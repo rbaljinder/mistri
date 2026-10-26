@@ -5,10 +5,5 @@
     "emitDeclarationOnly": true,
     "removeComments": false
   },
-  /* The engine and the kit's server modules are emitted whole. mistri's declarations import the engine by its
-     package name (`@mistriwork/engine/adapters/adapter.js`), and tsc does not emit a file it reached through
-     node_modules, a workspace link included: named only from mistri's entries, the engine shipped its JavaScript and
-     no declarations, so an installed mistri's types failed to resolve. Every module an install of either can import
-     ships the types its exports name. */
   "include": ["packages/engine/src", "packages/kit/src", "packages/mistri/src/server/commands.ts", "packages/mistri/src/server/policy.ts", "packages/mistri/src/server/maintenance.ts", "packages/mistri/src/server/jobs.ts", "packages/mistri/src/server/workflows.ts", "packages/mistri/src/server/integration.ts", "packages/mistri/src/server/openfeature.ts", "packages/mistri/src/server/testing.ts", "packages/mistri/src/server/handler.ts", "packages/ui/src/index.ts"]
 }

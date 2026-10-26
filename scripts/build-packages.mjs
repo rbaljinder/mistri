@@ -4,8 +4,11 @@
  *
  * The server, shared and adapter modules of every package compile as one tsc program (tsconfig.build.json), because
  * a declaration graph crosses packages — `@mistriwork/mistri/commands`'s types reach the engine's — and one program emits that
- * graph whole. tsc writes the program under a stage, laid out as packages/ is, and each package's share
- * (`<stage>/<dir>/src/…`) moves to `packages/<dir>/dist/…`. Then the files tsc does not make: ui's stylesheets, the
+ * graph whole. The declarations come from tsconfig.commands.json: mistri's public entries, and the engine and the kit's
+ * server modules whole, since tsc does not emit a file it reached through node_modules (a workspace link included) and
+ * mistri's declarations import the engine by its package name. tsc writes the program under a stage, laid out as
+ * packages/ is, and each package's share (`<stage>/<dir>/src/…`)
+ * moves to `packages/<dir>/dist/…`. Then the files tsc does not make: ui's stylesheets, the
  * docs and the Console rooms mistri ships, the kit's page as each product serves it (`vite build -c vite.<product>.config.ts`, into that product's
  * dist/client), and
  * mistri's bundles (@mistriwork/mistri/ui, @mistriwork/mistri/react, the observability page, the server renderer).
