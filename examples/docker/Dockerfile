@@ -38,6 +38,9 @@ RUN npm ci --no-audit --no-fund
 # What `npm run build` reads, as the root Dockerfile copies it.
 COPY tsconfig.json tsconfig.build.json tsconfig.commands.json vite.config.ts vite.tablewalk.config.ts vite.mistri.config.ts vite.ui.config.ts vite.observe.config.ts vite.embed.config.ts vite.ssr.config.ts ./
 COPY scripts ./scripts
+# Every package carries the repository's LICENSE (scripts/pack-manifest.mjs CARRIED), and the build lays the
+# packages out as an install has them (scripts/install-packages.mjs) for its type budget.
+COPY LICENSE ./
 COPY test/fixtures/apps/crm ./test/fixtures/apps/crm
 COPY test/fixtures/apps/ignition ./test/fixtures/apps/ignition
 COPY site/src/content/docs/docs ./site/src/content/docs/docs
