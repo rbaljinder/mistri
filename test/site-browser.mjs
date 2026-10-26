@@ -129,7 +129,7 @@ try {
     await page.goto(origin + '/docs/build-with-an-agent/');
     assert.ok(
       (await page.locator('main pre').allTextContents()).some(
-        (text) => /Build a tablewalk App/i.test(text) && text.includes('Do not deploy or publish'),
+        (text) => /Build a mistri App/i.test(text) && text.includes('Do not deploy or publish'),
       ),
       'Agent guide must retain the copyable implementation/verification brief',
     );
