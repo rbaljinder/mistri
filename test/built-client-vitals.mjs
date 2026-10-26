@@ -493,7 +493,8 @@ const SCENARIOS = [
     name: 'switch tab',
     path: '/vehicles',
     act: async (page) => {
-      await page.locator('#content .tab', { hasText: 'SUVs' }).first().click();
+      // A tab a phone's row keeps too: SUVs folds under More at 390 (a strip of tabs fits its row).
+      await page.locator('#content .tab', { hasText: 'Hybrid and electric' }).first().click();
       await page.waitForURL(/tab=/);
     },
   },
