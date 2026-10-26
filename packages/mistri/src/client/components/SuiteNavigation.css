@@ -1,0 +1,27 @@
+@layer components {
+.account-host:has(.suite-switcher) { display: inline-flex; align-items: center; gap: var(--space-2); }
+.suite-switcher { display: inline-flex; flex: none; }
+.suite-switcher-trigger { min-height: 44px; max-inline-size: 12rem; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.suite-switcher-popup { min-width: min(14rem, var(--available-width, 100vw - 16px)); max-width: min(22rem, var(--available-width, 100vw - 16px)); max-height: min(70vh, var(--available-height, 70vh)); overflow-y: auto; }
+.suite-switcher-popup p { padding: var(--space-3); margin: 0; }
+.suite-switcher-link { display: block; padding: var(--space-4) var(--space-3); color: var(--ink); text-decoration: none; border-radius: var(--radius); overflow-wrap: anywhere; }
+.suite-switcher-link:hover, .suite-switcher-link:focus-visible, .suite-switcher-link[data-highlighted] { background: var(--accent-soft); color: var(--accent-ink); }
+.suite-switcher-mega { width: min(48rem, var(--available-width, 100vw - 16px)); max-width: min(48rem, var(--available-width, 100vw - 16px)); padding: var(--space-5); box-sizing: border-box; }
+.suite-switcher-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr)); gap: var(--space-5); }
+.suite-switcher-group { min-width: 0; }
+.suite-switcher-heading, .suite-switcher-title { padding: var(--space-3) var(--space-3); font: 600 var(--text-sm) var(--sans); color: var(--ink-muted); overflow-wrap: anywhere; }
+.suite-switcher-account { border-block: 1px solid var(--line); padding-block: var(--space-2); margin-block: var(--space-2); }
+.suite-switcher-account .suite-switcher-groups { grid-template-columns: 1fr; gap: var(--space-2); }
+.suite-switcher-account .suite-switcher-title { color: var(--ink); }
+@media (max-width: 600px) {
+  .suite-switcher-trigger { max-inline-size: 7rem; }
+  .suite-switcher-groups { grid-template-columns: 1fr; }
+}
+.suite-preference { align-items: start; flex-wrap: wrap; gap: var(--space-4); }
+.suite-preference .prefs-name { flex: 1 1 12rem; }
+.suite-preference-controls { flex: 1 1 12rem; min-width: 0; }
+.suite-preference-controls .dd-button { width: 100%; max-width: 100%; }
+.suite-preference-controls p { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.suite-preference-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.suite-preference-actions button { min-height: 44px; }
+}

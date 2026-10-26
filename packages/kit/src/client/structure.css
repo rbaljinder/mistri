@@ -1,0 +1,1243 @@
+/* Layout no look may move (style.css names the order). */
+@layer structure {
+  /* Structure: layout that no look may move. These rules held their place by
+   out-specifying the looks (`:root body …`); in their own layer, after every
+   look and an App's own themes, they win by order instead (style.css names
+   the order), and read as what they are. A rule belongs here only when a look
+   restyling it would break the layout, not merely change its dress. */
+
+  body.app-mode .mobile-nav-drawer .sidebar {
+    width: 100%;
+  }
+
+  /* A reading measure: an article's column and a conversation's thread (page.css, `data-layout`). In the body
+   face's own width, so it follows the type scale and the density's zoom where a pixel width would not; here, so
+   no look moves it. */
+  :root {
+    --page-measure: 70ch;
+  }
+
+  /* The current menu entry in the colors a theme names (`nav.current`, `nav.onCurrent`): a block of the one on the
+   other, whichever look is worn. Only a theme that names them sets data-nav-current (appTheme.js), so every other
+   App keeps its look's own mark for the current entry. */
+  :root[data-nav-current]
+    :is(
+      .app-mode .topbar :is(.tn-item[aria-current='true'], .tn-group.active > .tn-group-button),
+      .tn-popitem[aria-current='true'],
+      #table-list button[aria-current='true'],
+      .mobile-nav-list button[aria-current='true']
+    ) {
+    background: var(--nav-current);
+    color: var(--nav-on-current, var(--nav-ink));
+    box-shadow: none;
+  }
+  :root[data-nav-current] .app-mode .topbar :is(.tn-item[aria-current='true'], .tn-group.active > .tn-group-button)::after {
+    background: transparent;
+  }
+  /* Its icon, count and caret in the block's ink: a look colors them for its own mark (Mono's inverted block in
+   nav.ground), which on a named block measured 1.4:1. */
+  :root[data-nav-current]
+    :is(
+      .app-mode .topbar :is(.tn-item[aria-current='true'], .tn-group.active > .tn-group-button),
+      .tn-popitem[aria-current='true'],
+      #table-list button[aria-current='true'],
+      .mobile-nav-list button[aria-current='true']
+    )
+    :is(svg, .nav-icon, .rows, .tn-caret) {
+    color: inherit;
+  }
+
+  /* A toned figure ("$1,200", "12 h") is its tone's ink and nothing else: no tint, no pill, no dot, whatever the look
+   says a status is. A dot before a figure moved it off the left edge its label and its neighbours share (rule 6:
+   a dot and its word belong to a vocabulary). */
+  .tone.tone-figure {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  .tone.tone-figure::before {
+    content: none;
+    display: none;
+  }
+
+  /* A pill's corner and a control's edge as a theme says them (`shape.radius.pill`, `shape.border.control`), under every look
+   and over each sheet's own. Only a theme that says one sets its attribute (appTheme.js); the rest keep what their
+   sheets draw — round pills, a 1px edge. A status dot stays a dot. */
+  :root[data-pill-radius]
+    :is(
+      .tone,
+      .record-tag,
+      .picker-chip,
+      .resume-chip,
+      .cards-badge,
+      .board-lane-count,
+      .triage-lane-count,
+      .applist-count,
+      .gallery-count
+    ) {
+    border-radius: var(--pill-radius);
+  }
+  :root[data-rules-control]
+    body.app-mode
+    :is(
+      input:not([type='checkbox'], [type='radio'], [type='range'], [role='switch']),
+      textarea,
+      select,
+      .dd-button,
+      .record-picker-trigger,
+      .picker,
+      .cell-edit
+    ) {
+    border-width: var(--control-border-w);
+  }
+
+  body.app-mobile-nav .topbar {
+    gap: var(--space-3);
+    padding-inline: var(--space-4);
+  }
+  /* The brand takes the room left on a phone's one-row bar: its mark keeps its size, and its name is said only where
+   enough of it fits to read — a mark and "T…" said less than the mark alone. Measured on the brand itself, so a bar
+   with fewer controls (no bell, no New) keeps the name. */
+  body.app-mobile-nav .brand {
+    container-type: inline-size;
+  }
+  body:is(.app-topnav, .app-mobile-nav) .topbar .brand-mark {
+    flex: none;
+  }
+  @container (max-width: 96px) {
+    .topbar .brand-name {
+      display: none;
+    }
+  }
+  /* A phone's App bar is one row (design.md), so on a phone the bar keeps only what is a mark. The tenant context's
+   control leaves it for the account menu's first item (tenantContextEntry.ts), which opens the same dialog: beside the
+   menu, the brand, search, New, the bell and the account it was a letter wide ("E ▾"), and at 320px it was pushed past
+   the edge. The header's New is its plus and the account its avatar, each a bare square the bell's size, as the
+   search is its magnifier: a bordered "+ New" was the one box among marks. */
+  @media (max-width: 700px) {
+    body.app-mode .topbar .tenant-control-host {
+      display: none;
+    }
+    body.app-mode .topbar .new-menu-trigger {
+      width: 40px;
+      min-width: 40px;
+      min-height: 40px;
+      padding: 0;
+      justify-content: center;
+      border-color: transparent;
+      background: transparent;
+      box-shadow: none;
+    }
+    body.app-mode .topbar .new-menu-words {
+      display: none;
+    }
+    body.app-mode .topbar .new-menu-mark {
+      display: inline;
+      font: 300 calc(24px * var(--type-k))/1 var(--sans);
+      /* The bar stands on the menu's ground in an App (visualThemes.css): its marks are the menu's muted ink, not the
+         page's grey, which on a dark menu was about 1.5:1 (G176). */
+      color: var(--nav-muted, var(--ink-muted));
+    }
+  }
+
+  /* A phone's App bar is one row in every App, whichever shell it has on a
+   desk: the menu's mark first, the brand taking the room, then search, the
+   settings and the account at the right edge. A top-bar App had put its
+   search on a second row, so a list's first screen stacked two search boxes,
+   and one without search left its menu in the middle of the bar between the
+   brand and the gear. The strip's own box stands aside (`display: contents`)
+   so its menu and its search each take their place in the bar's one row. */
+  @media (max-width: 600px) {
+    /* A content-width header keeps the inset that centres it over the page
+     (features.css); only a full-width bar takes the phone's 12px. */
+    body.app-topnav .topbar {
+      flex-wrap: nowrap;
+      gap: var(--space-2);
+      padding-block: var(--space-2h);
+    }
+    body.app-topnav .topbar:not([data-header-width='content']) {
+      padding-inline: var(--space-4);
+    }
+    body.app-topnav .topnav {
+      display: contents;
+    }
+    body.app-topnav .tn-folded-group {
+      order: -1;
+      display: flex;
+    }
+    body.app-topnav .tn-folded-group[hidden] {
+      display: none;
+    }
+    body.app-topnav .brand {
+      flex: 1;
+      min-width: 0;
+      container-type: inline-size;
+    }
+    /* The brand's -6px (style.css) lines its words up with the gutter when it
+     leads the bar; behind the menu's mark it drew its target over the mark's,
+     so there, and only there, it stands at 0. */
+    body.app-topnav .topbar:has(.tn-folded-group:not([hidden])) .brand,
+    body.app-mobile-nav .brand {
+      margin-left: 0;
+    }
+    body.app-topnav .brand-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    body.app-topnav .topbar-actions {
+      gap: var(--space-1);
+    }
+    body.app-topnav .topbar-actions > button {
+      min-height: 40px;
+      white-space: nowrap;
+    }
+    /* The menu is its mark, as the side-menu Apps' is: the word "Menu" and its
+     caret cost the brand its name. The button keeps "Menu" as its name. */
+    body.app-topnav .tn-folded :is(.tn-folded-word, .tn-caret) {
+      display: none;
+    }
+    body.app-topnav .tn-folded {
+      width: 40px;
+      min-height: 40px;
+      justify-content: center;
+      padding: 0;
+    }
+    body.app-topnav .tn-folded .tn-folded-icon {
+      display: inline-block;
+      font-size: var(--text-xl);
+    }
+    /* Search is its magnifier, so the list's own search is the one box on the
+     screen; the button keeps "Search (⌘K)" as its name. */
+    body.app-mode :is(#topnav .tn-search, #search-button.tn-search) {
+      flex: none;
+      width: 40px;
+      min-width: 40px;
+      min-height: 40px;
+      padding: 0;
+      justify-content: center;
+      border-color: transparent;
+      background: transparent;
+      box-shadow: none;
+      color: var(--nav-muted, var(--ink-muted));
+    }
+    body.app-mode :is(#topnav .tn-search, #search-button.tn-search) :is(.tn-search-hint, .tn-search-key) {
+      display: none;
+    }
+    body.app-mode :is(#topnav .tn-search, #search-button.tn-search) .tn-search-icon {
+      width: 18px;
+      height: 18px;
+    }
+  }
+
+  /* A heading, not a crumb: the list title's step in the look's heading face (style.css tokens). */
+  .crumbs h1.applist-title {
+    margin: 0;
+    font-family: var(--heading-font, var(--sans));
+    font-size: var(--type-list-title);
+    line-height: 1.2;
+    font-weight: var(--heading-weight);
+    letter-spacing: var(--track-title);
+    color: var(--ink);
+  }
+
+  .applist-head.in-crumbs {
+    padding: 0 var(--room-inset);
+  }
+
+  /* The chip row is reserved under a heading so the first filter does not shove the
+   rows; with the heading up in the bar that reserve is the gap the move closed.
+   Filtering reloads the rows anyway, so here the row appears with its first chip. */
+  .applist-head.in-crumbs .applist-chips:empty {
+    display: none;
+  }
+
+  /* On a phone the crumb bar keeps New and Export on the title's row: Export is
+   said by its menu's mark, its name kept for assistive technology. As words
+   beside a filled New they wrapped onto a row of their own. */
+  @media (max-width: 760px) {
+    body.app-mode .crumb-tools .export-summary .export-word {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    body.app-mode .crumb-tools .export-summary .export-more {
+      display: inline;
+    }
+    body.app-mode .crumb-tools .export-summary::after {
+      content: none;
+    }
+    body.app-mode .crumb-tools .export-summary {
+      min-width: 36px;
+      text-align: center;
+    }
+    /* Import is its mark there, its word kept for assistive technology: Depot's "Products 218", Import, New and ⋯
+     wrapped the verbs onto a row of their own. */
+    body.app-mode .crumb-tools .applist-import {
+      min-width: 36px;
+      padding-inline: 0;
+    }
+    body.app-mode .crumb-tools {
+      gap: var(--space-2);
+    }
+    body.app-mode .crumb-tools .applist-import-mark {
+      display: block;
+      margin-inline: auto;
+    }
+    body.app-mode .crumb-tools .applist-import-word {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    /* New says only "New" there: "+ New opportunity" beside "Opportunities 178"
+     wrapped New and ⋯ under the title in every look. */
+    body.app-mode .crumb-tools .applist-new-noun {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  /* The controls row is one strip: its tabs and filter bar give up the spacing a look gives them elsewhere. */
+  .applist-controls .tabs {
+    padding: 0;
+    border-bottom: 0;
+    flex: none;
+    overflow: visible;
+  }
+  /* A record's strip fits its row: what does not fit is under More (useTabFold.ts), so it clips and never scrolls.
+   Here, in the last layer, because a look places a tab of its own (an underlined tab is relative, lumenLook.css). */
+  .page-tabstrip.folds {
+    position: relative;
+    overflow: clip;
+  }
+  .page-tablist {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: inherit;
+    min-width: 0;
+  }
+  .page-tab-more {
+    flex: 0 0 auto;
+  }
+  /* A folded tab keeps its width, measured, out of the row; More is measured the same way while nothing is under it. */
+  :is(.page-tabstrip, .tabs).folds [data-folded] {
+    position: absolute;
+    top: 0;
+    inset-inline-start: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  /* The list's tabs fit the row (useTabFold.ts): the strip asks for every tab (its basis is their width, measured)
+   and gives way only where the row cannot hold them, the tabs past its end under More. It clips; it never scrolls.
+   The filters give way first, into "+ Filter" (ListFilterBar.tsx, which says when it has nothing left to give);
+   only then does the strip narrow, and the filter bar keeps what is left of it. */
+  .applist-controls .tabs.folds {
+    position: relative;
+    flex: 0 0 var(--tabs-natural, auto);
+    min-width: 0;
+    overflow: clip;
+  }
+  .applist-controls:is([data-filters-spent], :not(:has(> .applist-filterbar))) > .tabs.folds {
+    flex-shrink: 1;
+  }
+  .applist-controls[data-filters-spent] > .applist-filterbar {
+    flex-shrink: 0;
+  }
+  .tabs.folds > .tabs-row {
+    display: flex;
+    gap: inherit;
+    min-width: 0;
+  }
+  .tabs.folds > .tab-more {
+    flex: 0 0 auto;
+    display: flex;
+  }
+  /* The saved views' rule and heading, one box: they fold together. */
+  .tab-group {
+    display: flex;
+    flex: 0 0 auto;
+    align-self: stretch;
+    gap: inherit;
+  }
+  /* On a desk the row gives way before it scrolls: the search box narrows to a
+   floor, so a list's last filter is not cut off at the window's edge. Where
+   the bar leads the tabs (features.css, ≤860px) the row scrolls as it was. */
+  .applist-controls .applist-filterbar {
+    margin: 0;
+    padding: 0;
+    flex: 1 0 auto;
+  }
+  @media (min-width: 861px) {
+    .applist-controls .applist-filterbar {
+      flex-shrink: 1;
+      min-width: 0;
+    }
+    .applist-controls .applist-fields > .applist-search {
+      flex: 0 1 17rem;
+      min-width: 10rem;
+    }
+  }
+  /* On a phone the tabs take a row of their own under the search and Filters: sharing the one row, the first tab's
+   count was cut off and the next out of sight. The strip clips to its padding box (it folds, below),
+   so a pixel of padding keeps an underlined look's mark (bottom: -1px, lumenLook.css) in it. */
+  @media (max-width: 760px) {
+    .applist-controls {
+      flex-wrap: wrap;
+    }
+    /* Its search, Filters and sort wrap to a second line rather than run past a phone's edge: the search gives way
+       to a floor, and a sort that still does not fit takes the next line (Commons' members ran 14px past). */
+    .applist-controls > .applist-filterbar {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+    .applist-controls .applist-fields {
+      flex-wrap: wrap;
+    }
+    .applist-controls .applist-fields > .applist-search {
+      flex: 1 1 9rem;
+      min-width: 0;
+    }
+    .applist-controls > .tabs {
+      order: 1;
+      flex: 1 0 100%;
+      min-width: 0;
+      overflow-x: auto;
+      padding-bottom: 1px;
+      container-type: scroll-state;
+    }
+    /* Tabs past the phone's edge fade there, as the desk's strip does (features.css): "Converte" stopped at the
+       edge read as a word cut in half, not a row that scrolls. */
+    .applist-controls > .tabs::after {
+      content: '';
+      position: sticky;
+      right: 0;
+      flex: 0 0 var(--space-7);
+      align-self: stretch;
+      margin-left: calc(-1 * var(--space-7));
+      pointer-events: none;
+      visibility: hidden;
+      background: linear-gradient(to right, transparent, var(--strip-ground, var(--ground)));
+    }
+    @container scroll-state(scrollable: right) {
+      .applist-controls > .tabs::after {
+        visibility: visible;
+      }
+    }
+    /* The Records/Table switch stands at the tabs' end (TableView): on a row of its own over the rows it cost every
+       list 56px of its first screen. With no tabs it takes the line under the search, at its end. */
+    .applist-controls:has(> .applist-presentation > .record-presentation) > .tabs {
+      flex: 1 1 0;
+    }
+    /* The phone's row of tabs folds as a desk's does: it fills its line, and what does not fit is under More. */
+    .applist-controls > .tabs.folds {
+      flex: 1 0 100%;
+      overflow: clip;
+      container-type: normal;
+    }
+    .applist-controls:has(> .applist-presentation > .record-presentation) > .tabs.folds {
+      flex: 1 1 0;
+    }
+    .applist-controls > .tabs.folds::after {
+      content: none;
+    }
+    .applist-presentation {
+      display: flex;
+      order: 1;
+      flex: none;
+      margin-inline-start: auto;
+    }
+    .applist-presentation > .record-presentation {
+      display: flex;
+    }
+  }
+
+  /* An App's list row is one height, the density's (--row-h): a look says its type and its rules, never how tall a
+     row stands, so Lumen's compact means 32px rows and not 37. The cell's own padding is only what keeps a second
+     line off the rule; the placeholder rows stand at the same height. */
+  body.app-mode .table-wrap td {
+    box-sizing: border-box;
+    height: var(--row-h);
+    padding-block: var(--space-2);
+  }
+  /* A folded matrix's cell is a box, not a table cell, and a box's height is its height rather than its least: at the
+     row's 32px its figure, under its column's name, was cut in half. */
+  body.app-mode .matrix-host[data-fold] .matrix-cell {
+    height: auto;
+  }
+  .app-mode {
+    --sk-row-h: var(--row-h);
+  }
+
+  /* A compact list (`density: 'compact'`): tighter rows for a list read as a
+   ledger, in every look; a reader's zoom still scales them. In the base layer
+   these lost to each look's 10px cell padding and 14px text once the sheets
+   stood in layers, so a compact list read as a comfortable one. */
+  body.app-mode .table-wrap.grid-dense :is(td, th) {
+    padding-block: 5px;
+  }
+  body.app-mode .table-wrap.grid-dense td {
+    height: auto;
+  }
+  body.app-mode .table-wrap.grid-dense td {
+    font-size: var(--text-sm);
+  }
+  body.app-mode .table-wrap.grid-dense .avatar {
+    width: 20px;
+    height: 20px;
+    font-size: var(--text-xs);
+  }
+
+  /* The folded and drill-in menus are used by thumb: their rows keep a 44px target in every look. */
+  .topnav .tn-pop.tn-folded-pop .tn-popitem {
+    min-height: 44px;
+  }
+  .topnav .tn-pop.tn-drill-pop .tn-popitem {
+    min-height: 44px;
+  }
+  /* A dialog that fills the screen (and, on a phone, every dialog that asks to)
+   is the screen: no width, radius or margin a component gives it on a desk. */
+  [role='dialog'].modal-fullscreen {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    transform: none;
+  }
+  @media (max-width: 640px) {
+    [role='dialog'].modal-fullscreen-mobile {
+      position: fixed;
+      inset: 0;
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+      border: 0;
+      border-radius: 0;
+      transform: none;
+    }
+  }
+  /* A date picker's month is a control's grid, not a table of data: no look's cell rules reach it. */
+  .date-field-popup table.date-field-calendar :is(th, td) {
+    border: 0;
+    padding: 1px;
+    text-align: center;
+    background: transparent;
+    position: static;
+  }
+  .date-field-popup table.date-field-calendar tbody tr:hover td {
+    background: transparent;
+  }
+  /* A calendar week is not a list row: the looks' row-hover tint stays off it (docs/design.md, Access). */
+  .app-mode .calendar-grid tbody tr:hover > td.calendar-day {
+    background: none;
+  }
+  .app-mode .calendar-grid tbody tr:hover > td.calendar-day.is-outside {
+    background: var(--ground);
+  }
+  /* A checklist the reader cannot change still says what is done, in the text's
+   ink: the browser's disabled box drew its tick grey on grey, about 1.5:1.
+   Not a field, so not the disabled field's dress either; a check still being
+   saved keeps that dress, since it is waiting, not read-only. */
+  :root .checklist-row .checklist-toggle.is-readonly:disabled {
+    appearance: none;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    opacity: 1;
+    border: 1.5px solid var(--ink);
+    border-radius: min(3px, var(--radius));
+    background: var(--ground);
+    color: var(--ink);
+    cursor: default;
+  }
+  :root .checklist-row .checklist-toggle.is-readonly:disabled:checked::after {
+    content: '';
+    width: 5px;
+    height: 10px;
+    margin-top: -2px;
+    border: solid var(--ink);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  /* A property rail is caption beside value on its own grid, in every look; the
+   caption track stops at 12rem, so a full-width rail keeps its value near its name.
+   Its floor, 5.5rem, is the narrow aside's (a third of the record beside the
+   side menu): at 6rem an editable value, which keeps its pencil's 32px, had
+   104px and broke a twelve-digit UPC a digit from its end. */
+  dl.page-properties > .page-field {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, min(30%, 12rem)) minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--space-4);
+    padding: var(--space-2h) 0;
+    border-bottom: 1px solid var(--line);
+    min-width: 0;
+  }
+  /* Long text and rich text stand under their caption at the rail's width (PageFields.tsx), as on paper. */
+  dl.page-properties > .page-field-wide {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+  /* A rail whose other values open for editing: a value that cannot be edited
+   (a path, a key) takes the box an editable value's text sits in — 32px, its
+   text inside a 4px pad and a 1px edge (features.css, .inline-edit-value) —
+   so every row is one height and a rule lines up with the rule beside it in
+   the next column, where it stood 8px higher. */
+  dl.page-properties:has(.edit-field-surface) > .page-field > dd:not(:has(> .edit-field-surface)) {
+    min-height: 32px;
+    padding-block: 5px;
+    box-sizing: border-box;
+  }
+  /* The offer card starts level with the photos beside it: neither the card's
+   section nor the photos' (which lead the page without a rule) keeps a rule
+   or padding above it, whatever a look gives a section. */
+  .page-aside > .page-section:first-child:has(> .page-headline),
+  .page-main > .page-section.page-gallery:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  /* On a phone a caption keeps its value beside it where the value fits whole, and the value takes the line under
+   the caption where it does not: beside it at a fixed track, a 120px caption left an email address a hundred
+   pixels and broke it mid-word; over every value, a lead's eight short facts took 500px of a 844px screen. A
+   value is placed by its whole width (flex-basis: auto), so it moves under before it would break. The section's
+   last row draws no rule: the next section's rule follows it, and two rules 40px apart read as an empty row. */
+  @media (max-width: 760px) {
+    dl.page-properties > .page-field:not(.page-field-wide) {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-1) var(--space-4);
+    }
+    dl.page-properties > .page-field:not(.page-field-wide) > dt {
+      flex: 0 0 7.5rem;
+    }
+    dl.page-properties > .page-field:not(.page-field-wide) > dd {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    dl.page-properties > .page-field-wide {
+      gap: var(--space-1);
+    }
+    dl.page-properties > .page-field:last-child {
+      border-bottom: 0;
+    }
+  }
+  /* The aside's fields: one column beside the record, back into columns when it stacks under it. */
+  @media (min-width: 1101px) {
+    .page-aside .page-fields .page-field-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @container record-host (max-width: 1100px) {
+    .page-aside .page-fields .page-field-grid {
+      grid-template-columns: var(--page-field-columns, repeat(auto-fit, minmax(min(100%, var(--page-field-min, 16rem)), 1fr)));
+    }
+  }
+  /* A split list's detail names its record a step down: the pane is narrower than a page. */
+  .split-list-detail-pane .split-list-detail-body .root-current {
+    font-size: var(--text-xl);
+  }
+  /* A calendar day is the measure its range bars reach across by: its own padding
+   and overflow, whatever the tables' and the looks' cell rules say (CalendarList.css). */
+  .calendar-grid td.calendar-day {
+    padding: var(--calendar-pad);
+    overflow: visible;
+    max-width: none;
+  }
+  /* A field's states read the same in every look (docs/design.md, Access): a
+   disabled field is a filled ground and dim ink with no pointer — it looked
+   exactly like an enabled one — and an invalid field wears the danger edge
+   beside its written problem, keeping the focus ring. In an App only. */
+  :root[data-visual-theme]
+    :is(input:not(.picker-input), textarea, select, .dd-button, .record-picker-trigger, .cell-edit, .field-control):is(
+      :disabled,
+      [aria-disabled='true']
+    ),
+  :root[data-visual-theme] .picker:has(> .picker-input:disabled) {
+    background: var(--raised);
+    color: var(--ink-muted);
+    border-color: var(--line);
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  /* In a command form, whose fields at rest are a clean outline on the ground (formDress.css), a raised fill would
+     read as a field to fill in: a disabled one there keeps the ground, and its edge goes dashed and faint. */
+  :root[data-visual-theme] :is(.form-page, .command-form, .insert-form-app)
+    :is(input:not(.picker-input), textarea, select, .dd-button, .record-picker-trigger, .field-control):is(:disabled, [aria-disabled='true']):not(.form-lines *),
+  :root[data-visual-theme] :is(.form-page, .command-form, .insert-form-app) .picker:has(> .picker-input:disabled) {
+    background: transparent;
+    border-style: dashed;
+    border-color: color-mix(in oklab, var(--ink) 22%, transparent);
+  }
+  /* A picker is one field (N02): its box carries the state, and the text box inside it takes the dim ink with no ground of its own. */
+  :root[data-visual-theme] .picker > .picker-input:disabled {
+    background: none;
+    color: var(--ink-muted);
+    cursor: not-allowed;
+  }
+  :root[data-visual-theme]
+    :is(input:not(.picker-input), textarea, select, .dd-button, .record-picker-trigger, .cell-edit, .field-control)[aria-invalid='true'],
+  :root[data-visual-theme] .picker:has(> .picker-input[aria-invalid='true']),
+  :root[data-visual-theme] .form-field.is-invalid .picker {
+    border-color: var(--status-critical);
+  }
+  /* A section's lone field whose label the section title already says: the
+   value takes the whole row, not the label track's leftovers. */
+  .page-field:has(> dt.visually-hidden) > dd {
+    grid-column: 1 / -1;
+  }
+  /* A button that cannot be pressed says so in every look (B03): the ghost
+   and the primary dress read exactly as they did enabled, so a guided form's
+   Back on its first step looked like a way back. */
+  :root[data-visual-theme] button:is(.ghost, .primary, .btn, .danger):disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  /* A form's actions on a phone take the form's width, 44px tall, the primary on
+   top where the thumb is (N05): a small right-aligned Submit under a
+   full-width form read as an afterthought. */
+  @media (max-width: 760px) {
+    .form-actions {
+      flex-direction: column-reverse;
+      align-items: stretch;
+    }
+    .form-actions > .btn {
+      width: 100%;
+      min-height: 44px;
+      margin: 0;
+    }
+  }
+  /* A dialog that fills a phone keeps its actions at its foot (N04): 44px and the
+   screen's width, the one that answers on top, standing while the question
+   scrolls. They sat under the question at the top, 36px tall, with the rest of
+   the screen blank below them. */
+  @media (max-width: 640px) {
+    [role='dialog'].confirm.modal-fullscreen-mobile {
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding-bottom: 0;
+    }
+    [role='dialog'].confirm.modal-fullscreen-mobile > form {
+      display: flex;
+      flex-direction: column;
+      flex: 1 0 auto;
+    }
+    [role='dialog'].confirm.modal-fullscreen-mobile .confirm-actions {
+      position: sticky;
+      bottom: 0;
+      margin-top: auto;
+      padding: var(--space-5) 0 max(16px, env(safe-area-inset-bottom));
+      flex-direction: column-reverse;
+      align-items: stretch;
+      background: var(--surface);
+    }
+    [role='dialog'].confirm.modal-fullscreen-mobile .confirm-actions > button {
+      width: 100%;
+      min-height: 44px;
+      margin: 0;
+    }
+  }
+  /* Sign-in on a phone is the screen, not a card on it (N03): no box, no inset,
+   the fields the width of the window less its gutter. Boxed, they were 255px
+   wide on a 390px phone. */
+  @media (max-width: 760px) {
+    .signin {
+      padding: var(--space-6) var(--space-5) 40px;
+      justify-items: stretch;
+    }
+    .signin-card {
+      width: 100%;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+    }
+    .signin-home {
+      width: 100%;
+    }
+    /* The fields stand at the submit's 44px: a thumb's target, one height down the card. */
+    .signin-card :is(.btn-large, .field-control:not(textarea)) {
+      min-height: 44px;
+    }
+    /* A phone's actions take the form's width, the primary on top. */
+    .oauth-consent-actions {
+      flex-direction: column-reverse;
+    }
+    .oauth-consent-actions > .btn {
+      width: 100%;
+    }
+  }
+
+  /* A row's own small controls draw at 22–24px, which a pointer hits and a
+   finger does not: on a coarse pointer each takes a 44px hit area (WCAG
+   2.5.5) without growing what it draws, so the row keeps its measure. The
+   checklist's box is padded through its label, since a checkbox cannot be. */
+  @media (pointer: coarse) {
+    :is(.order-grip-button, .triage-card-menu-button, .applist-chip-x) {
+      position: relative;
+    }
+    :is(.order-grip-button, .triage-card-menu-button, .applist-chip-x)::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+    .checklist-hit {
+      padding: var(--space-4);
+      margin: -11px;
+    }
+    /* A field cannot take a hit area larger than it draws, so on a touch screen an App's form draws its fields at a
+     target's 44px, the height of the form's own actions on a phone and of the sign-in card's fields (docs/design.md,
+     Access). A text area is taller already; a checkbox and a switch take their row's. */
+    body.app-mode
+      :is(
+        .insert-field
+          :is(input:not(.picker-input, [role='switch'], [type='checkbox'], [type='radio']), .dd-button, .record-picker-trigger, .picker),
+        .page-field-edit :is(.cell-edit:not(textarea), .dd-button, .record-picker-trigger, .picker)
+      ) {
+      min-height: 44px;
+    }
+    /* A picker is a box round an input, and it is the input a finger lands on (and the grade measures): it was 25px
+     tall in a 44px box. It fills the box now, which keeps its height. */
+    body.app-mode :is(.insert-field, .page-field-edit) .picker:not(.lines-ref .picker) {
+      padding-block: 0;
+    }
+    body.app-mode :is(.insert-field, .page-field-edit) .picker > .picker-input {
+      min-height: 40px;
+    }
+    /* The command form's line pickers draw at the row's 30px. */
+    .form-lines-grid .lines-ref:not(.has-sub) .picker-input {
+      height: 40px;
+    }
+    /* The chrome's own controls the same way, on ::before, since a tab's underline and a field's pencil are
+     already their ::after: the brand, the header's icon buttons, a view's tabs, the buttons and a checklist
+     row's title are drawn 25–39px tall to the approved look and a finger still lands on them. The trail's
+     steps, a Select's button, a reference's jump, a list's Export and + filter, a record's title and a lane's +
+     too: a phone's grade found each 21–36px tall. A list's Filters and its saved views, a dashboard's windows (the segmented row and the one menu) and
+     an embedded view's heading link the same, and a record's related tabs, which a phone's grade found 22px tall. */
+    :where(
+      .brand,
+      .icon-button,
+      .tab,
+      .btn,
+      button.ghost,
+      .checklist-title,
+      .inline-edit-value,
+      .crumbs > button,
+      .dd-button,
+      .ref-jump,
+      .export-summary,
+      .applist-add,
+      .record-summary-title,
+      .triage-lane-new,
+      .applist-toggle,
+      .dash-window,
+      .dash-window-button,
+      .page-section-link,
+      .page-tab
+    ) {
+      position: relative;
+    }
+    :is(
+      .brand,
+      .icon-button,
+      .tab,
+      .btn,
+      button.ghost,
+      .checklist-title,
+      .inline-edit-value,
+      .crumbs > button,
+      .dd-button,
+      .ref-jump,
+      .export-summary,
+      .applist-add,
+      .record-summary-title,
+      .triage-lane-new,
+      .applist-toggle,
+      .dash-window,
+      .dash-window-button,
+      .page-section-link,
+      .page-tab
+    )::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+    /* A folding section's heading draws its chevron on ::before, so its hit area is the ::after. A gantt bar is
+     placed and turned already (a milestone is a diamond), so its hit area is measured from it as it is, and its
+     words are clipped by their own box rather than the bar's, which would clip the hit area with them. */
+    .page-fold > summary {
+      position: relative;
+    }
+    :is(.page-fold > summary, .gantt-bar)::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+    .gantt-bar {
+      overflow: visible;
+    }
+    .gantt-bar-title {
+      min-width: 0;
+    }
+  }
+
+  /* Cards in one strip are one height (docs/design.md): each stretches to the
+   row, its figure from the top, and its footer, a trend or a target, sits on
+   the card's bottom edge (`margin-top: auto`) so the row's footers share a
+   baseline. The trend's slot is still kept only when a trend is drawn. On a
+   phone the figures sit two to a row, each half the width whatever the look's
+   gap, and an odd run's first takes the row, its lead, with the rest in pairs
+   under it: one per row made eight figures a column three screens tall, and a lone last one, stretched under the pairs, read as an
+   afterthought — a strip of three always left one so (a field report on 0.9.0). A label may take two lines there;
+   the cards of a row stretch to the taller, so their figures still align. */
+  .dash-strip .home-cards {
+    align-items: stretch;
+  }
+  /* The old 6-7px margin becomes padding, so the tallest card keeps its gap. */
+  .dash-strip .home-card > :is(.dash-target, .spark-host) {
+    margin-top: auto;
+    padding-top: 7px;
+  }
+  .dash-strip .home-card > .dash-target ~ .spark-host {
+    margin-top: 0;
+  }
+  .dash-strip .home-card > .spark-host {
+    box-sizing: content-box;
+  }
+  /* A calendar card's status gives way inside its pill, ellipsized: kept whole, it pushed past the card and the
+   card's edge cut it mid-word ("Ready for pic"). A look draws the pill as a flex row, whose bare word cannot
+   ellipsize, so in a card it is a line of text with its dot inline. */
+  .calendar-card-badge .tone {
+    display: inline-block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .calendar-card-badge .tone::before {
+    display: inline-block;
+    margin-right: var(--space-2h);
+    vertical-align: 0.05em;
+  }
+  .calendar-card-badge .tone-marked .value-mark-icon {
+    display: inline-block;
+    vertical-align: -2px;
+    margin-right: var(--space-2);
+  }
+  /* A day cell's status is a dot before the title, in its tone, whatever the look draws a status as (a pill, a mark):
+   said here, in the layer that outranks the looks. Its word stays in the text for a reader (CalendarList.tsx). */
+  .calendar-card-mark {
+    display: inline-flex;
+    vertical-align: 0.05em;
+    margin-right: var(--space-2h);
+  }
+  .calendar-card-mark .tone {
+    display: inline-flex;
+    gap: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    font-size: 0;
+    line-height: 0;
+  }
+  .calendar-card-mark .tone > svg {
+    display: none;
+  }
+  .calendar-card-mark .tone::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin: 0;
+    border-radius: 50%;
+    background: var(--tone-dot, currentColor);
+  }
+  .calendar-card-mark .tone-neutral::before {
+    background: var(--ink-subtle);
+  }
+  @media (max-width: 760px) {
+    .dash-strip .home-cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .dash-strip .home-card {
+      min-width: 0;
+    }
+    .dash-strip .home-card:first-child:nth-last-child(odd) {
+      grid-column: 1 / -1;
+    }
+    /* A compact figure: a look's 30px figure broke "175,460" across two lines at half a phone. */
+    .dash-strip .home-card-value {
+      font-size: calc(24px * var(--type-k));
+    }
+  }
+  /* A strip's mark stands at its card's right, level with its label, in every look. Over the label it set the label
+   and figure of a card with a mark a row lower than those of a card without, across one strip; before the label it
+   pushed the words right, down a column of cards. At the right it takes no line of its own, so every card's label
+   and figure stand from one top and one inset, marked or not, as a BI tool's metric tiles do. */
+  /* The room is the look's to widen (--stat-mark-room): the icon look's mark is a 32px circle (lumenLook.css). */
+  .dash-strip .home-card-label:has(.dash-section-icon) {
+    position: relative;
+    display: block;
+    align-self: stretch;
+    padding-right: var(--stat-mark-room, 24px);
+  }
+  .dash-strip .home-card-label .dash-section-icon {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    margin: 0;
+    transform: translateY(-50%);
+  }
+  /* A label stands over its figure, and half a phone wraps one label and not its neighbour's, so the figures of a row
+   stood a line apart: there every label keeps two lines. */
+  @media (max-width: 760px) {
+    .dash-strip .home-card-label {
+      min-height: 2lh;
+    }
+  }
+  /* A record's figures (`presentation: 'summary'`) follow the same rule on a phone, and in a room as narrow as one (a
+   peek, a split's detail): two to a row, a lone last one taking the row. Every look stacks a record's fields one to a
+   row there (visualThemes.css), right for a form's fields and wrong for four short figures — Amount, Probability,
+   Weighted, Closes stood a column a screen tall over the record. */
+  @media (max-width: 760px) {
+    body.app-mode .page-field-grid.page-field-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-4) 18px;
+    }
+    body.app-mode .page-field-summary > .page-field:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+  }
+  @container record-host (max-width: 600px) {
+    .page-field-grid.page-field-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-4) var(--space-5);
+    }
+    .page-field-summary > .page-field:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+  }
+  /* A phone never draws more columns than the section asks for: `columns: 1` is one at a desk and on a phone, a title
+   over its long checklist, not two thirds side by side. */
+  @media (max-width: 760px) {
+    body.app-mode .page-field-grid.page-field-summary[data-columns='1'] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @container record-host (max-width: 600px) {
+    .page-field-grid.page-field-summary[data-columns='1'] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* A dashboard's layout (Dashboard.tsx LaidOut): sections placed in the named areas of a grid of equal tracks, so a
+     short breakdown can stand under another beside a tall chart. Here, and not in a look: a look dresses the sections
+     in the areas, and never moves the areas. The template and its column count arrive as properties of the grid, so
+     they are fixed at the first paint. Areas in one template row stand as tall as the tallest (design.md), and inside
+     an area the last section takes the height that is left, so a boxed look's panels end on the same line. */
+  .dash-laid {
+    container: dash-laid / inline-size;
+  }
+  .dash-grid {
+    display: grid;
+    flex: 1 1 100%;
+    min-width: 0;
+    grid-template-columns: repeat(var(--dash-columns), minmax(0, 1fr));
+    grid-template-areas: var(--dash-template);
+    column-gap: var(--space-7);
+    row-gap: var(--page-row-gap, var(--section-seam));
+  }
+  .dash-area {
+    grid-area: var(--area);
+    display: flex;
+    flex-direction: column;
+    gap: var(--page-row-gap, var(--section-seam));
+    min-width: 0;
+  }
+  .dash-area[hidden] {
+    display: none;
+  }
+  /* A section's page-row basis (100%) is a width in a row and would be a height in a column. */
+  .dash-area > .page-section {
+    flex: 0 0 auto;
+  }
+  .dash-area > .page-section:not(:has(~ .page-section:not([hidden]))) {
+    flex: 1 1 auto;
+  }
+  /* A template that does not fit its room is one column, the areas in reading order. Asked of the room the grid has
+     and not of the window, so the side menu's narrower column collapses where it should: a column wants 13rem, the
+     width of a metric or a short breakdown (17rem, the aside's budget, folded a four-column template at a 1280 desk).
+     Container sizes are in the root's rem, which the density zoom scales. */
+  @container dash-laid (inline-size < 26rem) {
+    .dash-grid[data-columns='2'] {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: none;
+    }
+    .dash-grid[data-columns='2'] > .dash-area {
+      grid-area: auto;
+    }
+  }
+  @container dash-laid (inline-size < 39rem) {
+    .dash-grid[data-columns='3'] {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: none;
+    }
+    .dash-grid[data-columns='3'] > .dash-area {
+      grid-area: auto;
+    }
+  }
+  @container dash-laid (inline-size < 52rem) {
+    .dash-grid[data-columns='4'] {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: none;
+    }
+    .dash-grid[data-columns='4'] > .dash-area {
+      grid-area: auto;
+    }
+  }
+
+  /* A phone's drawers fill it (design.md, "Modal task details"): a New form or a record's peek left a 24px sliver of
+     the dimmed list at the left, a page that read as unfinished behind a form that read as cramped. */
+  @media (max-width: 760px) {
+    :is(.peekpanel, .newpanel) {
+      width: 100%;
+      border-left: 0;
+    }
+    /* A section's records start on its heading, as its table does (design.md): the room's own inset, which a
+       list page's records need, set a lease's charges 16px in from "Charges" and its Records/Table switch 16px
+       short of the edge. */
+    .page-section .record-summaries {
+      padding-inline: 0;
+    }
+    .page-section .responsive-results .record-presentation {
+      margin-inline: 0;
+    }
+  }
+
+  /* A page's steps beside the form, at a desk wide enough for both: the form keeps its 40rem measure and the steps
+     take a column of their own beside it, sticky as the step scrolls. The page widens for them only at a desk; its
+     container then says whether there is room (the shell's menu takes some at 1024px). Here, not with the steps'
+     dress, because a page's own width rule (FormSurface.css) is a component's and outranks the base. */
+  @media (min-width: 1024px) {
+    .form-page:has(.multi-step-aside) { width: min(calc(40rem + 300px + var(--space-8)), 100%); container: form-page / inline-size; }
+    /* Narrower than both: the one column, at its measure, as everywhere else. */
+    .form-page:has(.multi-step-aside) > * { width: 100%; max-width: 40rem; justify-self: center; box-sizing: border-box; }
+    /* Cards whose words are short (IntakeControls' cardFit) stand side by side rather than stretching "Tile" across
+       the column: a label alone three to a row, a label and a short line two, and four of either two by two so no
+       row is left with one. They share a row's height, as a row of fields does. A phone and a dialog keep one a row. */
+    .form-page:has(.multi-step-aside) .choice-cards[data-fit] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .form-page:has(.multi-step-aside) .choice-cards[data-fit='short']:not(:has(> :nth-child(4):last-child)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @container form-page (min-width: 56rem) {
+    .form-page:has(.multi-step-aside) > * { max-width: none; }
+    /* The page's name and description stand over the form's column, not over the steps. */
+    .form-page:has(.multi-step-aside) > :not(form) { max-width: calc(100% - 300px - var(--space-8)); justify-self: start; }
+    .multi-step-form:has(> .multi-step-aside) { position: relative; padding-inline-end: calc(300px + var(--space-8)); }
+    .multi-step-form > .multi-step-aside { display: block; position: absolute; inset-block: 0; inset-inline-end: 0; width: 300px; }
+    .multi-step-aside > nav { position: sticky; top: var(--space-6); padding-inline-start: var(--space-6); border-inline-start: 1px solid var(--line); }
+  }
+
+  /* A record form's rows (`show: [['email', 'phone'], …]`) stand side by side while the form gives each field room,
+     and become one column below: measured on the form, since a drawer is narrower than the window it stands over and
+     a phone's is the window. The fieldset is the container, not the form, because a container's width may not come
+     from what it holds, and a fieldset always fills its form. A stepped form's rows keep the intake's own rule. The
+     row is @mistriwork/ui's Columns, drawn here as forms.css draws it (align-items: start, so a help line or an error
+     under one half moves nothing beside it), because a New form of plain boxes never fetches forms.css. */
+  .insert-form-app > .insert-fields { container: record-form / inline-size; }
+  .insert-form-app .form-columns {
+    display: grid;
+    grid-template-columns: var(--form-columns, repeat(auto-fit, minmax(min(100%, 9rem), 1fr)));
+    align-items: start;
+  }
+  /* Stacked, a row's fields stand as far apart as any two (features.css, .insert-group-fields). The intake style spaces
+     its own rows (MultiStepForm.css). */
+  .insert-form-app .form-columns:not([data-style='intake'] .form-columns) {
+    column-gap: var(--space-4);
+    row-gap: calc(var(--space-6) - var(--space-2));
+  }
+  @container record-form (max-width: 30rem) {
+    .insert-form-app .form-columns:not(.multi-step-form .form-columns) { grid-template-columns: minmax(0, 1fr); }
+  }
+}
+
+/* A footer group (nav placement: 'footer'): the sidebar's list is a column only when it holds one, and the gap takes what the rows leave. */
+#table-list:has(> .nav-foot-gap) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+#table-list > .nav-foot-gap {
+  flex: 1 1 0;
+  min-height: 12px;
+  list-style: none;
+}
+/* The list's end fade (features.css) is a 40px box pulled up by its own 40px: in this column, in a window shorter than
+   the menu, it shrank to nothing and its margin drew the footer group 40px up over the rows above the gap (Depot's
+   Warehouses over its Suppliers). It keeps its height, and comes last, after the footer group. */
+#table-list:has(> .nav-foot-gap)::after {
+  flex: none;
+  order: 99;
+}
+
+/* A related list's heading and its verbs share one row: the heading takes the room, the verbs the end of it. Where
+   the column is too narrow for both (an aside), the verbs go under the heading from the same start edge, not on a
+   row of their own pushed to the far side. In a tab strip the heading is the tab's, and the verbs keep the end. */
+.page-section-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-4);
+}
+.page-section-bar > .page-section-head {
+  flex: 1 1 auto;
+}
+.page-section-bar > .page-related-create {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  padding-block: 0 var(--space-3);
+}
+.page-tabpanel > .page-section > .page-section-bar > .page-section-head {
+  display: none;
+}
+.page-tabpanel > .page-section > .page-section-bar {
+  justify-content: flex-end;
+}

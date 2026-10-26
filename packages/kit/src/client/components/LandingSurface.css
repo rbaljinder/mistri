@@ -1,0 +1,177 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* The App's front page: a real page, not a form. One readable measure for
+   prose, the App's accent on the calls to action and the step numbers,
+   hairlines between sections instead of boxes, and nothing of the shell.
+   Hierarchy comes from the section seam and the type, never from a card. */
+/* The column is 68rem up to a 1440px desk, then grows with the window to 80rem at 1920, as a wide App frame is: held
+   at 68rem, a 1920px desk drew the page in its middle half, 450px of ground either side. At or under 1440 the clamp
+   is its floor, so a laptop and a phone draw exactly what they did. */
+.front { width: min(clamp(68rem, 40vw + 32rem, 80rem), 100%); margin: 0 auto; padding: 72px var(--space-7) var(--space-8); overflow-wrap: anywhere; }
+.front p { margin: 0; max-width: 65ch; line-height: 1.6; }
+.front .eyebrow { font: 500 var(--text-xs) var(--mono); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--ink-muted); }
+/* The headline is the display step of the type scale (style.css), in the
+   look's heading face at its heading weight. */
+.front h1 {
+  margin: 0; max-width: 22ch; font-family: var(--heading-font, var(--sans)); font-size: var(--type-display); line-height: 1.1;
+  font-weight: var(--heading-weight); letter-spacing: var(--track-display); text-wrap: balance;
+}
+.front h2 { margin: 0; font: 600 calc(22px * var(--type-k))/1.25 var(--sans); letter-spacing: var(--track-title); text-wrap: balance; }
+.front h3, .front-items h2 { margin: 0 0 var(--space-2h); font: 600 calc(15px * var(--type-k))/1.35 var(--sans); letter-spacing: 0; }
+
+.front-hero { display: grid; gap: var(--space-5); padding-bottom: 64px; }
+.front-hero-text { display: grid; gap: var(--space-5); align-content: center; min-width: 0; }
+/* The facts under the headline, a dot between each two. A line that wraps
+   starts with a fact, not a dot: every fact leads with its dot, and the list
+   is drawn one dot's width to the left with that strip clipped, so the dot
+   that would open a line falls outside it. */
+.front-highlights {
+  list-style: none; margin: 0 0 0 -22px; padding: 0; display: flex; flex-wrap: wrap; clip-path: inset(0 0 0 22px);
+  color: var(--ink-muted); font: 500 var(--text-base) var(--sans);
+}
+.front-highlights li { white-space: nowrap; }
+.front-highlights li::before { content: '\00b7'; display: inline-block; width: 22px; text-align: center; }
+
+/* A hero with a photo. The photo's box is sized before the photo arrives —
+   nothing moves — and the photo fills it. Split: words left, photo right at
+   4:3. Overlay: the photo covers the hero behind the words, under the photo
+   stage's scrim (the lightbox's ground and ink, the same in both themes), so
+   the words keep their contrast whatever the picture. The overlay's hero is
+   sized by its words — at least 16:7 of its width, taller when a headline
+   takes more lines — so the words never run off the photo: at a fixed 16:7 a
+   book face's headline pushed the stat line's light ink onto the page, where
+   it could not be read. The scrim is at its deepest across the words'
+   column, however much of the hero that is. */
+.front-hero-media { overflow: hidden; border-radius: var(--radius); background: var(--raised); min-width: 0; }
+.front-hero-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.front-hero-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 40px; align-items: center; }
+.front-hero-split .front-hero-media { grid-column: 2; grid-row: 1; aspect-ratio: 4 / 3; }
+.front-hero-split .front-hero-text { grid-column: 1; grid-row: 1; }
+.front-hero-split .front-hero-search { grid-column: 1 / -1; }
+/* No photo, but points: at a desk they take the photo's place, a column opposite the words behind a hairline, at
+   the size of the lede's smaller sibling so they read as reasons and not as fine print. A phone keeps them under the
+   actions. */
+@media (min-width: 1024px) {
+  .front-hero-beside { grid-template-columns: minmax(0, 3fr) minmax(16rem, 2fr); column-gap: 64px; align-items: center; }
+  .front-hero-beside .front-hero-search { grid-column: 1 / -1; }
+  .front-hero-points { padding-inline-start: var(--space-7); border-inline-start: 1px solid var(--line); }
+  .front-hero-points .front-points { gap: var(--space-5); font-size: var(--text-md); line-height: 1.45; }
+}
+.front-hero-overlay { grid-template-columns: minmax(0, 1fr); container: front-hero / inline-size; }
+.front-hero-overlay .front-hero-media, .front-hero-overlay .front-hero-text { grid-column: 1; grid-row: 1; }
+.front-hero-overlay .front-hero-media { position: relative; align-self: stretch; }
+.front-hero-overlay .front-hero-media img { position: absolute; inset: 0; }
+.front-hero-overlay .front-hero-media::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--lightbox-ground) 92%, transparent) 0%,
+    color-mix(in srgb, var(--lightbox-ground) 78%, transparent) min(34rem, 100%), transparent calc(min(34rem, 100%) + 24%));
+}
+.front-hero-overlay .front-hero-text { position: relative; z-index: 1; align-self: center; max-width: 34rem; min-height: calc(100cqi * 7 / 16); padding: 40px 44px; color: var(--lightbox-ink); }
+.front-hero-overlay h1 { color: inherit; }
+.front-hero-overlay .eyebrow, .front-hero-overlay .front-lede, .front-hero-overlay .front-highlights { color: var(--lightbox-ink); }
+/* Over the photo the primary is the stage's own: its light ink as the fill,
+   its dark ground as the words, in every look. The accent is chosen for the
+   page, not the scrim: Mono's black sat on the charcoal at about 1.2:1, and
+   the ghost beside it read as the primary. Only the words' own actions: the
+   search card standing on the photo's foot is the page's ground, and its
+   "Show vehicles" in the photo's white on white read as plain text. */
+.front-hero-overlay .front-hero-text .front-action-primary { background: var(--lightbox-ink); color: var(--lightbox-ground); border-color: transparent; }
+.front-hero-overlay .front-hero-text .front-action-primary:hover { background: color-mix(in srgb, var(--lightbox-ink) 82%, var(--lightbox-ground)); }
+.front-hero-overlay .front-hero-text .front-action-secondary { color: var(--lightbox-ink); border-color: var(--lightbox-line); }
+.front-hero-overlay .front-hero-text .front-action-secondary:hover { background: var(--lightbox-line); border-color: var(--lightbox-ink); }
+.front-hero-overlay .front-hero-search { grid-row: 2; position: relative; z-index: 1; margin: -48px 28px 0; }
+.front-hero-overlay .front-hero-search .front-search-form { box-shadow: var(--shadow-pop); }
+.front-lede { font-size: calc(18px * var(--type-k)); color: var(--ink-muted); }
+.front-hero .front-actions { margin-top: var(--space-4); }
+.front-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.front-action {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px;
+  border: 1px solid transparent; border-radius: var(--radius);
+  font: 500 calc(15px * var(--type-k)) var(--sans); text-decoration: none;
+}
+.front-action-primary { background: var(--primary, var(--accent)); color: var(--on-primary, var(--on-accent)); }
+.front-action-primary:hover { background: color-mix(in srgb, var(--primary, var(--accent)) 86%, var(--ink)); }
+.front-action-secondary { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+.front-action-secondary:hover { background: var(--surface); border-color: var(--ink-muted); }
+.front a:focus-visible, .front summary:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) {
+  /* Hover is colour, 120ms, and nothing else. */
+  .front-action { transition: background-color var(--t-hover) var(--ease-out), border-color var(--t-hover) var(--ease-out); }
+}
+
+/* The 40px-and-up seam between sections is the hierarchy. */
+.front-section { display: grid; gap: var(--space-6); padding: var(--space-8) 0; border-top: 1px solid var(--line); }
+.front-section > p { color: var(--ink-muted); }
+.front-items { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 28px 40px; }
+.front-items p { color: var(--ink-muted); }
+.front-steps .front-items { counter-reset: front-step; }
+.front-steps .front-items > li { counter-increment: front-step; }
+.front-steps .front-items > li::before {
+  content: counter(front-step, decimal-leading-zero); display: block;
+  margin-bottom: var(--space-4); padding-bottom: var(--space-3h); border-bottom: 1px solid var(--line);
+  font: 500 var(--text-base) var(--mono); letter-spacing: .04em; color: var(--accent-ink);
+}
+.front-prose { display: grid; gap: var(--space-4h); }
+
+/* The questions are the house accordion (page.css), held to the prose measure. */
+.front-questions { max-width: 65ch; }
+.front-questions .accordion-trigger { font-weight: 500; padding: var(--space-5) 0; }
+.front-answer { display: grid; gap: var(--space-4); color: var(--ink-muted); }
+
+/* A search straight under the hero is part of it: one box, the page's one
+   form, its fields in a row that wraps, the call to action at the end. */
+.front-search .front-search-form, .front-hero-search .front-search-form {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-5) 20px;
+  padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.front-hero + .front-search { border-top: 0; padding-top: 0; margin-top: -16px; }
+.front-search-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-4h) var(--space-5); min-width: 0; }
+.front-search-field { display: grid; gap: var(--space-2h); min-width: 0; }
+.front-search-label { font: 500 var(--text-sm) var(--sans); color: var(--ink-muted); }
+/* A text box and a Select in one row are one kind of field: the same edge,
+   ground, face and height. Left to the browser, the text box drew its own
+   inset grey frame beside the look's selects. */
+.front-search-input, .front-search-field .dd-button {
+  box-sizing: border-box; width: 100%; min-height: 40px; padding: var(--space-3) var(--space-3h);
+  font: var(--text-md) var(--sans); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-control); border-radius: var(--field-radius, var(--radius));
+}
+.front-search-input::placeholder { color: var(--ink-subtle); }
+.front-search-field .dropdown, .front-search-field button { width: 100%; min-height: 40px; }
+.front a:focus-visible, .front button:focus-visible, .front input:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+.front-more { margin: 0; }
+.front-more a { color: var(--link); font: 500 var(--text-md) var(--sans); }
+.front-note { color: var(--ink-muted); font-size: var(--text-md); }
+
+.front-links { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-3h) var(--space-7); }
+.front-links a { color: var(--link); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.front-contact .front-links a { font-size: calc(15px * var(--type-k)); }
+
+.front-footer { display: grid; gap: var(--space-4); padding-top: 28px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: var(--text-base); }
+.front-footer .front-links { gap: var(--space-3) 20px; }
+
+body.landing-mode .sidebar, body.landing-mode .sidebar-reveal, body.landing-mode #topnav, body.landing-mode .querybar,
+body.landing-mode .brand-db, body.landing-mode .conn-picker, body.landing-mode .topbar-actions, body.landing-mode #explain-pane { display: none; }
+body.landing-mode .brand { min-width: 0; max-width: 100%; pointer-events: none; }
+
+@media (max-width: 600px) {
+  .front { padding: 40px var(--space-5) var(--space-7); }
+  .front-lede { font-size: var(--text-lg); }
+  .front-hero { padding-bottom: 44px; }
+  .front-section { padding: 40px 0; }
+  .front-action { flex: 1 1 100%; }
+  .front-search .front-search-form, .front-hero-search .front-search-form { grid-template-columns: minmax(0, 1fr); padding: var(--space-5); }
+  /* A phone reads the photo first and the words under it, on the page's own ground. */
+  .front-hero-split, .front-hero-overlay { grid-template-columns: minmax(0, 1fr); }
+  .front-hero-split .front-hero-media, .front-hero-overlay .front-hero-media { grid-column: 1; grid-row: 1; aspect-ratio: 16 / 9; }
+  .front-hero-split .front-hero-text, .front-hero-overlay .front-hero-text { grid-column: 1; grid-row: 2; }
+  .front-hero-split .front-hero-search, .front-hero-overlay .front-hero-search { grid-column: 1; grid-row: 3; margin: 0; }
+  .front-hero-overlay .front-hero-media::after { display: none; }
+  .front-hero-overlay .front-hero-text { max-width: none; min-height: 0; padding: 0; color: var(--ink); }
+  .front-hero-overlay .eyebrow, .front-hero-overlay .front-lede, .front-hero-overlay .front-highlights { color: var(--ink-muted); }
+  .front-hero-overlay .front-hero-text .front-action-secondary { color: var(--ink); border-color: var(--line-strong); }
+  /* Under the photo, on the page's ground, the primary is the page's again. */
+  .front-hero-overlay .front-hero-text .front-action-primary { background: var(--primary, var(--accent)); color: var(--on-primary, var(--on-accent)); }
+  .front-hero-overlay .front-hero-text .front-action-primary:hover { background: color-mix(in srgb, var(--primary, var(--accent)) 86%, var(--ink)); }
+}
+}

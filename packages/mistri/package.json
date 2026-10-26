@@ -1,0 +1,229 @@
+{
+  "name": "@mistriwork/mistri",
+  "version": "1.0.0-rc.1",
+  "description": "The App framework: a few lines of TypeScript, a complete App, served from your own database.",
+  "homepage": "https://mistriwork.dev",
+  "bugs": {
+    "url": "https://github.com/rbaljinder/mistri/issues"
+  },
+  "license": "MIT",
+  "author": "Baljinder Randhawa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rbaljinder/mistri.git",
+    "directory": "packages/mistri"
+  },
+  "bin": {
+    "mistri": "dist/server/index.js"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "skills",
+    "examples/apps/**/*.{ts,tsx,md}",
+    "!examples/apps/**/*.test.tsx",
+    "examples/databases/tick/seed.mjs",
+    "examples/databases/lintel/{seed,data,images,schema}.mjs",
+    "examples/apps/ladle/host/*.{html,css}",
+    "examples/apps/*/fonts/*.{woff2,txt}",
+    "examples/databases/ladle/seed.mjs",
+    "README.md",
+    "mark.svg",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    "./app": {
+      "types": "./schema/app.d.ts",
+      "default": "./schema/app.mjs"
+    },
+    "./page": {
+      "types": "./schema/page.d.ts",
+      "mistri-built": "./dist/ui/page.js",
+      "default": "./src/client/components/sdk/page.tsx"
+    },
+    "./ui": {
+      "types": "./schema/ui.d.ts",
+      "mistri-built": "./dist/ui/index.js",
+      "default": "./src/client/components/sdk/index.ts"
+    },
+    "./ui/testing": {
+      "types": "./schema/ui-testing.d.ts",
+      "mistri-built": "./dist/ui/testing.js",
+      "default": "./src/client/components/sdk/testing.tsx"
+    },
+    "./commands": {
+      "mistri-built": {
+        "types": "./dist/server/commands.d.ts",
+        "default": "./dist/server/commands.js"
+      },
+      "default": "./src/server/commands.ts"
+    },
+    "./policy": {
+      "mistri-built": {
+        "types": "./dist/server/policy.d.ts",
+        "default": "./dist/server/policy.js"
+      },
+      "default": "./src/server/policy.ts"
+    },
+    "./jobs": {
+      "mistri-built": {
+        "types": "./dist/server/jobs.d.ts",
+        "default": "./dist/server/jobs.js"
+      },
+      "default": "./src/server/jobs.ts"
+    },
+    "./workflows": {
+      "mistri-built": {
+        "types": "./dist/server/workflows.d.ts",
+        "default": "./dist/server/workflows.js"
+      },
+      "default": "./src/server/workflows.ts"
+    },
+    "./handler": {
+      "mistri-built": {
+        "types": "./dist/server/handler.d.ts",
+        "default": "./dist/server/handler.js"
+      },
+      "default": "./src/server/handler.ts"
+    },
+    "./testing": {
+      "mistri-built": {
+        "types": "./dist/server/testing.d.ts",
+        "default": "./dist/server/testing.js"
+      },
+      "default": "./src/server/testing.ts"
+    },
+    "./maintenance": {
+      "mistri-built": {
+        "types": "./dist/server/maintenance.d.ts",
+        "default": "./dist/server/maintenance.js"
+      },
+      "default": "./src/server/maintenance.ts"
+    },
+    "./openfeature": {
+      "mistri-built": {
+        "types": "./dist/server/openfeature.d.ts",
+        "default": "./dist/server/openfeature.js"
+      },
+      "default": "./src/server/openfeature.ts"
+    },
+    "./integration": {
+      "mistri-built": {
+        "types": "./dist/server/integration.d.ts",
+        "default": "./dist/server/integration.js"
+      },
+      "default": "./src/server/integration.ts"
+    },
+    "./react": {
+      "types": "./schema/react.d.ts",
+      "mistri-built": "./dist/embed/react/index.js",
+      "default": "./src/embed/index.tsx"
+    },
+    "./react/next": {
+      "types": "./schema/react-next.d.ts",
+      "mistri-built": "./dist/embed/react/next.js",
+      "default": "./src/embed/next.ts"
+    },
+    "./react/react-router": {
+      "types": "./schema/react-react-router.d.ts",
+      "mistri-built": "./dist/embed/react/react-router.js",
+      "default": "./src/embed/react-router.ts"
+    },
+    "./react/tanstack-router": {
+      "types": "./schema/react-tanstack-router.d.ts",
+      "mistri-built": "./dist/embed/react/tanstack-router.js",
+      "default": "./src/embed/tanstack-router.ts"
+    },
+    "./schema/*": "./schema/*",
+    "./package.json": "./package.json",
+    "./*": {
+      "mistri-built": "./dist/*",
+      "default": "./src/*"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-packages.mjs",
+    "prepack": "node ../../scripts/pack-manifest.mjs strip",
+    "postpack": "node ../../scripts/pack-manifest.mjs restore"
+  },
+  "dependencies": {
+    "@mistriwork/engine": "1.0.0-rc.1",
+    "@mistriwork/kit": "1.0.0-rc.1",
+    "@mistriwork/ui": "1.0.0-rc.1",
+    "intl-messageformat": "12.1.2",
+    "marked": "^18.1.0",
+    "sanitize-html": "^2.18.0",
+    "subset-font": "^2.9.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.2.18",
+    "oxfmt": "^0.72.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "~7.0.2"
+  },
+  "peerDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@tanstack/react-router": "^1.0.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.2.0",
+    "next": ">=14.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router": ">=6.4",
+    "rolldown": "^1.2.0",
+    "satori": "^0.33.5",
+    "sharp": "^0.35.5",
+    "typescript": ">=7"
+  },
+  "peerDependenciesMeta": {
+    "@resvg/resvg-js": {
+      "optional": true
+    },
+    "@tanstack/react-router": {
+      "optional": true
+    },
+    "@testing-library/react": {
+      "optional": true
+    },
+    "@types/react": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "react-router": {
+      "optional": true
+    },
+    "rolldown": {
+      "optional": true
+    },
+    "satori": {
+      "optional": true
+    },
+    "sharp": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    }
+  },
+  "optionalDependencies": {
+    "@better-auth/core": "1.7.10",
+    "@better-auth/scim": "1.7.10",
+    "@better-auth/sso": "1.7.10",
+    "better-auth": "1.7.10"
+  },
+  "engines": {
+    "node": ">=24.22.1"
+  }
+}

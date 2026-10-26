@@ -1,0 +1,159 @@
+# Build the desktop app on a version tag, and attach the installers to the
+# GitHub Release for that tag.
+#
+# Separate from release.yml on purpose. That one publishes npm and the
+# container image and is fast; this one spins up three OS runners and builds
+# Electron installers, which is heavy and slower — keeping them apart means a
+# desktop build that breaks does not hold up the npm publish, and the matrix
+# lives in one place.
+#
+# macOS builds are signed with a Developer ID certificate and notarised, so a
+# downloaded app opens normally. The five secrets the Mac leg reads for
+# that — MAC_CSC_LINK (a base64 .p12 of the Developer ID cert + key),
+# MAC_CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID —
+# live on the repo. Only the macOS leg reads the certificate, into a keychain
+# it prepares itself; Windows and Linux never see it.
+# Windows and Linux stay UNSIGNED for now: Windows is a SmartScreen "More info
+# -> Run anyway", Linux AppImage needs nothing. A Windows cert can be added
+# later with no other change to this file.
+name: Desktop
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}       # build on demand without cutting a release
+
+jobs:
+  build:
+    # The macOS runner bills at 10x and then blocks for the notarisation
+    # round-trip, so this is the most expensive job in the repo. Trial tags
+    # (v0.0.x, or any -rc/-beta) do not need it — they exist to exercise the
+    # npm/container pipeline, which release.yml already covers. So skip the
+    # whole build for a trial: only a real release tag (v0.1.0 and up) or a
+    # manual dispatch spins up the runners. Signing itself is already proven,
+    # so a trial loses nothing by not rebuilding the desktop apps.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (!startsWith(github.ref_name, 'v0.0.') && !contains(github.ref_name, '-'))
+    permissions:
+      contents: write        # create/update the Release and upload installers
+    strategy:
+      fail-fast: false        # a Windows failure should not bin the Mac build
+      matrix:
+        include:
+          - os: macos-latest
+            platform: --mac --universal
+            artifacts: 'desktop/release/*.dmg,desktop/release/*.zip'
+          - os: windows-latest
+            platform: --win
+            artifacts: 'desktop/release/*.exe'
+          - os: ubuntu-latest
+            platform: --linux
+            artifacts: 'desktop/release/*.AppImage'
+    runs-on: ${{ matrix.os }}
+    # 45, not 30: a first notarisation from a new team can sit in Apple's queue
+    # ~25 min (measured on the 0.0.5 trial). This is a ceiling, not a cost — the
+    # job bills for actual runtime, and later notarisations are typically minutes.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      # The tag and the manifest must agree, the same rule release.yml enforces
+      # — a desktop app labelled a version the tag does not name is a support
+      # ticket waiting to happen. Runs on every OS so a mismatch fails fast on
+      # all three rather than after a 20-minute Mac build.
+      - name: The tag matches package.json
+        # A dispatch from a branch is a trial: no tag to match, nothing released.
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p 'require("./package.json").version')"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match package.json $pkg" >&2
+            exit 1
+          fi
+
+      - run: npm ci
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      # electron-builder's own keychain setup passes the certificate's password
+      # where the new keychain's belongs (set-key-partition-list -k), which the
+      # macOS 26 runner image refuses since September 2026. So the Mac leg
+      # builds the keychain itself, with its own password, and electron-builder
+      # signs from it (CSC_KEYCHAIN) instead of importing CSC_LINK.
+      - name: Prepare the signing keychain (macOS)
+        if: matrix.os == 'macos-latest'
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -base64 32)"
+          printf '%s' "$MAC_CSC_LINK" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$MAC_CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/signing.p12"
+          echo "CSC_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      # `stage.mjs` builds the root server and copies it, plus a production-only
+      # install of the drivers, into the bundle. Then electron-builder packages
+      # it for this OS. On macOS it signs with the Developer ID cert from
+      # the keychain above and notarises; Windows and Linux have no cert configured, so
+      # nothing is discovered and they ship unsigned.
+      - name: Build the installer
+        working-directory: desktop
+        env:
+          # macOS Developer ID signing + notarisation: electron-builder signs
+          # from the keychain the step above prepared (CSC_KEYCHAIN), then
+          # notarytool notarises using the APPLE_* credentials. No CSC_LINK:
+          # it would send electron-builder back to its own keychain setup.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Windows and Linux stay unsigned: no cert, so nothing to discover.
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          node scripts/stage.mjs
+          npx electron-builder ${{ matrix.platform }} --publish never
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: ${{ matrix.artifacts }}
+          fail_on_unmatched_files: true
+          # A 0.0.x tag or any `-rc`/`-beta` suffix is a trial, not the real
+          # thing — mark it pre-release so `/releases/latest` (which the site
+          # links to) skips it and resolves to the first full release instead.
+          prerelease: ${{ startsWith(github.ref_name, 'v0.0.') || contains(github.ref_name, '-') }}
+          body: |
+            - **macOS**: signed and notarised — opens normally.
+            - **Windows**: unsigned — SmartScreen → **More info** → **Run anyway**.
+            - **Linux**: `chmod +x` the AppImage and run it.
+
+            Prefer no install at all? `npx tablewalk` and the container image need neither.
+
+      # A trial (a dispatch from a branch) keeps its installers on the run
+      # instead of a release, so signing can be proved without releasing.
+      - name: Keep the trial installers
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*.zip
+            desktop/release/*.exe
+            desktop/release/*.AppImage
+          if-no-files-found: error

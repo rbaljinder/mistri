@@ -1,0 +1,62 @@
+{
+  "demo": {
+    "public.invoice": {
+      "id": "config:invoice",
+      "name": "Invoice",
+      "base": "public.invoice",
+      "sections": [
+        {
+          "kind": "fields",
+          "title": "Invoice",
+          "paths": ["id", "invoice_date", "total"]
+        },
+        {
+          "kind": "fields",
+          "title": "Customer",
+          "paths": [
+            "customer_id.name",
+            "customer_id.email",
+            "customer_id.credit_limit",
+            "customer_id.country_code.name"
+          ]
+        },
+        {
+          "kind": "fields",
+          "title": "Sold by",
+          "paths": ["sold_by.first_name", "sold_by.last_name", "sold_by.title"]
+        },
+        {
+          "kind": "list",
+          "title": "Lines",
+          "via": "invoice_line_invoice_fk",
+          "columns": ["line_no", "sku", "quantity"],
+          "limit": 20
+        }
+      ]
+    },
+    "public.customer": {
+      "id": "config:customer",
+      "name": "Customer",
+      "base": "public.customer",
+      "sections": [
+        {
+          "kind": "fields",
+          "title": "Customer",
+          "paths": ["id", "name", "email", "active"]
+        },
+        {
+          "kind": "fields",
+          "title": "Commercial",
+          "paths": ["credit_limit", "signed_up", "country_code.name"]
+        },
+        {
+          "kind": "list",
+          "title": "Invoices",
+          "via": "invoice_customer_fk",
+          "columns": ["id", "invoice_date", "total"],
+          "limit": 10
+        }
+      ]
+    }
+  }
+}

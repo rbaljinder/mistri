@@ -1,0 +1,98 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+/* The filter rail: facets in a column beside the rows, hairlines between
+   them rather than boxes around them. Quiet on purpose — the rows are the
+   subject; the rail says how they were narrowed and by how much. */
+.applist-body.has-rail {
+  display: grid;
+  grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
+  align-items: start;
+}
+.filter-rail {
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-5) var(--space-6) var(--space-4h);
+  border-right: 1px solid var(--line);
+  box-sizing: border-box;
+}
+.filter-rail-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); padding: var(--space-2h) 0 var(--space-3h); }
+.filter-rail-title { margin: 0; font: 600 var(--text-sm) var(--sans); color: var(--ink); }
+
+.filter-rail-clear, .facet-clear, .facet-more {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: var(--text-sm) var(--sans); color: var(--ink-muted);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .filter-rail-clear, .facet-clear, .facet-more { transition: color var(--t-hover) var(--ease-out); }
+}
+.filter-rail-clear:hover, .facet-clear:hover, .facet-more:hover { color: var(--accent-ink); }
+.facet-more { margin-top: var(--space-2h); }
+/* The rarer conditions: a quiet disclosure under the facet's own control, its
+   box under the choice that asks for text, in line with the choice's words. */
+.facet-more-conditions > .facet-values { margin-top: var(--space-2h); }
+.facet-more-conditions .form-field { margin: var(--space-1) 0 var(--space-2) var(--space-6); }
+
+.facet { position: relative; min-width: 0; margin: 0; padding: var(--space-4) 0; border: 0; border-top: 1px solid var(--line); }
+/* Floated, a legend is laid out as any child: a rendered legend sits in the
+   fieldset's top border, which drew the rule beside the name instead of above
+   it and measured the Clear from under the name, onto the first value. */
+.facet-label { float: left; width: 100%; margin: 0 0 var(--space-2h); padding: 0 var(--space-8) 0 0; font: 500 var(--text-sm) var(--sans); color: var(--ink-muted); }
+.facet > :not(legend) { clear: both; }
+.facet-clear { position: absolute; top: 12px; right: 0; }
+/* A facet of choices is a fieldset, and a legend sits in the fieldset's
+   border, so the padding box — where Clear measures its 12px from — began
+   under it: Clear landed on the first value's row, over its count. Floated,
+   the legend is an ordinary block in the padding box and Clear keeps its line.
+   Everything after it clears the float: the value list is a flex box, which
+   will not overlap a float and was squeezed to nothing beside it. */
+legend.facet-label { float: left; width: 100%; }
+legend.facet-label ~ * { clear: left; }
+.facet-values { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.facet-option { display: flex; align-items: center; gap: var(--space-3); min-height: 26px; font: var(--text-base) var(--sans); color: var(--ink); cursor: pointer; }
+.facet:has(> .facet-clear) .facet-flag { padding-right: var(--space-8); }
+.facet-option input { flex-shrink: 0; width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+.facet-option-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facet-count { color: var(--ink-subtle); font: var(--text-sm) var(--sans); font-variant-numeric: tabular-nums; }
+.facet-note { margin: 0 0 var(--space-2h); font-size: var(--text-sm); color: var(--ink-muted); overflow-wrap: anywhere; }
+
+.facet-range { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2h); margin-top: var(--space-3); }
+/* Native date segments and the calendar affordance need more room than a
+   numeric range. Stack in a narrow rail; wider sheets can retain two columns. */
+.facet-date-range { grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); }
+/* Each end is a compact Field (Field.tsx); its box is the field's own control. */
+.facet-range-end { min-width: 0; }
+
+/* The phone's sheet: the same facets, a footer that applies them. */
+.filter-sheet { display: flex; flex-direction: column; width: min(28rem, calc(100vw - 32px)); max-height: min(44rem, calc(100vh - 48px)); padding: 0; }
+.filter-sheet .filter-rail-body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-3) var(--space-5) var(--space-5); }
+.filter-sheet .facet-option { min-height: 40px; }
+.filter-sheet-foot { display: flex; justify-content: flex-end; gap: var(--space-3); padding: var(--space-4) var(--space-5); border-top: 1px solid var(--line); }
+.filter-sheet-foot button { min-height: 44px; }
+
+/* Beside a rail the results carry their own head: the chips that say the
+   selection and one Clear all, then the Sort — where the eye lands on the
+   rows, not a column away under the heading. Always drawn, so the first tick
+   never shoves the rows down. */
+.applist-results { min-width: 0; }
+.applist-results-head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--space-3) var(--space-5); min-height: 30px; padding: var(--space-1) var(--space-4h) var(--space-4);
+}
+.applist-results-head .applist-chips { flex: 1 1 auto; min-height: 28px; margin: 0; }
+.applist-chips-clear {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: var(--text-sm) var(--sans); color: var(--ink-muted);
+}
+@media (prefers-reduced-motion: no-preference) { .applist-chips-clear { transition: color var(--t-hover) var(--ease-out); } }
+.applist-chips-clear:hover { color: var(--accent-ink); }
+
+/* A number's range: the column's currency before the box, its unit after. */
+.facet-affix { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.facet-affix .facet-input { flex: 1 1 auto; }
+.facet-affix-text { flex: none; font: var(--text-sm) var(--sans); color: var(--ink-muted); }
+
+/* "Saved views" or "My views", after the App's tabs: a quiet word naming the list, not a tab. */
+.tab-group-label { align-self: center; padding: 0 var(--space-2) 0 var(--space-1); font: var(--text-xs) var(--sans); color: var(--ink-subtle); white-space: nowrap; }
+}

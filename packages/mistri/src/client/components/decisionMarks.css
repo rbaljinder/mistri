@@ -1,0 +1,37 @@
+/* What the shell draws before the chip's own code is here (DecisionChip.css comes with it, on demand): a record
+   field's held suggestion, in the chip's muted ink, and a list cell's mark. */
+.decision-chip-held {
+  color: var(--ink-muted);
+}
+/* A list cell's mark: the suggestion's words, muted, after a small glyph — on the cell's one line. */
+.decision-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--ink-muted);
+}
+.decision-mark-glyph {
+  flex: none;
+  color: var(--ink-subtle);
+}
+.decision-mark-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A phone's summary fact: the empty mark keeps its box from the first paint, and a waiting suggestion's glyph is laid
+   over it, so the fact's wrapping line is the width it was (decisionMarks.tsx). */
+.decision-fact {
+  position: relative;
+  display: inline-block;
+}
+.decision-fact.is-marked > .null {
+  visibility: hidden;
+}
+.decision-fact-mark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+}

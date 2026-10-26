@@ -1,0 +1,52 @@
+/*
+ * Someone else's stylesheet, the kind an older app carries: element rules in
+ * a layer of its own (a reset), and the page's own colours and type on html
+ * and body. Loud on purpose, so a rule that crosses into tablewalk, or one of
+ * tablewalk's that crosses out, shows in a computed style.
+ */
+@layer host-reset {
+  * {
+    margin: 0;
+  }
+  h1 {
+    color: rgb(200, 0, 0);
+    font: 700 40px/1 Georgia, serif;
+    letter-spacing: 2px;
+  }
+  button {
+    background: rgb(255, 230, 0);
+    border: 3px solid rgb(0, 0, 255);
+    border-radius: 0;
+    font-family: Georgia, serif;
+    text-transform: uppercase;
+  }
+  a {
+    color: rgb(0, 128, 0);
+  }
+  table,
+  td {
+    border: 3px solid rgb(0, 0, 255);
+  }
+}
+
+html {
+  font-size: 20px;
+}
+body {
+  margin: 0;
+  background: rgb(250, 245, 230);
+  color: rgb(40, 20, 0);
+  font-family: Georgia, serif;
+  letter-spacing: 1px;
+  line-height: 2;
+}
+.host-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  height: 48px;
+  padding: 0 16px;
+}
+.host-app {
+  height: calc(100vh - 48px);
+}

@@ -1,0 +1,165 @@
+{
+  "name": "@mistriwork/ui",
+  "version": "1.0.0-rc.1",
+  "description": "The standalone React primitives both shells are drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, the form controls built on them (text, masked, money and sensitive boxes, listboxes, choices, slider, progress and action bar; Preview), the landing hero's blocks (badge, photo tiles, icon rows; Preview), their tokens and stylesheet, and the zoom-aware ruler their popups are placed by.",
+  "homepage": "https://mistriwork.dev",
+  "bugs": {
+    "url": "https://github.com/rbaljinder/mistri/issues"
+  },
+  "license": "MIT",
+  "author": "Baljinder Randhawa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rbaljinder/mistri.git",
+    "directory": "packages/ui"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "mark.svg",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "mistri-built": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "default": "./src/index.ts"
+    },
+    "./Button.js": {
+      "mistri-built": "./dist/Button.js",
+      "default": "./src/Button.tsx"
+    },
+    "./Choices.js": {
+      "mistri-built": "./dist/Choices.js",
+      "default": "./src/Choices.tsx"
+    },
+    "./ComponentStyleScope.js": {
+      "mistri-built": "./dist/ComponentStyleScope.js",
+      "default": "./src/ComponentStyleScope.ts"
+    },
+    "./DateField.js": {
+      "mistri-built": "./dist/DateField.js",
+      "default": "./src/DateField.tsx"
+    },
+    "./DropMenu.js": {
+      "mistri-built": "./dist/DropMenu.js",
+      "default": "./src/DropMenu.tsx"
+    },
+    "./Dropdown.js": {
+      "mistri-built": "./dist/Dropdown.js",
+      "default": "./src/Dropdown.tsx"
+    },
+    "./Field.js": {
+      "mistri-built": "./dist/Field.js",
+      "default": "./src/Field.tsx"
+    },
+    "./FormParts.js": {
+      "mistri-built": "./dist/FormParts.js",
+      "default": "./src/FormParts.tsx"
+    },
+    "./HeroBlocks.js": {
+      "mistri-built": "./dist/HeroBlocks.js",
+      "default": "./src/HeroBlocks.tsx"
+    },
+    "./Icon.js": {
+      "mistri-built": "./dist/Icon.js",
+      "default": "./src/Icon.tsx"
+    },
+    "./Modal.js": {
+      "mistri-built": "./dist/Modal.js",
+      "default": "./src/Modal.tsx"
+    },
+    "./Select.js": {
+      "mistri-built": "./dist/Select.js",
+      "default": "./src/Select.tsx"
+    },
+    "./SensitiveField.js": {
+      "mistri-built": "./dist/SensitiveField.js",
+      "default": "./src/SensitiveField.tsx"
+    },
+    "./Slider.js": {
+      "mistri-built": "./dist/Slider.js",
+      "default": "./src/Slider.tsx"
+    },
+    "./TextField.js": {
+      "mistri-built": "./dist/TextField.js",
+      "default": "./src/TextField.tsx"
+    },
+    "./Typeahead.js": {
+      "mistri-built": "./dist/Typeahead.js",
+      "default": "./src/Typeahead.tsx"
+    },
+    "./anchor.js": {
+      "mistri-built": "./dist/anchor.js",
+      "default": "./src/anchor.ts"
+    },
+    "./datePickerModel.js": {
+      "mistri-built": "./dist/datePickerModel.js",
+      "default": "./src/datePickerModel.ts"
+    },
+    "./forms.css": {
+      "mistri-built": "./dist/forms.css",
+      "default": "./src/forms.css"
+    },
+    "./hero.css": {
+      "mistri-built": "./dist/hero.css",
+      "default": "./src/hero.css"
+    },
+    "./preferences.css": {
+      "mistri-built": "./dist/preferences.css",
+      "default": "./src/preferences.css"
+    },
+    "./masks.js": {
+      "mistri-built": "./dist/masks.js",
+      "default": "./src/masks.ts"
+    },
+    "./popups.js": {
+      "mistri-built": "./dist/popups.js",
+      "default": "./src/popups.ts"
+    },
+    "./primitives.css": {
+      "mistri-built": "./dist/primitives.css",
+      "default": "./src/primitives.css"
+    },
+    "./ruler.js": {
+      "mistri-built": "./dist/ruler.js",
+      "default": "./src/ruler.ts"
+    },
+    "./style.css": {
+      "mistri-built": "./dist/style.css",
+      "default": "./src/style.css"
+    },
+    "./tokens.css": {
+      "mistri-built": "./dist/tokens.css",
+      "default": "./src/tokens.css"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-packages.mjs",
+    "prepack": "node ../../scripts/pack-manifest.mjs strip",
+    "postpack": "node ../../scripts/pack-manifest.mjs restore"
+  },
+  "peerDependencies": {
+    "@base-ui/react": "^1.8.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@base-ui/react": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=24.22.1"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "_comment": [
+    "A reference tablewalk.json. Copy it, edit it, mount it — it is not built",
+    "into the image and nothing here is special.",
+    "",
+    "The password is written as ${POSTGRES_PASSWORD} rather than inline. That",
+    "is not decoration: the macOS keychain that credentials.ts prefers does",
+    "not exist in a Linux container, so environment expansion is the credential",
+    "mechanism for Docker. An unset variable is a startup error, not an empty",
+    "password. See DEPLOY.md.",
+    "",
+    "\"writable\" is opt-in per connection and enforced by the server, not by",
+    "the browser's toggle. Leaving it false is the right default for a file a",
+    "colleague may have copied without reading every line of.",
+    "",
+    "The aggregate clauses name their child table as public.invoice_line, not",
+    "invoice_line. On Postgres a table's id is schema-qualified, and an",
+    "aggregate resolves the child by id — the base table is the one place a",
+    "bare name is accepted. Getting this wrong is not silent: the view comes",
+    "back from /api/views carrying its own error, which names the fix.",
+    "",
+    "Unknown top-level keys are ignored by the loader, which is why this",
+    "comment can live in a file that has no comment syntax."
+  ],
+  "connections": [
+    {
+      "name": "demo",
+      "url": "postgres://tablewalk:${POSTGRES_PASSWORD}@db:5432/demo",
+      "schemas": ["public"],
+      "writable": false
+    }
+  ],
+  "_surfaces": [
+    "Beside `connections`, a config file can carry the surfaces a team agrees",
+    "on — so they live in version control rather than in one person's browser.",
+    "`views` are saved filters, `queries` named SQL, `pages` composed records,",
+    "and `layouts` how the record view arranges one table.",
+    "",
+    "A list section names its relationship as `from` + `whose` (the child",
+    "table, and the column of it whose value names this record) or as `via`,",
+    "the constraint name. The pair is resolved against the schema; one that",
+    "matches nothing keeps its section and carries an error rather than",
+    "disappearing. `show` says which fields or columns, `sort` reads like the",
+    "query bar — the same words a page section uses.",
+    "",
+    "A committed layout fills in for a table nobody has laid out here, and",
+    "never over one somebody saved in the browser."
+  ],
+  "layouts": [
+    {
+      "table": "customer",
+      "connection": "demo",
+      "name": "Account desk",
+      "sections": [
+        { "kind": "fields", "title": "Account", "show": ["name", "email", "credit_limit"] },
+        {
+          "kind": "list",
+          "title": "Invoices",
+          "from": "public.invoice",
+          "whose": "customer_id",
+          "show": ["id", "invoice_date", "total"],
+          "limit": 5,
+          "sort": "invoice_date desc"
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "name": "Recent invoices",
+      "connection": "demo",
+      "text": "invoice show id, invoice_date, total, customer_id.name as customer, customer_id.country_code.name as country count public.invoice_line via invoice_id as lines sort invoice_date desc limit 50"
+    },
+    {
+      "name": "Active customers by value",
+      "connection": "demo",
+      "text": "customer show name, email, country_code.name as country, credit_limit count public.invoice via customer_id as invoices sum public.invoice.total via customer_id as billed where active = true sort credit_limit desc limit 100"
+    }
+  ]
+}

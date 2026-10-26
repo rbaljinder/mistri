@@ -1,0 +1,11 @@
+/* The landing hero's badge, icon rows and photo tiles (LandingSurface.tsx draws them; their rules are @mistriwork/ui's
+   hero.css, imported below). They are rules of the public
+   page's first stylesheet, which the server draws a landing under (landing.js imports this sheet), and never of the
+   signed-in shell's: a member whose home is the landing has them fetched with its answer (PublicHome.tsx,
+   landingHeroShell.css). The two build to the same bytes, so the built sheet carries whichever name the build met
+   first. */
+@import '@mistriwork/ui/hero.css' layer(components);
+@layer components {
+/* What only the landing adds: over a photo the words wear the stage's ink. */
+.front-hero-overlay .front-points, .front-hero-overlay .front-badge { color: var(--lightbox-ink); }
+}

@@ -1,0 +1,5 @@
+{
+  "connections": [
+    { "name": "keystone", "url": "${KEYSTONE_DATABASE_URL}", "writable": true }
+  ]
+}

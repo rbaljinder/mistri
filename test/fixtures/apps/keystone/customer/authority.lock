@@ -1,0 +1,92 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role borrower — the App
+auth rows policy — the App
+source keystone connection "keystone" — the App
+source keystone default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource autopay access write — the App
+resource customer access write — the App
+resource customer fields read city — the App
+resource customer fields read customer_since — the App
+resource customer fields read email — the App
+resource customer fields read first_name — the App
+resource customer fields read id — the App
+resource customer fields read last_name — the App
+resource customer fields read paperless — the App
+resource customer fields read phone — the App
+resource customer fields read preferred_contact — the App
+resource customer fields read state — the App
+resource customer fields read street — the App
+resource customer fields read version — the App
+resource customer fields read zip — the App
+resource customer fields write city — the App
+resource customer fields write paperless — the App
+resource customer fields write phone — the App
+resource customer fields write preferred_contact — the App
+resource customer fields write state — the App
+resource customer fields write street — the App
+resource customer fields write zip — the App
+resource dealer fields read city — the App
+resource dealer fields read email — the App
+resource dealer fields read id — the App
+resource dealer fields read name — the App
+resource dealer fields read phone — the App
+resource dealer fields read state — the App
+resource dealer fields read street — the App
+resource dealer fields read zip — the App
+resource loan access write — the App
+resource payment access write — the App
+resource payoff_quote access write — the App
+role admin read autopay — the App
+role admin read customer — the App
+role admin read dealer — the App
+role admin read installment — the App
+role admin read loan — the App
+role admin read loan_document — the App
+role admin read payment — the App
+role admin read payoff_quote — the App
+role borrower read autopay — the App
+role borrower read customer — the App
+role borrower read dealer — the App
+role borrower read installment — the App
+role borrower read loan — the App
+role borrower read loan_document — the App
+role borrower read payment — the App
+role borrower read payoff_quote — the App
+role borrower write customer — the App
+role borrower command cancelAutopay — the App
+role borrower command enrollAutopay — the App
+role borrower command makePayment — the App
+role borrower command requestPayoffQuote — the App
+role borrower fields loan read amount_due — the App
+role borrower fields loan read apr — the App
+role borrower fields loan read charged_off_on — the App
+role borrower fields loan read customer_id — the App
+role borrower fields loan read days_past_due — the App
+role borrower fields loan read dealer_id — the App
+role borrower fields loan read first_due_on — the App
+role borrower fields loan read funded_on — the App
+role borrower fields loan read id — the App
+role borrower fields loan read interest_paid — the App
+role borrower fields loan read loan_number — the App
+role borrower fields loan read maturity_on — the App
+role borrower fields loan read next_due_on — the App
+role borrower fields loan read paid_off_on — the App
+role borrower fields loan read payment_amount — the App
+role borrower fields loan read principal — the App
+role borrower fields loan read principal_balance — the App
+role borrower fields loan read status — the App
+role borrower fields loan read term_months — the App
+role borrower fields loan read vehicle_description — the App
+role borrower fields loan read version — the App
+role borrower fields loan read vin — the App
+
+contract cancelAutopay v1 601cbf94b023
+contract enrollAutopay v1 d721f6f4bedf
+contract makePayment v1 20ac8fedfbe6
+contract requestPayoffQuote v1 197f5abc3fcf

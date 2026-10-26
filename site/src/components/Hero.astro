@@ -1,0 +1,80 @@
+---
+/* The home's opening: the promise, the two ways in, and its proof: the
+   lines of a sample App beside the screen they make, framed as the window it
+   runs in, overlapping the code a little. The code is cut from Lintel and
+   only reflowed to fit; `// …` marks what is left out. Starlight's own hero
+   puts a square picture beside the words; this override (astro.config.mjs)
+   draws the same front matter with the proof underneath. Only the home has a
+   hero. On a phone the screen comes first and only the status machine stays. */
+import { Image } from 'astro:assets';
+import { Code, LinkButton } from '@astrojs/starlight/components';
+import light from '../assets/home/hero.webp';
+import dark from '../assets/home/hero-dark.webp';
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, actions = [] } = data.hero || {};
+/* Two sentences, two lines: the promise, then what it gets you. */
+const heading = title.replace(/\.\s+/, '.<br />');
+const alt =
+  'A Lintel lease, Alder Court #101, Active: its start, end, rent and deposit under the name, Give notice and Add charge, the road from Draft to Ended, the balance due beside what was charged and paid, its charges, and beside them the home and the resident.';
+/* The picture takes about three fifths of the content's width. */
+const sizes = '(min-width: 76rem) 45rem, (min-width: 56rem) 62vw, calc(100vw - 2rem)';
+
+const machine = `machine: machine('status', {
+  draft: { on: { signLease: 'active' } },
+  active: { on: { giveNotice: 'notice' } },
+  notice: { on: { endLease: 'ended' } },
+  ended: { final: true },
+}),`;
+const page = `page('lease', [
+  header({ status: 'status',
+    facts: ['start_on', 'end_on', 'rent', 'deposit'] }),
+  fields(['balance', 'charged', 'paid']),
+  related('Charges', 'charge', 'lease_id', /* … */),
+  // … payments
+  card('Home', 'unit_id', ['property_id', 'bedrooms', 'sqft']),
+  card('Resident', 'resident_id', ['email', 'phone']),
+]),`;
+---
+
+<div class="tw-hero">
+  <div class="tw-hero-copy">
+    <h1 id="_top" data-page-title set:html={heading} />
+    {tagline && <p class="tw-hero-tagline" set:html={tagline} />}
+    {/* The loop an agent works in, each part a thing that exists: the typed DSL,
+        the skill, the check that names what is wrong, and the MCP tools that
+        show what ran. Words only, so it costs the first screen a line or two. */}
+    <p class="tw-hero-loop">
+      <a href="/docs/build-with-an-agent/">Built for the agent loop</a>: coding agents build Apps with it. The typed DSL keeps an App short, <code>mistri agent init</code> installs the skill, <code>mistri check</code> names what is wrong and the fix, and MCP shows the agent what the running App did.
+    </p>
+    <ol class="tw-hero-steps" aria-label="The agent loop">
+      <li>write</li>
+      <li>check</li>
+      <li>see</li>
+    </ol>
+    {
+      actions.length > 0 && (
+        <div class="tw-hero-actions">
+          {actions.map(({ attrs: { class: className, ...attrs } = {}, icon, link: href, text, variant }) => (
+            <LinkButton {href} {variant} icon={icon?.name} class:list={[className]} {...attrs}>
+              {text}
+            </LinkButton>
+          ))}
+        </div>
+      )
+    }
+  </div>
+  <div class="tw-hero-proof not-content">
+    <div class="tw-hero-code">
+      <Code code={machine} lang="ts" title="lintel/resources.ts" />
+      <div class="tw-hero-code-page"><Code code={page} lang="ts" title="lintel/pages/lease.ts" /></div>
+    </div>
+    <figure class="tw-window tw-hero-shot">
+      <div class="tw-window-bar" aria-hidden="true"><span></span><span></span><span></span><b>localhost:4111/leases/1</b></div>
+      {/* The light picture is the one the page waits for; the dark one is lazy,
+          so a reader in light mode never fetches it (display: none is not loaded). */}
+      <Image src={light} {alt} {sizes} loading="eager" fetchpriority="high" class="tw-shot-light" />
+      <Image src={dark} {alt} {sizes} loading="lazy" class="tw-shot-dark" />
+    </figure>
+  </div>
+</div>

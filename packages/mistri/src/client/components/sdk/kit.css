@@ -1,0 +1,251 @@
+/* The public kit's own rules (kit.tsx), brought with it: after the base, before any look (style.css names the order).
+   Tokens only, so every look dresses them; no motion. */
+@layer components {
+  .kit-card {
+    padding: var(--space-4h) var(--space-5);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg, var(--radius));
+    background: var(--surface);
+    color: var(--ink);
+    min-width: 0;
+  }
+  .kit-group {
+    min-width: 0;
+  }
+  .kit-card-title {
+    margin: 0 0 var(--space-3h);
+    font: var(--heading-weight, 600) calc(15px * var(--type-k))/1.3 var(--heading-font, var(--sans));
+    letter-spacing: var(--track-title, -0.012em);
+    color: var(--ink);
+  }
+  .kit-heading {
+    margin: 0;
+    font: var(--heading-weight, 600) calc(15px * var(--type-k))/1.3 var(--heading-font, var(--sans));
+    color: var(--ink);
+  }
+  h4.kit-heading {
+    font-size: var(--text-base);
+    color: var(--ink-muted);
+  }
+  .kit-stack {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .kit-row {
+    display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .kit-gap-tight {
+    gap: var(--space-2h);
+  }
+  .kit-gap-field {
+    gap: var(--field-gap);
+  }
+  .kit-gap-section {
+    gap: var(--section-seam);
+  }
+  .kit-row.kit-gap-field {
+    gap: var(--space-4) var(--field-gap);
+  }
+  .kit-align-start {
+    align-items: flex-start;
+  }
+  .kit-align-center {
+    align-items: center;
+  }
+  .kit-align-baseline {
+    align-items: baseline;
+  }
+  .kit-align-end {
+    align-items: flex-end;
+  }
+  /* Segmented: a row of words in one hairline, the chosen one filled as a tab is; a count is a pill beside its word. */
+  .kit-segmented {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border: 1px solid var(--line-control, var(--line));
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: var(--space-1);
+    gap: var(--space-1);
+  }
+  .kit-segment {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    flex: none;
+    min-height: 28px;
+    padding: 0 var(--space-4);
+    border: 0;
+    border-radius: var(--radius-item, var(--radius));
+    background: transparent;
+    color: var(--ink-muted);
+    font: 500 var(--text-base)/1 var(--sans);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .kit-segment {
+      transition:
+        color var(--t-hover, 120ms) ease,
+        background-color var(--t-hover, 120ms) ease;
+    }
+  }
+  .kit-segment:hover {
+    color: var(--ink);
+  }
+  .kit-segment[aria-checked='true'] {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+  /* As an activity feed's periods: the ink, not the accent, where a look fills its chosen tab in the ink (Mono). */
+  :root[data-look-tabs='inverted'] .kit-segment[aria-checked='true'] {
+    background: var(--ink);
+  }
+  .kit-segment:focus-visible {
+    outline: var(--focus-width, 2px) solid var(--focus);
+    outline-offset: -2px;
+  }
+  .kit-segmented-compact .kit-segment {
+    min-height: 24px;
+    padding: 0 var(--space-3h);
+    font-size: var(--text-sm);
+  }
+  @media (max-width: 760px) {
+    .kit-segment {
+      padding: 0 var(--space-3);
+      font-size: var(--text-sm);
+    }
+  }
+  .kit-segment-count {
+    min-width: 2ch;
+    padding: 1px var(--space-2h);
+    border-radius: 999px;
+    background: var(--raised);
+    color: var(--ink);
+    font: 600 var(--text-xs)/1.4 var(--sans);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+  .kit-segment[aria-checked='true'] .kit-segment-count {
+    background: color-mix(in srgb, var(--surface) 22%, transparent);
+    color: inherit;
+  }
+  /* A stat: the label over the figure, the change under it, the trend across its foot. */
+  .kit-stat {
+    display: grid;
+    align-content: start;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: var(--space-4h) var(--space-5);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel, var(--radius-lg, var(--radius)));
+    background: var(--surface);
+  }
+  .kit-stat-label {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
+  }
+  .kit-stat-figure {
+    font: var(--heading-weight, 600) calc(26px * var(--type-k))/1.15 var(--heading-font, var(--sans));
+    letter-spacing: var(--track-display, -0.022em);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .kit-stat-change {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+  .kit-stat-good {
+    color: var(--status-good);
+  }
+  .kit-stat-bad {
+    color: var(--status-critical);
+  }
+  .kit-stat-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-height: 30px;
+  }
+  .kit-stat-spark {
+    display: block;
+    flex: 0 1 50%;
+    height: 28px;
+    min-width: 0;
+  }
+  .kit-stat-spark .spark {
+    display: block;
+    width: 100%;
+    height: 28px;
+  }
+  .kit-columns {
+    min-width: 0;
+  }
+  /* A kit table is the look's table (style.css): only its row link and its empty note are the kit's own. The link reads as
+   the cell's text, ruled on hover, so a row does not become a column of accent-coloured words. */
+  .kit-table-link {
+    display: inline;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .kit-table-link:hover {
+    color: var(--accent-ink);
+    text-decoration: underline;
+  }
+  .kit-table-link:focus-visible {
+    outline: var(--focus-width, 2px) solid var(--focus);
+    outline-offset: 2px;
+  }
+  .kit-table-empty {
+    padding: var(--space-4) var(--space-4h);
+    color: var(--ink-muted);
+  }
+  /* A component's own element: what its scoped stylesheet is scoped to, and never wider than its section. */
+  .custom-section,
+  .custom-value,
+  .custom-list,
+  .custom-room,
+  .custom-input {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .custom-section,
+  .custom-list {
+    overflow-x: auto;
+  }
+  /* An input stands where a field's control does: the field's width, on its own line. */
+  .custom-input {
+    display: block;
+  }
+  /* An App's own value renderer stands in a field's value, a cell or a card, whose type is the platform's (a record's
+   value is heavy, mono and clipped to a line). It is drawn in body text instead, so what it makes is its author's
+   to set, from a known start, whichever room it is placed in. */
+  .custom-value {
+    font: 400 var(--text-base)/1.45 var(--sans);
+    font-style: normal;
+    font-variant-numeric: normal;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: normal;
+    color: var(--ink);
+  }
+}

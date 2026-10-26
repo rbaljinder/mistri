@@ -1,0 +1,4047 @@
+/* The tool's own rules: the first layer (style.css names the order). */
+@layer base {
+  /* Pages: one root, and everything that hangs off it.
+
+   In its own file because it is a self-contained surface and style.css is
+   already long. Nothing here names a colour — every value is a token defined
+   at the top of style.css, so the dark scheme needs no second set of rules. */
+
+  /* Two rows — see `.page-head-top` below. The head was a single flex row and
+   an earlier rule here set it, so the two-row version quietly did nothing. */
+  .page-head {
+    margin-bottom: var(--space-4h);
+  }
+  .page-title {
+    margin: 0;
+    font: 600 var(--text-lg) var(--mono);
+    letter-spacing: -0.015em;
+  }
+
+  /* The heading keeps the full accessible label; the initials disc is a quiet
+   identity cue alongside it, using the same avatar tokens as cards and lists. */
+  .page-record-avatar {
+    flex: none;
+  }
+
+  /* ---------- the layout ---------- */
+
+  /* Full width, like every other room. Pages sat in a centred 76rem column
+   while the lists ran edge to edge, so each navigation jumped the content
+   edge — one column discipline everywhere is what makes the rooms read as
+   one building. (The endorsed model here is the classic record form,
+   which is full width too.) */
+  .page-head,
+  .page-body {
+    width: 100%;
+  }
+  /* Two rows: what the page is called, then how you choose the record it is
+   about. They were one row, and the filter — the widest thing there and the
+   only one you type into — ended up wedged between two buttons. */
+  .page-head {
+    margin-bottom: var(--space-5);
+  }
+  .page-head-top {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3h);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+  }
+  /* The Layout button goes to the far end, away from the name it is not about. */
+  .page-head-top .page-edit {
+    margin-left: auto;
+  }
+  /* The title, when it is also the way to another page. Sized like the heading
+   it replaces rather than like a form control, because it is still the name
+   of what you are looking at — the caret is the only thing saying there is
+   more than one of them. */
+  .page-title-pick .dd-button {
+    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
+    border-color: transparent;
+    background: none;
+  }
+  .page-title-pick .dd-value {
+    font: 620 calc(17px * var(--type-k)) var(--mono);
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .page-title-pick .dd-button:hover {
+    border-color: var(--line);
+    background: var(--raised);
+  }
+  .page-title-pick .dd-list {
+    min-width: 16rem;
+  }
+  /* The Edit control to the far right; everything else keeps to the left, so
+   the filter sits beside the title it belongs to rather than adrift. */
+  .page-edit {
+    flex: none;
+    margin-left: auto;
+    font-size: var(--text-xs);
+  }
+
+  /* Sections flow into rows, each taking the share of the row its width names.
+   Wrapping rather than a grid with declared tracks: a section is a piece of
+   content and "half" survives a narrow window, where "columns 4 through 9"
+   needs a breakpoint table to mean anything. */
+  .page-body {
+    /* Sections need room to read as separate things. A page is several
+     answers about one record, and at 26px the seam between two of them was
+     the same distance as the gap between two rows of fields inside one — so
+     the eye had to use the hairline to find the edge, and a section without
+     a heading had nothing to find. */
+    --page-row-gap: var(--section-seam);
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--space-7);
+    row-gap: var(--page-row-gap);
+    /* Sections in one row stand as tall as the tallest (docs/design.md), their
+     content from the top; a section without a box shows only its height. */
+    align-items: stretch;
+  }
+
+  /* The aside is a third of the record, between 16rem and 20rem: a ratio of the
+   room the pane leaves rather than a fixed column. Fixed at 320px, it took
+   the same share beside the side menu as beside the top one, and the main
+   column was left 487px at 1280 — three figures a pixel short of a row, a
+   related list one column short. A third leaves the top menu's shell its
+   320px at a desk and gives the side menu's main column 538px there, and it
+   grows back as the window does. The floor is a properties rail's caption
+   beside its value; under it the columns are one (1100px, below). */
+  .page-layout {
+    --page-aside-gap: 32px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(256px, (100% - var(--page-aside-gap)) / 3, 320px);
+    gap: var(--page-aside-gap);
+    width: 100%;
+    align-items: start;
+  }
+  .page-layout > .page-body {
+    min-width: 0;
+  }
+  .page-aside {
+    border-left: 1px solid var(--line);
+    padding-left: var(--space-6);
+  }
+  @media (min-width: 1101px) {
+    /* The aside's rule runs the length of the page it stands beside: stopping
+     at its last field, it read as a short box rather than a column. */
+    /* Stretched, a wrapping column hands its spare height to its rows: two
+     aside sections beside a long page stood half a page apart. They stack
+     from the top; only the rule runs the length. */
+    .page-layout > .page-aside {
+      align-self: stretch;
+      align-content: flex-start;
+    }
+    .page-layout .page-aside .page-section {
+      flex-basis: 100%;
+      margin-inline: 0;
+    }
+    .page-aside .page-metric-row {
+      flex-direction: column;
+    }
+  }
+  /* Stacked under the record, the aside is more sections: its first takes the
+   section rule a section takes, in the look's weight, rather than the aside
+   drawing a hairline of its own a row under the last field's (two rules, a
+   gap apart, where one was meant). A headline or a card is a box, and a line
+   of facts draws no rule: those stay as they are. */
+  @media (max-width: 1100px) {
+    .page-layout {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--page-row-gap, var(--section-seam));
+    }
+    .page-aside {
+      border-left: 0;
+      padding-left: 0;
+    }
+    .page-aside > .page-section:first-child:not(:has(.page-headline, > .page-facts), .page-card-section) {
+      border-top-style: solid;
+      padding-top: var(--space-3h);
+    }
+  }
+
+  /* A section's own table brings its bottom padding, which lands on top of the
+   row gap and makes the space under a list visibly bigger than the space
+   under a metric strip. The gap is the layout's job here. */
+  .page-section .table-wrap {
+    padding-bottom: 0;
+  }
+  /* A table's first column starts on its section's heading, not 14px in from it (a room has one content edge). The
+   edge cells keep their 14px, which is what a frozen column needs (style.css, .table-wrap): the wrap itself
+   reaches out by that much on its start side only, so the text sits on the heading's line and nothing stands past the section's far edge.
+   A section that is a box (Lumen's card, Sage's panel) sets its own bleed and keeps the inset it gives. */
+  .page-section .table-wrap {
+    margin-inline-start: -14px;
+    max-width: none;
+  }
+  /* A section's table scrolls sideways only; it grows to its rows. `overflow-x: auto` alone makes it a vertical scroller
+   too, and a sliver of vertical overflow (a row a pixel taller in another font, Lumen's card) let it take a wheel
+   turned over it and keep it, so the record stopped short of its end (e2e/scrolling.spec.ts, on an iPad). */
+  .page-section .table-wrap {
+    overflow-y: hidden;
+  }
+
+  /* No box.
+ 
+   Every section in a rounded card with its own border made six boxes on a
+   page, and a border around content that is already a table draws the same
+   line twice. Separation comes from space and one hairline above the
+   heading — which is what the eye needs to see a group, and all it needs.
+   The cards also fixed a width to the content inside them, so a five-row
+   table and a two-row one drew boxes of visibly different weight for no
+   reason a reader could name. */
+  .page-section[hidden] {
+    display: none;
+  }
+  .page-section {
+    flex: 1 1 100%;
+    min-width: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    border-top: 1px solid var(--line);
+    padding-top: var(--space-3h);
+  }
+  /* `calc` rather than a bare percentage: the gap comes out of the row, so two
+   halves at 50% each wrap onto separate lines the moment there is one. */
+  .page-section.width-half {
+    flex-basis: calc(50% - 16px);
+  }
+  .page-section.width-third {
+    flex-basis: calc(33.333% - 22px);
+  }
+  .page-section.width-two-thirds {
+    flex-basis: calc(66.667% - 10px);
+  }
+
+  /* Offsets: empty space standing where a section of that fraction would have
+   stood. The pixel corrections make the margin end exactly where the next
+   column would begin — a third-offset third lines up under the middle of
+   three, not a gap-width to its left — except `quarter`, which has no column
+   to align to and is trimmed a little so a quarter–half–quarter row cannot
+   round itself past 100% and wrap. */
+  .page-section.offset-l-quarter {
+    margin-left: calc(25% + 6px);
+  }
+  .page-section.offset-l-third {
+    margin-left: calc(33.333% + 10px);
+  }
+  .page-section.offset-l-half {
+    margin-left: calc(50% + 16px);
+  }
+  .page-section.offset-l-two-thirds {
+    margin-left: calc(66.666% + 20px);
+  }
+  .page-section.offset-r-quarter {
+    margin-right: calc(25% + 6px);
+  }
+  .page-section.offset-r-third {
+    margin-right: calc(33.333% + 10px);
+  }
+  .page-section.offset-r-half {
+    margin-right: calc(50% + 16px);
+  }
+  .page-section.offset-r-two-thirds {
+    margin-right: calc(66.666% + 20px);
+  }
+
+  @media (max-width: 900px) {
+    .page-section.width-half,
+    .page-section.width-third,
+    .page-section.width-two-thirds {
+      flex-basis: 100%;
+    }
+    /* A narrow screen stacks everything full-width; an offset there is not
+     placement, it is a squeezed column. */
+    .page-section[class*='offset-'] {
+      margin-left: 0;
+      margin-right: 0;
+    }
+  }
+
+  /* The first section is the record itself and wants no rule above it: there is
+   nothing above it to be separated from. */
+  .page-section:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+  /* Nor do the sections that share its row: a row is one band, under one rule
+   or none, and a half beside the first half drew a rule its neighbour did not.
+   Only while sections sit side by side — narrow, each has its own row. */
+  @media (min-width: 901px) {
+    .page-section:first-child.width-half + .page-section.width-half,
+    .page-section:first-child.width-third + .page-section:is(.width-third, .width-two-thirds),
+    .page-section:first-child.width-third + .page-section.width-third + .page-section.width-third,
+    .page-section:first-child.width-two-thirds + .page-section.width-third {
+      border-top: none;
+      padding-top: 0;
+    }
+  }
+
+  /* A section heading carries a tab's weight and none of its furniture.
+ 
+   Drawing it as a chip did make it legible — it had been a faint grey line
+   beside content that was not — but a page then had a box round every
+   heading on it, and boxes are what the sections deliberately do not have.
+   The weight and the colour are what were missing; the border was not. */
+  .page-section-head {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    margin: 0 0 var(--space-3h);
+    font: 600 var(--text-xs) var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink);
+  }
+  /* An embedded view's heading opens its room: the heading's own ink, the underline on hover saying it goes somewhere. */
+  .page-section-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  .page-section-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .page-section-link:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  /* A section that could not run says so in its own place, and the page keeps
+   its shape around it. A page is most useful on the day something is
+   misconfigured, which is the day an error instead of a page is worst.
+   Its heading and rule stay the section's: the problem note under them
+   (Notes.tsx) carries the warn mark, and a red title over it said the same
+   thing twice, louder than anything else on the page. */
+  .page-broken > .problem {
+    padding-bottom: 0;
+  }
+
+  /* ---------- fields ---------- */
+
+  /* Label above value, not beside it.
+ 
+   Beside it, a fixed label column put two hundred pixels between `code` and
+   `NZ` — and with three pairs to a row, the eye had to work out which value
+   belonged to which label on every line. That is what makes a record read as
+   jumbled: not the amount of data, the distance between a thing and its name.
+ 
+   Stacked, each pair is one object. The label is small and quiet because it
+   is the same on every record; the value is what you came to read. */
+  /* The label and its value belong together and the next pair does not, and
+   the spacing is the only thing that can say so. Twenty-seven fields with
+   every line the same distance from the next is a wall of text; what fixes
+   it is the ratio — 2px under a label, 14px to the next row — not a large
+   row gap, which only spreads a record down the screen. */
+  .page-field-grid {
+    /* A <dl> (its fields are terms and values): not the list's own margins. */
+    display: grid;
+    margin: 0;
+    gap: var(--space-4h) 28px;
+    grid-template-columns: var(--page-field-columns, repeat(auto-fit, minmax(min(100%, var(--page-field-min, 16rem)), 1fr)));
+    /* Full-width rooms, capped measures: on an ultrawide the auto-fit grid
+     became one fourteen-column strip nobody can scan. The grid stops
+     growing at a readable measure and stays on the shared left edge; the
+     room keeps its width, the content keeps its shape. */
+    max-width: 100rem;
+  }
+  @media (max-width: 600px) {
+    .page-field-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  /* Where some values open for editing, their text sits inside the edit box's
+   edge and padding; a value that cannot be edited — an id — takes the same
+   step down, or it stood a line of its own above the row's other values. */
+  .page-field-grid:has(.edit-field-surface) > .page-field > dd:not(:has(> .edit-field-surface)) {
+    padding-top: 5px;
+  }
+  /* A folded group of fields.
+ 
+   `<details>` rather than a button and a class, because the browser already
+   knows how to open and close one, and the state lives on the element instead
+   of in a variable something else has to keep in step. The marker is replaced
+   with a chevron that turns, so the heading reads the same folded or not. */
+  .page-fold > summary {
+    cursor: pointer;
+    /* inline-flex, so the chip is the width of its name rather than the width
+     of the page — a full-width bar reads as a rule, not a label. */
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    list-style: none;
+    user-select: none;
+  }
+  /* A shut group is still legible and no longer the thing in front. */
+  .page-fold:not([open]) > summary {
+    color: var(--ink-muted);
+  }
+  .page-fold > summary::-webkit-details-marker {
+    display: none;
+  }
+  /* The chevron is drawn, not set: the '›' glyph was 3px wide in a look's sans,
+   and turned open it read as a stray dash before the heading. */
+  .page-fold > summary::before {
+    content: '';
+    flex: none;
+    width: 5px;
+    height: 5px;
+    margin-inline: 1px var(--space-1);
+    border: solid var(--ink-subtle);
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(-45deg);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .page-fold > summary::before {
+      transition: transform var(--t-hover) var(--ease-out);
+    }
+  }
+  .page-fold[open] > summary::before {
+    transform: translateY(-2px) rotate(45deg);
+  }
+  .page-fold > summary:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+    border-radius: min(3px, var(--radius));
+  }
+  .page-fold > .page-field-grid {
+    margin-top: var(--space-3h);
+  }
+
+  .page-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  /* An editable field is the same field with a box round the value, so a page
+   in write mode reads as the page it already was rather than as a form. */
+  .page-field-edit .cell-edit {
+    width: 100%;
+    min-width: 0;
+    padding: 5px var(--space-3);
+    min-height: 32px;
+    font: var(--text-base) var(--sans);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line-control);
+    border-radius: min(2px, var(--radius));
+  }
+  .page-field-edit .cell-edit:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: -1px;
+  }
+  .page-field-edit .cell-edit.dirty {
+    border-color: var(--status-warning);
+    background: var(--status-warning-soft, var(--raised));
+  }
+  .page-pending {
+    flex: 1 0 100%;
+  }
+  /* A label has to be readable before it can be quiet.
+ 
+   Uppercase at ten pixels in the faintest colour on the page was a caption
+   of a caption: the value under it was legible and the name of the value was
+   not, which is the wrong way round on a screen whose whole job is saying
+   what the numbers are. One step darker and half a pixel larger buys that
+   back; weight does not — thirty bold labels on a screen compete with the
+   thirty values they are labelling, which is the same problem the other way
+   round. The record view's labels have always been dimmed text at regular
+   weight and they read fine. */
+  .page-field > dt {
+    font: calc(10.5px * var(--type-k)) var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .page-field > dd {
+    margin: 0;
+    font: var(--text-base) var(--mono);
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .page-field > dd.null {
+    color: var(--ink-subtle);
+    font-style: italic;
+  }
+
+  /* ---------- metrics ---------- */
+
+  /* A metric is as wide as its number, and metrics sit in one strip.
+ 
+   Widths are declared per section, and for a list that is right — but a
+   two-digit count stretched to a third of the page is four inches of nothing,
+   and two of them read as a layout that failed rather than as a summary. They
+   take the space they need and the row fills left to right.
+ 
+   `full` stays the exception, for someone who wants a number on its own. */
+  .page-section.page-metric {
+    flex: 0 1 auto;
+    min-width: 7rem;
+    border-top: none;
+    padding-top: 0;
+    padding-right: var(--space-7);
+  }
+  .page-section.page-metric.width-full {
+    flex: 1 1 100%;
+  }
+  /* A hairline between counts rather than a box around each: the run reads as
+   one strip of related numbers, which is what it is. */
+  .page-metric + .page-metric {
+    border-left: 1px solid var(--line);
+    padding-left: var(--space-7);
+  }
+  .page-metric .page-section-head {
+    margin-bottom: var(--space-1h);
+  }
+
+  .page-metric-value {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    width: 100%;
+    padding: 0;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ink);
+  }
+  .metric-number {
+    font: 600 calc(26px * var(--type-k)) var(--mono);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric-of {
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+  }
+  .page-metric-value:hover .metric-number {
+    color: var(--accent-ink);
+  }
+  .page-metric-value:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 3px;
+    border-radius: min(4px, var(--radius));
+  }
+
+  /* ---------- breakdown sections: label, bar, count ----------
+   `pbd-`, not `pb-`: the page *builder* owns the pb- namespace below, and
+   sharing it dressed these rows in the dialog's label styles. */
+
+  /* Same rule as the field grid: a bar that spans an ultrawide puts the
+   count a monitor away from its label. */
+  /* The rows share one set of tracks (subgrid), so every bar ends on one
+   line whatever the width of its count, and the label gets room before the
+   bar does. */
+  .page-breakdown-rows {
+    display: grid;
+    grid-template-columns: minmax(64px, max-content) 1fr auto;
+    row-gap: 5px;
+    max-width: 46rem;
+    container-type: inline-size;
+  }
+  /* In a column too narrow for label, bar and count side by side (a third of a desk, a phone) the bar was left a
+     2px sliver: the bar goes under its label, full width, the count staying at the label's line end. */
+  @container (max-width: 18rem) {
+    .pbd-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      row-gap: var(--space-2);
+    }
+    .pbd-row > .pbd-label {
+      max-width: none;
+    }
+    .pbd-row > .pbd-bar {
+      grid-row: 2;
+      grid-column: 1 / -1;
+    }
+    .pbd-row > .pbd-count {
+      grid-row: 1;
+      grid-column: 2;
+    }
+  }
+  .page-breakdown-rows > * {
+    grid-column: 1 / -1;
+  }
+  .pbd-label {
+    max-width: 14rem;
+  }
+  .pbd-row {
+    display: grid;
+    grid-template-columns: subgrid;
+    gap: var(--space-3h);
+    align-items: center;
+    font: var(--text-sm) var(--mono);
+  }
+  .pbd-label {
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pbd-bar {
+    height: 8px;
+    background: var(--raised);
+    border-radius: min(2px, var(--radius));
+    overflow: hidden;
+  }
+  .pbd-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent-soft);
+    border-right: 2px solid var(--accent);
+  }
+  /* A group of a column that colors its values wears the color, as a chart's bar does (Dashboard.tsx, G209). */
+  .pbd-fill.is-toned {
+    background: color-mix(in srgb, var(--bar-ink) 40%, var(--surface));
+    border-right-color: var(--bar-ink);
+  }
+  .pbd-count {
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .pbd-more {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-xs);
+  }
+
+  /* The record the page is about: the pill that names it, and — clicked —
+   the way back to the list to pick another. The chooser that used to live
+   here (filter boxes, candidate hits, a recents menu) went: the list
+   itself is the chooser now, and its styles live with the list. */
+  .root-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  /* The record's name, as the heading it is. */
+  .root-current {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    max-width: 100%;
+    margin: 0;
+    font: 600 var(--text-xl) var(--sans);
+    letter-spacing: 0;
+    color: var(--ink);
+  }
+  /* With a record rooted, the page's name steps back to an eyebrow over it:
+   "LEAD" small and dim, "Margot Fontaine" large — what you are looking at,
+   then how you are reading it. Without a record the page name stays the
+   heading, because then it is the room. */
+  .page-head.has-record .page-title,
+  .page-head.has-record .page-title-pick .dd-value {
+    font: 500 var(--text-xs) var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+  }
+  .page-head.has-record .page-head-top {
+    margin-bottom: var(--space-2);
+  }
+  /* The eyebrow does not sit on the trail's rule above it: a step of the title's size (20px, four fifths), so the
+   two read as two things. A room that draws the head without a trail over it (a dialog) takes it back. */
+  .page-head.has-record {
+    margin-top: var(--space-5);
+  }
+  .page-group-empty {
+    margin: var(--space-2) 0 0;
+    font: var(--text-base) var(--mono);
+    color: var(--ink-muted);
+  }
+  /* The record's toolbar: its usual next step filled, a few more quiet, and
+   the rest — Delete last — in More. One height, so filled and quiet sit on
+   one line. */
+  .page-action {
+    font-size: var(--text-sm);
+    padding: var(--space-2) var(--space-4);
+    min-height: 30px;
+  }
+  button.ghost.page-action {
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  button.ghost.page-action:hover:not(:disabled) {
+    border-color: var(--line-strong);
+  }
+  .page-action[hidden] {
+    display: none;
+  }
+  /* The host the action bar is drawn into: no box of its own, so its buttons
+   sit in the head's row like the Delete beside them. */
+  .page-actions {
+    display: contents;
+  }
+  /* The toolbar shares the title's row, at its far end, on a wide screen;
+   on a phone it is a row of its own under the name, starting where the
+   name starts, instead of splitting across two lines. A record's head is
+   two columns for it: the name, with its eyebrow over it, wraps inside the
+   first however long it is, and the toolbar keeps the second. It was one
+   wrapping row, and a long name — or a display-sized one in a book face —
+   pushed the toolbar under it at 1280px in every look. */
+  .page-head-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  /* The name's column keeps a floor: with four verbs beside a record trail, an
+   unfloored name was squeezed a few letters wide ("KL-20001 / 2 · / Joshu /
+   a"), and the verbs wrap in their own column instead. */
+  .page-head.has-record {
+    display: grid;
+    grid-template-columns: minmax(min(100%, 24rem), 1fr) auto;
+    align-items: center;
+  }
+  .page-head.has-record > * {
+    grid-column: 1 / -1;
+  }
+  .page-head.has-record > .root-bar {
+    grid-column: 1;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  .page-head.has-record > .page-head-actions {
+    grid-column: 2;
+    margin-left: var(--space-6);
+  }
+  .page-head.has-record .root-bar > .root-current {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .page-head.has-record .root-bar > .fav-star {
+    flex: none;
+  }
+  /* On a phone, and in a room as narrow (a peek, a split's detail), a long name
+   wraps its own words and the star stays beside it, instead of dropping to a
+   line of its own under the title; the toolbar takes the row under both. */
+  @media (max-width: 600px) {
+    .page-head.has-record > :is(.root-bar, .page-head-actions) {
+      grid-column: 1 / -1;
+    }
+    .page-head.has-record > .root-bar {
+      flex-wrap: wrap;
+    }
+    .page-head.has-record .root-bar > .record-trail {
+      flex-basis: 100%;
+      justify-content: flex-end;
+    }
+    .page-head.has-record > .page-head-actions {
+      margin-left: 0;
+      justify-content: flex-start;
+    }
+    .page-head.has-record .root-bar > .root-current {
+      flex: 1 1 0;
+    }
+    .page-head.has-record .root-bar > .fav-star {
+      align-self: flex-start;
+    }
+  }
+  @container record-host (max-width: 600px) {
+    .page-head.has-record > :is(.root-bar, .page-head-actions) {
+      grid-column: 1 / -1;
+    }
+    .page-head.has-record > .root-bar {
+      flex-wrap: wrap;
+    }
+    .page-head.has-record .root-bar > .root-current {
+      flex: 1 1 0;
+    }
+    .page-head.has-record .root-bar > .record-trail {
+      flex-basis: 100%;
+      justify-content: flex-end;
+    }
+    .page-head.has-record > .page-head-actions {
+      margin-left: 0;
+      justify-content: flex-start;
+    }
+  }
+  /* The name is one line, cut short with an ellipsis where the column ends: a name that wrapped beside the verbs
+   pushed the facts down and read as a paragraph. The whole name is its title and the crumb's. */
+  .root-current > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .page-head.has-record .root-bar > .root-current {
+    overflow: hidden;
+  }
+  /* A record header (useRecordHeader in PageHead.tsx): its status is a chip beside the name, in
+   the tone's own dress, and its facts are the line under the name, in the
+   name's column, quieter than the name and no louder than the fields. On a
+   phone the status takes the line under the name and the facts the next,
+   above the toolbar's own row. */
+  .page-head-status {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    margin-inline-start: var(--space-2);
+    font-size: var(--text-md);
+  }
+  .page-head.has-record > .page-head-facts {
+    grid-column: 1;
+    margin-top: var(--space-2h);
+    font-weight: 400;
+    font-size: calc(15px * var(--type-k));
+  }
+  /* A header's facts are captioned values, as the fields under them are — "Close date" over "Dec 11, 2026" — in a
+   row with room between, never a sentence of links: a reference says its name in the ink, and is a link only to
+   the pointer. A fact the author gave a word ("3 beds") is its own caption and stands on the row's baseline. */
+  .page-head-facts {
+    align-items: flex-end;
+    gap: var(--space-3h) var(--space-7);
+    margin-top: var(--space-4h);
+  }
+  .page-head.has-record > .page-head-facts {
+    margin-top: var(--space-4h);
+    font-size: var(--text-md);
+  }
+  .page-head-facts > .page-fact::before {
+    content: none;
+  }
+  .page-head-facts > .page-fact:has(> .page-fact-caption) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .page-fact-caption {
+    font: 500 var(--text-sm)/1.4 var(--sans);
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  .page-head-facts :is(.ref-jump, .value-link) {
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .page-head-facts :is(.ref-jump, .value-link):hover {
+    color: var(--link);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .page-head-facts .num-value {
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 600px) {
+    .page-head.has-record .root-bar > .page-head-status {
+      flex-basis: 100%;
+      margin-inline-start: 0;
+    }
+    .page-head.has-record > .page-head-facts {
+      grid-column: 1 / -1;
+      order: -1;
+    }
+    .page-head.has-record > :is(.page-head-top, .root-bar) {
+      order: -2;
+    }
+  }
+  /* On a phone a record room's verbs are a bar at the foot of the screen, where a thumb is: under a long page they
+   were a scroll away from the record they act on. The page keeps the dock's clearance under its last section
+   (style.css), and the pending dock, when it is up, stands over the bar. */
+  @media (max-width: 600px) {
+    body.app-mode .page-head.has-record.is-room > .page-head-actions {
+      position: fixed;
+      z-index: 40;
+      inset-inline: 0;
+      bottom: 0;
+      margin: 0;
+      padding: var(--space-3h) var(--space-5) calc(10px + env(safe-area-inset-bottom, 0px));
+      justify-content: flex-end;
+      /* One row as a rule (a phone keeps one button, Actions.tsx); a verb and the menu too wide together at 320px
+       under a large base and roomy spacing take a second row rather than run off the screen's left edge. */
+      flex-wrap: wrap;
+      background: var(--surface);
+      border-top: 1px solid var(--line);
+    }
+  }
+  @container record-host (max-width: 600px) {
+    .page-head.has-record .root-bar > .page-head-status {
+      flex-basis: 100%;
+      margin-inline-start: 0;
+    }
+    .page-head.has-record > .page-head-facts {
+      grid-column: 1 / -1;
+      order: -1;
+    }
+    .page-head.has-record > :is(.page-head-top, .root-bar) {
+      order: -2;
+    }
+  }
+  /* The record's name, when it can be changed where it is said: the heading's
+   own type, not a form control's. */
+  .root-current .inline-edit-value {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+    min-height: 0;
+    padding: 0;
+    width: auto;
+  }
+  /* Where a pointer can hover, the heading's own hover frame and focus ring say it
+   can be changed; a pencil held invisible beside it only pushed the star away
+   from the name. On touch the dim pencil stays, as the only sign (features.css). */
+  @media (hover: hover) {
+    .root-current .inline-edit-value::after {
+      content: none;
+    }
+  }
+  .root-current .inline-field-open .cell-edit {
+    font: inherit;
+  }
+
+  .page-empty {
+    margin: var(--space-2) 0 0;
+  }
+
+  /* The strip a run of metrics sits in: one item on the page, several inside
+   it, so the page gets one seam after it rather than two.
+
+   The hairline between two metrics sits in the middle of the gap, drawn by
+   the second, and the strip clips at its own left edge: a metric that wraps
+   to the start of a line has its hairline outside the strip, so it starts
+   where the first did. As a padded left border, a third metric on a line of
+   its own (a narrow main column, a phone) stood indented behind a rule
+   that divided it from nothing. 4px past the edge is kept for a focus ring. */
+  .page-metric-row {
+    --metric-gap: 64px;
+    flex: 1 0 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 20px var(--metric-gap);
+    clip-path: inset(-100vmax -100vmax -100vmax -4px);
+  }
+  .page-metric-row > .page-section.page-metric {
+    position: relative;
+    padding-inline: 0;
+    border-left: none;
+  }
+  .page-metric-row > .page-metric + .page-metric::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    left: calc(var(--metric-gap) / -2);
+    border-left: 1px solid var(--line);
+  }
+  /* Metrics that share the line evenly are told apart by the gap alone. */
+  .page-metric-row:has(> .page-metric.width-auto) {
+    --metric-gap: 28px;
+  }
+  .page-metric-row > .page-metric.width-auto {
+    flex: 1 1 10rem;
+  }
+  .page-metric-row > .page-metric.width-auto::before {
+    content: none;
+  }
+
+  /* Related lists as tabs.
+
+   The strip carries the hairline the sections it replaced each carried, and
+   the selected tab sits on it — the border under the strip and the border of
+   the tab are the same line, which is what makes a tab read as being in
+   front of the page rather than beside it.
+
+   The strip scrolls sideways only. `overflow-x: auto` alone makes the other
+   axis auto too, and a pixel of a tab's mark past the strip's padding box
+   then made it a vertical scroller of its own: a wheel over the tabs latched
+   onto that one pixel and the record never moved (Chromium latches a wheel
+   gesture to the first box that can scroll it). */
+  .page-tabs {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+  .page-tabstrip {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--space-1);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    border-top: 1px solid var(--line);
+    padding-top: var(--space-3);
+    margin-bottom: var(--space-1);
+  }
+  .page-tabstrip::-webkit-scrollbar {
+    display: none;
+  }
+  /* Square, like everything else that holds data here: the grid, the query
+   bar and the tables under these tabs are all straight-edged, and a rounded
+   tab was the one soft corner on a screen full of hard ones. */
+  .page-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    appearance: none;
+    background: none;
+    cursor: pointer;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 0;
+    padding: 5px 11px var(--space-2h);
+    /* 24px at the least (WCAG 2.5.8): a look's small caps left a phone's tab at 21. */
+    min-height: 24px;
+    font: 600 calc(10px * var(--type-k)) var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-subtle);
+  }
+  .page-tab:hover {
+    color: var(--ink);
+    background: var(--raised);
+  }
+  .page-tab[aria-selected='true'] {
+    color: var(--ink);
+    background: var(--raised);
+    border-color: var(--line);
+  }
+  .page-tab:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: -2px;
+  }
+  /* Visited panels share one grid cell: a shorter/empty tab cannot collapse
+   the page and clamp its scroll position. Unopened tabs still fetch nothing.
+   Hidden panels contribute geometry only, never focus, pointer or AT content.
+   Natural CSS sizing also follows density, wrapping and viewport changes.
+   A small floor holds the loading rows even when the first list is empty. */
+  .page-tabpanels {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 12rem;
+  }
+  .page-tabpanel {
+    grid-area: 1 / 1;
+    min-width: 0;
+    align-self: start;
+  }
+  .page-tabpanel[hidden] {
+    display: block;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  /* The loading rows stand inside that floor: a look's taller placeholder rows and the grid's foot under them
+   stood 8.5px past it, and the strip grew while a tab loaded. The table that replaces them has no foot. */
+  .page-tabpanel .sk-grid {
+    padding-bottom: 0;
+  }
+  /* The panel's own section has already drawn the line above it; inside a tab
+   strip that line is the strip's, and drawing it twice boxes the table. */
+  .page-tabpanel > .page-section {
+    border-top: none;
+    padding-top: var(--space-2);
+  }
+  .page-tabpanel > .page-section > .page-section-head {
+    display: none;
+  }
+  .page-tabpanel:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+  }
+  /* A record's sections as tabs (`tab` on a section). A panel is sections
+   again, laid out as the page lays them out — the 40px seam between rows,
+   each section's heading and its rule — so the strip draws no rule of its
+   own: the sections under it carry theirs, and one drawn above the tabs as
+   well would box the strip between two lines. */
+  .page-tabs-sections > .page-tabstrip {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .page-tab-sections {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    column-gap: var(--space-7);
+    row-gap: var(--page-row-gap, var(--section-seam));
+    padding-top: var(--space-4);
+  }
+
+  .pb-tabs-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .pb-tabs-toggle input {
+    margin: 0;
+  }
+
+  .pb-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 85;
+    background: var(--scrim);
+  }
+  .pb {
+    position: fixed;
+    top: 6vh;
+    left: 50%;
+    z-index: 85;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: min(58rem, calc(100% - 32px));
+    max-height: 86vh;
+    padding: var(--space-5) var(--space-5);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-dialog);
+    box-shadow: var(--shadow-modal);
+  }
+  :where(:root:not([data-visual-theme])) .pb {
+    border-radius: 12px;
+  }
+  .pb-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3h);
+  }
+  .pb-title {
+    margin: 0;
+    font: 600 calc(15px * var(--type-k)) var(--mono);
+  }
+  .pb-base {
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+  }
+  .pb-close {
+    margin-left: auto;
+    font-size: calc(15px * var(--type-k));
+    line-height: 1;
+    padding: var(--space-1) var(--space-3);
+  }
+  .pb-error {
+    margin: 0;
+    padding: var(--space-3) var(--space-3h);
+    border-left: 3px solid var(--status-critical);
+    background: color-mix(in srgb, var(--status-critical) 7%, var(--surface));
+    color: var(--status-critical);
+    font: var(--text-sm) var(--mono);
+    overflow-wrap: anywhere;
+  }
+  .pb-error:focus {
+    outline: 2px solid var(--status-critical);
+    outline-offset: 2px;
+  }
+  .pb-status {
+    min-width: 5rem;
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-muted);
+  }
+  .pb-recovery {
+    border-block: 1px solid var(--line);
+    padding-block: var(--space-3h);
+    font: var(--text-sm) var(--sans);
+  }
+  .pb-recovery p {
+    margin: 0 0 var(--space-3);
+    overflow-wrap: anywhere;
+  }
+  .pb-recovery time {
+    color: var(--ink-muted);
+    margin-left: var(--space-3);
+  }
+  .pb-recovery button {
+    margin: 0 var(--space-2h) var(--space-2) 0;
+  }
+  .pb button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .pb > [inert] {
+    opacity: 0.65;
+  }
+  .pb-recovery-status {
+    margin: 0;
+    font: var(--text-xs) var(--sans);
+    color: var(--ink-muted);
+  }
+  .page-preview.modal {
+    width: 1400px;
+    max-width: calc(100% - 24px);
+    height: 90%;
+    padding: var(--space-4h);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-dialog);
+    background: var(--surface);
+    color: var(--ink);
+  }
+  :where(:root:not([data-visual-theme])) .page-preview.modal {
+    border-radius: 6px;
+  }
+  .page-preview-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    flex: none;
+  }
+  .page-preview-head h2 {
+    margin: 0;
+    font: 600 calc(15px * var(--type-k)) var(--sans);
+  }
+  .page-preview-head > button {
+    margin-left: auto;
+  }
+  .page-preview-modes {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: min(4px, var(--radius));
+  }
+  .page-preview-modes button {
+    border: 0;
+    border-radius: min(2px, var(--radius));
+  }
+  .page-preview-modes [aria-pressed='true'] {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
+  .page-preview-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: var(--raised);
+  }
+  .page-preview-frame {
+    display: block;
+    height: 100%;
+    max-width: none;
+    border: 0;
+    margin-inline: auto;
+    background: var(--surface);
+  }
+  .pb[aria-busy='true'] .pb-head button,
+  .pb[aria-busy='true'] .pb-foot button {
+    opacity: 0.55;
+    cursor: wait;
+  }
+
+  .pb-label {
+    font: var(--text-xs) var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-subtle);
+    flex: none;
+  }
+  .pb-name-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3h);
+  }
+  .pb-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: var(--space-2) var(--space-3h);
+    font: var(--text-sm) var(--mono);
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line-control);
+    border-radius: var(--radius);
+  }
+  .pb-input:focus {
+    outline: none;
+    border-color: var(--focus);
+  }
+  .pb-limit {
+    flex: 0 0 5rem;
+  }
+  .pb-width {
+    flex: none;
+  }
+  .page-field .cell-edit-control .picker-input {
+    font: var(--text-base) var(--sans);
+    border-radius: 0;
+  }
+  .page-field .cell-edit-control :is(.dd-button, .date-field-input) {
+    font: var(--text-base) var(--sans);
+  }
+  .pb-advanced {
+    position: relative;
+    font: var(--text-xs) var(--sans);
+  }
+  .pb-advanced summary {
+    cursor: pointer;
+    padding: var(--space-2h);
+  }
+  .pb-advanced[open] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  /* The themed listbox, not the browser's own.
+ 
+   A native `<select>` opens the operating system's menu — a blue macOS popup
+   with its own type and its own corners, in a dialog that has neither. It is
+   the one control a page cannot style, which is exactly why this codebase
+   already had a replacement; the builder was simply not using it. */
+  .pb-section .dd {
+    flex: none;
+  }
+  .pb-section .dd-button {
+    padding: var(--space-2) var(--space-3);
+    font: var(--text-xs) var(--mono);
+    min-width: 5.5rem;
+  }
+  .pb-section .dd-list {
+    min-width: 12rem;
+  }
+
+  /* The sections, in the order they will appear. Scrolls on its own so the
+   Add and Save rows stay put — a builder whose Save button walks off the
+   bottom as you add sections is a builder you have to scroll to finish. */
+  .pb-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2h);
+    overflow-y: auto;
+    min-height: 4rem;
+    padding: var(--space-1);
+  }
+  .pb-section {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2h) var(--space-3);
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  /* The grip is the only draggable part of the row, because everything else on
+   it is an input. Faint until the row is hovered: it is a handle, not a
+   decoration, and a column of them down the dialog reads as noise. */
+  .pb-section-grip {
+    flex: none;
+    cursor: grab;
+    user-select: none;
+    padding: var(--space-1) 1px;
+    margin-right: -2px;
+    font: var(--text-sm) var(--mono);
+    letter-spacing: -1px;
+    line-height: 1;
+    color: var(--ink-subtle);
+    opacity: 0.45;
+    transform: rotate(90deg);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .pb-section-grip {
+      transition: opacity var(--t-hover) var(--ease-out);
+    }
+  }
+  .pb-section:hover .pb-section-grip {
+    opacity: 1;
+  }
+  .pb-section-grip:active {
+    cursor: grabbing;
+  }
+  .pb-section.pb-dragging {
+    opacity: 0.45;
+  }
+  /* Where the row will land, drawn as the line it will sit on rather than by
+   moving everything else out of the way mid-drag. */
+  .pb-section.pb-drop-above {
+    box-shadow: 0 -2px 0 var(--accent);
+  }
+  .pb-section.pb-drop-below {
+    box-shadow: 0 2px 0 var(--accent);
+  }
+
+  .pb-kind {
+    flex: 0 0 3.4rem;
+    font: var(--text-xs) var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-subtle);
+  }
+  .pb-section-actions {
+    display: flex;
+    gap: var(--space-1);
+    margin-left: auto;
+    flex: none;
+  }
+  .pb-section-actions button {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-sm);
+    line-height: 1;
+  }
+  .pb-section-actions button:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+  .pb-remove:hover {
+    color: var(--status-critical);
+  }
+
+  .pb-add {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .pb-picker {
+    position: relative;
+  }
+  .pb-add-btn {
+    display: inline-block;
+    list-style: none;
+    cursor: pointer;
+    padding: var(--space-1h) var(--space-3h);
+    font: var(--text-sm) var(--sans);
+    background: transparent;
+    color: var(--ink-muted);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+  }
+  .pb-add-btn::-webkit-details-marker {
+    display: none;
+  }
+  .pb-add-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+  .pb-menu {
+    /* Placed by the positioner (Base UI) above its button, no taller than the room there. */
+    position: relative;
+    z-index: 90;
+    min-width: 22rem;
+    max-height: min(22rem, var(--available-height, 22rem));
+    overflow-y: auto;
+    padding: var(--space-2h);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pop);
+    box-shadow: var(--shadow-panel);
+  }
+  .pb-group + .pb-group {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--line);
+  }
+  .pb-group-head {
+    margin: 0 0 var(--space-2);
+    padding: 0 var(--space-3);
+    font: 600 var(--text-xs) var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-subtle);
+  }
+  .pb-menu-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .pb-section.pb-drop {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .pb-holds {
+    flex: none;
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+    white-space: nowrap;
+  }
+  .pb-menu-item:hover {
+    background: var(--raised);
+  }
+  .pb-menu-item:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: -2px;
+  }
+  .pb-menu-label {
+    font: var(--text-sm) var(--mono);
+    color: var(--ink);
+  }
+  /* The route, so choosing between two entries with the same table name is a
+   choice between two things you can tell apart. */
+  .pb-menu-detail {
+    font: calc(10.5px * var(--type-k)) var(--mono);
+    color: var(--ink-subtle);
+  }
+
+  .pb-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .pb-spacer {
+    flex: 1 1 auto;
+  }
+  .pb-json {
+    font-size: var(--text-xs);
+  }
+
+  /* ---------- the field panel, inline ---------- */
+
+  /* A section and its open panel are one thing, so they move together and the
+   panel cannot end up beside a different row. */
+  .pb-group-row {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pb-panel {
+    margin: 0 var(--space-3) var(--space-1);
+    padding: var(--space-3) var(--space-3h) var(--space-3h);
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+  .pb-panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin-bottom: var(--space-2h);
+  }
+  .pb-panel-head button {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+  }
+  .pb-field-count {
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+  }
+
+  /* Several across, because forty names in one column is a scroll and the names
+   are short enough to read three or four abreast. */
+  .pb-field-grid {
+    display: grid;
+    gap: 1px var(--space-3h);
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    max-height: 34vh;
+    overflow-y: auto;
+  }
+  /* The whole row toggles: a checkbox is a twelve-pixel target and the name
+   beside it is not. */
+  .pb-field-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-1h) var(--space-2h);
+    border-radius: var(--radius);
+    cursor: pointer;
+    min-width: 0;
+  }
+  .pb-field-row:hover {
+    background: var(--surface);
+  }
+  .pb-field-row input {
+    flex: none;
+    margin: 0;
+  }
+  .pb-field-name {
+    font: var(--text-sm) var(--mono);
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pb-field-type {
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+    flex: none;
+  }
+
+  /* The fields on a group, laid out the way the page will lay them out — same
+   column count, same order — so arranging them is done on a picture of the
+   result rather than on a list that has to be imagined into one. */
+  .pb-arrange {
+    display: grid;
+    gap: var(--space-1) var(--space-3h);
+    max-height: 34vh;
+    overflow-y: auto;
+    margin-bottom: var(--space-3);
+  }
+  .pb-arrange-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-1h) var(--space-2) var(--space-1h) var(--space-1);
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    cursor: grab;
+    min-width: 0;
+    position: relative;
+  }
+  .pb-arrange-row:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 1px;
+  }
+  .pb-arrange-row.dragging {
+    opacity: 0.45;
+    cursor: grabbing;
+  }
+  .pb-arrange-row .pb-field-name {
+    flex: 1;
+  }
+  .pb-grip {
+    font: var(--text-sm) var(--mono);
+    color: var(--ink-subtle);
+    letter-spacing: -1px;
+    flex: none;
+    transform: rotate(90deg);
+  }
+  .pb-arrange-row .pb-send,
+  .pb-arrange-row .pb-remove {
+    flex: none;
+    padding: 0 var(--space-2);
+    font-size: var(--text-xs);
+    line-height: 1.6;
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .pb-arrange-row .pb-send,
+    .pb-arrange-row .pb-remove {
+      transition: opacity var(--t-hover) var(--ease-out);
+    }
+  }
+  .pb-arrange-row:hover .pb-send,
+  .pb-arrange-row:hover .pb-remove,
+  .pb-arrange-row:focus-within .pb-send,
+  .pb-arrange-row:focus-within .pb-remove {
+    opacity: 1;
+  }
+
+  /* Which group to send a field to, opened in the row itself: a dialog here
+   would cover the arrangement being made. */
+  .pb-send-menu {
+    position: absolute;
+    z-index: 3;
+    top: 100%;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--space-1h);
+    gap: var(--space-1);
+    box-shadow: var(--shadow, var(--shadow-pop));
+  }
+  .pb-send-menu button {
+    font-size: var(--text-xs);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  /* Everything not on the page, as chips: short names, many of them, and each
+   one click from being added. */
+  .pb-pool {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+  .pb-add-field {
+    font: var(--text-xs) var(--mono);
+    padding: var(--space-1) var(--space-3);
+  }
+
+  /* A hidden section keeps its row and stops looking live. */
+  .pb-section.pb-hidden {
+    opacity: 0.5;
+  }
+  .pb-section.pb-hidden .pb-input {
+    text-decoration: line-through;
+  }
+  .pb-hide {
+    flex: none;
+    font-size: var(--text-xs);
+    line-height: 1.9;
+  }
+
+  .pb-cols {
+    flex: none;
+  }
+
+  .pb-fields-btn {
+    flex: none;
+    font-size: var(--text-xs);
+    padding: var(--space-1h) var(--space-3);
+  }
+  .pb-fields-btn.open {
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+  /* The row an open panel belongs to keeps its bottom edge open, so the two
+   read as one block rather than as two stacked boxes. */
+  .pb-section.pb-open {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  /* Destructive, and at the far end from Save so the two are not neighbours. */
+  .pb-delete {
+    color: var(--status-critical);
+  }
+  .pb-delete:hover {
+    border-color: var(--status-critical);
+    background: color-mix(in srgb, var(--status-critical) 10%, transparent);
+  }
+
+  /* A list's own pager. Right-aligned under the table, quiet, and present only
+   when there is somewhere to go — two disabled arrows under a list that fits
+   on one page are an explanation that nothing can be done. */
+  .page-pager {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: var(--space-2h);
+  }
+  .page-range {
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A related list read as groups: a header for each record its rows share, that group's table under it. The header
+   is the record's name, its facts after it and the count at the far end, on the line a table's head would take;
+   the groups are spaced by ratio, not by a rule, so the table is what the eye follows. */
+  .page-groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+  .page-group-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-4);
+    padding-bottom: var(--space-2h);
+  }
+  .page-group-name {
+    margin: 0;
+    font-size: var(--text-md);
+    font-weight: 600;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .page-group-link {
+    background: none;
+    border: 0;
+    padding: 0;
+    min-height: 0;
+    font: inherit;
+    color: var(--accent-ink);
+    text-align: start;
+    cursor: pointer;
+  }
+  .page-group-link:hover {
+    text-decoration: underline;
+  }
+  .page-group-facts {
+    display: inline-flex;
+    flex-wrap: wrap;
+    min-width: 0;
+    font-size: var(--text-base);
+    color: var(--ink-muted);
+  }
+  .page-group-fact + .page-group-fact::before {
+    content: '·';
+    margin-inline: var(--space-2h);
+    color: var(--ink-subtle);
+  }
+  .page-group-count {
+    margin-inline-start: auto;
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+  /* A summed column keeps to the count's quiet line, after it: the same small figure, a dot between. */
+  .page-group-sum {
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+  .page-group-sum::before {
+    content: '·';
+    margin-inline-end: var(--space-2h);
+  }
+  .page-group-more {
+    margin-top: var(--space-2);
+    min-height: 40px;
+  }
+  .page-group-total {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2) var(--space-5);
+    margin: 0;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--line);
+    font-size: var(--text-base);
+  }
+  .page-group-total-label {
+    color: var(--ink-muted);
+  }
+  .page-group-total-caption {
+    margin-inline-end: var(--space-2h);
+    color: var(--ink-subtle);
+  }
+  @media (max-width: 600px) {
+    /* A header that opens its record is a target: the 44px a finger needs, with the facts under the name. */
+    .page-group-link {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .page-group-more {
+      min-height: 44px;
+    }
+  }
+
+  /* ---------- the timeline ---------- */
+
+  /* The record's activity by day: the day said once over its rows. A message is
+   who, what kind and when, the time at the line's end, over the words; what no
+   person wrote is one quiet line, and a run of them folds to its count, opened
+   in place without motion (a disclosure read often moves nothing). The rhythm
+   is the gaps: 3px inside a message, 14px between messages, 4px between quiet
+   lines, 18px before a day. */
+  .timeline,
+  .timeline-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .timeline {
+    max-width: 46rem;
+  }
+  .timeline-day + .timeline-day {
+    margin-top: var(--space-5);
+  }
+  .timeline-day-label,
+  .timeline-source,
+  .timeline-when {
+    font-size: var(--text-sm);
+    color: var(--ink-subtle);
+  }
+  .timeline-day-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3h);
+    margin-bottom: var(--space-3h);
+  }
+  .timeline-day-label::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid var(--line);
+  }
+  .timeline-rows > * + * {
+    margin-top: var(--space-4h);
+  }
+  .timeline-rows > .is-compact + .is-compact,
+  .timeline-fold > .timeline-rows {
+    margin-top: var(--space-2);
+  }
+  .timeline-row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: var(--space-1h) var(--space-3h);
+  }
+  .timeline-avatar {
+    grid-row: span 2;
+  }
+  .timeline-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    min-height: 24px;
+    font-size: var(--text-base);
+  }
+  .timeline-by {
+    font-weight: 500;
+  }
+  .timeline-when {
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .timeline-text {
+    min-width: 0;
+    font-size: var(--text-base);
+    line-height: 1.5;
+  }
+  /* A line no person wrote, under the words of the messages around it: smaller, in the quieter ink (below, with rich text). */
+  .timeline-row.is-compact {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-left: var(--space-7);
+    align-items: baseline;
+  }
+  .timeline-fold-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-5);
+    min-height: 24px;
+    margin-left: var(--space-2h);
+    padding: 0;
+    background: none;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .timeline-fold-toggle[aria-expanded='true'] svg {
+    transform: rotate(90deg);
+  }
+  .page-related-create.timeline-compose {
+    padding-block: 0 var(--space-2h);
+  }
+
+  /* A conversation: oldest first inside a box of its own that holds the scroll, the composer pinned beneath it. The box has
+   its height before the rows arrive, so nothing moves when they do. */
+  /* The wheel chains to the page when the box has nothing left to scroll: with `overscroll-behavior: contain` the
+   pointer over the conversation trapped it, even for a box with no overflow, until it moved off to the side. */
+  .timeline-scroll {
+    max-height: min(60vh, 30rem);
+    overflow-y: auto;
+  }
+  /* A tinted message (an internal note) is a card in its column: its tone's wash, and an edge that says what it is. */
+  .timeline-row.is-tinted {
+    padding: var(--space-3) var(--space-3h);
+    background: color-mix(in srgb, var(--tone, var(--accent)) 7%, transparent);
+    border-left: 2px solid var(--tone, var(--accent));
+  }
+  .timeline-row[data-tone='warn'] {
+    --tone: var(--status-warning);
+  }
+  .timeline-row[data-tone='info'] {
+    --tone: var(--link);
+  }
+  .timeline-row[data-tone='bad'] {
+    --tone: var(--status-critical);
+  }
+  .timeline-row[data-tone='good'] {
+    --tone: var(--status-good);
+  }
+  .timeline-composer {
+    max-width: 46rem;
+    margin-top: var(--space-3h);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--rule, var(--line));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2h);
+  }
+  .timeline-composer.is-note .timeline-input {
+    background: color-mix(in srgb, var(--status-warning) 8%, var(--surface));
+  }
+  /* A small segmented control: the pressed segment is filled, and the note segment wears the warning tint the
+     box takes in note mode, so which of the two a send goes out as is never a guess (a note sent as a reply
+     reaches the resident). */
+  .timeline-modes {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: var(--space-1);
+    gap: var(--space-1);
+    border: 1px solid var(--line-control, var(--line));
+    border-radius: var(--radius-item, 6px);
+    background: var(--surface);
+  }
+  .timeline-mode {
+    appearance: none;
+    border: 0;
+    border-radius: calc(var(--radius-item, 6px) - 2px);
+    background: transparent;
+    color: var(--ink-muted);
+    font: inherit;
+    font-size: var(--type-ui);
+    padding: var(--space-1h) var(--space-3h);
+    min-block-size: 24px;
+    cursor: pointer;
+  }
+  .timeline-mode:hover {
+    color: var(--ink);
+  }
+  .timeline-mode[aria-pressed='true'] {
+    color: var(--ink);
+    font-weight: 600;
+    background: var(--surface-sunken, color-mix(in srgb, var(--ink) 8%, var(--surface)));
+  }
+  .timeline-mode.is-note[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--status-warning) 16%, var(--surface));
+  }
+  /* The house field (style.css .field-control): bare, it was the browser's own box — flush text, and a grey
+   ground in dark mode. */
+  .timeline-input {
+    min-height: 4.5rem;
+  }
+  .timeline-composer-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+  }
+  /* Templates sits at the foot's start, Send at its end: two controls of one height, so the foot never moves. */
+  .timeline-templates {
+    margin-inline-end: auto;
+  }
+
+  /* ---------- the record's history ---------- */
+
+  /* One write per entry, newest first: who and what on one line with the
+   moment at its end, then each field it changed, caption beside the change.
+   Ruled like a list, not carded — the timeline's quiet, with the before
+   value dimmed so the eye lands on what the record holds now. */
+  .history {
+    list-style: none;
+    margin: var(--space-2h) 0 0;
+    padding: 0;
+    max-width: 46rem;
+    container: history / inline-size;
+  }
+  .history-entry {
+    padding: var(--space-3h) 0;
+    border-top: 1px solid var(--line);
+  }
+  .history-entry:first-child {
+    border-top: 0;
+    padding-top: var(--space-2);
+  }
+  .history-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+    font-size: var(--text-base);
+    line-height: 1.5;
+  }
+  .history-by {
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .history-what {
+    color: var(--ink-muted);
+  }
+  .history-when {
+    margin-left: auto;
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+  .history-fields {
+    display: grid;
+    grid-template-columns: minmax(6rem, 11rem) minmax(0, 1fr);
+    gap: var(--space-1h) var(--space-4h);
+    margin: var(--space-2h) 0 0;
+  }
+  .history-field {
+    display: contents;
+  }
+  .history-field dt {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .history-field dd {
+    margin: 0;
+    min-width: 0;
+    font-size: var(--text-base);
+    overflow-wrap: anywhere;
+  }
+  .history-before {
+    color: var(--ink-subtle);
+  }
+  .history-before :is(.num-value, .date-value, .bool-value) {
+    color: inherit;
+  }
+  .history-arrow {
+    margin: 0 var(--space-2h);
+    color: var(--ink-subtle);
+  }
+  .history-changed,
+  .history-cut {
+    color: var(--ink-subtle);
+  }
+  .history-more {
+    display: flex;
+    justify-content: flex-start;
+    padding-top: var(--space-2h);
+  }
+  /* Narrow — a phone, a half-width section — the caption goes over its change
+   and the moment under who made it, so neither squeezes the values. */
+  @container history (max-width: 30rem) {
+    .history-fields {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+    .history-field dt {
+      margin-top: var(--space-2);
+    }
+    .history-when {
+      margin-left: 0;
+      flex-basis: 100%;
+    }
+  }
+
+  .workflow-status {
+    margin-bottom: 20px;
+  }
+  .page-related-create {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-4);
+    padding-block: var(--space-3);
+  }
+  .page-related-create [role='status'] {
+    font-size: var(--text-base);
+    color: var(--ink-muted);
+  }
+  .page-related-create button {
+    min-height: 40px;
+  }
+  /* At a desk a list's Add is the record's verbs' size (30px): a third button height stood on one page.
+     A phone keeps the 40px a thumb needs. */
+  @media (min-width: 761px) and (pointer: fine) {
+    .page-related-create button {
+      min-height: 30px;
+    }
+  }
+  /* A workflow is a track of segments, one per step, its label under it: a
+   step walked is filled in a quiet tint of the accent, the current one in the
+   accent with its label in the ink, a step ahead the rule's grey. The track
+   carries the order, so no joining rule and no box around it. */
+  .workflow-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3h) var(--space-2);
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .workflow-steps li {
+    flex: 1 1 0;
+    min-width: max-content;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    font-size: var(--text-base);
+    line-height: 1.3;
+    color: var(--ink-muted);
+  }
+  .workflow-marker {
+    order: -1;
+    height: 4px;
+    border-radius: min(2px, var(--radius));
+    background: var(--line);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .workflow-marker {
+      transition: background-color var(--t-popover) var(--ease-out);
+    }
+  }
+  .workflow-steps li[data-passed] {
+    color: var(--ink-muted);
+  }
+  .workflow-steps li[data-passed] .workflow-marker {
+    background: color-mix(in srgb, var(--accent) 50%, var(--line));
+  }
+  .workflow-steps li[aria-current='step'] {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .workflow-steps li[aria-current='step'] .workflow-marker {
+    background: var(--accent);
+  }
+  /* A step the record's own actions can move it to now: the label in the ink
+   and its segment hollow, outlined in the accent — ahead of it, not yet it. */
+  .workflow-steps li[data-reachable] {
+    color: var(--ink);
+  }
+  .workflow-steps li[data-reachable] .workflow-marker {
+    background: transparent;
+    outline: 1px solid color-mix(in srgb, var(--accent) 60%, var(--line));
+    outline-offset: -1px;
+  }
+  .workflow-unmapped {
+    margin: var(--space-3) 0 0;
+    font-size: var(--text-base);
+  }
+  /* On a phone the strip is one row that scrolls sideways, the current step brought into view (WorkflowStatus):
+   wrapped, a second row of segments read as a second track. An edge fades where there is more beyond it. A
+   step's label takes up to two lines under its segment: on one, "Confirmed by the supplier" ran on past the
+   window and its fade and read "Confirmed by the s", and the current step stood half out of view. */
+  @media (max-width: 600px) {
+    .workflow-steps {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+    }
+    .workflow-steps[data-more-after] {
+      mask-image: linear-gradient(90deg, var(--ink) calc(100% - 24px), transparent);
+    }
+    .workflow-steps[data-more-before] {
+      mask-image: linear-gradient(90deg, transparent, var(--ink) 24px);
+    }
+    .workflow-steps[data-more-before][data-more-after] {
+      mask-image: linear-gradient(90deg, transparent, var(--ink) 24px, var(--ink) calc(100% - 24px), transparent);
+    }
+    .workflow-steps::-webkit-scrollbar {
+      display: none;
+    }
+    .workflow-steps li {
+      flex: 1 0 auto;
+      min-width: 88px;
+      max-width: 9.5em;
+    }
+  }
+  /* No rule of its own under it: every section after the summary draws its
+   hairline above its heading, and the two with a row gap between them read as
+   a doubled rule with an empty band — twice, under a pair of half sections. */
+  .page-field-grid.page-field-summary {
+    /* Short summary facts fit a tighter measure than editing fields. Explicit
+     authored columns still win; otherwise the host determines the count. At
+     7rem four facts beside an aside stood three and one, 123px apart, and a
+     name broke over two lines ("Dr. Marcus / Webb", "Willamette /
+     Wheelhouse"); 9rem gives a customer's or a provider's name, and a date
+     with its time, one line, and four facts two and two. */
+    --page-field-min: 9rem;
+    gap: 18px var(--space-6);
+    padding-block: var(--space-3) 0;
+  }
+  .page-field-summary .page-field {
+    min-width: 0;
+  }
+  .page-field-summary .page-field > dt {
+    font-size: var(--text-xs);
+    margin-bottom: var(--space-2h);
+  }
+  /* A summary says its values whole: one clipped mid-word ("margot.fontaine@exam")
+   says less than one that wraps. An address breaks where its parts meet
+   (Value.tsx breakable), and anywhere only when one part is wider than its column. */
+  .page-field-summary .page-field > dd {
+    font-size: var(--text-md);
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+  /* Prose under its section's title (a description): a paragraph, not a figure. */
+  .page-field-summary .page-field.page-field-prose > dd {
+    font: 400 calc(15px * var(--type-k))/1.55 var(--sans);
+    max-width: 65ch;
+    color: var(--ink);
+  }
+  .page-prose-empty {
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: var(--text-md);
+  }
+  /* A number to call is one thing: it never wraps between its groups. */
+  .page-field-summary .value-link[href^='tel:'] {
+    white-space: nowrap;
+  }
+  /* An address, a number or a page in a record's fields is a link in the link
+   ink, as a named reference is (Value.tsx, ValueLink): it breaks anywhere,
+   since an email address has no spaces to wrap at. */
+  .value-link {
+    color: var(--link);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  .value-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .page-field .ref-jump {
+    max-width: 100%;
+    white-space: normal;
+    text-align: left;
+  }
+  .page-field .ref-jump-value {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  /* On a phone a record's figures sit two to a row (structure.css), as a dashboard's do. */
+  /* A property rail: the classic record form's properties — caption beside
+   value on one row, a hairline under each — at the side panel's scale. Unlike
+   the sheet it keeps an empty field, because that is where a value is set,
+   and a value stays editable in place. The caption wraps instead of cutting
+   a word short; the value takes the rest of the row. Rows fill `columns`
+   columns where the room has the width, as the sheet's do. The looks space a
+   field's label and value as a stack (visualThemes.css), so the row's own
+   gap is said at a weight that outranks theirs. */
+  .page-properties {
+    display: grid;
+    column-gap: var(--space-7);
+    margin: 0;
+    max-width: 100rem;
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, max(16rem, (100% - (var(--page-properties-columns, 1) - 1) * 32px) / var(--page-properties-columns, 1))), 1fr)
+    );
+  }
+  dl.page-properties > .page-field > :is(dt, dd) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  dl.page-properties > .page-field > dd {
+    min-width: 0;
+  }
+
+  /* A record drawn inside a dialog, a side panel or a split list's detail is as
+   narrow as that host, not as the screen: on a wide window the peek kept the
+   desktop page — an aside column, half-width sections, a three-column field
+   grid in 325px — and a name broke one letter to a line. The host is the
+   container, and the same stacking the screen rules above apply follows the
+   room the record actually has. */
+  .peekpanel-body,
+  .split-list-detail-body {
+    container: record-host / inline-size;
+  }
+  @container record-host (max-width: 1100px) {
+    .page-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .page-aside {
+      border-left: 0;
+      padding-left: 0;
+    }
+    .page-aside > .page-section:first-child:not(:has(.page-headline, > .page-facts), .page-card-section) {
+      border-top-style: solid;
+      padding-top: var(--space-3h);
+    }
+    /* Stacked under the main column, the aside's fields flow into columns again,
+     as they do on a narrow screen, instead of one field to a 640px row. */
+  }
+  @container record-host (max-width: 900px) {
+    .page-section.width-half,
+    .page-section.width-third,
+    .page-section.width-two-thirds {
+      flex-basis: 100%;
+    }
+    .page-section[class*='offset-'] {
+      margin-left: 0;
+      margin-right: 0;
+    }
+  }
+  @container record-host (max-width: 600px) {
+    .page-field-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* A page's archetype (`page(…, { layout })`, shared/pageLayouts.ts) moves its regions; the looks still dress them.
+   Each is keyed on `data-layout`, drawn from the first render, so the columns never change under a landed
+   section. A desk's columns are the screen's; a record in a dialog, a side panel or a split's detail stacks by the
+   room its host has (the container reset below), as every record page does. */
+  @media (min-width: 1101px) {
+    /* A conversation: the thread keeps a reading measure beside the record's cards. Wider than measure and
+     aside, the slack goes to the gutter between them, not to the bubbles: a reply 900px wide is read as a
+     banner. */
+    .page-layout[data-layout='conversation'] {
+      grid-template-columns: minmax(0, var(--page-measure)) clamp(256px, (100% - var(--page-aside-gap)) / 3, 320px);
+      justify-content: space-between;
+    }
+    /* A showcase: the photos at two thirds with the panel beside them, then the body under both at full width,
+     where a related list has the page's columns rather than the aside's leftover. */
+    .page-layout[data-layout='showcase'] {
+      grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+      row-gap: var(--section-seam);
+    }
+    .page-layout[data-layout='showcase'] > .page-showcase-body {
+      grid-column: 1 / -1;
+    }
+    /* The panel ends with its band: top-aligned, never sticky over the body that follows it. */
+    .page-layout[data-layout='showcase'] > .page-panel {
+      align-self: start;
+    }
+  }
+  /* An offer card is the panel's own edge, as beside a record's photos. */
+  .page-layout[data-layout='showcase'] > .page-panel:has(.page-headline) {
+    border-left: 0;
+    padding-left: 0;
+  }
+  @container record-host (max-width: 1100px) {
+    .page-layout[data-layout] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  /* An article: one column at a reading measure, the head's words on the same measure and the same content edge
+   as the crumb, not centred. A band header (`data-look-header`) still paints the pane's width behind it. */
+  .page-body[data-layout='article'],
+  .page-head[data-layout='article'] > * {
+    max-width: var(--page-measure);
+  }
+
+  /* The accordion: hairlines between items, one quiet button per heading.
+   Opening is instant; the chevron is the one thing that moves, and only as
+   a press's feedback, silenced under reduced motion. */
+  .accordion {
+    border-top: 1px solid var(--line);
+  }
+  .accordion-item {
+    border-bottom: 1px solid var(--line);
+  }
+  .accordion > .accordion-item:last-child {
+    border-bottom: 1px solid var(--line);
+  }
+  .accordion-heading {
+    margin: 0;
+    font: inherit;
+  }
+  .accordion-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-5);
+    width: 100%;
+    min-height: 48px;
+    padding: var(--space-4) var(--space-1);
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+    font: 600 calc(15px * var(--type-k))/1.35 var(--sans);
+    letter-spacing: -0.005em;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .accordion-trigger {
+      transition: color var(--t-hover) var(--ease-out);
+    }
+  }
+  /* Hover is the chevron's ink, not the title's: a heading recoloured under a
+   resting pointer read as the one section that was chosen. */
+  .accordion-trigger:hover {
+    background: none;
+  }
+  .accordion-trigger:hover .accordion-chevron {
+    color: var(--ink);
+  }
+  /* A page field's prose is read, not inspected: the workbench's scrolling box
+   around a long value stays in the record view's raw reading. */
+  .page-field .long-value.prose {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    max-height: none;
+    font-size: var(--text-md);
+    line-height: 1.6;
+  }
+  .accordion-trigger:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+  }
+  .accordion-chevron {
+    flex: none;
+    color: var(--ink-muted);
+  }
+  .accordion-item.is-open > .accordion-heading .accordion-chevron {
+    transform: rotate(180deg);
+  }
+  .accordion-panel {
+    padding: 0 var(--space-1) var(--space-5);
+    color: var(--ink);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .accordion-chevron {
+      transition: transform var(--t-press) var(--ease-out);
+    }
+  }
+
+  /* The gallery: one lead photo at a fixed ratio, so nothing moves as it
+   loads, and a strip of thumbnails that scrolls inside itself. The current
+   thumbnail is the accent's outline; hover is colour only. */
+  .gallery {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3h);
+    min-width: 0;
+  }
+  .gallery-lead {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: 0;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    /* Held short enough that the thumbnails show under it on a laptop screen:
+     the height the screen has left under the title, as a 4:3 width. The
+     zoom-corrected height, since vh units ignore the density zoom. */
+    max-width: min(100%, calc((var(--shell-vh, 100vh) - 400px) * 4 / 3));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--raised);
+  }
+  /* Beside an offer card the gallery leads the page, so its photo takes the
+   column's width in a 16:9 frame (covered, centred): as wide as the room and
+   still short enough for the thumbnails above the fold. The thumbnails and
+   the lightbox keep the whole photo. A phone's column is narrow enough for
+   the photo's own 4:3. */
+  @media (min-width: 601px) {
+    .page-layout:is([data-layout='showcase'], :has(> .page-aside .page-headline)) .gallery-lead {
+      aspect-ratio: 16 / 9;
+      max-width: min(100%, calc((var(--shell-vh, 100vh) - 380px) * 16 / 9));
+    }
+  }
+  /* What opens the photo: a button over the frame, stopping at the steps' columns (a step's 40px at 10px from the
+   edge, and its hit area's 2px either side) so a step and the photo are side by side, never one over the other. */
+  .gallery-open {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    cursor: zoom-in;
+  }
+  .gallery-lead.has-steps > .gallery-open {
+    inset: 0 56px;
+  }
+  .gallery-open:focus-visible {
+    outline: none;
+  }
+  .gallery-lead:has(> .gallery-open:focus-visible) {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+  }
+  .gallery-lead-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .gallery-count {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    padding: var(--space-1h) var(--space-3);
+    border-radius: 999px;
+    background: var(--lightbox-ground);
+    color: var(--lightbox-ink);
+    font: 500 var(--text-sm) var(--sans);
+    font-variant-numeric: tabular-nums;
+  }
+  /* The lead's previous and next: square, on the photo stage's scrim, at the
+   photo's middle. Quiet until the stage is hovered or holds focus where a
+   pointer can hover; always there on touch, where nothing hovers. */
+  .gallery-stage {
+    position: relative;
+    min-width: 0;
+  }
+  .gallery-step {
+    position: absolute;
+    top: 50%;
+    translate: 0 -50%;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--lightbox-ground);
+    color: var(--lightbox-ink);
+    cursor: pointer;
+  }
+  /* On a touch screen a step's 40px takes a 44px hit area, as the chrome's small controls do (structure.css); it
+   reaches 2px past the step, short of the photo's button. */
+  @media (pointer: coarse) {
+    .gallery-step::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 44px;
+      height: 44px;
+      transform: translate(-50%, -50%);
+    }
+  }
+  .gallery-step.is-prev {
+    left: 10px;
+  }
+  .gallery-step.is-next {
+    right: 10px;
+  }
+  .gallery-step:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+  }
+  @media (hover: hover) {
+    .gallery-step {
+      opacity: 0;
+    }
+    .gallery-stage:hover .gallery-step,
+    .gallery-stage:focus-within .gallery-step {
+      opacity: 1;
+    }
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .gallery-step {
+      transition: opacity var(--t-hover) var(--ease-out);
+    }
+  }
+  .gallery-caption {
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: var(--text-base);
+  }
+  .gallery-strip {
+    display: flex;
+    gap: var(--space-3);
+    overflow-x: auto;
+    padding: var(--space-1);
+    scrollbar-width: thin;
+  }
+  .gallery-thumb {
+    flex: none;
+    width: 96px;
+    aspect-ratio: 4 / 3;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--raised);
+    opacity: 0.78;
+    transition:
+      opacity var(--t-hover) var(--ease-out),
+      border-color var(--t-hover) var(--ease-out);
+  }
+  .gallery-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .gallery-thumb:hover {
+    opacity: 1;
+  }
+  .gallery-thumb[aria-current='true'] {
+    opacity: 1;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .gallery-thumb:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+  }
+  @media (max-width: 600px) {
+    .gallery-thumb {
+      width: 72px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gallery-thumb {
+      transition: none;
+    }
+  }
+
+  /* The lightbox: the photo on a deep ground that is the same in both themes,
+   because a photograph is judged against dark, whatever the page is. The
+   ground and its ink are tokens (style.css); the box enters with the
+   popover's fade where motion is welcome and leaves at once. */
+  .lightbox-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 400;
+    background: var(--lightbox-ground);
+  }
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 401;
+    display: flex;
+    flex-direction: column;
+    color: var(--lightbox-ink);
+    outline: none;
+  }
+  .lightbox-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .lightbox-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: max(10px, env(safe-area-inset-top, 0px)) var(--space-5) var(--space-3h);
+  }
+  .lightbox-count {
+    font: 500 var(--text-md) var(--sans);
+    font-variant-numeric: tabular-nums;
+  }
+  .lightbox-close,
+  .lightbox-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid var(--lightbox-line);
+    border-radius: var(--radius);
+    background: none;
+    color: var(--lightbox-ink);
+    font: 500 var(--text-md) var(--sans);
+    cursor: pointer;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lightbox-close,
+    .lightbox-step {
+      transition: background-color var(--t-hover) var(--ease-out);
+    }
+  }
+  .lightbox-close {
+    padding: 0 var(--space-4h);
+  }
+  .lightbox-close:hover,
+  .lightbox-step:hover {
+    background: var(--lightbox-line);
+  }
+  .lightbox-close:focus-visible,
+  .lightbox-step:focus-visible {
+    outline: 2px solid var(--lightbox-ink);
+    outline-offset: 2px;
+  }
+  .lightbox-stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 0 var(--space-5) max(16px, env(safe-area-inset-bottom, 0px));
+    touch-action: pan-y;
+  }
+  .lightbox-figure {
+    grid-column: 2;
+    margin: 0;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3h);
+  }
+  /* Fitted, never cropped: the whole photo, as large as the room allows. */
+  .lightbox-image {
+    display: block;
+    max-width: 100%;
+    max-height: calc(100dvh - 140px);
+    object-fit: contain;
+    user-select: none;
+  }
+  .lightbox-caption {
+    font: 400 var(--text-md)/1.4 var(--sans);
+    text-align: center;
+    max-width: 60ch;
+    color: var(--lightbox-ink);
+    opacity: 0.86;
+  }
+  .lightbox-prev {
+    grid-column: 1;
+  }
+  .lightbox-next {
+    grid-column: 3;
+  }
+  /* On a phone the steps sit over the photo's edges; the swipe is the main gesture there. */
+  @media (max-width: 600px) {
+    .lightbox-stage {
+      grid-template-columns: minmax(0, 1fr);
+      padding: 0 0 max(12px, env(safe-area-inset-bottom, 0px));
+    }
+    .lightbox-figure {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .lightbox-step {
+      grid-row: 1;
+      position: relative;
+      z-index: 1;
+      background: var(--lightbox-ground);
+    }
+    .lightbox-prev {
+      grid-column: 1;
+      justify-self: start;
+      margin-left: var(--space-3);
+    }
+    .lightbox-next {
+      grid-column: 1;
+      justify-self: end;
+      margin-right: var(--space-3);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lightbox,
+    .lightbox-backdrop {
+      transition: opacity var(--t-popover) var(--ease-out);
+    }
+    @starting-style {
+      .lightbox,
+      .lightbox-backdrop {
+        opacity: 0;
+      }
+    }
+  }
+
+  /* Cards: one box each, hairlines inside, the picture at a fixed 4:3 so the
+   grid never moves as photos arrive. Columns follow the room (a container
+   query), one to four. Hover is 120ms of border colour; the focus ring is
+   the title button's, drawn around the whole card it stretches over. */
+  /* The wrapper is the container: a query sizes what is inside it, never itself. */
+  .cards {
+    container-type: inline-size;
+    min-width: 0;
+  }
+  .cards-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+  @container (min-width: 520px) {
+    .cards-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @container (min-width: 820px) {
+    .cards-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  @container (min-width: 1120px) {
+    .cards-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .cards-item {
+    min-width: 0;
+    display: flex;
+  }
+  /* A long page's windowed lines (useRowWindow.ts): the spacer holds the undrawn lines' height across every column. */
+  .cards-spacer {
+    grid-column: 1 / -1;
+  }
+  .cards-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    transition: border-color var(--t-hover) var(--ease-out);
+  }
+  .cards-card:hover {
+    border-color: var(--line-strong);
+  }
+  .cards-media {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: var(--raised);
+    border-bottom: 1px solid var(--line);
+  }
+  .cards-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* An avatar reuses the card image source, but keeps a person-sized portrait and
+   the same deterministic initials disc Value draws when the file is absent. */
+  .cards-card.cards-profile {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--space-4h);
+    padding: 18px;
+  }
+  .cards-profile .cards-body {
+    flex: 1;
+    padding: 0;
+  }
+  .cards-profile .cards-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cards-media.cards-avatar {
+    flex: none;
+    display: grid;
+    place-items: center;
+    aspect-ratio: auto;
+    background: none;
+    border: 0;
+  }
+  .cards-media.cards-avatar .cards-image,
+  .cards-media .cards-avatar-mark {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+  }
+  .cards-media.cards-avatar .cards-image {
+    border: 1px solid var(--line);
+    object-fit: cover;
+  }
+  .cards-media .cards-avatar-mark {
+    font-size: calc(17px * var(--type-k));
+  }
+  .cards-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-subtle);
+  }
+  .cards-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2h);
+    padding: var(--space-4) var(--space-4h) var(--space-4h);
+    min-width: 0;
+  }
+  .cards-title {
+    margin: 0;
+    font: 600 calc(15px * var(--type-k))/1.35 var(--sans);
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  /* The value's mark before the name, in the caption's ink like a mark anywhere; it sits on the text's first line and never pushes the title's wrap. */
+  .cards-icon {
+    margin-right: var(--space-2h);
+    vertical-align: -2px;
+    color: var(--ink-muted);
+  }
+  /* An icon tile (media: 'icon'): the value's mark large on a tinted square — its tone's where the rule gives one —
+   leading the card where a picture would, a fixed square so every card's title starts on one line. */
+  .cards-tile {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: var(--space-2);
+    border-radius: var(--radius-item, var(--radius));
+  }
+  /* Untoned, the lead square's accent tint; a tone class colours it instead (features.css). */
+  .cards-tile:not([class*='tone-']) {
+    color: color-mix(in srgb, var(--accent) 80%, var(--ink));
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  /* The foot (footer): values along the card's last line under a hairline, at the card's bottom so a row of cards ends
+   together. The first value — a price — in the ink, the rest in the caption's. */
+  .cards-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-5);
+    margin: auto 0 0;
+    padding: var(--space-3h) var(--space-4h);
+    border-top: 1px solid var(--line);
+    color: var(--ink-muted);
+    font: 400 var(--text-base)/1.35 var(--sans);
+    font-variant-numeric: tabular-nums;
+  }
+  .cards-foot-item {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .cards-foot-item:first-child {
+    color: var(--ink);
+  }
+  /* On a profile card the foot spans under the portrait and the text, edge to edge. */
+  .cards-card.cards-profile:has(.cards-foot) {
+    flex-wrap: wrap;
+  }
+  .cards-profile .cards-foot {
+    flex-basis: 100%;
+    margin: var(--space-2) -18px -18px;
+  }
+  .cards-open {
+    display: inline;
+    padding: 0;
+    min-height: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  /* The button covers the card, so the whole card is the one target. */
+  .cards-open::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius);
+  }
+  .cards-open:hover {
+    background: none;
+    color: inherit;
+  }
+  .cards-open:focus-visible {
+    outline: none;
+  }
+  .cards-open:focus-visible::after {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: -2px;
+  }
+  .cards-description {
+    margin: 0;
+    color: var(--ink-muted);
+    font: 400 var(--text-base)/1.45 var(--sans);
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+  }
+  .cards-value {
+    margin: 0;
+    font: 650 var(--text-xl)/1.2 var(--sans);
+    letter-spacing: var(--track-title);
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .cards-value .num-value {
+    font: inherit;
+  }
+  .cards-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2h) var(--space-4);
+    margin: var(--space-2) 0 0;
+  }
+  .cards-fact {
+    min-width: 0;
+  }
+  .cards-fact > dt {
+    color: var(--ink-subtle);
+    font: 500 var(--text-xs) var(--sans);
+  }
+  .cards-fact > dd {
+    margin: 0;
+    color: var(--ink-muted);
+    font: 400 var(--text-base)/1.35 var(--sans);
+    overflow-wrap: anywhere;
+  }
+  .cards-card.has-media:not(.cards-profile) .cards-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: var(--space-1h) var(--space-3h);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    font: 600 var(--text-sm)/1.4 var(--sans);
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  .cards-body > .cards-badge {
+    align-self: flex-start;
+    padding: var(--space-1h) var(--space-3h);
+    border-radius: 999px;
+    background: var(--raised);
+    color: var(--ink);
+    font: 600 var(--text-sm)/1.4 var(--sans);
+  }
+  .cards-body > .cards-badge:has(> .tone) {
+    padding: 0;
+    background: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cards-card {
+      transition: none;
+    }
+  }
+
+  /* Attachments: a quiet list of files in the page's own tokens. The badge is
+   the extension in words; a drop target is the accent's outline, nothing more. */
+  .attachments {
+    border-radius: var(--radius);
+    transition: box-shadow var(--t-hover) var(--ease-out);
+  }
+  .attachments.is-over {
+    box-shadow: 0 0 0 2px var(--accent);
+    background: var(--accent-soft);
+  }
+  /* The drop area is an edge you can aim a file at, dashed in the border ink
+   so it reads as a place, not as another card; while a file is over the
+   list it takes the accent with the list. */
+  .attachments-add {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-3h);
+    padding: var(--space-4);
+    border: 1px dashed var(--line-strong, var(--line));
+    border-radius: var(--radius);
+  }
+  .attachments.is-over .attachments-add {
+    border-color: var(--accent);
+  }
+  .attachments-hint {
+    color: var(--ink-subtle);
+    font-size: var(--text-sm);
+  }
+  .attachments-said {
+    color: var(--status-good);
+    font-size: var(--text-sm);
+  }
+  .attachments-error {
+    color: var(--status-critical);
+    font-size: var(--text-sm);
+    flex-basis: 100%;
+  }
+  .attachments-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .attachments-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--line);
+    min-width: 0;
+  }
+  .attachments-item:first-child {
+    border-top: 0;
+  }
+  .attachments-badge {
+    /* At least square, and wider for a four-letter word: "JSON" no longer
+     touches the badge's edges. */
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    height: 38px;
+    padding: 0 var(--space-2h);
+    box-sizing: border-box;
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font: 600 var(--text-xs) var(--sans);
+    letter-spacing: 0.02em;
+  }
+  .attachments-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    flex: 1;
+  }
+  .attachments-name {
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+    color: var(--link);
+    font: inherit;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  .attachments-name:hover {
+    text-decoration: underline;
+  }
+  .attachments-actions {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .attachments-download {
+    text-decoration: none;
+  }
+  /* Rename in place: the box and its two buttons on the name's own line. */
+  .attachments-rename {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-3);
+  }
+  .attachments-rename .form-field {
+    flex: 1 1 14rem;
+    min-width: 0;
+    margin: 0;
+  }
+  .attachments-rename-actions {
+    display: inline-flex;
+    gap: var(--space-3);
+  }
+
+  .attachments-meta {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .attachments {
+      transition: none;
+    }
+  }
+
+  /* A record's tags: small toned chips under the title. The × and + stay quiet
+   until wanted; the chip's tone is the App's, never a colour of its own. */
+  .record-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2h);
+    margin: var(--space-3) 0 var(--space-1);
+  }
+  .record-tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2h);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .record-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  /* A record's tags where a value is drawn whole (a phone's row card, a summary): every chip, wrapping between chips. */
+  .value-tags {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    vertical-align: middle;
+  }
+  /* A record's tags in a list's cell: one line of chips, the rest counted. */
+  .tags-cell-list {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .tags-cell-more {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
+  }
+  /* In the tag's own ink: faded to .55 the × was 2.3:1, too faint for the one mark of a control. */
+  .record-tag-remove {
+    border: 0;
+    background: none;
+    padding: 0 var(--space-1);
+    min-height: 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    line-height: 1;
+  }
+  .record-tags-add {
+    padding: var(--space-1) var(--space-3);
+    min-height: 0;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    border-style: dashed;
+  }
+  .record-tags-pick {
+    min-width: 220px;
+  }
+
+  /* A record's headline: the figure large with its call to action beside it,
+   the facts in one row under their captions. The action is the accent
+   button, at least 44px tall, full width on a phone. */
+  .page-headline {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'figure actions' 'sub actions' 'facts facts' 'note note';
+    align-items: center;
+    gap: var(--space-4h) var(--space-6);
+  }
+  .page-headline-figure {
+    grid-area: figure;
+  }
+  .page-headline-sub {
+    grid-area: sub;
+  }
+  .page-headline-actions {
+    grid-area: actions;
+  }
+  .page-headline-facts {
+    grid-area: facts;
+  }
+  .page-headline-note {
+    grid-area: note;
+  }
+  /* The second figure sits under the first, a step down in size and ink: an
+   estimate is read after the price, never instead of it. */
+  .page-headline-sub {
+    margin: -8px 0 0;
+    color: var(--ink-muted);
+    font: 500 calc(15px * var(--type-k)) var(--sans);
+    font-variant-numeric: tabular-nums;
+  }
+  .page-headline-sub .num-value {
+    font: inherit;
+    color: var(--ink);
+  }
+  .page-headline-note {
+    margin: 0;
+    color: var(--ink-subtle);
+    font: var(--text-sm)/1.5 var(--sans);
+  }
+
+  /* A facts line: the values alone, one sentence of them, a dot between. The
+   first says the most (a year, a size), so all are the same weight and ink:
+   hierarchy is the order, not the dress. Wraps as words do. */
+  /* No dot opens a line: every fact carries its dot in the column gap before
+   it, and the row clips sideways, so the dot of a fact that starts a line
+   falls outside the row and is not drawn. */
+  .page-facts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2) 21px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--ink);
+    font: 500 calc(15.5px * var(--type-k))/1.5 var(--sans);
+    overflow-x: clip;
+  }
+  .page-fact {
+    display: inline-flex;
+    align-items: baseline;
+  }
+  .page-fact::before {
+    content: '·';
+    flex: none;
+    width: 21px;
+    margin-inline-start: -21px;
+    text-align: center;
+    color: var(--ink-subtle);
+  }
+  .page-fact .num-value,
+  .page-fact .date-value {
+    font: inherit;
+  }
+  .page-fact-caption {
+    color: var(--ink-muted);
+    white-space: pre;
+  }
+  /* A fact is a flex row, which drops the space at a word's edge: kept, so "Born Apr 24" never reads "BornApr 24". */
+  .page-fact-word {
+    white-space: pre;
+  }
+  .page-section:has(> .page-facts) {
+    border-top: 0;
+    padding-top: 0;
+  }
+  /* Wrapped facts use spacing: a separator at the start of a new line reads
+   like a stray bullet rather than a boundary between values. */
+  @media (max-width: 600px) {
+    .page-facts {
+      gap: var(--space-3) var(--space-5);
+    }
+    .page-fact + .page-fact::before {
+      content: none;
+    }
+  }
+  @container record-host (max-width: 600px) {
+    .page-facts {
+      gap: var(--space-3) var(--space-5);
+    }
+    .page-fact + .page-fact::before {
+      content: none;
+    }
+  }
+
+  /* A sheet: caption beside value, a hairline under each row, in columns of
+   rows where the room has the width. The caption is quiet; the value is
+   what is read. */
+  .page-sheet {
+    /* At most the columns asked for, and one fewer wherever a column would be
+     narrower than 16rem: a column's least width is the wider of 16rem and an
+     exact Nth of the row. The sheet decides from its own width, so it holds
+     in any host — a public page is not a record-host container. */
+    display: grid;
+    column-gap: var(--space-7);
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, max(16rem, (100% - (var(--page-sheet-columns, 1) - 1) * 32px) / var(--page-sheet-columns, 1))), 1fr)
+    );
+    margin: 0;
+    max-width: 100rem;
+  }
+  .page-sheet-row {
+    display: grid;
+    grid-template-columns: minmax(8rem, 40%) minmax(0, 1fr);
+    gap: var(--space-4);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--line);
+    min-width: 0;
+  }
+  .page-sheet-row > dt {
+    color: var(--ink-muted);
+    font: var(--text-base)/1.5 var(--sans);
+  }
+  .page-sheet-row > dd {
+    margin: 0;
+    color: var(--ink);
+    font: 500 var(--text-md)/1.5 var(--sans);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  /* A text of one item per line, as a list: two or three columns of items
+   where there is room, each after a quiet check in the accent. */
+  .value-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+    gap: var(--space-3) var(--space-6);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font: var(--text-md)/1.45 var(--sans);
+    color: var(--ink);
+  }
+  .value-items li {
+    position: relative;
+    padding-left: var(--space-6);
+  }
+  .value-items li::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 0.3em;
+    width: 10px;
+    height: 5px;
+    border-left: 1.7px solid var(--accent);
+    border-bottom: 1.7px solid var(--accent);
+    transform: rotate(-45deg);
+  }
+
+  /* A card's summary: its facts as one line under the figure, a dot between. */
+  /* As a facts line (above): the dot rides in the gap, and one that would open
+   a line is clipped, so "· Operations" never starts the second line. */
+  /* One line, ending in an ellipsis where it runs out: a summary that wrapped
+   in one card and not the next set the facts under it 22px lower there than
+   in its neighbour, so a row of cards read as a row of different forms. The
+   first item's dot stands outside the line and is clipped with it. */
+  .cards-summary {
+    display: block;
+    margin: var(--space-1) 0 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--ink-muted);
+    font: var(--text-base)/1.45 var(--sans);
+  }
+  .cards-summary-item + .cards-summary-item {
+    margin-inline-start: var(--space-5);
+  }
+  .cards-summary-item::before {
+    content: '·';
+    display: inline-block;
+    width: 15px;
+    margin-inline-start: -15px;
+    text-align: center;
+    color: var(--ink-subtle);
+  }
+  .cards-summary .num-value {
+    font: inherit;
+  }
+
+  /* A list's Sort menu: the word, then the choice, at the filters' height. */
+  .applist-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .applist-sort-label {
+    color: var(--ink-muted);
+    font: var(--text-base) var(--sans);
+  }
+  .page-headline-figure {
+    margin: 0;
+    font: 650 calc(32px * var(--type-k))/1.15 var(--sans);
+    letter-spacing: var(--track-display);
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .page-headline-figure .num-value {
+    font: inherit;
+  }
+  /* The earlier price beside the price, a step down and struck through: read second, and as what it was. */
+  .page-headline-was {
+    margin-left: var(--space-3h);
+    color: var(--ink-subtle);
+    font: 500 calc(17px * var(--type-k)) var(--sans);
+    letter-spacing: 0;
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+  .page-headline-was .num-value {
+    font: inherit;
+    color: inherit;
+  }
+  .page-headline-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3h);
+  }
+  .page-headline-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 20px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    font: 600 calc(15px * var(--type-k)) var(--sans);
+    text-decoration: none;
+  }
+  .page-headline-action.is-primary {
+    background: var(--primary, var(--accent));
+    color: var(--on-primary, var(--on-accent));
+  }
+  .page-headline-action.is-primary:hover {
+    background: color-mix(in srgb, var(--primary, var(--accent)) 86%, var(--ink));
+  }
+  .page-headline-action.is-secondary {
+    color: var(--ink);
+    border-color: var(--line-strong);
+  }
+  .page-headline-action.is-secondary:hover {
+    background: var(--raised);
+  }
+  .page-headline-action:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+  }
+  .page-headline-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-7);
+    margin: 0;
+  }
+  /* A caption is read, not squinted at: 12.5px, as a card's facts say theirs. */
+  .page-headline-facts > div > dt {
+    color: var(--ink-muted);
+    font: 500 var(--text-sm) var(--sans);
+  }
+  .page-headline-facts > div > dd {
+    margin: var(--space-1) 0 0;
+    color: var(--ink);
+    font: 500 calc(15px * var(--type-k)) var(--sans);
+  }
+  @media (max-width: 600px) {
+    /* A phone reads the price, then the facts, then the button, full width under them. */
+    .page-headline {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: 'figure' 'sub' 'facts' 'actions' 'note';
+    }
+    .page-headline-figure {
+      font-size: calc(28px * var(--type-k));
+    }
+    .page-headline-action {
+      flex: 1 1 100%;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .page-headline-action {
+      transition: background-color var(--t-hover) var(--ease-out);
+    }
+  }
+
+  /* A headline in the side panel is the offer: one card beside the photos,
+   the figure first, the facts in two columns, the call to action across its
+   foot. The panel widens for it, drops its rule (the card is the edge), and
+   stays in view while the details below scroll past — anchored to the top
+   of the grid, as the related panel is, so sticky has room to work. */
+  .page-layout:not([data-layout='showcase']):has(> .page-aside .page-headline) {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  }
+  .page-layout:not([data-layout='showcase']) > .page-aside:has(.page-headline) {
+    border-left: 0;
+    padding-left: 0;
+    position: sticky;
+    top: 16px;
+    align-self: start;
+  }
+  .page-aside .page-headline {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-5);
+    padding: 20px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  /* A column, not a grid of named rows: a grid kept a gap for the second figure
+   and the small print when the card had neither, and its foot stood 39px
+   under the button against 20px over the price. The call to action follows
+   the facts, and the small print closes the card. */
+  .page-aside .page-headline > .page-headline-actions {
+    order: 1;
+  }
+  .page-aside .page-headline > .page-headline-note {
+    order: 2;
+  }
+  /* A card (presentation: 'card'): the record a reference names, dressed as
+   the offer card beside it — one box, a hairline, the look's radius — so the
+   aside reads as two boxes of one kind. Its caption is the section's title,
+   its title the record's name in the heading face, a link in all but colour
+   until it is hovered; the facts two across; "View dealer" ruled off below. */
+  .page-card-section {
+    border-top: 0;
+    padding-top: 0;
+  }
+  /* Two boxes stacked in the aside (the offer, then who sells it) are one
+   column of cards, not two sections: 20px between them, not the 40px seam. */
+  .page-aside > .page-section:is(:has(.page-headline), .page-card-section) + .page-card-section {
+    margin-top: -20px;
+  }
+  .page-card {
+    display: grid;
+    gap: var(--space-4);
+    padding: 20px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    min-width: 0;
+  }
+  .page-card-caption {
+    margin: 0;
+    font: 600 var(--text-xs) var(--sans);
+    text-transform: uppercase;
+    letter-spacing: var(--track-caps, 0.05em);
+    color: var(--ink-muted);
+  }
+  .page-card-title {
+    margin: 0;
+    font: var(--heading-weight, 600) calc(18px * var(--type-k))/1.3 var(--heading-font, var(--sans));
+    letter-spacing: var(--track-title, -0.012em);
+    overflow-wrap: anywhere;
+  }
+  .page-card-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    gap: var(--space-4) var(--space-5);
+    margin: 0;
+  }
+  .page-card-fact {
+    min-width: 0;
+  }
+  /* An address is read whole or cut with an ellipsis (its title says the rest), never broken mid-word across two lines
+   in a column of 8rem: an email takes the card's row. */
+  .page-card-fact:has(> dd > a.value-link:is([href^='mailto:'], [href^='http'])) {
+    grid-column: 1 / -1;
+  }
+  .page-card-fact > dd > a.value-link:is([href^='mailto:'], [href^='http']) {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .page-card-fact > dt {
+    font: 500 var(--text-sm) var(--sans);
+    color: var(--ink-muted);
+  }
+  .page-card-fact > dd {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-md);
+    overflow-wrap: anywhere;
+  }
+  .page-card-foot {
+    margin: var(--space-2) 0 0;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--line);
+  }
+  /* The card's links are words, not chips: the reference pill is the Workbench's. */
+  button.ref-jump:is(.page-card-name, .page-card-more) {
+    display: inline;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  button.ref-jump.page-card-name:hover {
+    background: none;
+    color: var(--link);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  button.ref-jump.page-card-more {
+    color: var(--link);
+    font: 500 var(--text-base) var(--sans);
+  }
+  button.ref-jump.page-card-more::after {
+    content: ' →';
+  }
+  button.ref-jump.page-card-more:hover {
+    background: none;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .page-aside .page-headline-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4) var(--space-5);
+  }
+  .page-aside .page-headline-facts > div {
+    min-width: 0;
+  }
+  .page-aside .page-headline-facts > div > dd {
+    overflow-wrap: anywhere;
+  }
+  .page-aside .page-headline-action {
+    flex: 1 1 100%;
+  }
+  /* One column: what the aside says about the record's surroundings — the
+   offer card (the headline: the price and its actions), the card of the
+   record a reference names, the one current row — follows the photos and the
+   summary, ahead of the related lists it explains; the rest of the aside —
+   the properties rail, the history, the notes — follows the main work, as any
+   aside does stacked. Moving the whole aside up put a property rail and a
+   history ahead of a lease's payments. The two bodies give
+   up their boxes so their sections share one order. A grid rather than a
+   flex column: its items fill the width however little they hold (a shut
+   accordion), and a section's row-wrap flex-basis means nothing here
+   instead of becoming a height. */
+  @media (max-width: 1100px) {
+    /* The row gap is the bodies' own (`--page-row-gap` is set on .page-body, which
+     gave up its box here): read bare on the layout it was undefined, the gap
+     fell to nothing, and a card stood flush under the list above it. */
+    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--page-row-gap, var(--section-seam));
+    }
+    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) > .page-body {
+      display: contents;
+    }
+    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) > .page-main > * {
+      order: 2;
+    }
+    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) > .page-main > :first-child {
+      order: 0;
+    }
+    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) > .page-aside > * {
+      order: 3;
+    }
+    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section))
+      > .page-aside
+      > :is(:has(.page-headline), .page-card-section:not(.page-reference-card)) {
+      order: 1;
+    }
+    /* The headline and a current() row lead the lists; a reference card (card(), the parent) is context, so it
+     follows the main work with the rail (a field report on 0.9.0). */
+    /* The card that followed the headline in the aside now follows the lists:
+     it keeps the row gap instead of tucking under a box that is no longer above it. */
+    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section))
+      > .page-aside
+      > .page-section:has(.page-headline)
+      + .page-card-section {
+      margin-top: 0;
+    }
+  }
+}
+
+/* Notes (DashboardNote.tsx): a dashboard's and, since pages draw them too, a
+   record page's. Kept here rather than beside the component because the
+   page modules may not import a stylesheet — they are read outside a bundler
+   (test/agreement.test.ts) — and this sheet is on every screen already.
+   Still a component's rules: after the base, before any look. */
+@layer components {
+  .dashboard-note {
+    max-width: 44rem;
+    padding: var(--space-2) 0;
+  }
+  .dashboard-note.is-quiet {
+    padding: 0;
+  }
+  .dashboard-note.is-quiet .dashboard-note-title {
+    font-size: var(--text-base);
+  }
+  .dashboard-note.is-quiet .dashboard-note-text {
+    margin-top: var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--ink-subtle);
+  }
+  .dashboard-note.is-callout {
+    padding: var(--space-4) var(--space-4h);
+    border: 1px solid var(--rule, var(--line));
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface, var(--ground)));
+  }
+  .dashboard-note-icon {
+    display: block;
+    margin: 0 0 var(--space-4);
+    color: var(--accent-ink);
+  }
+  .dashboard-note-title {
+    margin: 0;
+    font: var(--heading-weight, 600) var(--type-list-title, var(--text-xl)) var(--heading-font, var(--sans));
+    letter-spacing: var(--track-title, -0.012em);
+    color: var(--ink);
+  }
+  .dashboard-note-text {
+    max-width: 70ch;
+    margin: var(--space-3) 0 0;
+    color: var(--ink-muted);
+    font: var(--text-md)/1.55 var(--sans);
+  }
+  .dashboard-note-action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    margin-top: var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius);
+    background: var(--primary, var(--accent));
+    color: var(--on-primary, var(--on-accent));
+    font: 600 var(--text-base) var(--sans);
+    text-decoration: none;
+  }
+  .dashboard-note-action:hover {
+    background: color-mix(in srgb, var(--primary, var(--accent)) 86%, var(--ink));
+  }
+  .dashboard-note-action:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 2px;
+  }
+  @media (max-width: 600px) {
+    .dashboard-note {
+      max-width: none;
+    }
+    .dashboard-note-action {
+      min-height: 44px;
+      padding-inline: var(--space-4h);
+    }
+  }
+}
+
+/* A key beside the verb it runs: quiet, mono, the width of one glyph so the button does not move when it arrives. */
+.key-hint {
+  margin-left: var(--space-3);
+  font: var(--text-xs) var(--mono);
+  color: var(--ink-subtle);
+  opacity: 0.8;
+}
+/* On a filled verb the faint ink is near the fill, unseen: the hint takes the button's own ink, whatever the look
+   fills it with, and stays quieter than the verb by its size and face, never by opacity. */
+:is(.btn-primary, .btn-danger) .key-hint {
+  color: inherit;
+  opacity: 1;
+}
+.page-actions-item .key-hint {
+  float: right;
+}
+
+/* ---------- rich text ---------- */
+
+/* A rich text value as it reads: the page's own type, blocks spaced by ratio
+   rather than gaps, tables ruled like a list, a task's box the platform's
+   check. The same rules dress the editor's text, so what is typed is what
+   is read. */
+.rich-text {
+  font: var(--text-md)/1.55 var(--sans);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  /* A record's field value (.page-field > dd) is one line clipped with an ellipsis, which is right for a
+     value and wrong for paragraphs: the text wraps wherever it is drawn. */
+  white-space: normal;
+  min-width: 0;
+}
+/* A timeline's quiet line, rich text or plain: smaller, in the quieter ink. */
+.is-compact :is(.timeline-text, .rich-text) {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+.page-field > dd:has(.rich-text, .rich-editor) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+/* Formatted text is read and written at the record's full width, as a long text would be: a half-width
+   column wrapped the editor's toolbar onto three rows. */
+.page-field-wide {
+  grid-column: 1 / -1;
+}
+.rich-text > :first-child {
+  margin-top: 0;
+}
+.rich-text > :last-child {
+  margin-bottom: 0;
+}
+.rich-text :is(p, ul, ol, blockquote, pre, table) {
+  margin: 0 0 0.6em;
+}
+.rich-text :is(h2, h3, h4) {
+  margin: 0.9em 0 0.35em;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.rich-text h2 {
+  font-size: 1.2em;
+  font-weight: 600;
+}
+.rich-text h3 {
+  font-size: 1.07em;
+  font-weight: 600;
+}
+.rich-text h4 {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.rich-text :is(ul, ol) {
+  padding-left: 1.4em;
+}
+.rich-text li > p {
+  margin: 0;
+}
+.rich-text a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rich-text blockquote {
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-muted);
+}
+.rich-text code {
+  font: 0.92em var(--mono);
+  padding: 1px var(--space-2);
+  background: var(--raised);
+  border-radius: var(--radius-item, var(--radius));
+}
+.rich-text pre {
+  padding: var(--space-3h) var(--space-4);
+  background: var(--raised);
+  border-radius: var(--radius-panel, var(--radius));
+  overflow-x: auto;
+}
+.rich-text pre code {
+  padding: 0;
+  background: none;
+  font-size: var(--text-sm);
+}
+.rich-text table {
+  border-collapse: collapse;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  font-size: var(--text-base);
+}
+.rich-text :is(th, td) {
+  padding: var(--space-2) var(--space-3h);
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  min-width: 3em;
+}
+.rich-text th {
+  background: var(--raised);
+  font-weight: 600;
+}
+.rich-text img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.4em 0;
+  border-radius: var(--radius-panel, var(--radius));
+}
+.rich-text ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.rich-text li[data-type='taskItem'] {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.rich-text li[data-type='taskItem'] > :is(input, label) {
+  margin: 0.3em 0 0;
+  flex: none;
+}
+.rich-text li[data-type='taskItem'] > div {
+  flex: 1;
+  min-width: 0;
+}
+.rich-text li[data-type='taskItem'] > label {
+  display: inline-flex;
+  line-height: 1;
+}
+.rich-text li[data-type='taskItem'] input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.rich-text li[data-type='taskItem'][data-checked='true'] > div {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-subtle);
+}
+.rich-text .rich-text-mention,
+.rich-text span[data-type='mention'] {
+  color: var(--accent-ink);
+  font-weight: 500;
+}
+.rich-text-missing {
+  color: var(--ink-subtle);
+  font-style: italic;
+}
+.rich-text-excerpt {
+  overflow-wrap: anywhere;
+}
+/* A field that waits for its editor keeps the editor's height: nothing under it moves when it arrives. */
+.rich-field {
+  min-height: 7.25rem;
+}
+/* A group's goal beside its figure (G76): "64% of $20,000 target", quieter than the figure it measures. */
+.pbd-goal {
+  color: var(--ink-subtle);
+}

@@ -1,0 +1,193 @@
+/* @mistriwork/ui's form controls (TextField, MaskedField, SensitiveField, Select, Choices, Slider, FormParts), apart
+   from primitives.css: a page that draws none of them does not pay for their rules at its first paint. style.css
+   takes this file with the rest; a shell that layers primitives.css itself (the kit's) loads this one beside the
+   first control it draws. */
+
+/* The form controls (TextField, MaskedField, SensitiveField, Select, Choices, Slider, FormParts). They wear the
+   field's own box above (`field-control`), so a theme that sets --field-fill, --control-h, --control-border-w or
+   --field-radius restyles every one of them together, and the label above is the Field's. */
+.form-field-optional { font-weight: 400; color: var(--ink-muted); }
+/* Read, not drawn: a group whose question is the heading above it. */
+.form-field-label-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+/* The problem's line stays in the flow while empty, so a problem that arrives moves nothing below it. */
+.form-field-reserve > .form-field-problem { min-height: calc(var(--text-sm) * 1.45); }
+/* A consent: a paragraph beside its box, in the body's weight. */
+.form-field-consent .form-field-label { font-size: var(--text-sm); font-weight: 400; line-height: 1.45; }
+.field-check { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); }
+.field-check:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+
+/* A text box and the mark at its inline end. The room for the mark is the box's from the start (has-mark), so the
+   check arriving moves no text. Decorative: validity is aria-invalid's to say. */
+.field-box { position: relative; display: flex; align-items: center; min-width: 0; }
+.field-box.has-mark > .field-control { padding-inline-end: calc(var(--space-3h) + 16px + var(--space-3)); }
+.field-mark { position: absolute; inset-inline-end: var(--space-3h); display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--status-good); color: var(--surface); pointer-events: none; }
+.field-mark:empty::after { content: ""; width: 4px; height: 8px; margin-top: calc(-1 * var(--space-1)); border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.field-mark > svg { width: 100%; height: 100%; }
+.field-control::placeholder { color: var(--ink-subtle); }
+.field-hidden { letter-spacing: 0.08em; }
+/* Show beside the box, never inside it. */
+.field-with-action { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
+.field-note { display: flex; align-items: center; gap: var(--space-3); margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-muted); }
+.field-note > svg { flex: none; width: 14px; height: 14px; }
+
+/* The form's listbox is the Dropdown dressed as a field box. */
+.dd-button.field-select { min-height: var(--control-h); border-width: var(--control-border-w); padding: var(--space-2h) var(--space-3h); font: inherit; font-size: var(--text-base); background: var(--field-fill); border-radius: var(--field-radius, var(--radius)); text-align: start; }
+.dd-button.field-select[aria-invalid="true"] { border-color: var(--status-critical); }
+.dd-button.field-select:is([disabled], [aria-disabled="true"]) { background: var(--raised); color: var(--ink-muted); cursor: not-allowed; }
+.dd-value.is-empty { color: var(--ink-muted); }
+.dd-list.field-list .dd-label { font: var(--text-base) var(--sans); }
+.dd-list-multi .dd-option.selected .dd-label { color: var(--ink); font-weight: inherit; }
+.dd-box { position: relative; flex: none; width: 16px; height: 16px; margin-top: var(--space-1); box-sizing: border-box; border: 1px solid var(--line-control); border-radius: 3px; background: var(--surface); }
+.dd-option.selected .dd-box { border-color: var(--accent); background: var(--accent); }
+.dd-option.selected .dd-box::after { content: ""; position: absolute; inset: 1px 0 0; margin: auto; width: 4px; height: 8px; border: solid var(--on-accent); border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+
+/* Choices: one answer is native radios, hidden, with their faces drawn, and the ring shows on the face when the
+   keyboard is on the input; several cards are each a face that takes the focus itself (CheckCards). A host may dress
+   them through the --choice-* roles — a quiet form draws a card at rest as its well, with an edge only once chosen
+   or in focus (formDress.css) — and each falls back to the field's own box here. */
+.choice-input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.choice-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.choice-pick, .choice-card {
+  position: relative; box-sizing: border-box; display: flex; align-items: center; min-height: var(--control-h);
+  border: var(--control-border-w) solid var(--choice-edge, var(--line-control)); border-radius: var(--field-radius, var(--radius));
+  background: var(--choice-well, var(--field-fill)); color: var(--ink); font-size: var(--text-base); cursor: pointer;
+  transition: border-color var(--t-hover) var(--ease-out), background-color var(--t-hover) var(--ease-out), box-shadow var(--t-hover) var(--ease-out);
+}
+.choice-pick { justify-content: center; padding: 0 var(--space-4); }
+.choice-card { gap: var(--space-3h); padding: var(--space-3) var(--space-4); min-height: max(var(--control-h), 48px); }
+@media (hover: hover) {
+  .choice-pick:hover, .choice-card:hover { border-color: var(--choice-edge-hover, color-mix(in srgb, var(--line-control) 60%, var(--ink))); background-color: var(--choice-well-hover, var(--field-fill)); }
+}
+/* On is a thicker edge drawn outside the box, not a wider border, so choosing moves nothing. */
+.choice-pick.is-on, .choice-card.is-on { border-color: var(--choice-on, var(--accent)); box-shadow: 0 0 0 1px var(--choice-on, var(--accent)); background: var(--choice-on-well, var(--accent-soft)); }
+.choice-pick:has(.choice-input:focus-visible), .choice-card:has(.choice-input:focus-visible), .choice-card:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+.choice-card[aria-disabled="true"] { cursor: not-allowed; opacity: 0.6; }
+.choice-cards { display: flex; flex-direction: column; gap: var(--space-3); }
+.choice-card-icon { display: inline-flex; flex: none; color: var(--accent-ink); }
+.choice-card-icon > svg { width: 22px; height: 22px; }
+.choice-card-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.choice-card-help { display: block; color: var(--ink-muted); font-size: var(--text-sm); }
+.choice-box { position: relative; flex: none; box-sizing: border-box; width: 18px; height: 18px; border: 1.5px solid var(--line-control); border-radius: 3px; background: var(--surface); }
+.choice-card.is-on .choice-box { border-color: var(--choice-check, var(--accent)); background: var(--choice-check, var(--accent)); }
+.choice-card.is-on .choice-box::after { content: ""; position: absolute; inset: 1px 0 0; margin: auto; width: 4px; height: 8px; border: solid var(--choice-on-check, var(--on-accent)); border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+/* One answer's card says so with a radio's round mark and its dot; several answers' keep the square and its tick, as
+   a native radio and checkbox would. Read off the input the card holds, so every host's cards agree. */
+.choice-card:has(> .choice-input[type="radio"]) > .choice-box { border-radius: 50%; }
+.choice-card.is-on:has(> .choice-input[type="radio"]) > .choice-box::after { inset: 0; width: 6px; height: 6px; border: 0; border-radius: 50%; background: var(--choice-on-check, var(--on-accent)); transform: none; }
+
+/* The slider: the readout in a field box, the native range under it. */
+.field-readout { display: flex; align-items: center; }
+.field-range { --range-share: 0%; width: 100%; height: 22px; margin: var(--space-3) 0 0; padding: 0; background: transparent; appearance: none; -webkit-appearance: none; cursor: pointer; }
+.field-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) 0 var(--range-share), var(--line) var(--range-share) 100%); }
+.field-range::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; /* off-scale: centres the 18px thumb on the 4px track, (4 - 18) / 2 */ border: 0; border-radius: 50%; background: var(--accent); }
+.field-range::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line); }
+.field-range::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+.field-range::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--accent); }
+.field-range:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+.field-range:disabled { cursor: not-allowed; opacity: 0.5; }
+.field-range-ends { display: flex; justify-content: space-between; font-size: var(--text-xs); line-height: 1.45; color: var(--ink-muted); }
+
+/* The help tip. */
+.help-tip { position: relative; display: inline-flex; }
+.help-tip-button { position: relative; display: inline-grid; place-items: center; width: 16px; height: 16px; padding: 0; border: 1px solid var(--ink-muted); border-radius: 50%; background: transparent; color: var(--ink-muted); font: italic 700 10px/1 var(--sans); cursor: pointer; box-shadow: none; }
+.help-tip-button::after { content: ""; position: absolute; inset: -8px; }
+.help-tip-button > svg { width: 100%; height: 100%; }
+.help-tip-button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+.help-tip-text {
+  position: absolute; inset-inline-start: 0; top: calc(100% + var(--space-3)); z-index: 30; width: min(240px, 80vw);
+  padding: var(--space-3) var(--space-3h); border: 1px solid var(--line-strong); border-radius: var(--radius-pop);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop);
+  font-size: var(--text-sm); font-weight: 400; line-height: 1.45; text-transform: none; letter-spacing: normal;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .help-tip-text { transform-origin: top left; transition: opacity var(--t-popover) var(--ease-out), transform var(--t-popover) var(--ease-out); @starting-style { opacity: 0; transform: scale(0.96) translateY(-4px); } }
+}
+
+/* The progress bar: a track and its fill. The fill is not animated: it is information that changes often. */
+.progress-bar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+.progress-bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+
+/* A step's heading and lead. */
+.step-header { display: grid; gap: var(--space-3); }
+.step-title { margin: 0; font-size: var(--type-record-title); font-weight: var(--heading-weight); line-height: 1.15; letter-spacing: var(--track-title); color: var(--ink); }
+.step-mark { display: inline-block; margin-inline-end: var(--space-4); }
+.step-lead { margin: 0; font-size: var(--text-md); line-height: 1.45; color: var(--ink-muted); }
+
+/* The bar at the foot of its container: sticky, so it stays in the container it belongs to and the page keeps its sidebar. */
+.action-bar { position: sticky; bottom: 0; z-index: 2; display: flex; gap: var(--space-4); padding: var(--space-4) var(--space-5); border-top: 1px solid var(--line); background: var(--surface); }
+.action-bar-back { flex: 0 0 33%; }
+.action-bar-primary { flex: 1; min-width: 0; }
+
+/* Fields side by side; a row stacks where its fields no longer fit. */
+.form-columns { display: grid; grid-template-columns: var(--form-columns, repeat(auto-fit, minmax(min(100%, 9rem), 1fr))); gap: var(--space-4); align-items: start; }
+@media (max-width: 22rem) { .form-columns { grid-template-columns: minmax(0, 1fr); } }
+.review-list { display: grid; gap: var(--field-gap); }
+
+/* A theme's recipes for a form (themeRecipes.ts: required, checkbox, formStep, actionBar). Their rules are here, not
+   in a first stylesheet: they draw nothing a page without a control has. */
+
+/* required: the star is primitives.css's; this one says the other word instead. The word stands beside the label
+   (Field's optionalWord), so the label's name is the same under either recipe, and it is drawn only here. */
+.form-field-label-row > .form-field-label { min-width: 0; overflow-wrap: anywhere; }
+.form-field-optional-word { display: none; font-size: var(--text-sm); font-weight: 400; line-height: 1.35; color: var(--ink-muted); }
+[data-look-required="optional-word"] .form-field-optional-word { display: inline; }
+[data-look-required="optional-word"] .form-field.is-required > .form-field-label::after { content: none; }
+
+/* checkbox: drawn. The native input stays (the keyboard, the name, the ring), with its own face taken off and
+   the field's drawn on: its fill, the control's edge, and a corner no rounder than a third of the box, since a
+   10px field corner on an 18px box is a circle. On is the accent with a check in its ink. */
+[data-look-checkbox="drawn"] :is(.field-check, .form-field-check-row > input[type="checkbox"]) {
+  appearance: none; -webkit-appearance: none; display: inline-grid; place-content: center; box-sizing: border-box;
+  background: var(--field-fill); border: var(--control-border-w) solid var(--line-control);
+  border-radius: min(var(--field-radius, var(--radius)), 6px); cursor: pointer;
+  transition: background-color var(--t-hover) var(--ease-out), border-color var(--t-hover) var(--ease-out);
+}
+[data-look-checkbox="drawn"] :is(.field-check, .form-field-check-row > input[type="checkbox"])::after {
+  content: ""; width: 4px; height: 8px; border: solid var(--on-accent); border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg); opacity: 0;
+}
+[data-look-checkbox="drawn"] :is(.field-check, .form-field-check-row > input[type="checkbox"]):checked { background: var(--accent); border-color: var(--accent); }
+[data-look-checkbox="drawn"] :is(.field-check, .form-field-check-row > input[type="checkbox"]):checked::after { opacity: 1; }
+[data-look-checkbox="drawn"] :is(.field-check, .form-field-check-row > input[type="checkbox"]):focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+[data-look-checkbox="drawn"] :is(.field-check, .form-field-check-row > input[type="checkbox"]):disabled { background: var(--raised); border-color: var(--line); cursor: not-allowed; }
+@media (forced-colors: active) {
+  [data-look-checkbox="drawn"] :is(.field-check, .form-field-check-row > input[type="checkbox"]) { border: 1px solid ButtonText; }
+  [data-look-checkbox="drawn"] :is(.field-check, .form-field-check-row > input[type="checkbox"]):checked { background: Highlight; border-color: Highlight; }
+  [data-look-checkbox="drawn"] :is(.field-check, .form-field-check-row > input[type="checkbox"]):checked::after { border-color: HighlightText; }
+}
+
+/* formStep: ruled puts a hairline under a step's header. actionBar: raised stands the sticky bar on the surface with a
+   soft lift (the theme's own shadow colour, upward since the bar is at the foot) in place of the hairline over it. */
+[data-look-form-step="ruled"] .intake-head { padding-bottom: var(--space-4); border-bottom: 1px solid var(--line); }
+[data-look-action-bar="raised"] :is(.intake-actions, .action-bar) {
+  background: var(--surface); border-top-color: transparent;
+  box-shadow: 0 -6px 18px color-mix(in srgb, var(--shadow-ink, black) 12%, transparent);
+}
+
+/* A control stands level at the theme's height (--control-h): the date field's input and the Button primitive with the
+   rest (the field box and the listbox read it above). */
+.date-field .date-field-input { box-sizing: border-box; min-height: var(--control-h); border-width: var(--control-border-w); background: var(--field-fill); border-radius: var(--field-radius, var(--radius)); }
+
+/* Mobile. */
+/* No double-tap-to-zoom delay on what is tapped, and no grey flash over it: the browser's highlight is replaced by
+   the house press (--t-press, the button gives a little and a link dims), so a tap is still answered. */
+:is(button, a, input, select, textarea, summary, [role="button"], [role="switch"], [role="tab"], [role="option"], [role="menuitem"]) {
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+a:active { opacity: 0.7; }
+@media (prefers-reduced-motion: no-preference) {
+  .btn { transition: transform var(--t-press) var(--ease-out); }
+  .btn:not(:disabled, [aria-disabled="true"]):active, .choice-pick:active, .choice-card:active { transform: scale(0.97); }
+}
+@media (pointer: coarse) {
+  /* A finger needs 44px (WCAG 2.5.5) whatever height the theme draws, through the density's zoom (--row-h does the same). */
+  /* A form's listbox may be the shell's (.form-field .dd-button) rather than @mistriwork/ui's Select: the same field, so the
+     same height as the box beside it in a row. */
+  .field-control, .dd-button.field-select, .form-field .dd-button, .choice-pick, .choice-card, .date-field .date-field-input, .btn:not(.btn-compact) {
+    min-height: max(var(--control-h), calc(44px / var(--density-zoom, 1)));
+  }
+  /* iOS Safari zooms the page when a field under 16px is focused, and does not zoom back. The density zoom only
+     enlarges (1, 1.12, 1.24), so a flat 16px is at least 16px drawn. Not verified on WebKit: it is not installed
+     where this was written, so a real iPhone is the test of this rule. */
+  input, select, textarea, .field-control, .dd-button.field-select, .form-field .dd-button, .date-field .date-field-input { font-size: max(16px, var(--text-base)); }
+}

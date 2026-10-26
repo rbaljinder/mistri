@@ -1,0 +1,213 @@
+/* Brought by the further chart shapes (ChartShapes.tsx), which a dashboard
+   loads only when it draws one, so none of it stands in a first stylesheet.
+   Tokens only: a look recolors these through its series and inks. */
+@layer components {
+  .chart-scatter,
+  .chart-waterfall {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .chart-scatter-dot {
+    fill: color-mix(in srgb, var(--chart-1, var(--accent)) 70%, var(--surface));
+    stroke: var(--chart-1, var(--accent));
+    stroke-width: 1;
+  }
+  .chart-scatter-dot.is-active {
+    fill: var(--chart-1, var(--accent));
+  }
+
+  /* A heat map is a table of cells: the keys in the quiet ink, the shade the value, the value itself said under it. */
+  .chart-heat {
+    display: grid;
+    gap: var(--space-2h);
+    min-width: 0;
+    margin-top: var(--space-2h);
+  }
+  .chart-heat-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    background:
+      linear-gradient(90deg, var(--surface) 30%, transparent) left / 24px 100% no-repeat local,
+      linear-gradient(270deg, var(--surface) 30%, transparent) right / 24px 100% no-repeat local,
+      linear-gradient(90deg, color-mix(in srgb, var(--ink) 14%, transparent), transparent) left / 10px 100% no-repeat scroll,
+      linear-gradient(270deg, color-mix(in srgb, var(--ink) 14%, transparent), transparent) right / 10px 100% no-repeat scroll;
+  }
+  /* Each column keeps room for its key whole ("10 AM"): where the card is narrower — a phone — the grid scrolls in
+   its own box rather than cutting every key to "1…". */
+  /* Fitted to its column: a cell is at least 16px, so a day's fourteen hours fit half a desk's width; past that the
+   grid scrolls, and its edges fade where there is more. */
+  .chart-heat-grid {
+    border-collapse: separate;
+    border-spacing: 2px;
+    width: 100%;
+    min-width: calc(8ch + var(--heat-cols, 1) * 18px);
+    table-layout: fixed;
+  }
+  .chart-heat-grid :is(tr, th, td) {
+    border: 0;
+    box-shadow: none;
+  }
+  .chart-heat-grid th {
+    background: none;
+  }
+  .chart-heat-grid td:first-child,
+  .chart-heat-row {
+    width: 8ch;
+  }
+  .chart-heat-col,
+  .chart-heat-row {
+    font: 400 var(--text-xs) var(--sans);
+    color: var(--ink-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* A column's name may be wider than its column: it is shown only where the next ones are not (headEvery), so it
+   spills over them centred rather than being cut. */
+  .chart-heat-col {
+    text-align: center;
+    padding: 0 0 var(--space-1);
+    overflow: visible;
+    text-overflow: clip;
+  }
+  /* The last column's name spills inward, never past the grid's edge, where it would scroll the grid for a word. */
+  .chart-heat-col.is-end {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .chart-heat-row {
+    text-align: right;
+    padding: 0 var(--space-2h) 0 0;
+  }
+  .chart-heat-grid .chart-heat-cell {
+    height: 20px;
+    min-width: 14px;
+    padding: 0;
+    border-radius: min(3px, var(--radius));
+    background: var(--raised, var(--ground));
+  }
+  .chart-heat-cell[style] {
+    background: color-mix(in srgb, var(--chart-1, var(--accent)) var(--heat), var(--surface));
+  }
+  .chart-heat-cell.is-active {
+    outline: 2px solid var(--ink);
+    outline-offset: -1px;
+  }
+  .chart-heat-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2h) var(--space-5);
+    flex-wrap: wrap;
+  }
+  .chart-heat-said {
+    margin: 0;
+    min-height: 1.4em;
+    font: var(--text-sm) var(--sans);
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .chart-heat-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1h);
+    font: var(--text-xs) var(--sans);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .chart-heat-key {
+    display: inline-block;
+    width: 14px;
+    height: 10px;
+    border-radius: min(2px, var(--radius));
+    background: color-mix(in srgb, var(--chart-1, var(--accent)) var(--heat), var(--surface));
+  }
+
+  /* A waterfall: rises the first series, falls the second (held apart for color-blind readers by the theme check), the total the ink. */
+  .chart-waterfall-bar {
+    rx: min(3px, var(--radius));
+  }
+  .chart-waterfall-bar.is-rise {
+    fill: color-mix(in srgb, var(--chart-1, var(--accent)) 60%, var(--surface));
+  }
+  .chart-waterfall-bar.is-fall {
+    fill: color-mix(in srgb, var(--chart-2, var(--status-critical)) 60%, var(--surface));
+  }
+  .chart-waterfall-bar.is-total {
+    fill: color-mix(in srgb, var(--ink) 70%, var(--surface));
+  }
+  .chart-waterfall-bar.is-rise.is-active {
+    fill: var(--chart-1, var(--accent));
+  }
+  .chart-waterfall-bar.is-fall.is-active {
+    fill: var(--chart-2, var(--status-critical));
+  }
+  .chart-waterfall-bar.is-total.is-active {
+    fill: var(--ink);
+  }
+  .chart-waterfall-join {
+    stroke: var(--ink-muted);
+    stroke-width: 1;
+    stroke-dasharray: 2 2;
+  }
+
+  /* A treemap: tiles in one hue, deeper for the larger (tileStep), words in the ink so they read on any step. */
+  .chart-treemap {
+    position: relative;
+    width: 100%;
+    margin-top: var(--space-2h);
+  }
+  .chart-tile {
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: var(--space-1);
+    padding: var(--space-2h) var(--space-3);
+    overflow: hidden;
+    border: 2px solid var(--surface);
+    border-radius: min(6px, var(--radius));
+    background: color-mix(in srgb, var(--chart-1, var(--accent)) var(--tile-step, 24%), var(--surface));
+  }
+  .chart-tile.is-other {
+    background: color-mix(in srgb, var(--ink-muted) 9%, var(--surface));
+  }
+  .chart-tile.is-active {
+    background: color-mix(in srgb, var(--chart-1, var(--accent)) calc(var(--tile-step, 24%) + 10%), var(--surface));
+  }
+  .chart-tile.is-other.is-active {
+    background: color-mix(in srgb, var(--ink-muted) 18%, var(--surface));
+  }
+  .chart-tile.is-deep :is(.chart-tile-name, .chart-tile-value) {
+    color: var(--ground);
+  }
+  .chart-tile-name {
+    font: 500 var(--text-sm)/1.25 var(--sans);
+    color: var(--ink);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+  /* A tile says its name whole or not at all (tileLabel): on more lines, then a size down, where one line will not hold it. */
+  .chart-tile.is-small .chart-tile-name {
+    font-size: var(--text-xs);
+  }
+  .chart-tile-value {
+    font: 600 var(--text-sm) var(--mono);
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+}
+/* A look's table rules (themeFamilies.css, the later `look` layer) underline a body row's head; a heat map's
+   cells are not rows of a table to read across, so they are answered in that layer, by name. */
+@layer look {
+  :root[data-theme-style] .chart-heat-grid :is(th, td) {
+    border: 0;
+  }
+  :root[data-theme-style] .chart-heat-grid th {
+    background: none;
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "tablewalk": { "command": "npx", "args": ["tsx", "packages/tablewalk/src/server/index.ts", "--mcp", "--demo", "--no-config"] }
+  }
+}

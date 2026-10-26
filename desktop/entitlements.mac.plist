@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Entitlements for a hardened-runtime, notarised build.
+
+  Two of these are not boilerplate and are the reason this file exists at all:
+
+  - allow-jit / allow-unsigned-executable-memory: V8 writes machine code at
+    run time. Without them a hardened build crashes on launch, not later.
+  - allow-dyld-environment-variables: the server child is this same binary
+    re-entered with ELECTRON_RUN_AS_NODE=1. The hardened runtime strips
+    environment variables it considers dangerous unless this is granted, and
+    the failure mode is subtle — the child starts as a second copy of the GUI
+    app instead of as Node, so the app appears to hang waiting for a server
+    that was never a server.
+
+  Applied to the inherited entitlements too (entitlementsInherit), because the
+  child is a separate process and inherits nothing by default.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.inherit</key>
+    <true/>
+  </dict>
+</plist>

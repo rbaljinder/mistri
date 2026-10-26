@@ -1,0 +1,124 @@
+{
+  "$schema": "../../../../packages/mistri/schema/app.schema.json",
+  "name": "Relay",
+  "id": "relay",
+  "resources": {
+    "service": {},
+    "engineer": {},
+    "release_run": {
+      "noun": "Release",
+      "access": "write",
+      "segments": { "active": "status != shipped", "shipped": "status = shipped" },
+      "display": {
+        "status": { "tone": { "queued": "neutral", "staged": "info", "shipping": "warn", "shipped": "good", "blocked": "bad" } }
+      },
+      "actions": {
+        "markStaged": { "label": "Mark staged", "set": { "status": "staged" }, "when": "status = queued" },
+        "markShipped": { "label": "Mark shipped", "set": { "status": "shipped" }, "when": "status = shipping" }
+      }
+    },
+    "incident": {
+      "access": "write",
+      "segments": { "active": "status != resolved", "resolved": "status = resolved" },
+      "display": {
+        "severity": { "tone": { "critical": "bad", "major": "warn", "minor": "info" } },
+        "status": { "tone": { "investigating": "bad", "monitoring": "warn", "resolved": "good" } }
+      },
+      "actions": {
+        "markMonitoring": { "label": "Mark monitoring", "set": { "status": "monitoring" }, "when": "status = investigating" },
+        "resolveIncident": { "label": "Resolve incident", "set": { "status": "resolved" }, "when": "status = monitoring" }
+      }
+    },
+    "approval": {
+      "access": "write",
+      "display": { "decision": { "tone": { "pending": "warn", "approved": "good", "changes_requested": "bad" } } },
+      "actions": {
+        "approve": { "label": "Approve", "set": { "decision": "approved" }, "when": "decision = pending" },
+        "requestChanges": { "label": "Request changes", "set": { "decision": "changes_requested" }, "when": "decision = pending" }
+      }
+    },
+    "deployment": {
+      "display": { "status": { "tone": { "healthy": "good", "degraded": "warn", "failed": "bad" } } }
+    }
+  },
+  "views": {
+    "release-control": {
+      "kind": "dashboard",
+      "label": "Release control",
+      "sections": [
+        { "kind": "metric", "title": "In flight", "from": "release_run", "query": "status = shipping", "width": "third" },
+        { "kind": "metric", "title": "Ready to ship", "from": "release_run", "query": "status = staged", "width": "third" },
+        { "kind": "metric", "title": "Active incidents", "from": "incident", "query": "status != resolved", "width": "third" },
+        {
+          "kind": "board",
+          "title": "Delivery queue",
+          "from": "release_run",
+          "by": "status",
+          "primary": "name",
+          "lines": ["service_id.name", "owner_id.name"],
+          "limit": 3
+        },
+        {
+          "kind": "rows",
+          "title": "Environment health",
+          "from": "deployment",
+          "show": ["name", "service_id.name", "environment", "status", "version"],
+          "width": "half",
+          "limit": 8
+        },
+        {
+          "kind": "rows",
+          "title": "Incident desk",
+          "from": "incident",
+          "query": "status != resolved",
+          "show": ["name", "severity", "service_id.name", "status"],
+          "width": "half",
+          "limit": 6
+        }
+      ]
+    },
+    "releases": {
+      "kind": "list",
+      "from": "release_run",
+      "label": "Releases",
+      "show": ["name", "service_id.name", "status", "owner_id.name", "target_on"],
+      "filters": ["status", "service_id", "owner_id"],
+      "tabs": [{ "segment": "active", "sort": "target_on" }, { "segment": "shipped", "sort": "target_on desc" }, { "label": "All" }]
+    },
+    "approvals": {
+      "kind": "list",
+      "from": "approval",
+      "label": "Approvals",
+      "show": ["name", "release_id.name", "reviewer_id.name", "decision"],
+      "filters": ["decision"]
+    },
+    "services": {
+      "kind": "list",
+      "from": "service",
+      "label": "Services",
+      "show": ["name", "owner_id.name", "tier", "repository"],
+      "open": "drawer"
+    },
+    "environments": {
+      "kind": "list",
+      "from": "deployment",
+      "label": "Environments",
+      "show": ["name", "service_id.name", "environment", "status", "version"],
+      "filters": ["environment", "status"]
+    },
+    "incidents": {
+      "kind": "list",
+      "from": "incident",
+      "label": "Incidents",
+      "show": ["name", "severity", "status", "service_id.name", "owner_id.name"],
+      "filters": ["severity", "status"],
+      "tabs": ["active", "resolved", { "label": "All" }]
+    }
+  },
+  "home": "release-control",
+  "nav": [
+    { "id": "delivery", "label": "Delivery", "children": ["release-control", "releases", "approvals"] },
+    { "id": "runtime", "label": "Runtime", "children": ["services", "environments", "incidents"] }
+  ],
+  "ui": { "shell": { "placement": "top" }, "theme": { "preset": "lumen" } }
+}

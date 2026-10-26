@@ -1,0 +1,21 @@
+/* The newer field vocabulary's own few rules (IntakeControls.tsx); the controls wear @mistriwork/ui's (formControls.css). */
+/* An amount says its currency inside the box, before the figure, as a New form's money does (docs/design.md): the
+   sign stands over the box's start at the box's own size and the box's words start after it (IntakeControls.tsx
+   sets that padding from the sign's length). Outside the box, "$" read as a stray character beside the field. */
+.intake-money { position: relative; display: grid; min-width: 0; --money-pad: var(--space-3h); --money-size: var(--text-md); }
+.multi-step-form[data-style='intake'] .intake-money { --money-pad: var(--space-4); --money-size: var(--text-lg); }
+.intake-money-symbol {
+  position: absolute; inset-inline-start: var(--money-pad); top: 50%; transform: translateY(-50%); z-index: 1;
+  color: var(--ink-muted); font-family: var(--sans); font-size: var(--money-size); line-height: 1; pointer-events: none;
+}
+/* An amount in the valid check's box (CommandFields' marked): the box is the row, and the mark keeps its room inside
+   the amount's own input, as a plain box's does (forms.css). */
+.field-box > .intake-money { flex: 1 1 auto; min-width: 0; }
+.field-box.has-mark > .intake-money > .field-control { padding-inline-end: calc(var(--space-3h) + 16px + var(--space-3)); }
+.intake-month { max-width: 10ch; box-sizing: content-box; }
+.intake-slider { display: grid; gap: var(--space-2); }
+.intake-slider-ends { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); color: var(--ink-muted); }
+.intake-consent { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.intake-statement { font: var(--text-base) var(--sans); color: var(--ink); white-space: pre-line; overflow-wrap: anywhere; }
+.intake-buttons { flex-wrap: wrap; }
+.intake-choice-help { display: block; color: var(--ink-muted); font: var(--text-sm) var(--sans); }

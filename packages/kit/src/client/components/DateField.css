@@ -1,0 +1,6 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). The field itself is
+   @mistriwork/ui's (packages/ui/src/primitives.css). */
+@layer base {
+/* A calendar is a popup like the others (docs/design.md, Shape); the database browser keeps the flat, rounder one it had. */
+:where(:root:not([data-visual-theme])) .date-field-popup { border-radius: var(--radius-lg); box-shadow: none; }
+}

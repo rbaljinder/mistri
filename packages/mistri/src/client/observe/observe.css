@@ -1,0 +1,113 @@
+/* The dev observer (Observer.tsx): a quiet developer tool in the tool's own
+   tokens (docs/design.md). Rules, not boxes; meaning is a dot and its word;
+   the monospace face for what the machine said. In the components layer, so
+   the tool's base rules sit under it and every look stays out of it. */
+@layer components {
+  .obs { min-height: 100vh; background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: var(--type-ui); display: flex; flex-direction: column; }
+  .obs > div { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .obs-head { display: flex; align-items: center; gap: 20px; padding: 0 var(--space-4h); border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 2; }
+  .obs-brand { display: inline-flex; align-items: center; gap: var(--space-4); font-weight: 620; letter-spacing: var(--track-title); padding-inline-end: var(--space-3); }
+  .obs-tabs { display: flex; gap: var(--space-1); align-self: stretch; position: relative; }
+  .obs-tab { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--space-2h); padding: var(--space-4) var(--space-3h) var(--space-3h); color: var(--ink-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: color var(--t-hover) var(--ease-out); }
+  .obs-tab:hover { color: var(--ink); }
+  .obs-tab[data-selected], .obs-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .obs-tab:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: calc(var(--focus-offset) * -1); border-radius: var(--radius-item); }
+  .obs-count { font-family: var(--code); font-size: var(--text-xs); color: var(--status-critical); }
+  .obs-head-end { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--space-4); }
+  .obs-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .obs-panel[hidden] { display: none; }
+  .obs-quiet { background: none; color: var(--ink); border: 1px solid var(--line-strong); }
+  .obs-quiet:hover { border-color: var(--line-control); }
+
+  .obs-split { display: grid; grid-template-columns: minmax(300px, 34%) 1fr; flex: 1; min-height: 0; }
+  .obs-list { border-inline-end: 1px solid var(--line); overflow: auto; max-height: calc(100vh - 44px); }
+  .obs-main { overflow: auto; max-height: calc(100vh - 44px); min-width: 0; }
+  .obs-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3h); padding: var(--space-3h) var(--space-4h); border-bottom: 1px solid var(--line); }
+  .obs-input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line-control); border-radius: var(--radius); padding: var(--space-2) var(--space-3); min-width: 0; flex: 1 1 160px; }
+  .obs-input:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+  .obs-check { display: inline-flex; align-items: center; gap: var(--space-2h); color: var(--ink-muted); white-space: nowrap; }
+
+  .obs-rows { list-style: none; margin: 0; padding: 0; }
+  .obs-row { display: grid; grid-template-columns: 44px 44px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-2h) var(--space-4h); color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .obs-row:hover { background: var(--accent-soft); }
+  .obs-row.is-selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+  .obs-row:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
+  .obs-row-meta { display: inline-flex; align-items: center; gap: var(--space-3); }
+  .obs-method { font-family: var(--code); font-size: var(--text-xs); color: var(--ink-muted); }
+  .obs-path { font-family: var(--code); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .obs-ms { font-family: var(--code); font-size: var(--text-xs); color: var(--ink-muted); min-width: 56px; text-align: end; }
+
+  /* Meaning is a dot and its word. */
+  .obs-dot { display: inline-flex; align-items: center; gap: var(--space-2h); font-family: var(--code); font-size: var(--text-xs); white-space: nowrap; }
+  .obs-dot::before { content: ""; inline-size: 7px; block-size: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .obs-ok { color: var(--status-good); } .obs-warn { color: var(--status-warning); } .obs-danger { color: var(--status-critical); } .obs-dim { color: var(--ink-subtle); }
+  .obs-flag { font-family: var(--code); font-size: var(--text-xs); color: var(--status-warning); margin-inline-start: var(--space-2h); max-inline-size: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .obs-flag-danger { color: var(--status-critical); }
+  .obs-faint { color: var(--ink-subtle); }
+  .obs-problem { color: var(--status-critical); margin: var(--space-2h) 0; overflow-wrap: anywhere; }
+  .obs-pad { padding: var(--space-5) var(--space-4h); margin: 0; }
+  .obs-pad-x { padding: 0 var(--space-4h); }
+  .obs-link { color: var(--link); font-size: var(--text-sm); white-space: nowrap; }
+
+  .obs-trace { display: flex; flex-direction: column; }
+  .obs-trace-head { padding: var(--space-4) var(--space-4h) var(--space-3h); border-bottom: 2px solid var(--ink); }
+  .obs-trace-head h2 { margin: 0 0 var(--space-2); font-size: calc(15px * var(--type-k)); font-weight: 620; display: flex; align-items: center; gap: var(--space-3h); min-width: 0; }
+  .obs-trace-head p { margin: var(--space-1) 0 0; }
+
+  .obs-waterfall { list-style: none; margin: 0; padding: 0; border-bottom: 1px solid var(--line); }
+  .obs-span { display: grid; grid-template-columns: minmax(180px, 40%) 1fr 70px; align-items: center; gap: var(--space-3h); padding: var(--space-1h) var(--space-4h); cursor: pointer; border-bottom: 1px solid var(--line); }
+  .obs-span:last-child { border-bottom: 0; }
+  .obs-span:hover { background: var(--accent-soft); }
+  .obs-span.is-selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+  .obs-span:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
+  .obs-span-name { font-family: var(--code); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .obs-span-track { position: relative; block-size: 10px; }
+  .obs-bar { position: absolute; inset-block: 1px; border-radius: min(2px, var(--radius)); background: var(--accent); }
+  .obs-bar-db { background: var(--status-info); } .obs-bar-out { background: var(--link); }
+  .obs-bar-warn { background: var(--status-warning); } .obs-bar-danger { background: var(--status-critical); } .obs-bar-ok { background: var(--accent); }
+  .obs-span-ms { font-family: var(--code); font-size: var(--text-xs); color: var(--ink-muted); text-align: end; }
+
+  .obs-detail { padding: var(--space-2) var(--space-4h) 28px; }
+  .obs-detail-title { font-size: var(--text-md); font-weight: 620; margin: var(--space-4h) 0 var(--space-2); font-family: var(--code); overflow-wrap: anywhere; }
+  .obs-section { padding-block: var(--space-3h); border-bottom: 1px solid var(--line); }
+  .obs-section:last-child { border-bottom: 0; }
+  .obs-section > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+  .obs-section h3 { margin: 0 0 var(--space-2h); font-size: var(--text-sm); font-weight: 600; color: var(--ink-muted); overflow-wrap: anywhere; font-family: var(--code); }
+  .obs-code { font-family: var(--code); font-size: var(--text-sm); line-height: 1.5; margin: var(--space-2) 0; padding: var(--space-3) var(--space-3h); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: 420px; overflow: auto; }
+  .obs-sql { color: var(--ink); }
+  .obs-pairs { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: var(--space-1h) var(--space-5); margin: var(--space-2h) 0; }
+  .obs-pairs > div { display: contents; }
+  .obs-pairs dt { color: var(--ink-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+  .obs-pairs dd { margin: 0; font-family: var(--code); font-size: var(--text-sm); overflow-wrap: anywhere; min-width: 0; }
+  .obs-pairs dd .obs-code { margin: 0; }
+  .obs-params { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+  .obs-string { color: var(--ink); }
+  .obs-literal { color: var(--status-info); }
+  .obs-masked { font-family: var(--code); font-size: var(--text-xs); color: var(--ink-muted); border: 1px solid var(--line-strong); border-radius: var(--radius-item); padding: 0 var(--space-2); }
+  .obs-because { margin: 0; padding-inline-start: 20px; display: grid; gap: var(--space-2); color: var(--status-critical); overflow-wrap: anywhere; }
+  .obs-because-text { margin: 0 0 var(--space-3); overflow-wrap: anywhere; }
+  .obs-explain { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2h); margin-block-start: var(--space-2h); }
+  .obs-explain .obs-code { align-self: stretch; }
+
+  .obs-lines { list-style: none; margin: 0; padding: 0; }
+  .obs-lines.obs-pad-x { padding-inline: var(--space-4h); }
+  .obs-log, .obs-error { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-3h); padding: var(--space-2) 0; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
+  .obs-error { grid-template-columns: auto minmax(0, 32%) auto minmax(0, 1fr) auto; }
+  .obs-time { font-family: var(--code); font-size: var(--text-xs); }
+  .obs-source { font-family: var(--code); font-size: var(--text-xs); color: var(--ink-muted); }
+  .obs-message { font-family: var(--code); font-size: var(--text-sm); white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+  .obs-logs { overflow: auto; max-height: calc(100vh - 44px); }
+  .obs-access .obs-filters { padding-inline: 0; }
+
+  @media (max-width: 760px) {
+    .obs-head { flex-wrap: wrap; gap: var(--space-3); }
+    .obs-tabs { overflow-x: auto; max-inline-size: 100%; }
+    .obs-head-end > .obs-faint { display: none; }
+    .obs-split { grid-template-columns: 1fr; }
+    .obs-list { max-height: 40vh; border-inline-end: 0; border-bottom: 1px solid var(--line); }
+    .obs-span { grid-template-columns: minmax(0, 1fr) 30% 60px; }
+    .obs-log, .obs-error { grid-template-columns: auto minmax(0, 1fr); }
+    .obs-log > .obs-time, .obs-error > .obs-faint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .obs-tab { transition: none; } }
+}

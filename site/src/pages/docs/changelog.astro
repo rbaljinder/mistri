@@ -1,0 +1,16 @@
+---
+/* The changelog, as a page of the docs: generated from CHANGELOG.md when the site builds (src/changelog.mjs says
+   why it is not a content page). The table of contents lists the releases. */
+import { readFileSync } from 'node:fs';
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { changelogPage } from '../../changelog.mjs';
+
+const { html, headings } = changelogPage(readFileSync(new URL('../../../../CHANGELOG.md', import.meta.url), 'utf8'));
+---
+
+<StarlightPage
+  frontmatter={{ title: 'Changelog', description: 'What changed in each release, newest first.', editUrl: false }}
+  headings={headings}
+>
+  <Fragment set:html={html} />
+</StarlightPage>

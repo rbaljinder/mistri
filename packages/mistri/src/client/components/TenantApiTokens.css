@@ -1,0 +1,29 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order).
+   The screen is loaded on demand (AccountControl.tsx), so none of it stands in a first paint. */
+@layer components {
+/* One box, hairlines inside, as the support log: a token is a row, the form a section after a rule. */
+.modal.api-tokens { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box;
+  padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.api-tokens > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3h); }
+.api-tokens h2 { margin: 0; font-size: calc(18px * var(--type-k)); }
+.api-tokens h3 { margin: 0 0 var(--space-3h); font-size: var(--text-md); }
+.api-tokens .note { margin: var(--space-2h) 0 0; color: var(--ink-muted); line-height: 1.5; }
+.api-tokens [role="alert"] { color: var(--status-warning); }
+.api-tokens-scroll { overflow-x: auto; margin-top: var(--space-5); }
+.api-tokens table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
+.api-tokens th { text-align: left; font-weight: 600; color: var(--ink-muted); padding: var(--space-2h) var(--space-3h) var(--space-2h) 0; border-bottom: 1px solid var(--line); }
+.api-tokens td { padding: var(--space-3) var(--space-3h) var(--space-3) 0; border-bottom: 1px solid var(--line); vertical-align: middle; overflow-wrap: anywhere; }
+.api-tokens td:last-child { text-align: right; padding-right: 0; }
+.api-tokens-dim { color: var(--ink-muted); }
+.api-tokens-make { display: grid; gap: var(--space-4); margin-top: 20px; padding-top: var(--space-5); border-top: 1px solid var(--line); }
+.api-tokens-roles { display: flex; flex-wrap: wrap; gap: var(--space-2h) var(--space-4h); }
+.api-tokens-roles label { display: inline-flex; align-items: center; gap: var(--space-2h); }
+.api-tokens-days { width: 6rem; }
+.api-tokens-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
+/* The secret, once: mono, selectable whole, with its one instruction beside it. */
+.api-tokens-secret { display: grid; gap: var(--space-2h); margin-top: var(--space-5); padding: var(--space-4); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.api-tokens-secret p { margin: 0; }
+.api-tokens-secret div { display: flex; gap: var(--space-3); align-items: center; }
+.api-tokens-secret input { flex: 1; min-width: 0; font-family: var(--mono); }
+}

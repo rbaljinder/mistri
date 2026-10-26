@@ -1,0 +1,32 @@
+/* The New menu's own rules, brought with it: after the base, before any look (style.css names the order).
+   A quiet header control beside the bell — the ghost button the account's
+   menu is — so the App's one way to make something does not shout over the
+   room's own primary action. */
+@layer components {
+.new-menu .new-menu-trigger { min-height: 32px; white-space: nowrap; }
+.new-menu-mark { display: none; }
+/* On a phone the button is its plus (structure.css draws it, over any look's button); its name is still "New". */
+.new-menu-popup {
+  min-width: min(12rem, var(--available-width, 100vw - 16px));
+  max-width: min(20rem, var(--available-width, 100vw - 16px));
+  border-radius: var(--radius);
+}
+.new-menu-item {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: var(--space-3); text-align: left;
+  background: transparent; border: 0; border-radius: var(--radius);
+  color: var(--ink); font: var(--text-sm) var(--sans);
+}
+.new-menu-item .tw-icon { flex: none; width: 16px; height: 16px; color: var(--ink-muted); }
+.new-menu-item .new-menu-slot { flex: none; width: 16px; height: 16px; }
+.new-menu-item:hover, .new-menu-item:focus-visible, .new-menu-item[data-highlighted] {
+  background: var(--accent-soft); color: var(--accent-ink);
+}
+.new-menu-item:hover .tw-icon, .new-menu-item[data-highlighted] .tw-icon { color: inherit; }
+/* A long menu's groups: a quiet heading over each, aligned with the lines' text, and one hairline between runs (a separator) — the
+   section rule's quiet, not a box round each group. */
+.new-menu-sep { height: 1px; margin: var(--space-2) var(--space-1); background: var(--line); }
+.new-menu-group-label {
+  padding: var(--space-2h) var(--space-3) var(--space-2); color: var(--ink-muted);
+  font: 600 var(--text-xs) var(--sans); letter-spacing: var(--track-caps, .05em); text-transform: uppercase;
+}
+}

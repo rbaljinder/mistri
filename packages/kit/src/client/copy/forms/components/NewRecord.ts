@@ -1,0 +1,31 @@
+/** What NewRecord says, in the forms room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '../../../messages.js';
+
+export const say = defineMessages({
+  yyyyMmDdHh: 'YYYY-MM-DD HH:MM',
+  fill: 'Fill in {column}.',
+  enterAValidDate: 'Enter a valid date and time.',
+  enterAValidDateInYyyy: 'Enter a valid date in YYYY-MM-DD format.',
+  useAtLeast: 'Use at least {min} characters.',
+  useAtMost: 'Use at most {max} characters.',
+  enterTheExpectedForm: 'Enter a value in the expected form.',
+  chooseFirst: 'Choose {waitingOn} first.',
+  notNullWithNoDefault: 'NOT NULL with no default',
+  emptyFieldsAreLeft: 'Empty fields are left to the database — defaults apply, keys are assigned.',
+  addRow: 'Add row',
+  adding: 'Adding...',
+  cannotAddThisRecord: 'Cannot add this record. Required fields hidden by this form need valid defaults or visible controls: {map}.',
+  assignedByTheDatabase: 'assigned by the database',
+  defaultValue: 'Default: {value}',
+  defaultSuppliedByTheDatabase: 'Default supplied by the database',
+  one: ' (one of {allowed})',
+  newThing: 'New {thing}',
+  discardNewRecord: 'Discard new record?',
+  yourEntriesHaveNotBeen: 'Your entries have not been saved.',
+  discardRecord: 'Discard record',
+  keepEditing: 'Keep editing',
+  requiredMark: 'required',
+  optionalWord: '(optional)',
+  choosePlaceholder: 'Choose {label}',
+  addAtLeastLines: 'Add at least {min} lines.',
+});

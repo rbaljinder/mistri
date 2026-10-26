@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "types": ["node"],
+    "skipLibCheck": true,
+    "lib": ["ES2023"],
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    /* Private handlers and policy import the public server entry points.
+       The package's exports map types it from dist/, which a fresh checkout
+       has not built; this mirrors the root tsconfig and reads the source. */
+    "paths": {
+      "@mistriwork/mistri/commands": ["../../../../packages/mistri/src/server/commands.ts"],
+      "@mistriwork/mistri/policy": ["../../../../packages/mistri/src/server/policy.ts"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

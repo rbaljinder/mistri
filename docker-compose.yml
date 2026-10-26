@@ -1,0 +1,87 @@
+# tablewalk against a Postgres, the way it would actually be run.
+#
+#   docker compose up --build      then open http://localhost:4111
+#
+# What this file demonstrates, and what DEPLOY.md explains at length:
+#
+#   - The image contains no configuration. Everything tablewalk browses comes
+#     from ./examples, mounted at /config. Point that mount somewhere else and
+#     the same image browses your databases instead; no rebuild is involved.
+#   - The password reaches the connection through ${POSTGRES_PASSWORD} in
+#     tablewalk.json, expanded from this environment. There is no macOS keychain
+#     in a Linux container, so this is *the* credential mechanism here.
+#   - The port is published to 127.0.0.1 and not to every interface. That is
+#     the security property the loopback default gives you on a laptop, put
+#     back after the container had to give it up.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: tablewalk
+      POSTGRES_DB: demo
+      # Demo credentials for a demo database. For anything real, put the value
+      # in a .env file next to this one — compose reads it automatically — or
+      # export it before `docker compose up`.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-password}
+    volumes:
+      - ./examples/postgres-seed.sql:/docker-entrypoint-initdb.d/10-seed.sql:ro
+      - db-data:/var/lib/postgresql/data
+    # Not published at all. tablewalk reaches it over the compose network, and
+    # nothing on the host needs to.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tablewalk -d demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  tablewalk:
+    build: .
+    image: tablewalk:local
+    depends_on:
+      db:
+        # Waiting for healthy, not just started. tablewalk opens its active
+        # connection eagerly and exits on failure — by design, so a bad target
+        # is a startup error rather than a broken page — which means racing
+        # Postgres's first boot would look like tablewalk being broken.
+        condition: service_healthy
+    environment:
+      # Read by expandEnv() when the connection string is resolved, at the last
+      # possible moment, and never stored anywhere by tablewalk.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-password}
+      #
+      # Uncomment if you reach this by any name other than localhost — a
+      # reverse proxy, a hosts-file alias, another machine. Without it the page
+      # loads (GETs are not checked) and then every write and every POST is
+      # refused, because the Host header matches neither loopback nor the bound
+      # interface. See "Behind a proxy" in DEPLOY.md.
+      # TABLEWALK_ALLOWED_HOSTS: tablewalk.internal,tablewalk.example.com
+    ports:
+      # 127.0.0.1: on purpose and load-bearing.
+      #
+      # The server binds 0.0.0.0 inside the container because loopback inside a
+      # network namespace is reachable by nothing outside it. That trades away
+      # the protection the default gives you, and this line is where it is
+      # bought back: the port exists on the host's loopback only. Writing
+      # "4111:4111" instead publishes a database browser on every interface of
+      # this machine, which is one shared network away from being someone
+      # else's database browser.
+      - "127.0.0.1:4111:4111"
+    volumes:
+      # The whole mechanism, in one line. /config is where the image looks:
+      #
+      #   /config/tablewalk.json          connections and views
+      #   /config/tablewalk/layouts.json  record layouts
+      #
+      # ./examples is a starting point to copy, not something the image ships.
+      # Mounted read-only so the demo cannot dirty a checked-in directory; the
+      # visible consequence is that saving a layout in the UI reports that it
+      # was kept in the browser only. Drop the `:ro` — or better, point this at
+      # a directory of your own — to make layout edits persist.
+      - ./examples:/config:ro
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  db-data:

@@ -1,0 +1,105 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* Live sync's words (docs/design.md, rule 11). None of them is in flow: a change from elsewhere never moves what the
+   reader is looking at. */
+
+/* Over a held list, at the top of the window below the bar, and not a toast: it stays until it is clicked or the
+   reader stops working in the list. */
+.live-pill-host {
+  position: fixed; top: calc(var(--space-8) + var(--space-4)); left: 50%; transform: translateX(-50%);
+  z-index: 55; pointer-events: none;
+}
+.live-pill {
+  pointer-events: auto; min-height: 28px; padding: var(--space-1) var(--space-4);
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop);
+  font: 600 var(--text-sm)/20px var(--sans); cursor: pointer;
+}
+.live-pill:hover { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* In the head's top row, at its far end, out of flow: a record's name never waits on it. */
+.page-head-top { position: relative; }
+.live-updated {
+  position: absolute; inset-inline-end: 0; top: 50%; transform: translateY(-50%);
+  max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: var(--text-xs)/16px var(--sans); color: var(--ink-muted);
+}
+
+/* In a draft's bar beside the fields (a dialog, a board's card), a row of its own across it. */
+.live-notice {
+  flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
+  padding-bottom: var(--space-3); border-bottom: 1px solid var(--line);
+}
+.live-notice-text { flex: 1 1 12rem; min-width: 0; font: 600 var(--text-sm)/20px var(--sans); color: var(--ink); overflow-wrap: anywhere; }
+.live-review { flex-basis: 100%; margin: 0; display: grid; gap: var(--space-3); max-height: 30dvh; overflow-y: auto; }
+
+/* A record room's draft: hung from the record's head (the bar's place in it, .page-pending, is its last row and holds
+   nothing in flow), over the gap above the fields, one line at a desk. Out of flow, so the fields never move when it
+   comes or goes; opened to review, it lays the changes over the fields like a menu, and closes the same way. */
+.page-pending { position: relative; }
+/* The row it hangs in is reserved from the first edit, before any change arrives, so its coming moves nothing: the
+   notice's own height and a gap under it, one line at a desk, a sentence over two answers on a phone. */
+.page-pending.has-live-draft { min-height: calc(var(--live-notice-h, 34px) + 2 * var(--space-3)); }
+.live-notice.is-anchored {
+  position: absolute; z-index: 30; top: var(--space-3); inset-inline-start: 0;
+  width: max-content; max-width: 100%; box-sizing: border-box;
+  flex-wrap: nowrap; gap: var(--space-2);
+  padding: var(--space-1h) var(--space-1h) var(--space-1h) var(--space-4);
+  border: 1px solid var(--line-strong); border-radius: var(--radius, 6px);
+  background: var(--surface); box-shadow: var(--shadow-pop);
+}
+.live-notice.is-anchored .live-notice-text { flex: 0 1 auto; margin-inline-end: var(--space-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.live-notice.is-anchored > button { flex: none; min-height: 28px; padding: 0 var(--space-3); font: 500 var(--text-sm)/1 var(--sans); }
+/* Answers are quiet words, not a box of boxes inside the box: a link's colour, a tint on hover. */
+.live-notice.is-anchored > button.live-act { border-color: transparent; background: none; box-shadow: none; color: var(--link); }
+.live-notice.is-anchored > button.live-act:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.live-notice.is-anchored.is-reviewing { flex-wrap: wrap; width: min(100%, 44rem); padding-block-end: var(--space-3); }
+.live-notice.is-anchored :is(.live-review, .live-review-note) { padding-inline-end: var(--space-3); }
+.live-notice.is-anchored .live-review { max-height: 50dvh; padding-block-start: var(--space-3); border-top: 1px solid var(--line); }
+/* A phone: the sentence on its line, cut short rather than wrapped, and the two answers side by side under it, each
+   half the width and a thumb's height. Over the top of the fields, never over the bar of verbs at the foot. */
+@media (max-width: 600px) {
+  .page-pending.has-live-draft { --live-notice-h: 76px; }
+  .live-notice.is-anchored {
+    inset-inline: 0; width: auto;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2);
+    padding: var(--space-2h) var(--space-3);
+  }
+  .live-notice.is-anchored .live-notice-text { grid-column: 1 / -1; margin: 0; }
+  .live-notice.is-anchored > button { min-height: 36px; justify-content: center; }
+  .live-notice.is-anchored > button:only-of-type { grid-column: 1 / -1; }
+  .live-notice.is-anchored.is-reviewing { width: auto; }
+  .live-notice.is-anchored :is(.live-review, .live-review-note) { grid-column: 1 / -1; padding-inline-end: 0; }
+}
+
+/* A command form's status line: the sentence, and Keep editing as a quiet word after it. The line is there before the
+   change and after it, so saying it there moves nothing. */
+.live-notice.is-inline { display: inline; padding: 0; border: 0; }
+.live-notice.is-inline .live-notice-text { font-weight: 600; }
+.live-notice.is-inline > button {
+  margin-inline-start: var(--space-2); padding: 0; min-height: 0; border: 0; background: none;
+  font: inherit; color: var(--link); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.live-review-field { display: grid; gap: var(--space-1); }
+.live-review dt { font: 600 var(--text-xs)/16px var(--sans); color: var(--ink-muted); }
+.live-review dd { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: var(--space-3); align-items: start; font: var(--text-sm)/18px var(--sans); }
+.live-review-col { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.live-review-col small { color: var(--ink-subtle); font: var(--text-xs)/14px var(--sans); }
+.live-review-note { flex-basis: 100%; margin: 0; color: var(--ink-muted); font: var(--text-sm)/18px var(--sans); }
+@media (max-width: 600px) {
+  .live-review dd { grid-template-columns: minmax(0, 1fr); }
+}
+/* A command form's status line, kept for a screen reader alone while the form is ready (style.css), unless it holds a
+   change from elsewhere: then it is drawn, and Keep editing can be pressed. Out of flow, as a record's
+   notice is, and one line the height of the gap between the fields and the actions, so it covers neither and its
+   coming moves nothing; a long sentence gives way before its button does. Here, not in the first stylesheet: only a
+   form this part draws into needs it. */
+.command-form form:has(> .command-feedback[data-live]) { position: relative; }
+.command-form .command-feedback[data-phase="ready"][data-live] {
+  inset-inline: 0; width: auto; height: var(--space-6); min-height: 0; margin: 0; overflow: hidden; clip-path: none;
+  display: flex; align-items: center; color: var(--ink); font-size: var(--text-sm); white-space: nowrap;
+}
+.command-feedback[data-live] .live-notice.is-inline { display: flex; align-items: center; min-width: 0; }
+.command-feedback[data-live] .live-notice-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.command-feedback[data-live] .live-notice.is-inline > button { flex: none; }
+}

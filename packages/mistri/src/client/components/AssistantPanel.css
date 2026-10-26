@@ -1,0 +1,271 @@
+/* The assistant's panel, brought with its chunk (AssistantPanel.tsx): nothing here is in a first page.
+   Beside the page, not over it: no scrim, the page stays live under the
+   person's hand. The record form's shape (peekpanel) and its quiet type;
+   arrival is the peek panel's (docs/design.md, motion), and only arrival. */
+@layer components {
+.assistant-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 75;
+  width: min(28rem, 100vw);
+  display: flex;
+  background: var(--surface); color: var(--ink);
+  border-left: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-panel);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .assistant-panel {
+    transition: transform var(--t-panel) var(--ease-out), opacity var(--t-panel) var(--ease-out);
+    @starting-style { transform: translateX(24px); opacity: 0; }
+  }
+}
+/* Full screen: the content column, beside the App's menu (its left edge measured, AssistantPanel.tsx). The page
+   beneath is not moved — the panel is fixed and only its own edge changes — and the change is not animated: a press
+   that is undone as often as it is made earns no motion (motion doctrine, rule 2). */
+.assistant-panel-expanded { left: var(--assistant-left, 0px); width: auto; }
+/* A phone has no beside: the panel is the page until it is closed, and full screen is the same screen. */
+@media (max-width: 640px) {
+  /* Both edges, not 100vw: the density zoom on the root scales a vw, and the panel would stand past the screen. */
+  .assistant-panel { left: 0; width: auto; border-left: 0; }
+  .assistant-expand { display: none; }
+}
+.assistant-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+
+/* The assistant's room (placement: 'page'): the conversations a rail beside it at a desk, a list over it on a
+   phone; the composer at its foot, the room standing to the window's foot (its height measured). */
+.assistant-room {
+  position: relative; display: flex; min-height: 0;
+  background: var(--surface); color: var(--ink);
+  border-top: 1px solid var(--line);
+}
+.assistant-room .assistant-title { font-size: var(--text-lg); }
+.assistant-rail {
+  flex: 0 0 15rem; min-width: 0; display: flex; flex-direction: column;
+  border-right: 1px solid var(--line); overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--space-3h) var(--space-3) var(--space-4h);
+}
+.assistant-rail-toggle { display: none; }
+.assistant-rail-scrim { display: none; }
+/* A phone's rail is a sheet from the left over the conversation, which stays in sight beside it under a faint
+   veil; it enters as a panel does (motion doctrine) and leaves at once. */
+@media (max-width: 640px) {
+  .assistant-rail { display: none; }
+  .assistant-room .assistant-rail-toggle { display: inline-flex; flex: none; width: 32px; padding: 0; }
+  .assistant-room-listing .assistant-rail {
+    display: flex; position: absolute; inset: 0 auto 0 0; z-index: 2; width: min(18rem, 84%);
+    background: var(--surface); border-right: 1px solid var(--line); box-shadow: var(--shadow-panel);
+  }
+  .assistant-room-listing .assistant-rail-scrim {
+    display: block; position: absolute; inset: 0; z-index: 1;
+    background: color-mix(in srgb, var(--ink) 14%, transparent);
+  }
+}
+@media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+  .assistant-room-listing .assistant-rail {
+    transition: transform var(--t-panel) var(--ease-out);
+    @starting-style { transform: translateX(-24px); }
+  }
+}
+
+/* Wide — full screen, or the room — reads in one column of at most 760px, centred: the words, the person's
+   messages, a table, a chart, a record card and a proposal all stand between the same two edges. A wide table
+   scrolls inside the column rather than leaving it. The composer is the column's width too. */
+.assistant-wide .assistant-body { align-items: center; padding: var(--space-6) 20px; }
+.assistant-wide .assistant-body > * { width: 100%; max-width: 760px; }
+.assistant-wide .assistant-person { align-self: center; display: flex; flex-direction: column; align-items: flex-end; }
+.assistant-wide .assistant-person p { max-width: 85%; }
+.assistant-wide .assistant-foot { padding-inline: 20px; }
+.assistant-wide .assistant-foot > * { width: 100%; max-width: 760px; margin-inline: auto; }
+
+/* An empty conversation: the intro, the starters and the composer one group in the middle of the pane, as a
+   new chat opens — the free height split above and below it, none left as a dead field over the composer. */
+.assistant-starting .assistant-body { flex: 0 1 auto; margin-top: auto; padding-bottom: var(--space-4); }
+.assistant-starting .assistant-foot { margin-bottom: auto; border-top: 0; padding-bottom: var(--space-6); }
+.assistant-start { display: flex; flex-direction: column; align-items: center; gap: var(--space-5); text-align: center; }
+.assistant-start .assistant-empty { max-width: 34rem; font-size: var(--text-md); line-height: 1.55; }
+.assistant-starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-3); width: 100%; }
+.assistant-starter {
+  padding: var(--space-3h) var(--space-4); font: inherit; font-size: var(--text-base); line-height: 1.4; text-align: left; color: var(--ink); cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .assistant-starter { transition: background-color var(--t-hover) var(--ease-out); }
+}
+.assistant-starter:hover { background: var(--raised); }
+.assistant-starter:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: 1px; }
+.assistant-record-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2h);
+  margin-top: var(--space-4); padding-top: var(--space-3h); border-top: 1px solid var(--line);
+}
+.assistant-head {
+  display: flex; align-items: center; gap: var(--space-2h);
+  padding: var(--space-3h) var(--space-3h) var(--space-3h) var(--space-4h); border-bottom: 1px solid var(--line);
+}
+.assistant-title { flex: 1; min-width: 0; margin: 0; font: 600 var(--text-md) var(--sans); }
+/* The room's heading is the open conversation's title: one line, cut, its whole in the title. */
+.assistant-room .assistant-title { flex: 0 1 auto; display: flex; align-items: baseline; gap: var(--space-3); }
+.assistant-title-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-title-menu { flex: none; }
+.assistant-room .assistant-head > .assistant-conv-rename { flex: 1; font-size: var(--text-md); }
+.assistant-body {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--space-4h); display: flex; flex-direction: column; gap: var(--space-4);
+  font-size: var(--text-base); line-height: 1.5;
+}
+/* The body scrolls, its items never shrink: a block that scrolls sideways (a table) has no content minimum, and was squeezed to its floor. */
+.assistant-body > * { flex-shrink: 0; }
+.assistant-empty, .assistant-note, .assistant-working, .assistant-waiting { margin: 0; color: var(--ink-muted); }
+.assistant-note { font-size: var(--text-sm); }
+.assistant-problem { margin: 0; color: var(--status-critical); }
+.assistant-person { align-self: flex-end; max-width: 85%; }
+.assistant-person p {
+  margin: 0; padding: var(--space-3) var(--space-3h); white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.assistant-person-editing p { border-color: var(--accent); }
+/* Edit and Retry keep their line whether or not they are shown, so a message never jumps when a turn ends. */
+.assistant-person-tools { display: flex; justify-content: flex-end; gap: var(--space-2); min-height: 22px; font-size: var(--text-sm); }
+.assistant-person-tools button { padding: 1px var(--space-2); border: 0; background: none; font: inherit; color: var(--ink-subtle); cursor: pointer; }
+.assistant-person-tools button:hover { color: var(--ink); }
+.assistant-text { overflow-wrap: anywhere; }
+.assistant-body a { color: var(--accent-ink); text-decoration: none; }
+.assistant-body a:hover { text-decoration: underline; }
+.assistant-text p, .assistant-text ul { margin: 0 0 var(--space-2h); }
+.assistant-text p:last-child, .assistant-text ul:last-child { margin-bottom: 0; }
+.assistant-text ul { padding-left: var(--space-5); }
+.assistant-text code { font: var(--text-sm) var(--mono); padding: 0 var(--space-1h); background: var(--raised); border-radius: min(3px, var(--radius)); }
+.assistant-steps { color: var(--ink-muted); font-size: var(--text-sm); }
+.assistant-steps summary { cursor: pointer; width: fit-content; color: var(--ink-subtle); }
+.assistant-steps summary:hover { color: var(--ink-muted); }
+.assistant-steps ol { margin: var(--space-2h) 0 0; padding-left: var(--space-5); }
+.assistant-step-failed { color: var(--status-critical); }
+/* A block holds its height while its read is out (a table's rows, a chart), so the words under it do not jump. */
+.assistant-block { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3h); min-width: 0; }
+.assistant-section { min-height: 6rem; overflow-x: auto; border: 0; padding: 0; }
+.assistant-section .page-section-title { font-size: var(--text-base); }
+/* A dashboard's body leaves a gutter round its sections and room under the last for the page's end; in a
+   conversation the section stands on the column's own edges and the next turn follows. */
+.assistant-section .page-body { padding: 0; }
+.assistant-record-title { margin-bottom: var(--space-3h); font-weight: 600; }
+.assistant-record { padding: var(--space-4) var(--space-4h); }
+/* Never fewer than two fields a row, so a phone's card is a compact grid, not a field per line. */
+.assistant-record .peekpanel-fields { gap: var(--space-3h) var(--space-5); grid-template-columns: repeat(auto-fit, minmax(min(9rem, calc(50% - 8px)), 1fr)); }
+/* A card is a glance: a long value keeps one line, cut with an ellipsis, its whole in the title — as a grid cell does. */
+/* A card's fields stand on its title's edge, not inset as a record page's are; a glance is not edited, so no hover. */
+.assistant-record .peekpanel-fields .field { padding: 0; border-left: 0; }
+.assistant-record .peekpanel-fields .field:hover { background: none; }
+.assistant-record .peekpanel-fields dd { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.assistant-proposal {
+  border: 1px solid var(--accent); border-radius: var(--radius); padding: var(--space-3h) var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+.assistant-proposal-done, .assistant-proposal-declined { border-color: var(--line-strong); }
+.assistant-proposal-failed { border-color: var(--status-critical); }
+.assistant-proposal-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); }
+.assistant-proposal-verb { font-weight: 600; }
+.assistant-proposal-why { margin: 0; color: var(--ink-muted); }
+.assistant-proposal-values { margin: 0; display: grid; gap: var(--space-2); }
+.assistant-proposal-values div { display: grid; grid-template-columns: minmax(6rem, 35%) 1fr; gap: var(--space-3); }
+.assistant-proposal-values dt { color: var(--ink-subtle); font: var(--text-xs) var(--mono); text-transform: uppercase; letter-spacing: 0.04em; padding-top: var(--space-1); }
+.assistant-proposal-values dd { margin: 0; overflow-wrap: anywhere; }
+.assistant-proposal-reason { display: flex; flex-direction: column; gap: var(--space-1h); }
+.assistant-proposal-reason span { color: var(--ink-subtle); font: var(--text-xs) var(--mono); text-transform: uppercase; letter-spacing: 0.04em; }
+.assistant-proposal-reason textarea { font: inherit; resize: vertical; }
+.assistant-proposal-actions { display: flex; gap: var(--space-3); }
+.assistant-proposal-outcome { margin: 0; color: var(--ink-muted); }
+.assistant-proposal-failed .assistant-proposal-outcome { color: var(--status-critical); }
+/* The conversations (ConversationList.tsx): a flat inbox, one quiet line each — no box, no fill at rest. What
+   needs the person sits first under its own heading; the current one wears the look's selected fill. */
+.assistant-convs { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.assistant-convs-head { display: flex; flex-direction: column; gap: var(--space-2h); padding: 0 0 var(--space-2h); }
+.assistant-convs-new {
+  display: inline-flex; align-items: center; gap: var(--space-2h); align-self: flex-start;
+  padding: var(--space-2) var(--space-3); font: 500 var(--text-base)/1.3 var(--sans); color: var(--ink);
+  background: none; border: 0; border-radius: var(--radius); cursor: pointer;
+}
+.assistant-convs-new:hover { background: var(--raised); }
+.assistant-convs-new .icon { color: var(--ink-muted); }
+.assistant-convs-find { position: relative; display: flex; align-items: center; min-width: 0; }
+/* A filter for this list, not the App's search: smaller, inset to the rows' text, on the rail's own ground. */
+.assistant-convs-find { margin-inline: var(--space-3) var(--space-1); }
+.assistant-convs-find-icon { position: absolute; left: 8px; width: 12px; height: 12px; color: var(--ink-subtle); pointer-events: none; }
+.assistant-convs-search {
+  width: 100%; min-width: 0; font: var(--text-sm)/1.3 var(--sans); padding: var(--space-2) var(--space-6) var(--space-2) var(--space-6);
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink);
+}
+/* The browser's own clear mark is drawn bold in its own colour; ours is the muted icon ink, darker on hover. */
+.assistant-convs-search::-webkit-search-cancel-button { appearance: none; display: none; }
+.assistant-convs-clear {
+  position: absolute; right: 4px; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border: 0; background: none; color: var(--ink-subtle); cursor: pointer;
+  border-radius: var(--radius);
+}
+.assistant-convs-clear:hover { color: var(--ink); }
+@media (prefers-reduced-motion: no-preference) {
+  .assistant-convs-new { transition: background-color var(--t-hover) var(--ease-out); }
+  .assistant-convs-clear { transition: color var(--t-hover) var(--ease-out); }
+}
+.assistant-convs-clear:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: -2px; }
+.assistant-convs-search:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: -1px; }
+.assistant-conv-group { display: flex; flex-direction: column; }
+.assistant-conv-heading {
+  margin: var(--space-3h) 0 var(--space-1); padding: 0 var(--space-3); font: 500 var(--text-xs)/1.4 var(--sans); color: var(--ink-subtle);
+  font-variant-caps: all-small-caps; letter-spacing: 0.04em;
+}
+.assistant-conv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.assistant-conv { position: relative; display: flex; align-items: center; min-width: 0; border-radius: var(--radius); }
+.assistant-conv:hover { background: var(--raised); }
+/* The current one: a quiet tint of the accent and a medium title (docs/design.md: a tint, never a bar). */
+.assistant-conv-current, .assistant-conv-current:hover { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
+.assistant-conv-open {
+  flex: 1; min-width: 0; min-height: 34px; padding: var(--space-2h) var(--space-3); display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  text-align: left; font: var(--text-base)/1.35 var(--sans); color: var(--ink); background: none; border: 0; border-radius: inherit; cursor: pointer;
+}
+.assistant-conv-open:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: -2px; }
+.assistant-conv-current .assistant-conv-title { font-weight: 500; }
+.assistant-conv-line { display: flex; align-items: center; gap: var(--space-2h); min-width: 0; }
+.assistant-conv-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-conv-when { flex: none; font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+.assistant-conv-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.assistant-conv-snippet {
+  display: block; min-width: 0; font-size: var(--text-sm); color: var(--ink-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.assistant-conv mark { background: var(--accent-soft); color: inherit; }
+/* A row's own menu is hidden, not dimmed, until its row is hovered or holds the focus — always there on touch. */
+.assistant-conv-menu { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: none; }
+.assistant-conv:hover .assistant-conv-menu, .assistant-conv:focus-within .assistant-conv-menu { display: block; }
+.assistant-conv:hover .assistant-conv-when, .assistant-conv:focus-within .assistant-conv-when { visibility: hidden; }
+@media (hover: none) {
+  .assistant-conv-menu { display: block; }
+  .assistant-conv-when { margin-right: 28px; }
+}
+/* A row's ⋯ is one quiet trailing mark, not a box: on touch, where it always shows, a row of boxes was noise. */
+.assistant-conv-more {
+  padding: var(--space-1) var(--space-2h); line-height: 1; font: inherit; font-size: var(--text-md); letter-spacing: 0.05em;
+  color: var(--ink-subtle); background: none; border: 0; border-radius: var(--radius); cursor: pointer;
+}
+.assistant-conv-more:hover, .assistant-conv-more[aria-expanded="true"] { color: var(--ink); background: var(--raised); }
+.assistant-conv-rename {
+  flex: 1; min-width: 0; margin: var(--space-1h) 0; font: var(--text-base)/1.35 var(--sans); padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--ground); color: var(--ink);
+}
+.assistant-convs .assistant-empty { padding: var(--space-3) var(--space-3); font-size: var(--text-base); }
+.assistant-body > .assistant-convs { padding: var(--space-1) 0; }
+.assistant-foot { border-top: 1px solid var(--line); padding: var(--space-3h) var(--space-4h) var(--space-4h); display: flex; flex-direction: column; gap: var(--space-2h); }
+.assistant-context { display: flex; align-items: center; gap: var(--space-2h); font-size: var(--text-sm); color: var(--ink-muted); }
+.assistant-context button { padding: 0 var(--space-2h); }
+/* The composer: a light field on the surface — one line, growing with its words (AssistantPanel.tsx) — and Send
+   beside it, filled only when there is something to send. The field wears the looks' own edge, ring and shut
+   state, so it reads as every other field in the App. */
+.assistant-compose { display: flex; flex-direction: column; gap: var(--space-2h); min-width: 0; }
+.assistant-compose-row { display: flex; align-items: flex-end; gap: var(--space-3); }
+.assistant-compose textarea {
+  flex: 1; min-width: 0; min-height: 36px; resize: none; overflow-y: hidden; margin: 0;
+  font: var(--text-md)/1.45 var(--sans); padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-control);
+}
+.assistant-compose-row .btn { min-height: 36px; }
+/* Waiting for the person: said over the field it shuts, a dot and its words, and the field names it as the reason. */
+.assistant-waiting { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-base); color: var(--ink); }
+.assistant-waiting-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+}

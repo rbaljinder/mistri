@@ -1,0 +1,25 @@
+{
+  "//": [
+    "Check every client runtime module, including JavaScript via JSDoc.",
+    "All diagnostics fail CI; none are filtered by error code.",
+    "Legacy JavaScript remains non-strict. The main TypeScript project also",
+    "checks TypeScript modules and tests with its stricter settings."
+  ],
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "noUncheckedSideEffectImports": false,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["packages/*/src/client/**/*.js", "packages/*/src/client/**/*.ts", "packages/*/src/client/**/*.tsx"],
+  "exclude": ["packages/*/src/client/**/*.test.ts", "packages/*/src/client/**/*.test.tsx"]
+}

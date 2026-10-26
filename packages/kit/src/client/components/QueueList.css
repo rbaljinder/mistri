@@ -1,0 +1,122 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+.queue .collection-selection-item { padding: var(--space-5) var(--space-5); border-bottom: 1px solid var(--line); cursor: default; }
+.queue .collection-selection-item.is-selected { background: var(--accent-soft); }
+.queue .collection-selection-item:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
+.queue .collection-selection-item[aria-disabled="true"] { color: var(--ink-muted); }
+.queue .collection-selection-empty { padding: 28px 0; color: var(--ink-muted); }
+.queue-row { display: flex; align-items: flex-start; gap: var(--space-4); }
+.queue-content { min-width: 0; flex: 1; }
+.queue-title { color: var(--ink); font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.queue-content > .queue-badge { display: inline-block; margin-bottom: var(--space-2h); padding: var(--space-1h) var(--space-3h); border-radius: 999px; background: var(--raised); color: var(--ink); font: 600 var(--text-sm)/1.4 var(--sans); }
+.queue-content > .queue-badge:has(> .tone) { padding: 0; background: none; }
+.queue-detail, .queue-meta, .queue-status { color: var(--ink-muted); font-size: var(--text-base); margin: var(--space-2) 0 0; }
+.queue-facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4h); margin: var(--space-3) 0 0; min-width: 0; }
+.queue-fact { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); min-width: 0; color: var(--ink-muted); font-size: var(--text-base); line-height: 1.4; }
+.queue-fact dt { color: var(--ink-muted); font-size: var(--text-xs); }
+.queue-fact dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.queue-status[role="alert"] { color: var(--status-critical); }
+.queue-open { flex: none; margin-left: auto; }
+/* Open repeats on every row, so it waits for its row: quiet until the row is
+   hovered or holds focus where a pointer can hover (still focusable, so Tab
+   reaches it and shows it), always there on touch. It arrives on the hover
+   token and leaves at once. */
+@media (hover: hover) {
+  .queue-row .queue-open { opacity: 0; }
+  .queue-row:is(:hover, :focus-within) .queue-open { opacity: 1; transition: opacity var(--t-hover) var(--ease-out); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .queue-row:is(:hover, :focus-within) .queue-open { transition: none; }
+}
+/* The toolbar stays in reach while the selection scrolls under it. */
+.queue-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3h) 0; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); }
+.queue-count, .queue-progress { color: var(--ink-muted); font-size: var(--text-base); }
+.queue-result { padding: var(--space-4) 0; color: var(--ink-muted); font-size: var(--text-base); }
+.queue-result[role="alert"] { color: var(--status-critical); }
+.queue-result:focus { outline: none; }
+.queue-result p { margin: 0; }
+.queue-result ul { margin: var(--space-2h) 0 0; padding-left: var(--space-5); }
+/* The last report and its Dismiss on one line; the report takes the room. */
+.queue-report { display: flex; align-items: center; gap: var(--space-3); }
+.queue-report .queue-result { flex: 1 1 auto; min-width: 0; }
+.queue-dismiss { flex: none; font-size: var(--text-sm); }
+/* A bulk command's form: the records one ineligible member would refuse whole. */
+.command-ineligible { margin: 0 0 var(--space-4); padding: var(--space-3h) var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--status-critical); color: var(--ink); font-size: var(--text-base); }
+.command-ineligible p { margin: 0; }
+.command-ineligible ul { margin: var(--space-2h) 0 var(--space-3); padding-left: var(--space-5); color: var(--ink-muted); }
+
+/* Embedded task queues have explicit, always-visible next steps. */
+.queue-list { list-style: none; margin: 0; padding: 0; }
+.queue-list > .queue-row { padding: 20px var(--space-5); border-bottom: 1px solid var(--line); }
+.queue-list > .queue-row:last-child { border-bottom: 0; }
+/* Dashboard sections already provide a content gutter. */
+.dash-section .queue-list > .queue-row { padding-inline: 0; }
+.queue-list .queue-title { font-weight: 600; }
+.queue-list .queue-detail, .queue-list .queue-meta { margin-top: var(--space-3); line-height: 1.5; }
+.queue-list .queue-open { opacity: 1; align-self: center; white-space: normal; }
+@media (max-width: 540px) {
+  .queue-list > .queue-row { flex-wrap: wrap; }
+  .queue-list .queue-content { flex-basis: 100%; }
+  .queue-list .queue-open { margin-left: 0; }
+}
+
+/* ---------- The compact row (every queue) ----------
+   The title and its badge share the first line; the quiet lines and the
+   captioned facts run on one wrapping line under them, each fact kept whole
+   (its caption never parted from its value); the action waits at the row's
+   end. A queue fits half a dashboard's width this way, where a row of four
+   stacked lines did not. The queue is its own container, so a narrow column
+   — not only a narrow window — decides when the action drops under. */
+.queue { container: queue / inline-size; }
+.queue .collection-selection-item { padding: var(--space-3h) var(--space-4h); }
+.queue-row { align-items: center; gap: var(--space-5); }
+.queue-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3h); min-width: 0; }
+/* One type scale wherever a queue is drawn: the name at 14px, everything
+   under and beside it at 13px. It inherited the room's size, so a queue read
+   13/12px in one place and 14/13px in the next. */
+.queue-head .queue-title { font-size: var(--text-md); line-height: 1.4; }
+.queue-head .queue-badge { color: var(--ink-muted); font-size: var(--text-base); line-height: 1.4; }
+.queue-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4h); margin-top: var(--space-1h); min-width: 0; color: var(--ink-muted); font-size: var(--text-base); line-height: 1.45; }
+.queue-line > .queue-detail, .queue-line > .queue-meta { margin: 0; line-height: inherit; }
+.queue-line > .queue-facts { display: contents; }
+.queue-line .queue-fact { flex-wrap: nowrap; white-space: nowrap; max-width: 100%; gap: var(--space-2); font-size: inherit; line-height: inherit; }
+.queue-line .queue-fact dd { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.queue-content > .queue-status { margin-top: var(--space-2); }
+.queue-list > .queue-row { padding: var(--space-3h) var(--space-4h); }
+.dash-section .queue-list > .queue-row, .dash-body .queue-list > .queue-row { padding-inline: 0; }
+.queue-list .queue-detail, .queue-list .queue-meta { margin-top: 0; line-height: inherit; }
+.queue-list .queue-open { align-self: center; white-space: nowrap; }
+/* On a phone the action drops under its content, left-aligned: beside it, it took a third of the row and the text wrapped narrow. */
+@media (max-width: 540px) {
+  .queue-list > .queue-row { flex-wrap: wrap; row-gap: var(--space-3); }
+  .queue-list .queue-content { flex-basis: 100%; }
+  .queue-list .queue-open { margin-left: 0; align-self: flex-start; min-height: 24px; }
+}
+@container queue (max-width: 22rem) {
+  .queue-list > .queue-row { flex-wrap: wrap; row-gap: var(--space-3); }
+  .queue-list .queue-content { flex-basis: 100%; }
+  .queue-list .queue-open { margin-left: 0; }
+}
+}
+
+/* A split's list: each row is the button that picks its record, the one beside the list marked by a ground, not a stripe
+   (docs/design.md refuses the side tab). */
+.queue-pick { all: unset; box-sizing: border-box; display: flex; align-items: flex-start; gap: var(--space-3h); width: 100%; cursor: pointer; }
+.queue-pick:focus-visible { outline: var(--focus-width) solid var(--focus, var(--accent)); outline-offset: -2px; }
+.queue-pick-list .queue-list > .queue-row { padding: 0; }
+.queue-pick-list .queue-pick { padding: var(--space-3h) var(--space-4); }
+.queue-pick-list .queue-pick:hover { background: var(--hover, color-mix(in srgb, var(--ink) 4%, transparent)); }
+.queue-pick-list .queue-pick[aria-current='true'] { background: var(--selected, color-mix(in srgb, var(--accent) 10%, transparent)); }
+.queue-pick-list .queue-pick > .avatar-value { flex: none; }
+.queue-pick-list .queue-pick > .avatar-value .avatar-text { display: none; }
+
+/* A split's list: each row is the button that picks its record, the one beside the list marked by a ground, not a stripe
+   (docs/design.md refuses the side tab). */
+.queue-pick { all: unset; box-sizing: border-box; display: flex; align-items: flex-start; gap: var(--space-3h); width: 100%; cursor: pointer; }
+.queue-pick:focus-visible { outline: var(--focus-width) solid var(--focus, var(--accent)); outline-offset: -2px; }
+.queue-pick-list .queue-list > .queue-row { padding: 0; }
+.queue-pick-list .queue-pick { padding: var(--space-3h) var(--space-4); }
+.queue-pick-list .queue-pick:hover { background: var(--hover, color-mix(in srgb, var(--ink) 4%, transparent)); }
+.queue-pick-list .queue-pick[aria-current='true'] { background: var(--selected, color-mix(in srgb, var(--accent) 10%, transparent)); }
+.queue-pick-list .queue-pick > .avatar-value { flex: none; }
+.queue-pick-list .queue-pick > .avatar-value .avatar-text { display: none; }

@@ -1,0 +1,147 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role manager — the App
+auth rows policy — the App
+source keystone connection "keystone" — the App
+source keystone default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource dealer access write — the App
+resource dealer_site access write — the App
+resource dealer_user access write — the App
+resource lead fields read created_at — the App
+resource lead fields read dealer_id — the App
+resource lead fields read first_name — the App
+resource lead fields read id — the App
+resource lead fields read last_name — the App
+resource lead fields read reference — the App
+resource lead fields read salesperson_id — the App
+resource lead fields read source — the App
+resource lead fields read status — the App
+resource lead fields read vehicle_id — the App
+resource lender_user fields read email — the App
+resource lender_user fields read id — the App
+resource lender_user fields read name — the App
+resource lender_user fields read title — the App
+resource program fields read active — the App
+resource program fields read advertised — the App
+resource program fields read base_apr — the App
+resource program fields read code — the App
+resource program fields read description — the App
+resource program fields read id — the App
+resource program fields read max_amount — the App
+resource program fields read max_ltv_pct — the App
+resource program fields read max_mileage — the App
+resource program fields read max_term — the App
+resource program fields read max_vehicle_age — the App
+resource program fields read min_score — the App
+resource program fields read name — the App
+resource program fields read tier — the App
+resource vehicle access write — the App
+role admin read dealer — the App
+role admin read dealer_site — the App
+role admin read dealer_user — the App
+role admin read dealer_visit — the App
+role admin read lead — the App
+role admin read lender_user — the App
+role admin read program — the App
+role admin read vehicle — the App
+role admin read vehicle_photo — the App
+role manager read dealer — the App
+role manager read dealer_site — the App
+role manager read dealer_user — the App
+role manager read dealer_visit — the App
+role manager read lead — the App
+role manager read lender_user — the App
+role manager read program — the App
+role manager read vehicle — the App
+role manager read vehicle_photo — the App
+role manager write dealer_site — the App
+role manager write vehicle — the App
+role manager command addTeamMember — the App
+role manager command changeTeamRole — the App
+role manager command deactivateTeamMember — the App
+role manager command listForSale — the App
+role manager command publishWebsite — the App
+role manager command takeOffTheMarket — the App
+role manager command unpublishWebsite — the App
+role manager command updateDealerContact — the App
+role manager fields dealer_site read about — the App
+role manager fields dealer_site read accent_color — the App
+role manager fields dealer_site read brand_color — the App
+role manager fields dealer_site read contact_email — the App
+role manager fields dealer_site read contact_phone — the App
+role manager fields dealer_site read custom_domain — the App
+role manager fields dealer_site read dealer_id — the App
+role manager fields dealer_site read headline — the App
+role manager fields dealer_site read hours — the App
+role manager fields dealer_site read id — the App
+role manager fields dealer_site read logo_text — the App
+role manager fields dealer_site read published — the App
+role manager fields dealer_site read published_on — the App
+role manager fields dealer_site read show_prices — the App
+role manager fields dealer_site read tagline — the App
+role manager fields dealer_site read version — the App
+role manager fields dealer_site write about — the App
+role manager fields dealer_site write accent_color — the App
+role manager fields dealer_site write brand_color — the App
+role manager fields dealer_site write contact_email — the App
+role manager fields dealer_site write contact_phone — the App
+role manager fields dealer_site write custom_domain — the App
+role manager fields dealer_site write headline — the App
+role manager fields dealer_site write hours — the App
+role manager fields dealer_site write logo_text — the App
+role manager fields dealer_site write show_prices — the App
+role manager fields dealer_site write tagline — the App
+role manager fields dealer_user read dealer_id — the App
+role manager fields dealer_user read email — the App
+role manager fields dealer_user read id — the App
+role manager fields dealer_user read invited_on — the App
+role manager fields dealer_user read joined_on — the App
+role manager fields dealer_user read name — the App
+role manager fields dealer_user read phone — the App
+role manager fields dealer_user read role — the App
+role manager fields dealer_user read status — the App
+role manager fields dealer_user read version — the App
+role manager fields vehicle read body — the App
+role manager fields vehicle read condition — the App
+role manager fields vehicle read cost — the App
+role manager fields vehicle read dealer_id — the App
+role manager fields vehicle read description — the App
+role manager fields vehicle read drivetrain — the App
+role manager fields vehicle read est_payment — the App
+role manager fields vehicle read exterior_color — the App
+role manager fields vehicle read featured — the App
+role manager fields vehicle read features — the App
+role manager fields vehicle read fuel — the App
+role manager fields vehicle read id — the App
+role manager fields vehicle read interior_color — the App
+role manager fields vehicle read list_price — the App
+role manager fields vehicle read listed_on — the App
+role manager fields vehicle read make — the App
+role manager fields vehicle read mileage — the App
+role manager fields vehicle read model — the App
+role manager fields vehicle read received_on — the App
+role manager fields vehicle read sold_on — the App
+role manager fields vehicle read status — the App
+role manager fields vehicle read stock_number — the App
+role manager fields vehicle read trim — the App
+role manager fields vehicle read version — the App
+role manager fields vehicle read vin — the App
+role manager fields vehicle read year — the App
+role manager fields vehicle write description — the App
+role manager fields vehicle write featured — the App
+role manager fields vehicle write features — the App
+role manager fields vehicle write list_price — the App
+
+contract addTeamMember v1 134a39b17f1b
+contract changeTeamRole v1 7eacbffaad3f
+contract deactivateTeamMember v1 1b1f054c93f0
+contract listForSale v1 3aa6ee71fc40
+contract publishWebsite v1 f693328111ba
+contract takeOffTheMarket v1 15646a5f51c9
+contract unpublishWebsite v1 43205c9a2675
+contract updateDealerContact v1 f0da61f6478d

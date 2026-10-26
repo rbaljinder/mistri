@@ -1,0 +1,83 @@
+# The Tick sample App from one image, in its own container with its own
+# seeded SQLite database, in one command:
+#
+#   docker compose -f examples/docker/docker-compose.yml up --build
+#
+# One image, built once from examples/docker/Dockerfile: a builder stage runs
+# `mistri build` for each App and seeds its data, and the runtime ships the
+# builds, never the Apps' TypeScript. Each container's start.sh copies its
+# App's seeded data into a named volume on first boot, skips that thereafter,
+# and serves the App from its build. Nothing is mounted from the checkout and
+# nothing reloads: changing an App is `up --build`. examples/docker/README.md
+# is the longer version.
+
+name: mistri-samples
+
+x-sample: &sample
+  build:
+    context: ../..
+    dockerfile: examples/docker/Dockerfile
+  # The same tag on every service so one build serves every container. The
+  # image's entrypoint is tini, then start.sh; the service's `command` is the
+  # App's name, which is also its build under /app/builds and its route:
+  # http://localhost:<port>/<name>.
+  image: mistri-samples:local
+  restart: unless-stopped
+  # /api/app answers 200 once the App and its database are up. The root
+  # image's /api/connections probe is refused by an application server, which
+  # does not offer connection management.
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4111/api/app').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+    interval: 30s
+    timeout: 5s
+    start_period: 20s
+    retries: 3
+
+# What every service's `environment` carries, spelled out per service below
+# because a YAML merge replaces the whole map rather than adding to it:
+#
+#   MISTRI_OPEN=0            never try to open a browser from a container
+#   MISTRI_ALLOWED_HOSTS     the names the server answers to besides
+#                               loopback (DEPLOY.md, "Trusting the name
+#                               people reach it by"). localhost:<port> from
+#                               the host needs nothing; the compose service
+#                               name is added so another container on this
+#                               network — a proxy, say — can reach it by
+#                               that name. Any other name is refused at the
+#                               door until it is listed here.
+#
+# MISTRI_HOST is the image's 0.0.0.0 — the only binding that reaches
+# past the container — and the safety it gives up is put back on each
+# `ports` line: published to the host's loopback, never to every interface.
+#
+# One mount per service: a named volume at /config, which the image already
+# hands to the unprivileged `node` user, for the database, its connection
+# config and any layout saved from the UI.
+
+services:
+  mistri-tick:
+    <<: *sample
+    command: ["tick"]
+    ports:
+      - "127.0.0.1:4741:4111"
+    environment:
+      MISTRI_OPEN: "0"
+      MISTRI_ALLOWED_HOSTS: mistri-tick
+    volumes:
+      - tick-data:/config
+
+  # An optional battery, off unless asked for with `--profile services`: a
+  # Valkey cache on this network, published to nothing. No sample uses it
+  # until a connection config names it ("kind": "cache", docs/services.md),
+  # and every sample runs the same without it. Its secret comes from your
+  # shell or an .env file beside this one — VALKEY_PASSWORD — never from here;
+  # `${…:-}` rather than `${…:?}`, because compose reads every service's values
+  # even when its profile is off.
+  valkey:
+    profiles: ["services"]
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD:-}", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+
+volumes:
+  tick-data:

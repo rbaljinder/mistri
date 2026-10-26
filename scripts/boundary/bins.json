@@ -1,0 +1,12 @@
+{
+  "$comment": [
+    "A bin is a module that is run rather than imported, which names each product's main by import() so either product answers: the page's entry (shellStart.js), which one client source serves from. Each server binary (`tablewalk`, `mistri`) runs its own main only, and names neither the other product nor its main. Its import() of a main it lists is the reviewed exception to the rule, and nothing else it imports is (docs/boundary.md, \"The bins\"). scripts/check-boundary.mjs reads it.",
+    "A module's layer is the package it sits in (scripts/boundary/entries.json `packages`), so there is no list of owners: placing a file is choosing its package."
+  ],
+  "bin": {
+    "packages/kit/src/client/shellStart.js": {
+      "mains": ["packages/tablewalk/src/client/workbenchShell.js", "packages/mistri/src/client/appShell.js"],
+      "reason": "the page's entry, because one client serves whichever product sent the page: after the kit's look it starts the database browser's main where the page says so (the `mistri-shell` meta) and the App framework's otherwise. Each is loaded with import(), and each is in a chunk the page already has (vite.config.ts `surfaces`), so naming both costs a page no round trip."
+    }
+  }
+}

@@ -1,0 +1,26 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+.modal.account-profile { width: min(30rem, calc(100vw - 28px)); box-sizing: border-box; padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.account-profile > header, .account-profile footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4h); }
+.account-profile h2 { margin: 0; font-size: calc(18px * var(--type-k)); }
+.account-profile .note { color: var(--ink-muted); line-height: 1.5; margin: var(--space-5) 0 var(--space-6); padding: 0; }
+.account-profile-field { display: grid; gap: var(--space-2h); margin-bottom: var(--field-gap); }
+.account-profile-field > span { color: var(--ink); font-size: var(--text-base); font-weight: 500; }
+.account-profile-field > p { margin: 0; overflow-wrap: anywhere; }
+/* Under the profile form, set off by a rule: the same dialog, a different request. */
+.account-profile-email { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.account-profile-email .note { margin: 0 0 var(--space-4h); font-size: var(--text-base); }
+/* The last field's 20px and this make the actions' 24px (style.css, .form-actions). */
+.account-profile footer.form-actions { justify-content: flex-end; margin-top: var(--space-2); }
+/* The applications this person connected (ConnectedClients.tsx): under a rule, as the email change is; one row each, its words and its button. */
+.account-profile-clients { margin-top: var(--space-5); padding-top: var(--space-5); border-top: 1px solid var(--line); }
+.account-profile-clients h3 { margin: 0; font-size: var(--text-md); font-weight: 600; }
+.account-profile-clients .note { margin: var(--space-2h) 0 var(--space-4); font-size: var(--text-base); }
+.account-profile-clients ul { display: grid; margin: 0; padding: 0; list-style: none; }
+.account-profile-clients li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4h); padding: var(--space-3h) 0; border-top: 1px solid var(--line); }
+.account-profile-clients li > div { display: grid; gap: var(--space-1); min-width: 0; }
+.account-profile-client { overflow-wrap: anywhere; }
+.account-profile-client-roles, .account-profile-clients-none { margin: 0; color: var(--ink-muted); font-size: var(--text-base); }
+.account-profile button:disabled { opacity: 0.5; cursor: not-allowed; }
+.account-profile > [role="alert"] { color: var(--status-warning); }
+}

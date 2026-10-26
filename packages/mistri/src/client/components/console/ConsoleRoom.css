@@ -1,0 +1,318 @@
+@layer components {
+  .console-workspace { min-width: 0; }
+  /* Feature flags: the toolbar's environment, the search and filters on one row, and a dense table. */
+  .console-env { padding: var(--space-1) var(--space-3h); border-radius: 999px; background: var(--raised); color: var(--ink-muted); font-size: var(--text-sm); font-weight: 500; }
+  .console-flag-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3h) var(--space-5); }
+  .console-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2h); min-width: 0; }
+  .console-chip { min-height: 28px; padding: 0 var(--space-3); border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-muted); font: 500 var(--text-sm)/1 var(--sans); cursor: pointer; }
+  @media (prefers-reduced-motion: no-preference) {
+    .console-chip { transition: color var(--t-hover, 120ms) ease, background-color var(--t-hover, 120ms) ease, border-color var(--t-hover, 120ms) ease; }
+  }
+  .console-chip:hover { color: var(--ink); border-color: var(--line-strong); }
+  .console-chip[aria-pressed='true'] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
+  .console-chip:focus-visible, .console-switch:focus-visible { outline: var(--focus-width, 2px) solid var(--focus); outline-offset: 2px; }
+  .console-search { display: inline-flex; align-items: center; gap: var(--space-2h); margin-inline-start: auto; min-width: 9rem; flex: 1 1 9rem; max-inline-size: 16rem; padding: 0 var(--space-2) 0 var(--space-3h); border: 1px solid var(--line-control, var(--line)); border-radius: var(--radius); background: var(--surface); }
+  .console-search:focus-within { border-color: var(--focus); }
+  .console-search input { flex: 1; min-width: 0; min-height: 30px; border: 0; padding: 0; background: transparent; color: var(--ink); font: inherit; font-size: var(--text-base); outline: none; }
+  .console-search-icon { display: inline-flex; flex: none; color: var(--ink-muted); }
+  .console-count { margin: 0; color: var(--ink-muted); font-size: var(--text-sm); }
+  .console-flags td { height: 52px; padding-block: var(--space-2h); }
+  .console-flag-key { font-family: var(--mono); font-weight: 600; font-size: var(--text-base); }
+  .console-flag-about { display: block; margin-top: var(--space-1); color: var(--ink-muted); font-size: var(--text-sm); }
+  .console-kind { color: var(--ink-muted); font-size: var(--text-sm); }
+  .console-rollout { display: inline-flex; align-items: center; gap: var(--space-3); font-variant-numeric: tabular-nums; }
+  .console-rollout-bar { display: block; inline-size: 56px; block-size: 6px; border-radius: 999px; background: var(--raised); overflow: hidden; }
+  .console-rollout-bar > span { display: block; block-size: 100%; background: var(--accent); }
+  .console-switch { display: inline-flex; align-items: center; gap: var(--space-3); min-height: 28px; padding: 0; border: 0; background: none; color: var(--ink); font: 500 var(--text-sm)/1 var(--sans); cursor: pointer; }
+  .console-switch::before { content: ''; inline-size: 28px; block-size: 16px; flex: none; border-radius: 999px; background: var(--line-strong); background-image: radial-gradient(circle at 8px 50%, var(--ground) 0 5px, transparent 5.5px); }
+  @media (prefers-reduced-motion: no-preference) {
+    .console-switch::before { transition: background-color var(--t-hover, 120ms) ease, background-position var(--t-hover, 120ms) ease; }
+  }
+  .console-switch[aria-checked='true']::before { background-color: var(--status-good); background-position: 12px 0; }
+  .console-confirm td { height: auto; padding-block: var(--space-3h); background: var(--raised); }
+  .console-confirm-form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); font-size: var(--text-base); }
+  .console-confirm-reason { flex: 1 1 14rem; min-width: 0; }
+  .console-confirm-reason input { inline-size: 100%; min-height: 28px; padding: 0 var(--space-3); border: 1px solid var(--line-control, var(--line)); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: inherit; }
+  .console-record { min-width: 0; overflow-wrap: anywhere; }
+  .console-caption { color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.5; }
+  .console-value-settings > .form-field { flex: 1 1 12rem; min-width: 0; }
+  .console-history p { margin: 0; }
+  .console-history time { color: var(--ink-muted); font-size: var(--text-sm); }
+  .console-results p { margin: 0; }
+  .console-segment { min-width: 0; border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-4); }
+  .console-segment legend { margin-bottom: var(--space-2h); }
+  .console-segment label { display: flex; align-items: center; gap: var(--space-2); }
+  .console-segment > .console-caption { flex-basis: 100%; margin: 0; }
+  /* The head every Console room opens with (ConsoleShell's ConsoleHead): the room's name, the App, its context, and at
+     its end the jump box and the live clock — one quiet row, the room's toolbar under it on a hairline. */
+  .console-head { display: grid; gap: var(--space-3h); min-width: 0; padding-bottom: var(--space-4); border-bottom: 1px solid var(--line); }
+  /* A head straight over a tab strip leaves the rule to the strip: one line between them, not two. */
+  .console-head:has(+ .page-tabs) { padding-bottom: 0; border-bottom: 0; }
+  .console-head-row { display: flex; align-items: center; gap: var(--space-3h); min-height: 36px; min-width: 0; }
+  .console-title { font: var(--heading-weight, 600) calc(18px * var(--type-k))/1.2 var(--heading-font, var(--sans)); letter-spacing: var(--track-title, -0.01em); color: var(--ink); white-space: nowrap; margin-inline-end: var(--space-2); }
+  .console-switcher { flex: 0 1 13rem; min-width: 8rem; }
+  .console-context-group { display: inline-flex; align-items: center; gap: var(--space-3h); min-width: 0; }
+  .console-context { color: var(--ink-muted); font-size: var(--text-base); white-space: nowrap; }
+  .console-head-end { display: inline-flex; align-items: center; gap: var(--space-2h); margin-inline-start: auto; flex: none; }
+  .console-jump { display: inline-flex; align-items: center; gap: var(--space-3); min-height: 30px; min-inline-size: 13rem; padding: 0 var(--space-2h) 0 var(--space-3h); border: 1px solid var(--line-control, var(--line)); border-radius: var(--radius); background: var(--surface); color: var(--ink-muted); font: var(--text-base)/1 var(--sans); cursor: pointer; }
+  .console-jump:hover { border-color: var(--line-strong); color: var(--ink); }
+  .console-jump:focus-visible { outline: var(--focus-width, 2px) solid var(--focus); outline-offset: 2px; }
+  .console-jump-word { flex: 1; text-align: start; }
+  .console-jump kbd { padding: var(--space-1) var(--space-2); border: 1px solid var(--line); border-radius: min(4px, var(--radius)); background: var(--raised); color: var(--ink-muted); font: 500 var(--text-xs)/1 var(--sans); }
+  .console-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4h); min-width: 0; }
+  .console-toolbar .console-count { margin-inline-start: 0; white-space: nowrap; }
+  /* The palette: a box to type in over a grouped list; the line under the pointer or the arrows is the one Enter opens. */
+  .console-palette { inline-size: min(36rem, calc(100vw - 32px)); max-block-size: calc(100dvh - 24vh); margin: 12vh auto auto; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg, var(--radius-panel)); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop); }
+  .console-palette::backdrop { background: color-mix(in srgb, var(--ink) 18%, transparent); }
+  .console-palette-box { display: flex; align-items: center; gap: var(--space-3h); padding: var(--space-4) var(--space-4h); border-bottom: 1px solid var(--line); color: var(--ink-muted); }
+  .console-palette .console-palette-box input { flex: 1; min-width: 0; min-height: 0; border: 0; padding: 0; background: transparent; box-shadow: none; color: var(--ink); font: calc(15px * var(--type-k))/1.4 var(--sans); outline: none; }
+  .console-palette-list { max-block-size: min(24rem, 60vh); overflow-y: auto; padding: var(--space-2h); }
+  .console-palette-group + .console-palette-group { margin-top: var(--space-2h); }
+  .console-palette-heading { display: block; padding: var(--space-2h) var(--space-3) var(--space-2); color: var(--ink-subtle, var(--ink-muted)); font: 600 var(--text-xs)/1.2 var(--sans); }
+  .console-palette-item { display: flex; align-items: baseline; gap: var(--space-3h); min-height: 32px; padding: var(--space-3) var(--space-3); border-radius: var(--radius-item, var(--radius)); cursor: pointer; }
+  .console-palette-item[aria-selected='true'] { background: var(--raised); }
+  .console-palette-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: var(--text-base); }
+  .console-palette-detail { margin-inline-start: auto; flex: none; color: var(--ink-muted); font-size: var(--text-sm); }
+  .console-palette-empty { margin: 0; padding: var(--space-5) var(--space-3); color: var(--ink-muted); font-size: var(--text-base); }
+  .console-updated { display: inline-block; min-inline-size: 9.5rem; text-align: end; color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .console-refresh.btn { min-inline-size: 28px; padding-inline: var(--space-2h); font-size: calc(15px * var(--type-k)); line-height: 1; }
+  /* Operations: four figures over the views, each the same height whether or not its trend has drawn yet. */
+  .console-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+  .console-metrics .kit-stat-change { min-height: 1lh; }
+  /* The panel sits straight in the tabs column, not a shared panels grid: it takes the room's width. */
+  .console-workspace .page-tabs > .page-tabpanel { align-self: stretch; }
+  .console-work-what .console-open { display: block; }
+  .console-open.console-key { font-family: var(--code); font-size: var(--text-sm); }
+  .console-work-source { display: block; margin-top: var(--space-1); color: var(--ink-muted); font-size: var(--text-sm); font-family: var(--sans); font-weight: 400; }
+  /* Stores: a card per store, its dot and name, what it holds, its state and layout. */
+  .console-stores { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-3h); }
+  .console-store { display: grid; align-content: start; gap: var(--space-2); min-width: 0; padding: var(--space-4) var(--space-4h); border: 1px solid var(--line); border-radius: var(--radius-panel, var(--radius)); background: var(--surface); }
+  .console-store-name { display: inline-flex; align-items: center; gap: var(--space-3); min-width: 0; font-weight: 600; }
+  .console-store-state { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3h); margin-top: var(--space-2h); }
+  .console-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ink-subtle, var(--ink-muted)); }
+  .console-dot[data-tone='good'] { background: var(--status-good); }
+  .console-dot[data-tone='warn'] { background: var(--status-warning); }
+  .console-dot[data-tone='bad'] { background: var(--status-critical); }
+  .console-act { width: 1%; text-align: end; white-space: nowrap; }
+  .console-badge { display: inline-block; min-inline-size: 2ch; margin-inline-start: var(--space-2h); padding: 0 var(--space-2h); border-radius: 999px; background: var(--status-critical); color: var(--ground); font-size: var(--text-xs); font-weight: 600; line-height: 18px; font-variant-numeric: tabular-nums; text-align: center; }
+  /* A section's controls: the filter's segmented row, a destination, and the selection's bulk action. */
+  .console-filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); min-height: 34px; min-width: 0; }
+  .console-bulk { margin-inline-start: auto; }
+  .console-said, .console-problem { margin: 0; font-size: var(--text-base); }
+  .console-said { color: var(--status-good); }
+  .console-problem { color: var(--status-critical); }
+  .console-reading { margin: 0; color: var(--ink-muted); font-size: var(--text-base); }
+  /* Tables: rows under the 2px rule in the ink, hairlines between them, full width; a wide one scrolls in its own box. */
+  .console-scroll { overflow-x: auto; min-width: 0; }
+  .console-table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
+  .console-table th { padding: var(--space-3) var(--space-3h); text-align: start; color: var(--ink-muted); font-size: var(--text-sm); font-weight: 600; border-bottom: 2px solid var(--ink); white-space: nowrap; }
+  .console-table td { padding: var(--space-3h); border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .console-table tbody tr:hover td { background: var(--raised); }
+  .console-table tr[aria-selected='true'] td { background: var(--chosen, var(--accent-soft)); }
+  .console-table .console-check { inline-size: 28px; padding-inline: var(--space-3h) 0; }
+  .console-check input { margin: 0; vertical-align: middle; }
+  .console-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .console-key { font-family: var(--code); font-size: var(--text-sm); overflow-wrap: anywhere; }
+  .console-code { font-family: var(--code); font-size: var(--text-xs); color: var(--ink-muted); }
+  .console-outcome { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+  .console-faint { color: var(--ink-subtle, var(--ink-muted)); }
+  .console-strong { font-weight: 600; }
+  .console-open { padding: 0; border: 0; background: none; color: var(--link, var(--accent)); font: inherit; font-weight: 600; text-align: start; cursor: pointer; overflow-wrap: anywhere; }
+  .console-open:hover { text-decoration: underline; }
+  .console-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* With a row open the list keeps the larger share, and its secondary columns give way. */
+  .console-split.split-list-detail[data-selected='true'] { grid-template-columns: minmax(18rem, 1.35fr) minmax(20rem, 1fr); }
+  .console-split[data-selected='true'] :is(.console-wide, .console-act) { display: none; }
+  .console-detail { min-width: 0; overflow-wrap: anywhere; padding-top: var(--space-4); }
+  .console-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--space-4) 20px; margin: 0; }
+  .console-facts > div { display: grid; gap: var(--space-1h); min-width: 0; }
+  .console-facts dt { color: var(--ink-muted); font-size: var(--text-sm); }
+  .console-facts dd { margin: 0; }
+  .console-sub { margin: 0 0 var(--space-3); font-size: var(--text-base); font-weight: 600; }
+  .console-timeline { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .console-timeline > li { display: grid; gap: var(--space-1h); padding: var(--space-3h) 0; border-bottom: 1px solid var(--line); font-size: var(--text-base); }
+  .console-timeline-head strong { font-weight: 600; }
+  .console-timeline-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3h); }
+  /* Analytics: the range in the bar, figures with their change, the day columns, funnels beside the top events. */
+  .console-dates { display: inline-flex; flex-wrap: wrap; gap: var(--space-3); }
+  .console-dates label { display: inline-flex; align-items: center; gap: var(--space-2h); color: var(--ink-muted); font-size: var(--text-sm); }
+  .console-dates input { min-height: 28px; padding: var(--space-1) var(--space-2h); border: 1px solid var(--line-control, var(--line)); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--text-base); }
+  .console-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: var(--space-4); align-items: start; }
+  .console-thirds { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+  .console-up { color: var(--status-good); }
+  .console-down { color: var(--status-critical); }
+  .console-funnel { display: grid; gap: var(--space-2h); min-width: 0; }
+  .console-funnel-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
+  .console-funnel-label { overflow-wrap: anywhere; }
+  .console-funnel-track { display: block; block-size: 14px; background: var(--raised); border-radius: min(3px, var(--radius)); overflow: hidden; }
+  .console-funnel-bar { display: block; block-size: 100%; background: var(--chart-1, var(--accent)); }
+  .console-breakdown { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+  /* The figures as one strip: a cell each between hairlines, the number at the size of a heading, not a poster. */
+  .console-strip { display: grid; grid-template-columns: repeat(var(--cells, 4), minmax(0, 1fr)); margin: 0; border: 1px solid var(--line); border-radius: var(--radius-panel, var(--radius)); background: var(--surface); }
+  .console-strip-cell { display: grid; align-content: start; gap: var(--space-1); min-width: 0; padding: var(--space-3h) var(--space-4h); }
+  .console-strip-cell + .console-strip-cell { border-inline-start: 1px solid var(--line); }
+  .console-strip dt { color: var(--ink-muted); font-size: var(--text-sm); }
+  .console-strip dd { margin: 0; }
+  .console-strip-figure { font: 600 var(--text-xl)/1.2 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); }
+  .console-strip-change { color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+  .console-strip-change.console-up { color: var(--status-good); }
+  .console-strip-change.console-down { color: var(--status-critical); }
+  /* An event opened: the way back, its name in the code face, its kind. */
+  .console-event-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
+  .console-back { padding: 0; border: 0; background: none; color: var(--link, var(--accent)); font: inherit; font-size: var(--text-base); cursor: pointer; }
+  .console-back:hover { text-decoration: underline; }
+  .console-event-name { font: 600 var(--text-lg)/1.3 var(--code); overflow-wrap: anywhere; }
+  /* A funnel's step carries its share as the breakdown's bar under its words, and what dropped away in the danger ink. */
+  .console-funnel-steps .dash-step-card { grid-template-columns: auto minmax(0, 1fr); }
+  .console-funnel-steps .console-funnel-track { grid-column: 1 / -1; }
+  .console-funnel-steps .console-funnel-drop { color: var(--status-critical); }
+  .console-breakdown > li { display: grid; grid-template-columns: minmax(6rem, 1fr) minmax(4rem, 1.5fr) 3.5rem; gap: var(--space-3h); align-items: center; }
+  .console-breakdown .console-num { text-align: end; }
+  /* Scopes, when an App has several: a card each, the room's only question until one is chosen. */
+  .console-scope-choice { display: grid; gap: var(--space-3h); }
+  .console-scope-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--space-3h); }
+  .console-scope-card { display: grid; gap: var(--space-2); inline-size: 100%; padding: var(--space-4) var(--space-4h); border: 1px solid var(--line); border-radius: var(--radius-panel, var(--radius)); background: var(--surface); color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+  .console-scope-card:hover { border-color: var(--line-strong); }
+  .console-scope-card:focus-visible { outline: var(--focus-width, 2px) solid var(--focus); outline-offset: 2px; }
+  /* The flag list: the key in the code face, state per scope, the share as a short bar. */
+  .console-flag-key { font-family: var(--code, var(--mono)); font-weight: 500; font-size: var(--text-base); color: var(--ink); }
+  .console-flag-key:focus-visible { outline: var(--focus-width, 2px) solid var(--focus); outline-offset: 2px; border-radius: min(2px, var(--radius)); }
+  .console-switch-word { min-inline-size: 2.5ch; }
+  .console-changed-cell { white-space: nowrap; color: var(--ink-muted); }
+  /* The sheet: a meta line, the state strip with the kill switch, then the tabs. */
+  .console-sheet-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) 0; margin: 0; color: var(--ink-muted); font-size: var(--text-sm); }
+  .console-sheet-meta > span:not(:first-child)::before { content: '·'; margin-inline: var(--space-3); color: var(--ink-subtle, var(--ink-muted)); }
+  .console-kind-pill, .console-count-pill { display: inline-block; padding: 1px var(--space-3); border-radius: 999px; background: var(--raised); color: var(--ink-muted); font: 500 var(--text-xs)/18px var(--sans); }
+  .console-count-pill { margin-inline-start: var(--space-2h); font-variant-numeric: tabular-nums; }
+  .console-sheet-meta .console-kind-pill::before { content: none; }
+  .console-sheet-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3h) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-panel, var(--radius)); background: var(--surface); }
+  .console-sheet-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2h); margin-inline-start: auto; }
+  .console-eyebrow { display: block; margin-bottom: var(--space-2); color: var(--ink-muted); font: 600 var(--text-xs)/1.3 var(--sans); }
+  .console-live { padding: var(--space-4) var(--space-4h); border-radius: var(--radius-panel, var(--radius)); background: var(--raised); }
+  .console-serving { margin: 0; font-size: var(--text-md); line-height: 1.55; color: var(--ink); }
+  .console-value { padding: 0 var(--space-2); border-radius: min(4px, var(--radius)); background: color-mix(in srgb, var(--ink) 6%, transparent); font-family: var(--code, var(--mono)); font-size: 0.92em; }
+  .console-section { display: grid; gap: var(--space-3); min-width: 0; }
+  .console-section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+  .console-section-title { display: inline-flex; align-items: center; margin: 0; font: 600 var(--text-base)/1.3 var(--sans); color: var(--ink); }
+  /* The rollout as one segmented bar: the served share, then the rest, with a legend under it. */
+  .console-split-bar { display: grid; gap: var(--space-2h); margin-top: var(--space-3); }
+  .console-split-track { display: flex; gap: var(--space-1); block-size: 8px; border-radius: 999px; overflow: hidden; background: var(--raised); }
+  .console-split-part.is-served, .console-legend-swatch.is-served { background: var(--accent); }
+  .console-split-part.is-rest, .console-legend-swatch.is-rest { background: var(--line-strong); }
+  .console-split-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4h); color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+  .console-legend-item { display: inline-flex; align-items: center; gap: var(--space-2h); }
+  .console-legend-swatch { inline-size: 8px; block-size: 8px; border-radius: min(2px, var(--radius)); }
+  /* Rules: ordered one-line cards; an open one shows its fields under its line. */
+  .console-rules { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2h); }
+  .console-rule { border: 1px solid var(--line); border-radius: var(--radius-panel, var(--radius)); background: var(--surface); }
+  .console-rule[data-open] { border-color: var(--line-strong); }
+  .console-rule-line { display: flex; align-items: center; gap: var(--space-3h); min-height: 40px; padding: var(--space-2) var(--space-2h) var(--space-2) var(--space-3h); }
+  .console-rule-number { display: inline-grid; place-items: center; flex: none; inline-size: 20px; block-size: 20px; border-radius: 50%; background: var(--raised); color: var(--ink-muted); font: 600 var(--text-xs)/1 var(--sans); font-variant-numeric: tabular-nums; }
+  .console-rule-words { flex: 1; min-width: 0; font-size: var(--text-base); line-height: 1.45; }
+  .console-rule-tools { display: inline-flex; flex: none; gap: var(--space-1); }
+  .console-rule-fields { display: grid; gap: var(--space-4); margin: 0; padding: var(--space-3h) var(--space-4) var(--space-4); border: 0; border-top: 1px solid var(--line); min-width: 0; }
+  .console-value-settings { display: flex; flex-wrap: wrap; gap: var(--space-3h) var(--space-4h); }
+  .console-check-line { display: flex; align-items: center; gap: var(--space-2h); font-size: var(--text-base); }
+  .console-variants td { padding-block: var(--space-3); }
+  .console-timeline-after { color: var(--ink-muted); }
+  .console-timeline-after .console-serving { font-size: var(--text-sm); color: var(--ink-muted); }
+  /* Staged edits wait in a bar at the sheet's foot, which stays in view as the sheet scrolls. */
+  .console-staged { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3h) var(--space-4); margin-inline: -2px; border: 1px solid var(--line-strong); border-radius: var(--radius-panel, var(--radius)); background: var(--surface); box-shadow: var(--shadow-pop); }
+  .console-staged-words { flex: 1; min-width: 0; font-size: var(--text-base); font-weight: 500; }
+  .console-review { min-width: 0; }
+  .console-diff { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .console-diff > li { display: grid; grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr) auto minmax(0, 1fr); gap: var(--space-2) var(--space-3h); align-items: baseline; padding: var(--space-3) 0; border-bottom: 1px solid var(--line); font-size: var(--text-base); }
+  .console-diff-what { color: var(--ink-muted); font-weight: 500; }
+  .console-diff-was { color: var(--ink-muted); text-decoration: line-through; text-decoration-color: var(--ink-subtle, var(--ink-muted)); }
+  .console-diff-arrow { color: var(--ink-subtle, var(--ink-muted)); }
+  /* Governance: an App's authority as sentences under hairlines, who grants each at the line's end. */
+  .console-sentences { list-style: none; margin: 0; padding: 0; }
+  .console-sentences > li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--line); font-size: var(--text-base); overflow-wrap: anywhere; }
+  .console-sentences > li:last-child { border-bottom: 0; }
+  .console-review-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+  /* Experiments: the verdict as the banner, four facts, then the variants drawn on one scale. */
+  .console-verdict[data-tone='good'] { border-color: color-mix(in srgb, var(--status-good) 30%, var(--line)); background: color-mix(in srgb, var(--status-good) 7%, var(--surface)); }
+  .console-verdict[data-tone='warn'] { border-color: color-mix(in srgb, var(--status-warning) 30%, var(--line)); background: color-mix(in srgb, var(--status-warning) 7%, var(--surface)); }
+  .console-verdict[data-tone='bad'] { border-color: color-mix(in srgb, var(--status-critical) 30%, var(--line)); background: color-mix(in srgb, var(--status-critical) 6%, var(--surface)); }
+  .console-verdict[data-tone='neutral'] { border-color: var(--line); background: var(--surface); }
+  .console-verdict[data-tone='good'] .dashboard-note-eyebrow { background: color-mix(in srgb, var(--status-good) 14%, var(--surface)); color: var(--status-good); }
+  .console-verdict[data-tone='warn'] .dashboard-note-eyebrow { background: color-mix(in srgb, var(--status-warning) 16%, var(--surface)); color: var(--ink); }
+  .console-verdict[data-tone='bad'] .dashboard-note-eyebrow { background: color-mix(in srgb, var(--status-critical) 12%, var(--surface)); color: var(--status-critical); }
+  .console-verdict[data-tone='neutral'] .dashboard-note-eyebrow { background: var(--raised); color: var(--ink-muted); }
+  .console-verdict .dashboard-note-title, .console-verdict .dashboard-note-text { margin: 0; }
+  .console-verdict .dashboard-note-text { margin-top: var(--space-2h); color: var(--ink-muted); }
+  .console-results .console-facts dd:first-of-type { font: 600 calc(17px * var(--type-k))/1.2 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); }
+  .console-compare { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .console-compare > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2h) var(--space-5); align-items: center; padding: var(--space-3h) 0; border-bottom: 1px solid var(--line); }
+  .console-compare-name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-width: 0; }
+  .console-compare-name .console-caption { flex-basis: 100%; }
+  .console-compare-figures { display: inline-flex; gap: var(--space-5); text-align: end; font-variant-numeric: tabular-nums; }
+  .console-compare-rate, .console-compare-lift { display: grid; justify-items: end; min-inline-size: 6.5rem; }
+  .console-compare-figures strong { font-size: var(--text-md); }
+  .console-compare-track { grid-column: 1 / -1; position: relative; display: block; block-size: 18px; }
+  .console-compare-bar { position: absolute; inset-block: 4px; inset-inline-start: 0; border-radius: 0 min(3px, var(--radius)) min(3px, var(--radius)) 0; background: color-mix(in srgb, var(--chart-1, var(--accent)) 70%, transparent); }
+  .console-compare li[data-control] .console-compare-bar { background: var(--line-strong); }
+  .console-compare-whisker { position: absolute; inset-block: 8px; block-size: 2px; background: var(--ink); }
+  .console-compare-whisker::before, .console-compare-whisker::after { content: ''; position: absolute; inset-block: -4px; inline-size: 1.5px; background: var(--ink); }
+  .console-compare-whisker::before { inset-inline-start: 0; }
+  .console-compare-whisker::after { inset-inline-end: 0; }
+  .console-compare-control { position: absolute; inset-block: 0; inline-size: 0; border-inline-start: 1px dashed var(--ink-muted); }
+  .console-compare [data-significance='positive'] { color: var(--status-good); }
+  .console-compare [data-significance='negative'] { color: var(--status-critical); }
+  .console-blockers .dash-step-title { white-space: normal; }
+  @media (max-width: 760px) {
+    /* On a phone each flag is a card: its key and switch on the first line, its kind and share under them. */
+    .console-flags, .console-flags tbody { display: block; }
+    .console-flags thead { display: none; }
+    .console-flags tbody { display: grid; gap: var(--space-3); }
+    .console-flags tr.console-flag-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'flag state' 'kind rollout'; gap: 0 var(--space-4); align-items: center;
+      /* The shell's table rules give each cell 10px above and below; the card's own padding makes up the rest. */
+      padding: var(--space-1) var(--space-4h); border: 1px solid var(--line); border-radius: var(--radius-panel, var(--radius)); background: var(--surface); }
+    /* The look rules every cell; a card has no rules inside it, so the cell's rule colour is cleared where the look reads it. */
+    .console-flags tr.console-flag-line > td { height: auto; padding: 0; border: 0; background: none; --line: transparent; --row-rule: transparent; }
+    .console-flags .console-flag-cell { grid-area: flag; min-width: 0; }
+    .console-flags .console-state-cell { grid-area: state; justify-self: end; }
+    .console-flags .console-kind-cell { grid-area: kind; }
+    .console-flags .console-rollout-cell { grid-area: rollout; justify-self: end; }
+    .console-flags tr.console-confirm, .console-flags tr.console-confirm > td { display: block; }
+    .console-compare > li { grid-template-columns: minmax(0, 1fr); }
+    .console-compare-figures { justify-content: space-between; text-align: start; }
+    .console-compare-rate, .console-compare-lift { justify-items: start; min-inline-size: 0; }
+    .console-search { flex: 1 1 100%; margin-inline-start: 0; }
+    /* The scope and the environment are one unit on the head's own second row: the scope gives way first (an ellipsis), the pill keeps its word. */
+    .console-head-row { flex-wrap: wrap; }
+    .console-context-group { order: 3; flex: 1 1 100%; }
+    .console-context { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .console-env { flex: none; }
+    .console-head-end { margin-inline-start: auto; }
+    .console-jump { min-inline-size: 0; }
+    .console-jump-word, .console-jump kbd { display: none; }
+    .console-diff > li { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+    .console-diff-what { grid-column: 1 / -1; }
+    /* A phone's head keeps to one row: the App switcher takes what the name leaves, the clock gives way to its refresh. */
+    .console-updated { display: none; }
+    .console-head-row .console-switcher { flex: 1 1 0; min-width: 6rem; }
+    .console-wide { display: none; }
+    .console-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+    .console-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .console-strip-cell:nth-child(odd) { border-inline-start: 0; }
+    .console-strip-cell:nth-child(n + 3) { border-top: 1px solid var(--line); }
+    /* The tabs' badges say where the attention is; a phone's figure keeps to its number. */
+    .console-metrics .kit-stat-change { display: none; }
+    /* The facet and the source share one row, half each. */
+    .console-filter { gap: var(--space-3); }
+    .console-filter .console-switcher { flex: 1 1 0; min-width: 0; }
+    /* On a phone each piece of work is a card: what it is and its state, then its outcome and Redrive. */
+    .console-work, .console-work tbody { display: block; }
+    .console-work thead { display: none; }
+    .console-work tbody { display: grid; gap: var(--space-3); }
+    .console-work tr.console-work-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'what state' 'outcome act'; gap: var(--space-2) var(--space-4); align-items: center; padding: var(--space-1) var(--space-4h); border: 1px solid var(--line); border-radius: var(--radius-panel, var(--radius)); background: var(--surface); }
+    .console-work tr.console-work-line > td { height: auto; padding: 0; border: 0; background: none; --line: transparent; --row-rule: transparent; }
+    .console-work tr.console-work-line > td.console-check { display: none; }
+    .console-work .console-work-what { grid-area: what; min-width: 0; }
+    .console-work .console-work-state { grid-area: state; justify-self: end; }
+    .console-work .console-work-outcome { grid-area: outcome; min-width: 0; }
+    .console-work tr.console-work-line > td.console-act { display: block; grid-area: act; justify-self: end; width: auto; }
+    .console-pair, .console-thirds { grid-template-columns: minmax(0, 1fr); }
+  }
+}

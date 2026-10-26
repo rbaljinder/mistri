@@ -1,0 +1,298 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role user — the App
+auth rows policy — the App
+source lintel connection "lintel" — the App
+source lintel default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource charge access write — the App
+resource lease access write — the App
+resource maintenance_request access write — the App
+resource part access write — the App
+resource part_receipt access write — the App
+resource payment access write — the App
+resource property access write — the App
+resource property_photo access write — the App
+resource property_photo delete — the App
+resource request_note access write — the App
+resource request_part access write — the App
+resource request_part delete — the App
+resource resident access write — the App
+resource unit access write — the App
+resource viewing access write — the App
+role accountant read charge — the App
+role accountant read lease — the App
+role accountant read maintenance_request — the App
+role accountant read payment — the App
+role accountant read property — the App
+role accountant read property_photo — the App
+role accountant read resident — the App
+role accountant read staff — the App
+role accountant read unit — the App
+role accountant export charge — the App
+role accountant export payment — the App
+role accountant command addCharge — the App
+role accountant command postRent — the App
+role accountant command recordPayment — the App
+role accountant action charge "waive" — the App
+role admin extends manager — the App
+role admin read charge — the App
+role admin read lease — the App
+role admin read maintenance_request — the App
+role admin read part — the App
+role admin read part_receipt — the App
+role admin read payment — the App
+role admin read property — the App
+role admin read property_photo — the App
+role admin read request_note — the App
+role admin read request_part — the App
+role admin read resident — the App
+role admin read staff — the App
+role admin read unit — the App
+role admin read viewing — the App
+role admin write maintenance_request — the App
+role admin write part — the App
+role admin write part_receipt — the App
+role admin write property — the App
+role admin write property_photo — the App
+role admin write request_part — the App
+role admin write resident — the App
+role admin write unit — the App
+role admin write viewing — the App
+role admin command addCharge — the App
+role admin command addNote — the App
+role admin command assignTechnician — the App
+role admin command cancelRequest — the App
+role admin command completeRequest — the App
+role admin command endLease — the App
+role admin command giveNotice — the App
+role admin command postRent — the App
+role admin command recordPayment — the App
+role admin command replyToResident — the App
+role admin command scheduleVisit — the App
+role admin command signLease — the App
+role admin action charge "waive" — the App
+role admin operation workflows — the App
+role admin fields maintenance_request write category — the App
+role admin fields maintenance_request write description — the App
+role admin fields maintenance_request write entry_ok — the App
+role admin fields maintenance_request write priority — the App
+role admin fields maintenance_request write reported_on — the App
+role admin fields maintenance_request write resident_id — the App
+role admin fields maintenance_request write status — the App
+role admin fields maintenance_request write title — the App
+role admin fields maintenance_request write unit_id — the App
+role admin fields unit write available_on — the App
+role admin fields unit write description — the App
+role admin fields unit write headline — the App
+role admin fields unit write listed — the App
+role admin fields unit write market_rent — the App
+role admin fields viewing write message — the App
+role admin fields viewing write phone — the App
+role admin fields viewing write preferred_on — the App
+role admin fields viewing write status — the App
+role admin fields viewing write unit_id — the App
+role lease_clock read lease — the App
+role lease_clock read unit — the App
+role lease_clock command endLease — the App
+role leasing read charge — the App
+role leasing read lease — the App
+role leasing read maintenance_request — the App
+role leasing read part — the App
+role leasing read part_receipt — the App
+role leasing read payment — the App
+role leasing read property — the App
+role leasing read property_photo — the App
+role leasing read request_note — the App
+role leasing read request_part — the App
+role leasing read resident — the App
+role leasing read staff — the App
+role leasing read unit — the App
+role leasing read viewing — the App
+role leasing write property_photo — the App
+role leasing write resident — the App
+role leasing write unit — the App
+role leasing write viewing — the App
+role leasing command addNote — the App
+role leasing command endLease — the App
+role leasing command giveNotice — the App
+role leasing command replyToResident — the App
+role leasing command signLease — the App
+role leasing fields unit write available_on — the App
+role leasing fields unit write description — the App
+role leasing fields unit write headline — the App
+role leasing fields unit write listed — the App
+role leasing fields unit write market_rent — the App
+role leasing fields viewing write message — the App
+role leasing fields viewing write phone — the App
+role leasing fields viewing write preferred_on — the App
+role leasing fields viewing write status — the App
+role leasing fields viewing write unit_id — the App
+role manager extends leasing — the App
+role manager read charge — the App
+role manager read lease — the App
+role manager read maintenance_request — the App
+role manager read part — the App
+role manager read part_receipt — the App
+role manager read payment — the App
+role manager read property — the App
+role manager read property_photo — the App
+role manager read request_note — the App
+role manager read request_part — the App
+role manager read resident — the App
+role manager read staff — the App
+role manager read unit — the App
+role manager read viewing — the App
+role manager write maintenance_request — the App
+role manager write part — the App
+role manager write part_receipt — the App
+role manager write property — the App
+role manager write property_photo — the App
+role manager write request_part — the App
+role manager write resident — the App
+role manager write unit — the App
+role manager write viewing — the App
+role manager command addCharge — the App
+role manager command addNote — the App
+role manager command assignTechnician — the App
+role manager command cancelRequest — the App
+role manager command completeRequest — the App
+role manager command endLease — the App
+role manager command giveNotice — the App
+role manager command postRent — the App
+role manager command recordPayment — the App
+role manager command replyToResident — the App
+role manager command scheduleVisit — the App
+role manager command signLease — the App
+role manager action charge "waive" — the App
+role manager fields maintenance_request write category — the App
+role manager fields maintenance_request write description — the App
+role manager fields maintenance_request write entry_ok — the App
+role manager fields maintenance_request write priority — the App
+role manager fields maintenance_request write reported_on — the App
+role manager fields maintenance_request write resident_id — the App
+role manager fields maintenance_request write status — the App
+role manager fields maintenance_request write title — the App
+role manager fields maintenance_request write unit_id — the App
+role manager fields unit write available_on — the App
+role manager fields unit write description — the App
+role manager fields unit write headline — the App
+role manager fields unit write listed — the App
+role manager fields unit write market_rent — the App
+role manager fields viewing write message — the App
+role manager fields viewing write phone — the App
+role manager fields viewing write preferred_on — the App
+role manager fields viewing write status — the App
+role manager fields viewing write unit_id — the App
+role processor read charge — the App
+role processor read lease — the App
+role processor read payment — the App
+role processor command settleCharge — the App
+role rent_poster read charge — the App
+role rent_poster read lease — the App
+role rent_poster command assessLateFees — the App
+role rent_poster command postRent — the App
+role repair_triage read maintenance_request — the App
+role repair_triage read property — the App
+role repair_triage read staff — the App
+role repair_triage read unit — the App
+role repair_triage command assignTechnician — the App
+role resident read charge — the App
+role resident read lease — the App
+role resident read maintenance_request — the App
+role resident read part — the App
+role resident read payment — the App
+role resident read property — the App
+role resident read property_photo — the App
+role resident read request_note — the App
+role resident read request_part — the App
+role resident read resident — the App
+role resident read staff — the App
+role resident read unit — the App
+role resident command messageOffice — the App
+role resident command reportIssue — the App
+role resident fields part read id — the App
+role resident fields part read name — the App
+role resident fields staff read id — the App
+role resident fields staff read name — the App
+role resident fields staff read title — the App
+role technician read lease — the App
+role technician read maintenance_request — the App
+role technician read part — the App
+role technician read part_receipt — the App
+role technician read property — the App
+role technician read property_photo — the App
+role technician read request_note — the App
+role technician read request_part — the App
+role technician read resident — the App
+role technician read staff — the App
+role technician read unit — the App
+role technician write maintenance_request — the App
+role technician write part_receipt — the App
+role technician write request_part — the App
+role technician command addNote — the App
+role technician command completeRequest — the App
+role technician command replyToResident — the App
+role technician fields lease read end_on — the App
+role technician fields lease read id — the App
+role technician fields lease read resident_id — the App
+role technician fields lease read start_on — the App
+role technician fields lease read status — the App
+role technician fields lease read unit_id — the App
+role technician fields maintenance_request write status — the App
+role technician fields resident read email — the App
+role technician fields resident read id — the App
+role technician fields resident read language — the App
+role technician fields resident read name — the App
+role technician fields resident read phone — the App
+public read property — the App
+public read property_photo — the App
+public read unit — the App
+public fields property read address — the App
+public fields property read city — the App
+public fields property read description — the App
+public fields property read id — the App
+public fields property read kind — the App
+public fields property read name — the App
+public fields property read state — the App
+public fields property read year_built — the App
+public fields property read zip — the App
+public fields unit read available_on — the App
+public fields unit read bathrooms — the App
+public fields unit read bedrooms — the App
+public fields unit read code — the App
+public fields unit read description — the App
+public fields unit read floor — the App
+public fields unit read headline — the App
+public fields unit read id — the App
+public fields unit read listed — the App
+public fields unit read market_rent — the App
+public fields unit read number — the App
+public fields unit read property_id — the App
+public fields unit read sqft — the App
+public form request-viewing runs command requestViewing version 1 — the App
+
+contract addCharge v1 815ce8e1d750
+contract addNote v1 f46703911a9f
+contract assessLateFees v1 0df607b2e80c
+contract assignTechnician v1 922438d3fed8
+contract cancelRequest v1 bbd17811fadc
+contract completeRequest v1 db89bccd9c46
+contract endLease v1 e82ddebf7b62
+contract giveNotice v1 3bbdb82b8cf2
+contract messageOffice v1 2bf332f75f6d
+contract postRent v1 093d4704700e
+contract recordPayment v1 8cbb7afe63d3
+contract replyToResident v1 06e717f79b8a
+contract reportIssue v1 dd5eeee5c5c7
+contract requestViewing v1 aa4b3e46a834
+contract scheduleVisit v1 ef34b8de7203
+contract settleCharge v1 b17c3db7792a
+contract signLease v1 e82ddebf7b62
+workflow lateFees v1 5abf5c496ecc
+workflow lateFees v1 step until - grace
+workflow lateFees v1 step run assessLateFees assess

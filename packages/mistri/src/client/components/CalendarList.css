@@ -1,0 +1,425 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+  /* The calendar list: a month grid in the page's own tokens. Names no colour
+   of its own — today is the accent, a record is the accent's soft tint. */
+  .calendar-list {
+    min-width: 0;
+  }
+  .calendar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin: var(--space-4) 0;
+  }
+  .calendar-title {
+    margin: 0;
+    font: 600 calc(18px * var(--type-k)) var(--sans);
+    letter-spacing: -0.01em;
+  }
+  .calendar-nav {
+    display: flex;
+    gap: var(--space-2h);
+  }
+  /* A month's steps are marks at the interface's icon size, not 5px glyphs of the text face. */
+  .calendar-nav .tw-icon {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+  .calendar-grid {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .calendar-grid th {
+    padding: var(--space-3);
+    text-align: left;
+    font: 500 var(--text-sm) var(--sans);
+    color: var(--ink-muted);
+    border-bottom: 1px solid var(--line);
+    background: var(--raised);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  /* In a section the calendar is a part of the section, not a page of its own: the month is a quiet label in the
+     controls' row beside the steps (as the section's heading is the heading), not a title that outranks it; and on a
+     page whose sections are open the grid is not boxed again (a panel or a card is already one; that rule reads the
+     section recipe, so it is in themeFamilies.css with the recipes). A day is as tall as one card wants. */
+  .page-section .calendar-head {
+    justify-content: flex-start;
+    margin: 0 0 var(--space-3);
+  }
+  .page-section .calendar-head .calendar-nav {
+    order: -1;
+  }
+  .page-section .calendar-title {
+    font: 500 var(--text-base) var(--sans);
+    letter-spacing: 0;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .page-section .calendar-day {
+    height: 64px;
+  }
+  .calendar-day {
+    height: 116px;
+    padding: var(--space-2h);
+    vertical-align: top;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .calendar-grid tr > .calendar-day:last-child {
+    border-right: 0;
+  }
+  .calendar-grid tbody tr:last-child .calendar-day {
+    border-bottom: 0;
+  }
+  /* Days of the months either side hold the grid's shape and nothing else:
+   they take the page's ground, a step back from the month's own days. As the
+   second surface they stood lighter than the month by night. */
+  .calendar-day.is-outside {
+    background: var(--ground);
+  }
+  .calendar-day.is-outside .calendar-date {
+    color: var(--ink-subtle);
+  }
+  /* A week is not a list row. The looks tint a table's hovered row
+   (visualThemes.css, themeFamilies.css), and over that tint an outside day's
+   faint date fell to 4.42:1; under the pointer the days keep their own
+   grounds. `:root` and `.app-mode` are here only to outrank the looks' rule. */
+  .calendar-date {
+    display: inline-flex;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 var(--space-2);
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    font: 500 var(--text-sm) var(--sans);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .calendar-day.is-today .calendar-date {
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+  }
+  .calendar-cards {
+    list-style: none;
+    margin: var(--space-2) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1h);
+  }
+  .calendar-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: var(--space-1h) var(--space-2h);
+    text-align: left;
+    cursor: pointer;
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--accent-soft);
+    color: var(--ink);
+    font: 500 var(--text-sm)/1.3 var(--sans);
+  }
+  .calendar-card:hover:not(:disabled) {
+    border-color: var(--line-strong);
+  }
+  .calendar-card:disabled {
+    cursor: default;
+  }
+  .calendar-card-line {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* A title and a detail give way at a word, one line clamped: an ellipsis cuts at a character, so "Birchwood Lofts
+     #302" ended "Birchwood Lofts …", its word space kept before the dots. Clamped, the line ends where the last
+     word that fits ends, its space hanging out of sight, and a word longer than the card still breaks inside itself
+     and ends in the dots rather than being clipped bare. */
+  .calendar-card-title,
+  .calendar-card-detail {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    overflow: hidden;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .calendar-card-line {
+    color: var(--ink-muted);
+    font-weight: 400;
+  }
+  /* A busy day says how many more it holds instead of hiding them in a scroll. */
+  .calendar-more {
+    margin-top: var(--space-1h);
+    padding: 1px var(--space-2h);
+    border: 0;
+    background: none;
+    color: var(--ink-muted);
+    font: 500 var(--text-sm) var(--sans);
+    cursor: pointer;
+    position: relative;
+  }
+  /* A target of 24px (WCAG 2.5.8) without growing the day's cell: the hit reaches past the words, as a nav group's
+     fold does. */
+  .calendar-more::before {
+    content: '';
+    position: absolute;
+    inset: -4px 0;
+  }
+  .calendar-more:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+  /* Where a dragged record would land; the card being written dims until the month is read again. */
+  .calendar-day.is-over,
+  .calendar-agenda > li.is-over {
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+  .calendar-agenda > li.is-over {
+    border-radius: var(--radius);
+  }
+  .calendar-card.is-moving {
+    opacity: 0.55;
+  }
+  /* The grid's one Tab stop wears the house ring, inside the day: the grid clips
+   what falls outside it, and a neighbour's hairline would cut an outer ring. */
+  .calendar-day:focus {
+    outline: none;
+  }
+  .calendar-day:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: -2px;
+  }
+  .calendar-note {
+    margin: var(--space-3h) 0;
+    color: var(--ink-muted);
+    font-size: var(--text-base);
+  }
+  /* A phone reads the month as an agenda: only the days that have something. */
+  .calendar-agenda {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+  .calendar-agenda-day {
+    margin: 0 0 var(--space-2h);
+    font: 600 var(--text-base) var(--sans);
+    color: var(--ink-muted);
+  }
+  .calendar-agenda-day.is-today {
+    color: var(--accent-ink);
+  }
+  .calendar-agenda .calendar-card {
+    min-height: 44px;
+    padding: var(--space-3h) var(--space-4);
+    font-size: var(--text-md);
+    justify-content: center;
+  }
+  .calendar-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* ---------- Ranges, lanes and a status (calendar `end` and `badge`) ----------
+   A range is one bar across the days it spans. It stands in its first day's
+   cell and reaches over the next ones by the cells' own measure (their
+   padding and hairline), drawn above them; those days hold its lane with an
+   empty place of the same height, so every card of a calendar is one of two
+   heights — one line, or a line under the title. A bar that runs on from the
+   week before, or into the next, is square on that side: it has no end there. */
+  .calendar-list {
+    --calendar-pad: 6px;
+    --calendar-rule: 1px;
+  }
+  /* The day's own padding and overflow, which bars measure by, stand in structure.css. */
+  .calendar-cards > .calendar-slot {
+    list-style: none;
+  }
+  .calendar-card,
+  .calendar-slot {
+    box-sizing: border-box;
+    height: 24px;
+  }
+  .calendar-card.has-line,
+  .calendar-slot.has-line {
+    height: 40px;
+  }
+  .calendar-card {
+    justify-content: center;
+  }
+  .calendar-card.is-span {
+    position: relative;
+    z-index: 1;
+    width: calc(var(--calendar-span) * 100% + (var(--calendar-span) - 1) * (2 * var(--calendar-pad) + var(--calendar-rule)));
+  }
+  .calendar-card.runs-before {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+  .calendar-card.runs-after {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  /* The line under the title: the detail, after the status's dot and word on the agenda (in a day's cell the status is a
+   dot before the title, structure.css). */
+  .calendar-card-line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2h);
+    min-width: 0;
+  }
+  /* A long status gives way too, after the detail has given most (structure.css ellipsizes its word inside the
+   pill): the status is the card's signal, the detail its aside. */
+  .calendar-card-badge {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+  }
+  .calendar-card-detail {
+    flex: 0 4 auto;
+    min-width: 0;
+  }
+  .calendar-card-badge .tone {
+    font-size: inherit;
+  }
+  .calendar-card-caption {
+    color: var(--ink-muted);
+  }
+  /* Two details on the line are parted by a dot that rides before the second. */
+  .calendar-card-detail + .calendar-card-detail::before {
+    content: '·';
+    margin-right: var(--space-2h);
+    color: var(--ink-muted);
+  }
+  /* The agenda's cards are rows of a list, as tall as what they say. */
+  .calendar-agenda .calendar-card,
+  .calendar-agenda .calendar-card.has-line {
+    height: auto;
+  }
+
+  /* ---------- A calendar in a narrow place ----------
+   Seven days across half a dashboard leave a card about forty pixels of text, and a name on one line was cut to
+   "Priy…" beside a dot while the card had height to spare. Where the calendar itself is narrow (measured on the
+   calendar, not the window: a half-width section is narrow on a wide desk) a title takes two lines, so "Priya Brooks"
+   is said whole, and the detail line steps aside for a reader (the title is what the day holds; the detail is its
+   aside, and it is on the agenda and in a wider month). Every card is then one height, the two-line one, so a bar keeps
+   its lane as it does anywhere. */
+  .calendar-list {
+    container: calendar / inline-size;
+  }
+  @container calendar (max-width: 800px) {
+    .calendar-grid .calendar-card {
+      padding: var(--space-1h) var(--space-2);
+    }
+    .calendar-grid .calendar-card,
+    .calendar-grid .calendar-slot,
+    .calendar-grid .calendar-card.has-line,
+    .calendar-grid .calendar-slot.has-line {
+      height: 40px;
+    }
+    .calendar-grid .calendar-card-title {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .calendar-grid .calendar-card-line {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  /* ---------- Spans behind the days (calendar `backdrop`) ----------
+   Another resource's rows — a blackout window — shade the days they cover in
+   their tone, mixed quiet into the surface, behind the records, which keep
+   their own ground. A span is named beside the day's number where it starts and
+   where it runs into a new week, so it adds no height to a day; where it opens
+   its record the name is a link's quiet button. A phone's agenda says a span
+   under the day it starts, with its days. */
+  .calendar-day[data-backdrop],
+  .calendar-backdrop {
+    --shade: var(--ink-subtle);
+  }
+  .calendar-day[data-backdrop],
+  .calendar-backdrop[data-tone] {
+    background: color-mix(in srgb, var(--shade) 9%, var(--surface));
+  }
+  :is(.calendar-day, .calendar-backdrop):is([data-backdrop='warn'], [data-tone='warn']) {
+    --shade: var(--status-warning);
+  }
+  :is(.calendar-day, .calendar-backdrop):is([data-backdrop='bad'], [data-tone='bad']) {
+    --shade: var(--status-critical);
+  }
+  :is(.calendar-day, .calendar-backdrop):is([data-backdrop='good'], [data-tone='good']) {
+    --shade: var(--status-good);
+  }
+  :is(.calendar-day, .calendar-backdrop):is([data-backdrop='info'], [data-tone='info']) {
+    --shade: var(--link);
+  }
+  .calendar-day .calendar-backdrop {
+    display: inline-block;
+    max-width: calc(100% - 32px);
+    margin-left: var(--space-2);
+    padding: 0;
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: none;
+    border: 0;
+    font: 500 var(--text-xs)/24px var(--sans);
+    color: var(--ink-muted);
+  }
+  button.calendar-backdrop {
+    cursor: pointer;
+  }
+  button.calendar-backdrop:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+  .calendar-agenda-backdrops {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2h);
+  }
+  .calendar-agenda .calendar-backdrop {
+    padding: var(--space-3) var(--space-4);
+    border: 0;
+    text-align: left;
+    font: 500 var(--text-base) var(--sans);
+    color: var(--ink);
+  }
+}
+/* A shaded day keeps its shade under the row's hover, which the structure layer sets for every day (structure.css);
+   said here, in that layer, so it travels with the calendar rather than in every first page. */
+@layer structure {
+  .app-mode .calendar-grid tbody tr:hover > td.calendar-day[data-backdrop] {
+    background: color-mix(in srgb, var(--shade) 9%, var(--surface));
+  }
+}

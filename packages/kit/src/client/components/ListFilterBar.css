@@ -1,0 +1,76 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+/* An App list's filter bar (ListFilterBar.tsx): one search box, a quiet
+   "+ Status" per filter, and what is applied said as the list's own chips in
+   the same row. Only the search is a field, so only it wears the 3:1 edge;
+   the rest are buttons, quiet until they are pressed. */
+.applist-search { display: inline-flex; flex: 0 1 17rem; min-width: 10rem; }
+.applist-search-input {
+  box-sizing: border-box; width: 100%; min-height: 30px; margin: 0; padding: 0 var(--space-3h);
+  font: var(--text-base) var(--sans); color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--line-control); border-radius: var(--radius);
+}
+/* In a look it is dressed as the look's other fields are (themeFamilies.css):
+   on the pane's surface, at the look's field radius — square where a look
+   names none, as Mono under an App's own radius. */
+.applist-search-input::placeholder { color: var(--ink-subtle); opacity: 1; }
+/* Focus is the house ring, never an edge colour alone (design.md, Access). */
+.applist-search-input:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
+
+.applist-slot { display: inline-flex; }
+/* A filter not yet asked for: its name behind a +, on a dashed hairline that
+   says "a place for a filter" without being a field. */
+.applist-add {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  box-sizing: border-box; min-height: 30px; margin: 0; padding: 0 var(--space-3h);
+  font: var(--text-sm) var(--sans); color: var(--ink-muted); white-space: nowrap;
+  background: transparent; cursor: pointer;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius);
+}
+.applist-add-mark { color: var(--ink-subtle); font-size: var(--text-md); line-height: 1; }
+.applist-add:hover, .applist-add[aria-expanded="true"] { color: var(--ink); border-color: var(--ink-muted); }
+/* The phone's one button for every picker is a control, not a place: a solid hairline. */
+.applist-sheet-open { border-style: solid; color: var(--ink); }
+@media (prefers-reduced-motion: no-preference) {
+  .applist-add, .applist-chip-open { transition: color var(--t-hover) var(--ease-out), border-color var(--t-hover) var(--ease-out); }
+}
+
+/* The list's chips, at the height of the row they sit in; a chip's words open its picker. */
+.applist-fields .applist-chip { box-sizing: border-box; min-height: 30px; padding: 0 var(--space-1) 0 0; gap: 0; font-size: var(--text-sm); }
+.applist-fields .applist-chip > .applist-chip-text { padding: 0 var(--space-2h) 0 var(--space-3h); }
+.applist-chip-open {
+  align-self: stretch; display: inline-flex; align-items: center; margin: 0;
+  border: 0; border-radius: var(--radius); background: none; color: inherit; font: inherit; cursor: pointer;
+}
+.applist-chip-open:hover { color: var(--accent-ink); }
+.applist-fields .applist-chip-x { min-width: 24px; min-height: 24px; font-size: var(--text-md); }
+.applist-bar-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2h); flex-basis: 100%; }
+.applist-bar-chips:empty { display: none; }
+/* On a phone the row's controls are the large size (a Button's 40px), the sort's with them: a thumb's target. */
+@media (max-width: 600px) {
+  .applist-search { flex: 1 1 10rem; }
+  .applist-search-input, .applist-sheet-open, .applist-sort .dd-button { min-height: 40px; }
+}
+
+/* A picker: one box over the page, hairlines inside. */
+.filter-pop {
+  box-sizing: border-box; width: max-content; min-width: 15rem; max-width: min(22rem, var(--available-width, 22rem));
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+}
+.filter-pop:focus, .filter-pop:focus-visible { outline: none; }
+@media (prefers-reduced-motion: no-preference) {
+  /* A fade and nothing else: a transform on the popup would make it the
+     containing block of the reference typeahead's fixed list, which would
+     land away from its box until the transform ended. */
+  .filter-pop { transition: opacity var(--t-popover) var(--ease-out); @starting-style { opacity: 0; } }
+}
+.filter-pop .facet { border-top: 0; padding: var(--space-4) var(--space-4h) var(--space-3h); }
+.filter-pop .facet-clear { top: 12px; right: 14px; }
+.filter-pop .facet-values { max-height: min(18rem, 50vh); overflow-y: auto; }
+.filter-pop .applist-quick-text { box-sizing: border-box; width: 100%; min-height: 30px; }
+.filter-pop-foot { display: flex; justify-content: flex-end; padding: var(--space-3h) var(--space-4h) var(--space-4); border-top: 1px solid var(--line); }
+.filter-pop-foot .primary { min-height: 30px; }
+}

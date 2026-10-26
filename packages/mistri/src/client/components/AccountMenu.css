@@ -1,0 +1,39 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+.account-menu .account { display: inline-flex; align-items: center; gap: var(--space-2h); }
+.account-name { overflow: hidden; text-overflow: ellipsis; }
+.account-menu .account > :not(.account-name) { flex: none; }
+.account-menu-popup {
+  min-width: min(15rem, var(--available-width, 100vw - 16px));
+  max-width: min(22rem, var(--available-width, 100vw - 16px));
+  border-radius: var(--radius);
+}
+.account-menu-identity {
+  display: grid; gap: var(--space-2); padding: var(--space-3); margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line); font: var(--text-sm) var(--sans);
+  color: var(--ink); overflow-wrap: anywhere;
+}
+.account-menu-identity > :first-child { color: var(--ink-muted); font-size: var(--text-xs); }
+.account-menu-signout {
+  display: block; width: 100%; padding: var(--space-3); text-align: left;
+  background: transparent; border: 0; border-radius: var(--radius);
+  color: var(--ink); font: var(--text-sm) var(--sans);
+}
+.account-menu-signout:hover, .account-menu-signout:focus-visible, .account-menu-signout[data-highlighted] {
+  background: var(--accent-soft); color: var(--accent-ink);
+}
+/* The App's settings, between the account's own items and Sign out, set off by rules. */
+.account-menu-settings { margin: var(--space-2) 0; padding: var(--space-2) 0; border-block: 1px solid var(--line); }
+.account-menu-settings:first-child { margin-top: 0; }
+/* The tenant context, said and opened here on a phone only: at a desk the bar's own control says it (style.css). */
+.account-menu-context, .account-menu-context-sep { display: none; }
+@media (max-width: 700px) {
+  .account-menu .account { max-width: 9rem; }
+  /* The avatar alone: its caret was 14px the context's name needed. */
+  .account-menu .account-caret { display: none; }
+  .account-menu-context { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--space-2h); }
+  .account-menu-context-sep { display: block; height: 0; margin: var(--space-2) 0 var(--space-2); border-top: 1px solid var(--line); }
+  .account-menu-context bdi { font-weight: 600; overflow-wrap: anywhere; }
+  .account-menu-context-word { color: var(--ink-muted); }
+}
+}

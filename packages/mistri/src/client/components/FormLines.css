@@ -1,0 +1,430 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+  /* A record's lines: an order's lines as they read on paper — rows under a
+   hairline, a column laid out by its kind, figures right-aligned in tabular
+   numerals — that become a form only where they are touched. Names no colour
+   of its own. The widths are the columns' kinds, fixed, so nothing moves as
+   a figure grows under the typing or an amount is worked out. */
+  .form-lines {
+    min-width: 0;
+    margin: 20px 0 0;
+    padding: 0;
+    border: 0;
+  }
+  .form-lines > legend {
+    padding: 0;
+    margin: 0 0 var(--space-2h);
+    font: 600 var(--text-md) var(--sans);
+    color: var(--ink);
+  }
+  .form-lines-description {
+    margin: -2px 0 var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+  .form-lines-body {
+    --lines-figure: 7rem;
+    --lines-menu: 32px;
+    container-type: inline-size;
+    min-width: 0;
+  }
+  /* The handle: quiet until its row is under the pointer, and the keyboard's way to move a line as well as the pointer's. */
+  .lines-grip {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-item);
+    background: none;
+    color: var(--ink-subtle);
+    cursor: grab;
+    touch-action: none;
+  }
+  tr:hover .lines-grip,
+  .lines-grip:focus-visible {
+    color: var(--ink-muted);
+  }
+  .lines-thumb {
+    flex: none;
+    display: block;
+    width: 32px;
+    height: 32px;
+    overflow: hidden;
+    box-sizing: border-box;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-item);
+    background: var(--raised);
+  }
+  .lines-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .lines-ref-text {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+  }
+  /* The second line keeps its height while the record's is fetched, and on a line with none chosen yet: rows stand level. */
+  .lines-ref-sub {
+    display: block;
+    min-height: 15px;
+    padding-left: var(--space-1);
+    font: var(--text-xs)/15px var(--sans);
+    color: var(--ink-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .lines-choice {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3h);
+    min-width: 0;
+  }
+  .lines-choice .lines-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  .lines-choice-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .lines-choice-text .lines-ref-sub {
+    padding-left: 0;
+  }
+  .form-lines-foot {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3) var(--space-6);
+    margin-top: var(--space-2h);
+  }
+  .form-lines-foot .lines-add {
+    margin-left: 1px;
+  }
+  .form-lines-problem {
+    margin: 0;
+    color: var(--status-critical);
+    font: var(--text-sm) var(--sans);
+  }
+  /* The figures a form says as it is filled in: an order's summary, its values
+   under the amounts' column, the parts in the dim ink and the total in the
+   text's, over a hairline. A preview of what the record will hold. */
+  .form-live {
+    display: grid;
+    grid-template-columns: auto minmax(var(--lines-figure, 7rem), max-content);
+    margin: var(--space-4h) 0 0 auto;
+    width: max-content;
+  }
+  .form-lines-foot .form-live {
+    margin: var(--space-1) 0 0;
+    padding-right: var(--lines-menu);
+    min-width: 16rem;
+  }
+  .lines-summary-row {
+    display: contents;
+  }
+  .form-live dt {
+    padding: var(--space-1h) 0;
+    color: var(--ink-muted);
+    font: var(--text-base) var(--sans);
+    text-align: right;
+  }
+  .form-live dd {
+    margin: 0;
+    padding: var(--space-1h) var(--space-3) var(--space-1h) var(--space-6);
+    font: var(--text-base) var(--sans);
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .form-live .is-total :is(dt, dd) {
+    margin-top: var(--space-2h);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--line);
+    color: var(--ink);
+    font-size: var(--text-md);
+    font-weight: 600;
+  }
+
+  /* Narrower than a grid fits, the summary takes the width under Add line. */
+  @container (max-width: 34rem) {
+    .form-lines-foot {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .form-lines-foot .lines-add {
+      align-self: flex-start;
+    }
+    .form-lines-foot .form-live {
+      width: auto;
+      min-width: 0;
+      padding-right: 0;
+      grid-template-columns: 1fr auto;
+    }
+  }
+}
+
+/* A cell's box against the looks: every look dresses each input in a form as
+   a 36px field with its edge, and a line's cells are a table's, so what they
+   are is said in this layer, which a look does not reach — travelling with
+   the grid rather than in every first page. The box shows its edge where its
+   row is under the pointer and wears the house ring where it has the focus;
+   on a touch screen, with no pointer to show it, the edge is always there. */
+@layer structure {
+  /* The grid itself: the kit and every look pad and dress a table's cells, and these are a ledger's. */
+  .form-lines-grid {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font: var(--text-base) var(--sans);
+    color: var(--ink);
+  }
+  .form-lines-grid col.lines-col-grip {
+    width: 22px;
+  }
+  .form-lines-grid col.lines-col-number {
+    width: 4.5rem;
+  }
+  .form-lines-grid :is(col.lines-col-money, col.lines-col-figure) {
+    width: var(--lines-figure);
+  }
+  .form-lines-grid col.lines-col-control {
+    width: 10rem;
+  }
+  .form-lines-grid col.lines-col-menu {
+    width: var(--lines-menu);
+  }
+  /* A head's words start where its cells' words do: past the box's edge and inset. */
+  .form-lines-grid th {
+    padding: 0 9px 7px;
+    text-align: left;
+    font: 500 var(--text-sm) var(--sans);
+    color: var(--ink-muted);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .form-lines-grid th:is(.is-number, .is-money, .is-figure) {
+    text-align: right;
+  }
+  .form-lines-grid td {
+    padding: var(--space-2) 0;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--line);
+  }
+  .form-lines-grid td.lines-figure {
+    padding-right: 9px;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .form-lines-grid td.lines-handle,
+  .form-lines-grid td.lines-menu {
+    text-align: center;
+  }
+  .form-lines-grid .insert-missing {
+    display: block;
+    margin: var(--space-1h) 0 0 var(--space-3);
+    color: var(--status-critical);
+    font: var(--text-sm) var(--sans);
+  }
+  .form-lines-grid tr.lines-empty td {
+    padding: var(--space-4h) 9px;
+    color: var(--ink-muted);
+  }
+  /* Narrower than a grid fits — a drawer, a phone — each line is a block of
+     its own under a hairline: what it is and its menu across the top, its
+     figures in a row under them, each with its column's name. */
+  @container (max-width: 34rem) {
+    .form-lines-grid,
+    .form-lines-grid tbody {
+      display: block;
+    }
+    .form-lines-grid :is(thead, colgroup) {
+      display: none;
+    }
+    .form-lines-grid tbody tr {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: var(--space-2h) var(--space-3);
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--line);
+    }
+    /* The handle stands in the line's margin, so what it is and its figures start at one edge. */
+    .form-lines-grid.is-ordered tbody tr:not(.lines-empty) {
+      padding-left: var(--space-6);
+    }
+    /* A line is one block: the grid's row tint would paint each of its cells as a tile of its own. */
+    .form-lines-grid tbody td {
+      display: block;
+      padding: 0;
+      border: 0;
+      background: none;
+    }
+    .form-lines-grid td.lines-handle {
+      position: absolute;
+      left: 0;
+      top: 10px;
+    }
+    /* What the line is takes the top row whole, beside its menu; the figures wrap under it. */
+    .form-lines-grid td.lines-lead {
+      order: 1;
+      flex: 1 1 calc(100% - 40px);
+      min-width: 0;
+    }
+    .form-lines-grid td.lines-menu {
+      order: 2;
+      flex: none;
+      width: 32px;
+      padding-top: var(--space-2);
+    }
+    .form-lines-grid td:not(.lines-handle, .lines-lead, .lines-menu) {
+      order: 3;
+      flex: 1 1 0;
+      min-width: 4.5rem;
+    }
+    .form-lines-grid td:not(.lines-handle, .lines-lead, .lines-menu)::before {
+      content: attr(data-label);
+      display: block;
+      margin: 0 9px var(--space-1);
+      font: var(--text-xs)/15px var(--sans);
+      color: var(--ink-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .form-lines-grid td:is(.is-number, .is-money, .is-figure)::before {
+      text-align: right;
+    }
+    .form-lines-grid td.lines-figure {
+      padding: 0 9px 0 0;
+      line-height: 32px;
+    }
+    .form-lines-grid tr.lines-empty,
+    .form-lines-grid tr.lines-empty td {
+      display: block;
+    }
+  }
+  .form-lines-grid .lines-box {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    min-height: 32px;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: transparent;
+  }
+  .form-lines-grid .lines-box.lines-ref {
+    gap: var(--space-3);
+    padding-left: var(--space-1h);
+  }
+  .form-lines-grid .lines-box.lines-ref.has-thumb {
+    min-height: 40px;
+    padding-block: var(--space-1h);
+  }
+  .form-lines-grid tr:hover .lines-box,
+  .form-lines-grid .lines-box:focus-within {
+    border-color: var(--line-control);
+  }
+  .form-lines-grid .lines-box:focus-within {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 0;
+    border-color: var(--focus);
+  }
+  .form-lines-grid td.is-invalid .lines-box {
+    border-color: var(--status-critical);
+  }
+  @media (hover: none) {
+    .form-lines-grid .lines-box {
+      border-color: var(--line-control);
+    }
+  }
+  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input, .dd-button, input) {
+    min-height: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--ink);
+    font: var(--text-base) var(--sans);
+    line-height: 20px;
+  }
+  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input, .dd-button, input):focus-visible,
+  .form-lines-grid .lines-box .picker:focus-within {
+    outline: none;
+  }
+  .form-lines-grid .lines-box :is(.lines-input, .lines-control input, .dd-button) {
+    width: 100%;
+    height: 30px;
+    padding: 0 var(--space-3);
+  }
+  .form-lines-grid .lines-input.is-figure {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .form-lines-grid .lines-money .lines-affix {
+    flex: none;
+    padding-left: var(--space-3);
+    color: var(--ink-subtle);
+    font: var(--text-base) var(--sans);
+  }
+  .form-lines-grid .lines-money .lines-input {
+    padding-left: var(--space-2);
+  }
+  .form-lines-grid .lines-control {
+    flex: 1 1 auto;
+  }
+  .form-lines-grid .lines-control > * {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .form-lines-grid .lines-ref .picker {
+    flex-wrap: nowrap;
+    width: 100%;
+    padding: 0 var(--space-6) 0 0;
+  }
+  .form-lines-grid .lines-ref .picker-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 30px;
+    padding: 0 var(--space-1);
+  }
+  .form-lines-grid .lines-ref.has-sub .picker-input {
+    height: 19px;
+  }
+  .form-lines-grid :is(.picker-input, .lines-input)::placeholder {
+    color: var(--ink-subtle);
+  }
+  .form-lines-grid tr:not(:hover):not(:focus-within) .picker-clear {
+    visibility: hidden;
+  }
+  /* The row's menu fits its column in every look: a look dresses a button as a field-height control, and this is a quiet glyph. */
+  .form-lines-grid .row-actions-trigger {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    min-height: 0;
+    padding: 0;
+    border-color: transparent;
+    background: none;
+    box-shadow: none;
+  }
+}

@@ -1,0 +1,136 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role web_admin — the App
+auth rows policy — the App
+source keystone connection "keystone" — the App
+source keystone default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource applicant access write — the App
+resource lead access write — the App
+resource lead_activity access write — the App
+role web_admin read applicant — the App
+role web_admin read dealer — the App
+role web_admin read dealer_site — the App
+role web_admin read lead — the App
+role web_admin read lead_activity — the App
+role web_admin read program — the App
+role web_admin read vehicle — the App
+role web_admin read vehicle_photo — the App
+role web_admin fields dealer read city — the App
+role web_admin fields dealer read id — the App
+role web_admin fields dealer read name — the App
+role web_admin fields dealer read phone — the App
+role web_admin fields dealer read state — the App
+role web_admin fields dealer read street — the App
+role web_admin fields dealer read zip — the App
+role web_admin fields vehicle read body — the App
+role web_admin fields vehicle read condition — the App
+role web_admin fields vehicle read dealer_id — the App
+role web_admin fields vehicle read description — the App
+role web_admin fields vehicle read drivetrain — the App
+role web_admin fields vehicle read est_payment — the App
+role web_admin fields vehicle read exterior_color — the App
+role web_admin fields vehicle read featured — the App
+role web_admin fields vehicle read features — the App
+role web_admin fields vehicle read fuel — the App
+role web_admin fields vehicle read id — the App
+role web_admin fields vehicle read interior_color — the App
+role web_admin fields vehicle read list_price — the App
+role web_admin fields vehicle read listed_on — the App
+role web_admin fields vehicle read make — the App
+role web_admin fields vehicle read mileage — the App
+role web_admin fields vehicle read model — the App
+role web_admin fields vehicle read received_on — the App
+role web_admin fields vehicle read sold_on — the App
+role web_admin fields vehicle read status — the App
+role web_admin fields vehicle read stock_number — the App
+role web_admin fields vehicle read trim — the App
+role web_admin fields vehicle read version — the App
+role web_admin fields vehicle read vin — the App
+role web_admin fields vehicle read year — the App
+public read dealer — the App
+public read dealer_site — the App
+public read program — the App
+public read vehicle — the App
+public read vehicle_photo — the App
+public fields dealer read city — the App
+public fields dealer read id — the App
+public fields dealer read name — the App
+public fields dealer read phone — the App
+public fields dealer read state — the App
+public fields dealer read street — the App
+public fields dealer read zip — the App
+public fields dealer_site read about — the App
+public fields dealer_site read accent_color — the App
+public fields dealer_site read brand_color — the App
+public fields dealer_site read contact_email — the App
+public fields dealer_site read contact_phone — the App
+public fields dealer_site read dealer_id — the App
+public fields dealer_site read headline — the App
+public fields dealer_site read hours — the App
+public fields dealer_site read id — the App
+public fields dealer_site read logo_text — the App
+public fields dealer_site read published — the App
+public fields dealer_site read show_prices — the App
+public fields dealer_site read tagline — the App
+public fields dealer_site read version — the App
+public fields program read active — the App
+public fields program read advertised — the App
+public fields program read base_apr — the App
+public fields program read code — the App
+public fields program read description — the App
+public fields program read id — the App
+public fields program read max_amount — the App
+public fields program read max_ltv_pct — the App
+public fields program read max_mileage — the App
+public fields program read max_term — the App
+public fields program read max_vehicle_age — the App
+public fields program read min_score — the App
+public fields program read name — the App
+public fields program read tier — the App
+public fields vehicle read body — the App
+public fields vehicle read condition — the App
+public fields vehicle read dealer_id — the App
+public fields vehicle read description — the App
+public fields vehicle read drivetrain — the App
+public fields vehicle read est_payment — the App
+public fields vehicle read exterior_color — the App
+public fields vehicle read featured — the App
+public fields vehicle read features — the App
+public fields vehicle read fuel — the App
+public fields vehicle read id — the App
+public fields vehicle read interior_color — the App
+public fields vehicle read list_price — the App
+public fields vehicle read listed_on — the App
+public fields vehicle read make — the App
+public fields vehicle read mileage — the App
+public fields vehicle read model — the App
+public fields vehicle read received_on — the App
+public fields vehicle read sold_on — the App
+public fields vehicle read status — the App
+public fields vehicle read stock_number — the App
+public fields vehicle read trim — the App
+public fields vehicle read version — the App
+public fields vehicle read vin — the App
+public fields vehicle read year — the App
+public fields vehicle_photo read byte_size — the App
+public fields vehicle_photo read caption — the App
+public fields vehicle_photo read content_type — the App
+public fields vehicle_photo read data — the App
+public fields vehicle_photo read dealer_id — the App
+public fields vehicle_photo read file_name — the App
+public fields vehicle_photo read id — the App
+public fields vehicle_photo read position — the App
+public fields vehicle_photo read thumbnail — the App
+public fields vehicle_photo read vehicle_id — the App
+public form apply runs command applyForFinancing version 1 — the App
+public form ask runs command askAboutVehicle version 1 — the App
+public form test-drive runs command requestTestDrive version 1 — the App
+
+contract applyForFinancing v1 f87177aa69d8
+contract askAboutVehicle v1 219ae6e20600
+contract requestTestDrive v1 817dc4708bf5

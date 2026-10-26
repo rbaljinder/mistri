@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "lib": [
+      "ES2023",
+      "DOM"
+    ],
+    "jsx": "react-jsx",
+    "types": [
+      "node"
+    ],
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "paths": {
+      "@mistriwork/mistri/commands": [
+        "../../../../../packages/mistri/src/server/commands.ts"
+      ],
+      "@mistriwork/mistri/jobs": [
+        "../../../../../packages/mistri/src/server/jobs.ts"
+      ],
+      "@mistriwork/mistri/workflows": [
+        "../../../../../packages/mistri/src/server/workflows.ts"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "pages/*.page.tsx"
+  ]
+}

@@ -1,0 +1,49 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order).
+   The Branding form is loaded on demand (Dashboard.tsx), so none of it stands in a first paint. */
+@layer components {
+/* The fields on the left, the preview beside them: quiet and dense, one column on a phone. */
+.branding-form { display: grid; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+@media (max-width: 720px) { .branding-form { grid-template-columns: minmax(0, 1fr); } }
+.branding-form-fields { display: grid; gap: var(--space-4h); min-width: 0; }
+.branding-form-note { margin: 0; color: var(--ink-muted); font-size: var(--text-base); }
+.branding-form-logo, .branding-form-accent { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.branding-form-logo { flex-wrap: wrap; }
+/* The logo's box is the bar's, 96 by 24 at least, so what is seen here is what the bar holds. With no logo the sentence
+   that stands in for it wraps inside the box, which grows to hold it, rather than spilling onto the label above. */
+.branding-form-logo-box { display: inline-flex; align-items: center; min-width: 96px; max-width: 12rem; min-height: 24px; flex: 0 1 auto; color: var(--ink-subtle); font-size: var(--text-sm); line-height: 1.3; }
+/* The dark logo is judged on a dark ground, as it will be drawn. */
+.branding-form-logo-box--dark { background: var(--ink); color: var(--surface); padding: var(--space-2) var(--space-3); }
+.branding-form-logo-box img, .branding-preview img { display: block; width: 96px; height: 24px; object-fit: contain; object-position: left center; }
+.branding-form-accent input[type="color"] { width: 32px; height: 32px; flex: none; padding: var(--space-1); border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface); }
+.branding-form-accent .field-control { width: 8rem; font-family: var(--mono); }
+.branding-form .form-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-2); }
+.branding-form-status { flex: 1; margin: 0; color: var(--ink-muted); font-size: var(--text-base); }
+/* The preview wears the tenant's colors through its own properties, never the page's: what is drawn is the draft. */
+.branding-preview { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-4); min-width: 0; }
+.branding-preview figure { display: grid; gap: var(--space-2); align-content: start; margin: 0; min-width: 0; }
+.branding-preview figcaption { color: var(--ink-muted); font: 600 var(--text-xs) var(--sans); text-transform: uppercase; letter-spacing: 0.04em; }
+.branding-preview figure > div { min-width: 0; min-height: 64px; box-sizing: border-box; border: 1px solid var(--bp-line); border-radius: var(--bp-radius); background: var(--bp-surface); color: var(--bp-ink); font: var(--text-base) var(--sans); }
+/* The bar is the width of a page, so it takes the preview's whole row; on a narrow one the name gives way, never the menu. */
+.branding-preview figure:first-child { grid-column: 1 / -1; }
+.branding-preview .branding-preview-shell { display: flex; align-items: center; gap: var(--space-3h); padding: 0 var(--space-4); overflow: hidden; background: var(--bp-nav); color: var(--bp-nav-ink); }
+.branding-preview-mark { flex: none; }
+.branding-preview-mark:empty { display: none; }
+.branding-preview-shell strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.branding-preview-nav { flex: none; white-space: nowrap; padding: var(--space-1h) var(--space-3); border-radius: var(--bp-radius); color: var(--bp-nav-ink); }
+.branding-preview-nav[data-current] { background: var(--bp-accent-soft); color: var(--bp-nav-accent); font-weight: 600; }
+.branding-preview-record { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3h) var(--space-4); }
+/* The name takes what is left of the row and may not shrink past a few words; when the pill and the button do not fit
+   beside it they wrap beneath, so no card is wider than its cell and none is cut by the next. */
+.branding-preview-record strong { flex: 1 1 7rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(15px * var(--type-k)); }
+.branding-preview-pill { padding: var(--space-1) var(--space-3); border-radius: 999px; background: var(--bp-accent-soft); color: var(--bp-accent); font-size: var(--text-sm); font-weight: 600; }
+.branding-preview-button { display: inline-block; padding: var(--space-2) var(--space-3h); border-radius: var(--bp-radius); background: var(--bp-accent); color: var(--bp-surface); font-size: var(--text-sm); font-weight: 600; }
+.branding-preview-stat { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: var(--space-1) var(--space-4); padding: var(--space-3h) var(--space-4); }
+.branding-preview-stat > span:first-child { grid-column: 1 / -1; color: var(--bp-muted); font-size: var(--text-sm); }
+.branding-preview-stat strong { font-size: calc(22px * var(--type-k)); font-variant-numeric: tabular-nums; }
+.branding-preview-bars { display: flex; align-items: end; gap: var(--space-1h); height: 28px; }
+.branding-preview-bars i { width: 6px; background: var(--bp-chart); }
+.branding-preview .branding-preview-email { display: grid; gap: var(--space-3); padding: 0 0 var(--space-4); background: var(--bp-ground); }
+.branding-preview-email-head { display: flex; align-items: center; height: 40px; padding: 0 var(--space-4); border-bottom: 3px solid var(--bp-accent); background: var(--bp-surface); }
+.branding-preview-email p { margin: 0; padding: 0 var(--space-4); }
+.branding-preview-email .branding-preview-button { justify-self: start; margin-left: var(--space-4); }
+}

@@ -1,0 +1,25 @@
+/* Pay history. Tokens only, so each look and both modes dress it; served
+   inside @layer components and scoped to the component's own element. */
+.c-payroll-timeline { display: grid; gap: 6px; min-width: 0; }
+.c-payroll-timeline-rule { position: relative; height: 34px; margin: 0; padding: 0; list-style: none; border-bottom: 1px solid var(--line); }
+.c-payroll-timeline-period {
+  position: absolute; top: 6px; height: 12px; min-width: 3px; padding: 0;
+  border: 1px solid var(--surface); border-radius: var(--radius);
+  background: var(--line-strong, var(--line)); cursor: pointer;
+}
+.c-payroll-timeline-run[data-status="paid"] .c-payroll-timeline-period { background: var(--ink-muted); }
+.c-payroll-timeline-run[aria-current="true"] .c-payroll-timeline-period { background: var(--accent); }
+.c-payroll-timeline-period:hover { background: var(--ink); }
+.c-payroll-timeline-period:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.c-payroll-timeline-paid { position: absolute; bottom: 0; width: 1px; margin-left: -1px; height: 8px; background: var(--ink-muted); }
+.c-payroll-timeline-run[aria-current="true"] .c-payroll-timeline-paid { background: var(--accent); }
+.c-payroll-timeline-axis { position: relative; height: 16px; overflow: hidden; }
+.c-payroll-timeline-month { position: absolute; top: 0; font-size: 12px; color: var(--ink-muted); white-space: nowrap; }
+.c-payroll-timeline-caption { margin: 0; font-size: 12px; color: var(--ink-muted); }
+
+.c-payroll-timeline-list { margin: 0; padding: 0; }
+.c-payroll-timeline-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.c-payroll-timeline-item[aria-current="true"] { border-left: 2px solid var(--accent); padding-left: 10px; }
+.c-payroll-timeline-open { justify-self: start; min-height: 44px; padding: 0; text-align: left; }
+.c-payroll-timeline-stage { grid-column: 2; grid-row: 1; }
+.c-payroll-timeline-dates { grid-column: 1; grid-row: 2; font-size: 12px; color: var(--ink-muted); }

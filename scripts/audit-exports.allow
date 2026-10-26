@@ -1,0 +1,2 @@
+# Allowlist for scripts/audit-exports.mjs: "<file> <name>" per line.
+# Today's exports that no other file mentions. It only shrinks.

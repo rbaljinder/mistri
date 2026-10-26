@@ -1,0 +1,20 @@
+/* A file's preview: its own sheet, fetched with the preview (AttachmentList.tsx loads it on demand), so no first
+   page carries the rules of a dialog most visits never open. */
+/* The preview wears the lightbox (page.css); a PDF fills the stage, and
+   text is a page of monospace on the page's own ground, readable in both
+   themes. */
+.file-preview-name { font: 500 var(--text-md) var(--sans); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-preview-actions { flex: none; display: inline-flex; gap: var(--space-3); }
+.file-preview-download { text-decoration: none; }
+.file-preview-stage.is-pdf, .file-preview-stage.is-text, .file-preview-stage.is-video, .file-preview-stage.is-audio { display: flex; flex-direction: column; align-items: stretch; justify-content: center; }
+.file-preview-frame { flex: 1; width: 100%; min-height: 0; border: 0; border-radius: var(--radius); background: var(--surface); }
+/* A recording on the stage: a video as large as the stage lets it be, keeping its shape; a sound as one wide bar. */
+.file-preview-media { display: block; max-width: 100%; max-height: 100%; margin: auto; border-radius: var(--radius); }
+.file-preview-media.is-audio { width: min(560px, 100%); }
+.file-preview-text { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.file-preview-text pre {
+  flex: 1; min-height: 0; margin: 0; padding: var(--space-5); overflow: auto; border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); font: var(--text-base)/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.file-preview-note { margin: 0; font: 400 var(--text-base) var(--sans); color: var(--lightbox-ink); opacity: 0.86; text-align: center; }
+.file-preview-message { align-self: center; max-width: 36rem; padding: var(--space-5); border-radius: var(--radius); background: var(--surface); color: var(--ink); }

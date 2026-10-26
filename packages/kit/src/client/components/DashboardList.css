@@ -1,0 +1,7 @@
+/* A component's own rules, brought with it (DashboardList.tsx, loaded on demand): after the base, before any look. */
+@layer components {
+/* A dashboard list that works as its room does: its controls sit in the section, on its edge. */
+.dash-list-works .applist-controls { padding-inline: 0; }
+/* The section's head names the list; the list's own head row says only the chips it holds, else nothing. */
+.dash-list-works .applist-head:not(:has(.applist-chip)) { display: none; }
+}
