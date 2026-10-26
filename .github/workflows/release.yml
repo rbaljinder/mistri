@@ -181,7 +181,11 @@ jobs:
       # on those before it at exactly this version (tablewalk on engine, kit
       # and ui; create-mistri on mistri), so publishing one alone installs
       # nothing.
-      - run: npm publish --workspaces --access public
+      #
+      # A prerelease (1.0.0-rc.1) goes out under `next`, never `latest`: npm refuses one without a --tag.
+      - run: |
+          tag="$(node -p "require('./package.json').version.includes('-') ? 'next' : 'latest'")"
+          npm publish --workspaces --access public --tag "$tag"
 
   # Built and pushed only after npm has published, so the image can never name
   # a version the registry does not have.
