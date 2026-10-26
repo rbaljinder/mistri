@@ -129,7 +129,8 @@ test('after a reload the saved steps read as saved and not shown; Change re-ente
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument());
   expect(screen.getByText(/Your application is saved/)).toBeInTheDocument();
   expect(screen.getAllByText('Saved — not shown for your privacy')).toHaveLength(2);
-  expect(unloadBlocked()).toBe(true);
+  // Armed by the effect that follows the resumed review's render, which a loaded runner can draw first.
+  await waitFor(() => expect(unloadBlocked()).toBe(true));
   fireEvent.click(screen.getByRole('button', { name: 'Change Address' }));
   await waitFor(() => expect(screen.getByLabelText('City (required)')).toHaveValue(''));
   fireEvent.change(screen.getByLabelText('City (required)'), { target: { value: 'Paris' } });
