@@ -1,0 +1,205 @@
+/**
+ * Turning a refused write into an answer.
+ *
+ * SQLite says `FOREIGN KEY constraint failed`. That is the whole message: no
+ * column, no value, no target — on a table that may have six foreign keys.
+ * Postgres names its constraint and MySQL names the columns, so the same
+ * mistake is legible on one engine and opaque on another, which is its own
+ * problem for anything meant to work the same everywhere.
+ *
+ * tablewalk knows the graph. It knows `invoice.customer_id` points at
+ * `customer.id`, it knows what value the caller sent, and on the failure path
+ * it can afford one indexed lookup per candidate to find out which reference
+ * has nothing behind it. So the answer becomes "customer_id = 9999 has no
+ * matching customer.id", which is the difference between an agent retrying
+ * usefully and an agent retrying the same statement.
+ *
+ * The engine's own words are kept in front. They are accurate, they are what
+ * a person will search for, and a paraphrase that dropped them would be
+ * throwing away the one part that is certainly true.
+ */
+import type { Adapter } from '../adapters/adapter.js';
+import { findTable, referencesFrom, type DatabaseSchema } from '../shared/schema.js';
+
+/** Every engine's way of saying a foreign key was not satisfied. */
+const FOREIGN_KEY = /foreign key|violates foreign key constraint|a foreign key constraint fails/i;
+
+type Values = Record<string, unknown>;
+
+/** Which rule the engine says the write broke, or undefined where its error is
+ * not a constraint violation this knows by code. One table for all three
+ * engines — SQLite's extended result codes, PostgreSQL's SQLSTATEs,
+ * MySQL/MariaDB's errnos — so a caller asking "was this permanent?" and one
+ * asking "which rule?" can never disagree. Error text is never consulted. */
+type WriteFailureKind = 'unique' | 'reference' | 'required' | 'check';
+export function writeFailureKind(error: unknown): WriteFailureKind | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const { code, errcode, errno } = error as { code?: unknown; errcode?: unknown; errno?: unknown };
+  // PRIMARY KEY and UNIQUE; PostgreSQL's unique and exclusion; a duplicate key.
+  if (errcode === 1555 || errcode === 2067 || code === '23505' || code === '23P01' || errno === 1062) return 'unique';
+  if (errcode === 787 || code === '23503' || errno === 1452) return 'reference';
+  if (errcode === 1299 || code === '23502' || errno === 1048) return 'required';
+  if (errcode === 275 || code === '23514' || errno === 3819 || errno === 4025) return 'check';
+  return undefined;
+}
+
+/** A name as a column is spelled, and nothing else: whatever is not one is dropped, never shown. */
+const COLUMN_NAME = /^[A-Za-z_][\w$]{0,127}$/;
+
+/**
+ * The columns a refused write broke a rule on, by name only — never a value —
+ * for a form to put the message beside the field. Only an error `writeFailureKind`
+ * already recognized by its code is read, and only the part of it each engine
+ * fills with names: PostgreSQL's `column`, the `Key (…)=` head of its detail
+ * (the values follow the `=`), and the default `<table>_<column>_check` name of
+ * a check; SQLite's `NOT NULL`/`UNIQUE constraint failed: t.c` (names only) and a
+ * check whose expression starts with its column; MySQL's `Column '…' cannot be
+ * null`, the key a duplicate names (the last quoted word, after the value) and a
+ * reference's `FOREIGN KEY (…)`. `parent`: a delete or update of a row others
+ * still point at, where the column is theirs, not this form's. Undefined where
+ * the engine said no column (SQLite's `FOREIGN KEY constraint failed`).
+ */
+export function constraintColumns(error: unknown): { kind: WriteFailureKind; columns: string[]; parent?: true } | undefined {
+  const kind = writeFailureKind(error);
+  if (!kind) return undefined;
+  const e = error as {
+    code?: unknown;
+    errno?: unknown;
+    message?: unknown;
+    column?: unknown;
+    detail?: unknown;
+    constraint?: unknown;
+    table?: unknown;
+  };
+  const message = typeof e.message === 'string' ? e.message : '';
+  const named = (names: (string | undefined)[], parent?: true) => {
+    const columns = names.map((name) => name?.trim() ?? '').filter((name) => COLUMN_NAME.test(name));
+    return columns.length && columns.length === names.length
+      ? { kind, columns: [...new Set(columns)], ...(parent ? { parent } : {}) }
+      : undefined;
+  };
+  if (typeof e.code === 'string' && e.code.startsWith('23')) {
+    if (kind === 'required') return typeof e.column === 'string' ? named([e.column]) : undefined;
+    if (kind === 'check') {
+      const table = typeof e.table === 'string' ? e.table : '';
+      const constraint = typeof e.constraint === 'string' ? e.constraint : '';
+      const at = table && constraint.startsWith(`${table}_`) && constraint.endsWith('_check') ? constraint.slice(table.length + 1, -6) : '';
+      return at ? named([at]) : undefined;
+    }
+    const head = typeof e.detail === 'string' ? /^Key \(([^()]*)\)=\(/.exec(e.detail) : null;
+    if (!head) return undefined;
+    const parent =
+      kind === 'reference' && typeof e.detail === 'string' && /is still referenced from table/.test(e.detail) ? true : undefined;
+    return named(head[1].split(','), parent);
+  }
+  if (typeof e.errno === 'number') {
+    if (e.errno === 1048) return named([/^Column '([^']+)' cannot be null$/.exec(message)?.[1]]);
+    if (e.errno === 1062) {
+      const key = /for key '([^']+)'$/.exec(message)?.[1];
+      return key && key !== 'PRIMARY' && !key.endsWith('.PRIMARY') ? named([key.split('.').pop()]) : undefined;
+    }
+    if (e.errno === 1452 || e.errno === 1451) {
+      const columns = /FOREIGN KEY \(([^()]*)\) REFERENCES/.exec(message)?.[1];
+      return columns
+        ? named(
+            columns.split(',').map((name) => name.trim().replace(/^`|`$/g, '')),
+            e.errno === 1451 ? true : undefined,
+          )
+        : undefined;
+    }
+    return undefined;
+  }
+  /* SQLite: the message after the colon is the schema's own words — table.column, or the check's text. */
+  const said = /^(NOT NULL|UNIQUE|CHECK) constraint failed: (.+)$/.exec(message);
+  if (!said) return undefined;
+  if (said[1] === 'CHECK') return named([/^([A-Za-z_][\w$]*)\s*(?:[<>=!]|\bin\b|\bbetween\b|\bis\b|\blike\b)/i.exec(said[2])?.[1]]);
+  const parts = said[2].split(',').map((part) => part.trim());
+  return named(parts.map((part) => (part.includes('.') ? part.slice(part.indexOf('.') + 1) : undefined)));
+}
+
+/**
+ * A value the engine could not read as its column's type — words in a search
+ * of a number column, a date that is no date. The caller's to change, so a 400
+ * and a sentence, never a 500 that sends them to look at the server. By code
+ * only: PostgreSQL's data exceptions for a value's text, MySQL's in strict
+ * mode. SQLite takes any value in any column, so it has none.
+ */
+export function wrongTypeValue(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { code, errno } = error as { code?: unknown; errno?: unknown };
+  return code === '22P02' || code === '22003' || code === '22007' || code === '22008' || errno === 1292 || errno === 1366 || errno === 1367;
+}
+
+/** Only recognized constraint codes acknowledge rejection; error text is not proof. */
+export function writeFailureOutcome(error: unknown): 'rejected' | 'unknown' {
+  return writeFailureKind(error) ? 'rejected' : 'unknown';
+}
+
+export const insertFailureOutcome = writeFailureOutcome;
+
+/**
+ * The referenced row that is missing, if the message says one is.
+ *
+ * Returns the original message unchanged when this is not a foreign-key
+ * failure, when the write named no reference column, or when every reference
+ * it did name turns out to be satisfied — that last case matters, because a
+ * concurrent delete or a deferred constraint can produce a failure this
+ * cannot explain, and inventing an explanation for it would be worse than
+ * the bare message.
+ */
+export async function explainWriteFailure(
+  adapter: Adapter,
+  schema: DatabaseSchema,
+  tableId: string,
+  values: Values,
+  message: string,
+): Promise<string> {
+  if (!FOREIGN_KEY.test(message)) return message;
+  const table = findTable(schema, tableId);
+  if (!table) return message;
+
+  for (const fk of referencesFrom(schema, tableId)) {
+    const sent = fk.from.columns.map((c) => values[c]);
+    /* Only references this write actually set. A column left out is the
+       database's own default or null, and either way not what the caller
+       typed — pointing at it would send them to the wrong line. */
+    if (sent.some((v) => v === undefined || v === null)) continue;
+
+    const target = findTable(schema, fk.to.table);
+    if (!target) continue;
+
+    let exists: boolean;
+    try {
+      const found = await adapter.query({
+        table: fk.to.table,
+        columns: fk.to.columns,
+        filter: {
+          groups: [
+            fk.to.columns.map((column, i) => ({
+              column,
+              op: '=' as const,
+              value: sent[i] as string | number,
+            })),
+          ],
+        },
+        limit: 1,
+        offset: 0,
+      });
+      exists = found.rows.length > 0;
+    } catch {
+      /* A lookup that itself fails proves nothing about the write. */
+      continue;
+    }
+    if (exists) continue;
+
+    const pairs = fk.from.columns.map((c, i) => `${c} = ${format(sent[i])}`).join(', ');
+    const targetName = fk.to.columns.map((c) => `${target.name}.${c}`).join(', ');
+    return `${message} — ${pairs} has no matching ${targetName}. ` + `Insert that ${target.name} first, or point at one that exists.`;
+  }
+
+  return message;
+}
+
+function format(value: unknown): string {
+  return typeof value === 'number' || typeof value === 'boolean' ? String(value) : `"${String(value)}"`;
+}

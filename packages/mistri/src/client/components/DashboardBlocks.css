@@ -1,0 +1,96 @@
+/* Brought by the dashboard (Dashboard.tsx), which an App loads on demand, so none of it stands in an App's first
+   stylesheet: the date-range window button, the banner and the pipeline. */
+@layer components {
+/* The window as one button: the calendar, the dates it covers, a caret; a menu of the windows under it. Its height is
+   the segmented row's, so a dashboard that changes control does not move its sections. */
+.dash-window-button {
+  display: inline-flex; align-items: center; gap: var(--space-3); height: 32px; padding: 0 var(--space-4);
+  border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface);
+  color: var(--ink); font: 500 var(--text-sm) var(--sans); white-space: nowrap; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.dash-window-button:hover, .dash-window-button[data-popup-open] { border-color: var(--line-strong); }
+.dash-window-button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
+.dash-window-icon { flex: none; color: var(--ink-muted); }
+.dash-window-caret { flex: none; color: var(--ink-subtle); }
+.dash-window-list .more-tick { display: inline-block; width: 1em; }
+/* On a phone the button has its row to itself: its words change width with the window, and a row it shared with the
+   picks would wrap or unwrap under them at a pick, moving every section below. */
+@media (max-width: 720px) { .dash-window-menu { flex-basis: 100%; } }
+
+/* The banner: a note that introduces the dashboard. It is its own block, not a section in the look's box (the looks'
+   section rules pass it by), dressed by the `banner` recipe: here the tint, a ground a step into the accent. Its
+   height is its words'; a picture fills the right column behind them and is clipped to the corner, so a picture
+   arriving moves nothing. */
+.page-section.dash-banner {
+  position: relative; overflow: hidden; padding: 20px var(--space-6);
+  border: var(--panel-border-width, 1px) solid color-mix(in srgb, var(--accent) 14%, var(--line)); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.page-section.dash-banner:has(.has-image) { padding-right: 0; padding-block: 0; }
+.dashboard-note.is-banner { max-width: none; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
+.dashboard-note.is-banner.has-image { grid-template-columns: minmax(0, 1fr) minmax(0, 34%); min-height: 148px; }
+.dashboard-note.is-banner.has-image .dashboard-note-words { padding-block: 20px; padding-right: var(--space-6); }
+.dashboard-note-words { min-width: 0; max-width: 46rem; }
+.dashboard-note-picture { position: relative; align-self: stretch; }
+.dashboard-note-picture > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dashboard-note-eyebrow {
+  display: inline-block; margin-bottom: var(--space-3); padding: var(--space-1) var(--space-3); border-radius: var(--radius-item);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent-ink);
+  font: 600 var(--text-xs)/16px var(--sans); letter-spacing: 0.01em;
+}
+.dashboard-note.is-banner .dashboard-note-title { font-size: calc(19px * var(--type-k)); line-height: 1.3; }
+.dashboard-note.is-banner .dashboard-note-text { margin-top: var(--space-2h); font-size: var(--text-base); }
+.dashboard-note.is-banner .dashboard-note-action { gap: var(--space-2h); margin-top: var(--space-4h); }
+/* On a phone the picture leads, a band over the words. */
+@media (max-width: 720px) {
+  .page-section.dash-banner:has(.has-image) { padding: 0; }
+  .dashboard-note.is-banner.has-image { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-note.is-banner.has-image .dashboard-note-words { padding: var(--space-5) var(--space-5) var(--space-5); }
+  .dashboard-note-picture { order: -1; height: 120px; }
+}
+
+/* Steps: a breakdown as a row of cards, one per value in the column's order, an arrow between each. Every card is as
+   wide as the next and the row is laid out before the counts arrive (a blank figure holds the line), so nothing moves
+   when they do. The look's `steps` recipe dresses the cards; this is the flat one, on the surface with a hairline. */
+.dash-steps {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(max(8.5rem, 100% / var(--cols, 4)), 1fr));
+}
+/* Every card as tall as the tallest, its words from the top: a step with a longer note must not drop the others. */
+.dash-step { display: flex; align-items: stretch; min-width: 0; }
+.dash-step-card {
+  flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; align-content: start; gap: var(--space-3h) var(--space-4);
+  padding: var(--space-4h); border: var(--panel-border-width, 1px) solid var(--line); border-radius: var(--radius-lg); background: var(--surface);
+  font: inherit; color: inherit; text-align: left;
+}
+:is(button, a).dash-step-card { cursor: pointer; }
+a.dash-step-card { text-decoration: none; }
+:is(button, a).dash-step-card:hover { border-color: var(--line-strong); }
+:is(button, a).dash-step-card:hover .dash-step-title { color: var(--accent-ink); }
+:is(button, a).dash-step-card:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+.dash-step-mark {
+  display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  font: 600 var(--text-sm)/1 var(--sans); font-variant-numeric: tabular-nums;
+}
+.dash-step-mark:not([class*='tone-']) { background: var(--accent-soft); color: var(--accent-ink); }
+.dash-step-figure { grid-row: 1; grid-column: 2; justify-self: end; padding-inline-start: var(--space-3); font: 600 var(--text-xl)/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); margin-inline-start: var(--space-3); }
+.dash-step.no-mark .dash-step-figure { grid-column: 1 / -1; justify-self: start; padding-inline-start: 0; }
+.dash-step-words { grid-column: 1 / -1; display: grid; gap: var(--space-1h); min-width: 0; }
+.dash-step-title {
+  font: 600 var(--text-base)/1.3 var(--sans); color: var(--ink); text-wrap: balance; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.dash-step-note { font: var(--text-sm)/1.4 var(--sans); color: var(--ink-muted); }
+.dash-step-arrow { flex: none; align-self: center; margin: 0 var(--space-2h); color: var(--ink-subtle); }
+/* On a phone the steps stand in a column, each arrow pointing down to the next. */
+@media (max-width: 720px) {
+  .dash-steps { grid-template-columns: minmax(0, 1fr); }
+  .dash-step { flex-direction: column; align-items: stretch; }
+  .dash-step-card { flex: none; }
+  .dash-step-arrow { align-self: center; margin: var(--space-2) 0; transform: rotate(90deg); }
+}
+/* A custom section whose component draws nothing (a section for a role this reader does not hold) takes no place, as on
+   a record page. */
+.page-section.dash-custom:has(> .custom-section:empty) { display: none; }
+}

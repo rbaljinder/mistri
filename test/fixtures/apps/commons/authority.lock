@@ -1,0 +1,141 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up open — the App
+auth default-role member — the App
+auth rows all — the App
+source forum connection "commons" — the App
+source forum default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource board access write — the App
+resource member access write — the App
+resource post access write — the App
+resource post_revision access write — the App
+resource reaction access write — the App
+resource removal access write — the App
+resource report access write — the App
+resource tag access write — the App
+resource thread access write — the App
+resource thread_tag access write — the App
+resource thread_tag delete — the App
+resource warning access write — the App
+role admin read board — the App
+role admin read member — the App
+role admin read member_avatar — the App
+role admin read post — the App
+role admin read post_image — the App
+role admin read post_revision — the App
+role admin read reaction — the App
+role admin read removal — the App
+role admin read report — the App
+role admin read site_image — the App
+role admin read tag — the App
+role admin read thread — the App
+role admin read thread_tag — the App
+role admin read warning — the App
+role admin write board — the App
+role admin write tag — the App
+role admin write thread_tag — the App
+role admin command approvePost — features "moderation"
+role admin command dismissReport — features "moderation"
+role admin command editPost — features "posting"
+role admin command editProfile — features "posting"
+role admin command hidePost — features "moderation"
+role admin command joinCommunity — features "posting"
+role admin command lockThread — features "moderation"
+role admin command moveThread — features "moderation"
+role admin command pinThread — features "moderation"
+role admin command reactToPost — features "posting"
+role admin command removeReportedPost — features "moderation"
+role admin command replyToThread — features "posting"
+role admin command restorePost — features "moderation"
+role admin command startThread — features "posting"
+role admin command unlockThread — features "moderation"
+role admin command unpinThread — features "moderation"
+role admin command warnMember — features "moderation"
+role member read board — the App
+role member read member — the App
+role member read member_avatar — the App
+role member read post — the App
+role member read post_image — the App
+role member read post_revision — the App
+role member read reaction — the App
+role member read site_image — the App
+role member read tag — the App
+role member read thread — the App
+role member read thread_tag — the App
+role member command editPost — features "posting"
+role member command editProfile — features "posting"
+role member command joinCommunity — features "posting"
+role member command reactToPost — features "posting"
+role member command replyToThread — features "posting"
+role member command startThread — features "posting"
+role member fields member read account_id — the App
+role member fields member read bio — the App
+role member fields member read display_name — the App
+role member fields member read handle — the App
+role member fields member read id — the App
+role member fields member read joined_on — the App
+role member fields member read location — the App
+role member fields member read reputation — the App
+role member fields member read standing — the App
+role member fields member read team — the App
+role member fields member read version — the App
+role member fields member read website — the App
+role moderator read board — the App
+role moderator read member — the App
+role moderator read member_avatar — the App
+role moderator read post — the App
+role moderator read post_image — the App
+role moderator read post_revision — the App
+role moderator read reaction — the App
+role moderator read removal — the App
+role moderator read report — the App
+role moderator read site_image — the App
+role moderator read tag — the App
+role moderator read thread — the App
+role moderator read thread_tag — the App
+role moderator read warning — the App
+role moderator write thread_tag — the App
+role moderator command approvePost — features "moderation"
+role moderator command dismissReport — features "moderation"
+role moderator command editPost — features "posting"
+role moderator command editProfile — features "posting"
+role moderator command hidePost — features "moderation"
+role moderator command joinCommunity — features "posting"
+role moderator command lockThread — features "moderation"
+role moderator command moveThread — features "moderation"
+role moderator command pinThread — features "moderation"
+role moderator command reactToPost — features "posting"
+role moderator command removeReportedPost — features "moderation"
+role moderator command replyToThread — features "posting"
+role moderator command restorePost — features "moderation"
+role moderator command startThread — features "posting"
+role moderator command unlockThread — features "moderation"
+role moderator command unpinThread — features "moderation"
+role moderator command warnMember — features "moderation"
+public read board — the App
+public read member — the App
+public read member_avatar — the App
+public read post — the App
+public read post_image — the App
+public read post_revision — the App
+public read reaction — the App
+public read site_image — the App
+public read tag — the App
+public read thread — the App
+public read thread_tag — the App
+public fields member read bio — the App
+public fields member read display_name — the App
+public fields member read handle — the App
+public fields member read id — the App
+public fields member read joined_on — the App
+public fields member read location — the App
+public fields member read reputation — the App
+public fields member read standing — the App
+public fields member read team — the App
+public fields member read version — the App
+public fields member read website — the App
+public form report-post runs command reportPost version 1 — features "posting"

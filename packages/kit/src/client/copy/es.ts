@@ -1,0 +1,71 @@
+/**
+ * The framework's own words in Spanish: messages.ts's shared table, said
+ * over its English. A chunk of its own (vite.config.ts names it `copy.es`),
+ * fetched only for a reader whose language is Spanish, so an English first
+ * page carries none of it; the server names it beside the entry for a reader
+ * it knows is Spanish (server/clientSurface.ts). A word left out is said in
+ * English.
+ */
+import type { Translation } from '../messages.js';
+
+const es: Translation = {
+  'navigation.menu': 'Menú',
+  'navigation.closeMenu': 'Cerrar menú',
+  'navigation.search': 'Buscar',
+  'navigation.collapse': 'Contraer',
+  'navigation.expand': 'Expandir',
+  'preferences.title': 'Preferencias',
+  'preferences.language': 'Idioma',
+  'preferences.languageHint': 'Se guarda en este navegador.',
+  'preferences.languageHintPerson': 'Se guarda en tu perfil.',
+  'preferences.visualTheme': 'Tema visual',
+  'preferences.appTheme': 'Tema de esta aplicación',
+  'preferences.resetTheme': 'Restablecer el tema de la aplicación',
+  'preferences.palette': 'Paleta',
+  'preferences.paletteHint': 'colores para el tema seleccionado',
+  'preferences.colorMode': 'Modo de color',
+  'preferences.colorModeDarkOnly': 'Este tema es solo oscuro.',
+  'preferences.system': 'Sistema',
+  'preferences.light': 'Claro',
+  'preferences.dark': 'Oscuro',
+  'preferences.density': 'Densidad',
+  'preferences.comfortable': 'Cómodo',
+  'preferences.defaultHint': 'el valor predeterminado',
+  'preferences.spacious': 'Espacioso',
+  'preferences.spaciousHint': 'el mayor espacio disponible',
+  'preferences.compact': 'Compacto',
+  'preferences.compactHint': 'el más ajustado; muestra más filas',
+  'preferences.typography': 'Tipografía',
+  'preferences.appDefault': 'Predeterminado de la aplicación',
+  'preferences.mono': 'Monoespaciada',
+  'preferences.monoHint': 'valores fáciles de comparar',
+  'preferences.sans': 'Sans serif',
+  'preferences.sansHint': 'para lectura; el código sigue siendo código',
+  'preferences.rowsPerList': 'Filas por lista',
+  'preferences.rowsPerListHint': 'cuadrículas y listas de la aplicación',
+  'preferences.rowsPerRelatedList': 'Filas por lista relacionada',
+  'preferences.rowsPerRelatedListHint': 'las listas de una página',
+  'common.close': 'Cerrar',
+  'common.signIn': 'Iniciar sesión',
+  'common.settings': 'Ajustes',
+  'common.more': 'Más',
+  'common.back': 'Volver',
+  'common.favorites': 'Favoritos',
+  'list.viewAll': 'Ver todo',
+  'list.empty': 'No hay filas',
+  'list.nothing': 'Nada por ahora.',
+  'list.rows': { one: '{count} fila', other: '{count} filas' },
+  'list.clearAll': 'Borrar todo',
+  'filter.and': '{first} y {last}',
+  'filter.or': '{first} o {last}',
+  'filter.comma': '{first}, {next}',
+  'filter.noMatches': 'Ningún resultado en {things} coincide con {conditions}.',
+  'filter.noMatchesPlain': 'Ningún resultado en {things} coincide con la búsqueda y los filtros.',
+  'problem.retry': 'Reintentar',
+  'problem.offline': 'No hay conexión. Revisa tu conexión y vuelve a intentarlo.',
+  'problem.notDrawn': 'No se pudo mostrar esta sección. Vuelve a intentarlo o recarga la página si sigue ocurriendo.',
+  'problem.roomNotDrawn': 'No se pudo mostrar esta página. Vuelve a intentarlo o recarga la página si sigue ocurriendo.',
+  'problem.sameAbove': 'No se cargó, por el motivo indicado arriba.',
+};
+
+export default es;

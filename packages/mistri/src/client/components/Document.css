@@ -1,0 +1,173 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* A record on paper (Document.tsx). The sheet is paper in every look and
+   mode — ink on white through the system's colours, as the print block says
+   it (docs/design.md, On paper) — and on screen it is the proof: the sheet's
+   width, its margins as padding, on the room's ground. Its hierarchy is type
+   and rules, never boxes: a letterhead, captions in small capitals, a table
+   that is its rows under a rule in the ink, figures right-aligned in tabular
+   numerals, and the sum that is owed the heaviest thing on it. */
+.doc-room { display: flex; flex-direction: column; align-items: center; gap: var(--space-4h); padding-bottom: 40px; }
+.doc-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); width: 100%; max-width: var(--doc-width, 210mm); }
+.doc-bar-paper { color: var(--ink-muted); font-size: var(--text-sm); }
+
+.doc-sheet {
+  --doc-ink: CanvasText;
+  --doc-dim: color-mix(in srgb, CanvasText 62%, Canvas);
+  --doc-faint: color-mix(in srgb, CanvasText 46%, Canvas);
+  --doc-rule: color-mix(in srgb, CanvasText 11%, Canvas);
+  --doc-ground: color-mix(in srgb, CanvasText 3.5%, Canvas);
+  color-scheme: light;
+  box-sizing: border-box; width: 100%; max-width: var(--doc-width);
+  min-height: var(--doc-height);
+  padding: var(--doc-margin);
+  background: Canvas; color: var(--doc-ink);
+  border: 1px solid var(--line);
+  font-family: var(--sans); font-size: var(--text-sm); line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.doc-sheet--a4 { --doc-width: 210mm; --doc-height: 297mm; }
+.doc-sheet--letter { --doc-width: 8.5in; --doc-height: 11in; }
+.doc-room:has(.doc-sheet--letter) { --doc-width: 8.5in; }
+.doc-broken { color: var(--doc-dim); }
+
+/* The letterhead: who sends it at the left, what it is at the right, one rule under both. */
+.doc-letterhead {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-7);
+  padding-bottom: 28px; margin-bottom: var(--space-7); border-bottom: 1px solid var(--doc-rule);
+}
+.doc-from { display: flex; flex-direction: column; gap: var(--space-3h); min-width: 0; }
+.doc-brand { display: flex; align-items: center; gap: var(--space-3h); }
+.doc-logo {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 30px; height: 30px; border-radius: var(--radius);
+  background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: calc(15px * var(--type-k)); line-height: 1;
+  print-color-adjust: exact; -webkit-print-color-adjust: exact;
+}
+.doc-logo--icon { font-size: calc(18px * var(--type-k)); }
+.doc-logo-image { display: block; max-width: 180px; max-height: 44px; object-fit: contain; object-position: left center; }
+.doc-from-name { font-size: var(--text-lg); font-weight: 600; letter-spacing: var(--track-title); }
+.doc-from-lines { margin: 0; color: var(--doc-dim); font-size: var(--text-xs); line-height: 1.55; white-space: pre-line; }
+.doc-title { margin: 0; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2h); text-align: right; flex: none; }
+.doc-title-label {
+  font-family: var(--heading-font, var(--sans)); font-size: var(--type-record-title, calc(26px * var(--type-k))); font-weight: var(--heading-weight, 600);
+  letter-spacing: var(--track-display); line-height: 1.1;
+}
+.doc-title-number { font-size: var(--text-base); font-weight: 500; letter-spacing: 0; }
+.doc-title-caption { color: var(--doc-faint); font-weight: 400; }
+
+/* Sections in lines, as the page grid places them; a sheet may end between two lines, not inside one. */
+.doc-body { display: flex; flex-direction: column; gap: var(--space-7); }
+.doc-row { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--space-7); row-gap: var(--space-6); align-items: start; }
+.doc-cell { min-width: 0; }
+.doc-cell--fields, .doc-cell--note { break-inside: avoid; }
+
+/* A caption: the section's name, in small capitals the ink of a label. */
+.doc-caption {
+  margin: 0 0 var(--space-3); color: var(--doc-faint);
+  font-size: var(--text-xs); font-weight: 600; line-height: 1.3; letter-spacing: var(--track-caps); text-transform: uppercase;
+}
+.doc-sheet dl { margin: 0; }
+.doc-sheet dd { margin: 0; }
+
+/* Summary: label over value, as many across as fit. */
+.doc-summary dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: var(--space-4h) var(--space-6); }
+.doc-field dt { color: var(--doc-faint); font-size: var(--text-xs); font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; margin-bottom: var(--space-1h); }
+.doc-field dd { font-weight: 500; }
+
+/* Facts: an address, a line a value. */
+.doc-facts-lines { margin: 0; display: flex; flex-direction: column; line-height: 1.55; }
+.doc-facts-lines > :first-child { font-weight: 600; }
+
+/* Properties: caption beside value, the value toward the edge it is read from. */
+.doc-property { display: flex; justify-content: space-between; gap: var(--space-5); padding: var(--space-1h) 0; }
+.doc-property dt { color: var(--doc-dim); }
+.doc-property dt { flex-shrink: 0; max-width: 50%; }
+.doc-property dd { font-weight: 500; text-align: right; }
+/* Text to read sits under its caption at the section's width, left-aligned, never beside a caption it would squeeze;
+   a summary gives it the whole row. On paper it is a paragraph, not the screen's scrolling box. */
+.doc-property--block { flex-direction: column; gap: var(--space-1h); }
+.doc-property--block dd { font-weight: 400; text-align: start; }
+.doc-summary .doc-field--block { grid-column: 1 / -1; }
+.doc-field--block dd { font-weight: 400; }
+.doc-sheet .long-value {
+  background: none; border: 0; border-radius: 0; padding: 0;
+  max-width: none; max-height: none; overflow: visible; font: inherit; line-height: 1.55;
+}
+
+/* Totals: figures right-aligned under one another; the sum owed is the heaviest line, under a rule in the ink. */
+.doc-totals dl { display: flex; flex-direction: column; }
+.doc-total { display: flex; justify-content: space-between; gap: var(--space-6); padding: var(--space-1h) 0; }
+.doc-total dt { color: var(--doc-dim); }
+.doc-total dd { text-align: right; white-space: nowrap; }
+.doc-total--due { margin-top: var(--space-2h); padding-top: var(--space-3h); border-top: 1.5px solid var(--doc-ink); font-size: calc(15px * var(--type-k)); font-weight: 600; }
+.doc-total--due dt { color: var(--doc-ink); }
+
+/* A headline: the one figure the sheet is for — the amount due, the net pay — on a quiet ground. */
+.doc-headline { padding: var(--space-4h) var(--space-5); background: var(--doc-ground); border-radius: var(--radius); print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.doc-headline .doc-caption { margin-bottom: var(--space-2); }
+.doc-figure { margin: 0; font-size: calc(24px * var(--type-k)); font-weight: 600; letter-spacing: var(--track-display); line-height: 1.2; }
+.doc-headline-facts { margin: var(--space-2h) 0 0; color: var(--doc-dim); font-size: var(--text-xs); }
+
+/* The lines: rows under a 2px rule in the ink, hairlines between them, no boxes, no bands. */
+.doc-table { width: 100%; border-collapse: collapse; }
+.doc-table thead { display: table-header-group; }
+.doc-table th {
+  padding: 0 var(--space-3h) var(--space-3); text-align: left; vertical-align: bottom;
+  color: var(--doc-faint); font-size: calc(10.5px * var(--type-k)); font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase;
+  border-bottom: 2px solid var(--doc-ink);
+}
+.doc-table td { padding: 9px var(--space-3h); vertical-align: top; border-bottom: 1px solid var(--doc-rule); }
+.doc-table :is(th, td):first-child { padding-left: 0; }
+.doc-table :is(th, td):last-child { padding-right: 0; }
+.doc-table .is-figure { text-align: right; white-space: nowrap; width: 1%; }
+.doc-table .is-fit { white-space: nowrap; width: 1%; padding-right: 28px; }
+.doc-table .is-figure + .is-figure { padding-left: 20px; }
+.doc-table tr { break-inside: avoid; }
+.doc-table-total td { border-bottom: 0; padding-top: var(--space-3h); font-weight: 600; }
+/* A list's name heads its lines in the ink: the columns' captions under it are the small capitals. */
+.doc-lines > .doc-caption { color: var(--doc-ink); font-size: var(--text-base); letter-spacing: 0; text-transform: none; margin-bottom: var(--space-3h); }
+.doc-more, .doc-empty { margin: var(--space-3) 0 0; color: var(--doc-dim); font-size: var(--text-xs); }
+
+/* The author's words: terms, a thank-you. Quiet is small print. */
+.doc-note p { margin: 0 0 var(--space-2h); max-width: 72ch; white-space: pre-line; }
+.doc-note--quiet { color: var(--doc-dim); font-size: var(--text-xs); }
+.doc-note--callout { padding-left: var(--space-4); border-left: 2px solid var(--doc-ink); }
+
+/* A phone shows the proof at its own width: the sheet's margins shrink, nothing scrolls sideways. */
+@media screen and (max-width: 640px) {
+  .doc-sheet { min-height: 0; padding: 20px var(--space-5); }
+  .doc-letterhead { flex-direction: column; gap: var(--space-5); }
+  .doc-title { align-items: flex-start; text-align: left; }
+  .doc-row { display: flex; flex-direction: column; gap: var(--field-gap); }
+  .doc-lines { overflow-x: auto; }
+}
+
+}
+
+/* A look dresses every table on screen — a header on a ground, a row that lights under the pointer — and
+   a look is a later layer than this one. Paper wears none of it: said again where a look says it, as a
+   chart's heat grid is (ChartShapes.css). */
+@layer look {
+:root[data-theme-style] .doc-table th {
+  background: none; font: 600 var(--text-xs) var(--sans); color: var(--doc-faint);
+  letter-spacing: var(--track-caps); text-transform: uppercase; border-bottom: 2px solid var(--doc-ink);
+}
+:root[data-theme-style] .doc-table td { font-size: inherit; font-weight: inherit; border-bottom: 1px solid var(--doc-rule); }
+:root[data-theme-style] .doc-table tbody tr:hover td { background: none; }
+:root[data-theme-style] .doc-table .doc-table-total td { border-bottom: 0; font-weight: 600; }
+}
+
+/* On paper the sheet is the page: @page (Document.tsx) gives it its size and margins, and nothing else of the
+   room prints — not a look's ground, not the frame's gutter. In the print layer, after every look, as the
+   shell's own paper rules are (style.css). */
+@layer print {
+@media print {
+  .doc-bar, body:has(.doc-sheet) :is(.app-footer, .crumbs) { display: none !important; }
+  body:has(.doc-sheet) :is(.content, .app-content-frame, .panel-pad.doc-room) { padding: 0; margin: 0; background: Canvas; }
+  .doc-room { display: block; }
+  .doc-sheet { max-width: none; min-height: 0; padding: 0; border: 0; font-size: 10pt; }
+  .doc-letterhead { flex-direction: row; }
+}
+}

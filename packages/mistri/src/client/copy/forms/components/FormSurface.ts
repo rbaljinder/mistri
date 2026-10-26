@@ -1,0 +1,32 @@
+/** What FormSurface says, in the forms room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '@mistriwork/kit/client/messages.js';
+
+export const say = defineMessages({
+  theFormCouldNotBeSubmitted: 'The form could not be submitted ({status}).',
+  tooManySubmissionsFromThisAddress: 'Too many submissions from this address. Try again in {retryAfter} seconds.',
+  review: 'Review',
+  reviewTitle: 'Review your answers',
+  reviewLead: 'Check each section. Change anything that is not right.',
+  keepThisReference: 'Keep this reference.',
+  received: 'Received',
+  yourReference: 'Your reference',
+  fillInAnother: 'Fill in another',
+  backToApp: 'Back to {name}',
+  submit: 'Submit',
+  change: 'Change {label}',
+  changeStep: 'Change',
+  checkThisBoxTo: 'Check this box to continue.',
+  thisAnswerWasNot: 'This answer was not accepted. Check it and try again.',
+  couldNotReach: 'The form could not be sent. Check your connection and try again.',
+  refusedInvalidInput: 'Some answers need another look.',
+  refusedVersion: 'This form has changed since the page was opened. Reload the page to continue.',
+  refusedNotFound: 'What this form was about is no longer here. Reload the page to continue.',
+  refusedIneligible: 'This can’t be sent as it stands. Check your answers and try again.',
+  refusedForbidden: 'This form can’t be sent from this page. Reload it and try again.',
+  refusedKeyReused: 'This was already sent with different answers. Reload the page to start again.',
+  refusedDuplicate: 'Something with these details already exists.',
+  refusedStale: 'Something changed while you were filling this in. Reload the page and try again.',
+  refusedCancelled: 'It was not sent.',
+  refusedUnavailable: 'It could not be sent just now. Try again in a moment; it will not be sent twice.',
+  refusedLocked: 'Someone else is changing this record right now. Nothing was sent; try again in a moment.',
+});

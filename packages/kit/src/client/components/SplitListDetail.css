@@ -1,0 +1,119 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+/* The split host owns the seam; its list and detail children remain ordinary
+   App surfaces, so authored layout and record ownership do not change. */
+
+/* The host is what the split measures itself by, not the window: the detail
+   stands beside its list wherever both keep their minimums with the seam
+   between them (16rem + 20rem + 56px, about 39.5rem). Below 40rem of room —
+   a 1024px window with the side menu open is just under it — the two stack, the detail
+   first, since the record just picked is what the reader came for and would
+   otherwise sit under the whole list. A phone gets the dialog
+   (SplitListDetail.tsx). */
+.split-list-detail-host { container: split-host / inline-size; }
+
+.split-list-detail {
+  display: grid;
+  /* One minmax per track: a minmax() nested as another's maximum is invalid,
+     so the whole declaration was dropped and the detail stacked under its
+     list at every width. */
+  grid-template-columns: minmax(16rem, 0.9fr) minmax(20rem, 1.1fr);
+  min-width: 0;
+  width: 100%;
+  align-items: start;
+}
+
+/* Navigation-sized lists should not consume half a long editor. */
+.split-list-detail-compact { grid-template-columns: minmax(12rem, 0.55fr) minmax(24rem, 1.65fr); }
+
+.split-list-detail-expand[data-selected="false"] { grid-template-columns: minmax(0, 1fr); }
+.split-list-detail-expand[data-selected="false"] > .split-list-detail-pane { display: none; }
+
+.split-list-detail-list,
+.split-list-detail-pane { min-width: 0; }
+
+.split-list-detail-pane {
+  min-height: 16rem;
+  border-left: 1px solid var(--line);
+  padding-left: 28px;
+  margin-left: 28px;
+}
+
+@container split-host (max-width: 40rem) {
+  .split-list-detail { grid-template-columns: minmax(0, 1fr); }
+  .split-list-detail-pane {
+    order: -1;
+    border-left: 0; padding-left: 0; margin-left: 0;
+    border-bottom: 1px solid var(--line); margin-bottom: var(--space-6); padding-bottom: var(--space-4h);
+  }
+}
+
+/* One head for the pane: the kind of record, its place in the list, the way
+   to its full page, and Close — on one line, the kind yielding first. */
+.split-list-detail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-3);
+}
+
+.split-list-detail-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font: 600 var(--text-sm) var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Opt-out for a host whose detail is a named record: the name is not an eyebrow. */
+.split-list-detail-sentence .split-list-detail-title { font: 600 calc(15px * var(--type-k))/1.3 var(--code, var(--mono)); letter-spacing: normal; text-transform: none; color: var(--ink); }
+
+.split-list-detail-actions { display: flex; align-items: center; gap: var(--space-3); flex: none; }
+.split-list-detail-actions .record-trail { margin-inline-start: 0; }
+
+.split-list-detail-close { margin-left: auto; flex: none; }
+
+/* The row the detail is showing, marked in the list beside it so J and K
+   read as moving down the list: a current item is a tint and the accent's ink
+   (docs/design.md), never a bar down its side, which the refusal list names. */
+.split-list-detail-list tbody tr[aria-current="true"] td { background: var(--accent-soft); color: var(--accent-ink); }
+
+.split-list-detail-body { min-width: 0; padding-top: var(--space-5); }
+
+/* The pane reads the App's record. Its head already names the kind ("Issue")
+   and holds the trail, so the page's own kind line would say it twice, and a
+   page-sized title would crowd a pane. */
+.split-list-detail-body .page-head-top { display: none; }
+
+/* The record being left, held over the pane until the next one settles
+   (SplitDetailPane.tsx, recordPicture.ts). */
+.split-detail-stage { position: relative; }
+.split-detail-pictures { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.split-detail-pictures:empty { display: none; }
+.split-detail-pictures > .split-detail-body { background: var(--surface); }
+
+/* Nothing picked yet: a sentence at the body's size where the record will
+   start, not a caption in the code face floating in the middle of the pane. */
+.split-list-detail-empty {
+  min-height: 16rem;
+  margin: 0;
+  padding: var(--space-3h) 0 0;
+  color: var(--ink-muted);
+  font: var(--text-md)/1.5 var(--sans);
+}
+
+.split-list-detail-modal {
+  width: min(46rem, 100vw);
+  height: min(100%, 48rem);
+}
+
+@media (max-width: 760px) {
+  .split-list-detail { display: block; }
+}
+}

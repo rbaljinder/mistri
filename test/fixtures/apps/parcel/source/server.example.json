@@ -1,0 +1,12 @@
+{
+  "connections": [
+    {
+      "name": "parcel",
+      "kind": "http",
+      "url": "http://127.0.0.1:4781/v1/",
+      "description": "parcel.http.json",
+      "insecure": true,
+      "auth": { "bearer": "${PARCEL_API_TOKEN}" }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+---
+/* Starlight's footer, and on the home a small one of its own: the home has no sidebar, so this is where its reader
+   finds the rest of the site. */
+import Default from '@astrojs/starlight/components/Footer.astro';
+
+const home = Astro.locals.starlightRoute.entry.data.template === 'splash';
+---
+
+<Default><slot /></Default>
+{home && (
+  <nav class="home-foot" aria-label="Footer">
+    <ul>
+      <li><a href="/docs/getting-started/">Docs</a></li>
+      <li><a href="/docs/examples/">Sample Apps</a></li>
+      <li><a href="/docs/status/">Status</a></li>
+      <li><a href="https://github.com/rbaljinder/mistri">GitHub</a></li>
+      <li><a href="https://github.com/rbaljinder/mistri/releases">Releases</a></li>
+    </ul>
+  </nav>
+)}
+
+<style>
+  .home-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sl-color-hairline);
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  .home-foot ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 1.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .home-foot a {
+    display: inline-block;
+    padding: 0.6rem 0;
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+  }
+  .home-foot a:hover {
+    color: var(--sl-color-white);
+  }
+</style>

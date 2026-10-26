@@ -1,0 +1,6 @@
+{
+  "connections": [
+    { "name": "loans", "url": "${IGNITION_LENDING_DATABASE_URL}", "writable": true },
+    { "name": "applicants", "url": "${IGNITION_APPLICANTS_DATABASE_URL}", "writable": false }
+  ]
+}

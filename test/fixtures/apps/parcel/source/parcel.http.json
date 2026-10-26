@@ -1,0 +1,232 @@
+{
+  "format": "mistri.http/1",
+  "title": "Parcel Tracking API",
+  "version": "1.0.0",
+  "spec": {
+    "file": "openapi.json",
+    "sha256": "26d3ca79b2bd5563b3141a3c393ae2a9e5613958562204771608074cc1eea81a"
+  },
+  "resources": [
+    {
+      "name": "carriers",
+      "list": "/carriers",
+      "item": "/carriers/{id}",
+      "key": "id",
+      "rows": "/data",
+      "columns": [
+        {
+          "name": "id",
+          "type": "string",
+          "nullable": false,
+          "readOnly": true
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "nullable": false,
+          "readOnly": false
+        },
+        {
+          "name": "headquarters",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "phone",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "website",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "on_time_rate",
+          "type": "number",
+          "nullable": true,
+          "readOnly": false,
+          "comment": "Percent of deliveries on or before their estimate, 0 to 100"
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "nullable": true,
+          "readOnly": false
+        }
+      ],
+      "filters": {},
+      "paging": {
+        "kind": "cursor",
+        "param": "cursor",
+        "next": "/next_cursor",
+        "limit": "limit"
+      },
+      "guesses": [
+        "paging: cursor — sends \"cursor\", reads the next one at /next_cursor, page size \"limit\""
+      ],
+      "comment": "The carriers in the network"
+    },
+    {
+      "name": "shipments",
+      "list": "/shipments",
+      "item": "/shipments/{tracking_number}",
+      "key": "tracking_number",
+      "rows": "",
+      "columns": [
+        {
+          "name": "tracking_number",
+          "type": "string",
+          "nullable": false,
+          "readOnly": true,
+          "comment": "The carrier's tracking number"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "nullable": false,
+          "readOnly": false,
+          "allowed": [
+            "label_created",
+            "in_transit",
+            "out_for_delivery",
+            "delivered",
+            "exception"
+          ]
+        },
+        {
+          "name": "carrier_id",
+          "type": "string",
+          "nullable": false,
+          "readOnly": false,
+          "comment": "The carrier moving it",
+          "references": "carriers"
+        },
+        {
+          "name": "service",
+          "type": "string",
+          "nullable": false,
+          "readOnly": false,
+          "allowed": [
+            "ground",
+            "two_day",
+            "overnight"
+          ]
+        },
+        {
+          "name": "origin_city",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "origin_state",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "destination_city",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "destination_state",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "weight_lb",
+          "type": "number",
+          "nullable": true,
+          "readOnly": false,
+          "comment": "Weight in pounds"
+        },
+        {
+          "name": "declared_value",
+          "type": "number",
+          "nullable": true,
+          "readOnly": false,
+          "comment": "Declared value in US dollars"
+        },
+        {
+          "name": "shipped_at",
+          "type": "datetime",
+          "nullable": false,
+          "readOnly": false
+        },
+        {
+          "name": "eta",
+          "type": "date",
+          "nullable": true,
+          "readOnly": false,
+          "comment": "Estimated delivery day"
+        },
+        {
+          "name": "delivered_at",
+          "type": "datetime",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "signed_by",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "exception_reason",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false,
+          "comment": "Why it is held, when it is"
+        }
+      ],
+      "filters": {
+        "status": {
+          "param": "status",
+          "ops": [
+            "="
+          ]
+        },
+        "carrier_id": {
+          "param": "carrier_id",
+          "ops": [
+            "=",
+            "in"
+          ]
+        },
+        "destination_state": {
+          "param": "destination_state",
+          "ops": [
+            "="
+          ]
+        }
+      },
+      "search": "q",
+      "sort": {
+        "param": "sort",
+        "values": [
+          "-shipped_at",
+          "shipped_at",
+          "eta"
+        ]
+      },
+      "paging": {
+        "kind": "offset",
+        "offset": "offset",
+        "limit": "limit"
+      },
+      "guesses": [
+        "paging: offset — \"offset\" and \"limit\"",
+        "references: carrier_id → carriers, by its name"
+      ],
+      "comment": "Shipments, most recently shipped first"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role desk — the App
+auth rows all — the App
+source ladle connection "ladle" — the App
+source ladle default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource booking access write — the App
+resource class_session access write — the App
+role admin extends manager — the App
+role admin read booking — the App
+role admin read class_session — the App
+role admin write booking — the App
+role admin write class_session — the App
+role admin command checkIn — the App
+role desk read booking — the App
+role desk read class_session — the App
+role desk write booking — the App
+role desk command checkIn — the App
+role manager extends desk — the App
+role manager read booking — the App
+role manager read class_session — the App
+role manager write booking — the App
+role manager write class_session — the App
+role manager command checkIn — the App
+page check-in reads booking — the App
+page check-in reads class_session — the App
+page check-in runs checkIn — the App
+
+contract checkIn v1 4e4c132380ea

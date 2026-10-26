@@ -1,0 +1,242 @@
+/* Sage's own rules, fetched when Sage is worn rather than carried in
+   every App's first stylesheet (visualTheme.ts, LOOK_SHEETS; lumenLook.css
+   says why). They stand in `look` as every look's rules do; the rules all
+   the looks share stay in themeFamilies.css. */
+@layer look {
+
+/* Sage: the plain structure as a soft workspace — warm cream grounds, a
+   dashboard's sections and stat cards on white panels with a soft shadow and
+   the look's larger radius, tables open on the ground as in every look,
+   near-black ink for text and calls to action, sage green for the charts and
+   good news, a tint of that ink for what is chosen, and meaning in soft tinted
+   pills. Recreated as it is from a reference the maintainer chose; its
+   departures from the refusal list (a warm ground, soft shadows, tinted
+   pills) are Sage's alone (docs/design.md, Sage). Shadows mix the look's own
+   ink, so no colour is named here; by night they take the ground's black. */
+  :root[data-look-elevation='soft'] {
+    --shadow-ink: var(--ink);
+    --shadow-card:
+      0 1px 2px color-mix(in srgb, var(--shadow-ink) 5%, transparent),
+      0 10px 28px -16px color-mix(in srgb, var(--shadow-ink) 20%, transparent);
+    --shadow-pop: 0 8px 20px -6px color-mix(in srgb, var(--shadow-ink) 18%, transparent);
+    --shadow-panel: 0 12px 32px -8px color-mix(in srgb, var(--shadow-ink) 20%, transparent);
+    --shadow-modal: 0 24px 60px -12px color-mix(in srgb, var(--shadow-ink) 28%, transparent);
+  }
+  /* What is chosen — a window, a tab — takes a tint of the accent with the text's ink: in Sage, whose
+     accent is its ink, a warm grey; in a theme built on it, its own accent's. It was the third chart
+     colour's, which named no role: when Sage's charts were reordered it turned lavender, and Payday's
+     coral, its colour for attention, read as a brown block on its dark ground. */
+  :root:is([data-look-tabs='chosen'], [data-look-windows='chosen']) {
+    --chosen: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  }
+  @media (prefers-color-scheme: dark) {
+    :root[data-look-elevation='soft']:not([data-theme='light']) {
+      --shadow-ink: var(--ground);
+    }
+  }
+  :root[data-look-elevation='soft'][data-theme='dark'] {
+    --shadow-ink: var(--ground);
+  }
+  :root[data-look-bar='soft'] .app-mode .topbar {
+    background: var(--surface);
+    border-bottom-color: var(--line);
+  }
+  /* A soft bar is a panel on the page, apart from the menu beside it, so it is drawn in the page's own colors: the
+     navigation's dress the menu, wherever the menu is. When the menu is drawn in the bar (placement top) the bar is
+     the menu, and it wears nav.ground as a side menu does. */
+  :root[data-look-bar='soft'] body:not(.app-topnav) .topbar {
+    --nav-ground: var(--surface);
+    --nav-ink: var(--ink);
+    --nav-muted: var(--ink-muted);
+    --nav-line: var(--line);
+    --nav-accent: var(--accent);
+  }
+  :root[data-look-bar='soft'] body.app-topnav .topbar {
+    background: var(--nav-ground);
+    border-bottom-color: var(--nav-line);
+  }
+  /* The current room: a quiet ink tint, as the reference's menu marks it — a
+   raised white card here hung its shadow below the bar. */
+  :root[data-look-nav='quiet'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) {
+    background: color-mix(in srgb, var(--nav-ink) 6%, transparent);
+    color: var(--nav-ink);
+    box-shadow: none;
+    align-self: center;
+    height: auto;
+    padding-block: var(--space-2h);
+    border-radius: var(--radius);
+  }
+  /* Editing groups keep a quiet surface. Summaries and the context rail read
+   directly on the page so a few facts do not become separate oversized cards.
+   Only a group that has its row to itself: sections sharing a row are dressed
+   alike, and a panel beside a bare breakdown read as two different pages. */
+/* A public reader edits nothing, so there is no editing group to panel:
+   the record's words sit on the page (body.public-visitor, publicVisitor.ts). */
+  :root[data-look-fields='panel']
+    body:not(.public-visitor)
+    :is(
+      .page-body:not(.dash-body):not(.page-aside) > .page-section.page-fields.width-full,
+      .page-tabpanel > .page-tab-sections > .page-section.page-fields.width-full
+    ):not(:has(.page-field-summary)):has(.page-field-grid, .page-properties, .page-sheet) {
+    background: var(--surface);
+    border: var(--panel-border-width, 1px) solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5) 18px;
+    box-shadow: none;
+  }
+  /* A table inside that panel takes the panel's white under its heads. */
+  :root[data-look-fields='panel']
+    body:not(.public-visitor)
+    :is(
+      .page-body:not(.dash-body):not(.page-aside) > .page-section.page-fields.width-full,
+      .page-tabpanel > .page-tab-sections > .page-section.page-fields.width-full
+    ):not(:has(.page-field-summary)):has(.page-field-grid, .page-properties, .page-sheet)
+    th {
+    background: var(--surface);
+  }
+  /* The larger identity cue belongs to a record's name, not every table row. */
+  :root[data-look-avatar='large'] .page-record-avatar {
+    width: 44px;
+    height: 44px;
+    font-size: var(--text-md);
+  }
+  /* A dashboard's sections are white panels, as are its stat cards. */
+  :root[data-look-section='panel'] .dash-body .page-section:not(.dash-strip, .dash-cards-section, .dash-banner) {
+    --panel-pad-block: 18px;
+    --panel-pad-inline: 20px;
+    background: var(--surface);
+    border: var(--panel-border-width, 1px) solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: var(--panel-pad-block) var(--panel-pad-inline);
+    box-shadow: var(--shadow-card);
+  }
+  /* Supporting dashboard lists read as a quiet column; guidance keeps its panel. */
+  :root[data-look-section='panel'] .dashboard-layout .page-aside > .page-section:not(.dash-note, .dash-strip) {
+    --panel-pad-block: 0px;
+    --panel-pad-inline: 0px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  /* Steps inside a panel are cells divided by hairlines, not cards: a bordered card for each step inside the
+     panel's own card was a card in a card. A cell's top and left edge are a shadow clipped at the row's own box, so
+     a row that wraps is divided between its rows as between its cells. */
+  :root[data-look-section='panel'] .dash-steps {
+    clip-path: inset(1px 0 0 1px);
+  }
+  :root[data-look-section='panel'] .dash-step {
+    box-shadow: -1px -1px 0 0 var(--line);
+  }
+  :root[data-look-section='panel'] .dash-step-arrow {
+    display: none;
+  }
+  :root[data-look-section='panel'] .dash-step-card {
+    border: 0;
+    border-radius: 0;
+    background: none;
+    padding: var(--space-4h) var(--space-5);
+  }
+  :root[data-look-section='panel'] .dash-step.is-row-start .dash-step-card {
+    padding-left: 1px;
+  }
+  :root[data-look-section='panel'] :is(button, a).dash-step-card:focus-visible {
+    outline-offset: -2px;
+  }
+  @media (max-width: 720px) {
+    :root[data-look-section='panel'] .dash-step .dash-step-card {
+      padding-left: 1px;
+    }
+  }
+  :root[data-look-section='panel'] .dash-body .page-section:not(.dash-strip) .dash-list .table-wrap {
+    margin-inline: calc(-1 * var(--panel-pad-inline));
+    max-width: none;
+  }
+  :root[data-look-section='panel'] .dash-body .page-section:not(.dash-strip) th {
+    background: var(--surface);
+  }
+  :root[data-look-stat='panel'] .dash-strip .home-card:nth-child(n) {
+    background: var(--surface);
+    border: var(--panel-border-width, 1px) solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+  :root[data-look-chart='wash'] .chart-area {
+    fill: var(--chart-1);
+    opacity: 0.14;
+  }
+  /* A table is open, as in every look: its rows on the cream ground under a
+   hairline, never a white box of its own. Boxed, every list and every
+   related tab was a card, and a record page a stack of them (the refusal
+   list's "a box round a table"); a dashboard's panel is the one ground a
+   table stands on in white, and there it is rows (above). */
+  :root[data-look-table='hairline'] th {
+    border-bottom: 1px solid var(--line);
+    font: 600 var(--text-sm) var(--sans);
+    padding-block: var(--space-3h);
+  }
+  :root[data-look-table='hairline'] td {
+    font-size: var(--text-base);
+  }
+  :root[data-look-board='soft'] :is(.board-card, .triage-card) {
+    box-shadow: var(--shadow-card);
+  }
+  /* What is chosen: a tint of the accent and the text's ink, never a fill in the accent. */
+  :root[data-look-tabs='chosen'] .tab[aria-selected='true'] {
+    background: var(--chosen);
+    color: var(--ink);
+  }
+  /* Record tabs name groups in ordinary language; the accent line says which group is open. */
+  :root[data-look-tabs='chosen'] .page-tabstrip {
+    gap: var(--space-5);
+  }
+  :root[data-look-tabs='chosen'] body.app-mode .page-tab {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: var(--space-3) var(--space-1);
+    background: transparent;
+    font: 500 var(--text-base) var(--sans);
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--ink-muted);
+  }
+  :root[data-look-tabs='chosen'] body.app-mode .page-tab:hover {
+    background: transparent;
+    color: var(--ink);
+  }
+  :root[data-look-tabs='chosen'] body.app-mode .page-tab[aria-selected='true'] {
+    background: transparent;
+    border-color: transparent transparent var(--accent);
+    color: var(--ink);
+  }
+  :root[data-look-windows='chosen'] .dash-windows {
+    background: transparent;
+    border-color: transparent;
+    gap: var(--space-2h);
+  }
+  :root[data-look-windows='chosen'] .dash-window[aria-pressed='true'] {
+    background: var(--chosen);
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--ink);
+  }
+  /* Meaning as a soft tinted pill (the shared looks draw a dot and its word).
+   `html` outranks the shared layer's `.tone` without reordering stylesheets. */
+  html:root[data-look-status='pill'] .tone:not(.record-tag) {
+    padding: var(--space-1) var(--space-3h);
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 13%, transparent);
+  }
+  html:root[data-look-status='pill'] .tone::before {
+    content: none;
+  }
+  /* A neutral value is plain text: only a tone that carries meaning earns a pill. */
+  html:root[data-look-status='pill'] .tone.tone-neutral:not(.record-tag) {
+    padding: 0;
+    background: transparent;
+    color: var(--ink);
+  }
+}

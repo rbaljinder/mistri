@@ -1,0 +1,1191 @@
+{
+  "note": "Read by scripts/docs-shots.mjs. file is under site/src/assets; clip is in CSS pixels (the picture is twice that); viewport is desk (1280 wide) or phone (390), and width, when given, is the window's width instead. An entry with workbench (a database name) instead of app is the database browser over that database. An entry with story (a story id in the component library) is that story, cut to what it draws, from the built library: run npm run build:site first. served: true takes the App signed out at an address shot does not take (the sign-in screen); click presses a named button before the picture.",
+  "shots": [
+    {
+      "file": "guide/list.webp",
+      "app": "lintel",
+      "route": "/units",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 720
+      }
+    },
+    {
+      "file": "guide/dashboard.webp",
+      "app": "lintel",
+      "route": "/today",
+      "as": "manager",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 1000
+      }
+    },
+    {
+      "file": "guide/form.webp",
+      "app": "lintel",
+      "route": "/report",
+      "as": "resident",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 700
+      }
+    },
+    {
+      "file": "guide/record-page.webp",
+      "app": "lintel",
+      "route": "/leases/1",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "guide/shell.webp",
+      "app": "lintel",
+      "route": "/leases",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "start/tick.webp",
+      "app": "tick",
+      "route": "/",
+      "viewport": "desk",
+      "clip": {
+        "x": 240,
+        "y": 0,
+        "width": 800,
+        "height": 460
+      }
+    },
+    {
+      "file": "guide/overview.webp",
+      "app": "lintel",
+      "route": "/residents/29",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "guide/lists.webp",
+      "app": "lintel",
+      "route": "/my-requests/1",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 720
+      }
+    },
+    {
+      "file": "guide/pages.webp",
+      "app": "lintel",
+      "route": "/leases/1",
+      "as": "manager",
+      "viewport": "desk",
+      "width": 1440,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 760
+      }
+    },
+    {
+      "file": "guide/forms.webp",
+      "app": "tick",
+      "route": "/tasks/new",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 480
+      }
+    },
+    {
+      "file": "guide/dashboards.webp",
+      "app": "lintel",
+      "route": "/today",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 660
+      }
+    },
+    {
+      "file": "guide/nav.webp",
+      "app": "lintel",
+      "route": "/repairs",
+      "as": "manager",
+      "viewport": "desk",
+      "width": 1024,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1024,
+        "height": 740
+      }
+    },
+    {
+      "file": "screens/browser-record.webp",
+      "workbench": "demo",
+      "route": "/demo/customer/~1",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "screens/browser-query.webp",
+      "workbench": "demo",
+      "route": "/demo/invoice%20total%20%3E%3D%20500%20sort%20total%20desc",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 560
+      }
+    },
+    {
+      "file": "screens/landing.webp",
+      "app": "lintel",
+      "route": "/",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "screens/custom-component.webp",
+      "app": "depot",
+      "route": "/warehouses/1",
+      "as": "admin",
+      "viewport": "desk",
+      "clip": {
+        "x": 280,
+        "y": 455,
+        "width": 640,
+        "height": 420
+      }
+    },
+    {
+      "file": "looks/mono.webp",
+      "app": "lintel",
+      "route": "/leases",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "mono",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "looks/sage.webp",
+      "app": "lintel",
+      "route": "/leases",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "sage",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "looks/lumen.webp",
+      "app": "lintel",
+      "route": "/leases",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "lumen",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "looks/tidelight-compare.webp",
+      "app": "lintel",
+      "route": "/leases/1",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "tidelight",
+      "compare": "mono",
+      "scale": 1,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 2596,
+        "height": 640
+      }
+    },
+    {
+      "file": "looks/blueprint-compare.webp",
+      "app": "lintel",
+      "route": "/today",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "blueprint",
+      "compare": "lumen",
+      "scale": 1,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 2596,
+        "height": 700
+      }
+    },
+    {
+      "file": "looks/blueprint-light.webp",
+      "app": "lintel",
+      "route": "/today",
+      "as": "manager",
+      "viewport": "phone",
+      "look": "blueprint",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 690
+      }
+    },
+    {
+      "file": "looks/blueprint-dark.webp",
+      "app": "lintel",
+      "route": "/today",
+      "as": "manager",
+      "viewport": "phone",
+      "look": "blueprint",
+      "scheme": "dark",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 690
+      }
+    },
+    {
+      "file": "guide/actions.webp",
+      "app": "tick",
+      "route": "/tasks/1",
+      "viewport": "desk",
+      "clip": {
+        "x": 240,
+        "y": 0,
+        "width": 800,
+        "height": 320
+      }
+    },
+    {
+      "file": "guide/command-form.webp",
+      "app": "lintel",
+      "route": "/report",
+      "as": "resident",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 700
+      }
+    },
+    {
+      "file": "guide/sign-in.webp",
+      "app": "lintel",
+      "served": true,
+      "route": "/sign-in",
+      "viewport": "desk",
+      "clip": {
+        "x": 400,
+        "y": 140,
+        "width": 480,
+        "height": 440
+      }
+    },
+    {
+      "file": "guide/commands.webp",
+      "app": "lintel",
+      "route": "/my-requests/4",
+      "as": "manager",
+      "click": "Schedule visit",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 900
+      }
+    },
+    {
+      "file": "data/resources.webp",
+      "app": "lintel",
+      "route": "/property/1",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 900
+      }
+    },
+    {
+      "file": "data/relationships.webp",
+      "app": "lintel",
+      "route": "/residents/29",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 860
+      }
+    },
+    {
+      "file": "data/display-rules.webp",
+      "app": "lintel",
+      "route": "/units",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 520
+      }
+    },
+    {
+      "file": "data/dates.webp",
+      "app": "lintel",
+      "route": "/today",
+      "as": "manager",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 240,
+        "y": 120,
+        "width": 1040,
+        "height": 800
+      }
+    },
+    {
+      "file": "gallery/banner.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 30,
+        "y": 217,
+        "width": 1220,
+        "height": 157
+      }
+    },
+    {
+      "file": "gallery/window-button.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 24,
+        "y": 163,
+        "width": 1232,
+        "height": 66
+      }
+    },
+    {
+      "file": "gallery/metrics.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 30,
+        "y": 386,
+        "width": 1220,
+        "height": 156
+      }
+    },
+    {
+      "file": "gallery/line-chart.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 30,
+        "y": 554,
+        "width": 602,
+        "height": 318
+      }
+    },
+    {
+      "file": "gallery/line-smooth.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 648,
+        "y": 554,
+        "width": 602,
+        "height": 318
+      }
+    },
+    {
+      "file": "gallery/breakdown.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 30,
+        "y": 884,
+        "width": 602,
+        "height": 212
+      }
+    },
+    {
+      "file": "gallery/donut.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 648,
+        "y": 884,
+        "width": 602,
+        "height": 212
+      }
+    },
+    {
+      "file": "gallery/funnel.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 30,
+        "y": 1108,
+        "width": 602,
+        "height": 351
+      }
+    },
+    {
+      "file": "gallery/scatter.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 648,
+        "y": 1108,
+        "width": 602,
+        "height": 351
+      }
+    },
+    {
+      "file": "gallery/avatars.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 30,
+        "y": 2155,
+        "width": 1220,
+        "height": 391
+      }
+    },
+    {
+      "file": "gallery/steps.webp",
+      "app": "depot",
+      "route": "/operations",
+      "look": "lumen",
+      "viewport": "desk",
+      "as": "admin",
+      "full": true,
+      "clip": {
+        "x": 262,
+        "y": 371,
+        "width": 643,
+        "height": 190
+      }
+    },
+    {
+      "file": "gallery/bar-chart.webp",
+      "app": "depot",
+      "route": "/operations",
+      "look": "lumen",
+      "viewport": "desk",
+      "as": "admin",
+      "full": true,
+      "clip": {
+        "x": 262,
+        "y": 1227,
+        "width": 313,
+        "height": 355
+      }
+    },
+    {
+      "file": "gallery/heatmap.webp",
+      "app": "depot",
+      "route": "/operations",
+      "look": "lumen",
+      "viewport": "desk",
+      "as": "admin",
+      "full": true,
+      "clip": {
+        "x": 591,
+        "y": 1227,
+        "width": 313,
+        "height": 355
+      }
+    },
+    {
+      "file": "gallery/treemap.webp",
+      "app": "depot",
+      "route": "/operations",
+      "look": "lumen",
+      "viewport": "desk",
+      "as": "admin",
+      "full": true,
+      "clip": {
+        "x": 262,
+        "y": 1594,
+        "width": 313,
+        "height": 302
+      }
+    },
+    {
+      "file": "gallery/waterfall.webp",
+      "app": "depot",
+      "route": "/operations",
+      "look": "lumen",
+      "viewport": "desk",
+      "as": "admin",
+      "full": true,
+      "clip": {
+        "x": 591,
+        "y": 1594,
+        "width": 313,
+        "height": 302
+      }
+    },
+    {
+      "file": "gallery/board.webp",
+      "app": "compass",
+      "route": "/pipeline",
+      "look": "lumen",
+      "viewport": "desk",
+      "clip": {
+        "x": 24,
+        "y": 120,
+        "width": 1232,
+        "height": 400
+      }
+    },
+    {
+      "file": "gallery/tree.webp",
+      "app": "compass",
+      "route": "/account-tree",
+      "look": "lumen",
+      "viewport": "desk",
+      "full": true,
+      "clip": {
+        "x": 24,
+        "y": 1565,
+        "width": 700,
+        "height": 200
+      }
+    },
+    {
+      "file": "gallery/gantt.webp",
+      "app": "compass",
+      "route": "/campaign-schedule",
+      "look": "lumen",
+      "viewport": "desk",
+      "clip": {
+        "x": 24,
+        "y": 150,
+        "width": 1232,
+        "height": 570
+      }
+    },
+    {
+      "file": "gallery/calendar.webp",
+      "app": "compass",
+      "route": "/task-calendar",
+      "look": "lumen",
+      "viewport": "desk",
+      "clip": {
+        "x": 30,
+        "y": 170,
+        "width": 1220,
+        "height": 470
+      }
+    },
+    {
+      "file": "gallery/cards.webp",
+      "app": "depot",
+      "route": "/catalog",
+      "look": "lumen",
+      "viewport": "desk",
+      "as": "admin",
+      "clip": {
+        "x": 500,
+        "y": 160,
+        "width": 750,
+        "height": 432
+      }
+    },
+    {
+      "file": "gallery/checklist.webp",
+      "app": "tick",
+      "route": "/",
+      "look": "lumen",
+      "viewport": "desk",
+      "clip": {
+        "x": 290,
+        "y": 80,
+        "width": 700,
+        "height": 340
+      }
+    },
+    {
+      "file": "gallery/table.webp",
+      "app": "compass",
+      "route": "/leads",
+      "look": "lumen",
+      "viewport": "desk",
+      "clip": {
+        "x": 24,
+        "y": 108,
+        "width": 1232,
+        "height": 400
+      }
+    },
+    {
+      "file": "gallery/rating.webp",
+      "app": "thread",
+      "route": "/projects",
+      "look": "lumen",
+      "viewport": "desk",
+      "clip": {
+        "x": 260,
+        "y": 100,
+        "width": 996,
+        "height": 205
+      }
+    },
+    {
+      "file": "gallery/icon-mark.webp",
+      "app": "depot",
+      "route": "/products",
+      "look": "lumen",
+      "viewport": "desk",
+      "as": "admin",
+      "clip": {
+        "x": 260,
+        "y": 160,
+        "width": 470,
+        "height": 200
+      }
+    },
+    {
+      "file": "home/hero.webp",
+      "app": "lintel",
+      "route": "/leases/1",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "lumen",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 780
+      }
+    },
+    {
+      "file": "home/hero-dark.webp",
+      "app": "lintel",
+      "route": "/leases/1",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "lumen",
+      "scheme": "dark",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 780
+      }
+    },
+    {
+      "file": "home/tab-lists.webp",
+      "app": "lintel",
+      "route": "/repair-board",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "home/tab-pages.webp",
+      "app": "lintel",
+      "route": "/my-requests/7",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "home/tab-dashboards.webp",
+      "app": "lintel",
+      "route": "/today",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "home/pair-list.webp",
+      "app": "lintel",
+      "route": "/units",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 240,
+        "y": 50,
+        "width": 1010,
+        "height": 550
+      }
+    },
+    {
+      "file": "home/pair-page.webp",
+      "app": "lintel",
+      "route": "/leases/1",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 240,
+        "y": 50,
+        "width": 1010,
+        "height": 380
+      }
+    },
+    {
+      "file": "home/pair-dashboard.webp",
+      "app": "lintel",
+      "route": "/today",
+      "as": "manager",
+      "viewport": "desk",
+      "clip": {
+        "x": 240,
+        "y": 200,
+        "width": 1010,
+        "height": 190
+      }
+    },
+    {
+      "file": "recipes/nav.webp",
+      "app": "compass",
+      "route": "/tasks",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "nav"
+    },
+    {
+      "file": "recipes/bar.webp",
+      "app": "compass",
+      "route": "/tasks",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "bar"
+    },
+    {
+      "file": "recipes/tabs.webp",
+      "app": "compass",
+      "route": "/accounts/1",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "tabs"
+    },
+    {
+      "file": "recipes/windows.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "windows"
+    },
+    {
+      "file": "recipes/type-label.webp",
+      "app": "compass",
+      "route": "/opportunities",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "type.label"
+    },
+    {
+      "file": "recipes/type-figure.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "type.figure"
+    },
+    {
+      "file": "recipes/stat.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "stat"
+    },
+    {
+      "file": "recipes/section.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "section"
+    },
+    {
+      "file": "recipes/fields.webp",
+      "app": "compass",
+      "route": "/opportunities/1",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "fields"
+    },
+    {
+      "file": "recipes/table.webp",
+      "app": "compass",
+      "route": "/opportunities",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "table"
+    },
+    {
+      "file": "recipes/status.webp",
+      "app": "compass",
+      "route": "/opportunities",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "status"
+    },
+    {
+      "file": "recipes/board.webp",
+      "app": "compass",
+      "route": "/pipeline",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "board"
+    },
+    {
+      "file": "recipes/chart.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "chart"
+    },
+    {
+      "file": "recipes/buttons.webp",
+      "app": "compass",
+      "route": "/opportunities/1",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "buttons"
+    },
+    {
+      "file": "recipes/links.webp",
+      "app": "compass",
+      "route": "/opportunities",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "links"
+    },
+    {
+      "file": "recipes/rules.webp",
+      "app": "compass",
+      "route": "/opportunities/1",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "rules"
+    },
+    {
+      "file": "recipes/avatar.webp",
+      "app": "compass",
+      "route": "/opportunities/1",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "avatar"
+    },
+    {
+      "file": "recipes/workflow.webp",
+      "app": "compass",
+      "route": "/opportunities/1",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "workflow"
+    },
+    {
+      "file": "recipes/banner.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "banner"
+    },
+    {
+      "file": "recipes/steps.webp",
+      "app": "compass",
+      "route": "/sales-dashboard",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "steps"
+    },
+    {
+      "file": "recipes/type-section.webp",
+      "app": "compass",
+      "route": "/accounts/1",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "type.section"
+    },
+    {
+      "file": "recipes/lanes.webp",
+      "app": "compass",
+      "route": "/pipeline",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "lanes"
+    },
+    {
+      "file": "recipes/header.webp",
+      "app": "lintel",
+      "route": "/residents/1",
+      "as": "manager",
+      "look": "sage",
+      "viewport": "desk",
+      "recipes": "header"
+    },
+    {
+      "file": "recipes/radius-pill.webp",
+      "app": "compass",
+      "route": "/opportunities",
+      "look": "sage",
+      "viewport": "desk",
+      "recipes": "radius.pill"
+    },
+    {
+      "file": "recipes/border-control.webp",
+      "app": "compass",
+      "route": "/leads/new",
+      "look": "lumen",
+      "viewport": "desk",
+      "recipes": "border.control"
+    },
+    {
+      "file": "components/list-grid.webp",
+      "story": "rooms-list--room",
+      "look": "mono",
+      "height": 520
+    },
+    {
+      "file": "components/list-cards.webp",
+      "story": "lists-cards--grid",
+      "look": "mono"
+    },
+    {
+      "file": "components/list-queue.webp",
+      "story": "lists-queue--readonly-task-queue",
+      "look": "mono"
+    },
+    {
+      "file": "components/list-board.webp",
+      "story": "lists-work-collections--board-lanes",
+      "look": "mono"
+    },
+    {
+      "file": "components/list-calendar.webp",
+      "story": "lists-calendar--month",
+      "look": "mono"
+    },
+    {
+      "file": "components/list-split.webp",
+      "story": "lists-work-collections--split-inbox-selected",
+      "look": "mono"
+    },
+    {
+      "file": "components/record-page.webp",
+      "story": "records-complete-page--profile",
+      "look": "mono"
+    },
+    {
+      "file": "components/record-related.webp",
+      "story": "records-related-collections--table-and-phone-records",
+      "look": "mono"
+    },
+    {
+      "file": "components/record-history.webp",
+      "story": "records-sections--history",
+      "look": "mono"
+    },
+    {
+      "file": "components/record-workflow.webp",
+      "story": "records-workflow-status--in-review",
+      "look": "mono"
+    },
+    {
+      "file": "components/dash-metrics.webp",
+      "story": "dashboards-stat-cards--trends-and-marks",
+      "look": "mono"
+    },
+    {
+      "file": "components/dash-bars.webp",
+      "story": "dashboards-charts--bars",
+      "look": "mono"
+    },
+    {
+      "file": "components/dash-breakdown.webp",
+      "story": "records-sections--grouped-counts",
+      "look": "mono"
+    },
+    {
+      "file": "components/dash-activity.webp",
+      "story": "dashboards-activity--feed",
+      "look": "mono"
+    },
+    {
+      "file": "components/dash-first-run.webp",
+      "story": "dashboards-first-run--fresh",
+      "look": "mono"
+    },
+    {
+      "file": "components/form-guided.webp",
+      "story": "forms-complete-form--guided-request",
+      "look": "mono"
+    },
+    {
+      "file": "components/form-command.webp",
+      "story": "forms-command-fields--repeated-group",
+      "look": "mono"
+    },
+    {
+      "file": "components/chrome-sign-in.webp",
+      "story": "accounts-sign-in--at-rest",
+      "look": "mono"
+    },
+    {
+      "file": "components/chrome-account.webp",
+      "story": "navigation-account-and-notifications--account-menu",
+      "look": "mono"
+    },
+    {
+      "file": "components/chrome-bell.webp",
+      "story": "navigation-account-and-notifications--bell",
+      "look": "mono"
+    },
+    {
+      "file": "components/state-empty.webp",
+      "story": "rooms-list--empty",
+      "look": "mono",
+      "height": 320
+    },
+    {
+      "file": "components/state-refused.webp",
+      "story": "rooms-list--forbidden",
+      "look": "mono",
+      "height": 320
+    },
+    {
+      "file": "components/state-problem.webp",
+      "story": "rooms-list--offline",
+      "look": "mono",
+      "height": 320
+    },
+    {
+      "file": "components/custom-post-stream.webp",
+      "story": "fixture-apps-commons-post-stream--member",
+      "look": "mono"
+    },
+    {
+      "file": "components/custom-bin-map.webp",
+      "story": "fixture-apps-depot-bin-map--desk",
+      "look": "mono"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+---
+/* Starlight's own content wrapper, plus the lightbox every page's screenshots
+   open in. One override, so no page opts in and none is left out.
+
+   The first picture of a page, when only a sentence or two stands above it, is drawn in the first screen: Astro
+   writes every Markdown picture lazy, which left its box empty and bordered until the file arrived. It is made eager
+   here, with the width and height the image service already wrote beside it, so it comes with the page and nothing
+   moves. Pictures lower down stay lazy. */
+import Default from '@astrojs/starlight/components/MarkdownContent.astro';
+
+let html = await Astro.slots.render('default');
+const firstImage = html.search(/<img\b/);
+const firstHeading = html.search(/<h[1-6]\b/);
+if (firstImage >= 0 && (firstHeading < 0 || firstImage < firstHeading)) {
+  const tag = html.slice(firstImage).match(/<img\b[^>]*>/)![0];
+  html =
+    html.slice(0, firstImage) +
+    tag.replace(' loading="lazy"', ' loading="eager" fetchpriority="high"') +
+    html.slice(firstImage + tag.length);
+}
+---
+
+<Default><Fragment set:html={html} /></Default>
+
+<script>
+  import { enlargeImages } from '../lightbox';
+  enlargeImages();
+</script>

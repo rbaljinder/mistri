@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "removeComments": false
+  },
+  "include": ["packages/engine/src", "packages/kit/src", "packages/mistri/src/server/commands.ts", "packages/mistri/src/server/policy.ts", "packages/mistri/src/server/maintenance.ts", "packages/mistri/src/server/jobs.ts", "packages/mistri/src/server/workflows.ts", "packages/mistri/src/server/integration.ts", "packages/mistri/src/server/openfeature.ts", "packages/mistri/src/server/testing.ts", "packages/mistri/src/server/handler.ts", "packages/ui/src/index.ts"]
+}

@@ -1,0 +1,53 @@
+/* Brought by the platform's own inputs (builtInInputs.tsx), a part on demand: none of it stands in a first stylesheet.
+   Each is as tall as the plain box it replaces, so a field does not move when its input arrives. */
+@layer components {
+.rating-input { display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--control-h); }
+.rating-input-star {
+  display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0;
+  border: 0; border-radius: var(--radius); background: none; cursor: pointer;
+  font: calc(18px * var(--type-k))/1 var(--sans); color: color-mix(in srgb, var(--ink) 18%, var(--surface));
+}
+.rating-input-star.is-on { color: var(--status-warning); }
+.rating-input-star:hover { background: var(--raised); }
+.rating-input-star:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
+.rating-input-star:disabled { cursor: default; opacity: 0.6; }
+
+.slider-input { display: inline-flex; align-items: center; gap: var(--space-3h); min-height: var(--control-h); width: 100%; max-width: 320px; }
+.slider-input input[type='range'] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.slider-input-figure { min-width: 3ch; text-align: right; color: var(--ink); }
+
+.color-input { display: inline-flex; align-items: center; gap: var(--space-3); }
+.color-input-picker {
+  width: 32px; height: 32px; padding: var(--space-1); flex: none; cursor: pointer;
+  border: 1px solid var(--line-control, var(--line)); border-radius: var(--radius); background: var(--surface);
+}
+.color-input-code { width: 10ch; font-family: var(--mono, var(--sans)); }
+
+/* A JSON document: the box keeps its own width and grows with its lines (rows), the problem and Format under it. */
+.json-input { display: grid; gap: var(--space-2); width: 100%; }
+.json-input-text { width: 100%; min-height: 6em; font: var(--text-sm)/1.5 var(--mono, monospace); tab-size: 2; white-space: pre; resize: vertical; }
+.json-input-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 24px; }
+.json-input-problem { min-width: 0; font: var(--text-sm) var(--sans); color: var(--status-critical); overflow-wrap: anywhere; }
+.json-input-format { flex: none; }
+
+/* A code: the box always there, Scan beside it where the browser reads codes, the camera's view under it. */
+/* minmax(0, 1fr): a grid row is otherwise at least its input's own width, which in a narrow aside pushed the Scan button out of the field. */
+.scan-input { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); width: 100%; }
+.scan-input-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+/* A box wide enough for a 13-digit code; where the field cannot hold that and the button, Scan goes under it. */
+.scan-input-text { flex: 1 1 15ch; min-width: 0; font-family: var(--mono, var(--sans)); }
+.scan-input-button { flex: none; }
+.scan-input-video { width: 100%; max-width: 320px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius); background: var(--raised); }
+.scan-input-note { font: var(--text-sm) var(--sans); color: var(--ink-muted); }
+
+/* A signature: a white pad in every look (ink on paper, as it is kept), the tools under it. */
+.signature-input { display: grid; gap: var(--space-3); width: 100%; max-width: 480px; }
+.signature-input-pad {
+  display: block; width: 100%; aspect-ratio: 480 / 150; touch-action: none; cursor: crosshair;
+  border: 1px dashed var(--line-control, var(--line)); border-radius: var(--radius); background: #ffffff;
+}
+.signature-input-kept { display: block; max-width: 100%; max-height: 120px; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: #ffffff; }
+.signature-input-tools { display: flex; flex-wrap: wrap; gap: var(--space-2h) var(--space-3); align-items: center; }
+.signature-input-keep { margin-left: auto; }
+.signature-input-problem { font: var(--text-sm) var(--sans); color: var(--status-critical); }
+}

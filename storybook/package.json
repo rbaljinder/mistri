@@ -1,0 +1,21 @@
+{
+  "name": "tablewalk-storybook",
+  "private": true,
+  "description": "The component library, drawn from src/client. A package of its own so the tablewalk package never depends on Storybook.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "review": "node scripts/review.mjs",
+    "test:interactions": "node scripts/interactions.mjs",
+    "photos": "node scripts/photos.mjs",
+    "predev": "npm run photos",
+    "dev": "storybook dev --port 6006 --no-open",
+    "prebuild": "npm run photos",
+    "build": "storybook build --quiet --output-dir ../site/dist/components"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "^10.6.3",
+    "@storybook/react-vite": "10.6.3",
+    "storybook": "10.6.3"
+  }
+}

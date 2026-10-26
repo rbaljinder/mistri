@@ -1,0 +1,499 @@
+/* The tool's own rules: the first layer (style.css names the order). */
+@layer base {
+/* The view composer.
+
+   Every colour here is a token from style.css — nothing names a colour
+   directly, so the composer follows the light/dark switch without knowing
+   there is one. Shapes are borrowed too: `.panel`, `.tab`, `.ac`, `.dd` and
+   the results grid all come from the main sheet and are only positioned
+   here, so a view looks like the rest of the tool rather than like a second
+   application bolted to the side of it. */
+
+.composer {
+  position: fixed;
+  top: 0; /* set from the top bar's height on open — see positionRoot() */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+  color: var(--ink);
+}
+
+/* The page behind is inert but still visible above the composer; stopping it
+   from scrolling keeps the two layers from arguing about the wheel. */
+body.composing { overflow: hidden; }
+
+/* ---------- the composer's own bar ---------- */
+
+.composer-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3h);
+  flex: none;
+  padding: var(--space-3) var(--space-4h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.composer-eyebrow {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-subtle);
+  flex: none;
+}
+
+.composer-name {
+  flex: 1;
+  min-width: 0;
+  max-width: 26rem;
+  padding: var(--space-2h) var(--space-3);
+  font: var(--text-base) var(--sans);
+  color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+}
+.composer-name:focus { outline: var(--focus-width) solid var(--focus); outline-offset: -1px; border-color: transparent; }
+
+.composer-on {
+  color: var(--ink-muted);
+  font: var(--text-sm) var(--mono);
+  flex: none;
+}
+
+.composer-bar-actions { display: flex; gap: var(--space-2h); margin-left: auto; flex: none; }
+
+.composer-close { font-size: calc(15px * var(--type-k)); line-height: 1; padding: var(--space-2) var(--space-3h); }
+
+/* ---------- two columns ---------- */
+
+.composer-body { display: flex; flex: 1; min-height: 0; }
+
+/* The sidebar itself does not scroll; its sections do.
+
+   With one scroller for the whole column, the relationship list — which is
+   long, and the tallest thing here — pushes everything under it off the
+   bottom of the window. Saved views were reachable only by scrolling past
+   thirty relationships, which is to say they were not reachable. Giving the
+   long section its own scroller pins the short ones in place. */
+.composer-side {
+  width: 336px;
+  flex: none;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  overflow: hidden;
+  padding: var(--space-3h);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3h);
+  min-height: 0;
+}
+
+.composer-panel { display: flex; flex-direction: column; min-height: 0; }
+.composer-panel > h3 { flex: none; }
+.composer-panel > .composer-rel,
+.composer-panel > .composer-saved { overflow-y: auto; min-height: 0; }
+
+/* Saved views take what they need up to a third of the column; the
+   relationship list takes the rest. */
+.composer-side > .composer-panel:nth-child(2) > .composer-saved { max-height: 32vh; }
+.composer-related { flex: 1; }
+
+.composer-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.composer-pad { padding: var(--space-3) var(--space-3h); }
+
+/* ---------- related tables ----------
+
+   The phrase leads and the mechanism follows it in mono, one size down: you
+   read "each invoice has one customer" and only look at `via customer_id` if
+   you need to know how. Reversing that order is what makes join builders feel
+   like paperwork. */
+
+.composer-rel { list-style: none; margin: 0; padding: var(--space-2) 0 var(--space-2h); }
+
+.composer-rel-head {
+  padding: var(--space-3) var(--space-3h) var(--space-1h);
+  font: 600 var(--text-xs) var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-subtle);
+}
+
+.composer-rel-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3h);
+  border-left: 2px solid transparent;
+}
+.composer-rel-item:hover { background: var(--raised); }
+.composer-rel-item.open { border-left-color: var(--accent); background: var(--accent-soft); }
+
+.composer-phrase { font: var(--text-sm)/1.35 var(--sans); color: var(--ink); }
+.composer-rel-item.many .composer-phrase { color: var(--ink-muted); }
+
+.composer-via {
+  grid-column: 1;
+  font: var(--text-xs) var(--mono);
+  color: var(--ink-subtle);
+}
+
+.composer-add {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink-muted);
+  padding: var(--space-1) var(--space-3h);
+  font: var(--text-xs) var(--sans);
+  cursor: pointer;
+}
+.composer-add:hover { border-color: var(--accent); color: var(--accent-ink); }
+.composer-add.on { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+
+.composer-cap {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  font: var(--text-xs) var(--mono);
+  color: var(--ink-subtle);
+}
+
+/* A table reachable several ways is stated once, with its routes beneath.
+   Three sentences differing only in a trailing column name is a list you have
+   to read rather than scan. */
+.composer-rel-group {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3h) var(--space-1);
+}
+.composer-rel-group .composer-phrase { font-size: var(--text-sm); }
+.composer-ways {
+  margin-left: auto;
+  flex: none;
+  font: var(--text-xs) var(--mono);
+  color: var(--ink-subtle);
+}
+.composer-rel-item.in-group { padding-top: var(--space-1); padding-bottom: var(--space-1); }
+.composer-rel-item.in-group .composer-via { grid-row: 1; align-self: center; }
+
+/* The many side: two real options and a warning, rather than a disabled
+   button and no explanation.
+
+   Its controls sit on their own row rather than beside the sentence. In a
+   `1fr auto` row the `auto` column sizes to three stacked controls, which on
+   a 336px sidebar left the sentence a column about one word wide — "each /
+   customer / has many / invoices", read downwards. A sentence and a control
+   stack cannot share a row this narrow, so they do not. */
+.composer-rel-item.many { grid-template-columns: 1fr; }
+.composer-many-actions {
+  grid-row: auto;
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2h);
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-top: var(--space-2);
+}
+.composer-menu { display: inline-block; min-width: 9rem; }
+.composer-menu .dd-button { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+/* Positioning is handled in the viewport by dropdown.js, so nothing here
+   needs to fight the sidebar's clip. */
+.composer-menu .dd-list { min-width: 13rem; }
+
+/* ---------- saved views ---------- */
+
+.composer-saved { list-style: none; margin: 0; padding: var(--space-2) 0 var(--space-2h); }
+.composer-saved-item { display: flex; align-items: stretch; }
+.composer-saved-item:hover { background: var(--raised); }
+.composer-saved-item.active { background: var(--accent-soft); }
+
+.composer-pin {
+  flex: none;
+  align-self: center;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--ink-subtle);
+  cursor: pointer;
+  padding: var(--space-2h) var(--space-1) var(--space-2h) var(--space-3);
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+.composer-pin:hover { color: var(--ink-muted); }
+.composer-pin.on { color: var(--accent-ink); }
+
+.composer-saved-open {
+  flex: 1;
+  min-width: 0;
+  padding-left: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  padding: var(--space-2h) var(--space-3h);
+  cursor: pointer;
+  color: var(--ink);
+}
+.composer-saved-open[disabled] { color: var(--ink-subtle); cursor: default; }
+.composer-saved-name {
+  font: var(--text-sm) var(--sans);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.composer-saved-item.active .composer-saved-name { color: var(--accent-ink); font-weight: 600; }
+.composer-saved-base { font: var(--text-xs) var(--mono); color: var(--ink-muted); }
+
+.composer-saved-tag {
+  align-self: center;
+  flex: none;
+  margin-right: var(--space-3);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+  background: var(--raised);
+  border-radius: min(3px, var(--radius));
+  padding: 1px var(--space-2);
+}
+
+/* ---------- fields ---------- */
+
+.composer-fields {
+  margin: var(--space-3h) var(--space-4h) 0;
+  max-height: 38%;
+  overflow-y: auto;
+  flex: none;
+}
+.composer-fields > h3 { position: sticky; top: 0; z-index: 1; display: flex; gap: var(--space-3); align-items: baseline; }
+.composer-count { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: var(--text-xs); }
+
+.composer-empty {
+  margin: 0;
+  padding: var(--space-3h) var(--space-4) var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--line);
+}
+.composer-empty strong { color: var(--ink); font-weight: 600; }
+
+.composer-group { border-bottom: 1px solid var(--line); }
+.composer-group:last-child { border-bottom: none; }
+/* A moment's emphasis on the group that just arrived, then nothing. A badge
+   that stays becomes furniture and stops meaning "new". */
+.composer-group.fresh { background: var(--accent-soft); }
+.composer-group-new {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-ink);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .composer-group { transition: background var(--t-panel) var(--ease-out); }
+}
+
+.composer-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2h) var(--space-4) var(--space-1);
+}
+.composer-group-name { font: 600 var(--text-sm) var(--mono); color: var(--ink); }
+.composer-group-path { font: var(--text-xs) var(--mono); color: var(--ink-subtle); }
+
+/* A wrapping grid rather than a list: a table with twenty-seven columns is
+   the case that matters, and one per line makes it a scroll instead of a
+   glance. */
+.composer-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-3h) var(--space-3);
+}
+
+.composer-check {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1h) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  font: var(--text-sm) var(--mono);
+  color: var(--ink-muted);
+  max-width: 100%;
+}
+.composer-check:hover { border-color: var(--line-strong); color: var(--ink); }
+.composer-check.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.composer-check input { margin: 0; accent-color: var(--accent); }
+.composer-field-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-field-type { font-size: var(--text-xs); color: var(--ink-subtle); }
+.composer-mark { font-size: var(--text-xs); }
+.composer-mark.pk { color: var(--status-info); }
+.composer-mark.fk { color: var(--accent-ink); }
+
+/* ---------- filter ---------- */
+
+.composer-filter { flex: none; padding: var(--space-3h) var(--space-4h) 0; }
+
+.composer-filter-row { display: flex; align-items: center; gap: var(--space-3); }
+
+.composer-filter-label {
+  font: var(--text-xs) var(--mono);
+  color: var(--ink-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: none;
+}
+
+.composer-query-wrap { position: relative; flex: 1; min-width: 0; display: block; }
+
+.composer-query {
+  width: 100%;
+  padding: var(--space-3) var(--space-3h);
+  font: var(--text-base)/1.4 var(--mono);
+  color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+}
+.composer-query:focus { outline: var(--focus-width) solid var(--focus); outline-offset: -1px; border-color: transparent; }
+
+.composer-limit {
+  width: 5rem;
+  padding: var(--space-3) var(--space-3);
+  font: var(--text-base) var(--mono);
+  color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+}
+
+/* The suggestion list is `.ac` from style.css; only its anchor changes. */
+.composer-ac { top: calc(100% + 4px); left: 0; }
+
+.composer-hint { margin: var(--space-2h) 0 0; font-size: var(--text-xs); color: var(--ink-subtle); }
+
+/* What the result *is*, in words, immediately above the grid that shows it.
+   The panels above describe ingredients; this is the only line that describes
+   the answer, which is the thing people cannot otherwise assemble in their
+   heads. */
+.composer-summary {
+  flex: none;
+  margin: var(--space-3h) 0 0;
+  padding: var(--space-3) var(--space-4h);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--ink-muted);
+  background: var(--raised);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.composer-summary strong { color: var(--ink); font-weight: 600; }
+
+/* ---------- the view, written down ---------- */
+
+.composer-textpanel {
+  flex: none;
+  margin: var(--space-3h) var(--space-4h) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2h);
+}
+
+.composer-text {
+  width: 100%;
+  resize: vertical;
+  padding: var(--space-3h) var(--space-4);
+  font: var(--text-sm)/1.6 var(--mono);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-panel);
+  tab-size: 2;
+}
+.composer-text:focus { outline: var(--focus-width) solid var(--focus); outline-offset: -1px; border-color: transparent; }
+
+.composer-text-actions { display: flex; align-items: center; gap: var(--space-3h); }
+.composer-text-actions .composer-hint { margin: 0; flex: 1; min-width: 0; }
+.composer-text-apply { padding: var(--space-2) var(--space-4); font-size: var(--text-sm); }
+.composer-text-apply[disabled] { opacity: 0.45; cursor: default; }
+
+/* ---------- SQL ---------- */
+
+.composer-explain {
+  flex: none;
+  margin: var(--space-3h) var(--space-4h) 0;
+  max-height: 12rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--raised);
+}
+
+/* ---------- preview ---------- */
+
+.composer-preview { flex: 1; min-height: 0; overflow: auto; }
+.composer-preview .result-head { padding-top: var(--space-4); }
+.composer-errors { border-bottom: none; margin: var(--space-3h) var(--space-4h); border-radius: var(--radius-panel); }
+
+/* Headers in a view carry two names — the table and the column — because a
+   view of thirty fields drawn from five tables is unreadable when every third
+   one is called "name". */
+.composer-th-table { color: var(--ink-subtle); font-weight: 400; text-transform: none; letter-spacing: 0; }
+/* A summary is a different kind of column — computed from many rows rather
+   than read from one — and is coloured like a key so the eye separates it
+   from the fields beside it. */
+.composer-preview th.is-summary { cursor: default; color: var(--status-info); }
+.composer-preview th.is-summary:hover { color: var(--status-info); }
+.composer-preview th.is-summary .composer-th-table { color: var(--status-info); opacity: 0.75; }
+.composer-th-sort { color: var(--accent-ink); }
+.composer-preview th.sorted-asc, .composer-preview th.sorted-desc { color: var(--accent-ink); }
+/* Nothing to click through to: a view row is a join of several rows and has
+   no single identity to open. Saying so with the cursor is cheaper than
+   letting someone find out. */
+.composer-preview tbody tr { cursor: default; }
+.composer-preview tbody tr:hover { background: var(--raised); }
+
+/* ---------- narrow windows ---------- */
+
+@media (max-width: 860px) {
+  .composer-body { flex-direction: column; }
+  .composer-side { width: auto; border-right: none; border-bottom: 1px solid var(--line); max-height: 40%; }
+  .composer-fields { max-height: none; }
+}
+
+/* Renaming a column, on the header where the ambiguity shows. Hidden until
+   the header is hovered: it is an occasional action and a pencil on every
+   column of a thirty-column view is noise. */
+.composer-th-rename {
+  background: none; border: none; border-radius: min(3px, var(--radius));
+  color: var(--ink-subtle); cursor: pointer;
+  padding: 0 var(--space-2); margin-left: var(--space-2h); font-size: var(--text-xs); line-height: 1;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) { .composer-th-rename { transition: opacity var(--t-hover) var(--ease-out); } }
+th:hover .composer-th-rename,
+.composer-th-rename:focus-visible { opacity: 1; }
+.composer-th-rename:hover { color: var(--accent-ink); }
+}

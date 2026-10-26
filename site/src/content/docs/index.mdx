@@ -1,0 +1,287 @@
+---
+title: mistri
+# The browser tab reads the product and its promise, not "mistri | mistri".
+head:
+  - tag: title
+    content: mistri — A few lines of TypeScript. A complete App.
+description: A TypeScript framework for Apps. Describe records, screens and rules in a few typed lines; mistri serves lists, record pages, forms, dashboards, sign-in and roles on PostgreSQL.
+template: splash
+prev: false
+next: false
+# Drawn by src/components/Hero.astro: the words, then a real App under them.
+hero:
+  title: A few lines of TypeScript. A complete App.
+  tagline: Describe your records, screens and rules in typed TypeScript. mistri serves the App on PostgreSQL, with lists, record pages, forms, dashboards, public pages, sign-in and roles.
+  actions:
+    - text: Build your first App
+      link: /docs/getting-started/
+      icon: right-arrow
+    - text: Build it with an agent
+      link: /docs/build-with-an-agent/
+      variant: secondary
+---
+
+import { Image } from 'astro:assets';
+import Showcase from '../../components/Showcase.astro';
+import Pair from '../../components/Pair.astro';
+import pairList from '../../assets/home/pair-list.webp';
+import pairPage from '../../assets/home/pair-page.webp';
+import pairDashboard from '../../assets/home/pair-dashboard.webp';
+import lumen from '../../assets/looks/lumen.webp';
+import mono from '../../assets/looks/mono.webp';
+import sage from '../../assets/looks/sage.webp';
+import blueprintCompare from '../../assets/looks/blueprint-compare.webp';
+
+## Start a new App
+
+Two tables and twenty-one lines of TypeScript are an App you can list, search,
+filter and edit.
+
+<div class="tw-new">
+<div>
+
+```sql title="schema.sql"
+create table customer (
+  id serial primary key,
+  name text not null,
+  email text
+);
+
+create table invoice (
+  id serial primary key,
+  customer_id integer not null references customer (id),
+  total numeric(10, 2) not null,
+  paid boolean not null default false
+);
+```
+
+```json title="mistri.json"
+{
+  "connections": [{
+    "name": "billing",
+    "url": "postgres://localhost/billing",
+    "writable": true
+  }]
+}
+```
+
+</div>
+
+```ts title="app.ts"
+import { defineApp, listView } from '@mistriwork/mistri/app';
+
+export default defineApp({
+  id: 'billing',
+  name: 'Billing',
+  connection: 'billing',
+  resources: {
+    customer: { access: 'write' },
+    invoice: { access: 'write' },
+  },
+  views: {
+    invoices: listView('Invoices', 'invoice', {
+      show: ['customer_id', 'total', 'paid'],
+    }),
+    customers: listView('Customers', 'customer', {
+      show: ['name', 'email'],
+    }),
+  },
+  nav: ['invoices', 'customers'],
+  home: 'invoices',
+});
+```
+
+</div>
+
+```sh title="Terminal"
+npm init -y && npm pkg set type=module && npm install @mistriwork/mistri typescript
+createdb billing
+npx @mistriwork/mistri migrate diff init --app .   # writes migrations/V1__init.sql from schema.sql
+npx @mistriwork/mistri migrate up --app .          # applies it, then checks the App against it
+npx @mistriwork/mistri dev                         # serves it, and reloads on every save
+```
+
+You read the first migration before it runs; the next comes the same way when
+you change `schema.sql`. No front end to write, no API to wire, no build step
+to serve. Starting with nothing, `npm create mistri billing` makes a starter App
+with a SQLite database of its own; with a database you have, mistri drafts the
+App from it. [Get started](/docs/getting-started/)
+
+## The DSL: a few lines is a screen
+
+Lintel, the flagship sample, runs a property company's three Denver buildings:
+leases, a rent ledger, repairs, a storeroom, a public listings site and a
+resident portal. It is about 1,500 lines of TypeScript, commands and jobs
+included, not counting blank lines, comments or tests, checked against the
+database before anyone opens a page. Three cuts from it:
+
+<Pair src={pairList} title="A list people work in" alt="Lintel's rent roll: counted tabs from All to Advertised, filters to add, and rows of homes with their size, asking rent, status and resident.">
+
+```ts title="examples/apps/lintel/views.ts"
+units: listView('Rent roll', 'unit', {
+  icon: 'buildings',
+  // …
+  editable: ['market_rent', 'available_on', 'listed'],
+  // …
+  tabs: [
+```
+
+An asking rent, a date and a listing change in place; the tabs are the rent
+roll's segments, each counted.
+
+</Pair>
+
+<Pair src={pairPage} title="Buttons from the road a lease travels" alt="A Lintel lease that is Active: Give notice and Add charge, and a strip of its states from Draft to Ended.">
+
+```ts title="examples/apps/lintel/resources.ts"
+machine: machine('status', {
+  draft: { on: { signLease: 'active' } },
+  // …
+  ended: { final: true },
+```
+
+Each state names the verbs that leave it. They become the page's buttons and
+its stepper, and the server refuses any other change of status.
+
+</Pair>
+
+<Pair src={pairDashboard} title="A card for each number that matters" alt="Lintel's figures over the last 90 days: occupied and vacant homes, Rent collected with its change against the prior 90 days and a sparkline, and Overdue.">
+
+```ts title="examples/apps/lintel/dashboards.ts"
+metric('Rent collected', 'charge', {
+  query: 'kind = rent and status = paid',
+  over: 'due_on',
+  measure: 'sum amount as collected',
+  better: 'up',
+  // …
+}),
+```
+
+Over the window the reader picks, with its change from the period before and its
+trend across the window, drawn unasked.
+
+</Pair>
+
+## The UX: drawn for you
+
+Every list, record page, form and dashboard is drawn for you, in a design
+system made for work people do all day.
+
+<Showcase />
+
+<ul class="tw-ux not-content">
+  <li><strong>Keys for everything.</strong> ⌘K finds any view, and <kbd>j</kbd> and <kbd>k</kbd> step through the records of the list you came from. <a href="/docs/nav-and-shell/">Navigation</a></li>
+  <li><strong>An address for every state.</strong> A list's tab, search, filters and sort, a record, a dashboard's window: copy the address and share it. <a href="/docs/dsl-root/#addresses">Addresses</a></li>
+  <li><strong>Edit in place.</strong> Name the columns a list may change in its cells, and a record's side panel edits where it reads. <a href="/docs/lists/">Lists</a></li>
+  <li><strong>Forms from the schema.</strong> Required fields marked, references searched by name, a switch for a yes or no. <a href="/docs/forms/">Forms</a></li>
+  <li><strong>Phone layouts.</strong> On a phone the menu folds into the bar, dialogs fill the screen and a record's side panel follows the page. <a href="/docs/nav-and-shell/">Navigation</a></li>
+  <li><strong>Light and dark, three looks.</strong> Lumen, Mono and Sage; each reader picks a look and System, Light or Dark under Preferences. <a href="/docs/looks/">Looks</a></li>
+</ul>
+
+<div class="tw-trio not-content">
+  <a href="/docs/looks/"><Image src={lumen} alt="Lintel's leases in Lumen, the default look." widths={[480, 960]} sizes="(min-width: 64rem) 22rem, calc(100vw - 2rem)" loading="lazy" /><span>Lumen</span></a>
+  <a href="/docs/looks/"><Image src={mono} alt="The same leases in Mono." widths={[480, 960]} sizes="(min-width: 64rem) 22rem, calc(100vw - 2rem)" loading="lazy" /><span>Mono</span></a>
+  <a href="/docs/looks/"><Image src={sage} alt="The same leases in Sage." widths={[480, 960]} sizes="(min-width: 64rem) 22rem, calc(100vw - 2rem)" loading="lazy" /><span>Sage</span></a>
+</div>
+
+## Same App. Your brand.
+
+<figure class="tw-brand not-content">
+  <div class="tw-window tw-brand-whole"><Image src={blueprintCompare} alt="Lintel's Today dashboard twice, side by side. On the left in Lumen, the default look: white panels, rounded corners and four figure cards in a row. On the right in Blueprint, a theme of its own: blue ink on a gridded off-white ground, square corners, the greeting in condensed capitals, and the figures and their labels in a monospace under ruled lines." widths={[960, 1600, 2596]} sizes="(min-width: 76rem) 72rem, calc(100vw - 2rem)" loading="lazy" /></div>
+  {/* On a phone the sheet is too small to read whole: each half stands on its own, from the same picture. */}
+  <div class="tw-brand-halves">
+    <div class="tw-window"><Image src={blueprintCompare} alt="Lintel's Today in Lumen, the default look: white panels, rounded corners and four figure cards in a row." widths={[960, 1600]} sizes="200vw" loading="lazy" /></div>
+    <div class="tw-window tw-brand-right"><Image src={blueprintCompare} alt="The same page in Blueprint: blue ink on a gridded off-white ground, square corners, the greeting in condensed capitals, and the figures and their labels in a monospace under ruled lines." widths={[960, 1600]} sizes="200vw" loading="lazy" /></div>
+  </div>
+  <figcaption>
+    The same Lintel, data and addresses, re-dressed by one validated 61-line theme file that changes 98 of Lumen's
+    values. <code>mistri check</code> tests every color pair it makes in light and dark, and refuses one it cannot
+    read, naming a color that passes; <code>mistri grade</code> then measures the rendered pages, 26 of them at four widths: 99 of 100, and no finding the theme causes.
+    <a href="/docs/themes/#a-look-of-your-own">A look of your own</a>
+  </figcaption>
+</figure>
+
+## Hooks: yours to change
+
+When a default is not enough, each layer has a hook, and what you write is
+still checked against the database. Ladle, a cooking school, draws its door
+list as a page of its own:
+
+```tsx title="examples/apps/ladle/pages/check-in.page.tsx"
+const page = definePage({
+  label: 'Check-in',
+  reads: ['class_session', 'booking'],
+  commands: ['checkIn'],
+  params: ['class'],
+  component: CheckIn,
+});
+```
+
+The page reads only what it declares, under the reader's grants, writes only
+through its command, and draws the App's own blocks beside its React.
+[Custom components](/docs/custom-components/) · [The general path](/docs/general-path/)
+
+<div class="tw-features not-content">
+  <a href="/docs/themes/"><strong>Your own look</strong><span><code>defineTheme</code>: colors by purpose, faces and corners, light and dark.</span></a>
+  <a href="/docs/commands/"><strong>Commands</strong><span>Server operations with declared inputs, a typed <code>db</code> and refusals of their own, in one transaction.</span></a>
+  <a href="/docs/pages/"><strong>Record pages</strong><span>Sections, child tabs and a side panel, your own components among them.</span></a>
+  <a href="/docs/dashboards/"><strong>Dashboards</strong><span>Metrics, charts, breakdowns and waiting work, over a window the reader picks.</span></a>
+  <a href="/docs/custom-components/"><strong>Custom components</strong><span>A React component fed by checked reads, drawn with the looks' tokens.</span></a>
+  <a href="/docs/forms/"><strong>Forms</strong><span>Groups, defaults, help and conditions for the New form and record editing.</span></a>
+</div>
+
+## The agent loop
+
+Coding agents build Apps with mistri: a typed DSL that keeps an App short, a
+check that answers precisely when it is wrong, and MCP to see what the running
+App did. Install the skill, give the agent a brief, and it works against the
+same checks you would.
+
+<div class="tw-new">
+
+<ul class="tw-ux tw-ux-list not-content">
+  <li><strong>The skill where your agent reads it.</strong> <code>{'mistri agent init'}</code> installs it for Claude Code, Codex, Cursor and GitHub Copilot. <a href="/docs/build-with-an-agent/">Build with a coding agent</a></li>
+  <li><strong>The schema in its context.</strong> <code>{'mistri schema --brief'}</code> prints one line per table, with keys, references and allowed values.</li>
+  <li><strong>Wrong fails before a page opens.</strong> <code>{'mistri check'}</code> typechecks the App against the generated schema types and validates it against the database: a stable code, the file, and the fix, as lines or JSON. <a href="/docs/check-codes/">Check codes</a></li>
+  <li><strong>It sees what it did.</strong> <code>{'--dev'}</code> records every request's SQL, each command's input and refusal cause, logs, N+1 and slow statements and page vitals, and <code>{'mistri observe --mcp'}</code> hands them to the agent as tools; <code>{'mistri shot'}</code> draws the App's pages as PNG files. <a href="/docs/observe/">Observe</a></li>
+</ul>
+
+<div>
+
+```shellsession title="Terminal" wrap
+$ npx @mistriwork/mistri agent init
+$ npx @mistriwork/mistri schema --brief
+…
+customer(id* int, name text, email text?)
+invoice(id* int, customer_id int → customer, total num, paid bool)
+$ npx @mistriwork/mistri check --app . --brief
+unknown-column app.ts view "invoices": This view's show cannot be resolved on "invoice": "amount" ("amount" is not a column on invoice.). — fix: use a column the table has (the message names the nearest; mistri schema --brief lists them)
+```
+
+</div>
+</div>
+
+An App's own reads and commands reach an agent as MCP tools too, under a scoped
+token and the same grants as its screens. In production the same traces go to
+your collector over OpenTelemetry.
+[App API](/docs/app-api/) · [Observe and operate](/docs/observe/)
+
+## Also built in
+
+<div class="tw-features not-content">
+  <a href="/docs/roles/"><strong>Sign-in and access</strong><span>Roles, and field and row access, enforced by the server.</span></a>
+  <a href="/docs/pages/"><strong>History and notifications</strong><span>A record's changes, and an inbox for the writes your rules say to tell.</span></a>
+  <a href="/docs/tenant-apps/"><strong>Tenant Apps</strong><span>Several organizations in one App, each seeing only its own rows.</span></a>
+  <a href="/docs/landing-pages/"><strong>Public pages and forms</strong><span>A landing page and forms for signed-out visitors.</span></a>
+  <a href="/docs/app-api/"><strong>App API and webhooks</strong><span>Declared reads and commands for other programs, with scoped tokens.</span></a>
+  <a href="/docs/build-and-deploy/"><strong>Build and deploy</strong><span><code>mistri build</code> checks and bundles once, for a container.</span></a>
+</div>
+
+What is stable and what comes next:
+[Status and roadmap](/docs/status/).
+
+<div class="tw-lines not-content">
+  <p><strong>Three sample Apps</strong> to run and read, and not only for the back office: Tick, a to-do list in one file; Lintel, a staff desk and a resident portal in one App, with its own tests; and Ladle, a cooking school's own React site with the App inside it. A CRM, a service desk, a warehouse and the like are patterns in the agent skill's recipes, not samples. <a href="/docs/examples/">Sample Apps</a></p>
+  <p><strong>And tablewalk, a database browser.</strong> <code>npx tablewalk postgres://…</code> opens any PostgreSQL, MySQL/MariaDB or SQLite database read-only, its foreign keys links to follow: a package of its own, with no App in it. <a href="/docs/database-browser/">The database browser</a></p>
+  <p class="tw-foot">MIT license (the <code>LICENSE</code> file in the npm package)</p>
+</div>

@@ -1,0 +1,18 @@
+/* @mistriwork/ui's stylesheet, for a page drawn with the primitives alone: the tokens, the primitives' rules, and the
+   dress a page's own element rules would give a Button. All of it stands in the `mistri-ui` layer, so any rule of the
+   page's own — in a later layer or in none — wins over it. The kit's stylesheet takes tokens.css and primitives.css
+   into its own base layer instead (packages/kit/src/client/style.css says why) and dresses the button itself; the form
+   controls' rules (forms.css) and the hero blocks' (hero.css) wait there for the first control a page draws. */
+@layer mistri-ui;
+@import './tokens.css' layer(mistri-ui);
+@import './primitives.css' layer(mistri-ui);
+@import './forms.css' layer(mistri-ui);
+@import './hero.css' layer(mistri-ui);
+@import './preferences.css' layer(mistri-ui);
+
+@layer mistri-ui {
+.btn { border: 1px solid transparent; border-radius: var(--radius); background: var(--accent); color: var(--on-accent); cursor: pointer; }
+.btn.btn-secondary { background: transparent; color: var(--ink-muted); border-color: var(--line-strong); }
+.btn.btn-danger { background: var(--status-critical); color: var(--surface); border-color: var(--status-critical); }
+.btn:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+}

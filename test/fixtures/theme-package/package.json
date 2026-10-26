@@ -1,0 +1,25 @@
+{
+  "name": "tablewalk-theme-ledger",
+  "version": "1.0.0",
+  "description": "A published look for tablewalk Apps: the fixture test/theme-package.test.ts installs into two Apps.",
+  "files": [
+    "theme.js",
+    "theme.d.ts",
+    "ledger.css",
+    "paper.png",
+    "fonts"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./theme.d.ts",
+      "default": "./theme.js"
+    }
+  },
+  "peerDependencies": {
+    "tablewalk": "^1"
+  },
+  "tablewalk": {
+    "theme": "./theme.js"
+  }
+}

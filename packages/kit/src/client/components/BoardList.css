@@ -1,0 +1,9 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+/* The board list: TriageBoard.css draws the lanes and cards; this is only
+   what the list adds around them. Names no colour of its own. */
+.board-list { min-width: 0; }
+/* Rows outside the lanes are counted, not hidden: a board that shows nine of
+   ten records should say so where the tenth would have been. */
+.board-elsewhere { margin: 0; padding: var(--space-3) 0; color: var(--ink-muted); font-size: var(--text-base); }
+}

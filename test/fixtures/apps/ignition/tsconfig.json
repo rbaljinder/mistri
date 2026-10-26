@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "types": ["node"],
+    "skipLibCheck": true,
+    "lib": ["ES2023"],
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    /* The server-only modules here import `@mistriwork/mistri/commands`, `@mistriwork/mistri/jobs`
+       and `@mistriwork/mistri/policy` the way a deployment does. The package's exports
+       map types them from dist/, which a fresh checkout has not built; this
+       mirrors the root tsconfig and reads the source. tenant-policy.ts is the
+       one that needs `policy`. It also checks tablewalk's own server here, so
+       this project's time is not the App's: scripts/type-budget.mjs measures
+       Ignition as a user's project holds it. */
+    "paths": {
+      "@mistriwork/mistri/commands": ["../../../../packages/mistri/src/server/commands.ts"],
+      "@mistriwork/mistri/jobs": ["../../../../packages/mistri/src/server/jobs.ts"],
+      "@mistriwork/mistri/policy": ["../../../../packages/mistri/src/server/policy.ts"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

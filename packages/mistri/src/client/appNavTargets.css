@@ -1,0 +1,16 @@
+/* Loaded by the checked projection before it publishes any target anchors. */
+@layer base {
+.app-nav-target { text-decoration: none; }
+:where(#table-list, .mobile-nav-list) a.app-nav-target {
+  width: 100%; box-sizing: border-box; text-align: start; background: transparent; color: var(--ink);
+  border: 0; border-radius: var(--radius); padding: var(--space-2) var(--space-3); padding-inline-start: calc(8px + var(--nav-indent, 0px));
+  font: var(--text-sm)/1.35 var(--mono); display: flex; justify-content: space-between; gap: var(--space-3); align-items: center;
+}
+:is(#table-list, .mobile-nav-list) a.app-nav-target:hover { background: var(--raised); }
+:is(#table-list, .mobile-nav-list) a.app-nav-target:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
+.mobile-nav-list a.app-nav-target { min-height: 44px; padding-block: var(--space-3); font: var(--type-ui)/1.35 var(--sans); }
+body.app-mode .sidebar[data-density="comfortable"] #table-list a.app-nav-target {
+  min-height: 46px; padding: var(--space-3h) var(--space-4); padding-inline-start: calc(12px + var(--nav-indent, 0px)); gap: var(--space-4); font: var(--type-ui)/1.4 var(--sans);
+}
+body.app-nav-rail.sidebar-hidden #table-list a.app-nav-target { justify-content: center; padding: var(--space-3) 0; }
+}

@@ -1,0 +1,151 @@
+/* The tool's own rules: the first layer (style.css names the order). */
+@layer base {
+/* The query reference: the panel behind `?`, and the runnable examples on the
+   landing page.
+
+   In its own file rather than style.css because it is a self-contained feature
+   and the stylesheet is already 1600 lines. Nothing here names a colour: every
+   value is one of the tokens defined at the top of style.css, so the panel
+   follows the dark scheme without a second set of rules to keep in step. */
+
+/* ---------- the landing page's examples ---------- */
+
+.landing-examples { margin-bottom: 26px; }
+.landing-examples-head {
+  display: flex; align-items: baseline; gap: var(--space-4);
+  margin-bottom: var(--space-3h);
+}
+.landing-examples-head .landing-heading { margin: 0; }
+
+/* Wrapping columns rather than a row: three queries on a narrow window
+   otherwise shrink until the text they are teaching is ellipsised, which is
+   the one thing an example cannot survive. */
+.help-starters {
+  display: grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+}
+
+/* ---------- an example, wherever it appears ---------- */
+
+/* A button that looks like a line of query text, because that is what it puts
+   in the bar. The border only firms up under the pointer: a page of examples
+   each in its own box reads as a form to fill in. */
+.help-example {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1h);
+  width: 100%; padding: var(--space-3) var(--space-4); text-align: left; cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius-panel);
+  font: inherit; color: var(--ink);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .help-example {
+    transition: border-color var(--t-hover) var(--ease-out),
+                background var(--t-hover) var(--ease-out);
+  }
+}
+.help-example:hover,
+.help-example:focus-visible {
+  border-color: var(--accent); background: var(--accent-soft);
+}
+.help-query {
+  font: var(--text-sm)/1.5 var(--mono); color: var(--ink);
+  /* Long paths wrap instead of scrolling sideways: an example you have to
+     scroll to read is one you cannot decide to click. */
+  overflow-wrap: anywhere;
+}
+.help-example:hover .help-query,
+.help-example:focus-visible .help-query { color: var(--accent-ink); }
+.help-caption { font-size: var(--text-xs); color: var(--ink-muted); }
+
+/* ---------- the panel ---------- */
+
+.help-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--scrim);
+  display: flex; justify-content: center;
+  padding: 8vh var(--space-5) var(--space-5);
+}
+.help-panel {
+  width: min(720px, 96vw); max-height: 84vh;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .help-panel {
+    animation: help-in var(--t-panel) var(--ease-out);
+  }
+  @keyframes help-in {
+    from { opacity: 0; transform: translateY(-6px); }
+  }
+}
+
+.help-head {
+  display: flex; align-items: flex-start; gap: var(--space-4);
+  padding: var(--space-4h) var(--space-5); flex: none;
+  border-bottom: 1px solid var(--line);
+}
+.help-title { margin: 0; font: 600 calc(15px * var(--type-k)) var(--sans); letter-spacing: -0.01em; }
+.help-sub { margin: var(--space-1h) 0 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.help-close {
+  margin-left: auto; flex: none;
+  padding: var(--space-1) var(--space-3); line-height: 1.2;
+  background: none; border: 1px solid transparent; border-radius: var(--radius);
+  color: var(--ink-subtle); cursor: pointer; font: var(--text-lg) var(--mono);
+}
+.help-close:hover, .help-close:focus-visible {
+  color: var(--accent-ink); border-color: var(--line);
+}
+
+.help-body { overflow-y: auto; padding: var(--space-2) var(--space-5) var(--space-5); }
+
+.help-section { padding: var(--space-4h) 0; border-bottom: 1px solid var(--line); }
+.help-section:last-child { border-bottom: none; }
+.help-section-title {
+  margin: 0 0 var(--space-2);
+  font: 600 var(--text-xs) var(--sans); text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--ink-muted);
+}
+.help-note { margin: 0 0 var(--space-3h); font-size: var(--text-sm); color: var(--ink); max-width: 60ch; }
+
+/* Syntax on the left, what it means on the right. A two-column grid rather
+   than a table so a long form wraps under itself instead of squeezing the
+   meaning into a column an inch wide. */
+.help-grammar {
+  margin: 0 0 var(--space-3h);
+  display: grid; grid-template-columns: minmax(9rem, auto) 1fr;
+  gap: var(--space-1h) var(--space-4h); align-items: baseline;
+}
+.help-grammar > div { display: contents; }
+.help-grammar dt { margin: 0; }
+.help-grammar dt code {
+  font: var(--text-sm) var(--mono); color: var(--accent-ink);
+  background: var(--accent-soft); border-radius: min(4px, var(--radius)); padding: 1px var(--space-2);
+}
+.help-grammar dd { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
+
+.help-examples { display: grid; gap: var(--space-2h); }
+.help-examples .help-example { background: var(--raised); }
+.help-examples .help-example:hover,
+.help-examples .help-example:focus-visible { background: var(--accent-soft); }
+
+.help-absent { margin: 0; font-size: var(--text-sm); color: var(--ink-subtle); }
+
+@media (max-width: 560px) {
+  .help-grammar { grid-template-columns: 1fr; gap: 1px; }
+  .help-grammar dd { margin-bottom: var(--space-2h); }
+}
+
+/* ---------- the examples, as the summary card's foot ---------- */
+
+/* Inside the shape card they are a continuation of it, not a section: the
+   heading and the margin that separated two stacked panels were pure cost
+   once there was only one panel. */
+.shape-body .landing-examples { margin: var(--space-4) 0 0; padding-top: var(--space-4); border-top: 1px solid var(--line); }
+.shape-body .landing-examples-head { margin-bottom: var(--space-3); }
+.shape-body .landing-heading { font: var(--text-xs) var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-subtle); }
+.shape-body .help-example { padding: var(--space-3) var(--space-3h); }
+}

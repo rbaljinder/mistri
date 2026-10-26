@@ -1,0 +1,566 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role servicing — the App
+auth rows all — the App
+source keystone connection "keystone" — the App
+source keystone default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource customer access write — the App
+resource deal access write — the App
+resource dealer access write — the App
+resource dealer_visit access write — the App
+resource decision_alert access write — the App
+resource funding access write — the App
+resource installment access write — the App
+resource intake_submission access write — the App
+resource lead access write — the App
+resource loan access write — the App
+resource loan_application access write — the App
+resource loan_document access write — the App
+resource payment access write — the App
+resource program access write — the App
+resource servicing_note access write — the App
+resource stipulation access write — the App
+resource underwriting_file access write — the App
+resource underwriting_note access write — the App
+resource vehicle access write — the App
+role admin read applicant — the App
+role admin read autopay — the App
+role admin read customer — the App
+role admin read deal — the App
+role admin read deal_scenario — the App
+role admin read dealer — the App
+role admin read dealer_site — the App
+role admin read dealer_user — the App
+role admin read dealer_visit — the App
+role admin read decision_alert — the App
+role admin read funding — the App
+role admin read installment — the App
+role admin read intake_submission — the App
+role admin read lead — the App
+role admin read lead_activity — the App
+role admin read lender_user — the App
+role admin read loan — the App
+role admin read loan_application — the App
+role admin read loan_document — the App
+role admin read payment — the App
+role admin read payoff_quote — the App
+role admin read prequalification — the App
+role admin read program — the App
+role admin read saved_vehicle — the App
+role admin read servicing_note — the App
+role admin read stipulation — the App
+role admin read trade_in — the App
+role admin read underwriting_file — the App
+role admin read underwriting_note — the App
+role admin read vehicle — the App
+role admin read vehicle_photo — the App
+role admin command auditFunding — the App
+role admin command clearStipulation — the App
+role admin command closeIntakeSubmission — the App
+role admin command fundLoan — the App
+role admin command logDealerVisit — the App
+role admin command postPayment — the App
+role admin command receiveContract — the App
+role admin command recordServicingNote — the App
+role admin command returnPayment — the App
+role admin command rotateIntakeAddress — the App
+role admin command setDealerStatus — the App
+role admin command waiveLateFee — the App
+role admin action intake_submission "markFollowedUp" — the App
+role admin operation workflows — the App
+role admin fields applicant read city — the App
+role admin fields applicant read created_at — the App
+role admin fields applicant read dealer_id — the App
+role admin fields applicant read email — the App
+role admin fields applicant read employer — the App
+role admin fields applicant read employment_type — the App
+role admin fields applicant read first_name — the App
+role admin fields applicant read housing — the App
+role admin fields applicant read id — the App
+role admin fields applicant read job_title — the App
+role admin fields applicant read last_name — the App
+role admin fields applicant read lead_id — the App
+role admin fields applicant read monthly_housing — the App
+role admin fields applicant read monthly_income — the App
+role admin fields applicant read phone — the App
+role admin fields applicant read role — the App
+role admin fields applicant read state — the App
+role admin fields applicant read street — the App
+role admin fields applicant read years_at_address — the App
+role admin fields applicant read years_employed — the App
+role admin fields applicant read zip — the App
+role admin fields underwriting_file read application_id — the App
+role admin fields underwriting_file read assigned_at — the App
+role admin fields underwriting_file read dealer_id — the App
+role admin fields underwriting_file read decided_by — the App
+role admin fields underwriting_file read decision_due_at — the App
+role admin fields underwriting_file read id — the App
+role admin fields underwriting_file read underwriter_id — the App
+role admin fields underwriting_file read version — the App
+role automation read applicant — the App
+role automation read autopay — the App
+role automation read customer — the App
+role automation read deal — the App
+role automation read deal_scenario — the App
+role automation read dealer — the App
+role automation read dealer_site — the App
+role automation read dealer_user — the App
+role automation read dealer_visit — the App
+role automation read decision_alert — the App
+role automation read funding — the App
+role automation read installment — the App
+role automation read intake_submission — the App
+role automation read lead — the App
+role automation read lead_activity — the App
+role automation read lender_user — the App
+role automation read loan — the App
+role automation read loan_application — the App
+role automation read loan_document — the App
+role automation read payment — the App
+role automation read payoff_quote — the App
+role automation read prequalification — the App
+role automation read program — the App
+role automation read saved_vehicle — the App
+role automation read servicing_note — the App
+role automation read stipulation — the App
+role automation read trade_in — the App
+role automation read underwriting_file — the App
+role automation read underwriting_note — the App
+role automation read vehicle — the App
+role automation read vehicle_photo — the App
+role automation command approveApplication — the App
+role automation command referToUnderwriter — the App
+role automation command remindUnderwriter — the App
+role credit_manager read applicant — the App
+role credit_manager read autopay — the App
+role credit_manager read customer — the App
+role credit_manager read deal — the App
+role credit_manager read deal_scenario — the App
+role credit_manager read dealer — the App
+role credit_manager read dealer_site — the App
+role credit_manager read dealer_user — the App
+role credit_manager read dealer_visit — the App
+role credit_manager read decision_alert — the App
+role credit_manager read funding — the App
+role credit_manager read installment — the App
+role credit_manager read intake_submission — the App
+role credit_manager read lead — the App
+role credit_manager read lead_activity — the App
+role credit_manager read lender_user — the App
+role credit_manager read loan — the App
+role credit_manager read loan_application — the App
+role credit_manager read loan_document — the App
+role credit_manager read payment — the App
+role credit_manager read payoff_quote — the App
+role credit_manager read prequalification — the App
+role credit_manager read program — the App
+role credit_manager read saved_vehicle — the App
+role credit_manager read servicing_note — the App
+role credit_manager read stipulation — the App
+role credit_manager read trade_in — the App
+role credit_manager read underwriting_file — the App
+role credit_manager read underwriting_note — the App
+role credit_manager read vehicle — the App
+role credit_manager read vehicle_photo — the App
+role credit_manager write program — the App
+role credit_manager command assignUnderwriter — the App
+role credit_manager command clearStipulation — the App
+role credit_manager command closeIntakeSubmission — the App
+role credit_manager command decideApplication — the App
+role credit_manager command requestCreditCheck — the App
+role credit_manager command requestStipulation — the App
+role credit_manager command waiveStipulation — the App
+role credit_manager operation workflows — the App
+role credit_manager fields dealer read city — the App
+role credit_manager fields dealer read email — the App
+role credit_manager fields dealer read franchise_make — the App
+role credit_manager fields dealer read id — the App
+role credit_manager fields dealer read joined_on — the App
+role credit_manager fields dealer read kind — the App
+role credit_manager fields dealer read legal_name — the App
+role credit_manager fields dealer read monthly_goal — the App
+role credit_manager fields dealer read name — the App
+role credit_manager fields dealer read on_hold_reason — the App
+role credit_manager fields dealer read phone — the App
+role credit_manager fields dealer read relationship_manager_id — the App
+role credit_manager fields dealer read reserve_pct — the App
+role credit_manager fields dealer read state — the App
+role credit_manager fields dealer read status — the App
+role credit_manager fields dealer read street — the App
+role credit_manager fields dealer read tier — the App
+role credit_manager fields dealer read version — the App
+role credit_manager fields dealer read zip — the App
+role funder read applicant — the App
+role funder read autopay — the App
+role funder read customer — the App
+role funder read deal — the App
+role funder read deal_scenario — the App
+role funder read dealer — the App
+role funder read dealer_site — the App
+role funder read dealer_user — the App
+role funder read dealer_visit — the App
+role funder read decision_alert — the App
+role funder read funding — the App
+role funder read installment — the App
+role funder read intake_submission — the App
+role funder read lead — the App
+role funder read lead_activity — the App
+role funder read lender_user — the App
+role funder read loan — the App
+role funder read loan_application — the App
+role funder read loan_document — the App
+role funder read payment — the App
+role funder read payoff_quote — the App
+role funder read prequalification — the App
+role funder read program — the App
+role funder read saved_vehicle — the App
+role funder read servicing_note — the App
+role funder read stipulation — the App
+role funder read trade_in — the App
+role funder read underwriting_file — the App
+role funder read underwriting_note — the App
+role funder read vehicle — the App
+role funder read vehicle_photo — the App
+role funder command auditFunding — the App
+role funder command clearStipulation — the App
+role funder command fundLoan — the App
+role funder command receiveContract — the App
+role funder fields applicant read city — the App
+role funder fields applicant read created_at — the App
+role funder fields applicant read dealer_id — the App
+role funder fields applicant read email — the App
+role funder fields applicant read employer — the App
+role funder fields applicant read employment_type — the App
+role funder fields applicant read first_name — the App
+role funder fields applicant read housing — the App
+role funder fields applicant read id — the App
+role funder fields applicant read job_title — the App
+role funder fields applicant read last_name — the App
+role funder fields applicant read lead_id — the App
+role funder fields applicant read monthly_housing — the App
+role funder fields applicant read monthly_income — the App
+role funder fields applicant read phone — the App
+role funder fields applicant read role — the App
+role funder fields applicant read state — the App
+role funder fields applicant read street — the App
+role funder fields applicant read years_at_address — the App
+role funder fields applicant read years_employed — the App
+role funder fields applicant read zip — the App
+role funder fields dealer read city — the App
+role funder fields dealer read email — the App
+role funder fields dealer read franchise_make — the App
+role funder fields dealer read id — the App
+role funder fields dealer read joined_on — the App
+role funder fields dealer read kind — the App
+role funder fields dealer read legal_name — the App
+role funder fields dealer read monthly_goal — the App
+role funder fields dealer read name — the App
+role funder fields dealer read on_hold_reason — the App
+role funder fields dealer read phone — the App
+role funder fields dealer read relationship_manager_id — the App
+role funder fields dealer read reserve_pct — the App
+role funder fields dealer read state — the App
+role funder fields dealer read status — the App
+role funder fields dealer read street — the App
+role funder fields dealer read tier — the App
+role funder fields dealer read version — the App
+role funder fields dealer read zip — the App
+role funder fields underwriting_file read application_id — the App
+role funder fields underwriting_file read assigned_at — the App
+role funder fields underwriting_file read dealer_id — the App
+role funder fields underwriting_file read decided_by — the App
+role funder fields underwriting_file read decision_due_at — the App
+role funder fields underwriting_file read id — the App
+role funder fields underwriting_file read underwriter_id — the App
+role funder fields underwriting_file read version — the App
+role integration read applicant — the App
+role integration read autopay — the App
+role integration read customer — the App
+role integration read deal — the App
+role integration read deal_scenario — the App
+role integration read dealer — the App
+role integration read dealer_site — the App
+role integration read dealer_user — the App
+role integration read dealer_visit — the App
+role integration read decision_alert — the App
+role integration read funding — the App
+role integration read installment — the App
+role integration read intake_submission — the App
+role integration read lead — the App
+role integration read lead_activity — the App
+role integration read lender_user — the App
+role integration read loan — the App
+role integration read loan_application — the App
+role integration read loan_document — the App
+role integration read payment — the App
+role integration read payoff_quote — the App
+role integration read prequalification — the App
+role integration read program — the App
+role integration read saved_vehicle — the App
+role integration read servicing_note — the App
+role integration read stipulation — the App
+role integration read trade_in — the App
+role integration read underwriting_file — the App
+role integration read underwriting_note — the App
+role integration read vehicle — the App
+role integration read vehicle_photo — the App
+role integration command recordCreditResult — the App
+role relationship_manager read applicant — the App
+role relationship_manager read autopay — the App
+role relationship_manager read customer — the App
+role relationship_manager read deal — the App
+role relationship_manager read deal_scenario — the App
+role relationship_manager read dealer — the App
+role relationship_manager read dealer_site — the App
+role relationship_manager read dealer_user — the App
+role relationship_manager read dealer_visit — the App
+role relationship_manager read decision_alert — the App
+role relationship_manager read funding — the App
+role relationship_manager read installment — the App
+role relationship_manager read intake_submission — the App
+role relationship_manager read lead — the App
+role relationship_manager read lead_activity — the App
+role relationship_manager read lender_user — the App
+role relationship_manager read loan — the App
+role relationship_manager read loan_application — the App
+role relationship_manager read loan_document — the App
+role relationship_manager read payment — the App
+role relationship_manager read payoff_quote — the App
+role relationship_manager read prequalification — the App
+role relationship_manager read program — the App
+role relationship_manager read saved_vehicle — the App
+role relationship_manager read servicing_note — the App
+role relationship_manager read stipulation — the App
+role relationship_manager read trade_in — the App
+role relationship_manager read underwriting_file — the App
+role relationship_manager read underwriting_note — the App
+role relationship_manager read vehicle — the App
+role relationship_manager read vehicle_photo — the App
+role relationship_manager command closeIntakeSubmission — the App
+role relationship_manager command logDealerVisit — the App
+role relationship_manager command setDealerStatus — the App
+role relationship_manager action intake_submission "markFollowedUp" — the App
+role relationship_manager fields applicant read city — the App
+role relationship_manager fields applicant read created_at — the App
+role relationship_manager fields applicant read dealer_id — the App
+role relationship_manager fields applicant read email — the App
+role relationship_manager fields applicant read employer — the App
+role relationship_manager fields applicant read employment_type — the App
+role relationship_manager fields applicant read first_name — the App
+role relationship_manager fields applicant read housing — the App
+role relationship_manager fields applicant read id — the App
+role relationship_manager fields applicant read job_title — the App
+role relationship_manager fields applicant read last_name — the App
+role relationship_manager fields applicant read lead_id — the App
+role relationship_manager fields applicant read monthly_housing — the App
+role relationship_manager fields applicant read monthly_income — the App
+role relationship_manager fields applicant read phone — the App
+role relationship_manager fields applicant read role — the App
+role relationship_manager fields applicant read state — the App
+role relationship_manager fields applicant read street — the App
+role relationship_manager fields applicant read years_at_address — the App
+role relationship_manager fields applicant read years_employed — the App
+role relationship_manager fields applicant read zip — the App
+role relationship_manager fields dealer read city — the App
+role relationship_manager fields dealer read email — the App
+role relationship_manager fields dealer read franchise_make — the App
+role relationship_manager fields dealer read id — the App
+role relationship_manager fields dealer read joined_on — the App
+role relationship_manager fields dealer read kind — the App
+role relationship_manager fields dealer read legal_name — the App
+role relationship_manager fields dealer read monthly_goal — the App
+role relationship_manager fields dealer read name — the App
+role relationship_manager fields dealer read on_hold_reason — the App
+role relationship_manager fields dealer read phone — the App
+role relationship_manager fields dealer read relationship_manager_id — the App
+role relationship_manager fields dealer read reserve_pct — the App
+role relationship_manager fields dealer read state — the App
+role relationship_manager fields dealer read status — the App
+role relationship_manager fields dealer read street — the App
+role relationship_manager fields dealer read tier — the App
+role relationship_manager fields dealer read version — the App
+role relationship_manager fields dealer read zip — the App
+role relationship_manager fields underwriting_file read application_id — the App
+role relationship_manager fields underwriting_file read assigned_at — the App
+role relationship_manager fields underwriting_file read dealer_id — the App
+role relationship_manager fields underwriting_file read decided_by — the App
+role relationship_manager fields underwriting_file read decision_due_at — the App
+role relationship_manager fields underwriting_file read id — the App
+role relationship_manager fields underwriting_file read underwriter_id — the App
+role relationship_manager fields underwriting_file read version — the App
+role servicing read applicant — the App
+role servicing read autopay — the App
+role servicing read customer — the App
+role servicing read deal — the App
+role servicing read deal_scenario — the App
+role servicing read dealer — the App
+role servicing read dealer_site — the App
+role servicing read dealer_user — the App
+role servicing read dealer_visit — the App
+role servicing read decision_alert — the App
+role servicing read funding — the App
+role servicing read installment — the App
+role servicing read intake_submission — the App
+role servicing read lead — the App
+role servicing read lead_activity — the App
+role servicing read lender_user — the App
+role servicing read loan — the App
+role servicing read loan_application — the App
+role servicing read loan_document — the App
+role servicing read payment — the App
+role servicing read payoff_quote — the App
+role servicing read prequalification — the App
+role servicing read program — the App
+role servicing read saved_vehicle — the App
+role servicing read servicing_note — the App
+role servicing read stipulation — the App
+role servicing read trade_in — the App
+role servicing read underwriting_file — the App
+role servicing read underwriting_note — the App
+role servicing read vehicle — the App
+role servicing read vehicle_photo — the App
+role servicing command postPayment — the App
+role servicing command recordServicingNote — the App
+role servicing command returnPayment — the App
+role servicing command waiveLateFee — the App
+role servicing fields applicant read city — the App
+role servicing fields applicant read created_at — the App
+role servicing fields applicant read dealer_id — the App
+role servicing fields applicant read email — the App
+role servicing fields applicant read employer — the App
+role servicing fields applicant read employment_type — the App
+role servicing fields applicant read first_name — the App
+role servicing fields applicant read housing — the App
+role servicing fields applicant read id — the App
+role servicing fields applicant read job_title — the App
+role servicing fields applicant read last_name — the App
+role servicing fields applicant read lead_id — the App
+role servicing fields applicant read monthly_housing — the App
+role servicing fields applicant read monthly_income — the App
+role servicing fields applicant read phone — the App
+role servicing fields applicant read role — the App
+role servicing fields applicant read state — the App
+role servicing fields applicant read street — the App
+role servicing fields applicant read years_at_address — the App
+role servicing fields applicant read years_employed — the App
+role servicing fields applicant read zip — the App
+role servicing fields dealer read city — the App
+role servicing fields dealer read email — the App
+role servicing fields dealer read franchise_make — the App
+role servicing fields dealer read id — the App
+role servicing fields dealer read joined_on — the App
+role servicing fields dealer read kind — the App
+role servicing fields dealer read legal_name — the App
+role servicing fields dealer read monthly_goal — the App
+role servicing fields dealer read name — the App
+role servicing fields dealer read on_hold_reason — the App
+role servicing fields dealer read phone — the App
+role servicing fields dealer read relationship_manager_id — the App
+role servicing fields dealer read reserve_pct — the App
+role servicing fields dealer read state — the App
+role servicing fields dealer read status — the App
+role servicing fields dealer read street — the App
+role servicing fields dealer read tier — the App
+role servicing fields dealer read version — the App
+role servicing fields dealer read zip — the App
+role servicing fields underwriting_file read application_id — the App
+role servicing fields underwriting_file read assigned_at — the App
+role servicing fields underwriting_file read dealer_id — the App
+role servicing fields underwriting_file read decided_by — the App
+role servicing fields underwriting_file read decision_due_at — the App
+role servicing fields underwriting_file read id — the App
+role servicing fields underwriting_file read underwriter_id — the App
+role servicing fields underwriting_file read version — the App
+role underwriter read applicant — the App
+role underwriter read autopay — the App
+role underwriter read customer — the App
+role underwriter read deal — the App
+role underwriter read deal_scenario — the App
+role underwriter read dealer — the App
+role underwriter read dealer_site — the App
+role underwriter read dealer_user — the App
+role underwriter read dealer_visit — the App
+role underwriter read decision_alert — the App
+role underwriter read funding — the App
+role underwriter read installment — the App
+role underwriter read intake_submission — the App
+role underwriter read lead — the App
+role underwriter read lead_activity — the App
+role underwriter read lender_user — the App
+role underwriter read loan — the App
+role underwriter read loan_application — the App
+role underwriter read loan_document — the App
+role underwriter read payment — the App
+role underwriter read payoff_quote — the App
+role underwriter read prequalification — the App
+role underwriter read program — the App
+role underwriter read saved_vehicle — the App
+role underwriter read servicing_note — the App
+role underwriter read stipulation — the App
+role underwriter read trade_in — the App
+role underwriter read underwriting_file — the App
+role underwriter read underwriting_note — the App
+role underwriter read vehicle — the App
+role underwriter read vehicle_photo — the App
+role underwriter command assignUnderwriter — the App
+role underwriter command clearStipulation — the App
+role underwriter command decideApplication — the App
+role underwriter command requestCreditCheck — the App
+role underwriter command requestStipulation — the App
+role underwriter command waiveStipulation — the App
+role underwriter fields dealer read city — the App
+role underwriter fields dealer read email — the App
+role underwriter fields dealer read franchise_make — the App
+role underwriter fields dealer read id — the App
+role underwriter fields dealer read joined_on — the App
+role underwriter fields dealer read kind — the App
+role underwriter fields dealer read legal_name — the App
+role underwriter fields dealer read monthly_goal — the App
+role underwriter fields dealer read name — the App
+role underwriter fields dealer read on_hold_reason — the App
+role underwriter fields dealer read phone — the App
+role underwriter fields dealer read relationship_manager_id — the App
+role underwriter fields dealer read reserve_pct — the App
+role underwriter fields dealer read state — the App
+role underwriter fields dealer read status — the App
+role underwriter fields dealer read street — the App
+role underwriter fields dealer read tier — the App
+role underwriter fields dealer read version — the App
+role underwriter fields dealer read zip — the App
+page workflows reads underwriting_file — the App
+
+contract approveApplication v1 074c4a7910a6
+contract assignUnderwriter v1 5ac7d3cf7293
+contract auditFunding v1 bd915ef87287
+contract clearStipulation v1 85764fc6494d
+contract closeIntakeSubmission v1 0dd4c69b223d
+contract decideApplication v1 282ae8c77d3e
+contract fundLoan v1 ef2c98c3a754
+contract logDealerVisit v1 f587f0912479
+contract postPayment v1 c8ab95d21666
+contract receiveContract v1 ef2c98c3a754
+contract recordCreditResult v2 5ff277cbd95b
+contract recordServicingNote v1 0001a01784d2
+contract referToUnderwriter v1 b8145adf186d
+contract remindUnderwriter v1 b8145adf186d
+contract requestCreditCheck v1 cef270d7a3e8
+contract requestStipulation v1 c4980726d6b1
+contract returnPayment v1 07ac0fdd5402
+contract rotateIntakeAddress v1 9792be440a6e
+contract setDealerStatus v1 66e4ef79c308
+contract waiveLateFee v1 9774cda673d2
+contract waiveStipulation v1 4f55cbcad994
+workflow creditDecision v1 dc2d6d1043f7
+workflow creditDecision v1 step call credit-provider request-check
+workflow creditDecision v1 step waitFor credit.reported@1 credit-result
+workflow creditDecision v1 step run referToUnderwriter no-score
+workflow creditDecision v1 step run approveApplication auto-approve
+workflow creditDecision v1 step run referToUnderwriter refer
+workflow creditDecision v1 step waitFor application.decided@1 decision
+workflow creditDecision v1 step run remindUnderwriter remind
+workflow creditDecision v1 step waitFor application.decided@1 decision-late

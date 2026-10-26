@@ -1,0 +1,39 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+/* The two sentences a place says instead of its content (Notes.tsx). Both
+   start on the section's own edge, at body size: an empty place is quieter
+   than the section's title, never louder, and a problem is said as plainly
+   as a value, with its warn mark and the way to try again beside it. */
+.empty-note { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-3h); align-items: start; margin: 0; padding: var(--space-3h) 0; max-width: 42rem; }
+.empty-note > :not(.empty-note-mark) { grid-column: 2; }
+.empty-note:not(:has(> .empty-note-mark)) { display: block; }
+/* The mark sits on the first line's centre, quiet: a place's state is not a decoration. */
+.empty-note-mark { grid-column: 1; grid-row: 1; margin-top: calc((1.5em - 1em) / 2); font-size: var(--text-lg); color: var(--ink-subtle); }
+.empty-note-detail { display: block; }
+/* A refusal stands where a room's content would: on the room's edge, as the bare note it replaces did. */
+.empty-note.is-refused { padding: var(--space-4h) var(--room-inset, 12px); }
+.empty-note-text { margin: 0; color: var(--ink-muted); font-size: var(--text-md); line-height: 1.5; }
+.empty-note-detail { color: var(--ink-muted); }
+/* An authored title leads in the text ink at the same size: the sentence is what it says, not a heading. */
+.empty-note-title { color: var(--ink); }
+.empty-note-action { margin-top: var(--space-3); }
+/* Empty related lists said once (PageEmptyRun.tsx): their Adds stand under the sentence from its own edge, not at the
+   far end of a section bar, and take the touch target on a phone. */
+.page-empty-run .empty-note-action { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-top: var(--space-2); }
+.page-empty-run .page-related-create { justify-content: flex-start; padding-block: 0; }
+@media (pointer: coarse) { .page-empty-run .page-related-create button { min-height: 44px; } }
+
+/* A problem is the empty block's shape (mark, sentence, then the one action under it from the sentence's edge), so an
+   empty place and a broken one read alike. Try again beside the sentence stood a control's height against a line's,
+   its label off the sentence's baseline. */
+.problem { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-3h); align-items: start; margin: 0; padding: var(--space-3h) 0; max-width: 46rem; font-size: var(--text-md); line-height: 1.5; color: var(--ink); }
+.problem > :not(.problem-mark) { grid-column: 2; }
+/* The mark sits on the sentence's first line, in the warning ink, never the danger red: nothing was lost. */
+.problem-mark { grid-column: 1; grid-row: 1; margin-top: calc((1.5em - 1em) / 2); color: var(--status-warning); font-size: var(--text-lg); }
+.problem-text { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.problem-retry { justify-self: start; margin-top: var(--space-3); }
+.problem-repeat { display: block; color: var(--ink-muted); }
+/* A card of a stat strip that could not be drawn keeps the card's place. */
+.home-card.home-card-broken { cursor: default; }
+.home-card-broken .problem { padding: 0; font-size: var(--text-base); }
+}

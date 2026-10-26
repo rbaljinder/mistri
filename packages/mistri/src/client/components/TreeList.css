@@ -1,0 +1,19 @@
+/* Brought by a tree list (TreeList.tsx), loaded only where a list is drawn as one. Tokens only. */
+@layer components {
+.tree-list { min-width: 0; }
+.tree-items { margin: 0; padding: var(--space-2) 0; list-style: none; }
+.tree-item {
+  display: flex; align-items: center; gap: var(--space-2h); min-height: 32px; padding-inline-end: var(--space-4);
+  border-radius: min(6px, var(--radius)); font: var(--text-base) var(--sans); color: var(--ink); cursor: default;
+}
+.tree-item:hover { background: var(--hover, color-mix(in srgb, var(--ink) 5%, transparent)); }
+.tree-item:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: -2px; }
+.tree-caret { display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; color: var(--ink-muted); cursor: pointer; border-radius: min(4px, var(--radius)); }
+.tree-caret.is-leaf { cursor: default; }
+.tree-caret:not(.is-leaf):hover { color: var(--ink); }
+.tree-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.tree-title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.tree-line { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink-muted); font-size: var(--text-sm); }
+.tree-count { margin-inline-start: auto; flex: none; font: var(--text-xs) var(--sans); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.tree-note { margin: var(--space-3) var(--space-4); font: var(--text-sm) var(--sans); color: var(--ink-muted); }
+}

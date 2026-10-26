@@ -1,0 +1,4 @@
+/* The landing hero's rules for the signed-in shell, inlined from the one sheet at build (landingHero.css says why
+   they are not the shell's first stylesheet). An import of landingHero.css itself would load the public chunk, its
+   home, with it. */
+@import './landingHero.css';

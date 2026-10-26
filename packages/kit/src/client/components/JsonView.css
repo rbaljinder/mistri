@@ -1,0 +1,109 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+/* A JSON document, laid out (components/JsonView.tsx), its one-line grid
+   preview and its overlay (JsonPreview.tsx). Every value is a token from
+   style.css, so light, dark and an App's theme dress it the same way. */
+
+.json-view { min-width: 0; max-width: 70rem; font: var(--text-base)/1.55 var(--sans); color: var(--ink); }
+/* A document is a block: in a record's or a page's field grid it takes the
+   full width, as long text does, rather than being squeezed into a column. */
+.field:has(.json-view), .page-field:has(.json-view) { grid-column: 1 / -1; }
+
+.json-bar { display: flex; justify-content: flex-end; gap: var(--space-2); margin-bottom: var(--space-1); }
+.json-tool {
+  background: transparent; color: var(--ink-muted); border: 1px solid transparent;
+  padding: 1px var(--space-3); font-size: var(--text-sm); line-height: 1.6;
+}
+.json-tool:hover { color: var(--ink); background: var(--raised); }
+.json-tool[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent-soft); }
+
+/* Labels beside values. The label column is as wide as its longest key up to
+   a cap, so a short document is not stretched across the room and a long key
+   wraps rather than pushing its value off the edge. */
+.json-fields {
+  display: grid; grid-template-columns: fit-content(14rem) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-5); margin: 0;
+}
+.json-field { display: contents; }
+.json-key { color: var(--ink-muted); font: var(--text-sm)/1.65 var(--code); overflow-wrap: anywhere; }
+.json-index { color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+.json-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* A nested object is indented under its count by a hairline, not boxed:
+   one box, hairlines inside. */
+.json-group { margin: var(--space-1) 0 var(--space-2h); padding-left: var(--space-4); border-left: 1px solid var(--line); }
+
+.json-fold, .json-more {
+  background: none; border: 0; padding: 0; border-radius: min(3px, var(--radius));
+  font: var(--text-sm)/1.65 var(--sans); cursor: pointer;
+}
+.json-fold { color: var(--ink-muted); }
+.json-fold:hover { color: var(--ink); }
+.json-caret { display: inline-block; width: 1.1em; color: var(--ink-subtle); }
+.json-more { display: block; margin-top: var(--space-2); color: var(--link); }
+.json-more:hover { text-decoration: underline; }
+
+/* Like records, lined up. Wide ones scroll inside themselves; the page never does. */
+.json-table-wrap { overflow-x: auto; max-width: 100%; }
+.json-table { border-collapse: collapse; font-size: var(--text-sm); }
+.json-table th {
+  text-align: left; font: var(--text-xs)/1.5 var(--code); font-weight: normal; color: var(--ink-muted);
+  padding: var(--space-1h) var(--space-4h) var(--space-1h) 0; border-bottom: 1px solid var(--line-strong); white-space: nowrap;
+}
+.json-table td {
+  padding: var(--space-2) var(--space-4h) var(--space-2) 0; border-bottom: 1px solid var(--line);
+  vertical-align: top; max-width: 24rem; overflow-wrap: anywhere;
+}
+
+.json-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.json-chip {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised);
+  padding: 0 var(--space-3); font-size: var(--text-sm); line-height: 1.65;
+}
+.json-lines { margin: 0; padding-left: 2em; }
+.json-lines li::marker { color: var(--ink-subtle); font: var(--text-xs) var(--code); }
+
+.json-number, .json-date { font-variant-numeric: tabular-nums; }
+.json-table :is(th, td).json-figures { text-align: right; }
+.json-number { font-family: var(--mono); }
+.json-null, .json-empty { color: var(--ink-subtle); }
+.json-empty { font-family: var(--code); }
+.json-bool {
+  display: inline-block; padding: 0 var(--space-3); border-radius: 999px;
+  font-size: var(--text-xs); line-height: 1.65; background: var(--raised); color: var(--ink-muted);
+}
+.json-bool.yes { background: var(--accent-soft); color: var(--accent-ink); }
+.json-link { color: var(--link); overflow-wrap: anywhere; }
+.json-long { display: block; white-space: pre-wrap; }
+
+.json-raw {
+  margin: 0; padding: var(--space-3) var(--space-3h); max-height: 24rem; overflow: auto;
+  font: var(--text-sm)/1.55 var(--code); white-space: pre; tab-size: 2;
+  background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.json-raw:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -1px; }
+
+/* In a grid cell: the shape in one quiet line, the whole cell a button. */
+.json-preview {
+  display: block; width: 100%; padding: 0; border: 0; border-radius: 0; background: none;
+  text-align: left; font: var(--text-sm)/inherit var(--code); color: var(--ink-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+.json-preview:hover { color: var(--link); }
+.json-preview:focus-visible { outline-offset: -2px; }
+.json-preview-text { font: var(--text-sm) var(--code); color: var(--ink-muted); }
+
+/* The overlay is the confirm dialog's box and scrim, at a document's width. */
+.json-overlay { width: min(60rem, calc(100vw - 2rem)); max-width: none; max-height: 85vh; }
+.json-overlay .json-view { max-width: none; }
+.json-overlay .json-raw { max-height: 60vh; }
+.json-overlay-head { display: flex; align-items: baseline; gap: var(--space-3h); margin-bottom: var(--space-3h); }
+.json-overlay-head h2 { margin: 0; font: 600 calc(15px * var(--type-k))/1.4 var(--sans); overflow-wrap: anywhere; }
+.json-overlay-type { color: var(--ink-subtle); font: var(--text-xs) var(--code); }
+.json-overlay-close { margin-left: auto; padding: var(--space-1h) var(--space-3h); font-size: var(--text-sm); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .json-tool, .json-fold, .json-preview {
+    transition: color var(--t-hover) var(--ease-out), background-color var(--t-hover) var(--ease-out);
+  }
+}
+}

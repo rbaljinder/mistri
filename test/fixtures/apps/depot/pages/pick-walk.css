@@ -1,0 +1,34 @@
+/* The pick walk: made for a thumb on a phone — big type for the bin, whole-width
+   targets, one line at a time — and just as plain at a desk, where it keeps to a
+   phone's column. Tokens only; served inside @layer components and scoped. */
+.c-page-pick-walk { display: grid; gap: 16px; max-width: 480px; min-width: 0; }
+.c-page-pick-walk-quiet { margin: 0; color: var(--ink-muted); font-size: 13px; }
+.c-page-pick-walk-said { margin: 0; padding: 10px 12px; border-left: 0; border: 1px solid var(--status-good); border-radius: var(--radius); color: var(--ink); }
+
+.c-page-pick-walk-lists { margin: 0; padding: 0; }
+.c-page-pick-walk-list {
+  display: grid; gap: 2px; width: 100%; min-height: 64px; padding: 12px 14px; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: inherit; cursor: pointer;
+}
+.c-page-pick-walk-list:hover { border-color: var(--ink-muted); }
+.c-page-pick-walk-list:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.c-page-pick-walk-list-ref { font-weight: 600; font-variant-numeric: tabular-nums; }
+.c-page-pick-walk-list-to { color: var(--ink); }
+.c-page-pick-walk-list-meta { font-size: 13px; color: var(--ink-muted); }
+
+.c-page-pick-walk-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.c-page-pick-walk-ref { margin: 0; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.c-page-pick-walk-progress { margin: 0; font-size: 13px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.c-page-pick-walk-progressbar { height: 4px; background: var(--raised); border-radius: var(--radius); overflow: hidden; }
+.c-page-pick-walk-progressbar span { display: block; height: 100%; background: var(--accent); }
+
+.c-page-pick-walk-card { display: grid; gap: 6px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-lg, var(--radius)); background: var(--surface); }
+.c-page-pick-walk-label { margin: 0; font-size: 12px; color: var(--ink-muted); letter-spacing: var(--track-caps, 0.05em); text-transform: uppercase; }
+.c-page-pick-walk-bin { margin: 0; font: 600 34px/1.1 var(--code, var(--mono)); color: var(--ink); letter-spacing: 0.02em; overflow-wrap: anywhere; }
+.c-page-pick-walk-sku { margin: 0; font-family: var(--code, var(--mono)); color: var(--ink-muted); }
+.c-page-pick-walk-name { margin: 0; color: var(--ink); }
+.c-page-pick-walk-qty { margin: 6px 0 0; display: flex; align-items: baseline; gap: 10px; }
+.c-page-pick-walk-qty strong { font-size: 30px; font-variant-numeric: tabular-nums; }
+.c-page-pick-walk-done .c-page-pick-walk-bin { font-family: var(--heading-font, var(--sans)); font-size: 24px; }
+
+.c-page-pick-walk-actions { display: grid; gap: 8px; }

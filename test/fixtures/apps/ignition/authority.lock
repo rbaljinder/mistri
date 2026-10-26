@@ -1,0 +1,218 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role user — the App
+auth rows tenant — the App
+auth platform realm enabled — the App
+auth tenant profile dealer — the App
+source applicants connection "applicants" — the App
+source applicants realm platform read-only — the App
+source lending connection "loans" — the App
+source lending default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource applicants.applicant owner platform — the App
+resource applicants.contact owner platform — the App
+resource applicants.employment owner platform — the App
+resource applicants.residence owner platform — the App
+resource application_document owner tenant — the App
+resource application_review access write — the App
+resource application_review owner platform — the App
+resource assignment_history access write — the App
+resource assignment_history owner platform — the App
+resource dealer access write — the App
+resource dealer owner platform — the App
+resource intake_co_applicant access write — the App
+resource intake_co_applicant owner platform — the App
+resource intake_submission access write — the App
+resource intake_submission owner platform — the App
+resource lead access write — the App
+resource lead owner tenant — the App
+resource lead_co_applicant access write — the App
+resource lead_co_applicant owner tenant — the App
+resource lender_staff owner platform — the App
+resource loan_application access write — the App
+resource loan_application owner tenant — the App
+resource loan_decision access write — the App
+resource loan_decision owner platform — the App
+resource review_alert access write — the App
+resource review_alert owner platform — the App
+resource review_desk owner platform — the App
+resource review_file access write — the App
+resource review_file owner platform — the App
+resource vehicle owner tenant — the App
+resource vehicle_model owner global — the App
+role automation realm platform — the App
+role automation read loan_application — features "review-clock"
+role automation read review_alert — features "review-clock"
+role automation read review_file — features "review-clock"
+role automation command flagOverdueReview — features "review-clock"
+role dealer_admin realm tenant — the App
+role dealer_admin read application_document — the App
+role dealer_admin read lead — the App
+role dealer_admin read lead_co_applicant — the App
+role dealer_admin read loan_application — the App
+role dealer_admin read vehicle — the App
+role dealer_admin read vehicle_model — the App
+role dealer_admin command convertLead — features "dealer-workspace"
+role dealer_admin command disqualifyLead — features "dealer-workspace"
+role dealer_admin command qualifyLead — features "dealer-workspace"
+role dealer_admin command withdrawApplication — features "dealer-workspace"
+role dealer_staff realm tenant — the App
+role dealer_staff read application_document — the App
+role dealer_staff read lead — the App
+role dealer_staff read lead_co_applicant — the App
+role dealer_staff read loan_application — the App
+role dealer_staff read vehicle — the App
+role dealer_staff read vehicle_model — the App
+role dealer_staff command convertLead — features "dealer-workspace"
+role dealer_staff command disqualifyLead — features "dealer-workspace"
+role dealer_viewer realm tenant — the App
+role dealer_viewer read application_document — the App
+role dealer_viewer read lead — the App
+role dealer_viewer read lead_co_applicant — the App
+role dealer_viewer read loan_application — the App
+role dealer_viewer read vehicle — the App
+role dealer_viewer read vehicle_model — the App
+role manager realm platform — the App
+role manager read applicants.applicant — the App
+role manager read applicants.contact — the App
+role manager read applicants.employment — the App
+role manager read applicants.residence — the App
+role manager read application_document — the App
+role manager read application_review — the App
+role manager read assignment_history — the App
+role manager read dealer — the App
+role manager read intake_co_applicant — the App
+role manager read intake_submission — the App
+role manager read lead — the App
+role manager read lead_co_applicant — the App
+role manager read lender_staff — the App
+role manager read loan_application — the App
+role manager read loan_decision — the App
+role manager read review_alert — the App
+role manager read review_desk — the App
+role manager read review_file — the App
+role manager read vehicle — the App
+role manager read vehicle_model — the App
+role manager command assignReviewer — features "lender-book"
+role manager command closeIntakeSubmission — features "intake-triage"
+role manager command recordDecision — features "lender-book"
+role manager command recordReview — features "lender-book"
+role manager command reviseApplication — features "lender-book"
+role manager operation readiness — the App
+role platform_admin realm platform — the App
+role platform_admin read applicants.applicant — the App
+role platform_admin read applicants.contact — the App
+role platform_admin read applicants.employment — the App
+role platform_admin read applicants.residence — the App
+role platform_admin read application_document — the App
+role platform_admin read application_review — the App
+role platform_admin read assignment_history — the App
+role platform_admin read dealer — the App
+role platform_admin read intake_co_applicant — the App
+role platform_admin read intake_submission — the App
+role platform_admin read lead — the App
+role platform_admin read lead_co_applicant — the App
+role platform_admin read lender_staff — the App
+role platform_admin read loan_application — the App
+role platform_admin read loan_decision — the App
+role platform_admin read review_alert — the App
+role platform_admin read review_desk — the App
+role platform_admin read review_file — the App
+role platform_admin read vehicle — the App
+role platform_admin read vehicle_model — the App
+role platform_admin command assignReviewer — features "lender-book"
+role platform_admin command closeIntakeSubmission — features "intake-triage"
+role platform_admin command recordDecision — features "lender-book"
+role platform_admin command reviseApplication — features "lender-book"
+role platform_admin command rotateIntakeAddress — features "dealer-registry"
+role platform_admin operation readiness — the App
+role reviewer realm platform — the App
+role reviewer read applicants.applicant — the App, features "applicant-directory"
+role reviewer read applicants.contact — the App, features "applicant-directory"
+role reviewer read applicants.employment — the App, features "applicant-directory"
+role reviewer read applicants.residence — the App, features "applicant-directory"
+role reviewer read application_document — the App
+role reviewer read application_review — the App
+role reviewer read assignment_history — the App
+role reviewer read dealer — the App
+role reviewer read intake_co_applicant — the App
+role reviewer read intake_submission — the App
+role reviewer read lead — the App
+role reviewer read lead_co_applicant — the App
+role reviewer read lender_staff — the App
+role reviewer read loan_application — the App
+role reviewer read loan_decision — the App
+role reviewer read review_alert — the App
+role reviewer read review_desk — the App
+role reviewer read review_file — the App
+role reviewer read vehicle — the App
+role reviewer read vehicle_model — the App
+role reviewer command recordReview — features "lender-book"
+role reviewer fields applicants.applicant read created_on — features "applicant-directory"
+role reviewer fields applicants.applicant read id — features "applicant-directory"
+role reviewer fields applicants.applicant read name — features "applicant-directory"
+role reviewer fields applicants.applicant read reference — features "applicant-directory"
+role reviewer fields applicants.applicant read verification_status — features "applicant-directory"
+role reviewer fields applicants.contact read applicant_id — features "applicant-directory"
+role reviewer fields applicants.contact read id — features "applicant-directory"
+role reviewer fields applicants.contact read kind — features "applicant-directory"
+role reviewer fields applicants.contact read name — features "applicant-directory"
+role reviewer fields applicants.contact read preferred — features "applicant-directory"
+role reviewer fields applicants.contact read verified — features "applicant-directory"
+role reviewer fields applicants.employment read applicant_id — features "applicant-directory"
+role reviewer fields applicants.employment read id — features "applicant-directory"
+role reviewer fields applicants.employment read kind — features "applicant-directory"
+role reviewer fields applicants.employment read months_employed — features "applicant-directory"
+role reviewer fields applicants.employment read name — features "applicant-directory"
+role reviewer fields applicants.employment read verification_status — features "applicant-directory"
+role reviewer fields applicants.residence read applicant_id — features "applicant-directory"
+role reviewer fields applicants.residence read city — features "applicant-directory"
+role reviewer fields applicants.residence read current — features "applicant-directory"
+role reviewer fields applicants.residence read id — features "applicant-directory"
+role reviewer fields applicants.residence read months_at_address — features "applicant-directory"
+role reviewer fields applicants.residence read name — features "applicant-directory"
+role reviewer fields applicants.residence read region — features "applicant-directory"
+role reviewer fields applicants.residence read tenure — features "applicant-directory"
+public form finance runs command applyForFinancing version 1 — features "public-site"
+api version 1 — the App
+api public-spec false — the App
+api role dealer_admin — the App
+api role dealer_staff — the App
+api resource application_document field application_id — the App
+api resource application_document field category — the App
+api resource application_document field id — the App
+api resource application_document field received_on — the App
+api resource application_document field status — the App
+api resource lead field applicant_email — the App
+api resource lead field applicant_name — the App
+api resource lead field down_payment — the App
+api resource lead field id — the App
+api resource lead field reference — the App
+api resource lead field requested_amount — the App
+api resource lead field status — the App
+api resource lead field submitted_on — the App
+api resource lead field term_months — the App
+api resource lead field vehicle_stock — the App
+api resource lead field version — the App
+api resource loan_application field applicant_ref — the App
+api resource loan_application field document_status — the App
+api resource loan_application field down_payment — the App
+api resource loan_application field id — the App
+api resource loan_application field reference — the App
+api resource loan_application field requested_amount — the App
+api resource loan_application field status — the App
+api resource loan_application field submitted_on — the App
+api resource loan_application field term_months — the App
+api resource loan_application field version — the App
+api resource vehicle field condition — the App
+api resource vehicle field id — the App
+api resource vehicle field mileage — the App
+api resource vehicle field price — the App
+api resource vehicle field status — the App
+api resource vehicle field stock_reference — the App
+api command convertLead target {"target":"lead","targets":"one","realm":"tenant"} — the App
+api command qualifyLead target {"target":"lead","targets":"many","realm":"tenant"} — the App

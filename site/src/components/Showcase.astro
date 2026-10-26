@@ -1,0 +1,88 @@
+---
+/* Four screens of real Apps, one at a time, under labelled tabs.
+   The tabs are radio buttons and the panels follow them in CSS alone: no
+   script to wait for, nothing drawn and then moved, and the arrow keys walk
+   the tabs as they walk any radio group. Every picture sits in the same
+   16:10 frame, so switching never changes the page's height. The showcase
+   sits below the fold, so every picture is lazy: the shown one loads as it
+   nears the window, a hidden panel's when its tab is chosen. */
+import { Image } from 'astro:assets';
+import assistant from '../assets/home/tab-assistant.webp';
+import lists from '../assets/home/tab-lists.webp';
+import pages from '../assets/home/tab-pages.webp';
+import dashboards from '../assets/home/tab-dashboards.webp';
+
+const tabs = [
+  {
+    id: 'assistant',
+    label: 'Assistant',
+    image: assistant,
+    address: 'localhost:4111/assistant',
+    alt: 'The assistant in a CRM test App: a bar chart of the open pipeline by stage that it drew from the data, and below it a proposed change, Start working Bronwyn Quinn, with Confirm and Decline buttons.',
+    caption:
+      'Ask in words. The assistant answers with the App’s own charts, tables and record cards, as the person signed in, and changes nothing until they confirm. One <code>assistant()</code> entry.',
+    link: '/docs/assistant/',
+  },
+  {
+    id: 'lists',
+    label: 'Lists',
+    image: lists,
+    address: 'localhost:4111/repair-board',
+    alt: 'Lintel’s repair board: open repairs as cards in a lane per state, New, Triaged, Scheduled and In progress, each card with its kind, home, technician and date.',
+    caption:
+      'A board with a lane per state, or the same rows as a grid with counted tabs and filters, a calendar or cards. Each is one <code>listView</code> call.',
+    link: '/docs/lists/',
+  },
+  {
+    id: 'pages',
+    label: 'Pages',
+    image: pages,
+    address: 'localhost:4111/my-requests/7',
+    alt: 'A repair in Lintel, beside the list it was picked from: its state, home, priority, technician and visit, a Schedule visit button, and its conversation with the resident and an internal note.',
+    caption:
+      'A record page: the buttons its state allows, its fields, its conversation and its related lists. Sections in one <code>page()</code>.',
+    link: '/docs/pages/',
+  },
+  {
+    id: 'dashboards',
+    label: 'Dashboards',
+    image: dashboards,
+    address: 'localhost:4111/today',
+    alt: 'Lintel’s Today: the window button, four figures with Rent collected’s change and trend, the repairs counted by state, rent charged and collected by week as bars, and homes by building.',
+    caption: 'Metrics, counts by state, bars and lists over your own queries, in a window the reader picks. A <code>metric</code> or <code>chart</code> call each.',
+    link: '/docs/dashboards/',
+  },
+];
+const sizes = '(min-width: 76rem) 72rem, calc(100vw - 2rem)';
+---
+
+<div class="tw-showcase not-content">
+  {tabs.map(({ id }, i) => <input type="radio" name="tw-showcase" id={`tw-tab-${id}`} class="tw-tab-input" checked={i === 0} />)}
+  <div class="tw-tabs">
+    {
+      tabs.map(({ id, label }) => (
+        <label for={`tw-tab-${id}`} class={`tw-tab tw-tab-${id}`}>
+          {label}
+        </label>
+      ))
+    }
+  </div>
+  {
+    tabs.map(({ id, image, alt, caption, link, address }) => (
+      <figure class={`tw-panel tw-panel-${id}`}>
+        <div class="tw-window">
+          <div class="tw-window-bar" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <b>{address}</b>
+          </div>
+          <Image src={image} {alt} {sizes} loading="lazy" />
+        </div>
+        <figcaption>
+          <Fragment set:html={caption} /> <a href={link}>How it works</a>
+        </figcaption>
+      </figure>
+    ))
+  }
+</div>

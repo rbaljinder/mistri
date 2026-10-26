@@ -1,0 +1,122 @@
+/* The intake style of MultiStepForm: a progress bar, the step's title large, one question at a time, a bar of actions
+   that stays at the foot, and a last page of every step's answers. Loaded with the form, never at first paint: the
+   stepper's own rules are features.css's. After the base, before any look.
+
+   One idea: quiet until touched. A field at rest is a clean outline at 3:1 with no fill (formDress.css); only the
+   field the person is in, the one they got wrong, and the one thing to press carry more. Hierarchy is the question's
+   type, not boxes. Everything below is said in tokens over the field primitive (primitives.css), so a theme still
+   reaches it: its `colors.field` fills the box, `shape.height.control` above 44px raises it, its radius rounds it. */
+@layer components {
+  .multi-step-form[data-style='intake'] { gap: var(--space-6); min-width: 0; }
+  .intake-note { margin: 0; display: flex; align-items: center; gap: var(--space-2h); font-size: var(--text-sm); line-height: 1.4; color: var(--ink-muted); }
+  .intake-note > svg { flex: none; width: 14px; height: 14px; }
+  .intake-head { display: grid; gap: var(--space-6); }
+
+  /* The well, its ring and its wash, the optional word, Show inside the box and the primary's color are every quiet
+     form's (formDress.css, at first paint); this sheet says what is the intake's own: its bar, size, type and page. */
+
+  /* The bar and its count are every stepped form's (features.css, .multi-step-progress). */
+
+  /* The question: set tight, the page's one strong thing. The title role's face, leading and numerals when the look
+     says them (themeType.ts); tracking at the display step unless the role says its own. */
+  /* The title runs a display size, not a record's: at 411px a record title's 21px sat barely above a 16px help line,
+     and a two-line question at 1.1 read as two sentences. The step's help is one size and one color wherever it
+     appears, a step's lead or a section's words under the title, well under the title and never bold. */
+  .intake-head .step-header { gap: var(--space-3); }
+  .intake-head .step-title {
+    font-size: calc(28px * var(--type-k)); /* off-scale: the question's display size on a phone (docs/design.md, the intake style) */
+    font-family: var(--type-title-font, inherit);
+    font-weight: var(--heading-weight, 600);
+    line-height: var(--type-title-leading, 1.05);
+    letter-spacing: var(--type-title-tracking, var(--track-display));
+    font-variant-numeric: var(--type-title-numeric, normal);
+    text-wrap: balance;
+    overflow-wrap: anywhere;
+    outline: none;
+  }
+  /* off-scale: the question's display size at a desk, above the scale's 20px like the landing's display */
+  @media (min-width: 601px) { .intake-head .step-title { font-size: calc(32px * var(--type-k)); } }
+  .intake-head .step-lead,
+  .multi-step-form[data-style='intake'] .command-group > legend {
+    max-width: 60ch; text-wrap: pretty; font-size: var(--text-lg); font-weight: 400; line-height: 1.45; color: var(--ink-muted);
+  }
+  /* A section in a step is the step's own words, not a part of a long form: no rule under the title, and its options
+     (a checkbox's words beside it) are answers, in the regular weight (formDress.css). */
+  .multi-step-form[data-style='intake'] .command-group { border-top: 0; padding-top: 0; }
+  .multi-step-form[data-style='intake'] .command-group-body { padding-top: var(--space-5); }
+  .multi-step-form[data-style='intake'] .form-field-check-row > .form-field-label { font-size: var(--text-lg); }
+
+  /* The fields. A label stands a step clear of its well, and a field three times that clear of the next label. */
+  .multi-step-form[data-style='intake'] {
+    --intake-h: max(var(--control-h), 44px);
+  }
+  .multi-step-form[data-style='intake'] :is(.multi-step-panel, .intake-actions) { --control-h: var(--intake-h); }
+  .multi-step-form[data-style='intake'] .command-fields { gap: var(--space-6); }
+  .multi-step-form[data-style='intake'] .form-columns { column-gap: var(--space-4); row-gap: var(--space-6); }
+  .multi-step-form[data-style='intake'] .form-field { gap: var(--space-3); }
+  .multi-step-form[data-style='intake'] .form-field-label { font-size: var(--text-md); }
+  .multi-step-form[data-style='intake'] .form-field-problem { font-size: var(--text-base); }
+  .multi-step-form[data-style='intake'] .date-field .date-field-trigger { inset-inline-end: var(--space-2); }
+
+  /* Show, at the intake's larger box. */
+  .multi-step-form[data-style='intake'] .field-with-action > .btn { min-height: 32px; margin-inline-end: var(--space-2); font-size: var(--text-base); }
+  .multi-step-form[data-style='intake'] .field-hidden { letter-spacing: 0.12em; }
+
+  /* The actions: Back a quiet word, the primary the one filled thing on the page, in the theme's primary-action color
+     (formDress.css). No rule over them. */
+  .intake-actions {
+    margin-inline: 0;
+    padding: var(--space-4) 0 max(var(--space-4), env(safe-area-inset-bottom));
+    border-top: 0;
+    background: var(--ground);
+    align-items: center;
+  }
+  .intake-actions .btn { min-height: var(--control-h); }
+  /* Back's words stand on the content's edge; its press area reaches past it. */
+  .intake-actions .action-bar-back { flex: none; margin-inline-start: calc(-1 * var(--space-3)); padding-inline: var(--space-3); }
+  @media (pointer: coarse) { .intake-actions .btn { min-height: max(var(--control-h), 44px); } }
+  /* At a desk the primary is weighted to the right, at its words' width, with Back at the left. */
+  @media (min-width: 601px) {
+    .intake-actions { justify-content: space-between; }
+    .intake-actions .action-bar-primary { flex: 0 1 auto; min-width: 10rem; margin-inline-start: auto; }
+  }
+  /* On a phone the bar is the screen's foot, not the end of the form: a short step left it floating mid-screen. The
+     page fills the scrolling container it is in (the shell's <main>), the form fills the page, and the bar takes the
+     space left over above it, so it rests at the container's foot and still sticks there when the step is long. A fade
+     over its top says the step goes on under it. */
+  @media (max-width: 600px) {
+    .form-page[data-style='intake']:has(.intake-actions) { box-sizing: border-box; min-height: 100%; display: flex; flex-direction: column; padding-bottom: 0; }
+    .form-page[data-style='intake']:has(.intake-actions) > form { flex: 1; display: flex; flex-direction: column; }
+    .multi-step-form[data-style='intake']:has(> .intake-actions) { flex: 1; display: flex; flex-direction: column; }
+    .intake-actions { margin-top: auto; }
+    .intake-actions::before {
+      content: ''; position: absolute; inset-inline: 0; bottom: 100%; height: var(--space-5);
+      background: linear-gradient(to bottom, transparent, var(--ground)); pointer-events: none;
+    }
+  }
+
+  /* The review's sections, rows and Change are every stepped form's (FormSurface.css, .intake-review); a section's
+     fields opened in place keep the intake's room. */
+  .intake-review { display: grid; gap: 0; }
+  .intake-summary { margin: 0; }
+  /* A sensitive answer: only its last four, and a quiet way to ask for it again. */
+  .intake-masked { display: grid; gap: var(--space-3); }
+  .intake-masked-label { font-size: var(--text-md); font-weight: 500; }
+  .intake-masked-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-width: 0; }
+  .intake-masked-value { font-size: var(--text-lg); font-variant-numeric: tabular-nums; letter-spacing: .08em; overflow-wrap: anywhere; }
+}
+
+/* The intake field's own size, outside the layer, ranked by the :root it stands under over every look's field dress,
+   and only on this on-demand sheet, so no first page carries an exception for it. Its colors, edge and ring are the
+   quiet form's (formDress.css). */
+/* Every box a row can hold is one height: the command form's listbox is the shell's (.dd-button, without @mistriwork/ui's
+   .field-select), and stood 8px short of the text box beside it. */
+:root .multi-step-form[data-style='intake'] :is(.field-control, .dd-button, .date-field .date-field-input) {
+  min-height: var(--control-h);
+  padding-inline: var(--space-4);
+  font-size: var(--text-lg);
+  border-radius: var(--field-radius, var(--radius));
+}
+:root .multi-step-form[data-style='intake'] .field-control[readonly]:not(:disabled) { background: var(--raised); }
+:root .multi-step-form[data-style='intake'] .date-field .date-field-input { padding-inline-end: 40px; /* off-scale: the calendar button's 30px and its inset */ }
+:root .multi-step-form[data-style='intake'] .field-with-action .field-control { padding-inline-end: calc(5.5em + var(--space-3)); }

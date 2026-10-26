@@ -1,0 +1,1486 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "theme.schema.json",
+  "title": "Mistri theme (the input of defineTheme)",
+  "type": "object",
+  "required": [
+    "id",
+    "label"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "theme"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,47}$",
+      "not": {
+        "enum": [
+          "default",
+          "lumen",
+          "mono",
+          "sage"
+        ]
+      }
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+    },
+    "extends": {
+      "anyOf": [
+        {
+          "enum": [
+            "lumen",
+            "mono",
+            "sage"
+          ],
+          "description": "A built-in look."
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "theme"
+            }
+          },
+          "description": "A theme defineTheme made: an installed look, or one of the App's own. It extends a built-in look itself; a theme is never more than two deep."
+        }
+      ],
+      "description": "Start from a built-in look, or from a theme, and say only what differs. Without it, colors names ground, surface, ink and accent in both modes and the rest is derived."
+    },
+    "colors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "light": {
+          "$ref": "#/$defs/colors"
+        },
+        "dark": {
+          "$ref": "#/$defs/colors"
+        }
+      },
+      "description": "Required, with ground, surface, ink and accent in both modes, unless the theme extends a built-in; then partial."
+    },
+    "palettes": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,47}$",
+            "not": {
+              "const": "default"
+            }
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "light": {
+            "$ref": "#/$defs/colorsOver"
+          },
+          "dark": {
+            "$ref": "#/$defs/colorsOver"
+          }
+        }
+      },
+      "description": "Named color variations over the theme's own colors. IDs must be unique within the theme, checked by the App parser."
+    },
+    "defaultPalette": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,47}$",
+      "description": "default or a declared palette id; references are checked by the App parser."
+    },
+    "scheme": {
+      "enum": [
+        "dark",
+        "dark-only"
+      ],
+      "description": "dark: worn dark until the reader picks a mode themselves, whatever their machine is set to; it still has light colors, held to a printed page's white paper. dark-only: no light colors at all, colors names dark alone, the theme is judged as dark and not as paper, and a reader cannot turn it light. Omitted, the theme follows the reader and their machine."
+    },
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "radius": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "control": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(?:1[0-5]|[0-9])(?:\\.\\d+)?px$|^16px$"
+                },
+                {
+                  "const": "round"
+                }
+              ],
+              "description": "A button's, an input's and a select's corner, 0px to 16px, or `round`: a pill (every other box that follows it takes 8px)."
+            },
+            "field": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(?:1[01]|[0-9])(?:\\.\\d+)?px$|^12px$"
+                }
+              ],
+              "description": "A form field's corner, 0px to 12px."
+            },
+            "pill": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(?:1[01]|[0-9])(?:\\.\\d+)?px$|^12px$"
+                },
+                {
+                  "const": "round"
+                }
+              ],
+              "description": "A status pill's, a tag's and a chip's corner, 0px to 12px or `round`; omitted, round."
+            },
+            "panel": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(?:1[0-9]|[0-9])(?:\\.\\d+)?px$|^20px$"
+                }
+              ],
+              "description": "A card's, a section's and a dialog's corner, 0px to 20px; omitted, one and a half controls', at most 20px."
+            }
+          }
+        },
+        "elevation": {
+          "description": "A preset as its look draws it (flat: Mono, no lift; hairline: the platform's; soft: Sage; raised: Lumen), or a step for cards and one for what floats over the base's, each none, hairline, low (the platform's popups), mid (Sage's) or high (Lumen's).",
+          "oneOf": [
+            {
+              "enum": [
+                "flat",
+                "hairline",
+                "soft",
+                "raised"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "card": {
+                  "enum": [
+                    "none",
+                    "hairline",
+                    "low",
+                    "mid",
+                    "high"
+                  ],
+                  "description": "The cards a recipe draws: a section, a field group or a stat boxed by section, fields or stat."
+                },
+                "float": {
+                  "enum": [
+                    "none",
+                    "hairline",
+                    "low",
+                    "mid",
+                    "high"
+                  ],
+                  "description": "What floats: a menu, a popover, a drawer; a dialog a step above."
+                }
+              }
+            }
+          ]
+        },
+        "border": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rule": {
+              "enum": [
+                "1px",
+                "2px",
+                "3px"
+              ],
+              "description": "The rules over a section and a board's lanes and under a table's heads; omitted, the look's (2px, Lumen 1px)."
+            },
+            "control": {
+              "enum": [
+                "0px",
+                "1px",
+                "2px"
+              ],
+              "description": "A field's and a select's edge; omitted, 1px. `0px` draws none, and `check` refuses it unless `colors.field` stands apart from the ground and the surface (1.08:1); the focus ring is then the edge."
+            },
+            "panel": {
+              "enum": [
+                "0px",
+                "1px",
+                "2px"
+              ],
+              "description": "A card's and a section's edge where the look draws one; 0px draws none. Omitted, 1px."
+            },
+            "focus": {
+              "enum": [
+                "2px",
+                "3px"
+              ],
+              "description": "The focus ring; omitted, 2px."
+            }
+          }
+        },
+        "height": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "control": {
+              "type": "string",
+              "pattern": "^(?:3[2-9]|4[0-9]|5[0-6])px$",
+              "description": "A field's, a select's and a button's height, 32px to 56px; omitted, 34px. A touch screen keeps a 44px floor."
+            }
+          }
+        }
+      }
+    },
+    "type": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/font"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ui": {
+                  "$ref": "#/$defs/font"
+                },
+                "data": {
+                  "$ref": "#/$defs/font"
+                },
+                "heading": {
+                  "$ref": "#/$defs/font"
+                },
+                "code": {
+                  "$ref": "#/$defs/font"
+                }
+              }
+            }
+          ]
+        },
+        "faces": {
+          "type": "array",
+          "maxItems": 12,
+          "description": "Font files from the App's directory, each one @font-face served from the App's own origin. The heading's face is preloaded on first paint.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "family",
+              "src"
+            ],
+            "properties": {
+              "family": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9 _-]*$",
+                "description": "The family name a type.font stack names it by."
+              },
+              "src": {
+                "type": "string",
+                "pattern": "^\\./[^\\\\]+\\.(?:woff2|woff)$",
+                "description": "A .woff2 or .woff file inside the App's directory, relative to it: ./fonts/workshop-mono.woff2."
+              },
+              "weight": {
+                "description": "100 to 900, or a variable file's range as \"100 900\". Omitted, 400.",
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 900
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[1-9]00(?: [1-9]00)?$"
+                  }
+                ]
+              },
+              "style": {
+                "enum": [
+                  "normal",
+                  "italic"
+                ]
+              },
+              "subset": {
+                "const": false,
+                "description": "Omitted, the file is cut to Latin when the App loads; false ships it whole, for an App written in another script."
+              }
+            }
+          }
+        },
+        "icons": {
+          "enum": [
+            "regular",
+            "light",
+            "bold",
+            "fill"
+          ],
+          "description": "The icons’ weight, from Phosphor’s: regular (omitted), light, bold or fill. Thin and duotone are refused: a 1px stroke fades at an icon’s 16px, and a second tone is a color no role says."
+        },
+        "base": {
+          "enum": [
+            "13px",
+            "14px",
+            "15px",
+            "16px"
+          ],
+          "description": "The size an App’s text is drawn at; every size grows with it, the roles’ too. Omitted, 13px."
+        },
+        "roles": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Each kind of text by what it is for, saying only what differs from the look. Body, data, label and nav text has no size of its own: it follows type.base.",
+          "properties": {
+            "display": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "A landing’s headline: its face, size (28px to 56px), leading, tracking, weight and features.",
+              "properties": {
+                "face": {
+                  "enum": [
+                    "ui",
+                    "heading",
+                    "data",
+                    "code"
+                  ]
+                },
+                "size": {
+                  "type": "string",
+                  "pattern": "^\\d{1,2}(?:\\.\\d)?px$",
+                  "description": "28px to 56px, at the 13px base."
+                },
+                "leading": {
+                  "type": "number",
+                  "minimum": 0.85,
+                  "maximum": 1.8
+                },
+                "tracking": {
+                  "type": "string",
+                  "pattern": "^-?(?:0|0?\\.\\d{1,3})em$",
+                  "description": "-0.03em to 0.15em."
+                },
+                "weight": {
+                  "enum": [
+                    400,
+                    500,
+                    600,
+                    700,
+                    800,
+                    900
+                  ]
+                },
+                "features": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:tnum|lnum|onum|zero|case|ss(?:0[1-9]|1\\d|20)|cv(?:0[1-9]|[1-9]\\d))$"
+                  }
+                }
+              }
+            },
+            "title": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "A record’s and a dashboard’s name: its face, size (20px to 36px), leading, tracking, weight, case and features; its weight is every heading’s.",
+              "properties": {
+                "face": {
+                  "enum": [
+                    "ui",
+                    "heading",
+                    "data",
+                    "code"
+                  ]
+                },
+                "size": {
+                  "type": "string",
+                  "pattern": "^\\d{1,2}(?:\\.\\d)?px$",
+                  "description": "20px to 36px, at the 13px base."
+                },
+                "leading": {
+                  "type": "number",
+                  "minimum": 0.85,
+                  "maximum": 1.8
+                },
+                "tracking": {
+                  "type": "string",
+                  "pattern": "^-?(?:0|0?\\.\\d{1,3})em$",
+                  "description": "-0.03em to 0.15em."
+                },
+                "weight": {
+                  "enum": [
+                    400,
+                    500,
+                    600,
+                    700,
+                    800,
+                    900
+                  ]
+                },
+                "case": {
+                  "enum": [
+                    "none",
+                    "upper",
+                    "small-caps"
+                  ]
+                },
+                "features": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:tnum|lnum|onum|zero|case|ss(?:0[1-9]|1\\d|20)|cv(?:0[1-9]|[1-9]\\d))$"
+                  }
+                }
+              }
+            },
+            "heading": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "A list naming itself over its rows: its face, size (16px to 28px), leading, tracking, weight (omitted, the title’s), case and features.",
+              "properties": {
+                "face": {
+                  "enum": [
+                    "ui",
+                    "heading",
+                    "data",
+                    "code"
+                  ]
+                },
+                "size": {
+                  "type": "string",
+                  "pattern": "^\\d{1,2}(?:\\.\\d)?px$",
+                  "description": "16px to 28px, at the 13px base."
+                },
+                "leading": {
+                  "type": "number",
+                  "minimum": 1.1,
+                  "maximum": 1.8
+                },
+                "tracking": {
+                  "type": "string",
+                  "pattern": "^-?(?:0|0?\\.\\d{1,3})em$",
+                  "description": "-0.03em to 0.15em."
+                },
+                "weight": {
+                  "enum": [
+                    400,
+                    500,
+                    600,
+                    700,
+                    800,
+                    900
+                  ]
+                },
+                "case": {
+                  "enum": [
+                    "none",
+                    "upper",
+                    "small-caps"
+                  ]
+                },
+                "features": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:tnum|lnum|onum|zero|case|ss(?:0[1-9]|1\\d|20)|cv(?:0[1-9]|[1-9]\\d))$"
+                  }
+                }
+              }
+            },
+            "section": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "A section’s title on a record and a dashboard: its face, case and features; a dashboard’s section title also takes a size (12px to 20px), tracking and weight.",
+              "properties": {
+                "face": {
+                  "enum": [
+                    "ui",
+                    "heading",
+                    "data",
+                    "code"
+                  ]
+                },
+                "size": {
+                  "type": "string",
+                  "pattern": "^\\d{1,2}(?:\\.\\d)?px$",
+                  "description": "12px to 20px, at the 13px base."
+                },
+                "tracking": {
+                  "type": "string",
+                  "pattern": "^-?(?:0|0?\\.\\d{1,3})em$",
+                  "description": "-0.03em to 0.15em."
+                },
+                "weight": {
+                  "enum": [
+                    400,
+                    500,
+                    600,
+                    700,
+                    800,
+                    900
+                  ]
+                },
+                "case": {
+                  "enum": [
+                    "none",
+                    "upper",
+                    "small-caps"
+                  ]
+                },
+                "features": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:tnum|lnum|onum|zero|case|ss(?:0[1-9]|1\\d|20)|cv(?:0[1-9]|[1-9]\\d))$"
+                  }
+                }
+              }
+            },
+            "body": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Prose, fields and the interface, at the base size: its leading (1.35 to 1.8) and features.",
+              "properties": {
+                "leading": {
+                  "type": "number",
+                  "minimum": 1.35,
+                  "maximum": 1.8
+                },
+                "features": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:tnum|lnum|onum|zero|case|ss(?:0[1-9]|1\\d|20)|cv(?:0[1-9]|[1-9]\\d))$"
+                  }
+                }
+              }
+            },
+            "label": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "A column’s head, a stat’s label and a record’s tabs, at the base size: their face, tracking, weight (400 to 700), case and features; upper sets them a step smaller.",
+              "properties": {
+                "face": {
+                  "enum": [
+                    "ui",
+                    "heading",
+                    "data",
+                    "code"
+                  ]
+                },
+                "tracking": {
+                  "type": "string",
+                  "pattern": "^-?(?:0|0?\\.\\d{1,3})em$",
+                  "description": "-0.03em to 0.15em."
+                },
+                "weight": {
+                  "enum": [
+                    400,
+                    500,
+                    600,
+                    700
+                  ]
+                },
+                "case": {
+                  "enum": [
+                    "none",
+                    "upper",
+                    "small-caps"
+                  ]
+                },
+                "features": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:tnum|lnum|onum|zero|case|ss(?:0[1-9]|1\\d|20)|cv(?:0[1-9]|[1-9]\\d))$"
+                  }
+                }
+              }
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates, a record header’s facts too).",
+              "properties": {
+                "features": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:tnum|lnum|onum|zero|case|ss(?:0[1-9]|1\\d|20)|cv(?:0[1-9]|[1-9]\\d))$"
+                  }
+                },
+                "reach": {
+                  "enum": [
+                    "values",
+                    "figures"
+                  ],
+                  "description": "values (omitted): every value in the data face; figures: only figures, keys and dates, names in the interface face."
+                }
+              }
+            },
+            "figure": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "A stat’s figure: its face, size (18px to 40px), tracking, weight and features, tabular figures kept.",
+              "properties": {
+                "face": {
+                  "enum": [
+                    "ui",
+                    "heading",
+                    "data",
+                    "code"
+                  ]
+                },
+                "size": {
+                  "type": "string",
+                  "pattern": "^\\d{1,2}(?:\\.\\d)?px$",
+                  "description": "18px to 40px, at the 13px base."
+                },
+                "tracking": {
+                  "type": "string",
+                  "pattern": "^-?(?:0|0?\\.\\d{1,3})em$",
+                  "description": "-0.03em to 0.15em."
+                },
+                "weight": {
+                  "enum": [
+                    400,
+                    500,
+                    600,
+                    700,
+                    800,
+                    900
+                  ]
+                },
+                "features": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(?:tnum|lnum|onum|zero|case|ss(?:0[1-9]|1\\d|20)|cv(?:0[1-9]|[1-9]\\d))$"
+                  }
+                }
+              }
+            },
+            "nav": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The menu’s entries in the bar, at the base size: their face, tracking, weight (400 to 600) and case; upper sets them a step smaller.",
+              "properties": {
+                "face": {
+                  "enum": [
+                    "ui",
+                    "heading",
+                    "data",
+                    "code"
+                  ]
+                },
+                "tracking": {
+                  "type": "string",
+                  "pattern": "^-?(?:0|0?\\.\\d{1,3})em$",
+                  "description": "-0.03em to 0.15em."
+                },
+                "weight": {
+                  "enum": [
+                    400,
+                    500,
+                    600
+                  ]
+                },
+                "case": {
+                  "enum": [
+                    "none",
+                    "upper",
+                    "small-caps"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "density": {
+      "enum": [
+        "compact",
+        "comfortable",
+        "spacious"
+      ]
+    },
+    "motion": {
+      "enum": [
+        "house",
+        "brisk",
+        "still"
+      ],
+      "description": "How fast things enter: house (omitted) as the platform moves, brisk a quarter quicker, still with nothing entering, as reduced motion draws it. A reader who asks for reduced motion gets still under every pace."
+    },
+    "rhythm": {
+      "enum": [
+        "tight",
+        "house",
+        "airy"
+      ],
+      "description": "How far apart things stand: house (omitted) as the platform spaces a page, tight its layout steps (16px and up, and the section seam) a quarter closer, airy a quarter wider. A control's own padding never moves."
+    },
+    "recipes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nav": {
+          "enum": [
+            "tint",
+            "inverted",
+            "wash",
+            "underline",
+            "pill",
+            "quiet"
+          ],
+          "description": "`tint`: The current entry sits on a soft tint of the accent; the other rows stay plain. `inverted`: The current entry is inverted, the menu’s ink as its ground: the boldest mark, square and high-contrast. `wash`: The current entry sits on a wash of the menu’s own accent, stronger than tint, for a menu in a brand color. `underline`: The current entry in the top bar is marked by a 3px rule of the menu’s accent under it, with no fill. `pill`: Every row is a rounded pill with room around it; the current one is filled in the accent’s tint, its word in the accent. `quiet`: The current entry is barely shaded in the menu’s ink, with no accent at all: the calmest mark."
+        },
+        "bar": {
+          "enum": [
+            "plain",
+            "ruled",
+            "dark",
+            "airy",
+            "soft"
+          ],
+          "description": "`plain`: The top bar is the menu’s ground with a hairline under it. `ruled`: The top bar ends in a 2px rule instead of a hairline, and casts no shadow. `dark`: The top bar takes the menu’s ground and inks, so a dark or brand-colored menu runs across the top too. `airy`: The top bar is taller, with a large bold brand name and a wide, raised search box. `soft`: The top bar is a panel in the surface color with a hairline under it, apart from the menu beside it."
+        },
+        "tabs": {
+          "enum": [
+            "pill",
+            "inverted",
+            "underline",
+            "rule",
+            "chosen"
+          ],
+          "description": "`pill`: The chosen tab is a filled pill; the others are plain words. `inverted`: The chosen tab is inverted, the ink as its ground: square, high-contrast. `underline`: The tabs stand on a hairline, wide apart, the chosen one underlined in the accent with no fill. `rule`: The chosen tab is underlined by a 2px rule in the link color with no fill, the tabs packed as written. `chosen`: The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline."
+        },
+        "windows": {
+          "enum": [
+            "segmented",
+            "lifted",
+            "chosen"
+          ],
+          "description": "`segmented`: The period picker is a segmented control, the chosen period filled. `lifted`: The period picker is a sunken tray, the chosen period a raised white key on it. `chosen`: The period picker has no tray; the chosen period sits on a soft tint of the accent."
+        },
+        "stat": {
+          "enum": [
+            "plain",
+            "framed",
+            "topline",
+            "ruled",
+            "icon",
+            "panel",
+            "divided"
+          ],
+          "description": "`plain`: A stat is a figure and its label with no frame. `framed`: Each stat is a card framed by a line in the ink: square and stark. `topline`: Each stat card has a 3px rule in the first chart color along its top. `ruled`: Each stat stands open under a 2px rule in the ink, with no card or shadow, like a printed page. `icon`: Each stat is a card with its icon in a round tint of a chart color above the label, and a large bold figure. `panel`: Each stat is a panel on the surface with a hairline and the look’s card shadow. `divided`: The stats share one strip, parted by hairlines, with no cards: the quietest arrangement."
+        },
+        "section": {
+          "enum": [
+            "open",
+            "card",
+            "panel"
+          ],
+          "description": "`open`: A dashboard section stands open on the page under its rule. `card`: Each dashboard section is a card with a hairline and the card shadow, its table drawn to the card’s edges. `panel`: Each dashboard section is a panel like card, but a section in the side column stays open on the page."
+        },
+        "fields": {
+          "enum": [
+            "open",
+            "panel",
+            "card",
+            "rail"
+          ],
+          "description": "`open`: A record’s field groups and forms stand open on the page. `panel`: Each field group and form is a panel on the surface with a hairline; its labels stay as the look draws them. `card`: Each field group and form is a card with a hairline and the card shadow, its labels muted and the values in the interface face. `rail`: Field groups stand open, and the side column’s cards become captioned groups between hairlines."
+        },
+        "table": {
+          "enum": [
+            "open",
+            "tinted",
+            "hairline",
+            "card",
+            "quiet",
+            "banded"
+          ],
+          "description": "`open`: Rows stand on the page under a rule, the head as the look draws it. `tinted`: As open, but a hovered row takes a tint of the accent and its check boxes the accent: the same until a pointer moves. `hairline`: The head sits on a hairline in 12.5px semibold, the rows in 13.5px: open, a little roomier. `card`: The table is a card: muted 12px heads on a hairline, faint row rules and taller rows. `quiet`: The table is a card of quiet rows, a work queue’s open button folded to a chevron at the row’s end. `banded`: As open, but every other row lies on the band color (colors.band, or the raised ground), each ink measured on it."
+        },
+        "status": {
+          "enum": [
+            "dot",
+            "pill",
+            "pill-dot",
+            "quiet"
+          ],
+          "description": "`dot`: A status word in its tone with a dot before it. `pill`: A status word on a pill tinted with its tone, without a dot. `pill-dot`: A status word on a pill tinted with its tone, with a small dot inside it. `quiet`: A status word in the ink with a dot in its tone: the color is only the dot."
+        },
+        "board": {
+          "enum": [
+            "ruled",
+            "soft",
+            "strip"
+          ],
+          "description": "`ruled`: A board’s lanes are outlined by a hairline; its cards lie flat on them. `soft`: As ruled, but each card casts the look’s card shadow: only the cards lift. `strip`: Each lane is headed by a strip tinted with its tone, its cards white on the lane."
+        },
+        "chart": {
+          "enum": [
+            "plain",
+            "wash",
+            "gradient",
+            "line"
+          ],
+          "description": "`plain`: A chart is its lines or bars on a light grid. `wash`: An area under a line is washed in the first chart color. `gradient`: An area fades from the line down to nothing, the line heavier and the grid dashed. `line`: Only the lines: no areas, a fine solid grid and small ticks."
+        },
+        "buttons": {
+          "enum": [
+            "accent",
+            "raised"
+          ],
+          "description": "`accent`: The primary button is filled in the accent; the rest are quiet. `raised`: Secondary buttons are white keys with a hairline and a small shadow, raised off the page."
+        },
+        "links": {
+          "enum": [
+            "plain",
+            "underline"
+          ],
+          "description": "`plain`: A link to another record is in the link color without an underline. `underline`: A link to another record is underlined, so it reads as one without color."
+        },
+        "rules": {
+          "enum": [
+            "ink",
+            "hairline"
+          ],
+          "description": "`ink`: A record’s sections are announced by a 2px rule in the ink. `hairline`: A record’s sections are announced by a 1px hairline instead."
+        },
+        "avatar": {
+          "enum": [
+            "plain",
+            "large",
+            "round"
+          ],
+          "description": "`plain`: A record’s avatar is its initials in a small square. `large`: A record’s avatar is 44px, in the look’s corners. `round`: A record’s avatar is 44px and round, and the menu’s and the account’s marks are round too."
+        },
+        "workflow": {
+          "enum": [
+            "markers",
+            "pills"
+          ],
+          "description": "`markers`: A workflow is a track of thin segments, the label under each. `pills`: A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s."
+        },
+        "banner": {
+          "enum": [
+            "tint",
+            "gradient",
+            "plain"
+          ],
+          "description": "`tint`: A dashboard’s banner note is a box tinted with the accent. `gradient`: A dashboard’s banner note is a soft gradient from the accent to the second chart color. `plain`: A dashboard’s banner note stands on the page with no box, its eyebrow in the link color."
+        },
+        "steps": {
+          "enum": [
+            "flat",
+            "tinted",
+            "strip"
+          ],
+          "description": "`flat`: A breakdown drawn as steps is a row of cards on the surface with a hairline. `tinted`: Each step’s card is tinted with its tone: good, warning, critical or the accent. `strip`: The steps are one strip of figures parted by hairlines, with no cards or marks."
+        },
+        "lanes": {
+          "enum": [
+            "tint",
+            "tag",
+            "plain"
+          ],
+          "description": "`tint`: A board lane’s value in its head is on its tone’s tint. `tag`: A board lane’s value is a solid tag in its tone, in white capitals. `plain`: A board lane’s value is its name in plain ink."
+        },
+        "header": {
+          "enum": [
+            "plain",
+            "band",
+            "hero"
+          ],
+          "description": "`plain`: A record’s head and a list’s stand on the page’s ground, under the trail’s hairline. `band`: A record’s head and a list’s are one band of the raised ground from edge to edge: the trail, the title, its status, facts and verbs, a list’s tabs and filters; the contents keep their edge. `hero`: A band, with the record’s avatar large beside its title (above it on a phone); a record without one, and a list, draw the band."
+        },
+        "required": {
+          "enum": [
+            "star",
+            "optional-word"
+          ],
+          "description": "`star`: A required field wears a red star after its label; an optional one wears nothing. `optional-word`: A required field wears nothing and an optional one says “(optional)” after its label, quietly; the form’s own words, in the reader’s language."
+        },
+        "checkbox": {
+          "enum": [
+            "native",
+            "drawn"
+          ],
+          "description": "`native`: A checkbox is the browser’s own, in the accent. `drawn`: A checkbox is drawn: a square in the field’s fill with the control’s edge and corner, the accent with a check when on."
+        },
+        "formStep": {
+          "enum": [
+            "plain",
+            "ruled"
+          ],
+          "description": "`plain`: A multi-step form’s step header is its title over its lead, with nothing between it and the fields. `ruled`: A multi-step form’s step header ends in a hairline, which parts it from the fields under it."
+        },
+        "actionBar": {
+          "enum": [
+            "plain",
+            "raised"
+          ],
+          "description": "`plain`: A form’s sticky action bar stands on a hairline over the page. `raised`: A form’s sticky action bar is raised on the surface with a soft lift, in place of the hairline."
+        }
+      },
+      "description": "Each part's treatment, from the closed menu the built-in looks wear."
+    },
+    "shell": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Where the menu is drawn, as a suggestion: it holds when this theme is the App's own (ui.theme.preset) and ui.shell.placement says nothing.",
+      "properties": {
+        "placement": {
+          "enum": [
+            "side",
+            "top"
+          ]
+        }
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A pattern behind the page (ground) and one behind the navigation (nav), drawn in the theme’s line color; never behind a panel or a field.",
+      "properties": {
+        "ground": {
+          "$ref": "#/$defs/pattern"
+        },
+        "nav": {
+          "$ref": "#/$defs/pattern"
+        }
+      }
+    },
+    "parts": {
+      "type": "object",
+      "description": "Each published part’s own style, by its name: ground, bar, bar.search, nav, nav.item, nav.current, nav.group, logo, page.title, tabs, tab.current, section, section.title, stat, stat.figure, fields, field.label, table, table.head, table.row, status, tag, button.primary, button.secondary, button.quiet, link, board.lane, board.card, workflow.step, banner, steps.step, avatar, menu, dialog, chart. Contract 1: a 1.x release may publish another part and withdraws none.",
+      "propertyNames": {
+        "enum": [
+          "ground",
+          "bar",
+          "bar.search",
+          "nav",
+          "nav.item",
+          "nav.current",
+          "nav.group",
+          "logo",
+          "page.title",
+          "tabs",
+          "tab.current",
+          "section",
+          "section.title",
+          "stat",
+          "stat.figure",
+          "fields",
+          "field.label",
+          "table",
+          "table.head",
+          "table.row",
+          "status",
+          "tag",
+          "button.primary",
+          "button.secondary",
+          "button.quiet",
+          "link",
+          "board.lane",
+          "board.card",
+          "workflow.step",
+          "banner",
+          "steps.step",
+          "avatar",
+          "menu",
+          "dialog",
+          "chart"
+        ]
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/partStyle"
+      }
+    },
+    "stylesheet": {
+      "type": "string",
+      "pattern": "^\\./(?:[\\w.-]+/)*[\\w.-]+\\.css$",
+      "description": "A stylesheet beside the theme (8 KB at most) that styles its parts and nothing else: [data-part] selectors under the theme's own root, and only the properties the stylesheet allowlist names. Read once when the App loads; a build serves it from its brand/ folder.",
+      "not": {
+        "pattern": "(?:^|/)\\.\\.(?:/|$)"
+      }
+    },
+    "contract": {
+      "const": 1,
+      "description": "The theme contract a published look was written to. A theme written to another is refused, naming the release to install."
+    },
+    "from": {
+      "type": "string",
+      "pattern": "^file:",
+      "description": "A published look's import.meta.url, so its faces and stylesheet are read from the package that holds them, never from the App that installs it. Requires contract."
+    }
+  },
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "font": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[\\w\\s'\",.-]+$"
+    },
+    "colors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ground": {
+          "$ref": "#/$defs/color"
+        },
+        "surface": {
+          "$ref": "#/$defs/color"
+        },
+        "field": {
+          "$ref": "#/$defs/color",
+          "description": "A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1."
+        },
+        "raised": {
+          "$ref": "#/$defs/color"
+        },
+        "ink": {
+          "$ref": "#/$defs/color"
+        },
+        "inkMuted": {
+          "$ref": "#/$defs/color"
+        },
+        "inkSubtle": {
+          "$ref": "#/$defs/color"
+        },
+        "line": {
+          "$ref": "#/$defs/color"
+        },
+        "lineStrong": {
+          "$ref": "#/$defs/color"
+        },
+        "lineControl": {
+          "$ref": "#/$defs/color"
+        },
+        "accent": {
+          "$ref": "#/$defs/color"
+        },
+        "onAccent": {
+          "$ref": "#/$defs/color"
+        },
+        "accentInk": {
+          "$ref": "#/$defs/color"
+        },
+        "accentSoft": {
+          "$ref": "#/$defs/color"
+        },
+        "primary": {
+          "$ref": "#/$defs/color"
+        },
+        "onPrimary": {
+          "$ref": "#/$defs/color"
+        },
+        "link": {
+          "$ref": "#/$defs/color"
+        },
+        "focus": {
+          "$ref": "#/$defs/color"
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "good": {
+              "$ref": "#/$defs/color"
+            },
+            "warning": {
+              "$ref": "#/$defs/color"
+            },
+            "critical": {
+              "$ref": "#/$defs/color"
+            },
+            "info": {
+              "$ref": "#/$defs/color"
+            }
+          }
+        },
+        "nav": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ground": {
+              "$ref": "#/$defs/color"
+            },
+            "ink": {
+              "$ref": "#/$defs/color"
+            },
+            "muted": {
+              "$ref": "#/$defs/color"
+            },
+            "line": {
+              "$ref": "#/$defs/color"
+            },
+            "accent": {
+              "$ref": "#/$defs/color"
+            },
+            "current": {
+              "$ref": "#/$defs/color"
+            },
+            "onCurrent": {
+              "$ref": "#/$defs/color"
+            }
+          }
+        },
+        "rules": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "section": {
+              "$ref": "#/$defs/color"
+            },
+            "head": {
+              "$ref": "#/$defs/color"
+            }
+          }
+        },
+        "shadow": {
+          "$ref": "#/$defs/color",
+          "description": "The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow)."
+        },
+        "band": {
+          "$ref": "#/$defs/color",
+          "description": "Every other row of a banded table (recipes.table). Omitted, raised. Each ink is checked on it as on the page."
+        },
+        "chart": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/color"
+          }
+        }
+      }
+    },
+    "colorsOver": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ground": {
+          "$ref": "#/$defs/color"
+        },
+        "surface": {
+          "$ref": "#/$defs/color"
+        },
+        "field": {
+          "$ref": "#/$defs/color",
+          "description": "A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1."
+        },
+        "raised": {
+          "$ref": "#/$defs/color"
+        },
+        "ink": {
+          "$ref": "#/$defs/color"
+        },
+        "inkMuted": {
+          "$ref": "#/$defs/color"
+        },
+        "inkSubtle": {
+          "$ref": "#/$defs/color"
+        },
+        "line": {
+          "$ref": "#/$defs/color"
+        },
+        "lineStrong": {
+          "$ref": "#/$defs/color"
+        },
+        "lineControl": {
+          "$ref": "#/$defs/color"
+        },
+        "accent": {
+          "$ref": "#/$defs/color"
+        },
+        "onAccent": {
+          "$ref": "#/$defs/color"
+        },
+        "accentInk": {
+          "$ref": "#/$defs/color"
+        },
+        "accentSoft": {
+          "$ref": "#/$defs/color"
+        },
+        "primary": {
+          "$ref": "#/$defs/color"
+        },
+        "onPrimary": {
+          "$ref": "#/$defs/color"
+        },
+        "link": {
+          "$ref": "#/$defs/color"
+        },
+        "focus": {
+          "$ref": "#/$defs/color"
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "good": {
+              "$ref": "#/$defs/color"
+            },
+            "warning": {
+              "$ref": "#/$defs/color"
+            },
+            "critical": {
+              "$ref": "#/$defs/color"
+            },
+            "info": {
+              "$ref": "#/$defs/color"
+            }
+          }
+        },
+        "nav": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ground": {
+              "$ref": "#/$defs/color"
+            },
+            "ink": {
+              "$ref": "#/$defs/color"
+            },
+            "muted": {
+              "$ref": "#/$defs/color"
+            },
+            "line": {
+              "$ref": "#/$defs/color"
+            },
+            "accent": {
+              "$ref": "#/$defs/color"
+            },
+            "current": {
+              "$ref": "#/$defs/color"
+            },
+            "onCurrent": {
+              "$ref": "#/$defs/color"
+            }
+          }
+        },
+        "rules": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "section": {
+              "$ref": "#/$defs/color"
+            },
+            "head": {
+              "$ref": "#/$defs/color"
+            }
+          }
+        },
+        "shadow": {
+          "$ref": "#/$defs/color",
+          "description": "The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow)."
+        },
+        "band": {
+          "$ref": "#/$defs/color",
+          "description": "Every other row of a banded table (recipes.table). Omitted, raised. Each ink is checked on it as on the page."
+        },
+        "chart": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/color"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "pattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "paper",
+            "grain",
+            "grid",
+            "dots",
+            "lines",
+            "scanlines"
+          ],
+          "description": "paper and grain a fine speckle, grid squares, dots a dot grid, lines ruled lines, scanlines a screen’s."
+        },
+        "strength": {
+          "enum": [
+            1,
+            2,
+            3
+          ],
+          "description": "How much of the line color it is drawn in: 1 (omitted) 40%, 2 70%, 3 all of it. check measures the words over its darkest point (theme-contrast)."
+        }
+      }
+    },
+    "colorPath": {
+      "enum": [
+        "ground",
+        "surface",
+        "raised",
+        "line",
+        "lineStrong",
+        "lineControl",
+        "ink",
+        "inkMuted",
+        "inkSubtle",
+        "accent",
+        "onAccent",
+        "accentInk",
+        "focus",
+        "accentSoft",
+        "link",
+        "status.good",
+        "status.warning",
+        "status.critical",
+        "status.info",
+        "nav.ground",
+        "nav.ink",
+        "nav.muted",
+        "nav.line",
+        "nav.accent",
+        "nav.current",
+        "nav.onCurrent",
+        "rules.section",
+        "rules.head",
+        "band",
+        "chart[0]",
+        "chart[1]",
+        "chart[2]",
+        "chart[3]",
+        "chart[4]",
+        "chart[5]",
+        "chart[6]",
+        "chart[7]"
+      ],
+      "description": "A color role by its path in colors, never a hex: check measures the pair in every mode and palette."
+    },
+    "partStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One part’s colors by role, its corner, lift, face, weight and case. Nothing that moves a box: a part’s size, spacing, order and visibility are the App’s (theme-part).",
+      "properties": {
+        "ground": {
+          "$ref": "#/$defs/colorPath",
+          "description": "What it is drawn on."
+        },
+        "ink": {
+          "$ref": "#/$defs/colorPath",
+          "description": "Its words; check measures them on its ground."
+        },
+        "edge": {
+          "$ref": "#/$defs/colorPath",
+          "description": "Its border’s color, where it has one."
+        },
+        "radius": {
+          "enum": [
+            "control",
+            "field",
+            "pill",
+            "panel",
+            "square"
+          ],
+          "description": "One of the theme’s own corners, or square."
+        },
+        "lift": {
+          "enum": [
+            "none",
+            "hairline",
+            "low",
+            "mid",
+            "high"
+          ],
+          "description": "A lift from the theme’s steps, in its shadow ink."
+        },
+        "face": {
+          "enum": [
+            "ui",
+            "heading",
+            "data"
+          ],
+          "description": "One of the theme’s faces."
+        },
+        "weight": {
+          "enum": [
+            400,
+            500,
+            600,
+            700
+          ]
+        },
+        "case": {
+          "enum": [
+            "none",
+            "upper",
+            "small-caps"
+          ],
+          "description": "Capitals: upper or small-caps, tracked as the theme’s labels are; none undoes the look’s."
+        }
+      }
+    }
+  },
+  "dependentRequired": {
+    "from": [
+      "contract"
+    ]
+  }
+}

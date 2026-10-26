@@ -1,0 +1,233 @@
+/* @mistriwork/ui's tokens: every colour, size, space, radius, shadow and time the primitives and the pages drawn with them
+   name. Unlayered here, so whoever takes them names the layer: style.css takes them into `mistri-ui`, the kit's
+   stylesheet into its `base`. */
+/* Light is the bare :root; dark is redefined twice — once for the
+   OS preference (guarded so an explicit light choice still wins) and once for
+   the explicit stamp. Nothing outside these blocks names a colour directly. */
+:root {
+  /* Every text size is written over this (calc(12px * var(--type-k))): a
+     theme's type.base worn as base / 13px, so one setting grows the whole
+     scale together. 1 draws every size as written. */
+  --type-k: 1;
+  --ground: #fbfaf8;
+  --surface: #ffffff;
+  --raised: #f3f1ed;
+  --line: #e2ded6;
+  --line-strong: #cbc5b9;
+  /* A form control's edge: 3:1 on the field and on the ground it sits on
+     (WCAG 1.4.11), where the two hairlines above are 1.3 to 2:1. Only fields
+     wear it; sections, cards, tables and rules keep the quiet hairline. */
+  --line-control: #8d887f;
+  --ink: #24211c;
+  --ink-muted: #6d675d;
+  /* The faintest ink still clears 4.5:1 on every light ground. It was a
+     50%-alpha grey that composited to about 1.6:1 — matrix headers, every
+     `null`, type hints and disabled sort headers were decoration to a
+     reader who needed them to be text. */
+  --ink-subtle: #736c65;
+  /* The ring's ink: the look's softer tint of its accent (`focus` in the palette), the accent where a palette
+     sets none. On :root, not body, so a look's inline value is the one every ring reads. */
+  --focus: var(--accent);
+  --accent: #1d6a5a;
+  /* The accent is a fill; the words drawn on it and the words drawn in it are the palette's `onAccent` and `accentInk`
+     where a theme names them or its accent would fail without. Unsaid they are the page's color and the accent itself,
+     as they were when the accent was both. An App's own accent is worn on body (appTheme.js), which writes them there. */
+  --on-accent: var(--ground);
+  --accent-ink: var(--accent);
+  /* Elevation and scrims, tokens rather than literals in every sheet, so
+     dark mode can deepen them: a 16% black shadow on a dark ground is no
+     shadow at all. */
+  --shadow-pop: 0 6px 20px rgb(0 0 0 / 0.16);
+  --shadow-panel: 0 10px 34px rgb(0 0 0 / 0.18);
+  --shadow-modal: 0 18px 50px rgb(0 0 0 / 0.24);
+  --scrim: rgb(0 0 0 / 0.28);
+  --scrim-light: rgb(0 0 0 / 0.14);
+  /* A photo is judged against dark whatever the page's theme, so the
+     lightbox's ground and ink are the same in both. */
+  --lightbox-ground: rgb(10 12 16 / 0.94);
+  --lightbox-ink: rgb(255 255 255 / 0.94);
+  --lightbox-line: rgb(255 255 255 / 0.22);
+  --accent-soft: #1d6a5a14;
+  --link: #17594c;
+  --status-warning: #9a4b12;
+  --status-critical: #a12d2d;
+  --status-info: #7a5cc0;
+  /* Success, independent of --accent: an app may theme its accent indigo,
+     and "good" must stay green there. */
+  --status-good: #1f7a46;
+  /* The code face, single-sourced: --mono is the data face and follows the
+     typography preference; --code is what code surfaces pin to. */
+  --code: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --mono: var(--code);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 6px;
+  /* A form control's own size, said once for every one of them (the field box, a listbox, a choice, a button's pair):
+     its fill, its height and the width of its edge. A theme sets them to draw a filled, taller or heavier field; the
+     defaults are the look they have always had. The corner is --field-radius, read where it is used, --radius unsaid. */
+  --field-fill: var(--surface);
+  --control-h: 34px;
+  --control-border-w: 1px;
+  /* A room's one content edge inside the pane's gutter: the crumb bar's
+     words, a list's controls and rows, a board's first lane, a calendar and a
+     record all start here, so nothing in a room starts a step off the rest. */
+  --room-inset: 14px;
+  /* The space scale (docs/design.md, Space and text): every padding, margin
+     and gap is a step of it or a semantic token over it. The steps from 16px
+     up are the layout's and move with a theme's rhythm (themeFamilies.css);
+     the small ones are a control's own and never do. */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+  /* The halves between the control steps: a button's, a field's and a chip's own padding sat at 6, 10 and 14px
+     long before the scale, and a control's size is not the page's air, so these never move with a theme's
+     rhythm either. The smallest, 3px, is a caption's gap over its value (the classic record form's label sits 3px
+     over its value: docs/design.md, Voice) and a compact control's block padding. */
+  --space-1h: 3px;
+  --space-2h: 6px;
+  --space-3h: 10px;
+  --space-4h: 14px;
+  /* The seam between a record's sections and a dashboard's rows: hierarchy
+     from space, not boxes. */
+  --section-seam: 40px;
+  /* Between a form's fields and a record's field columns: the 20px field gap that, with the seam, makes hierarchy
+     from space (docs/design.md, the refusal list). Named where it was a literal, it stands where the literal stood:
+     a theme's rhythm does not move it. */
+  --field-gap: 20px;
+  /* A list's row, drawn: 32px at compact, 40px at comfortable and 44px at
+     spacious or under a finger, whatever the density's zoom (density.js
+     sets data-density beside the zoom, before the first paint). A cell
+     taller than its row (two lines, an avatar) grows it. */
+  --row-h: 32px;
+  /* The text scale, each step over the theme's base like every size. */
+  --text-xs: calc(11px * var(--type-k));
+  --text-sm: calc(12px * var(--type-k));
+  --text-base: calc(13px * var(--type-k));
+  --text-md: calc(14px * var(--type-k));
+  --text-lg: calc(16px * var(--type-k));
+  --text-xl: calc(20px * var(--type-k));
+  /* Tracking by size, for the looks' type. Large type set at its natural
+     spacing reads as body text blown up, and small capitals set tight read
+     cramped: display type (24px and up) closes up, a title (17 to 23px) a
+     little, and capitals and small caps open out. Tuned by eye on the system
+     face, Helvetica and Iowan Old Style. */
+  --track-display: -0.022em;
+  --track-title: -0.012em;
+  --track-caps: 0.05em;
+  /* Three steps of heading: a list names itself, a record is named, a
+     landing announces. Each is set in the look's heading face at its heading
+     weight, which no look takes past 700 (themePresets.ts). */
+  --type-list-title: var(--text-xl);
+  /* Navigation and controls share a text role. Density changes their hit
+     area and spacing, not this scale. */
+  --type-ui: var(--text-base);
+  --icon-ui: 18px;
+  --type-record-title: calc(26px * var(--type-k));
+  --type-display: calc(clamp(32px, 1.25vw + 26px, 44px) * var(--type-k));
+  --heading-weight: 700;
+
+  /* Motion.
+
+     The built-in CSS easings are too weak to read as intentional, so the
+     curves are explicit. `ease-in` appears nowhere: it starts slow, delaying
+     the exact moment the user is watching, and an ease-out at 200ms feels
+     faster than an ease-in at 200ms.
+
+     Durations are short because this is a tool, not a presentation. A
+     dropdown at 160ms feels responsive; the same dropdown at 400ms feels
+     like it is thinking. Nothing here exceeds 220ms.
+
+     What is deliberately NOT animated: anything reached by keyboard, and
+     anything you see a hundred times a day. Arrowing through the table list
+     and paging through rows are instant, because animating a repeated action
+     makes the tool feel slower every single time. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* A drawer or sheet that slides in from an edge: fast off the mark, a long settle (docs/design.md, Motion doctrine 14). */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --t-press: 140ms;
+  --t-hover: 120ms;
+  --t-popover: 160ms;
+  --t-panel: 200ms;
+  --t-changed: 1200ms;
+  /* The hue of a row just changed (rule 11): a warm amber of its own, never the look's accent. Mono's accent is black
+     and Sage's a grey, so an accent tint came out as the grey of a selected row. One hue in every look, light and dark. */
+  --changed-hue: #e8a53c;
+  /* How much of it a changed row starts at, over the surface: a hue the eye catches across the room, not a fill.
+     Dark grounds take more, since the hue over a dark surface reads fainter at one share. */
+  --changed-mix: 18%;
+}
+
+:root[data-density='comfortable'] { --row-h: calc(40px / var(--density-zoom, 1)); }
+:root[data-density='spacious'] { --row-h: calc(44px / var(--density-zoom, 1)); }
+@media (pointer: coarse) {
+  :root, :root[data-density] { --row-h: calc(44px / var(--density-zoom, 1)); }
+}
+
+/* The browser draws its own controls — a checkbox, a radio, a date's
+   calendar, the window's scroll bar — in the scheme it is told. Untold, they
+   stayed white on every dark ground: a column of bright squares down a list. */
+:root { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; }
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #16181a;
+    --surface: #1c1f22;
+    --raised: #23272b;
+    --line: #2f343a;
+    --line-strong: #454c54;
+    --line-control: #6e7378;
+    --ink: #e4e2dd;
+    --ink-muted: #9aa0a6;
+    --ink-subtle: #979da4;
+    --accent: #5fc9ad;
+    --accent-soft: #5fc9ad1a;
+    --changed-mix: 22%;
+    --link: #6fd4b8;
+    /* A matrix's heaviest tint, where the ink still reads at 4.5:1 on this pale accent (theme.ts heatTop). */
+    --heat-top: 46%;
+    --status-warning: #e0a05c;
+    --status-critical: #e8756f;
+    --status-info: #b39ae8;
+    --status-good: #57b884;
+    --shadow-pop: 0 6px 20px rgb(0 0 0 / 0.5);
+    --shadow-panel: 0 10px 34px rgb(0 0 0 / 0.55);
+    --shadow-modal: 0 18px 50px rgb(0 0 0 / 0.65);
+    --scrim: rgb(0 0 0 / 0.55);
+    --scrim-light: rgb(0 0 0 / 0.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #16181a;
+  --surface: #1c1f22;
+  --raised: #23272b;
+  --line: #2f343a;
+  --line-strong: #454c54;
+  --line-control: #6e7378;
+  --ink: #e4e2dd;
+  --ink-muted: #9aa0a6;
+  --ink-subtle: #979da4;
+  --accent: #5fc9ad;
+  --accent-soft: #5fc9ad1a;
+  --changed-mix: 22%;
+  --link: #6fd4b8;
+  --heat-top: 46%;
+  --status-warning: #e0a05c;
+  --status-critical: #e8756f;
+  --status-info: #b39ae8;
+  --status-good: #57b884;
+  --shadow-pop: 0 6px 20px rgb(0 0 0 / 0.5);
+  --shadow-panel: 0 10px 34px rgb(0 0 0 / 0.55);
+  --shadow-modal: 0 18px 50px rgb(0 0 0 / 0.65);
+  --scrim: rgb(0 0 0 / 0.55);
+  --scrim-light: rgb(0 0 0 / 0.35);
+}

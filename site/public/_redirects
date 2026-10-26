@@ -1,0 +1,15 @@
+# Pages merged in the 0.8.0 simplification (Cloudflare Pages reads this file).
+/docs/tour/ / 301
+/docs/tour / 301
+/docs/roadmap/ /docs/status/#roadmap 301
+/docs/roadmap /docs/status/#roadmap 301
+/docs/load-testing/ /docs/performance/#load-testing 301
+/docs/load-testing /docs/performance/#load-testing 301
+/docs/composition/ /docs/dsl-features/ 301
+/docs/composition /docs/dsl-features/ 301
+/docs/jobs/ /docs/events-and-jobs/ 301
+/docs/jobs /docs/events-and-jobs/ 301
+
+# The docs section has no index of its own; it opens at the start.
+/docs/ /docs/getting-started/ 302
+/docs /docs/getting-started/ 302

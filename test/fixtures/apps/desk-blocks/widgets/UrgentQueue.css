@@ -1,0 +1,25 @@
+/* The urgent list: a line per ticket, its caller beside it. Tokens only. */
+.c-urgent-queue-period {
+  margin: 0 0 6px;
+  color: var(--ink-muted);
+}
+.c-urgent-queue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.c-urgent-queue-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.c-urgent-queue-list button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  cursor: pointer;
+}

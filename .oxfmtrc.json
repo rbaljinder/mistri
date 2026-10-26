@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 140,
+  "singleQuote": true,
+  "semi": true,
+  "trailingComma": "all",
+  "tabWidth": 2,
+  "ignorePatterns": [
+    "**/mistri-schema.d.ts",
+    "**/mistri-commands.d.ts",
+    "**/mistri-components.d.ts",
+    "packages/engine/src/shared/iconGlyphs.ts",
+    "packages/engine/src/shared/iconWeights.ts",
+    "packages/kit/src/client/components/chromeIcons.ts",
+    "packages/engine/src/shared/builtInThemes.ts",
+    "packages/*/schema/**",
+    "**/dist/**",
+    "**/storybook-static/**",
+    "**/.astro/**",
+    ".notes/**",
+    ".demo/**",
+    ".idea/**",
+    ".claude/**",
+    ".visual/**",
+    "e2e/.tmp/**"
+  ]
+}

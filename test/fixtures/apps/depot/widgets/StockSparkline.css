@@ -1,0 +1,6 @@
+/* The sparkline beside on hand. A hairline in the ink's quiet tone, the accent's warning only when stock fell. Tokens only. */
+.c-stock-sparkline { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.c-stock-sparkline-line { flex: none; overflow: visible; }
+.c-stock-sparkline-line polyline { stroke: var(--ink-muted); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.c-stock-sparkline[data-trend="down"] .c-stock-sparkline-line polyline { stroke: var(--status-warning); }
+.c-stock-sparkline-figure { font-variant-numeric: tabular-nums; }

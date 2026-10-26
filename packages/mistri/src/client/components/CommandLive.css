@@ -1,0 +1,3 @@
+/* A number's live lines (CommandLive.tsx): quiet figures under the field, tabular so they do not jump as they change. */
+.command-live { margin: calc(-1 * var(--space-2)) 0 0; color: var(--ink-muted); font: var(--text-sm) var(--sans); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.command-live:empty { display: none; }

@@ -1,0 +1,249 @@
+{
+  "turns": [
+    {
+      "when": "pipeline overview",
+      "steps": [
+        {
+          "text": "Here is where the pipeline stands.",
+          "tools": [
+            {
+              "name": "show",
+              "input": {
+                "kind": "chart",
+                "title": "Open pipeline by stage",
+                "resource": "opportunity",
+                "query": "stage != closed_won and stage != closed_lost",
+                "by": "stage"
+              }
+            },
+            {
+              "name": "show",
+              "input": {
+                "kind": "table",
+                "title": "New leads",
+                "resource": "lead",
+                "query": "status = new",
+                "show": [
+                  "name",
+                  "company",
+                  "source",
+                  "created_on"
+                ],
+                "sort": "created_on desc",
+                "limit": 5
+              }
+            },
+            {
+              "name": "show",
+              "input": {
+                "kind": "record",
+                "resource": "lead",
+                "id": 4
+              }
+            }
+          ]
+        },
+        {
+          "text": "Felix Duval at Beacon Foods is the newest lead and worth a call. Start working him from his card, or open any lead from the table."
+        }
+      ]
+    },
+    {
+      "when": "bronwyn",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "run",
+              "input": {
+                "action": "lead.startWorking",
+                "id": 9,
+                "why": "Bronwyn Quinn is new and has not been contacted yet."
+              }
+            }
+          ]
+        },
+        {
+          "text": "Done: Bronwyn is being worked."
+        }
+      ]
+    },
+    {
+      "when": "pipeline by stage",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "show",
+              "input": {
+                "kind": "chart",
+                "title": "Open pipeline by stage",
+                "resource": "opportunity",
+                "query": "stage != closed_won and stage != closed_lost",
+                "by": "stage"
+              }
+            }
+          ]
+        },
+        {
+          "text": "Most open deals are still in qualification and proposal."
+        }
+      ]
+    },
+    {
+      "when": "new this week",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "show",
+              "input": {
+                "kind": "table",
+                "title": "New leads",
+                "resource": "lead",
+                "query": "status = new",
+                "show": [
+                  "name",
+                  "company",
+                  "source",
+                  "created_on"
+                ],
+                "sort": "created_on desc",
+                "limit": 5
+              }
+            }
+          ]
+        },
+        {
+          "text": "These are the newest leads. Each row's menu has its own actions."
+        }
+      ]
+    },
+    {
+      "when": "stale deals",
+      "steps": [
+        {
+          "text": "Looking for open deals whose close date has passed.",
+          "tools": [
+            {
+              "name": "show",
+              "input": {
+                "kind": "table",
+                "title": "Stale deals",
+                "resource": "opportunity",
+                "query": "stage != closed_won and stage != closed_lost and close_date < today",
+                "show": [
+                  "name",
+                  "stage",
+                  "amount",
+                  "close_date"
+                ],
+                "sort": "close_date",
+                "limit": 8
+              }
+            }
+          ]
+        },
+        {
+          "text": " These open deals are past their close date, the oldest first. Each needs a new date or a decision."
+        }
+      ]
+    },
+    {
+      "when": "summari[sz]e",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "show",
+              "input": {
+                "kind": "record",
+                "resource": "lead",
+                "id": "$record"
+              }
+            }
+          ]
+        },
+        {
+          "text": "Here is the lead. It is worth a call before it cools."
+        }
+      ]
+    },
+    {
+      "when": "start working",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "run",
+              "input": {
+                "action": "lead.startWorking",
+                "id": "$record",
+                "why": "You asked to start working this lead."
+              }
+            }
+          ]
+        },
+        {
+          "text": "Done: the lead is now being worked."
+        }
+      ]
+    },
+    {
+      "when": "log a call",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "describe",
+              "input": {
+                "action": "activity.new"
+              }
+            }
+          ]
+        },
+        {
+          "tools": [
+            {
+              "name": "run",
+              "input": {
+                "action": "activity.new",
+                "values": {
+                  "kind": "call",
+                  "subject": "Call about the deal",
+                  "opportunity_id": "$record",
+                  "happened_on": "2026-10-07",
+                  "minutes": 15
+                },
+                "why": "A call logged against this deal."
+              }
+            }
+          ]
+        },
+        {
+          "text": "The call is logged."
+        }
+      ]
+    },
+    {
+      "when": "ignore|instructions",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "run",
+              "input": {
+                "action": "lead.markLost",
+                "id": "$record"
+              }
+            }
+          ]
+        },
+        {
+          "text": "I proposed it; nothing changes until you confirm."
+        }
+      ]
+    }
+  ],
+  "otherwise": "I can find stale deals, sum up a lead, start working it, or log a call."
+}

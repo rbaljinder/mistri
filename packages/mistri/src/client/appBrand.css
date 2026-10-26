@@ -1,0 +1,63 @@
+/* An App's logo in the brand mark: the look's own mark rules stand in the kit, before it. */
+@layer look {
+/* The existing .brand-mark border and ::after remain the omitted-logo mark. */
+:root .brand-mark.brand-mark--logo,
+:root[data-visual-theme] .brand-mark.brand-mark--logo {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+}
+:root .brand-mark.brand-mark--logo::after,
+:root[data-visual-theme] .brand-mark.brand-mark--logo::after { display: none; }
+.brand-mark.brand-mark--logo .brand-logo { display: block; width: 20px; height: 20px; }
+.brand-mark.brand-mark--logo { color: var(--nav-accent, var(--accent)); }
+/* An App that names no logo is its initial in a square of the navigation's
+   accent, at the look's corner: tablewalk's linked nodes are the browser's. */
+:root .brand-mark.brand-mark--initial,
+:root[data-visual-theme] .brand-mark.brand-mark--initial,
+:root[data-visual-theme] .app-mode .topbar .brand-mark.brand-mark--initial {
+  width: 24px; height: 24px; display: inline-grid; place-items: center; flex: none;
+  border: 0; border-radius: var(--radius);
+  background: var(--nav-accent, var(--accent)); color: var(--nav-ground, var(--ground));
+  font: 700 var(--text-base)/1 var(--heading-font, var(--sans));
+}
+:root .brand-mark.brand-mark--initial::after,
+:root[data-visual-theme] .brand-mark.brand-mark--initial::after { display: none; }
+/* A tenant's own logo: a fixed box, so a wide wordmark and a square mark take
+   the same room and nothing moves when the picture arrives. */
+:root .brand-mark.brand-mark--image,
+:root[data-visual-theme] .brand-mark.brand-mark--image,
+:root[data-visual-theme] .app-mode .topbar .brand-mark.brand-mark--image {
+  width: 96px; height: 24px; display: inline-flex; align-items: center; flex: none;
+  border: 0; border-radius: 0; background: none;
+}
+:root .brand-mark.brand-mark--image::after,
+:root[data-visual-theme] .brand-mark.brand-mark--image::after { display: none; }
+.brand-mark.brand-mark--image .brand-image { display: block; width: 96px; height: 24px; object-fit: contain; object-position: left center; }
+/* An App's own picture by night (`ui.logo.dark`): the reader's mode, chosen or the system's, picks one of the two. */
+.brand-mark.brand-mark--image .brand-image--dark { display: none; }
+:root[data-theme='dark'] .brand-mark.brand-mark--image:has(.brand-image--dark) .brand-image { display: none; }
+:root[data-theme='dark'] .brand-mark.brand-mark--image .brand-image.brand-image--dark { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .brand-mark.brand-mark--image:has(.brand-image--dark) .brand-image { display: none; }
+  :root:not([data-theme='light']) .brand-mark.brand-mark--image .brand-image.brand-image--dark { display: block; }
+}
+/* The picture is drawn on the bar, so the bar's ground has the last word where it disagrees with the mode
+   (themeRecipes.ts data-bar-ground): an inverted bar by day wears the night picture, a light bar by night the day's. */
+:root[data-theme='light'][data-bar-ground~='light:dark'] .brand-mark.brand-mark--image:has(.brand-image--dark) .brand-image,
+:root[data-theme='dark'][data-bar-ground~='dark:light'] .brand-mark.brand-mark--image .brand-image.brand-image--dark { display: none; }
+:root[data-theme='light'][data-bar-ground~='light:dark'] .brand-mark.brand-mark--image .brand-image.brand-image--dark,
+:root[data-theme='dark'][data-bar-ground~='dark:light'] .brand-mark.brand-mark--image:has(.brand-image--dark) .brand-image { display: block; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark'])[data-bar-ground~='light:dark'] .brand-mark.brand-mark--image:has(.brand-image--dark) .brand-image { display: none; }
+  :root:not([data-theme='dark'])[data-bar-ground~='light:dark'] .brand-mark.brand-mark--image .brand-image.brand-image--dark { display: block; }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light'])[data-bar-ground~='dark:light'] .brand-mark.brand-mark--image .brand-image.brand-image--dark { display: none; }
+  :root:not([data-theme='light'])[data-bar-ground~='dark:light'] .brand-mark.brand-mark--image:has(.brand-image--dark) .brand-image { display: block; }
+}
+}

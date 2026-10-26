@@ -1,0 +1,109 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+/* The quiet form, in the look layer, shared by every form that runs a command or makes a record (formDress.css). */
+@import './formDress.css';
+@layer components {
+/* A command form is one measure, centred, the App's accent on the stepper
+   and the primary button. A public form is the whole page and nothing else
+   of the shell; a signed-in form sits in the content pane beside the menu. */
+.form-page { width: min(40rem, 100%); margin: 0 auto; padding: var(--space-7) 20px 56px; display: grid; gap: var(--space-4h); }
+.form-page .eyebrow { margin: 0; font: 500 var(--text-xs) var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
+.form-page h1 { margin: 0; font: var(--heading-weight, 600) calc(24px * var(--type-k)) var(--heading-font, var(--sans)); letter-spacing: var(--track-display, -0.015em); }
+.form-page-description { margin: 0 0 var(--space-4); color: var(--ink-muted); font-size: var(--text-md); line-height: 1.5; max-width: 70rem; }
+.form-page-steps { padding-top: var(--space-2h); }
+.form-page .command-field input[type="checkbox"] { width: auto; }
+.form-page-failure { margin: 0; font: var(--text-base) var(--sans); line-height: 1.45; color: var(--status-critical); overflow-wrap: anywhere; }
+/* Above the actions (docs/design.md): a one-page form's line stands 18px
+   under its fields, and the actions keep their 24px over it; a stepper's
+   grid gap gives it the same. */
+.form-page form > .form-page-failure { margin-top: 18px; }
+.form-page-done { padding-top: 56px; }
+.form-page-reference-label { margin: var(--space-3) 0 0; font: 500 var(--text-xs) var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
+.form-page-reference { margin: 0; }
+.form-page-reference strong { display: inline-block; padding: var(--space-3) var(--space-4); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); font: 600 var(--text-xl) var(--mono); letter-spacing: .04em; }
+.form-page-done-message { margin: 0; color: var(--ink-muted); font-size: var(--text-md); line-height: 1.5; }
+/* The way back after a receipt: a quiet link in the link ink, a step below the message, never a second button. */
+.form-page-done-home { margin: var(--space-6) 0 0; font-size: var(--text-md); }
+.form-page-done-home a { color: var(--accent-ink, var(--accent)); text-underline-offset: 3px; }
+/* A public form's review, drawn from the page's memory, and a saved form's note before its first step. */
+.form-note { margin: 0; padding: var(--space-3h) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-muted); font-size: var(--text-base); line-height: 1.5; }
+/* The review, the stepper's and the intake's alike (MultiStepForm.css keeps only the intake's larger heading): each
+   step a section, more room between sections than between rows; its name with Change attached to it, a quiet link in
+   the link ink, so the eye that finds the step finds the way back to it and the Tab order runs name, Change, answers.
+   An answer beside its question where there is room, the question in a column of 38% (13rem at most) in the muted
+   ink, the answer in the ink, one size for both; under it on a phone. */
+:is(.form-review, .intake-review) > section { display: grid; gap: var(--space-3); padding-block: var(--space-6); border-top: 1px solid var(--line); }
+:is(.form-review, .intake-review) > section:first-of-type { padding-top: var(--space-4); }
+:is(.form-review > section:last-of-type, .intake-review-section:last-child) { border-bottom: 1px solid var(--line); }
+:is(.form-review-head, .intake-review-head) { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-start; column-gap: var(--space-3); row-gap: 0; min-width: 0; }
+:is(.form-review-head, .intake-review-head) > :is(h2, h3) { flex: 0 1 auto; min-width: 0; margin: 0; font: 600 var(--text-md)/1.35 var(--sans); color: var(--ink); text-wrap: pretty; overflow-wrap: anywhere; }
+:is(.form-review-head, .intake-review-head) > .btn {
+  flex: none; min-height: 24px; padding: 0; border: 0; background: none; white-space: nowrap;
+  font-weight: 500; color: var(--accent-ink, var(--accent));
+  text-decoration: underline; text-decoration-color: color-mix(in oklab, currentColor 35%, transparent); text-underline-offset: 3px;
+}
+@media (hover: hover) { :is(.form-review-head, .intake-review-head) > .btn:hover:not(:disabled, [aria-disabled='true']) { background: none; text-decoration-color: currentColor; } }
+:is(.form-review, .intake-review) dl { margin: 0; display: grid; gap: var(--space-2h); }
+/* Stacked on a phone, a label sits 2px over its answer, so the pairs need
+   more air between them than inside them or the list reads as one column of
+   alternating lines. */
+@media (max-width: 480px) { :is(.form-review, .intake-review) dl { gap: var(--space-4); } }
+:is(.form-review, .intake-review) dl > div { display: grid; gap: var(--space-1); font-size: var(--text-md); line-height: 1.45; }
+@media (min-width: 481px) { :is(.form-review, .intake-review) dl > div { grid-template-columns: min(38%, 13rem) minmax(0, 1fr); column-gap: var(--space-4); } }
+:is(.form-review, .intake-review) :is(dt, section > p) { margin: 0; color: var(--ink-muted); font-size: var(--text-md); overflow-wrap: anywhere; }
+:is(.form-review, .intake-review) dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.form-review > fieldset { margin-top: var(--space-4h); }
+/* On a phone a stepped form's actions are the screen's foot, as the intake's are (MultiStepForm.css): the page fills
+   the container it scrolls in, the form fills the page, and the bar rests at its foot under the safe area, still there
+   when the step is long. No rule over it; a fade says the step goes on under it. A dialog keeps its own foot. */
+@media (max-width: 600px) {
+  .form-page:has(.multi-step-form:not([data-style='intake']) > .multi-step-actions) { box-sizing: border-box; min-height: 100%; display: flex; flex-direction: column; padding-bottom: 0; }
+  .form-page:has(.multi-step-form:not([data-style='intake']) > .multi-step-actions) > form { flex: 1; display: flex; flex-direction: column; }
+  .form-page .multi-step-form:not([data-style='intake']):has(> .multi-step-actions) { flex: 1; display: flex; flex-direction: column; }
+  .form-page .multi-step-form:not([data-style='intake']) > .multi-step-actions {
+    position: sticky; bottom: 0; z-index: 1; margin-top: auto;
+    padding: var(--space-3) 0 max(var(--space-3), env(safe-area-inset-bottom)); background: var(--ground);
+  }
+  .form-page .multi-step-form:not([data-style='intake']) > .multi-step-actions::before {
+    content: ''; position: absolute; inset-inline: 0; bottom: 100%; height: var(--space-5);
+    background: linear-gradient(to bottom, transparent, var(--ground)); pointer-events: none;
+  }
+}
+/* A status check's answer, an account's own applications, and the done screen's offer to follow it in an account. */
+.form-page h2 { margin: 0; font: 600 calc(15px * var(--type-k)) var(--sans); }
+.form-status { margin: 0; display: grid; gap: var(--space-1h); }
+.form-status > div { display: grid; grid-template-columns: minmax(6rem, auto) 1fr; column-gap: var(--space-4); font-size: var(--text-md); line-height: 1.45; }
+.form-status dt { color: var(--ink-muted); }
+.form-status dd { margin: 0; font-weight: 600; }
+.form-status-answer, .form-account, .form-claim, .form-status-more { display: grid; gap: var(--space-3); padding: var(--space-4h) 0 0; border-top: 1px solid var(--line); }
+/* The review's optional address proof: the review's own rule and rhythm, never a card. */
+.form-proof { display: grid; gap: var(--space-3); padding: var(--space-4) 0 0; border-top: 1px solid var(--line); }
+.form-proof h3 { margin: 0; font-size: var(--text-md); }
+.form-proof p { margin: 0; color: var(--ink-muted); font-size: var(--text-base); }
+.form-account ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-3h); }
+.form-account li { display: grid; gap: var(--space-1h); }
+.form-account strong { font: 600 var(--text-base) var(--mono); letter-spacing: .04em; }
+.form-claim { margin-top: var(--space-3h); justify-items: start; }
+.form-claim-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.form-claim-actions > a { text-decoration: none; }
+body.public-form-mode .sidebar, body.public-form-mode .sidebar-reveal, body.public-form-mode #topnav, body.public-form-mode .querybar,
+body.public-form-mode .brand-db, body.public-form-mode .conn-picker, body.public-form-mode .topbar-actions, body.public-form-mode #explain-pane { display: none; }
+body.public-form-mode .brand { min-width: 0; max-width: 100%; pointer-events: none; }
+/* The staff door, on a form served as the App's home (publicForm.js): at the
+   bar's end, where a signed-in reader's account menu stands. The name gives
+   way before it does. */
+body.public-form-mode .brand { flex: 0 1 auto; }
+body.public-form-mode .brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.public-form-mode .public-sign-in { margin-left: auto; flex: none; }
+@media (max-width: 600px) {
+  .form-page { padding: 20px var(--space-4h) 40px; }
+  .form-page h1 { font-size: calc(21px * var(--type-k)); }
+}
+/* An intake form: its progress bar and the step's title are the page, so there is no eyebrow or form heading. The
+   brand row keeps the App's mark and its name, as every public page's does: with the mark alone a reader on a
+   desk saw an unnamed square over a form asking for their address. The name gives way (above) where room runs out. */
+.form-page[data-style='intake'] { padding-top: var(--space-5); }
+/* The form's description is the first step's alone, between its title and its first field. */
+.form-page[data-style='intake'] .form-page-description { margin: 0 0 var(--field-gap); }
+}
+/* A group's answers on a review, a line each by its label (ReviewValue.tsx). */
+.review-lines { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }

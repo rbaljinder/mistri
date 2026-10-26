@@ -1,0 +1,41 @@
+/** What RichTextEditor says, in the forms room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '../../../messages.js';
+
+export const say = defineMessages({
+  formatting: 'Formatting for {label}',
+  bold: 'Bold',
+  /* The buttons' faces: a letter in its own style, the name said by its label. */
+  boldMark: 'B',
+  italicMark: 'I',
+  strikeMark: 'S',
+  italic: 'Italic',
+  strike: 'Strikethrough',
+  textStyle: 'Text style',
+  paragraph: 'Paragraph',
+  heading: 'Heading {level}',
+  quote: 'Quote',
+  codeBlock: 'Code block',
+  inlineCode: 'Code',
+  bulletList: 'Bulleted list',
+  orderedList: 'Numbered list',
+  taskList: 'Checklist',
+  link: 'Link',
+  linkAddress: 'Link address',
+  linkPlaceholder: 'https://',
+  linkApply: 'Apply',
+  linkRemove: 'Remove link',
+  linkInvalid: 'A link is a web address (https://…) or mailto:.',
+  table: 'Table',
+  tableInsert: 'Insert table',
+  tableRowAfter: 'Add row below',
+  tableColumnAfter: 'Add column right',
+  tableRowDelete: 'Delete row',
+  tableColumnDelete: 'Delete column',
+  tableDelete: 'Delete table',
+  picture: 'Add picture',
+  pictureAdding: 'Adding picture…',
+  noPeople: 'No one by that name',
+  people: 'People',
+  /* Beside a team in the @ list: picking it tells everyone in it. */
+  group: 'Team',
+});

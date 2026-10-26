@@ -1,0 +1,8 @@
+/** What EditLayoutButton says, in the record page room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '../../../messages.js';
+
+export const say = defineMessages({
+  layout: 'Layout',
+  editingTheLayoutForEvery: 'Editing “{named}” — the layout for every {name} record',
+  chooseWhatThisRecord: 'Choose what this record shows',
+});

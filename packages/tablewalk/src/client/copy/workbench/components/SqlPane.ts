@@ -1,0 +1,31 @@
+/** What SqlPane says, in the Workbench room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '@mistriwork/kit/client/messages.js';
+
+export const say = defineMessages({
+  rows: { one: '{count} row', other: '{count} rows' },
+  saved: 'Saved "{name}".',
+  nameThisStatement: 'Name this statement',
+  eGCustomersOver: 'e.g. Customers over their limit',
+  runThisStatementOnTheWrite: 'Run this statement on the write connection',
+  runAsWrite: 'Run as write…',
+  keepThisStatementUnder: 'Keep this statement under a name',
+  save: 'Save…',
+  run: 'Run ⌘↵',
+  forget: 'Forget "{name}"',
+  forgetName: 'Forget {name}',
+  definedInTablewalkJson: 'Defined in tablewalk.json',
+  config: 'config',
+  sqlStatement: 'SQL statement',
+  selectFromCustomerWhere: 'select * from customer where credit_limit > 5000',
+  running: 'Running…',
+  firstAddALimit: 'first {rowsCount} — add a LIMIT to see a different page',
+  firstOfWhatTheDatabase: 'first {rowsCount} of what the database returned',
+  noRows: 'No rows.',
+  theStatementReturnedThese: ' The statement returned these columns: {columns}.',
+  theStatementReturnedNoColumns: ' The statement returned no columns either.',
+  rowsOpenAsRecords: 'Rows open as {name} records.',
+  runThisAsAWrite: 'Run this as a write?',
+  thisRunsOnTheWrite: 'This runs on the write connection. It is not undoable from here.',
+  runAsWriteConfirm: 'Run as write',
+  msMs: '{ms} ms',
+});

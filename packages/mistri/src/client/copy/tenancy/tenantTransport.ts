@@ -1,0 +1,30 @@
+/** What tenantTransport says, in the tenancy room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '@mistriwork/kit/client/messages.js';
+
+export const say = defineMessages({
+  theTenantContextIsUnavailable: 'The tenant context is unavailable. Verify your session and choose a tenant again.',
+  theTenantResponseCould: 'The tenant response could not be verified.',
+  theTenantRequestWasRefused: 'The tenant request was refused.',
+  thisOperationIsNotEnabled: 'This operation is not enabled in the tenant browser.',
+  invalidMutationData: 'Invalid mutation data.',
+  invalidMutationFields: 'Invalid mutation fields.',
+  invalidUndoRequest: 'Invalid Undo request.',
+  invalidImportRequest: 'Invalid import request.',
+  invalidCommandRequest: 'Invalid command request.',
+  invalidRecordRequest: 'Invalid record request.',
+  invalidDeleteRequest: 'Invalid delete request.',
+  invalidWriteValues: 'Invalid write values.',
+  invalidExpectedValues: 'Invalid expected values.',
+  thisMutationIsNotEnabled: 'This mutation is not enabled in the tenant browser.',
+  invalidMutationBody: 'Invalid mutation body.',
+  invalidMutationSelector: 'Invalid mutation selector.',
+  theMutationIsToo: 'The mutation is too large.',
+  thisChangeIsNotEnabled: 'This change is not enabled in the platform realm.',
+  theMutationWasCancelled: 'The mutation was cancelled before sending.',
+  theMutationWasNotSent: 'The mutation was not sent.',
+  theChangeCouldNotBeConfirmed: 'The change could not be confirmed.',
+  theChangeResponseBelongs: 'The change response belongs to an unverified tenant context. Reconcile before trying again.',
+  theImportResponseHasNoVerified: 'The import response has no verified tenant owner. Reconcile before trying again.',
+  theImportCouldNotBeConfirmed: 'The import could not be confirmed.',
+  theChangeResponseHasNoVerified: 'The change response has no verified tenant owner. Reconcile before trying again.',
+});

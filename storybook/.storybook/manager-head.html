@@ -1,0 +1,11 @@
+<!-- The manager writes "<story> ⋅ Storybook" into the tab on every navigation and offers no setting for the word
+     (Helmet owns the title); the library is "Component library" on the site, so the tab says so. -->
+<script>
+  (function () {
+    var rename = function () {
+      if (/Storybook/.test(document.title)) document.title = document.title.replace(/Storybook/g, 'Component library');
+    };
+    rename();
+    new MutationObserver(rename).observe(document.head, { subtree: true, childList: true, characterData: true });
+  })();
+</script>

@@ -1,0 +1,33 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role viewer — the App
+auth rows all — the App
+source lending connection "loaner-desk" — the App
+source lending default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource equipment access write — the App
+resource equipment_loan access write — the App
+role admin read borrower — the App
+role admin read equipment — the App
+role admin read equipment_loan — the App
+role admin command checkoutEquipment — the App
+role admin command returnEquipment — the App
+role kiosk read borrower — the App
+role kiosk read equipment — the App
+role kiosk read equipment_loan — the App
+role kiosk command returnEquipment — the App
+role staff read borrower — the App
+role staff read equipment — the App
+role staff read equipment_loan — the App
+role staff command checkoutEquipment — the App
+role staff command returnEquipment — the App
+role viewer read borrower — the App
+role viewer read equipment — the App
+role viewer read equipment_loan — the App
+
+contract checkoutEquipment v1 d7e6d6588c93
+contract returnEquipment v1 94f2b9b84476

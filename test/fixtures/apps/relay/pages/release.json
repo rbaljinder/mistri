@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../../../packages/mistri/schema/page.schema.json",
+  "base": "release_run",
+  "listTabs": true,
+  "sections": [
+    { "kind": "fields", "show": ["name", "status", "service_id", "owner_id", "version", "target_on"], "columns": 3 },
+    { "kind": "fields", "title": "Release notes", "show": ["summary"], "width": "half" },
+    { "kind": "fields", "title": "Service ownership", "show": ["service_id.name", "service_id.tier", "service_id.repository", "service_id.owner_id.name"], "width": "half" },
+    { "kind": "list", "title": "Approvals", "from": "approval", "whose": "release_id", "show": ["name", "reviewer_id.name", "decision", "notes"] },
+    { "kind": "list", "title": "Deployments", "from": "deployment", "whose": "release_id", "show": ["name", "environment", "status", "version", "deployed_on"] },
+    { "kind": "list", "title": "Service incidents", "from": "incident", "same": ["service_id"], "show": ["name", "severity", "status", "opened_on"] }
+  ]
+}

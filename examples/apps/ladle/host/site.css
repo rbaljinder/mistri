@@ -1,0 +1,184 @@
+/*
+ * The school's own design: cream paper, tomato red, a serif for headings. Plain CSS, nothing of mistri's.
+ *
+ * Element rules sit in a cascade layer of the site's own, and everything else is a class: the embedded App's styles
+ * are in a layer of their own and scoped to its elements, and a layered rule of the host's never reaches them. An
+ * unlayered `button { … }` here would (the embed guide says so), which is why there is none.
+ */
+:root {
+  --site-paper: #fbf6ee;
+  --site-ink: #2b2118;
+  --site-quiet: #6f6256;
+  --site-line: #e6d9c6;
+  --site-accent: #c2412d;
+  --site-card: #ffffff;
+  --site-serif: Georgia, 'Times New Roman', serif;
+  --site-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --site-paper: #1d1813;
+    --site-ink: #f3ece2;
+    --site-quiet: #b5a898;
+    --site-line: #3a3028;
+    --site-accent: #ee7a5f;
+    --site-card: #262019;
+  }
+}
+
+@layer site-base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--site-paper);
+    color: var(--site-ink);
+    font: 16px/1.5 var(--site-sans);
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--site-serif);
+    font-weight: 600;
+    margin: 0;
+  }
+  a {
+    color: inherit;
+  }
+}
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 16px max(16px, calc((100% - 1080px) / 2));
+  border-bottom: 3px solid var(--site-accent);
+  background: var(--site-paper);
+}
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 22px/1 var(--site-serif);
+  text-decoration: none;
+}
+.site-mark {
+  color: var(--site-accent);
+  font-size: 26px;
+}
+.site-header nav {
+  display: flex;
+  gap: 20px;
+}
+.site-header nav a {
+  text-decoration: none;
+  color: var(--site-quiet);
+  padding-bottom: 2px;
+}
+.site-header nav a[aria-current='page'] {
+  color: var(--site-ink);
+  border-bottom: 2px solid var(--site-accent);
+}
+
+.site-main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px 16px 64px;
+}
+.site-hero {
+  margin-bottom: 40px;
+}
+.site-hero h1 {
+  font-size: clamp(30px, 5vw, 44px);
+  line-height: 1.1;
+  max-width: 18ch;
+}
+.site-hero p {
+  color: var(--site-quiet);
+  max-width: 52ch;
+  margin: 12px 0 0;
+}
+.site-main h2 {
+  font-size: 24px;
+  margin-bottom: 16px;
+}
+.site-quiet {
+  color: var(--site-quiet);
+}
+
+.site-classes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+.site-class {
+  background: var(--site-card);
+  border: 1px solid var(--site-line);
+  border-radius: 2px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.site-class h3 {
+  font-size: 19px;
+}
+.site-class-when {
+  margin: 0;
+  color: var(--site-accent);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.site-class-meta {
+  margin: 0;
+  color: var(--site-quiet);
+  font-size: 14px;
+}
+.site-class-foot {
+  margin: 12px 0 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+.site-price {
+  font-weight: 600;
+}
+.site-seats {
+  color: var(--site-quiet);
+}
+.site-full {
+  color: var(--site-accent);
+  font-weight: 600;
+}
+
+/* The staff desk: a thin strip of the school's, then the frame the App draws inside. */
+.site-staff {
+  padding: 0 0 32px;
+}
+.site-staff-note {
+  margin: 0;
+  padding: 8px max(16px, calc((100% - 1080px) / 2));
+  font-size: 13px;
+  color: var(--site-quiet);
+  background: var(--site-card);
+  border-bottom: 1px solid var(--site-line);
+}
+.site-embed {
+  min-height: 70vh;
+  border-bottom: 1px solid var(--site-line);
+}
+
+.site-footer {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--site-quiet);
+}

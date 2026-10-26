@@ -1,0 +1,278 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+.triage-board {
+  --lane-gap: 12px;
+  /* A lane starts at this width and grows to share a wide room, up to a
+     reading width: at 244px fixed, the fifth lane of a 1280px desk stood
+     behind the fade while a sixth of the row stayed empty on a wider one. 15rem is what a card's title, a line and a
+     foot need to be read whole. In a narrower room the lanes give way together, down to --lane-floor, wrapping a
+     card's words rather than pushing the last lane past the edge: beside a side menu at 1280, four lanes at 15rem
+     and two folded strips stood 80px wider than the room, the fourth lane's sum behind the fade and the folded
+     strips out of sight. Only a board with more lanes than fit at the floor scrolls, with the fade at its edge. */
+  --lane-min: 15rem;
+  --lane-floor: 12rem;
+  --lane-max: 320px;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lane-gap);
+  overflow-x: auto;
+  padding: var(--space-3) 0 var(--space-3h);
+  container-type: scroll-state;
+}
+
+/* More lanes than the window holds: the far edge fades while there is more
+   to scroll to, and clears at the end — the one sign that a lane stopping at
+   the gutter is not the last. It answers the scroll position, not time, so
+   nothing moves (motion doctrine 1); a browser without scroll-state queries
+   shows the board as it was. The fade is a sticky sliver after the last lane
+   whose negative margin gives back its width and the gap, so it adds no
+   scroll of its own. */
+.triage-board:not(.has-rows)::after, .triage-heads::after, .triage-swimlane-cells::after {
+  content: ''; position: sticky; right: 0; flex: 0 0 32px; align-self: stretch;
+  margin-left: calc(-32px - var(--lane-gap)); pointer-events: none; visibility: hidden;
+  background: linear-gradient(to right, transparent, var(--ground));
+}
+@container scroll-state(scrollable: right) {
+  .triage-board:not(.has-rows)::after, .triage-heads::after, .triage-swimlane-cells::after { visibility: visible; }
+}
+
+.triage-lane {
+  flex: 1 1 var(--lane-min);
+  min-width: var(--lane-floor);
+  max-width: var(--lane-max);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+}
+
+.triage-lane-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 0 var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.triage-lane-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.triage-lane-count { margin-left: auto; color: var(--ink-subtle); font: var(--text-xs) var(--mono); white-space: nowrap; }
+/* Past its limit a lane says so in the warning ink, not in weight: the number is the thing to read. */
+.triage-lane-count.is-over { color: var(--status-warning); }
+/* What the lane's cards are worth together, after its count: "3 · $92.8K". */
+.triage-lane-sum { color: var(--ink-muted); font: 500 var(--text-sm) var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.triage-lane-sum::before { content: '\b7'; margin-inline-end: var(--space-2h); color: var(--ink-subtle); }
+/* A lane given way below its 15rem (--lane-floor) has no room for its name, count, sum and its + on one line: the
+   sum takes a line of its own under the name rather than push the + past the lane's edge. */
+.triage-board:not(.has-rows) > .triage-lane:not(.is-folded) { container: triage-lane / inline-size; }
+@container triage-lane (width < 15rem) {
+  .triage-lane-head { flex-wrap: wrap; row-gap: var(--space-1); }
+  .triage-lane-sum { order: 1; flex-basis: 100%; }
+  .triage-lane-sum::before { content: none; }
+}
+/* A lane that folds: a quiet caret at the head's end closes it to a strip. */
+.triage-lane-fold {
+  display: grid; place-items: center; flex: none; width: 24px; height: 24px; margin: -4px -4px -4px -2px; padding: 0;
+  border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--ink-subtle); cursor: pointer;
+}
+.triage-lane-fold:hover { border-color: var(--line); background: var(--surface); color: var(--ink); }
+.triage-lane-fold:focus-visible, .triage-lane-unfold:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
+/* Folded: a narrow strip, its name, count and sum written down its side, the whole strip the button that opens it.
+   It keeps the lane's tint where the look gives one (--lane-strip), and stays a place to drop a card. */
+.triage-lane.is-folded { flex: 0 0 44px; min-width: 44px; max-width: 44px; padding: 0; align-self: stretch; }
+.triage-lane-unfold {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%; height: 100%; min-height: 160px; padding: var(--space-4) 0;
+  writing-mode: vertical-rl; border: 0; border-radius: var(--radius); background: var(--lane-strip, transparent);
+  color: var(--lane-ink, var(--ink-muted)); font: inherit; text-align: start; cursor: pointer;
+}
+.triage-lane-unfold:hover { background: var(--lane-strip-hover, var(--raised)); }
+.triage-lane-unfold .triage-lane-label { color: inherit; white-space: nowrap; }
+.triage-lane-unfold .triage-lane-count { margin: 0; }
+.triage-lane-cards { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-3); min-height: 62px; }
+.triage-card-wrap { position: relative; display: flex; flex-direction: column; gap: var(--space-2); }
+.triage-card {
+  position: relative;
+  display: flex; flex-direction: column; gap: var(--space-1h); align-items: flex-start;
+  width: 100%; padding: var(--space-3) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--ground); color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+}
+.triage-card.has-menu { padding-right: var(--space-7); }
+/* What opens the card: its words, laid out as the card lays them out, with a hit area over the card's padding (the
+   ::after, measured from the card) that stops at the ⋯'s column, so the two targets meet and never overlap. */
+.triage-card-open {
+  display: flex; flex-direction: column; gap: inherit; align-items: flex-start; align-self: stretch; min-width: 0;
+  padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; text-align: inherit;
+  cursor: inherit;
+}
+.triage-card-open::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+.triage-card.has-menu > .triage-card-open::after { right: var(--card-menu-column, 30px); }
+.triage-card-open:focus-visible { outline: none; }
+.triage-card:has(> .triage-card-open:focus-visible) { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+/* A card that can be dragged says so: a grab cursor, and on a pointer that hovers, a grip of six dots in the card's left
+   margin that rises with the hover (a quiet row control, design.md). The keyboard's way (Alt and an arrow) and the ⋯
+   are unchanged, and a card that cannot move has neither. Dragging draws the grabbing cursor on the page (features.css). */
+.triage-card[data-draggable='true'] { cursor: grab; }
+@media (hover: hover) {
+  .triage-card[data-draggable='true']::after {
+    content: ''; position: absolute; left: 3px; top: 50%; width: 6px; height: 14px; translate: 0 -50%;
+    background: radial-gradient(circle, var(--ink-subtle) 1px, transparent 1.5px) 0 0 / 3px 4.67px;
+    opacity: 0; pointer-events: none;
+  }
+  .triage-card[data-draggable='true']:is(:hover, :focus-within)::after { opacity: 0.7; }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .triage-card[data-draggable='true']::after { transition: opacity var(--t-hover, 120ms) ease; }
+}
+.triage-card:hover, .triage-card.is-selected { border-color: var(--accent); }
+.triage-card.is-selected { background: var(--accent-soft); }
+.triage-card-title { font-size: var(--text-base); }
+.triage-card-subtitle, .triage-card-meta { color: var(--ink-muted); font-size: var(--text-sm); }
+.triage-card-meta { font-family: var(--mono); font-size: var(--text-xs); }
+/* A card's kind, over its title: a chip in one of the theme's series colors, which a look may also draw as the card's
+   stripe (lumenLook.css). The ink is the series deepened by the text's as an avatar's initials are (features.css), 45%
+   of it: at 72%, as the tone pills', Mono's grey eighth series read 3.0:1 and a custom theme's amber 4.3:1, and no
+   theme check saw it. `check` measures this exact pair for every series (theme.ts componentInks). */
+.triage-card { --cat-ink: var(--accent); }
+.triage-card.cat-c1 { --cat-ink: var(--chart-1, var(--accent)); }
+.triage-card.cat-c2 { --cat-ink: var(--chart-2, var(--status-info)); }
+.triage-card.cat-c3 { --cat-ink: var(--chart-3, var(--status-good)); }
+.triage-card.cat-c4 { --cat-ink: var(--chart-4, var(--status-warning)); }
+.triage-card.cat-c5 { --cat-ink: var(--chart-5, var(--status-critical)); }
+.triage-card.cat-c6 { --cat-ink: var(--chart-6, var(--link)); }
+.triage-card.cat-c7 { --cat-ink: var(--chart-7, var(--ink-muted)); }
+.triage-card.cat-c8 { --cat-ink: var(--chart-8, var(--ink-muted)); }
+.triage-card-category {
+  max-width: 100%; padding: 0 var(--space-3); border-radius: 999px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 var(--text-xs)/1.75 var(--sans);
+  color: color-mix(in srgb, var(--cat-ink) 45%, var(--ink));
+  background: color-mix(in srgb, var(--cat-ink) 13%, transparent);
+}
+/* The foot: facts in a row, each a mark and its value, a person at the right end; it wraps rather than overflowing. */
+.triage-card-foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); align-self: stretch;
+  margin-top: var(--space-2); color: var(--ink-muted); font-size: var(--text-sm);
+}
+.triage-card-fact { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.triage-card-fact-icon { flex: none; color: var(--ink-subtle); }
+.triage-card-fact.is-person { margin-left: auto; }
+.triage-card-fact.is-person .avatar-text { display: none; }
+/* A New record in a lane: a quiet "+" at the head's end, the size a finger is promised. */
+.triage-lane-new {
+  display: grid; place-items: center; flex: none; width: 24px; height: 24px; margin: -4px -2px -4px 0; padding: 0;
+  border: 1px solid transparent; border-radius: var(--radius); background: transparent;
+  color: var(--ink-muted); font: 500 calc(15px * var(--type-k))/1 var(--sans); cursor: pointer;
+}
+.triage-lane-new:hover { border-color: var(--line); background: var(--surface); color: var(--ink); }
+.triage-lane-new:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
+.triage-empty { margin: 0; padding: var(--space-3h) var(--space-1); color: var(--ink-subtle); font-size: var(--text-sm); }
+/* The rest of a lane, read in place a page at a time. */
+.triage-more { align-self: flex-start; padding: var(--space-2) var(--space-1); font-size: var(--text-sm); color: var(--ink-muted); }
+.triage-more:hover { color: var(--ink); }
+.triage-lane-top .triage-more { margin-top: var(--space-2); }
+/* Which lane a phone is on; a desk sees its lanes side by side. */
+.triage-lane-picker { display: none; }
+
+/* A card's ⋯: moves, order and edits in one menu rather than two selects on
+   every card. Quiet until its card is hovered or focused where a pointer can
+   hover (docs/design.md: a row's own menu); always there on touch. */
+.triage-card-menu { position: absolute; top: 5px; right: 5px; }
+.triage-card-menu-button {
+  /* 24px square: the smallest target a finger is promised (WCAG 2.5.8); at
+     22 by 20 it crowded the card it sits on. */
+  display: grid; place-items: center; width: 24px; height: 24px; padding: 0;
+  border: 1px solid transparent; border-radius: var(--radius); background: transparent;
+  color: var(--ink-muted); font: var(--text-base)/1 var(--sans); cursor: pointer;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .triage-card-menu-button { transition: opacity var(--t-hover, 120ms) ease, border-color var(--t-hover, 120ms) ease; }
+}
+.triage-card-menu-button:hover, .triage-card-menu-button[data-popup-open] { border-color: var(--line); background: var(--surface); color: var(--ink); }
+.triage-card-menu-button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; opacity: 1; }
+@media (hover: hover) {
+  .triage-card-wrap:not(:hover):not(:focus-within) .triage-card-menu-button:not([data-popup-open]) { opacity: 0; }
+}
+/* The menu's items are buttons (so a disabled one is disabled); they wear the header menu's rows, not a button's chrome. */
+.triage-menu .more-item { width: 100%; border: 0; background: transparent; text-align: left; }
+.triage-menu .more-item:disabled { color: var(--ink-subtle); cursor: default; }
+.triage-menu .more-item:hover:disabled { background: transparent; }
+
+/* The editor a card opens in place, and what its save says, under the card. */
+.triage-card-under { padding: var(--space-1) 0 0; }
+.triage-card-under:empty { display: none; }
+.triage-card-under .cell-edit, .triage-card-under .cell-edit-control { width: 100%; }
+.triage-card-under .pending { flex-wrap: wrap; gap: var(--space-2h); margin: var(--space-2) 0 0; }
+
+/* Where a dragged card will land: its lane's edge, in color, and — where the
+   lanes keep an order — the gap its neighbors slide aside to open
+   (usePointerDrag.tsx writes that slide; features.css draws the copy). */
+.triage-lane.is-over { border-color: var(--accent); }
+/* A lane the dragged card may not enter: dimmed and refusing, never resized or moved. */
+.triage-lane.is-shut { cursor: not-allowed; }
+.triage-lane.is-shut > * { opacity: 0.45; }
+/* A move drawn before the server has it: the card stands in its new place, quieter, until the save lands (or the
+   form it opened is answered, fainter still); a refusal puts it back. Opacity only, so nothing around it moves. */
+.triage-card.is-saving { opacity: 0.7; }
+.triage-card.is-asking { opacity: 0.45; }
+.triage-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Swimlanes: the lane heads once at the top, then a row of cells per value,
+   every run the same widths so the columns line up as one scroll. */
+.triage-board.has-rows { --lane-min: 220px; flex-direction: column; align-items: stretch; gap: var(--space-2h); }
+.triage-heads, .triage-swimlane-cells { display: flex; gap: var(--lane-gap); width: max-content; }
+.triage-lane-top { flex: 0 0 var(--lane-min); min-width: var(--lane-min); padding: 0 var(--space-3); }
+.triage-swimlane { width: max-content; }
+.triage-swimlane-head {
+  position: sticky; left: 0; display: flex; align-items: baseline; gap: var(--space-3); width: max-content;
+  padding: var(--space-3) var(--space-1) var(--space-2h); cursor: pointer; list-style: none; user-select: none;
+}
+.triage-swimlane-head::-webkit-details-marker { display: none; }
+.triage-swimlane-head::before {
+  content: '\203a'; display: inline-block; color: var(--ink-subtle); font-size: var(--text-base); line-height: 1;
+}
+@media (prefers-reduced-motion: no-preference) { .triage-swimlane-head::before { transition: transform var(--t-hover) var(--ease-out); } }
+.triage-swimlane[open] > .triage-swimlane-head::before { transform: rotate(90deg); }
+.triage-swimlane-head:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; border-radius: min(3px, var(--radius)); }
+.triage-swimlane:not([open]) > .triage-swimlane-head { color: var(--ink-muted); }
+.triage-swimlane-label { margin: 0; color: inherit; font-size: var(--text-sm); font-weight: 600; }
+.triage-swimlane-head .triage-lane-count { margin-left: 0; }
+/* A cell keeps its column's width exactly: the rows are laid out to their
+   content, and a cell that grew with its cards would leave its head behind. */
+.triage-cell { flex: 0 0 var(--lane-min); max-width: none; padding: var(--space-2h) var(--space-3) var(--space-3); }
+/* An empty cell is a place, not a box: a board of rows is mostly empty cells,
+   and a box around each read as a grid of empty boxes. It keeps its size and
+   stays a drop zone; its edge comes back, in the accent, only under a card
+   carried to it. */
+.triage-cell.is-empty:not(.is-over) { border-color: transparent; }
+.triage-cell .triage-lane-cards { padding-top: 0; min-height: 44px; }
+
+/* The first lane starts on the room's edge, where the crumbs, the tabs and
+   a queue's rows start, not at the pane's edge — at a desk as on a phone; the
+   lanes still scroll the whole width, so one scrolled past slides out under
+   that edge. A sticky edge sits inside the scroller's padding, so the fade
+   reaches out over it. */
+.applist-room .triage-board { padding-inline: var(--room-inset); }
+.applist-room :is(.triage-board:not(.has-rows), .triage-heads, .triage-swimlane-cells)::after { right: calc(-1 * var(--room-inset)); }
+@media (max-width: 760px) {
+  .triage-board { --lane-gap: 8px; padding-inline: var(--space-4h); }
+  .triage-board:not(.has-rows)::after, .triage-heads::after, .triage-swimlane-cells::after { right: -14px; }
+  /* One lane and the edge of the next, snapping into place as they are
+     swiped, so a lane is never left half in view; the picker above says
+     which one it is and how many there are. */
+  .triage-board { scroll-snap-type: x mandatory; scroll-padding-inline: 14px; }
+  .triage-lane, .triage-lane-top { flex: 0 0 min(248px, calc(100vw - 88px)); min-width: min(248px, calc(100vw - 88px)); max-width: none; scroll-snap-align: start; }
+  .triage-lane.is-folded { flex: 0 0 44px; min-width: 44px; max-width: 44px; scroll-snap-align: none; }
+  .triage-lane-picker {
+    display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-4h) var(--space-2h);
+  }
+  .triage-lane-picker > button { display: grid; place-items: center; min-width: 36px; min-height: 36px; padding: 0; line-height: 1; }
+  .triage-lane-picker > button:disabled { color: var(--ink-subtle); }
+  .triage-lane-picker-at { flex: 1 1 auto; min-width: 0; text-align: center; font-size: var(--text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .triage-lane-picker-name { font-weight: 600; color: var(--ink); }
+  .triage-lane-picker-of { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+}
+}

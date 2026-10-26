@@ -1,0 +1,327 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role operator — the App
+auth rows all — the App
+source depot connection "depot" — the App
+source depot default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource attribute access write — the App
+resource attribute delete — the App
+resource bin access write — the App
+resource cycle_count access write — the App
+resource cycle_count_line access write — the App
+resource delivery_signature access write — the App
+resource order_line access write — the App
+resource order_line delete — the App
+resource pick_list access write — the App
+resource po_flow access write — the App
+resource po_flow delete — the App
+resource po_flow_step access write — the App
+resource po_flow_step delete — the App
+resource po_line access write — the App
+resource product access write — the App
+resource product_photo access write — the App
+resource product_photo delete — the App
+resource purchase_order access write — the App
+resource sales_order access write — the App
+resource stock_level access write — the App
+resource stock_movement access write — the App
+resource supplier access write — the App
+role admin read attribute — the App
+role admin read bin — the App
+role admin read category — the App
+role admin read customer — the App
+role admin read cycle_count — the App
+role admin read cycle_count_line — the App
+role admin read delivery_signature — the App
+role admin read order_line — the App
+role admin read pick_list — the App
+role admin read po_flow — the App
+role admin read po_flow_step — the App
+role admin read po_line — the App
+role admin read product — the App
+role admin read product_photo — the App
+role admin read purchase_order — the App
+role admin read sales_order — the App
+role admin read stock_level — the App
+role admin read stock_movement — the App
+role admin read supplier — the App
+role admin read warehouse — the App
+role admin write attribute — the App
+role admin write bin — the App
+role admin write delivery_signature — the App
+role admin write order_line — the App
+role admin write pick_list — the App
+role admin write po_flow — the App
+role admin write po_flow_step — the App
+role admin write product — the App
+role admin write product_photo — the App
+role admin write sales_order — the App
+role admin write supplier — the App
+role admin command adjustStock — the App
+role admin command approvePurchaseOrder — the App
+role admin command cancelPurchaseOrder — the App
+role admin command completeCount — the App
+role admin command draftPurchaseOrder — the App
+role admin command packLists — the App
+role admin command pickList — the App
+role admin command receiveLine — the App
+role admin command recordCount — the App
+role admin command rejectPurchaseOrder — the App
+role admin command releaseOrder — the App
+role admin command sendPurchaseOrder — the App
+role admin command shipList — the App
+role admin command startCount — the App
+role admin command transferStock — the App
+role admin operation workflows — the App
+role admin fields pick_list write signature_id — the App
+role admin fields supplier read city — the App
+role admin fields supplier read contact — the App
+role admin fields supplier read email — the App
+role admin fields supplier read id — the App
+role admin fields supplier read lead_time_days — the App
+role admin fields supplier read name — the App
+role admin fields supplier read phone — the App
+role admin fields supplier read state — the App
+role admin fields supplier read terms — the App
+role admin fields supplier write city — the App
+role admin fields supplier write contact — the App
+role admin fields supplier write email — the App
+role admin fields supplier write lead_time_days — the App
+role admin fields supplier write name — the App
+role admin fields supplier write phone — the App
+role admin fields supplier write state — the App
+role admin fields supplier write terms — the App
+role automation read attribute — the App
+role automation read bin — the App
+role automation read category — the App
+role automation read customer — the App
+role automation read cycle_count — the App
+role automation read cycle_count_line — the App
+role automation read delivery_signature — the App
+role automation read order_line — the App
+role automation read pick_list — the App
+role automation read po_flow — the App
+role automation read po_flow_step — the App
+role automation read po_line — the App
+role automation read product — the App
+role automation read product_photo — the App
+role automation read purchase_order — the App
+role automation read sales_order — the App
+role automation read stock_level — the App
+role automation read stock_movement — the App
+role automation read supplier — the App
+role automation read warehouse — the App
+role automation command requestApproval — the App
+role automation command sendPurchaseOrder — the App
+role manager read attribute — the App
+role manager read bin — the App
+role manager read category — the App
+role manager read customer — the App
+role manager read cycle_count — the App
+role manager read cycle_count_line — the App
+role manager read delivery_signature — the App
+role manager read order_line — the App
+role manager read pick_list — the App
+role manager read po_flow — the App
+role manager read po_flow_step — the App
+role manager read po_line — the App
+role manager read product — the App
+role manager read product_photo — the App
+role manager read purchase_order — the App
+role manager read sales_order — the App
+role manager read stock_level — the App
+role manager read stock_movement — the App
+role manager read supplier — the App
+role manager read warehouse — the App
+role manager write attribute — the App
+role manager write bin — the App
+role manager write delivery_signature — the App
+role manager write order_line — the App
+role manager write pick_list — the App
+role manager write po_flow — the App
+role manager write po_flow_step — the App
+role manager write product — the App
+role manager write product_photo — the App
+role manager write sales_order — the App
+role manager write supplier — the App
+role manager command adjustStock — the App
+role manager command approvePurchaseOrder — the App
+role manager command cancelPurchaseOrder — the App
+role manager command completeCount — the App
+role manager command draftPurchaseOrder — the App
+role manager command packLists — the App
+role manager command pickList — the App
+role manager command receiveLine — the App
+role manager command recordCount — the App
+role manager command rejectPurchaseOrder — the App
+role manager command releaseOrder — the App
+role manager command sendPurchaseOrder — the App
+role manager command shipList — the App
+role manager command startCount — the App
+role manager command transferStock — the App
+role manager fields pick_list write signature_id — the App
+role manager fields supplier read city — the App
+role manager fields supplier read contact — the App
+role manager fields supplier read email — the App
+role manager fields supplier read id — the App
+role manager fields supplier read lead_time_days — the App
+role manager fields supplier read name — the App
+role manager fields supplier read phone — the App
+role manager fields supplier read state — the App
+role manager fields supplier read terms — the App
+role manager fields supplier write city — the App
+role manager fields supplier write contact — the App
+role manager fields supplier write email — the App
+role manager fields supplier write lead_time_days — the App
+role manager fields supplier write name — the App
+role manager fields supplier write phone — the App
+role manager fields supplier write state — the App
+role manager fields supplier write terms — the App
+role operator read attribute — the App
+role operator read bin — the App
+role operator read category — the App
+role operator read customer — the App
+role operator read cycle_count — the App
+role operator read cycle_count_line — the App
+role operator read delivery_signature — the App
+role operator read order_line — the App
+role operator read pick_list — the App
+role operator read po_flow — the App
+role operator read po_flow_step — the App
+role operator read po_line — the App
+role operator read product — the App
+role operator read product_photo — the App
+role operator read purchase_order — the App
+role operator read sales_order — the App
+role operator read stock_level — the App
+role operator read stock_movement — the App
+role operator read supplier — the App
+role operator read warehouse — the App
+role operator write delivery_signature — the App
+role operator write pick_list — the App
+role operator write sales_order — the App
+role operator command packLists — the App
+role operator command pickList — the App
+role operator command receiveLine — the App
+role operator command recordCount — the App
+role operator command shipList — the App
+role operator command startCount — the App
+role operator command transferStock — the App
+role operator fields pick_list write signature_id — the App
+role purchaser read attribute — the App
+role purchaser read bin — the App
+role purchaser read category — the App
+role purchaser read customer — the App
+role purchaser read cycle_count — the App
+role purchaser read cycle_count_line — the App
+role purchaser read delivery_signature — the App
+role purchaser read order_line — the App
+role purchaser read pick_list — the App
+role purchaser read po_flow — the App
+role purchaser read po_flow_step — the App
+role purchaser read po_line — the App
+role purchaser read product — the App
+role purchaser read product_photo — the App
+role purchaser read purchase_order — the App
+role purchaser read sales_order — the App
+role purchaser read stock_level — the App
+role purchaser read stock_movement — the App
+role purchaser read supplier — the App
+role purchaser read warehouse — the App
+role purchaser write attribute — the App
+role purchaser write po_flow — the App
+role purchaser write po_flow_step — the App
+role purchaser write product — the App
+role purchaser write product_photo — the App
+role purchaser write supplier — the App
+role purchaser command cancelPurchaseOrder — the App
+role purchaser command draftPurchaseOrder — the App
+role purchaser command sendPurchaseOrder — the App
+role purchaser fields supplier read city — the App
+role purchaser fields supplier read contact — the App
+role purchaser fields supplier read email — the App
+role purchaser fields supplier read id — the App
+role purchaser fields supplier read lead_time_days — the App
+role purchaser fields supplier read name — the App
+role purchaser fields supplier read phone — the App
+role purchaser fields supplier read state — the App
+role purchaser fields supplier read terms — the App
+role purchaser fields supplier write city — the App
+role purchaser fields supplier write contact — the App
+role purchaser fields supplier write email — the App
+role purchaser fields supplier write lead_time_days — the App
+role purchaser fields supplier write name — the App
+role purchaser fields supplier write phone — the App
+role purchaser fields supplier write state — the App
+role purchaser fields supplier write terms — the App
+page pick-walk reads bin — the App
+page pick-walk reads order_line — the App
+page pick-walk reads pick_list — the App
+page pick-walk reads product — the App
+page pick-walk reads sales_order — the App
+page pick-walk reads warehouse — the App
+page pick-walk runs pickList — the App
+page pick-walk loads pickWalk — the App
+api version 1 — the App
+api public-spec false — the App
+api role admin — the App
+api role manager — the App
+api resource pick_list field carrier — the App
+api resource pick_list field id — the App
+api resource pick_list field reference — the App
+api resource pick_list field sales_order_id — the App
+api resource pick_list field status — the App
+api resource pick_list field tracking — the App
+api resource pick_list field version — the App
+api resource pick_list filter status — the App
+api resource pick_list sort id — the App
+api resource product field id — the App
+api resource product field name — the App
+api resource product field reorder_point — the App
+api resource product field sku — the App
+api resource product field specs — the App
+api resource product field status — the App
+api resource product field unit — the App
+api resource product filter sku — the App
+api resource product filter status — the App
+api resource product sort sku — the App
+api resource stock_level field bin_id — the App
+api resource stock_level field id — the App
+api resource stock_level field product_id — the App
+api resource stock_level field qty — the App
+api resource stock_level field warehouse_id — the App
+api resource stock_level filter product_id — the App
+api resource stock_level filter warehouse_id — the App
+api resource stock_level sort id — the App
+api resource supplier field contact — the App
+api resource supplier field email — the App
+api resource supplier field id — the App
+api resource supplier field lead_time_days — the App
+api resource supplier field name — the App
+api resource supplier field phone — the App
+api resource supplier sort name — the App
+api resource supplier update — the App
+api command shipList target {"target":"pick_list","targets":"one","realm":"tenant"} — the App
+api event order.shipped — the App
+
+contract adjustStock v1 6d606acb22d7
+contract approvePurchaseOrder v1 e3acb2f41a57
+contract cancelPurchaseOrder v1 0b04b132b002
+contract completeCount v1 b7400059dc71
+contract draftPurchaseOrder v1 8f45abf094de
+contract packLists v1 3646d1effad2
+contract pickList v1 82c587a68b62
+contract receiveLine v1 2651a017e409
+contract recordCount v1 68e12a3a7dba
+contract rejectPurchaseOrder v1 e3acb2f41a57
+contract releaseOrder v1 e527007487c4
+contract requestApproval v1 e27d21e3dedf
+contract sendPurchaseOrder v1 19038bbce571
+contract shipList v1 6744f0ba1b37
+contract startCount v1 4a20fb7d0bd8
+contract transferStock v1 a3c28c5ed894

@@ -1,0 +1,115 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up open — the App
+auth default-role shopper — the App
+auth rows policy — the App
+source market connection "forecourt" — the App
+source market default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource inquiry access write — the App
+resource inquiry_message access write — the App
+resource saved_vehicle access write — the App
+resource vehicle access write — the App
+resource vehicle_photo access write — the App
+resource vehicle_photo delete — the App
+role admin read dealer — the App
+role admin read inquiry — the App
+role admin read inquiry_message — the App
+role admin read saved_vehicle — the App
+role admin read site_image — the App
+role admin read vehicle — the App
+role admin read vehicle_photo — the App
+role admin write vehicle — the App
+role admin write vehicle_photo — the App
+role admin command addNote — the App
+role admin command assignInquiry — the App
+role admin command bookTestDrive — the App
+role admin command logCall — the App
+role admin command markLost — the App
+role admin command markSold — the App
+role admin command recordOffer — the App
+role admin command removeSavedVehicle — the App
+role admin command replyToBuyer — the App
+role admin command saveVehicle — the App
+role admin command sendVehicleInquiry — the App
+role admin fields vehicle write description — the App
+role admin fields vehicle write featured — the App
+role admin fields vehicle write highlight — the App
+role admin fields vehicle write mileage — the App
+role admin fields vehicle write price — the App
+role admin fields vehicle write sold_on — the App
+role admin fields vehicle write status — the App
+role admin fields vehicle write was_price — the App
+role shopper read dealer — the App
+role shopper read inquiry — the App
+role shopper read inquiry_message — the App
+role shopper read saved_vehicle — the App
+role shopper read site_image — the App
+role shopper read vehicle — the App
+role shopper read vehicle_photo — the App
+role shopper command removeSavedVehicle — the App
+role shopper command saveVehicle — the App
+role shopper command sendVehicleInquiry — the App
+role shopper fields dealer read about — the App
+role shopper fields dealer read city — the App
+role shopper fields dealer read id — the App
+role shopper fields dealer read name — the App
+role shopper fields dealer read phone — the App
+role shopper fields dealer read rating — the App
+role shopper fields dealer read reviews — the App
+role staff read dealer — the App
+role staff read inquiry — the App
+role staff read inquiry_message — the App
+role staff read saved_vehicle — the App
+role staff read site_image — the App
+role staff read vehicle — the App
+role staff read vehicle_photo — the App
+role staff write vehicle — the App
+role staff write vehicle_photo — the App
+role staff command addNote — the App
+role staff command assignInquiry — the App
+role staff command bookTestDrive — the App
+role staff command logCall — the App
+role staff command markLost — the App
+role staff command markSold — the App
+role staff command recordOffer — the App
+role staff command removeSavedVehicle — the App
+role staff command replyToBuyer — the App
+role staff command saveVehicle — the App
+role staff command sendVehicleInquiry — the App
+role staff fields vehicle write description — the App
+role staff fields vehicle write featured — the App
+role staff fields vehicle write highlight — the App
+role staff fields vehicle write mileage — the App
+role staff fields vehicle write price — the App
+role staff fields vehicle write sold_on — the App
+role staff fields vehicle write status — the App
+role staff fields vehicle write was_price — the App
+public read dealer — the App
+public read site_image — the App
+public read vehicle — the App
+public read vehicle_photo — the App
+public fields dealer read about — the App
+public fields dealer read city — the App
+public fields dealer read id — the App
+public fields dealer read name — the App
+public fields dealer read phone — the App
+public fields dealer read rating — the App
+public fields dealer read reviews — the App
+public form inquire runs command inquireAboutVehicle version 1 — the App
+
+contract addNote v1 467914920956
+contract assignInquiry v1 9e25f46732da
+contract bookTestDrive v1 8b44d339a53f
+contract inquireAboutVehicle v1 112687bdc466
+contract logCall v1 109fe858e208
+contract markLost v1 b4345454fcfa
+contract markSold v1 fd5298e842cc
+contract recordOffer v1 0ad2398d4919
+contract removeSavedVehicle v1 c2177d4dd99c
+contract replyToBuyer v1 1c449323cf50
+contract saveVehicle v1 ea018e7f4dd6
+contract sendVehicleInquiry v1 35486c0e3637

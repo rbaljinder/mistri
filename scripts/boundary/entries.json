@@ -1,0 +1,115 @@
+{
+  "$comment": [
+    "The names each package is imported by (docs/boundary.md, \"Entries\"). Each entry is the name an importer writes: its layer, the module it starts at (`source`) and the file its types are read from (`types`).",
+    "`packages` are the workspaces under packages/, each owning its sources: a module's layer is the package it sits in. Each entry is in its package's `exports`, pointed at its source; `node scripts/check-boundary.mjs --entries` holds the manifests and each entry's import closure to it. The database browser (`tablewalk`) publishes none of the App framework's names: an App imports `mistri/*`, and the browser installs and runs without mistri.",
+    "The JSON schemas under `./schema/*.json` are files, not modules: mistri owns and publishes them."
+  ],
+  "packages": {
+    "@mistriwork/engine": { "dir": "packages/engine", "layer": "engine" },
+    "@mistriwork/ui": { "dir": "packages/ui", "layer": "ui" },
+    "@mistriwork/kit": { "dir": "packages/kit", "layer": "kit" },
+    "@mistriwork/mistri": { "dir": "packages/mistri", "layer": "mistri" },
+    "create-mistri": { "dir": "packages/create-mistri", "layer": "mistri" },
+    "tablewalk": { "dir": "packages/tablewalk", "layer": "browser" }
+  },
+  "entries": {
+    "@mistriwork/mistri": { "layer": "mistri", "source": "packages/mistri/src/server/index.ts", "types": null },
+    "@mistriwork/mistri/app": {
+      "layer": "mistri",
+      "source": "packages/mistri/schema/app.mjs",
+      "types": "packages/mistri/schema/app.d.ts"
+    },
+    "@mistriwork/mistri/page": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/client/components/sdk/page.tsx",
+      "types": "packages/mistri/schema/page.d.ts"
+    },
+    "@mistriwork/mistri/ui": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/client/components/sdk/index.ts",
+      "types": "packages/mistri/schema/ui.d.ts"
+    },
+    "@mistriwork/mistri/ui/testing": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/client/components/sdk/testing.tsx",
+      "types": "packages/mistri/schema/ui-testing.d.ts"
+    },
+    "@mistriwork/mistri/commands": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/commands.ts",
+      "types": "packages/mistri/src/server/commands.ts"
+    },
+    "@mistriwork/mistri/policy": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/policy.ts",
+      "types": "packages/mistri/src/server/policy.ts"
+    },
+    "@mistriwork/mistri/jobs": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/jobs.ts",
+      "types": "packages/mistri/src/server/jobs.ts"
+    },
+    "@mistriwork/mistri/workflows": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/workflows.ts",
+      "types": "packages/mistri/src/server/workflows.ts"
+    },
+    "@mistriwork/mistri/handler": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/handler.ts",
+      "types": "packages/mistri/src/server/handler.ts"
+    },
+    "@mistriwork/mistri/react": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/embed/index.tsx",
+      "types": "packages/mistri/schema/react.d.ts"
+    },
+    "@mistriwork/mistri/react/next": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/embed/next.ts",
+      "types": "packages/mistri/schema/react-next.d.ts"
+    },
+    "@mistriwork/mistri/react/react-router": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/embed/react-router.ts",
+      "types": "packages/mistri/schema/react-react-router.d.ts"
+    },
+    "@mistriwork/mistri/react/tanstack-router": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/embed/tanstack-router.ts",
+      "types": "packages/mistri/schema/react-tanstack-router.d.ts"
+    },
+    "@mistriwork/mistri/testing": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/testing.ts",
+      "types": "packages/mistri/src/server/testing.ts"
+    },
+    "@mistriwork/mistri/maintenance": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/maintenance.ts",
+      "types": "packages/mistri/src/server/maintenance.ts"
+    },
+    "@mistriwork/mistri/openfeature": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/openfeature.ts",
+      "types": "packages/mistri/src/server/openfeature.ts"
+    },
+    "@mistriwork/mistri/integration": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/integration.ts",
+      "types": "packages/mistri/src/server/integration.ts"
+    },
+    "@mistriwork/engine": {
+      "layer": "engine",
+      "source": "packages/engine/src/engine.ts",
+      "types": "packages/engine/src/engine.ts"
+    },
+    "@mistriwork/ui": { "layer": "ui", "source": "packages/ui/src/index.ts", "types": "packages/ui/src/index.ts" },
+    "@mistriwork/kit": {
+      "layer": "kit",
+      "source": "packages/kit/src/client/kit.ts",
+      "types": "packages/kit/src/client/kit.ts"
+    },
+    "tablewalk": { "layer": "browser", "source": "packages/tablewalk/src/server/index.ts", "types": null }
+  }
+}

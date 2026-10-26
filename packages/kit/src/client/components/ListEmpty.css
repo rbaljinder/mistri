@@ -1,0 +1,13 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+/* The empty block (Notes.css) on the list's own 14px inset, where its rows and its controls start. */
+/* A list that could not be read stands where its empty block would, on the same inset. */
+.list-empty.empty-note, .list-problem > .problem { padding: 20px var(--space-4h); }
+.list-empty .empty-note-detail { display: block; }
+.list-empty a { display: inline-flex; align-items: center; min-height: 36px; padding: var(--space-2h) var(--space-4h); border: 1px solid transparent; border-radius: var(--radius); background: var(--primary, var(--accent)); color: var(--on-primary, var(--on-accent)); font-size: var(--text-md); font-weight: 600; text-decoration: none; }
+.list-empty a:hover { background: color-mix(in srgb, var(--primary, var(--accent)) 86%, var(--ink)); }
+.list-empty a:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+/* In a section the edge is the section's own: no list inset. */
+.page-section .list-problem > .problem { padding-inline: 0; }
+.page-section .list-empty.empty-note { padding-inline: 0; }
+}

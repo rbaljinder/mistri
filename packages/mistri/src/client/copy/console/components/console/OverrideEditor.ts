@@ -1,0 +1,32 @@
+/** What console/OverrideEditor says, in the Console room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '@mistriwork/kit/client/messages.js';
+export const say = defineMessages({
+  invalidRollout: 'Enter a rollout percentage between 0 and 100.',
+  chooseValue: 'Choose a value',
+  objectHint: 'Enter the complete JSON object value.',
+  value: 'Value',
+  rollout: 'Rollout percentage',
+  rolloutHint: 'Stable assignment. Leave blank for 100%.',
+  keepDisabled: 'Keep the flag off',
+  targeting: 'Rules',
+  noRules: 'No rules: everyone is served by the line below.',
+  noAudiences: 'No rules. A rule targets an audience the App declares, and this App declares none.',
+  targetingHint:
+    'Rules run in order, before the rollout; the first whose audiences hold someone serves its value. Audiences are declared in the App and never grant access.',
+  ruleNumber: 'Rule {number}',
+  ruleNeedsAudience: 'Rule {number} needs an audience.',
+  audiences: 'Audiences',
+  audiencesHint: 'Declared in the App. A rule matches a member of any one checked.',
+  ruleValue: 'Rule value',
+  edit: 'Edit',
+  done: 'Done',
+  editRule: 'Edit rule {number}',
+  doneRule: 'Close rule {number}',
+  moveUp: 'Move rule {number} up',
+  moveDown: 'Move rule {number} down',
+  removeRule: 'Remove rule {number}',
+  addRule: 'Add rule',
+  everyone: 'Everyone',
+  everyoneElse: 'Everyone else',
+  replaceExperiment: 'Applying this fixed value ends experiment enrollment in this scope. Existing experiment evidence is retained.',
+});

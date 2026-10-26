@@ -1,0 +1,43 @@
+/* Custom themes' token machinery, under every look (style.css names the order). */
+@layer kit {
+/* Public theme slots override the base style, without changing its layout. */
+:root[data-custom-theme] :is(button, input:not([role=switch]), select, textarea, .tn-search, .dd-button) { border-radius: var(--radius); }
+/* Round controls (`shape.radius.control: 'round'`) are pills; a check box, a radio and a slider keep their own
+   shape, and a form's field keeps the field's corner (the rule below outranks this one). A look that corners its
+   own controls (the dashboard's window and filters, a list's search and toggles) reads --control-radius there, unset
+   in every built-in look; a card that is a button keeps the look's panel corner. */
+:root[data-control-radius] :is(button, input:not([role=switch], [type=checkbox], [type=radio], [type=range]), select, .tn-search, .dd-button) { border-radius: var(--control-radius); }
+:root[data-custom-theme] :is(.applist-title, .root-current, .page-section-title) { font-family: var(--heading-font, var(--sans)); }
+:root[data-custom-theme] .page-field-edit :is(.cell-edit, .record-picker-trigger),
+:root[data-custom-theme] .insert-field :is(input:not([role=switch]), textarea, .dd-button, .record-picker-trigger) { border-radius: var(--field-radius, 2px); }
+
+.theme-lab {
+  width: min(72rem, 94%); max-height: 90%; overflow: auto;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-modal);
+}
+.theme-lab-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); }
+.theme-lab-head h2 { margin: 0; font: 600 var(--text-xl)/1.3 var(--heading-font, var(--sans)); }
+.theme-lab-controls { display: flex; flex-wrap: wrap; gap: var(--space-4); padding-block: var(--space-5); border-bottom: 1px solid var(--line); }
+.theme-lab-controls label { display: grid; gap: var(--space-2h); min-width: 10rem; }
+.theme-lab-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); }
+.theme-lab-section { min-width: 0; padding-block: var(--space-5); border-bottom: 1px solid var(--line); }
+.theme-lab-section h3 { margin: 0 0 var(--space-5); font: 600 var(--text-md) var(--sans); }
+.theme-lab-fields { display: grid; gap: var(--space-4); }
+.theme-lab-fields label { display: grid; gap: var(--space-2); }
+.theme-lab-fields input { width: 100%; min-height: 34px; padding: var(--space-2h) var(--space-3); font: var(--text-base) var(--mono); border: 1px solid var(--line-control); background: var(--surface); color: var(--ink); }
+.theme-lab-fields input[aria-invalid="true"] { border-color: var(--status-critical); }
+.theme-lab-fields input:disabled { opacity: 0.6; }
+.theme-lab-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-5); }
+.theme-lab-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+.theme-lab-fields [role="alert"] { color: var(--status-critical); }
+.theme-lab-section pre { overflow: auto; font-family: var(--code); }
+.theme-lab-table { overflow-x: auto; }
+.theme-lab-colors { display: flex; flex-wrap: wrap; gap: var(--space-4); list-style: none; padding: 0; }
+.theme-lab-colors li { display: flex; align-items: center; gap: var(--space-2h); font: var(--text-sm) var(--sans); }
+.theme-lab-swatch { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--line-strong); }
+@media (max-width: 700px) {
+  .theme-lab-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .theme-lab-controls > label { flex: 1 1 100%; min-width: 0; }
+}
+}
