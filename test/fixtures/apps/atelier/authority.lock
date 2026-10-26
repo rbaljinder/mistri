@@ -1,0 +1,213 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role staff — the App
+auth rows all — the App
+source atelier connection "atelier" — the App
+source atelier default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource collection access write — the App
+resource collection_product access write — the App
+resource collection_product delete — the App
+resource customer access write — the App
+resource discount access write — the App
+resource fulfillment access write — the App
+resource inventory_level access write — the App
+resource inventory_movement access write — the App
+resource order_line access write — the App
+resource order_return access write — the App
+resource payment access write — the App
+resource product access write — the App
+resource product_image access write — the App
+resource product_image delete — the App
+resource product_tag access write — the App
+resource product_tag delete — the App
+resource refund access write — the App
+resource return_line access write — the App
+resource sales_order access write — the App
+resource tag access write — the App
+resource variant access write — the App
+role admin read collection — the App
+role admin read collection_product — the App
+role admin read customer — the App
+role admin read discount — the App
+role admin read fulfillment — the App
+role admin read inventory_level — the App
+role admin read inventory_movement — the App
+role admin read location — the App
+role admin read order_line — the App
+role admin read order_return — the App
+role admin read payment — the App
+role admin read product — the App
+role admin read product_image — the App
+role admin read product_tag — the App
+role admin read refund — the App
+role admin read return_line — the App
+role admin read sales_order — the App
+role admin read tag — the App
+role admin read variant — the App
+role admin write collection — the App
+role admin write collection_product — the App
+role admin write customer — the App
+role admin write discount — the App
+role admin write product — the App
+role admin write product_image — the App
+role admin write product_tag — the App
+role admin write sales_order — the App
+role admin write tag — the App
+role admin write variant — the App
+role admin command adjustStock — the App
+role admin command approveReturn — the App
+role admin command cancelOrder — the App
+role admin command completeOrder — the App
+role admin command confirmOrder — the App
+role admin command createOrder — the App
+role admin command deliverFulfillment — the App
+role admin command fulfillOrder — the App
+role admin command markPaid — the App
+role admin command receiveReturn — the App
+role admin command receiveStock — the App
+role admin command refundPayment — the App
+role admin command refundReturn — the App
+role admin command rejectReturn — the App
+role admin command requestReturn — the App
+role admin command shipFulfillment — the App
+role admin fields sales_order write note — the App
+role owner read collection — the App
+role owner read collection_product — the App
+role owner read customer — the App
+role owner read discount — the App
+role owner read fulfillment — the App
+role owner read inventory_level — the App
+role owner read inventory_movement — the App
+role owner read location — the App
+role owner read order_line — the App
+role owner read order_return — the App
+role owner read payment — the App
+role owner read product — the App
+role owner read product_image — the App
+role owner read product_tag — the App
+role owner read refund — the App
+role owner read return_line — the App
+role owner read sales_order — the App
+role owner read tag — the App
+role owner read variant — the App
+role owner write collection — the App
+role owner write collection_product — the App
+role owner write customer — the App
+role owner write discount — the App
+role owner write product — the App
+role owner write product_image — the App
+role owner write product_tag — the App
+role owner write sales_order — the App
+role owner write tag — the App
+role owner write variant — the App
+role owner command adjustStock — the App
+role owner command approveReturn — the App
+role owner command cancelOrder — the App
+role owner command completeOrder — the App
+role owner command confirmOrder — the App
+role owner command createOrder — the App
+role owner command deliverFulfillment — the App
+role owner command fulfillOrder — the App
+role owner command markPaid — the App
+role owner command receiveReturn — the App
+role owner command receiveStock — the App
+role owner command refundPayment — the App
+role owner command refundReturn — the App
+role owner command rejectReturn — the App
+role owner command requestReturn — the App
+role owner command shipFulfillment — the App
+role owner fields sales_order write note — the App
+role staff read collection — the App
+role staff read collection_product — the App
+role staff read customer — the App
+role staff read discount — the App
+role staff read fulfillment — the App
+role staff read inventory_level — the App
+role staff read inventory_movement — the App
+role staff read location — the App
+role staff read order_line — the App
+role staff read order_return — the App
+role staff read payment — the App
+role staff read product — the App
+role staff read product_image — the App
+role staff read product_tag — the App
+role staff read refund — the App
+role staff read return_line — the App
+role staff read sales_order — the App
+role staff read tag — the App
+role staff read variant — the App
+role staff write collection — the App
+role staff write collection_product — the App
+role staff write customer — the App
+role staff write product — the App
+role staff write product_image — the App
+role staff write product_tag — the App
+role staff write sales_order — the App
+role staff write tag — the App
+role staff write variant — the App
+role staff command approveReturn — the App
+role staff command cancelOrder — the App
+role staff command completeOrder — the App
+role staff command confirmOrder — the App
+role staff command createOrder — the App
+role staff command deliverFulfillment — the App
+role staff command fulfillOrder — the App
+role staff command markPaid — the App
+role staff command receiveReturn — the App
+role staff command refundPayment — the App
+role staff command refundReturn — the App
+role staff command rejectReturn — the App
+role staff command requestReturn — the App
+role staff command shipFulfillment — the App
+role staff fields sales_order write note — the App
+role warehouse read collection — the App
+role warehouse read collection_product — the App
+role warehouse read customer — the App
+role warehouse read discount — the App
+role warehouse read fulfillment — the App
+role warehouse read inventory_level — the App
+role warehouse read inventory_movement — the App
+role warehouse read location — the App
+role warehouse read order_line — the App
+role warehouse read order_return — the App
+role warehouse read payment — the App
+role warehouse read product — the App
+role warehouse read product_image — the App
+role warehouse read product_tag — the App
+role warehouse read refund — the App
+role warehouse read return_line — the App
+role warehouse read sales_order — the App
+role warehouse read tag — the App
+role warehouse read variant — the App
+role warehouse command deliverFulfillment — the App
+role warehouse command fulfillOrder — the App
+role warehouse command receiveReturn — the App
+role warehouse command receiveStock — the App
+role warehouse command shipFulfillment — the App
+role warehouse fields customer read city — the App
+role warehouse fields customer read email — the App
+role warehouse fields customer read id — the App
+role warehouse fields customer read name — the App
+role warehouse fields customer read state — the App
+
+contract adjustStock v1 d4a7f8cd949d
+contract approveReturn v1 a72cef8cb6e3
+contract cancelOrder v1 fa8b8b31ac00
+contract completeOrder v1 22d39a500fb3
+contract confirmOrder v1 22d39a500fb3
+contract createOrder v1 ccce26eeda78
+contract deliverFulfillment v1 3732147a926b
+contract fulfillOrder v1 3732147a926b
+contract markPaid v1 f7e58c7f6486
+contract receiveReturn v1 a64d1863fe73
+contract receiveStock v1 217043125b02
+contract refundPayment v1 6e211e091bc5
+contract refundReturn v1 a72cef8cb6e3
+contract rejectReturn v1 3099c96f6eec
+contract requestReturn v1 d6e98bbb520a
+contract shipFulfillment v1 67941028e971

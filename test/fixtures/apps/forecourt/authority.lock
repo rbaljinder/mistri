@@ -1,0 +1,63 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up open — the App
+auth default-role shopper — the App
+auth rows policy — the App
+source market connection "forecourt" — the App
+source market default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource inquiry access write — the App
+resource inquiry_activity access write — the App
+resource saved_vehicle access write — the App
+resource vehicle access write — the App
+role admin read dealer — the App
+role admin read inquiry — the App
+role admin read inquiry_activity — the App
+role admin read saved_vehicle — the App, features "shortlist"
+role admin read site_image — the App
+role admin read vehicle — the App
+role admin read vehicle_photo — the App
+role admin command closeInquiry — features "inquiries"
+role admin command recordInquiryReply — features "inquiries"
+role admin command removeSavedVehicle — features "shortlist"
+role admin command saveVehicle — features "shortlist"
+role admin command sendVehicleInquiry — features "account-inquiries"
+role shopper read dealer — the App
+role shopper read inquiry — features "account-inquiries"
+role shopper read saved_vehicle — features "shortlist"
+role shopper read site_image — the App
+role shopper read vehicle — the App
+role shopper read vehicle_photo — the App
+role shopper command removeSavedVehicle — features "shortlist"
+role shopper command saveVehicle — features "shortlist"
+role shopper command sendVehicleInquiry — features "account-inquiries"
+role shopper fields dealer read about — the App
+role shopper fields dealer read city — the App
+role shopper fields dealer read id — the App
+role shopper fields dealer read name — the App
+role shopper fields dealer read phone — the App
+role staff read dealer — the App
+role staff read inquiry — the App
+role staff read inquiry_activity — the App
+role staff read saved_vehicle — the App, features "shortlist"
+role staff read site_image — the App
+role staff read vehicle — the App
+role staff read vehicle_photo — the App
+role staff command closeInquiry — features "inquiries"
+role staff command recordInquiryReply — features "inquiries"
+role staff command removeSavedVehicle — features "shortlist"
+role staff command saveVehicle — features "shortlist"
+role staff command sendVehicleInquiry — features "account-inquiries"
+public read dealer — the App
+public read site_image — the App
+public read vehicle — the App
+public read vehicle_photo — the App
+public fields dealer read about — the App
+public fields dealer read city — the App
+public fields dealer read id — the App
+public fields dealer read name — the App
+public fields dealer read phone — the App
+public form inquire runs command inquireAboutVehicle version 1 — features "inquiries"

@@ -1,0 +1,700 @@
+{
+  "name": "@mistriwork/kit",
+  "version": "1.0.0-rc.1",
+  "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
+  "homepage": "https://mistriwork.dev",
+  "bugs": {
+    "url": "https://github.com/rbaljinder/mistri/issues"
+  },
+  "license": "MIT",
+  "author": "Baljinder Randhawa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rbaljinder/mistri.git",
+    "directory": "packages/kit"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "mark.svg",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "mistri-built": "./dist/client/kit.js",
+      "default": "./src/client/kit.ts"
+    },
+    "./client/actionGrants.js": {
+      "mistri-built": "./dist/client/actionGrants.js",
+      "default": "./src/client/actionGrants.ts"
+    },
+    "./client/addressMount.js": {
+      "mistri-built": "./dist/client/addressMount.js",
+      "default": "./src/client/addressMount.js"
+    },
+    "./client/app.js": {
+      "mistri-built": "./dist/client/app.js",
+      "default": "./src/client/app.js"
+    },
+    "./client/breakdownBatch.js": {
+      "mistri-built": "./dist/client/breakdownBatch.js",
+      "default": "./src/client/breakdownBatch.ts"
+    },
+    "./client/bulkActions.js": {
+      "mistri-built": "./dist/client/bulkActions.js",
+      "default": "./src/client/bulkActions.ts"
+    },
+    "./client/clauses.js": {
+      "mistri-built": "./dist/client/clauses.js",
+      "default": "./src/client/clauses.js"
+    },
+    "./client/columns.js": {
+      "mistri-built": "./dist/client/columns.js",
+      "default": "./src/client/columns.js"
+    },
+    "./client/components/AppIssues.js": {
+      "mistri-built": "./dist/client/components/AppIssues.js",
+      "default": "./src/client/components/AppIssues.tsx"
+    },
+    "./client/components/CardsList.js": {
+      "mistri-built": "./dist/client/components/CardsList.js",
+      "default": "./src/client/components/CardsList.tsx"
+    },
+    "./client/components/Chart.js": {
+      "mistri-built": "./dist/client/components/Chart.js",
+      "default": "./src/client/components/Chart.tsx"
+    },
+    "./client/components/ChartFigure.js": {
+      "mistri-built": "./dist/client/components/ChartFigure.js",
+      "default": "./src/client/components/ChartFigure.tsx"
+    },
+    "./client/components/DashboardList.js": {
+      "mistri-built": "./dist/client/components/DashboardList.js",
+      "default": "./src/client/components/DashboardList.tsx"
+    },
+    "./client/components/DashboardNote.js": {
+      "mistri-built": "./dist/client/components/DashboardNote.js",
+      "default": "./src/client/components/DashboardNote.tsx"
+    },
+    "./client/components/DateField.js": {
+      "mistri-built": "./dist/client/components/DateField.js",
+      "default": "./src/client/components/DateField.tsx"
+    },
+    "./client/components/DeleteButton.js": {
+      "mistri-built": "./dist/client/components/DeleteButton.js",
+      "default": "./src/client/components/DeleteButton.tsx"
+    },
+    "./client/components/Dressed.js": {
+      "mistri-built": "./dist/client/components/Dressed.js",
+      "default": "./src/client/components/Dressed.tsx"
+    },
+    "./client/components/Dropdown.js": {
+      "mistri-built": "./dist/client/components/Dropdown.js",
+      "default": "./src/client/components/Dropdown.tsx"
+    },
+    "./client/components/Editable.js": {
+      "mistri-built": "./dist/client/components/Editable.js",
+      "default": "./src/client/components/Editable.tsx"
+    },
+    "./client/components/ErrorBoundary.js": {
+      "mistri-built": "./dist/client/components/ErrorBoundary.js",
+      "default": "./src/client/components/ErrorBoundary.tsx"
+    },
+    "./client/components/FavoriteStar.js": {
+      "mistri-built": "./dist/client/components/FavoriteStar.js",
+      "default": "./src/client/components/FavoriteStar.tsx"
+    },
+    "./client/components/FieldArranger.js": {
+      "mistri-built": "./dist/client/components/FieldArranger.js",
+      "default": "./src/client/components/FieldArranger.tsx"
+    },
+    "./client/components/Grid.js": {
+      "mistri-built": "./dist/client/components/Grid.js",
+      "default": "./src/client/components/Grid.tsx"
+    },
+    "./client/components/GridCellEditor.js": {
+      "mistri-built": "./dist/client/components/GridCellEditor.js",
+      "default": "./src/client/components/GridCellEditor.tsx"
+    },
+    "./client/components/Icon.js": {
+      "mistri-built": "./dist/client/components/Icon.js",
+      "default": "./src/client/components/Icon.tsx"
+    },
+    "./client/components/JsonView.js": {
+      "mistri-built": "./dist/client/components/JsonView.js",
+      "default": "./src/client/components/JsonView.tsx"
+    },
+    "./client/components/Landing.js": {
+      "mistri-built": "./dist/client/components/Landing.js",
+      "default": "./src/client/components/Landing.tsx"
+    },
+    "./client/components/LandingSurface.js": {
+      "mistri-built": "./dist/client/components/LandingSurface.js",
+      "default": "./src/client/components/LandingSurface.tsx"
+    },
+    "./client/components/ListEmpty.js": {
+      "mistri-built": "./dist/client/components/ListEmpty.js",
+      "default": "./src/client/components/ListEmpty.tsx"
+    },
+    "./client/components/LiveNotices.js": {
+      "mistri-built": "./dist/client/components/LiveNotices.js",
+      "default": "./src/client/components/LiveNotices.tsx"
+    },
+    "./client/components/MinorMoneyInput.js": {
+      "mistri-built": "./dist/client/components/MinorMoneyInput.js",
+      "default": "./src/client/components/MinorMoneyInput.tsx"
+    },
+    "./client/components/MultiStepForm.js": {
+      "mistri-built": "./dist/client/components/MultiStepForm.js",
+      "default": "./src/client/components/MultiStepForm.tsx"
+    },
+    "./client/components/NavGlyph.js": {
+      "mistri-built": "./dist/client/components/NavGlyph.js",
+      "default": "./src/client/components/NavGlyph.tsx"
+    },
+    "./client/components/NewRecord.js": {
+      "mistri-built": "./dist/client/components/NewRecord.js",
+      "default": "./src/client/components/NewRecord.tsx"
+    },
+    "./client/components/Notes.js": {
+      "mistri-built": "./dist/client/components/Notes.js",
+      "default": "./src/client/components/Notes.tsx"
+    },
+    "./client/components/OverflowMenu.js": {
+      "mistri-built": "./dist/client/components/OverflowMenu.js",
+      "default": "./src/client/components/OverflowMenu.tsx"
+    },
+    "./client/components/Page.js": {
+      "mistri-built": "./dist/client/components/Page.js",
+      "default": "./src/client/components/Page.tsx"
+    },
+    "./client/components/PageHistory.js": {
+      "mistri-built": "./dist/client/components/PageHistory.js",
+      "default": "./src/client/components/PageHistory.tsx"
+    },
+    "./client/components/PagePreview.js": {
+      "mistri-built": "./dist/client/components/PagePreview.js",
+      "default": "./src/client/components/PagePreview.tsx"
+    },
+    "./client/components/PageSections.js": {
+      "mistri-built": "./dist/client/components/PageSections.js",
+      "default": "./src/client/components/PageSections.tsx"
+    },
+    "./client/components/Prompt.js": {
+      "mistri-built": "./dist/client/components/Prompt.js",
+      "default": "./src/client/components/Prompt.tsx"
+    },
+    "./client/components/Record.js": {
+      "mistri-built": "./dist/client/components/Record.js",
+      "default": "./src/client/components/Record.tsx"
+    },
+    "./client/components/RecordPicker.js": {
+      "mistri-built": "./dist/client/components/RecordPicker.js",
+      "default": "./src/client/components/RecordPicker.tsx"
+    },
+    "./client/components/RecordTrailNav.js": {
+      "mistri-built": "./dist/client/components/RecordTrailNav.js",
+      "default": "./src/client/components/RecordTrailNav.tsx"
+    },
+    "./client/components/RichTextField.js": {
+      "mistri-built": "./dist/client/components/RichTextField.js",
+      "default": "./src/client/components/RichTextField.tsx"
+    },
+    "./client/components/Rooms.js": {
+      "mistri-built": "./dist/client/components/Rooms.js",
+      "default": "./src/client/components/Rooms.tsx"
+    },
+    "./client/components/SectionPeriod.js": {
+      "mistri-built": "./dist/client/components/SectionPeriod.js",
+      "default": "./src/client/components/SectionPeriod.tsx"
+    },
+    "./client/components/Sidebar.js": {
+      "mistri-built": "./dist/client/components/Sidebar.js",
+      "default": "./src/client/components/Sidebar.tsx"
+    },
+    "./client/components/TableRoom.js": {
+      "mistri-built": "./dist/client/components/TableRoom.js",
+      "default": "./src/client/components/TableRoom.tsx"
+    },
+    "./client/components/TableView.js": {
+      "mistri-built": "./dist/client/components/TableView.js",
+      "default": "./src/client/components/TableView.tsx"
+    },
+    "./client/components/Value.js": {
+      "mistri-built": "./dist/client/components/Value.js",
+      "default": "./src/client/components/Value.tsx"
+    },
+    "./client/components/WorkPanel.js": {
+      "mistri-built": "./dist/client/components/WorkPanel.js",
+      "default": "./src/client/components/WorkPanel.tsx"
+    },
+    "./client/components/appListModel.js": {
+      "mistri-built": "./dist/client/components/appListModel.js",
+      "default": "./src/client/components/appListModel.ts"
+    },
+    "./client/components/appRooms.js": {
+      "mistri-built": "./dist/client/components/appRooms.js",
+      "default": "./src/client/components/appRooms.ts"
+    },
+    "./client/components/autoChart.js": {
+      "mistri-built": "./dist/client/components/autoChart.js",
+      "default": "./src/client/components/autoChart.ts"
+    },
+    "./client/components/avatarPhotos.js": {
+      "mistri-built": "./dist/client/components/avatarPhotos.js",
+      "default": "./src/client/components/avatarPhotos.tsx"
+    },
+    "./client/components/besideDetail.js": {
+      "mistri-built": "./dist/client/components/besideDetail.js",
+      "default": "./src/client/components/besideDetail.ts"
+    },
+    "./client/components/boardNew.js": {
+      "mistri-built": "./dist/client/components/boardNew.js",
+      "default": "./src/client/components/boardNew.ts"
+    },
+    "./client/components/cardsModel.js": {
+      "mistri-built": "./dist/client/components/cardsModel.js",
+      "default": "./src/client/components/cardsModel.ts"
+    },
+    "./client/components/columnPresentation.js": {
+      "mistri-built": "./dist/client/components/columnPresentation.js",
+      "default": "./src/client/components/columnPresentation.ts"
+    },
+    "./client/components/composerDraft.js": {
+      "mistri-built": "./dist/client/components/composerDraft.js",
+      "default": "./src/client/components/composerDraft.ts"
+    },
+    "./client/components/crumbSlot.js": {
+      "mistri-built": "./dist/client/components/crumbSlot.js",
+      "default": "./src/client/components/crumbSlot.ts"
+    },
+    "./client/components/dashboardModel.js": {
+      "mistri-built": "./dist/client/components/dashboardModel.js",
+      "default": "./src/client/components/dashboardModel.ts"
+    },
+    "./client/components/dashboardParts.js": {
+      "mistri-built": "./dist/client/components/dashboardParts.js",
+      "default": "./src/client/components/dashboardParts.ts"
+    },
+    "./client/components/editInteraction.js": {
+      "mistri-built": "./dist/client/components/editInteraction.js",
+      "default": "./src/client/components/editInteraction.tsx"
+    },
+    "./client/components/favoriteNav.js": {
+      "mistri-built": "./dist/client/components/favoriteNav.js",
+      "default": "./src/client/components/favoriteNav.ts"
+    },
+    "./client/components/favorites.js": {
+      "mistri-built": "./dist/client/components/favorites.js",
+      "default": "./src/client/components/favorites.ts"
+    },
+    "./client/components/gridCellModel.js": {
+      "mistri-built": "./dist/client/components/gridCellModel.js",
+      "default": "./src/client/components/gridCellModel.ts"
+    },
+    "./client/components/groupOrder.js": {
+      "mistri-built": "./dist/client/components/groupOrder.js",
+      "default": "./src/client/components/groupOrder.ts"
+    },
+    "./client/components/inputRenderers.js": {
+      "mistri-built": "./dist/client/components/inputRenderers.js",
+      "default": "./src/client/components/inputRenderers.tsx"
+    },
+    "./client/components/listColumn.js": {
+      "mistri-built": "./dist/client/components/listColumn.js",
+      "default": "./src/client/components/listColumn.ts"
+    },
+    "./client/components/mount.js": {
+      "mistri-built": "./dist/client/components/mount.js",
+      "default": "./src/client/components/mount.tsx"
+    },
+    "./client/components/myViews.js": {
+      "mistri-built": "./dist/client/components/myViews.js",
+      "default": "./src/client/components/myViews.ts"
+    },
+    "./client/components/navigationTree.js": {
+      "mistri-built": "./dist/client/components/navigationTree.js",
+      "default": "./src/client/components/navigationTree.ts"
+    },
+    "./client/components/newMenuModel.js": {
+      "mistri-built": "./dist/client/components/newMenuModel.js",
+      "default": "./src/client/components/newMenuModel.ts"
+    },
+    "./client/components/onDemand.js": {
+      "mistri-built": "./dist/client/components/onDemand.js",
+      "default": "./src/client/components/onDemand.tsx"
+    },
+    "./client/components/pageContext.js": {
+      "mistri-built": "./dist/client/components/pageContext.js",
+      "default": "./src/client/components/pageContext.ts"
+    },
+    "./client/components/pageModel.js": {
+      "mistri-built": "./dist/client/components/pageModel.js",
+      "default": "./src/client/components/pageModel.ts"
+    },
+    "./client/components/pickerStaleness.js": {
+      "mistri-built": "./dist/client/components/pickerStaleness.js",
+      "default": "./src/client/components/pickerStaleness.ts"
+    },
+    "./client/components/placeOrder.js": {
+      "mistri-built": "./dist/client/components/placeOrder.js",
+      "default": "./src/client/components/placeOrder.ts"
+    },
+    "./client/components/optimisticMoves.js": {
+      "mistri-built": "./dist/client/components/optimisticMoves.js",
+      "default": "./src/client/components/optimisticMoves.ts"
+    },
+    "./client/components/pointerDrag.js": {
+      "mistri-built": "./dist/client/components/pointerDrag.js",
+      "default": "./src/client/components/pointerDrag.ts"
+    },
+    "./client/components/presentationFit.js": {
+      "mistri-built": "./dist/client/components/presentationFit.js",
+      "default": "./src/client/components/presentationFit.ts"
+    },
+    "./client/components/recordKeys.js": {
+      "mistri-built": "./dist/client/components/recordKeys.js",
+      "default": "./src/client/components/recordKeys.ts"
+    },
+    "./client/components/recordSearch.js": {
+      "mistri-built": "./dist/client/components/recordSearch.js",
+      "default": "./src/client/components/recordSearch.ts"
+    },
+    "./client/components/recordSurface.js": {
+      "mistri-built": "./dist/client/components/recordSurface.js",
+      "default": "./src/client/components/recordSurface.ts"
+    },
+    "./client/components/sidebarModel.js": {
+      "mistri-built": "./dist/client/components/sidebarModel.js",
+      "default": "./src/client/components/sidebarModel.ts"
+    },
+    "./client/components/suggestPart.js": {
+      "mistri-built": "./dist/client/components/suggestPart.js",
+      "default": "./src/client/components/suggestPart.ts"
+    },
+    "./client/components/useBulkSelection.js": {
+      "mistri-built": "./dist/client/components/useBulkSelection.js",
+      "default": "./src/client/components/useBulkSelection.tsx"
+    },
+    "./client/components/useListOrder.js": {
+      "mistri-built": "./dist/client/components/useListOrder.js",
+      "default": "./src/client/components/useListOrder.tsx"
+    },
+    "./client/components/useMediaQuery.js": {
+      "mistri-built": "./dist/client/components/useMediaQuery.js",
+      "default": "./src/client/components/useMediaQuery.ts"
+    },
+    "./client/components/useMessageLanguage.js": {
+      "mistri-built": "./dist/client/components/useMessageLanguage.js",
+      "default": "./src/client/components/useMessageLanguage.ts"
+    },
+    "./client/components/usePointerDrag.js": {
+      "mistri-built": "./dist/client/components/usePointerDrag.js",
+      "default": "./src/client/components/usePointerDrag.tsx"
+    },
+    "./client/components/useRowWindow.js": {
+      "mistri-built": "./dist/client/components/useRowWindow.js",
+      "default": "./src/client/components/useRowWindow.ts"
+    },
+    "./client/components/valueModel.js": {
+      "mistri-built": "./dist/client/components/valueModel.js",
+      "default": "./src/client/components/valueModel.ts"
+    },
+    "./client/components/viewLink.js": {
+      "mistri-built": "./dist/client/components/viewLink.js",
+      "default": "./src/client/components/viewLink.ts"
+    },
+    "./client/components/walk.js": {
+      "mistri-built": "./dist/client/components/walk.js",
+      "default": "./src/client/components/walk.ts"
+    },
+    "./client/composedHook.js": {
+      "mistri-built": "./dist/client/composedHook.js",
+      "default": "./src/client/composedHook.ts"
+    },
+    "./client/composedReads.js": {
+      "mistri-built": "./dist/client/composedReads.js",
+      "default": "./src/client/composedReads.ts"
+    },
+    "./client/conditions.js": {
+      "mistri-built": "./dist/client/conditions.js",
+      "default": "./src/client/conditions.js"
+    },
+    "./client/connectionList.js": {
+      "mistri-built": "./dist/client/connectionList.js",
+      "default": "./src/client/connectionList.js"
+    },
+    "./client/connectionScope.js": {
+      "mistri-built": "./dist/client/connectionScope.js",
+      "default": "./src/client/connectionScope.ts"
+    },
+    "./client/connectionTransition.js": {
+      "mistri-built": "./dist/client/connectionTransition.js",
+      "default": "./src/client/connectionTransition.ts"
+    },
+    "./client/copy/record/components/Actions.js": {
+      "mistri-built": "./dist/client/copy/record/components/Actions.js",
+      "default": "./src/client/copy/record/components/Actions.ts"
+    },
+    "./client/copy/shell/components/MobileNavDrawer.js": {
+      "mistri-built": "./dist/client/copy/shell/components/MobileNavDrawer.js",
+      "default": "./src/client/copy/shell/components/MobileNavDrawer.ts"
+    },
+    "./client/copy/shell/components/TopNav.js": {
+      "mistri-built": "./dist/client/copy/shell/components/TopNav.js",
+      "default": "./src/client/copy/shell/components/TopNav.ts"
+    },
+    "./client/copy/shell/startup.js": {
+      "mistri-built": "./dist/client/copy/shell/startup.js",
+      "default": "./src/client/copy/shell/startup.ts"
+    },
+    "./client/core.js": {
+      "mistri-built": "./dist/client/core.js",
+      "default": "./src/client/core.js"
+    },
+    "./client/dashboard.js": {
+      "mistri-built": "./dist/client/dashboard.js",
+      "default": "./src/client/dashboard.js"
+    },
+    "./client/deeplink.js": {
+      "mistri-built": "./dist/client/deeplink.js",
+      "default": "./src/client/deeplink.js"
+    },
+    "./client/density.js": {
+      "mistri-built": "./dist/client/density.js",
+      "default": "./src/client/density.js"
+    },
+    "./client/dom.js": {
+      "mistri-built": "./dist/client/dom.js",
+      "default": "./src/client/dom.js"
+    },
+    "./client/draftRecovery.js": {
+      "mistri-built": "./dist/client/draftRecovery.js",
+      "default": "./src/client/draftRecovery.ts"
+    },
+    "./client/export.js": {
+      "mistri-built": "./dist/client/export.js",
+      "default": "./src/client/export.js"
+    },
+    "./client/fieldErrors.js": {
+      "mistri-built": "./dist/client/fieldErrors.js",
+      "default": "./src/client/fieldErrors.ts"
+    },
+    "./client/filterbar.js": {
+      "mistri-built": "./dist/client/filterbar.js",
+      "default": "./src/client/filterbar.js"
+    },
+    "./client/firstPaint.js": {
+      "mistri-built": "./dist/client/firstPaint.js",
+      "default": "./src/client/firstPaint.ts"
+    },
+    "./client/help.js": {
+      "mistri-built": "./dist/client/help.js",
+      "default": "./src/client/help.js"
+    },
+    "./client/historyToken.js": {
+      "mistri-built": "./dist/client/historyToken.js",
+      "default": "./src/client/historyToken.ts"
+    },
+    "./client/insert.js": {
+      "mistri-built": "./dist/client/insert.js",
+      "default": "./src/client/insert.js"
+    },
+    "./client/liveReads.js": {
+      "mistri-built": "./dist/client/liveReads.js",
+      "default": "./src/client/liveReads.ts"
+    },
+    "./client/liveState.js": {
+      "mistri-built": "./dist/client/liveState.js",
+      "default": "./src/client/liveState.ts"
+    },
+    "./client/locale.js": {
+      "mistri-built": "./dist/client/locale.js",
+      "default": "./src/client/locale.ts"
+    },
+    "./client/menu.js": {
+      "mistri-built": "./dist/client/menu.js",
+      "default": "./src/client/menu.js"
+    },
+    "./client/messages.js": {
+      "mistri-built": "./dist/client/messages.js",
+      "default": "./src/client/messages.ts"
+    },
+    "./client/motionStill.js": {
+      "mistri-built": "./dist/client/motionStill.js",
+      "default": "./src/client/motionStill.ts"
+    },
+    "./client/ownWrites.js": {
+      "mistri-built": "./dist/client/ownWrites.js",
+      "default": "./src/client/ownWrites.ts"
+    },
+    "./client/page.js": {
+      "mistri-built": "./dist/client/page.js",
+      "default": "./src/client/page.js"
+    },
+    "./client/pagemarks.js": {
+      "mistri-built": "./dist/client/pagemarks.js",
+      "default": "./src/client/pagemarks.js"
+    },
+    "./client/palette.js": {
+      "mistri-built": "./dist/client/palette.js",
+      "default": "./src/client/palette.js"
+    },
+    "./client/peek.js": {
+      "mistri-built": "./dist/client/peek.js",
+      "default": "./src/client/peek.js"
+    },
+    "./client/peekpanel.js": {
+      "mistri-built": "./dist/client/peekpanel.js",
+      "default": "./src/client/peekpanel.js"
+    },
+    "./client/prompt.js": {
+      "mistri-built": "./dist/client/prompt.js",
+      "default": "./src/client/prompt.js"
+    },
+    "./client/recordCompose.js": {
+      "mistri-built": "./dist/client/recordCompose.js",
+      "default": "./src/client/recordCompose.ts"
+    },
+    "./client/recordIntent.js": {
+      "mistri-built": "./dist/client/recordIntent.js",
+      "default": "./src/client/recordIntent.ts"
+    },
+    "./client/recordSource.js": {
+      "mistri-built": "./dist/client/recordSource.js",
+      "default": "./src/client/recordSource.ts"
+    },
+    "./client/recordTrail.js": {
+      "mistri-built": "./dist/client/recordTrail.js",
+      "default": "./src/client/recordTrail.ts"
+    },
+    "./client/recordWriteRefresh.js": {
+      "mistri-built": "./dist/client/recordWriteRefresh.js",
+      "default": "./src/client/recordWriteRefresh.ts"
+    },
+    "./client/requestIdentity.js": {
+      "mistri-built": "./dist/client/requestIdentity.js",
+      "default": "./src/client/requestIdentity.ts"
+    },
+    "./client/resourceRequests.js": {
+      "mistri-built": "./dist/client/resourceRequests.js",
+      "default": "./src/client/resourceRequests.ts"
+    },
+    "./client/roleLabels.js": {
+      "mistri-built": "./dist/client/roleLabels.js",
+      "default": "./src/client/roleLabels.ts"
+    },
+    "./client/rowEditing.js": {
+      "mistri-built": "./dist/client/rowEditing.js",
+      "default": "./src/client/rowEditing.js"
+    },
+    "./client/savedPages.js": {
+      "mistri-built": "./dist/client/savedPages.js",
+      "default": "./src/client/savedPages.js"
+    },
+    "./client/sessionIdentity.js": {
+      "mistri-built": "./dist/client/sessionIdentity.js",
+      "default": "./src/client/sessionIdentity.ts"
+    },
+    "./client/sessionLifecycle.js": {
+      "mistri-built": "./dist/client/sessionLifecycle.js",
+      "default": "./src/client/sessionLifecycle.ts"
+    },
+    "./client/shellHost.js": {
+      "mistri-built": "./dist/client/shellHost.js",
+      "default": "./src/client/shellHost.ts"
+    },
+    "./client/shellMode.js": {
+      "mistri-built": "./dist/client/shellMode.js",
+      "default": "./src/client/shellMode.ts"
+    },
+    "./client/shellStart.js": {
+      "mistri-built": "./dist/client/shellStart.js",
+      "default": "./src/client/shellStart.js"
+    },
+    "./client/shells.js": {
+      "mistri-built": "./dist/client/shells.js",
+      "default": "./src/client/shells.ts"
+    },
+    "./client/startup.js": {
+      "mistri-built": "./dist/client/startup.js",
+      "default": "./src/client/startup.ts"
+    },
+    "./client/startupHold.js": {
+      "mistri-built": "./dist/client/startupHold.js",
+      "default": "./src/client/startupHold.ts"
+    },
+    "./client/formControls.css": {
+      "mistri-built": "./dist/client/formControls.css",
+      "default": "./src/client/formControls.css"
+    },
+    "./client/style.css": {
+      "mistri-built": "./dist/client/style.css",
+      "default": "./src/client/style.css"
+    },
+    "./client/surfaces.js": {
+      "mistri-built": "./dist/client/surfaces.js",
+      "default": "./src/client/surfaces.js"
+    },
+    "./client/theme.js": {
+      "mistri-built": "./dist/client/theme.js",
+      "default": "./src/client/theme.js"
+    },
+    "./client/transport.js": {
+      "mistri-built": "./dist/client/transport.js",
+      "default": "./src/client/transport.ts"
+    },
+    "./client/uiBridge.js": {
+      "mistri-built": "./dist/client/uiBridge.js",
+      "default": "./src/client/uiBridge.ts"
+    },
+    "./client/updateAttempts.js": {
+      "mistri-built": "./dist/client/updateAttempts.js",
+      "default": "./src/client/updateAttempts.ts"
+    },
+    "./client/url.js": {
+      "mistri-built": "./dist/client/url.js",
+      "default": "./src/client/url.js"
+    },
+    "./client/visualTheme.js": {
+      "mistri-built": "./dist/client/visualTheme.js",
+      "default": "./src/client/visualTheme.ts"
+    },
+    "./client/write.js": {
+      "mistri-built": "./dist/client/write.js",
+      "default": "./src/client/write.js"
+    },
+    "./client/writePaths.js": {
+      "mistri-built": "./dist/client/writePaths.js",
+      "default": "./src/client/writePaths.ts"
+    },
+    "./client/yesNoRule.js": {
+      "mistri-built": "./dist/client/yesNoRule.js",
+      "default": "./src/client/yesNoRule.ts"
+    },
+    "./clientFiles.js": {
+      "mistri-built": "./dist/clientFiles.js",
+      "default": "./src/clientFiles.ts"
+    },
+    "./shared/uiTokens.js": {
+      "mistri-built": "./dist/shared/uiTokens.js",
+      "default": "./src/shared/uiTokens.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-packages.mjs",
+    "prepack": "node ../../scripts/pack-manifest.mjs strip",
+    "postpack": "node ../../scripts/pack-manifest.mjs restore"
+  },
+  "dependencies": {
+    "@mistriwork/engine": "1.0.0-rc.1",
+    "@mistriwork/ui": "1.0.0-rc.1",
+    "intl-messageformat": "12.1.2",
+    "qrcode-generator": "^2.0.4"
+  },
+  "engines": {
+    "node": ">=24.22.1"
+  }
+}

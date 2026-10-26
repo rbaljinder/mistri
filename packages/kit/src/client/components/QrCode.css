@@ -1,0 +1,11 @@
+/* Brought by the QR code (QrCode.tsx), a part on demand: none of it stands in a first stylesheet. The code is near-black
+   on white in every look and mode — an inverted, light-on-dark code is one many scanners refuse — at a size a phone
+   reads from a screen. The two fixed colors are the code's, not the theme's (docs/design.md). */
+@layer components {
+.qr-value { display: inline-grid; justify-items: start; gap: var(--space-2h); margin: 0; }
+.qr-value-code { width: 128px; height: 128px; border-radius: var(--radius); }
+.qr-value-ground { fill: #ffffff; }
+.qr-value-ink { fill: #111111; }
+.qr-value-code { box-shadow: 0 0 0 1px var(--line); }
+.qr-value-text { font: var(--text-sm)/1.35 var(--mono, var(--sans)); color: var(--ink-muted); overflow-wrap: anywhere; max-width: 32ch; }
+}

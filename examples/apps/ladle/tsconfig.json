@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "types": ["node"],
+    "skipLibCheck": true,
+    "paths": {
+      "@mistriwork/mistri/commands": ["../../../packages/mistri/src/server/commands.ts"],
+      "@mistriwork/mistri/handler": ["../../../packages/mistri/src/server/handler.ts"],
+      "@mistriwork/mistri/testing": ["../../../packages/mistri/src/server/testing.ts"]
+    },
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["**/*.ts", "pages/*.page.tsx", "host/*.tsx"]
+}

@@ -1,0 +1,128 @@
+/* A funnel section: per stage, its name, a bar against the first stage's length, the count, its share of the stage it
+   follows, and the rows it lost. The columns are one grid the stages share (subgrid), so the bars start and end
+   together whatever the names. Every cell holds its place before the counts arrive. */
+.dash-funnel-host {
+  container-type: inline-size;
+  min-width: 0;
+}
+.dash-funnel {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(80px, 1fr) max-content minmax(min-content, max-content) max-content;
+  /* No row gap: each stage's doors stand 24px tall (below), which is the old 18px line and its 6px gap in one. */
+  gap: 0 var(--space-4);
+  margin: var(--space-2h) 0 0;
+  padding: 0;
+  list-style: none;
+  align-items: center;
+}
+.dash-funnel-step {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.dash-funnel-main {
+  grid-column: 1 / 5;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+}
+.dash-funnel-drop {
+  grid-column: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 24px;
+  min-height: 24px;
+  font: var(--text-sm) var(--mono);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: none;
+}
+/* A stage and its lost rows sit one under another: each is a 24px target at least (docs/design.md, Access). */
+.dash-funnel-door {
+  min-height: 24px;
+  cursor: pointer;
+  border-radius: min(4px, var(--radius));
+}
+.dash-funnel-door:hover .dash-funnel-name,
+a.dash-funnel-drop:hover,
+button.dash-funnel-drop:hover {
+  color: var(--accent-ink);
+}
+.dash-funnel-door:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.dash-funnel-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-base) var(--sans);
+  color: var(--ink);
+}
+.dash-funnel-tag {
+  margin-left: var(--space-2h);
+  font: var(--text-xs) var(--sans);
+  color: var(--ink-muted);
+}
+.dash-funnel-track {
+  display: block;
+  height: 14px;
+  border-radius: min(4px, var(--radius));
+  background: color-mix(in srgb, var(--chart-1, var(--accent)) 12%, var(--surface));
+  overflow: hidden;
+}
+.dash-funnel-fill {
+  display: block;
+  height: 100%;
+  background: var(--chart-1, var(--accent));
+  border-radius: inherit;
+}
+.is-optional .dash-funnel-fill {
+  background: color-mix(in srgb, var(--chart-1, var(--accent)) 55%, var(--surface));
+}
+.dash-funnel-value {
+  font: 600 var(--text-sm) var(--mono);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.dash-funnel-share {
+  font: var(--text-sm) var(--sans);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+/* Narrower than the columns need (a phone's card): the name goes over its bar, the whole width its own, and the lost
+   rows follow the share on that line's end. */
+@container (max-width: 28rem) {
+  .dash-funnel {
+    grid-template-columns: minmax(80px, 1fr) max-content minmax(min-content, max-content) max-content;
+    row-gap: var(--space-2);
+  }
+  .dash-funnel-main {
+    grid-column: 1 / 4;
+  }
+  .dash-funnel-name {
+    grid-column: 1 / -1;
+    margin-top: var(--space-2h);
+  }
+  .dash-funnel-step:first-child .dash-funnel-name {
+    margin-top: 0;
+  }
+  .dash-funnel-drop {
+    grid-column: 4;
+  }
+}

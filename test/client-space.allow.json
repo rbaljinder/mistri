@@ -1,0 +1,277 @@
+{
+  "packages/mistri/src/client/components/AccountAdministration.css": {
+    "font-size calc(15px * var(--type-k))": 1,
+    "font-size calc(18px * var(--type-k))": 1,
+    "space -8px": 1,
+    "space 20px": 3,
+    "space 28px": 1
+  },
+  "packages/mistri/src/client/components/AccountProfile.css": {
+    "font-size calc(18px * var(--type-k))": 1,
+    "space 18px": 2
+  },
+  "packages/kit/src/client/components/AppFooter.css": {
+    "space 20px": 2,
+    "space 28px": 1
+  },
+  "packages/mistri/src/client/components/AssistantPanel.css": {
+    "space 20px": 2,
+    "space 28px": 1
+  },
+  "packages/mistri/src/client/components/BrandingForm.css": {
+    "font-size calc(15px * var(--type-k))": 1,
+    "font-size calc(22px * var(--type-k))": 1
+  },
+  "packages/mistri/src/client/components/CalendarList.css": {
+    "font-size calc(18px * var(--type-k))": 1
+  },
+  "packages/kit/src/client/components/Chart.css": {
+    "font-size calc(2.6px * var(--type-k))": 1,
+    "font-size calc(5px * var(--type-k))": 1,
+    "space 20px": 1
+  },
+  "packages/kit/src/client/components/Checklist.css": {
+    "space 28px": 1
+  },
+  "packages/mistri/src/client/components/DashboardActivity.css": {
+    "font-size calc(15px * var(--type-k))": 1
+  },
+  "packages/mistri/src/client/components/DashboardBlocks.css": {
+    "font-size calc(19px * var(--type-k))": 1,
+    "space 20px": 2
+  },
+  "packages/mistri/src/client/components/Document.css": {
+    "font-size calc(10.5px * var(--type-k))": 1,
+    "font-size calc(15px * var(--type-k))": 2,
+    "font-size calc(18px * var(--type-k))": 1,
+    "font-size calc(24px * var(--type-k))": 1,
+    "space 9px": 1,
+    "space 20px": 2,
+    "space 28px": 2,
+    "space 40px": 1
+  },
+  "packages/mistri/src/client/components/FormDialog.css": {
+    "space 20px": 1
+  },
+  "packages/mistri/src/client/components/FormLines.css": {
+    "space -2px": 1,
+    "space 7px": 1,
+    "space 9px": 5,
+    "space 20px": 1
+  },
+  "packages/mistri/src/client/components/FormSurface.css": {
+    "font-size calc(15px * var(--type-k))": 1,
+    "font-size calc(21px * var(--type-k))": 1,
+    "font-size calc(24px * var(--type-k))": 1,
+    "space 18px": 1,
+    "space 20px": 2,
+    "space 40px": 1,
+    "space 56px": 2
+  },
+  "packages/mistri/src/client/components/GanttList.css": {
+    "space -6px": 1
+  },
+  "packages/mistri/src/client/components/ImportDialog.css": {
+    "space 20px": 1
+  },
+  "packages/mistri/src/client/components/Inbox.css": {
+    "space 40px": 1
+  },
+  "packages/kit/src/client/components/JsonView.css": {
+    "font-size calc(15px * var(--type-k))": 1
+  },
+  "packages/kit/src/client/components/LandingSurface.css": {
+    "font-size calc(15px * var(--type-k))": 3,
+    "font-size calc(18px * var(--type-k))": 1,
+    "font-size calc(22px * var(--type-k))": 1,
+    "space -16px": 1,
+    "space -22px": 1,
+    "space -48px": 1,
+    "space 20px": 4,
+    "space 28px": 3,
+    "space 40px": 5,
+    "space 44px": 2,
+    "space 64px": 2,
+    "space 72px": 1
+  },
+  "packages/kit/src/client/components/ListEmpty.css": {
+    "space 20px": 1
+  },
+  "packages/kit/src/client/components/PageFlowDiagram.css": {
+    "space 28px": 1
+  },
+  "packages/kit/src/client/components/QueueList.css": {
+    "space 20px": 1,
+    "space 28px": 1
+  },
+  "packages/kit/src/client/components/QuickAdd.css": {
+    "space 20px": 1
+  },
+  "packages/kit/src/client/components/RichTextEditor.css": {
+    "font-size calc(15px * var(--type-k))": 1
+  },
+  "packages/kit/src/client/components/SplitListDetail.css": {
+    "font-size calc(15px * var(--type-k))": 1,
+    "space 28px": 2
+  },
+  "packages/mistri/src/client/components/SupportLog.css": {
+    "font-size calc(18px * var(--type-k))": 1,
+    "space 20px": 1,
+    "space 22px": 1
+  },
+  "packages/mistri/src/client/components/TenantAdministration.css": {
+    "font-size calc(15px * var(--type-k))": 1,
+    "font-size calc(18px * var(--type-k))": 1,
+    "space 7px": 2,
+    "space 20px": 3,
+    "space 28px": 1
+  },
+  "packages/mistri/src/client/components/TenantApiTokens.css": {
+    "font-size calc(18px * var(--type-k))": 1,
+    "space 20px": 1
+  },
+  "packages/mistri/src/client/components/TenantSupport.css": {
+    "font-size calc(18px * var(--type-k))": 1,
+    "space 20px": 5,
+    "space 40px": 1
+  },
+  "packages/mistri/src/client/components/TriageBoard.css": {
+    "font-size calc(15px * var(--type-k))": 1,
+    "space -2px": 2,
+    "space -4px": 5
+  },
+  "packages/mistri/src/client/components/builtInInputs.css": {
+    "font-size calc(18px * var(--type-k))": 1
+  },
+  "packages/mistri/src/client/components/console/ConsoleRoom.css": {
+    "font-size calc(15px * var(--type-k))": 2,
+    "font-size calc(17px * var(--type-k))": 1,
+    "font-size calc(18px * var(--type-k))": 1,
+    "space -2px": 1,
+    "space 20px": 1
+  },
+  "packages/mistri/src/client/components/sdk/kit.css": {
+    "font-size calc(15px * var(--type-k))": 2,
+    "font-size calc(26px * var(--type-k))": 1
+  },
+  "packages/kit/src/client/composer.css": {
+    "font-size calc(15px * var(--type-k))": 1
+  },
+  "packages/kit/src/client/features.css": {
+    "font-size calc(15px * var(--type-k))": 4,
+    "font-size calc(17px * var(--type-k))": 2,
+    "font-size calc(22px * var(--type-k))": 1,
+    "font-size calc(24px * var(--type-k))": 1,
+    "space -3px": 1,
+    "space -4px": 1,
+    "space -8px": 1,
+    "space -40px": 1,
+    "space -48px": 1,
+    "space 5px": 1,
+    "space 7px": 1,
+    "space 9px": 1,
+    "space 18px": 2,
+    "space 56px": 3,
+    "space calc(10px + 2.4ch)": 1,
+    "space clamp(32px, 14vh, 140px)": 1
+  },
+  "packages/kit/src/client/help.css": {
+    "font-size calc(15px * var(--type-k))": 1,
+    "space 26px": 1
+  },
+  "packages/kit/src/client/lumenLook.css": {
+    "font-size calc(15px * var(--type-k))": 3,
+    "font-size calc(18px * var(--type-k))": 3,
+    "font-size calc(24px * var(--type-k))": 4,
+    "font-size calc(32px * var(--type-k))": 1,
+    "space -3px": 1,
+    "space 7px": 2,
+    "space 9px": 1,
+    "space 18px": 1,
+    "space 20px": 5
+  },
+  "packages/mistri/src/client/observe/observe.css": {
+    "font-size calc(15px * var(--type-k))": 1,
+    "space 20px": 2,
+    "space 28px": 1
+  },
+  "packages/kit/src/client/page.css": {
+    "font-size calc(10.5px * var(--type-k))": 2,
+    "font-size calc(10px * var(--type-k))": 1,
+    "font-size calc(15.5px * var(--type-k))": 1,
+    "font-size calc(15px * var(--type-k))": 10,
+    "font-size calc(17px * var(--type-k))": 3,
+    "font-size calc(18px * var(--type-k))": 1,
+    "font-size calc(26px * var(--type-k))": 1,
+    "font-size calc(28px * var(--type-k))": 1,
+    "font-size calc(32px * var(--type-k))": 1,
+    "space -2px": 1,
+    "space -8px": 1,
+    "space -14px": 1,
+    "space -15px": 1,
+    "space -18px": 2,
+    "space -20px": 1,
+    "space -21px": 1,
+    "space 5px": 4,
+    "space 11px": 1,
+    "space 18px": 2,
+    "space 20px": 5,
+    "space 21px": 1,
+    "space 28px": 1,
+    "space calc(25% + 6px)": 2,
+    "space calc(33.333% + 10px)": 2,
+    "space calc(50% + 16px)": 2,
+    "space calc(66.666% + 20px)": 2
+  },
+  "packages/ui/src/primitives.css": {
+    "space 36px": 1
+  },
+  "packages/kit/src/client/sageLook.css": {
+    "space 18px": 1
+  },
+  "packages/kit/src/client/structure.css": {
+    "font-size calc(24px * var(--type-k))": 2,
+    "space -2px": 1,
+    "space -11px": 1,
+    "space 5px": 2,
+    "space 7px": 1,
+    "space 18px": 1,
+    "space 40px": 1
+  },
+  "packages/kit/src/client/style.css": {
+    "font-size calc(10.5px * var(--type-k))": 1,
+    "font-size calc(15px * var(--type-k))": 4,
+    "font-size calc(19px * var(--type-k))": 1,
+    "font-size calc(22px * var(--type-k))": 1,
+    "space -4px": 2,
+    "space -6px": 4,
+    "space 5px": 4,
+    "space 7px": 1,
+    "space 9px": 4,
+    "space 11px": 1,
+    "space 20px": 14,
+    "space 22px": 1,
+    "space 28px": 1,
+    "space 40px": 4,
+    "space 60px": 1,
+    "space 64px": 1,
+    "space min(420px, 42vw)": 1
+  },
+  "packages/kit/src/client/themeFamilies.css": {
+    "font-size calc(15px * var(--type-k))": 1,
+    "font-size calc(17px * var(--type-k))": 1,
+    "font-size calc(22px * var(--type-k))": 2,
+    "font-size calc(30px * var(--type-k))": 1,
+    "space 20px": 2
+  },
+  "packages/kit/src/client/visualThemes.css": {
+    "font-size calc(18px * var(--type-k))": 1,
+    "font-size calc(19px * var(--type-k))": 1,
+    "font-size calc(26px * var(--type-k))": 1,
+    "font-size calc(29px * var(--type-k))": 1,
+    "font-size calc(30px * var(--type-k))": 1,
+    "space 7px": 1,
+    "space 20px": 3,
+    "space 28px": 1
+  }
+}

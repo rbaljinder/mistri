@@ -1,0 +1,60 @@
+/* The inbox's own rules, brought with its chunk: after the base, before any look (style.css names the order).
+
+   A notice is a line of words over a quieter line of who and when — a list's
+   row, not a card: rows parted by hairlines, no box round the list. Unread is
+   said by a dot in the accent before the words and the words in the text's
+   ink; a read notice keeps the dot's place, empty, and its words in the dim
+   ink, so the two stand on one edge (docs/design.md: colour and spacing
+   before weight). The whole row is the target. */
+@layer components {
+.inbox-dot { flex: none; width: 8px; height: 8px; margin-top: var(--space-2h); border-radius: 50%; }
+.unread > .inbox-dot, .unread .inbox-dot { background: var(--accent); }
+.inbox-text { display: grid; gap: var(--space-1); min-width: 0; }
+.inbox-title { color: var(--ink-muted); overflow-wrap: anywhere; }
+.unread .inbox-title { color: var(--ink); }
+.inbox-meta { color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.inbox-meta time { white-space: nowrap; }
+
+/* The bell's menu: a head, the latest few, and the way to all of them. */
+.inbox-popup { width: min(24rem, var(--available-width, 100vw - 16px)); padding: 0; }
+.inbox-menu-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); border-bottom: 1px solid var(--line);
+}
+.inbox-menu-title { font: 600 var(--text-base) var(--sans); color: var(--ink); }
+.inbox-menu-mark, .inbox-menu-all {
+  padding: var(--space-2) var(--space-2h); border: 0; border-radius: var(--radius); background: none;
+  color: var(--link); font: var(--text-sm) var(--sans); cursor: pointer;
+}
+.inbox-menu-all { display: block; width: 100%; padding: var(--space-3h) var(--space-4); text-align: left; border-top: 1px solid var(--line); border-radius: 0; }
+.inbox-item {
+  display: flex; gap: var(--space-3h); width: 100%; padding: var(--space-3) var(--space-4); text-align: left;
+  border: 0; border-radius: 0; background: none; font: var(--text-base)/1.4 var(--sans); cursor: pointer;
+}
+.inbox-item + .inbox-item { border-top: 1px solid var(--line); }
+.inbox-item:hover, .inbox-item[data-highlighted], .inbox-menu-mark[data-highlighted], .inbox-menu-all[data-highlighted] { background: var(--raised); }
+.inbox-menu-note { margin: 0; padding: var(--space-4); color: var(--ink-muted); font: var(--text-base)/1.45 var(--sans); }
+
+/* The room: the page's one content edge, a list's heading and tabs, then the rows. */
+.inbox-room { padding-bottom: 40px; }
+.inbox-room-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-4); padding: var(--space-4h) var(--room-inset) 0; }
+.inbox-room-head .btn-quiet { margin-left: auto; }
+.inbox-room > .empty-note, .inbox-room > .note, .inbox-room > .loading { margin: var(--space-5) var(--room-inset); }
+.inbox-list { list-style: none; margin: 0; padding: 0; }
+.inbox-row { display: flex; align-items: flex-start; gap: var(--space-3); padding-inline: var(--room-inset); border-bottom: 1px solid var(--line); }
+.inbox-open {
+  display: flex; flex: 1; gap: var(--space-3h); min-width: 0; padding: var(--space-4) 0; text-align: left;
+  border: 0; background: none; color: inherit; font: var(--text-md)/1.45 var(--sans); cursor: pointer;
+}
+.inbox-open:hover .inbox-title { color: var(--link); }
+.inbox-mark { flex: none; margin-top: var(--space-3); }
+.inbox-more { padding: var(--space-5) var(--room-inset); }
+/* Whether notices are emailed too: one quiet line under the tabs. */
+.inbox-email { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); padding: var(--space-3h) var(--room-inset); border-bottom: 1px solid var(--line);
+  color: var(--ink-muted); font: var(--text-base) var(--sans); }
+.inbox-email label { display: inline-flex; align-items: center; gap: var(--space-2h); cursor: pointer; }
+.inbox-email-note { color: var(--status-critical); }
+@media (prefers-reduced-motion: no-preference) {
+  .inbox-open .inbox-title { transition: color var(--t-hover) var(--ease-out); }
+}
+}

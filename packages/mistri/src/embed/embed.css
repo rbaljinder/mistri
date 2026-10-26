@@ -1,0 +1,58 @@
+/*
+ * What index.html's own <style> and the document's <html> and <body> did for
+ * the served page, for the two elements that stand for them in a host's
+ * (shell.ts makeRoot). Written against `html` and `body` like the shell's
+ * sheets, and rewritten with them (scripts/embed-css.mjs): `html` is the
+ * `.tw-root`, `body` its `.tw-body`. Outside every named layer of ours, so
+ * it is the last word inside `mistri`.
+ */
+
+/* The root fills the slot the host gave the element; the body's height is
+   the slot's (shell.ts followSlot sets --shell-vh), as it is the window's
+   when served. */
+html {
+  display: block;
+  position: relative;
+  height: 100%;
+  isolation: isolate;
+  text-align: start;
+}
+
+/* The veil, as index.html draws it: nothing of the shell shows until boot
+   has chosen its look and room. */
+html[data-starting] body > :not(#startup-status) {
+  visibility: hidden;
+}
+#startup-status {
+  display: none;
+}
+html[data-starting] #startup-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--ink, #333);
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+  text-align: center;
+}
+#startup-status p {
+  margin: 0;
+  max-width: 32rem;
+  overflow-wrap: anywhere;
+}
+#startup-status a {
+  color: inherit;
+}
+
+/* A single surface is one room: the App's chrome is the host's to draw. */
+html[data-surface] .skip-link,
+html[data-surface] .topbar,
+html[data-surface] .sidebar,
+html[data-surface] .app-sidebar,
+html[data-surface] .mobile-nav {
+  display: none;
+}

@@ -1,0 +1,26 @@
+/* @mistriwork/ui's answers to the reader's own settings: more contrast, and less transparency. Apart from forms.css, whose
+   sheet holds that nothing in it is !important: this one is, on purpose. A worn theme writes its colours on the root as
+   inline custom properties, which nothing but !important beats, and the reader's setting must beat the theme's. Loaded
+   beside the form controls (formControls.css) because the first stylesheet has no bytes to spare for it; a page that
+   draws no control keeps its themed ink and scrims. Moving it to tokens.css costs about 0.5 KB raw there. */
+@media (prefers-contrast: more) {
+  :root {
+    /* Quiet ink and the hairlines toward the ink, the control's edge and the focus ring in it. */
+    --ink-muted: color-mix(in srgb, var(--ink) 85%, var(--surface)) !important;
+    --ink-subtle: var(--ink-muted) !important;
+    --line: color-mix(in srgb, var(--ink) 45%, var(--surface)) !important;
+    --line-strong: var(--ink-muted) !important;
+    --line-control: var(--ink) !important;
+    --field-edge: var(--ink) !important;
+    --focus: var(--ink) !important;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  /* The scrims behind a dialog and a drawer solid (the page is hidden, not dimmed), and the photo viewer's ground. */
+  :root {
+    --scrim: color-mix(in srgb, black 80%, var(--ground)) !important;
+    --scrim-light: color-mix(in srgb, black 45%, var(--ground)) !important;
+    --lightbox-ground: rgb(10 12 16) !important;
+  }
+  .modal-backdrop { background: var(--scrim-light); }
+}

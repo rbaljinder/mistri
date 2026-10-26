@@ -1,0 +1,81 @@
+{
+  "name": "tablewalk-desktop",
+  "version": "0.0.3",
+  "private": true,
+  "description": "tablewalk in a window: the same server, the same client, a native shell.",
+  "license": "MIT",
+  "author": "tablewalk",
+  "main": "main.js",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "stage": "node scripts/stage.mjs",
+    "dist": "npm run stage && electron-builder",
+    "dist:dir": "npm run stage && electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^43.8.3",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "dev.tablewalk.desktop",
+    "productName": "tablewalk",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/server",
+        "to": "server",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "build/server/node_modules",
+        "to": "server/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "icon": "assets/icon.png",
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
+      "notarize": true
+    },
+    "linux": {
+      "category": "Development",
+      "target": [
+        "AppImage"
+      ],
+      "icon": "assets/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.png"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "rbaljinder",
+        "repo": "mistri"
+      }
+    ]
+  }
+}

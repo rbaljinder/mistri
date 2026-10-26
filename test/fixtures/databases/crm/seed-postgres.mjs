@@ -1,0 +1,176 @@
+/**
+ * Compass CRM data on PostgreSQL.
+ *
+ * Reads compass.db by default (build it first: `node make-crm-db.mjs`)
+ * and writes the same twelve tables into Postgres with real types — DATE
+ * as date, money as numeric, the CHECKs kept — so the app the demo shows
+ * on SQLite can be walked, tested and broken on the engine customers run.
+ * The `public` schema, qualified ids, sequences: everything the SQLite
+ * demo cannot exercise is exactly what this exists to.
+ *
+ *   node test/fixtures/databases/crm/seed-postgres.mjs <new-postgres-url> [source.db]
+ *
+ * Requires an empty public schema and never drops or replaces objects.
+ * `pg` is an optional repository dependency; this is a development seeder.
+ */
+import { DatabaseSync } from 'node:sqlite';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import pg from 'pg';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const url = process.argv[2] ?? process.env.TABLEWALK_TEST_PG;
+if (!url) {
+  console.error('Usage: node seed-postgres.mjs <new-postgres-url> [source.db]   (or set TABLEWALK_TEST_PG)');
+  process.exit(1);
+}
+
+const db = new DatabaseSync(process.argv[3] ? resolve(process.argv[3]) : join(HERE, 'compass.db'), { readOnly: true });
+
+/* Postgres DDL, written by hand rather than translated: a translation that
+   guessed types would quietly make every DATE a text column, and the whole
+   point is real dates on a real engine. Tables are created in FK order. */
+const TABLES = [
+  [
+    'industry',
+    `create table industry (
+    id integer primary key, name text not null unique)`,
+  ],
+  [
+    'sales_rep',
+    `create table sales_rep (
+    id integer primary key, name text not null, email text not null unique,
+    title text not null, region text not null check (region in ('amer','emea','apac')),
+    manager_id integer references sales_rep(id), hired_on date not null, quota numeric not null default 0)`,
+  ],
+  [
+    'account',
+    `create table account (
+    id integer primary key, name text not null, industry_id integer not null references industry(id),
+    owner_id integer not null references sales_rep(id), parent_account_id integer references account(id),
+    rating text not null check (rating in ('hot','warm','cold')),
+    annual_revenue numeric not null, employees integer not null,
+    website text not null, city text not null, country text not null, created_on date not null)`,
+  ],
+  [
+    'contact',
+    `create table contact (
+    id integer primary key, name text not null, account_id integer not null references account(id),
+    owner_id integer not null references sales_rep(id), title text not null, email text not null,
+    phone text, is_primary integer not null default 0, created_on date not null)`,
+  ],
+  [
+    'lead',
+    `create table lead (
+    id integer primary key, name text not null, company text not null, email text not null, phone text,
+    status text not null check (status in ('new','working','qualified','converted','lost')),
+    source text not null check (source in ('web','referral','event','outbound','partner')),
+    owner_id integer not null references sales_rep(id),
+    converted_contact_id integer references contact(id), created_on date not null)`,
+  ],
+  [
+    'product',
+    `create table product (
+    sku text primary key, name text not null,
+    family text not null check (family in ('platform','analytics','integrations','support','services')),
+    list_price numeric not null, is_active integer not null default 1)`,
+  ],
+  [
+    'opportunity',
+    `create table opportunity (
+    id integer primary key, name text not null,
+    account_id integer not null references account(id),
+    stage text not null check (stage in ('prospecting','qualification','proposal','negotiation','closed_won','closed_lost')),
+    amount numeric not null, probability integer not null,
+    close_date date not null, owner_id integer not null references sales_rep(id),
+    created_on date not null, team text)`,
+  ],
+  [
+    'opportunity_line',
+    `create table opportunity_line (
+    opportunity_id integer not null references opportunity(id),
+    line_no integer not null, product_sku text not null references product(sku),
+    qty integer not null, unit_price numeric not null,
+    primary key (opportunity_id, line_no))`,
+  ],
+  [
+    'activity',
+    `create table activity (
+    id integer primary key, kind text not null check (kind in ('call','email','meeting','demo')),
+    subject text not null, account_id integer not null references account(id),
+    contact_id integer references contact(id), opportunity_id integer references opportunity(id),
+    owner_id integer not null references sales_rep(id), happened_on date not null, minutes integer not null)`,
+  ],
+  /* The SQLite fixture's rowid key and column defaults, as Postgres says them: a page's "Add task" is
+     asked for no id, and no priority, because the database supplies both. */
+  [
+    'task',
+    `create table task (
+    id integer generated by default as identity primary key, subject text not null,
+    status text not null default 'open' check (status in ('open','done')),
+    priority integer not null default 2 check (priority between 1 and 3), is_urgent integer not null default 0,
+    due_on date not null, owner_id integer not null references sales_rep(id),
+    account_id integer references account(id), opportunity_id integer references opportunity(id),
+    created_on date not null)`,
+  ],
+  [
+    'campaign',
+    `create table campaign (
+    id integer primary key, name text not null,
+    kind text not null check (kind in ('webinar','conference','email','ads','content')),
+    starts_on date not null, ends_on date not null, budget numeric not null)`,
+  ],
+  [
+    'campaign_member',
+    `create table campaign_member (
+    campaign_id integer not null references campaign(id),
+    lead_id integer not null references lead(id),
+    responded integer not null default 0, added_on date not null,
+    primary key (campaign_id, lead_id))`,
+  ],
+];
+
+const client = new pg.Client({ connectionString: url });
+await client.connect();
+try {
+  await client.query('begin');
+  await client.query("SET LOCAL lock_timeout = '5s'");
+  const lock = await client.query("SELECT pg_try_advisory_xact_lock(hashtext('tablewalk/compass/public')) AS acquired");
+  if (!lock.rows[0]?.acquired) throw new Error('Another Compass seed is already running.');
+  const namespace = await client.query("SELECT oid FROM pg_namespace WHERE nspname = 'public'");
+  if (!namespace.rows.length) throw new Error('The public schema must exist before seeding.');
+  const existing = await client.query(
+    `SELECT 1 FROM pg_class WHERE relnamespace=$1
+    UNION ALL SELECT 1 FROM pg_proc WHERE pronamespace=$1
+    UNION ALL SELECT 1 FROM pg_type WHERE typnamespace=$1 LIMIT 1`,
+    [namespace.rows[0].oid],
+  );
+  if (existing.rows.length) throw new Error('Refusing to seed: the public schema is not empty.');
+  await client.query('SET LOCAL search_path = public, pg_catalog');
+  for (const [, ddl] of TABLES) await client.query(ddl);
+
+  for (const [name] of TABLES) {
+    const rows = db.prepare(`select * from ${name}`).all();
+    if (!rows.length) continue;
+    const cols = Object.keys(rows[0]);
+    const placeholders = () => cols.map((_, i) => `$${i + 1}`).join(', ');
+    const insert = `insert into ${name} (${cols.join(', ')}) values (${placeholders()})`;
+    for (const row of rows) {
+      await client.query(
+        insert,
+        cols.map((c) => row[c]),
+      );
+    }
+    /* Rows carry their own ids, so the identity's next value starts past them. */
+    if (name === 'task') await client.query(`select setval(pg_get_serial_sequence('task', 'id'), (select max(id) from task))`);
+    console.log(`${name.padEnd(18)} ${rows.length}`);
+  }
+  await client.query('commit');
+} catch (err) {
+  await client.query('rollback').catch(() => {});
+  throw err;
+} finally {
+  await client.end();
+  db.close();
+}
+console.log('\nSeeded Compass into PostgreSQL.');

@@ -1,0 +1,77 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "env": {
+    "es2024": true,
+    "node": true
+  },
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-undef": "error",
+    "no-unused-vars": "off",
+    "unicorn/no-useless-fallback-in-spread": "off",
+    "unicorn/no-useless-spread": "off"
+  },
+  "overrides": [
+    {
+      "files": [
+        "packages/*/src/client/**",
+        "packages/*/src/embed/**",
+        "packages/ui/src/**"
+      ],
+      "env": {
+        "browser": true,
+        "node": false
+      }
+    },
+    {
+      "files": [
+        "packages/*/src/embed/**"
+      ],
+      "globals": {
+        "__MISTRI_VERSION__": "readonly"
+      }
+    },
+    {
+      "files": [
+        "e2e/**",
+        "examples/**/*.spec.ts",
+        "examples/apps/*/host/*.tsx",
+        "test/*-acceptance/*.spec.ts"
+      ],
+      "env": {
+        "browser": true,
+        "node": true
+      }
+    },
+    {
+      "files": [
+        "packages/mistri/src/server/build/gradeProbe.ts",
+        "scripts/token-canary.mjs"
+      ],
+      "env": {
+        "browser": true,
+        "node": true
+      }
+    },
+    {
+      "files": [
+        "storybook/**"
+      ],
+      "env": {
+        "browser": true,
+        "node": true
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "dist",
+    "packages/*/dist",
+    "node_modules",
+    "e2e/.tmp",
+    "desktop",
+    "site",
+    ".demo"
+  ]
+}

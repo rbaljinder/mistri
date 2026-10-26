@@ -1,0 +1,14 @@
+/* A component's own rules, brought with it (SectionPeriod.tsx, loaded the first time a dashboard has a
+   section with windows of its own): after the base, before any look (style.css names the order). */
+@layer components {
+/* A section's own period (its `windows`): a quiet picker at the end of its heading row, apart from the
+   dashboard's window. A figure's card with one holds the picker in its label row, and its label is the
+   way in (a button cannot hold another control). */
+.dash-section-head { display: flex; align-items: center; gap: var(--space-3h); }
+.dash-section-head > .page-section-title { flex: 1; min-width: 0; }
+.dash-period { flex: none; margin-left: auto; }
+.dash-period .dd-button { font-size: var(--text-sm); padding: var(--space-1h) var(--space-3); }
+.home-card-period { cursor: default; }
+.home-card-period .home-card-label { display: flex; align-items: center; gap: var(--space-3); width: 100%; }
+.home-card-open { display: inline-flex; align-items: center; gap: var(--space-2h); padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+}

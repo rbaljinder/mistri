@@ -1,0 +1,120 @@
+/* The treatments no built-in look wears and an App's own theme may pick
+   (docs/theming.md shows the themes that do): a bar in the navigation's own
+   colour, a printed page's rules, small capitals and book figures. Fetched
+   when a worn theme picks one of them rather than carried in every App's
+   first stylesheet — the look is chosen before the page is revealed, and boot
+   waits for this sheet as it waits for the App (visualTheme.ts,
+   lookSheetReady). They stand in `look` as every look's rules do; the rules
+   all the looks share stay in themeFamilies.css. */
+@layer look {
+  /* A bar in the navigation's colour, with light text, the brand in the bar's ink. */
+  :root[data-look-bar='dark'] .topbar {
+    background: var(--nav-ground);
+    border-bottom-color: var(--nav-line);
+  }
+  :root[data-look-bar='dark'] .topbar .brand-name {
+    color: var(--nav-ink);
+  }
+  :root[data-look-bar='dark'] .app-mode .topbar .tn-search {
+    background: color-mix(in srgb, var(--nav-ink) 8%, transparent);
+    border-color: var(--nav-line);
+    color: var(--nav-muted);
+  }
+  :root[data-look-bar='dark'] .app-mode .topbar .tn-search kbd {
+    color: var(--nav-muted);
+    border-color: var(--nav-line);
+  }
+  /* The bar's own keys — New, the customer chooser — are drawn as its search is, on a tint of its ground in its ink:
+     left the page's surface keys, they were the brightest things on a light page (G174). A phone's bare + mark keeps
+     the bar's muted ink (structure.css). */
+  :root[data-look-bar='dark'] .app-mode .topbar :is(.new-menu-trigger, .tenant-control-trigger) {
+    background: color-mix(in srgb, var(--nav-ink) 8%, transparent);
+    border-color: var(--nav-line);
+    color: var(--nav-ink);
+    box-shadow: none;
+  }
+  :root[data-look-bar='dark'] .app-mode .topbar :is(.new-menu-trigger, .tenant-control-trigger):hover {
+    background: color-mix(in srgb, var(--nav-ink) 14%, transparent);
+  }
+  /* The current room as a wash of the navigation's accent; its items stay the bar's muted ink. */
+  :root[data-look-nav='wash'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) {
+    background: color-mix(in srgb, var(--nav-accent) 18%, transparent);
+    color: var(--nav-ink);
+  }
+  /* The current room underlined in the navigation's accent, as a printed page marks it. */
+  :root[data-look-nav='underline'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) {
+    background: none;
+    color: var(--nav-ink);
+    border-radius: 0;
+    box-shadow: inset 0 -3px 0 var(--nav-accent);
+  }
+  /* :nth-child(n) matches the specificity of the shared card border, so the rule lands on the first card too.
+   One colour for every card: a colour per position said the second card was
+   something the first was not (docs/design.md, the refusal list). */
+  :root[data-look-stat='topline'] .dash-strip .home-card:nth-child(n) {
+    border-top: 3px solid var(--chart-1);
+  }
+  :root[data-look-stat='ruled'] .dash-strip .home-card:nth-child(n) {
+    background: transparent;
+    border: 0;
+    border-top: 2px solid var(--ink);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  :root[data-look-table='tinted'] tbody tr:hover td {
+    background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  }
+  :root[data-look-table='tinted'] .row-host .row-select {
+    accent-color: var(--accent);
+  }
+  /* Every other row on the band (`colors.band`, omitted the raised ground): `check` measures each ink on it. A hovered
+     band row darkens by the ink, since the hover's own ground may be the band's. Only a list's or grid's table
+     (`.table-wrap`): the calendar's weeks are a table too, and striping them reads as a mistake. A status or tag whose
+     theme gives it an opaque ground keeps that ground on the band (`theme-band` says so). */
+  :root[data-look-table='banded'] .table-wrap tbody tr:nth-child(even) td {
+    background: var(--band, var(--raised));
+  }
+  :root[data-look-table='banded'] .table-wrap tbody tr:nth-child(even):hover td {
+    background: color-mix(in srgb, var(--ink) 6%, var(--band, var(--raised)));
+  }
+  :root[data-look-tabs='rule'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] {
+    background: none;
+    color: var(--ink);
+    border-radius: 0;
+    box-shadow: inset 0 -2px 0 var(--link);
+  }
+  /* A lane's value as a solid tag in its tone: the tone's color behind the surface's ink, which every status color
+   is checked against at 4.5:1, so the tag reads either way round. Its dot is the tag. */
+  html:root[data-look-lanes='tag'] :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone[class] {
+    padding: 1px var(--space-3);
+    color: var(--surface);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: var(--track-caps);
+  }
+  html:root[data-look-lanes='tag'] :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone-good[class] {
+    background: var(--status-good);
+  }
+  html:root[data-look-lanes='tag'] :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone-warn[class] {
+    background: var(--status-warning);
+  }
+  html:root[data-look-lanes='tag'] :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone-bad[class] {
+    background: var(--status-critical);
+  }
+  html:root[data-look-lanes='tag'] :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone-info[class] {
+    background: var(--status-info);
+  }
+  html:root[data-look-lanes='tag'] :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone-neutral[class] {
+    background: var(--ink-muted);
+  }
+  /* A lane's value as its name in the page's ink, no tint or mark: the lanes are told apart by their place. */
+  html:root[data-look-lanes='plain'] :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone[class] {
+    padding: 0;
+    background: none;
+    color: var(--ink);
+  }
+  html:root:is([data-look-lanes='tag'], [data-look-lanes='plain']) :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone[class]::before {
+    display: none;
+  }
+}

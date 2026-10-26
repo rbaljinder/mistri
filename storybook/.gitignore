@@ -1,0 +1,3 @@
+# Rendered by `npm run photos` (scripts/photos.mjs) before dev and build.
+public/
+.artifacts/

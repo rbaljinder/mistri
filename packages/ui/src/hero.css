@@ -1,0 +1,23 @@
+/* @mistriwork/ui's hero blocks (Badge, PhotoTiles, IconRows), apart from primitives.css and forms.css: a page that draws
+   none of them does not pay for their rules. style.css takes this file with the rest; a shell that layers its own
+   sheets (the kit's landing, mistri's landingHero.css) imports it into the layer it wants. */
+
+/* The badge: the author's few words in a chip over the heading (the look's corner), in the accent's
+   quiet tint so it reads as a note on the page, never as a button. */
+.front-badge {
+  justify-self: start; display: inline-flex; align-items: center; gap: var(--space-2h); margin: 0; padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--ink);
+  font: 500 var(--text-sm) var(--sans);
+}
+.front-badge svg { color: var(--accent-ink); flex: none; }
+/* Icon rows: each an icon in the accent and a line in the muted ink, stacked with air between. */
+.front-points { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); color: var(--ink-muted); font: 400 var(--text-base) var(--sans); }
+.front-points li { display: flex; align-items: flex-start; gap: var(--space-3); }
+.front-points svg { color: var(--accent-ink); flex: none; margin-top: var(--space-1); }
+/* Tiles: the one photo's 4:3 box cut into a mosaic, so it is sized before any photo arrives. Two side by side; three
+   with the first tall on the left; four in a square grid. */
+.front-hero-tiles { display: grid; gap: var(--space-2); background: none; border-radius: 0; grid-template-columns: 1fr 1fr; }
+.front-hero-tiles img { border-radius: var(--radius); background: var(--raised); min-height: 0; }
+.front-hero-tiles-3 { grid-template-rows: 1fr 1fr; }
+.front-hero-tiles-3 img:first-child { grid-row: 1 / span 2; }
+.front-hero-tiles-4 { grid-template-rows: 1fr 1fr; }

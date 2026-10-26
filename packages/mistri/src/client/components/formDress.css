@@ -1,0 +1,99 @@
+/* The quiet form (docs/design.md, Standing layout rules: "A command form is quiet until touched"). Every form that runs
+   a command or makes a record — a command dialog (.command-form), a form page in the shell, on its own or on a public
+   page (.form-page), a resource's New form (.insert-form-app), each with or without steps — draws a field at rest as a
+   clean outline: no fill, one hairline at 3:1 on what it stands on (WCAG 1.4.11). The soft well it replaced read as a
+   disabled field. Only the field the reader is in, the one that is wrong and the one action to press carry more. Each
+   keeps its own density: this says color, edge and words, never a height.
+   In the look layer, so it stands over every look's field dress (visualThemes.css, in kit) and under a theme's own
+   sheet and the shared states (structure.css: disabled, and the danger edge of an invalid field). A record's inline
+   edit, a grid's cell, a filter, the query bar and the Workbench are none of these and keep the look's control edge,
+   and a grid of lines inside a form is a grid. In the first paint beside the form's own rules: every App and public
+   page can draw a form, and a sheet fetched after it would repaint each field as it landed. Each state is a role set
+   once on the form and read by one rule, since every selector here is a first page's bytes (scripts/bundle-budget.mjs). */
+@layer look {
+  /* The edge is `--field-edge`, which the App's theme writer derives from the look (appTheme.js, themeColor.ts
+     fieldEdge): the look's control edge where it reads quietly, so a form's field and a record's inline edit wear one
+     line (Lumen, Sage); a stronger one, Mono's ink, lightened to about 3.5:1. Hover takes it a step toward the ink. The
+     field is the ground it stands on, at rest and in it. A theme's own `colors.field` is the fill instead, and keeps
+     the look's control edge. */
+  :is(.form-page, .command-form, .insert-form-app) {
+    --form-primary: var(--primary, var(--accent));
+    --form-on-primary: var(--on-primary, var(--on-accent));
+    --form-well: transparent;
+    --form-well-hover: transparent;
+    --form-well-in: transparent;
+    --form-edge: var(--field-edge, var(--line-control));
+    --form-edge-hover: color-mix(in oklab, var(--form-edge) 70%, var(--ink));
+    /* A choice's cards and buttons (forms.css) are fields too: the same outline at rest, a step darker under the
+       pointer, and once chosen an edge and a square in the primary-action color. */
+    --choice-well: var(--form-well); --choice-well-hover: var(--form-well-hover); --choice-edge: var(--form-edge); --choice-edge-hover: var(--form-edge-hover);
+    --choice-on: var(--form-primary); --choice-on-well: var(--form-well-in); --choice-check: var(--form-primary); --choice-on-check: var(--form-on-primary);
+  }
+  :root[data-field-fill] :is(.form-page, .command-form, .insert-form-app) {
+    --form-well: var(--field-fill); --form-well-hover: var(--field-fill); --form-well-in: var(--field-fill); --form-edge: var(--line-control);
+  }
+  :is(.form-page, .command-form, .insert-form-app) :is(.field-control, .dd-button, .date-field-input, .picker, .record-picker-trigger, .insert-input):not(.form-lines *) {
+    background-color: var(--form-well); border-color: var(--form-edge); box-shadow: none; font-variant-numeric: tabular-nums;
+  }
+  @media (hover: hover) {
+    :is(.form-page, .command-form, .insert-form-app) :is(.field-control, .dd-button, .date-field-input, .picker, .record-picker-trigger, .insert-input):not(.form-lines *, :disabled, [aria-invalid='true']):hover {
+      background-color: var(--form-well-hover); border-color: var(--form-edge-hover);
+    }
+  }
+  /* In it, the house ring is its one edge, the border clear under it: a 1px border inside a 2px ring of one ink drew
+     two lines with a seam between them. Wrong, the danger edge (structure.css) over a faint wash of it. */
+  :is(.form-page, .command-form, .insert-form-app) :is(.field-control, .dd-button, .date-field-input, .record-picker-trigger, .insert-input):not(.form-lines *):focus-visible,
+  :is(.form-page, .command-form, .insert-form-app) .picker:not(.form-lines *):focus-within {
+    border-color: transparent; background-color: var(--form-well-in);
+  }
+  :is(.form-page, .command-form, .insert-form-app) :is(:is(.field-control, .dd-button, .date-field-input, .record-picker-trigger, .insert-input)[aria-invalid='true'], .picker:has(> [aria-invalid='true']), .is-invalid .picker) {
+    background-color: color-mix(in oklab, var(--status-critical) 6%, transparent);
+  }
+
+  /* An answer that may be left empty says so in a word, and a needed one is simply asked: in a long form nearly every
+     answer is needed, so a star on each was noise (docs/design.md, Access, "The optional word"). */
+  :is(.form-page, .command-form, .insert-form-app) .form-field-label-row { display: block; min-width: 0; }
+  :is(.form-page, .command-form, .insert-form-app) .form-field-optional-word { display: inline; font-size: var(--text-sm); font-weight: 400; color: var(--ink-muted); }
+  :is(.form-page, .command-form, .insert-form-app) .form-field.is-required > .form-field-label::after { content: none; }
+  /* A checkbox's words beside it are an answer, not a question: the regular weight; a question's label stays medium. */
+  :is(.form-page, .command-form, .insert-form-app) .form-field-check-row > .form-field-label { font-weight: 400; }
+
+  /* A sensitive answer's Show stands over the box's inline end, a Tab stop of its own after the box (never a control
+     inside a control); the box keeps the room for it, so a long value never runs under the word. */
+  :is(.form-page, .command-form, .insert-form-app) .field-with-action { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
+  :is(.form-page, .command-form, .insert-form-app) .field-with-action > * { grid-area: 1 / 1; }
+  :is(.form-page, .command-form, .insert-form-app) .field-with-action > .btn {
+    justify-self: end; min-height: 28px; margin-inline-end: var(--space-1h); padding-inline: var(--space-3); font-weight: 600; border-radius: var(--radius-item);
+  }
+  :is(.form-page, .command-form, .insert-form-app) .field-with-action .field-control { padding-inline-end: calc(5.5em + var(--space-3)); }
+
+  /* The one thing to press fills in the theme's primary-action color (`colors.primary`): Lumen's ink, so a form says
+     "next" by weight, not by hue; the accent where a theme names none. Back is a quiet word in the muted ink. */
+  :is(.form-page, .command-form, .insert-form-app) .btn-primary { --accent: var(--form-primary); --on-accent: var(--form-on-primary); font-weight: 600; }
+  @media (hover: hover) {
+    :is(.form-page, .command-form, .insert-form-app) .btn-primary:not(:disabled):hover { --accent: color-mix(in oklab, var(--form-primary) 88%, var(--surface)); }
+    :is(.multi-step-back, .action-bar-back):not(:disabled):hover { background: none; color: var(--ink); }
+  }
+  :is(.multi-step-back, .action-bar-back) { color: var(--ink-muted); }
+}
+
+/* Unlayered, as the listbox's own rules are (primitives.css, forms.css): a listbox with nothing chosen asks in the
+   placeholder's quiet ink, as an empty text box does, and its caret is drawn at the text's size — the tool's small
+   caret, beside a field this tall, read as a stray mark. */
+:is(.form-page, .command-form, .insert-form-app) .dd-value.is-empty { color: var(--ink-subtle); }
+/* The caret is the chrome's own caret-down (chromeIcons.ts, regular weight) at 16px in the muted ink, drawn as the
+   date's calendar is: a glyph "▾" read as a speck beside a 36px box at any size the text allowed. */
+:is(.form-page, .command-form, .insert-form-app) .dd-caret {
+  width: 16px; height: 16px; font-size: 0; background-color: var(--ink-muted);
+  --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z'/%3E%3C/svg%3E");
+  -webkit-mask: var(--caret) center / 16px no-repeat; mask: var(--caret) center / 16px no-repeat;
+}
+/* A label asks in the ink at the words' size and regular weight, the help under it in the muted ink a size down: the
+   question reads as plainly as the answer, and the drawer's labels (once 12px in the muted ink) say it as a dialog's
+   do. The intake's own larger label is MultiStepForm.css's. */
+:is(.form-page, .command-form, .insert-form-app) .form-field:not(.form-field-compact, .form-field-consent) > .form-field-label,
+:is(.form-page, .command-form, .insert-form-app) .form-field-label-row > .form-field-label {
+  font-size: var(--text-md); font-weight: 400; line-height: 1.3; color: var(--ink);
+}
+:is(.form-page, .command-form, .insert-form-app) .form-field-label-row { line-height: 1.3; }
+:is(.form-page, .command-form, .insert-form-app) .form-field-hint { font-size: var(--text-sm); color: var(--ink-muted); }

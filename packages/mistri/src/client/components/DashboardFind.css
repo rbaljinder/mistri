@@ -1,0 +1,24 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order).
+   The find box is loaded on demand (DashboardFind.tsx), so none of it stands in a first paint. */
+@layer components {
+/* One big field, the section's only edge at 3:1, and the hits under it as
+   rules, not boxes: each group's word, then its records, the lit one in the
+   selected tint a menu's item wears. */
+.find { display: grid; gap: var(--space-3h); min-width: 0; }
+.find-box {
+  display: flex; align-items: center; gap: var(--space-3h); min-height: 48px; padding: 0 var(--space-4h);
+  border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface); color: var(--ink-muted);
+}
+.find-box:focus-within { border-color: var(--focus); outline: var(--focus-width) solid var(--focus); outline-offset: -1px; }
+.find-box input { flex: 1; min-width: 0; padding: var(--space-3h) 0; border: 0; background: none; color: var(--ink); font: var(--text-lg) var(--sans); outline: none; }
+.find-box input::placeholder { color: var(--ink-subtle); }
+.find-empty { margin: 0; color: var(--ink-muted); font-size: var(--text-md); }
+.find-hits { display: grid; gap: var(--space-4); max-height: 420px; overflow-y: auto; overscroll-behavior: contain; }
+.find-hits[hidden] { display: none; }
+.find-group { display: grid; }
+.find-group-title { margin: 0 0 var(--space-2); color: var(--ink-muted); font: 600 var(--text-sm) var(--sans); }
+.find-hit { display: grid; gap: var(--space-1); padding: var(--space-3) var(--space-3h); border-radius: var(--radius); cursor: pointer; min-width: 0; }
+.find-hit[aria-selected="true"] { background: var(--accent-soft); }
+.find-hit-name { overflow: hidden; color: var(--ink); font: 500 var(--text-md) var(--sans); text-overflow: ellipsis; white-space: nowrap; }
+.find-hit-line { overflow: hidden; color: var(--ink-muted); font-size: var(--text-base); text-overflow: ellipsis; white-space: nowrap; }
+}

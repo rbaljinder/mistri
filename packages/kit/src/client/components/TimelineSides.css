@@ -1,0 +1,23 @@
+/* A conversation's other side (a timeline's `side`), fetched with TimelineSides.tsx the first time a section with sides
+   draws, so a first page carries none of it. In the base layer, beside the rest of the timeline in page.css. */
+@layer base {
+/* The other party (a timeline's `side`): against the far edge on the second surface, square, its mark on that side; a
+   run of one author's messages names them once. A phone keeps every row full width, the surface alone telling them apart. */
+.timeline-row.is-other {
+  width: fit-content; min-width: min(100%, 16rem); max-width: 80%; margin-inline-start: auto; padding: var(--space-3) var(--space-3h); background: var(--raised);
+  grid-template-columns: minmax(0, 1fr) 24px;
+}
+.timeline-row.is-other > .timeline-avatar { grid-column: 2; grid-row: 1 / span 2; }
+.timeline-rows > .is-continued { margin-top: var(--space-1h); }
+/* A run's later message is one line shorter: its kind and time at the end of its words' first line, not a head of their own. */
+.timeline-row.is-continued { grid-template-columns: 24px minmax(0, 1fr) auto; align-items: baseline; }
+.timeline-row.is-continued > .timeline-avatar { grid-row: 1; }
+.timeline-row.is-continued > .timeline-text { grid-column: 2; grid-row: 1; }
+.timeline-row.is-continued > .timeline-head { grid-column: 3; grid-row: 1; min-height: 0; }
+.timeline-row.is-other.is-continued { grid-template-columns: minmax(0, 1fr) auto 24px; }
+.timeline-row.is-other.is-continued > .timeline-text { grid-column: 1; }
+.timeline-row.is-other.is-continued > .timeline-head { grid-column: 2; }
+.timeline-row.is-other.is-continued > .timeline-avatar { grid-column: 3; }
+@media (max-width: 600px) { .timeline-row.is-other { width: auto; max-width: none; margin-inline-start: 0; } }
+@container record-host (max-width: 600px) { .timeline-row.is-other { width: auto; max-width: none; margin-inline-start: 0; } }
+}

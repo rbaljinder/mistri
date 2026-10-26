@@ -1,0 +1,770 @@
+/* Each look (style.css names the order). */
+@layer look {
+/* Structural identities for the built-in looks, which dress Apps only
+   (docs/design.md, Tokens): every rule keys on a look being worn
+   (`data-theme-style`, which an App's own theme takes from its base), and the
+   database browser wears none. One structure, shared below, worn three
+   ways: Lumen, the default, as a refined workspace of lifted white cards on a
+   cool ground; Mono in black and white; Sage as a soft workspace of white
+   panels on cream. Palettes and font stacks live in themeLooks.ts.
+   What every look shares, and Mono's structure and the plain one a theme
+   that extends nothing starts from, are here, in every App's first
+   stylesheet; Lumen's and Sage's own rules are sheets of their own, fetched
+   when one is worn (lumenLook.css, sageLook.css), as are the treatments only
+   an App's own theme picks (brandLook.css). */
+
+/* Every look: one type scale — a sans interface, titles in the look's
+   heading face at its heading weight — charts from the palette, and
+   structure drawn with rules rather than boxes. */
+:root[data-theme-style] {
+  --chart-secondary: var(--chart-2);
+  --chart-tertiary: var(--chart-3);
+}
+:root[data-theme-style] :is(.brand-name, .applist-title, .root-current) { font-family: var(--heading-font); overflow-wrap: anywhere; }
+:root[data-theme-style] .app-mode .topbar .tn-group.active > .tn-group-button::after { display: none; }
+/* The bar's items are blocks of their own height, centred in the bar. They
+   stretched to the menu strip, whose -8px margin reaches the Workbench's 8px
+   padding: in a look (4px) a current block ran past the bar's rule. A look
+   marks the current item one way — its fill, a pill, or an underline — so the
+   base's underline under the block is gone for a plain item as for a group. */
+:root[data-theme-style] .app-mode .topbar .tn-item { align-self: center; padding-block: var(--space-2h); border-radius: var(--radius); }
+:root[data-theme-style] .app-mode .topbar .tn-item[aria-current="true"]::after { display: none; }
+:root[data-theme-style] .brand-name { font-size: calc(17px * var(--type-k)); font-weight: 600; letter-spacing: var(--track-title); }
+/* Three steps of heading (the style.css tokens): a list names itself at the
+   list title's step — in the crumb bar (features.css), or over a list with
+   no bar of its own — and a record and a dashboard are named a step up. */
+:root[data-theme-style] .applist-title { font-size: var(--type-list-title); line-height: 1.2; font-weight: var(--heading-weight); letter-spacing: var(--track-title); }
+:root[data-theme-style] :is(.root-current, .dash-head .applist-title) { font-size: var(--type-record-title); line-height: 1.2; font-weight: var(--heading-weight); letter-spacing: var(--track-display); }
+:root[data-theme-style] :is(.page-field > dt, .applist-field-label) { font: 500 var(--text-sm) var(--sans); text-transform: none; letter-spacing: normal; color: var(--ink-muted); }
+:root[data-theme-style] :is(.page-section-head, .page-section-title, .page-card-caption) { font: 600 var(--text-md) var(--sans); text-transform: none; letter-spacing: normal; color: var(--ink); }
+/* A dashboard section's own title (a list's, a board's) is in the look's heading face, as it always showed. */
+:root[data-theme-style] .page-section-title { font-family: var(--heading-font, var(--sans)); }
+/* Over a record's name, its kind is a label, not a second heading: at 14px
+   in bold capitals "ISSUE" weighed as much as the sections under it. */
+:root[data-theme-style] .page-head.has-record :is(.page-title, .page-title-pick .dd-value) { font: 600 var(--text-xs) var(--sans); text-transform: uppercase; letter-spacing: var(--track-caps); color: var(--ink-muted); }
+
+/* A section's note ("Nothing to count yet.") starts on the section's own
+   edge, under its heading, at a size a sentence can be read in: the
+   Workbench's inset 12px note sat indented like a stray cell. */
+:root[data-theme-style] .page-section .note { padding-inline: 0; font-size: var(--text-base); }
+
+/* A section is announced by its rule, 2px in the ink unless the theme says
+   otherwise (`rules.section`, `rules.weight`: --rules-section, --rules-weight).
+   Only the width and
+   colour change: where a room draws no rule (the first section, a tab's
+   panel, a run of accordions) there is still none, and a section keeps the
+   one rule it had, so nothing doubles. Sections that share a row share one
+   rule: the second's is carried back across the gap to the first's (the
+   bridge, below), so a Description beside an Activity reads as one band. */
+  :root[data-theme-style] .page-section {
+    border-top-width: var(--rules-weight, 2px);
+    border-top-color: var(--rules-section, var(--ink));
+  }
+  /* `rules: 'hairline'`: a record's sections keep their rules, softened from the ink to the hairline. */
+  :root[data-look-rules='hairline'] .page-section {
+    border-top-width: 1px;
+    border-top-color: var(--line);
+  }
+  /* The bridge: the second of a pair of halves, and the second and third of a
+   run of thirds, draw their rule on back across the page body's 32px column
+   gap. Where sections stack (a narrow window, a narrow room) there is no
+   gap to bridge; a dashboard's Sage panels are boxes, not rules. */
+@media (min-width: 901px) {
+  :root[data-theme-style] .page-body:not(.dash-body) > :is(
+      .width-half:not(.width-half + .width-half) + .width-half,
+      .width-half:not(.width-half + .width-half) + .width-half + .width-half + .width-half,
+      .width-third:not(.width-third + .width-third) + .width-third,
+      .width-third:not(.width-third + .width-third) + .width-third + .width-third
+    ):not([class*="offset-"]) { position: relative; }
+  :root[data-theme-style] .page-body:not(.dash-body) > :is(
+      .width-half:not(.width-half + .width-half) + .width-half,
+      .width-half:not(.width-half + .width-half) + .width-half + .width-half + .width-half,
+      .width-third:not(.width-third + .width-third) + .width-third,
+      .width-third:not(.width-third + .width-third) + .width-third + .width-third
+    ):not([class*="offset-"])::before { content: ''; position: absolute; bottom: 100%; right: 100%; width: 32px; height: 0; border-top: inherit; }
+}
+@container record-host (max-width: 900px) {
+  :root[data-theme-style] .page-body > .page-section::before { content: none; }
+}
+
+/* A table is its rows, not a panel: no container, one rule in the ink under
+   its header, hairlines between the rows. A box around a list was a card on
+   a page that is already the list's. Its loading grid is unboxed the same
+   way, so the finished table lands where the grid was. The header takes the
+   page's ground, which the rows scroll under. */
+:root[data-theme-style] :is(.table-wrap, .sk-grid) { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+/* A placeholder is seen before it is replaced: on the surface-2 of a white
+   look it was about 1.1:1, a page that looked empty rather than loading. It
+   stands a tenth into the text ink, at the look's corner (Mono's square). */
+:root[data-theme-style] .sk-bar { background-color: color-mix(in srgb, var(--ink) 10%, var(--surface)); border-radius: min(3px, var(--radius)); }
+:root[data-theme-style] .table-wrap { padding: 0; }
+/* The weight and the cells' padding are the kit's (600; 10px): these rules once said 500 and 11px/14px
+   and lost to the kit on specificity, so they never showed. They say what ships. */
+:root[data-theme-style] th { background: var(--ground); font: 600 var(--text-base) var(--sans); color: var(--ink-muted); text-transform: none; letter-spacing: normal; border-bottom: var(--rules-weight, 2px) solid var(--rules-head, var(--ink)); }
+/* A row's own head (a matrix's "Closed won") is a th in the body: it takes
+   the row's hairline, not the header's rule, or every row read as underlined. */
+:root[data-theme-style] tbody th { border-bottom: 1px solid var(--line); background: transparent; }
+/* Where the ground is a panel's — a peek, a dialog — the header takes it. */
+:root[data-theme-style] :is(.peekpanel, .modal) th { background: var(--surface); }
+/* A form's lines are a form, not a data table: their head is the grid's own quiet caption row (FormLines.css), on
+   whatever ground the form stands. Without this the head took the page's ground, a grey band across a white form. */
+:root[data-theme-style] .form-lines-grid th { background: none; font: 500 var(--text-sm) var(--sans); border-bottom: 1px solid var(--line); }
+:root[data-theme-style] td { border-bottom: 1px solid var(--line); }
+:root[data-theme-style] tbody tr:hover td { background: var(--raised); }
+:root[data-theme-style] .grid-totals td { background: var(--ground); border-top: 1px solid var(--ink); }
+
+/* A board's lanes stand under a rule in the ink instead of in a box, and a
+   board of rows keeps the rule on its lane heads alone: a cell is a place,
+   not a box. A border keeps its width and only its colour goes, so a lane or
+   a cell does not move when a carried card lights its edge in the accent
+   (the drop mark). */
+:root[data-theme-style] .triage-lane { border-color: transparent; border-top: var(--rules-weight, 2px) solid var(--rules-section, var(--ink)); border-radius: 0; background: transparent; padding: var(--space-3h) 0 0; }
+:root[data-theme-style] .triage-lane-head { border-bottom: 0; }
+:root[data-theme-style] .triage-lane-top { border-top: var(--rules-weight, 2px) solid var(--rules-section, var(--ink)); padding: var(--space-3h) 0 0; }
+:root[data-theme-style] .triage-cell { border-top-color: transparent; padding: var(--space-2h) 0 var(--space-3); }
+:root[data-theme-style] .triage-lane.is-over { border-color: var(--accent); }
+/* A dashboard's board: the lane's name under the same rule, its count chip beside it. */
+:root[data-theme-style] .board-lane-head { border-bottom: 0; border-top: var(--rules-weight, 2px) solid var(--rules-section, var(--ink)); padding-top: var(--space-3); margin-bottom: var(--space-3); gap: var(--space-3); font: 600 var(--text-md) var(--sans); }
+/* A dashboard's board and a list's are one board, dressed one way: the
+   lane's name in the text's ink with its count as a chip, and each card its
+   title over its quieter lines. They were two — a dashboard's with dots and
+   chips, a list's with small grey heads and bare counts — for the same lanes. */
+:root[data-theme-style] .triage-lane-label { font: 600 var(--text-md) var(--sans); color: var(--ink); }
+:root[data-theme-style] :is(.board-lane-count, .triage-lane-count) { padding: 0 var(--space-3); border-radius: 999px; background: var(--raised); border: 1px solid var(--line); font: 500 var(--text-sm)/1.6 var(--sans); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+:root[data-theme-style] .triage-lane-count.is-over { color: var(--status-warning); }
+/* A board's card is a card: a theme that names its panel corner (shape.radius.panel) rounds it with its panels and stat
+   cards; a look that names none keeps its control's corner on a card this small (design.md, Shape). */
+:root[data-theme-style] :is(.board-card, .triage-card) { background: var(--surface); border: 1px solid var(--line); border-radius: var(--panel-radius, var(--radius)); padding: var(--space-4) var(--space-4h); gap: var(--space-2h); }
+:root[data-theme-style] .triage-card.has-menu { padding-right: var(--space-7); }
+:root[data-theme-style] :is(.board-card, .triage-card):hover { border-color: var(--line-strong); }
+:root[data-theme-style] .triage-card.is-selected { border-color: var(--accent); }
+:root[data-theme-style] :is(.board-card-title, .triage-card-title) { font: 600 var(--text-md) var(--sans); }
+:root[data-theme-style] :is(.board-card-line, .triage-card-subtitle) { font-size: var(--text-sm); color: var(--ink-muted); }
+
+/* One radius (docs/design.md, Shape): the look's --radius on what a hand
+   works — a field, a nav pill, the palette's rows, a card — and its larger
+   step, --radius-lg, on a panel, the palette and a stat card. An App's
+   authored radius moves both. */
+:root[data-theme-style] .app-mode .topbar .tn-search { border-radius: var(--control-radius, var(--radius)); }
+:root[data-theme-style] .palette { border-color: var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); }
+:root[data-theme-style] .palette-item { border-radius: var(--radius); padding: var(--space-3) var(--space-3h); }
+:root[data-theme-style] .page-input { border-color: var(--line-control); border-radius: var(--field-radius); }
+:root[data-theme-style] .dash-windows { background: var(--raised); border: 1px solid var(--line); border-radius: var(--control-radius, var(--radius)); }
+:root[data-theme-style] .dash-window[aria-pressed="true"] { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-control); }
+:root[data-theme-style] .dash-strip .home-card,
+:root[data-theme-style] .dash-strip .home-card:nth-child(n) { background: var(--surface); border: var(--panel-border-width, 1px) solid var(--line); border-radius: var(--radius-lg); padding: var(--space-5) 20px; }
+:root[data-theme-style] .home-card-value { font: 600 calc(30px * var(--type-k))/1.15 var(--sans); letter-spacing: var(--track-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+:root[data-theme-style] .home-card-label { font: 500 var(--text-base) var(--sans); color: var(--ink-muted); }
+/* Figures that stand in columns or beside each other are tabular in every look: a table's cells and heads, a
+   metric, a change, a chart's axis and legend, a record's values. Proportional figures set "1,111" narrower
+   than "8,888", and a column of amounts did not align. The faces the looks wear turn only their ten figures
+   tabular (lumenLook.css, the shipped Inter), so words under it set as they did. */
+/* A menu count of work past its date (counts: 'work', sidebarModel.ts) is the one said in the danger's ink. */
+:root[data-theme-style] #table-list .rows.is-overdue { color: var(--status-critical); }
+:root[data-theme-style] :is(td, th, .home-card-value, .dash-delta, .chart-tick, .chart-legend, .chart-tip-card, .pbd-count, .page-field > dd, .page-fact, .matrix-cell) { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 700px) {
+  :root[data-theme-style] :is(.root-current, .dash-head .applist-title) { font-size: calc(22px * var(--type-k)); }
+}
+
+/* The shared kit every look starts from: soft shadows, ruled tables, dotted
+   status words and pill tabs. */
+:root[data-theme-style] {
+  --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.08);
+  --shadow-panel: 0 8px 24px rgb(0 0 0 / 0.08);
+  --shadow-modal: 0 16px 48px rgb(0 0 0 / 0.16);
+  /* The lift a field, a quiet button and the pressed window take: a hairline's worth. */
+  --shadow-control: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+:root[data-theme-style] .app-mode .content { background: var(--ground); }
+:root[data-theme-style] .app-mode .topbar { border-bottom: 1px solid var(--nav-line); }
+:root[data-theme-style] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current="true"]) { background: color-mix(in srgb, var(--nav-ink) 8%, transparent); color: var(--nav-ink); border-radius: var(--radius); }
+:root[data-theme-style] td { font-size: var(--text-md); }
+:root[data-theme-style] .app-mode td:first-child { font-weight: 500; }
+:root[data-theme-style] td.num { font-weight: 500; }
+/* List tabs are pills here: the current one filled in the accent. */
+:root[data-theme-style] .tabs { border-bottom: 0; gap: var(--space-2); padding-top: var(--space-4); }
+/* A tab takes the look's radius, as it always showed (the 999px this said never won): Mono's are square. */
+/* A record's tabs are tabs too: they wore the Workbench's 10px capitals in every look. */
+:root[data-theme-style] :where(body.app-mode) .page-tabstrip { gap: var(--space-2); }
+/* In sentence case: the base's capitals and tracking (page.css) are the Workbench's, and a
+   `font` shorthand resets neither, so four looks named their record tabs in capitals. Mono
+   sets its own label below. */
+:root[data-theme-style] :is(.tab, :where(body.app-mode) .page-tab) { border: 0; border-radius: var(--radius); padding: var(--space-2) var(--space-4); font: 500 var(--text-base) var(--sans); text-transform: none; letter-spacing: normal; color: var(--ink-muted); }
+:root[data-theme-style] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected="true"] { background: var(--accent); color: var(--on-accent); border-bottom-width: 0; }
+:root[data-theme-style] .tab .tab-count { font-size: var(--text-sm); }
+:root[data-theme-style] button.ghost:not(.fav-star, .dash-open, .account, .live-act, .pager *) { border-color: var(--line); color: var(--ink); background: var(--surface); box-shadow: var(--shadow-control); }
+:root[data-theme-style] button.ghost:not(.fav-star, .dash-open, .account, .live-act, .pager *):hover:not(:disabled) { background: var(--raised); }
+/* A secondary Button that is a toggle says it is on: the ink's edge on the tinted ground, in every look. */
+:root[data-theme-style] button.ghost.btn[aria-pressed="true"] { border-color: var(--ink); background: var(--raised); color: var(--ink); }
+/* A list's New is its one primary action, filled in the accent as a record's
+   first action is (in the look's primary-action color, `--primary`). Drawn as a quiet outline it weighed the same as Export
+   beside it, and a list offered no obvious first thing to do. */
+:root[data-theme-style] .app-mode button.ghost.applist-new { background: var(--primary, var(--accent)); color: var(--on-primary, var(--on-accent)); border-color: var(--primary, var(--accent)); box-shadow: none; }
+:root[data-theme-style] .app-mode button.ghost.applist-new:hover:not(:disabled) { background: color-mix(in srgb, var(--primary, var(--accent)) 86%, var(--ink)); border-color: transparent; }
+/* A field's edge is the look's control border (3:1, docs/design.md Access), not its hairline, which was 1.3:1. A
+   form's picker is the quiet form's well instead (formDress.css): the id in this list outranks any class there. */
+:root[data-theme-style] :is(.applist-quick-text, .applist-field .dd-button, .picker:not(:is(.form-page, .command-form, .insert-form-app) .picker:not(.form-lines .picker)), .page-field-edit .cell-edit, .root-current .cell-edit, .page-field-edit .record-picker-trigger, #table-filter) {
+  background: var(--surface); border-color: var(--line-control); border-radius: var(--field-radius); box-shadow: var(--shadow-control);
+}
+/* The search is a field on the page's surface whatever the bar's ground, so it reads in the page's ink: in the
+   menu's muted ink it measured 1.9:1 on a dark menu's white field. The dark bar draws it on its own ground instead
+   (brandLook.css). */
+:root[data-theme-style] .app-mode .topbar .tn-search { background: var(--surface); border-color: var(--line); color: var(--ink-muted); }
+:root[data-theme-style] .app-mode .topbar .tn-search kbd { color: var(--ink-muted); border-color: var(--line); }
+:root[data-theme-style] :is(.pct-bar, .pct-fill) { border-radius: 999px; }
+:root[data-theme-style] .chart-stroke { stroke-width: 2px; }
+/* Charts draw in the palette's first series (sky), as the kit's do, not in
+   the near-black accent that buttons wear. */
+:root[data-theme-style] .chart-stroke { stroke: var(--chart-1); }
+:root[data-theme-style] .chart-area { fill: var(--chart-1); opacity: 0.1; }
+:root[data-theme-style] :is(.chart-dot, .chart-cursor-dot) { stroke: var(--chart-1); }
+:root[data-theme-style] .chart-cursor-dot { fill: var(--chart-1); }
+:root[data-theme-style] .spark-stroke { stroke: var(--spark-ink, var(--chart-1)); stroke-width: 2; opacity: 1; }
+:root[data-theme-style] .spark-dot { stroke: var(--spark-ink, var(--chart-1)); }
+/* The trend's slot, and only where a trend is asked: a card asks one only
+   for a window of four periods or more (dashboardTrend.ts, sparkWindow), and
+   holds its 32px from the first paint, so the line never arrives by
+   pushing the row taller. An empty host nobody reserved stands no height. */
+:root[data-theme-style] .dash-strip .spark-host { height: 32px; }
+:root[data-theme-style] .dash-strip .spark-host:empty:not(.is-reserved) { display: none; }
+:root[data-theme-style] .dash-strip .spark { width: 100%; height: 32px; }
+/* Stat cards: the label over a large figure, the change said under it. */
+:root[data-theme-style] .dash-strip .home-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); text-align: left; }
+:root[data-theme-style] .dash-strip .home-card-label { order: -1; margin-bottom: var(--space-2); }
+:root[data-theme-style] .dash-strip .dash-delta { font: 500 var(--text-sm) var(--sans); }
+:root[data-theme-style] .dash-strip .home-card:hover { background: var(--surface); border-color: var(--line-strong); }
+/* A breakdown's bar is a quantity, drawn as the charts draw theirs: a solid
+   fill in the first series. A pale fill with an accent cap at its end read
+   as a slider's handle, not an amount. */
+:root[data-theme-style] .pbd-fill { background: var(--chart-1); border-right: 0; }
+:root[data-theme-style] .pbd-fill.is-toned { background: var(--bar-ink); }
+/* The palette: a search field over grouped results, the current one tinted. */
+:root[data-theme-style] .palette-input { padding: var(--space-4h) var(--space-5); font: calc(15px * var(--type-k)) var(--sans); }
+:root[data-theme-style] .palette-input:focus { border-bottom-color: var(--line); }
+:root[data-theme-style] .palette-item.active { background: var(--raised); }
+:root[data-theme-style] .palette-item.active .palette-label { color: var(--ink); }
+:root[data-theme-style] :is(.palette-kind, .palette-detail) { font-family: var(--sans); }
+:root[data-theme-style] .palette-label { font: 500 var(--text-md) var(--sans); }
+/* The pager: quiet steps and a page box, as the kit's pagination. */
+:root[data-theme-style] .pager .ghost { border-color: transparent; background: none; box-shadow: none; color: var(--ink); }
+:root[data-theme-style] .pager .ghost:hover:not(:disabled) { background: var(--raised); }
+:root[data-theme-style] .page-input { box-shadow: var(--shadow-control); }
+
+
+/* Mono: the plain structure in black and white — square corners, rules in the
+   ink over grey hairlines, figures and labels in a monospace, the current tab
+   and group inverted, and colour left to status alone. */
+/* Monospace for the figures and labels that make the look, not for data: a
+   reader who wants monospace data chooses it in Preferences. */
+  /* How wide a label in capitals sets in a grid head (gridSizing.ts): sized for sentence case, the last head would
+     clip into a stray "…". */
+  :root[data-type-label~='upper'] {
+    --grid-head-char: 8;
+  }
+  :root[data-type-label~='small-caps'] {
+    --grid-head-char: 9;
+  }
+  /* Square and hairline all the way up: a menu, a list, a date's calendar and a
+   dialog stand on their edge in the ink (--line-strong), never on a soft
+   shadow, and a field or a quiet button has no lift at all. Its corners are
+   square already: every shape token follows the look's --radius, which is 0. */
+  :root[data-look-elevation='flat'] {
+    --shadow-pop: none;
+    --shadow-panel: none;
+    --shadow-modal: none;
+    --shadow-control: none;
+  }
+  /* A theme's lifts (`shape.elevation: { card, float }`): a step for the cards a recipe draws and one for what
+     floats, over the look's own drawing, which `look` keeps. Each step is mixed from --shadow-ink, the theme's
+     `shadow` where it says one (worn inline, over these), else its ink by day and its ground by night, as Lumen's and
+     Sage's are. low is the platform's popups, mid Sage's, high Lumen's. `:root:root[data-look-elevation]` outranks a look sheet's
+     elevation rules, which come later and say a dark card of their own at three attributes. */
+  :root:root:is([data-look-card]:not([data-look-card='look']), [data-look-float]:not([data-look-float='look'])) {
+    --shadow-ink: var(--ink);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:root:is([data-look-card]:not([data-look-card='look']), [data-look-float]:not([data-look-float='look'])):not([data-theme='light']) {
+      --shadow-ink: var(--ground);
+    }
+  }
+  :root:root:is([data-look-card]:not([data-look-card='look']), [data-look-float]:not([data-look-float='look']))[data-theme='dark'] {
+    --shadow-ink: var(--ground);
+  }
+  :root:root[data-look-elevation][data-look-float='none'] {
+    --shadow-pop: none;
+    --shadow-panel: none;
+    --shadow-modal: none;
+  }
+  :root:root[data-look-elevation][data-look-float='hairline'] {
+    --shadow-pop: 0 0 0 1px color-mix(in srgb, var(--shadow-ink) 10%, transparent);
+    --shadow-panel: 0 0 0 1px color-mix(in srgb, var(--shadow-ink) 12%, transparent);
+    --shadow-modal: 0 0 0 1px color-mix(in srgb, var(--shadow-ink) 14%, transparent);
+  }
+  :root:root[data-look-elevation][data-look-float='low'] {
+    --shadow-pop: 0 6px 20px color-mix(in srgb, var(--shadow-ink) 16%, transparent);
+    --shadow-panel: 0 10px 34px color-mix(in srgb, var(--shadow-ink) 18%, transparent);
+    --shadow-modal: 0 18px 50px color-mix(in srgb, var(--shadow-ink) 24%, transparent);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:root[data-look-elevation][data-look-float='low']:not([data-theme='light']) {
+      --shadow-pop: 0 6px 20px color-mix(in srgb, var(--shadow-ink) 50%, transparent);
+      --shadow-panel: 0 10px 34px color-mix(in srgb, var(--shadow-ink) 55%, transparent);
+      --shadow-modal: 0 18px 50px color-mix(in srgb, var(--shadow-ink) 65%, transparent);
+    }
+  }
+  :root:root[data-look-elevation][data-look-float='low'][data-theme='dark'] {
+    --shadow-pop: 0 6px 20px color-mix(in srgb, var(--shadow-ink) 50%, transparent);
+    --shadow-panel: 0 10px 34px color-mix(in srgb, var(--shadow-ink) 55%, transparent);
+    --shadow-modal: 0 18px 50px color-mix(in srgb, var(--shadow-ink) 65%, transparent);
+  }
+  :root:root[data-look-elevation][data-look-float='mid'] {
+    --shadow-pop: 0 8px 20px -6px color-mix(in srgb, var(--shadow-ink) 18%, transparent);
+    --shadow-panel: 0 12px 32px -8px color-mix(in srgb, var(--shadow-ink) 20%, transparent);
+    --shadow-modal: 0 24px 60px -12px color-mix(in srgb, var(--shadow-ink) 28%, transparent);
+  }
+  :root:root[data-look-elevation][data-look-float='high'] {
+    --shadow-pop:
+      0 4px 6px -2px color-mix(in srgb, var(--shadow-ink) 5%, transparent),
+      0 12px 24px -6px color-mix(in srgb, var(--shadow-ink) 14%, transparent);
+    --shadow-panel: 0 16px 40px -12px color-mix(in srgb, var(--shadow-ink) 22%, transparent);
+    --shadow-modal: 0 24px 64px -16px color-mix(in srgb, var(--shadow-ink) 30%, transparent);
+  }
+  :root:root[data-look-elevation][data-look-card='none'] {
+    --shadow-card: none;
+  }
+  :root:root[data-look-elevation][data-look-card='hairline'] {
+    --shadow-card: 0 1px 2px color-mix(in srgb, var(--shadow-ink) 5%, transparent);
+  }
+  :root:root[data-look-elevation][data-look-card='low'] {
+    --shadow-card:
+      0 1px 2px color-mix(in srgb, var(--shadow-ink) 4%, transparent), 0 6px 16px -4px color-mix(in srgb, var(--shadow-ink) 7%, transparent);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:root[data-look-elevation][data-look-card='low']:not([data-theme='light']) {
+      --shadow-card: 0 1px 2px color-mix(in srgb, var(--shadow-ink) 24%, transparent);
+    }
+  }
+  :root:root[data-look-elevation][data-look-card='low'][data-theme='dark'] {
+    --shadow-card: 0 1px 2px color-mix(in srgb, var(--shadow-ink) 24%, transparent);
+  }
+  :root:root[data-look-elevation][data-look-card='mid'] {
+    --shadow-card:
+      0 1px 2px color-mix(in srgb, var(--shadow-ink) 5%, transparent), 0 10px 28px -16px color-mix(in srgb, var(--shadow-ink) 20%, transparent);
+  }
+  :root:root[data-look-elevation][data-look-card='high'] {
+    --shadow-card:
+      0 1px 3px color-mix(in srgb, var(--shadow-ink) 6%, transparent), 0 16px 36px -14px color-mix(in srgb, var(--shadow-ink) 26%, transparent);
+  }
+  /* A theme's pace (`motion`): the house's five durations and nothing else, so a pace quickens or silences what
+     the house moves and can never add to it (docs/design.md, Motion doctrine). Brisk is each a quarter quicker;
+     still is none, and navigationHold.ts skips a navigation's enter as it does under reduced motion. */
+  :root[data-look-motion='brisk'] {
+    --t-press: 105ms;
+    --t-hover: 90ms;
+    --t-popover: 120ms;
+    --t-panel: 150ms;
+    --t-changed: 900ms;
+  }
+  :root[data-look-motion='still'] {
+    --t-press: 0ms;
+    --t-hover: 0ms;
+    --t-popover: 0ms;
+    --t-panel: 0ms;
+    --t-changed: 0ms;
+  }
+  /* A theme's rhythm (`rhythm`): the space scale's layout steps and the section seam, a quarter closer or wider,
+     and nothing else (docs/design.md, Space and text). The steps under 16px are a control's own padding and a
+     row's height is the density's, so a rhythm moves the page's air and never a control's size or its target. */
+  :root[data-look-rhythm='tight'] {
+    --space-5: 12px;
+    --space-6: 18px;
+    --space-7: 24px;
+    --space-8: 36px;
+    --section-seam: 30px;
+  }
+  :root[data-look-rhythm='airy'] {
+    --space-5: 20px;
+    --space-6: 30px;
+    --space-7: 40px;
+    --space-8: 60px;
+    --section-seam: 50px;
+  }
+  :root[data-look-bar='ruled'] .app-mode .topbar {
+    border-bottom: 2px solid var(--nav-line);
+    box-shadow: none;
+  }
+  /* A bar of plain items (Forecourt's Vehicles, Dealers) is dressed as a bar of
+   groups: the current one inverted, every one set as a label. A grey tint and
+   a sentence-case sans made two Mono bars that did not match. */
+  :root[data-look-nav='inverted'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) {
+    background: var(--nav-ink);
+    color: var(--nav-ground);
+    border-radius: var(--radius);
+  }
+  /* Its icon and caret too: the bar draws them in nav.muted, which on the inverted block is the block's own color. */
+  :root[data-look-nav='inverted'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) :is(.tn-caret, .nav-icon) {
+    color: inherit;
+  }
+  :root[data-look-tabs='inverted'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] {
+    background: var(--ink);
+    color: var(--ground);
+    border-radius: var(--radius);
+  }
+  /* A stat card is framed in the ink at a hairline's width: at 2px, three of
+   them in a row outweighed the chart and the section rules under them.
+   Mono is square because its --radius is 0, not because it says 0 here: an
+   App's authored radius (Compass's 8px) rounds the cards as it rounds the
+   window switch, the pickers and the search box on the same screen. */
+  :root[data-look-stat='framed'] .dash-strip .home-card:nth-child(n) {
+    border: 1px solid var(--ink);
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+    background: var(--surface);
+  }
+  /* type.roles.figure: a stat's figure. Its tabular figures stay (themeType.ts adds tnum to what a theme says). Over
+     the stat recipes' own figure (lumenLook.css's divided and icon, later in `look` and as specific): a role is said,
+     a recipe's figure is the look's default. */
+  html:root[data-type-figure~='face'] .home-card .home-card-value {
+    font-family: var(--type-figure-font);
+  }
+  html:root[data-type-figure~='weight'] .home-card .home-card-value {
+    font-weight: var(--type-figure-weight);
+  }
+  html:root[data-type-figure~='size'] .home-card .home-card-value {
+    font-size: var(--type-figure-size);
+  }
+  html:root[data-type-figure~='tracking'] .home-card .home-card-value {
+    letter-spacing: var(--type-figure-tracking);
+  }
+  html:root[data-type-figure~='numeric'] .home-card .home-card-value {
+    font-variant-numeric: var(--type-figure-numeric);
+  }
+  html:root[data-type-figure~='features'] .home-card .home-card-value {
+    font-feature-settings: var(--type-figure-features);
+  }
+  /* By night the ink is white, and three white frames on black outweighed
+   everything under them: the frame is half the ink there. */
+  @media (prefers-color-scheme: dark) {
+    :root[data-look-stat='framed']:not([data-theme='light']) .dash-strip .home-card:nth-child(n) {
+      border-color: color-mix(in srgb, var(--ink) 45%, var(--surface));
+    }
+  }
+  :root[data-look-stat='framed'][data-theme='dark'] .dash-strip .home-card:nth-child(n) {
+    border-color: color-mix(in srgb, var(--ink) 45%, var(--surface));
+  }
+  /* The sidebar's current room is inverted too, as the bar's is: Mono marks
+   where you are one way everywhere — in the phone's menu as at a desk. The
+   inverted block is the whole mark: the entry's words keep the face and case
+   of its siblings, since a typeface that switched on selection read as a
+   glitch. Its mark and count take the same ink. */
+  :root[data-look-nav='inverted'] :is(#table-list, .mobile-nav-list) button[aria-current='true'],
+  :root[data-look-nav='inverted'] :is(#table-list, .mobile-nav-list) button[aria-current='true']:hover {
+    background: var(--nav-ink);
+    color: var(--nav-ground);
+  }
+  :root[data-look-nav='inverted'] :is(#table-list, .mobile-nav-list) button[aria-current='true'] :is(.rows, svg, .nav-icon) {
+    color: var(--nav-ground);
+  }
+  :root[data-look-nav='inverted'] #table-list button[aria-current='true']:focus-visible {
+    outline: 2px solid var(--nav-ground);
+    outline-offset: -4px;
+  }
+  /* Mono's link is its text's ink (themePresets.ts), so a reference said
+   nothing a plain word did not: a record's "Operations", a grid's "Northstar",
+   a card's "View dealer" read as text. In the one look where the colour
+   cannot say it, the underline does — 1px, 2px under the letters. */
+  :root[data-look-links='underline']
+    :is(
+      td.reflink,
+      :is(:is(.page-field, .page-sheet-row, .page-properties) dd, .page-fact) button.ref-jump,
+      button.ref-jump:is(.page-card-name, .page-card-more),
+      .front-more a
+    ) {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  /* The type roles (`type.roles`, themeType.ts): each property a role says is a word in its `data-type-<role>`
+     attribute and a `--type-<role>-<property>` token, so a role that says nothing turns no rule on. A title's size
+     and weight, a heading's size and the display step's are the tokens every sheet reads already
+     (--type-record-title, --heading-weight, --type-display). Capitals take the caps tracking unless the role says a
+     tracking of its own. */
+  /* label: the short names things are filed under. `.table-wrap thead th`, not `th`: the shared layer sets an App's
+     heads in the sans at that weight, and a row's own head in the body is a value, not a label. */
+  :root[data-type-label~='face'] :is(.home-card-label, .table-wrap thead th, .tab, :where(body.app-mode) .page-tab) {
+    font-family: var(--type-label-font);
+  }
+  :root[data-type-label~='upper'] :is(.home-card-label, .table-wrap thead th, .tab, :where(body.app-mode) .page-tab) {
+    text-transform: uppercase;
+    letter-spacing: var(--type-label-tracking, var(--track-caps));
+    font-size: var(--text-xs);
+  }
+  /* Small capitals on a stat's label; a column's heads in tracked capitals at label size, which reads as small
+     capitals in any face, shipped or not. */
+  :root[data-type-label~='small-caps'] .home-card-label {
+    font-variant: all-small-caps;
+    letter-spacing: var(--type-label-tracking, var(--track-caps));
+  }
+  :root[data-type-label~='small-caps'] thead th {
+    font: 600 var(--text-xs) var(--type-label-font, var(--sans));
+    text-transform: uppercase;
+    letter-spacing: var(--type-label-tracking, var(--track-caps));
+  }
+  :root[data-type-label~='tracking'] :is(.home-card-label, .table-wrap thead th, .tab, :where(body.app-mode) .page-tab) {
+    letter-spacing: var(--type-label-tracking);
+  }
+  :root[data-type-label~='weight'] :is(.home-card-label, .table-wrap thead th, .tab, :where(body.app-mode) .page-tab) {
+    font-weight: var(--type-label-weight);
+  }
+  :root[data-type-label~='numeric'] :is(.home-card-label, .table-wrap thead th, .tab, :where(body.app-mode) .page-tab) {
+    font-variant-numeric: var(--type-label-numeric);
+  }
+  :root[data-type-label~='features'] :is(.home-card-label, .table-wrap thead th, .tab, :where(body.app-mode) .page-tab) {
+    font-feature-settings: var(--type-label-features);
+  }
+  /* nav: the menu's entries, in the bar and down the side, and the bar's groups. The side menu answers
+     data-type-nav-side, which a theme wears only for what it sets itself: a look's own nav role (Mono's mono
+     capitals) is the bar's alone, as it was before the role reached the side. */
+  :root[data-type-nav~='face'] :is(.tn-group-button, .topbar .tn-item),
+  :root[data-type-nav-side~='face'] :where(body.app-mode) .sidebar li:not(.nav-group) > :is(a, button) {
+    font-family: var(--type-nav-font);
+  }
+  :root[data-type-nav~='upper'] :is(.tn-group-button, .topbar .tn-item),
+  :root[data-type-nav-side~='upper'] :where(body.app-mode) .sidebar li:not(.nav-group) > :is(a, button) {
+    text-transform: uppercase;
+    letter-spacing: var(--type-nav-tracking, var(--track-caps));
+    font-size: var(--text-xs);
+  }
+  :root[data-type-nav~='small-caps'] :is(.tn-group-button, .topbar .tn-item),
+  :root[data-type-nav-side~='small-caps'] :where(body.app-mode) .sidebar li:not(.nav-group) > :is(a, button) {
+    font-variant-caps: all-small-caps;
+    letter-spacing: var(--type-nav-tracking, var(--track-caps));
+  }
+  :root[data-type-nav~='tracking'] :is(.tn-group-button, .topbar .tn-item),
+  :root[data-type-nav-side~='tracking'] :where(body.app-mode) .sidebar li:not(.nav-group) > :is(a, button) {
+    letter-spacing: var(--type-nav-tracking);
+  }
+  :root[data-type-nav~='weight'] :is(.tn-group-button, .topbar .tn-item),
+  :root[data-type-nav-side~='weight'] :where(body.app-mode) .sidebar li:not(.nav-group) > :is(a, button) {
+    font-weight: var(--type-nav-weight);
+  }
+  /* title: a record's and a dashboard's name. */
+  :root[data-type-title~='face'] :is(.root-current, .dash-head .applist-title) {
+    font-family: var(--type-title-font);
+  }
+  :root[data-type-title~='leading'] :is(.root-current, .dash-head .applist-title) {
+    line-height: var(--type-title-leading);
+  }
+  :root[data-type-title~='tracking'] :is(.root-current, .dash-head .applist-title) {
+    letter-spacing: var(--type-title-tracking);
+  }
+  :root[data-type-title~='upper'] :is(.root-current, .dash-head .applist-title) {
+    text-transform: uppercase;
+    letter-spacing: var(--type-title-tracking, var(--track-caps));
+  }
+  :root[data-type-title~='small-caps'] :is(.root-current, .dash-head .applist-title) {
+    font-variant-caps: all-small-caps;
+    letter-spacing: var(--type-title-tracking, var(--track-caps));
+  }
+  :root[data-type-title~='numeric'] :is(.root-current, .dash-head .applist-title) {
+    font-variant-numeric: var(--type-title-numeric);
+  }
+  :root[data-type-title~='features'] :is(.root-current, .dash-head .applist-title) {
+    font-feature-settings: var(--type-title-features);
+  }
+  /* heading: a list naming itself over its rows. Its weight, omitted, is the title's. */
+  :root[data-type-heading~='face'] .applist-head:not(.dash-head) .applist-title {
+    font-family: var(--type-heading-font);
+  }
+  :root[data-type-heading~='size'] .applist-head:not(.dash-head) .applist-title {
+    font-size: var(--type-heading-size);
+  }
+  :root[data-type-heading~='leading'] .applist-head:not(.dash-head) .applist-title {
+    line-height: var(--type-heading-leading);
+  }
+  :root[data-type-heading~='tracking'] .applist-head:not(.dash-head) .applist-title {
+    letter-spacing: var(--type-heading-tracking);
+  }
+  :root[data-type-heading~='weight'] .applist-head:not(.dash-head) .applist-title {
+    font-weight: var(--type-heading-weight);
+  }
+  :root[data-type-heading~='upper'] .applist-head:not(.dash-head) .applist-title {
+    text-transform: uppercase;
+    letter-spacing: var(--type-heading-tracking, var(--track-caps));
+  }
+  :root[data-type-heading~='small-caps'] .applist-head:not(.dash-head) .applist-title {
+    font-variant-caps: all-small-caps;
+    letter-spacing: var(--type-heading-tracking, var(--track-caps));
+  }
+  :root[data-type-heading~='numeric'] .applist-head:not(.dash-head) .applist-title {
+    font-variant-numeric: var(--type-heading-numeric);
+  }
+  :root[data-type-heading~='features'] .applist-head:not(.dash-head) .applist-title {
+    font-feature-settings: var(--type-heading-features);
+  }
+  /* section: a section's title on a record and a dashboard. Its face, case and features reach every section's
+     head, as the headings recipe they replace did; its size, weight and tracking reach a dashboard's section title,
+     as the scale they replace did, so every section head, the aside's card captions included, is one role at one size. Over the sheets'
+     sentence case by one more element in the selector, as both stand in `look`. */
+  html:root[data-type-section~='face'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+    font-family: var(--type-section-font);
+  }
+  :root[data-type-section~='size'] :is(.page-section-title, .page-section-head, .page-card-caption) {
+    font-size: var(--type-section-size);
+  }
+  :root[data-type-section~='weight'] :is(.page-section-title, .page-section-head, .page-card-caption) {
+    font-weight: var(--type-section-weight);
+  }
+  :root[data-type-section~='tracking'] :is(.page-section-title, .page-section-head, .page-card-caption) {
+    letter-spacing: var(--type-section-tracking);
+  }
+  html:root[data-type-section~='upper'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+    text-transform: uppercase;
+    letter-spacing: var(--type-section-tracking, var(--track-caps));
+  }
+  html:root[data-type-section~='small-caps'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+    font-variant-caps: all-small-caps;
+    letter-spacing: var(--type-section-tracking, var(--track-caps));
+  }
+  html:root[data-type-section~='numeric'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+    font-variant-numeric: var(--type-section-numeric);
+  }
+  html:root[data-type-section~='features'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+    font-feature-settings: var(--type-section-features);
+  }
+  /* display: a landing's headline; its size is --type-display. */
+  :root[data-type-display~='face'] .front h1 {
+    font-family: var(--type-display-font);
+  }
+  :root[data-type-display~='leading'] .front h1 {
+    line-height: var(--type-display-leading);
+  }
+  :root[data-type-display~='tracking'] .front h1 {
+    letter-spacing: var(--type-display-tracking);
+  }
+  :root[data-type-display~='weight'] .front h1 {
+    font-weight: var(--type-display-weight);
+  }
+  :root[data-type-display~='numeric'] .front h1 {
+    font-variant-numeric: var(--type-display-numeric);
+  }
+  :root[data-type-display~='features'] .front h1 {
+    font-feature-settings: var(--type-display-features);
+  }
+  /* body: prose, fields and the interface, which inherit it. */
+  :root[data-type-body~='leading'] body {
+    line-height: var(--type-body-leading);
+  }
+  :root[data-type-body~='numeric'] body {
+    font-variant-numeric: var(--type-body-numeric);
+  }
+  :root[data-type-body~='features'] body {
+    font-feature-settings: var(--type-body-features);
+  }
+  /* data: a table's cells, in the data face. */
+  :root[data-type-data~='numeric'] .table-wrap td {
+    font-variant-numeric: var(--type-data-numeric);
+  }
+  :root[data-type-data~='features'] .table-wrap td {
+    font-feature-settings: var(--type-data-features);
+  }
+  /* data's reach. A record header's facts are values too: its figures, its key and its dates are set in the data
+     face, as the same values are in its fields, where they were the one place a theme's data face never reached.
+     `reach: 'figures'` keeps the face to figures, keys and dates everywhere — a table's, a field's, a header's — and
+     a name, a status or a sentence is read in the interface face (columns.js identifierLike says which text is a
+     key). One element more than the looks' own table and field rules, as both stand in `look`. */
+  .app-mode .page-head-facts :is(.num-value, .date-value, .id-value) {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  html:root[data-type-data~='figures'] .app-mode :is(table, .page-field > dd, .ref-jump) {
+    font-family: var(--sans);
+  }
+  html:root[data-type-data~='figures'] .app-mode :is(td.mono, .num-value, .date-value, .id-value) {
+    font-family: var(--mono);
+  }
+
+  /* ---------- The header (recipes.header) ---------- */
+  /* `band` lays a record's head and a list's on one strip of the raised ground, edge to edge of the pane: the trail with
+   the record's verbs, the eyebrow, the name, its status and facts, or a list's title, tabs and filters, as an object
+   page leads with its object. It paints the boxes the page placed and the gaps between them, and moves nothing: each
+   is a border image whose outset reaches the pane's edges and the next box, and an outset is ink overflow, so it
+   adds no scroll, clips nothing (a phone's verbs fixed at the screen's foot are the head's own) and is drawn where
+   the page already stands, decided by the root's attribute before the first paint. The contents keep their edge.
+   A hairline closes the band. A chip that stands on the raised ground (a list's count) takes a step from the band. */
+  @media screen {
+    :root:is([data-look-header='band'], [data-look-header='hero']) {
+      --head-band: var(--raised);
+      --head-band-edge: var(--line);
+    }
+    :root:is([data-look-header='band'], [data-look-header='hero'])
+      .app-mode
+      .content:has(.page-head.has-record.is-room, > .applist-host > .applist-controls)
+      > .crumbs-host
+      > .crumbs,
+    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > .applist-host > .applist-head,
+    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .page-head.has-record.is-room,
+    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > .applist-host > .applist-controls {
+      --raised: color-mix(in oklab, var(--head-band), var(--ink) 7%);
+      /* What a fade at a strip's edge fades into (structure.css, a phone's tabs). */
+      --strip-ground: var(--head-band);
+      background: var(--head-band);
+      border-image: linear-gradient(var(--head-band) 0 0) fill 0 / 0 / 0 100vmax;
+    }
+    :root:is([data-look-header='band'], [data-look-header='hero'])
+      .app-mode
+      .content:has(.page-head.has-record.is-room, > .applist-host > .applist-controls)
+      > .crumbs-host
+      > .crumbs {
+      border-bottom-color: transparent;
+    }
+    /* A record's band reaches up over the room's padding to the trail, and keeps a margin of its own under the facts
+       before its hairline: the body starts the head's margin below it, as it does on the plain ground. */
+    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .page-head.has-record.is-room {
+      border-image: linear-gradient(to top, var(--head-band-edge) 1px, var(--head-band) 1px) fill 0 / 0 / 48px 100vmax 0;
+      padding-bottom: 20px;
+    }
+    /* A list's ends under its tabs and filters, where its rows start. */
+    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > .applist-host > .applist-controls {
+      border-image: linear-gradient(to top, var(--head-band-edge) 1px, var(--head-band) 1px) fill 0 / 0 / 0 100vmax;
+    }
+    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > .applist-host > .applist-controls::after {
+      background: linear-gradient(to right, transparent, var(--head-band));
+    }
+    /* `hero` is the band with the record's avatar large beside its name, the head's words a column to its right; on a
+     phone it stands over the eyebrow. The room is kept from the first paint wherever the resource says its records
+     have an avatar (`has-avatar`, PageHead.tsx), before the name it is drawn from has arrived. A record without one
+     draws the band. */
+    :root[data-look-header='hero'] .app-mode .page-head.has-record.is-room.has-avatar {
+      --hero-avatar: 64px;
+      position: relative;
+      min-height: var(--hero-avatar);
+      padding-inline-start: calc(var(--hero-avatar) + 20px);
+    }
+    :root[data-look-header='hero'] .app-mode .page-head.has-record.is-room.has-avatar .page-record-avatar {
+      position: absolute;
+      top: 0;
+      inset-inline-start: 0;
+      width: var(--hero-avatar);
+      height: var(--hero-avatar);
+      font-size: calc(22px * var(--type-k));
+    }
+    @media (max-width: 600px) {
+      :root[data-look-header='hero'] .app-mode .page-head.has-record.is-room.has-avatar {
+        --hero-avatar: 56px;
+        padding-inline-start: 0;
+        padding-top: calc(var(--hero-avatar) + 12px);
+      }
+    }
+  }
+
+/* An App's own query bar, where its shell shows one, is a kit field. */
+:root[data-theme-style] #query { border-color: var(--line-control); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-control); }
+:root[data-theme-style] #query:focus { outline: var(--focus-width) solid var(--focus); outline-offset: 0; border-color: var(--focus); }
+
+/* A calendar in a section on a page whose sections are open is not boxed again; a card or a panel already is one
+   (components/CalendarList.css draws the rest of it). Read off the section recipe, so it is here with the recipes,
+   and it answers every look and none, as the open section does. */
+:root:not([data-look-section='card'], [data-look-section='panel']) .page-section .calendar-grid { border: 0; border-radius: 0; background: none; }
+}

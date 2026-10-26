@@ -1,0 +1,23 @@
+/* The workflows page: rows under a rule, the state as a dot and its word, one filled action. Tokens only. */
+.c-page-workflows { min-width: 0; }
+.c-page-workflows-bar { gap: 12px; }
+.c-page-workflows-quiet { margin: 0; color: var(--ink-muted); font-size: 13px; }
+.c-page-workflows-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.c-page-workflows-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.c-page-workflows-table thead th { text-align: left; font-weight: 600; padding: 6px 12px 6px 0; border-bottom: 2px solid var(--ink); white-space: nowrap; }
+.c-page-workflows-table tbody td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line); vertical-align: baseline; overflow-wrap: anywhere; }
+.c-page-workflows-table tbody tr[aria-selected="true"] { background: var(--raised); }
+.c-page-workflows-num { font-variant-numeric: tabular-nums; }
+.c-page-workflows-key { font-variant-numeric: tabular-nums; }
+.c-page-workflows-open { min-height: 24px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.c-page-workflows-open:hover { text-decoration: underline; }
+.c-page-workflows-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.c-page-workflows-detail { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); min-width: 0; }
+.c-page-workflows-head { gap: 12px; }
+.c-page-workflows-title { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.c-page-workflows-sub { margin: 0; font-size: 13px; font-weight: 600; }
+.c-page-workflows-actions { gap: 8px; align-items: center; }
+.c-page-workflows-ask { color: var(--ink); font-size: 13px; }
+.c-page-workflows-problem { margin: 0; color: var(--status-critical); font-size: 13px; }
+.c-page-workflows-said { margin: 0; color: var(--ink); font-size: 13px; }
+@media (max-width: 640px) { .c-page-workflows { overflow-x: auto; } }

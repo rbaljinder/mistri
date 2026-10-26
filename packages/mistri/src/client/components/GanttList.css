@@ -1,0 +1,36 @@
+/* Brought by a gantt list (GanttList.tsx), loaded only where a list is drawn as one. Tokens only. */
+@layer components {
+.gantt { min-width: 0; }
+.gantt-chart { display: grid; min-width: 0; padding: var(--space-2) 0 var(--space-3); }
+.gantt-ruler, .gantt-row { display: grid; grid-template-columns: minmax(96px, 22%) minmax(0, 1fr); align-items: center; gap: var(--space-4); }
+.gantt-ruler { height: 40px; border-bottom: 1px solid var(--line); }
+.gantt-row { min-height: calc(var(--lanes, 1) * 26px + 6px); border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.gantt-name { min-width: 0; padding-inline-start: var(--space-4); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: var(--text-base) var(--sans); color: var(--ink); }
+.gantt-track { position: relative; align-self: stretch; min-height: 24px; margin-inline-end: var(--space-4); }
+.gantt-tick { position: absolute; bottom: 4px; padding-inline-start: var(--space-2); font: var(--text-xs) var(--sans); color: var(--ink-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gantt-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--line) 60%, transparent); }
+.gantt-today { position: absolute; top: 0; bottom: 0; width: 2px; margin-inline-start: -1px; background: var(--accent); opacity: .6; }
+.gantt-bar {
+  position: absolute; top: 16px; height: 20px; min-width: 6px; margin: 0; padding: 0 var(--space-2h); transform: translateY(-50%);
+  display: flex; align-items: center; overflow: hidden; border-radius: min(4px, var(--radius)); cursor: pointer;
+  /* Tinted rather than solid, so a group's bar can carry its title in the ink on any look; the done share the deeper tint. */
+  background: linear-gradient(to right, color-mix(in srgb, var(--chart-1, var(--accent)) 55%, var(--surface)) var(--done, 100%), color-mix(in srgb, var(--chart-1, var(--accent)) 22%, var(--surface)) var(--done, 100%));
+  border: 1px solid color-mix(in srgb, var(--chart-1, var(--accent)) 60%, transparent);
+}
+.gantt-bar:hover { border-color: var(--chart-1, var(--accent)); }
+.gantt-bar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.gantt-bar:disabled { cursor: default; }
+.gantt-bar.is-mark { width: 12px; min-width: 0; height: 12px; padding: 0; margin-inline-start: -6px; border-radius: min(2px, var(--radius)); transform: translateY(-50%) rotate(45deg); }
+/* The ruler's two tiers: the year over where it begins, and under it the months (thinned to what fits). */
+.gantt-year { position: absolute; top: 2px; padding-inline-start: var(--space-2); font: 600 var(--text-xs) var(--sans); color: var(--ink); font-variant-numeric: tabular-nums; }
+/* A group is a band over its homes; the band holds the top of the room while its rows pass beneath it. */
+.gantt-band {
+  position: sticky; top: var(--sticky-top, 0); z-index: 2; padding: var(--space-2h) var(--space-4) var(--space-2); background: var(--surface);
+  border-bottom: 1px solid var(--line); font: 600 var(--text-sm)/1.3 var(--sans); color: var(--ink-muted);
+}
+@media (max-width: 720px) {
+  .gantt-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--text-sm); line-height: 1.25; padding-inline-start: var(--space-3); }
+  .gantt-ruler, .gantt-row { gap: var(--space-3); }
+}
+.gantt-note { margin: var(--space-3) var(--space-4); font: var(--text-sm) var(--sans); color: var(--ink-muted); }
+}

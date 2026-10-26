@@ -1,0 +1,55 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order).
+   The activity feed is loaded on demand (DashboardActivity.tsx), so none of it stands in a first paint. */
+@layer components {
+/* Rules, not boxes: the periods and the search over the changes, each change
+   a row under a hairline, its resource's mark in a hairline square beside it
+   as the icon rail draws a mark, its time at the row's end. */
+.activity { display: grid; gap: var(--space-4); min-width: 0; }
+/* One grammar with a list's tabs in the looks that fill them: the chosen period in the accent. The buttons share
+   the row and grow alike, but each is at least its word: in a narrow aside (Lumen's) equal thirds cut "Yesterday"
+   to "Yeste…", so a button that cannot fit goes to the next line whole instead. */
+.activity-periods { display: flex; flex-wrap: wrap; gap: var(--space-2h); }
+.activity-period {
+  flex: 1 0 auto; min-height: 30px; padding: var(--space-2) var(--space-3h); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink-muted); font: 500 var(--text-base) var(--sans); white-space: nowrap; cursor: pointer;
+}
+.activity-period:hover { color: var(--ink); }
+.activity-period[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .activity-period { transition: color var(--t-hover) var(--ease-out), background-color var(--t-hover) var(--ease-out); }
+}
+/* The one field in the section, so the one 3:1 edge; the ring stands on it. */
+.activity-search {
+  display: flex; align-items: center; gap: var(--space-3); min-height: 34px; padding: 0 var(--space-3h);
+  border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface); color: var(--ink-muted);
+}
+.activity-search:focus-within { border-color: var(--focus); outline: var(--focus-width) solid var(--focus); outline-offset: -1px; }
+.activity-search input { flex: 1; min-width: 0; padding: var(--space-2h) 0; border: 0; background: none; color: var(--ink); font: var(--text-md) var(--sans); outline: none; }
+.activity-search input::placeholder { color: var(--ink-subtle); }
+.activity-count { margin: var(--space-1) 0 0; color: var(--ink-muted); font-size: var(--text-base); }
+.activity-count strong { color: var(--ink); font-size: calc(15px * var(--type-k)); font-weight: 600; font-variant-numeric: tabular-nums; }
+.activity-list { margin: 0; padding: 0; list-style: none; }
+.activity-entry { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--space-4); padding: var(--space-3h) 0; }
+.activity-entry + .activity-entry { border-top: 1px solid var(--line); }
+.activity-mark {
+  display: grid; place-items: center; width: 32px; height: 32px; box-sizing: border-box;
+  border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-muted);
+}
+.activity-text { display: grid; gap: var(--space-1); min-width: 0; }
+.activity-head { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
+.activity-what { min-width: 0; overflow: hidden; color: var(--ink); font: 500 var(--text-md) var(--sans); text-overflow: ellipsis; white-space: nowrap; }
+.activity-when { flex: none; margin-left: auto; color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.activity-detail { color: var(--ink-muted); font-size: var(--text-base); line-height: 1.45; overflow-wrap: anywhere; }
+.activity-noun { color: var(--ink-muted); }
+/* The record, a way to it in the text's ink: underlined, as a reference is where the ink cannot say it. */
+.activity-record {
+  padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 500; text-align: left; cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--line-strong); text-decoration-thickness: 1px; text-underline-offset: 2px;
+}
+.activity-record:hover { color: var(--link); }
+.activity-field + .activity-field::before { content: ' · '; color: var(--ink-subtle); }
+.activity-caption { color: var(--ink-muted); }
+.activity-before, .activity-after { color: var(--ink); }
+.activity-by { overflow: hidden; color: var(--ink-muted); font-size: var(--text-sm); text-overflow: ellipsis; white-space: nowrap; }
+.activity-show { justify-self: start; }
+}

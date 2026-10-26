@@ -1,0 +1,44 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* Over the page, at its top, and not a modal: the last good App is still
+   served beneath it and stays usable. The bottom corner is the toasts'. One
+   rule in the danger ink says what kind of thing this is; the rest is the
+   surface and its text, so it reads in every look, light and dark. */
+.app-reload-problem {
+  position: fixed; top: 12px; left: 16px; right: 16px; z-index: 270;
+  max-width: 760px; margin: 0 auto; box-sizing: border-box;
+  display: grid; gap: var(--space-3);
+  padding: var(--space-4h) var(--space-5) var(--space-4);
+  border: 1px solid var(--line-strong); border-top: 3px solid var(--status-critical);
+  border-radius: var(--radius-dialog);
+  background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-modal);
+  font: 400 var(--text-base)/20px var(--sans);
+  max-height: calc(100dvh - 24px); overflow-y: auto;
+}
+.app-reload-problem-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.app-reload-problem h2 { margin: 0; font-size: var(--text-md); font-weight: 600; line-height: 20px; color: var(--ink); }
+.app-reload-problem-dismiss { flex: none; min-height: 28px; }
+.app-reload-problem-where { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); margin: 0; }
+.app-reload-problem-where code { font-family: var(--code); color: var(--ink); overflow-wrap: anywhere; }
+.app-reload-problem-where a { font-family: var(--code); color: var(--status-critical); text-decoration: underline; text-underline-offset: 2px; }
+.app-reload-problem-message { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+/* The lines around the place, as the file numbers them: its own box scrolls
+   sideways, never the page. The line at fault carries a bar in the danger ink. */
+.app-reload-problem-frame {
+  margin: 0; padding: var(--space-3) 0; overflow-x: auto;
+  border: 1px solid var(--line); border-radius: var(--radius-panel);
+  background: var(--raised); color: var(--ink-muted);
+  font: var(--text-sm)/18px var(--code);
+}
+.app-reload-problem-frame > span { display: block; padding: 0 var(--space-4) 0 var(--space-3h); border-left: 2px solid transparent; white-space: pre; }
+.app-reload-problem-frame > span.is-at { border-left-color: var(--status-critical); color: var(--ink); }
+.app-reload-problem-line { display: inline-block; margin-right: var(--space-4); color: var(--ink-subtle); user-select: none; }
+.app-reload-problem .note { margin: 0; color: var(--ink-muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .app-reload-problem {
+    transition: opacity var(--t-panel) var(--ease-out), transform var(--t-panel) var(--ease-out);
+    @starting-style { opacity: 0; transform: translateY(-8px); }
+  }
+}
+}

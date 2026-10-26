@@ -1,0 +1,507 @@
+/* Starlight owns layout and interaction. mistri dresses it in the look an
+   App wears by default, Lumen, in its Stone neutrals: Inter, warm greys, one
+   blue for links and focus, and near-black for the one primary action. Bold
+   comes from type and contrast, not from colour. Unlayered, so these win over
+   Starlight's @layer rules. */
+
+/* Inter's variable Latin subset, the file the client ships (src/client/fonts,
+   SIL Open Font License beside it in public/fonts), and a fallback cut to its
+   measure so the swap moves almost nothing (the same overrides as
+   packages/kit/src/client/lumenLook.css). */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter Fallback';
+  font-weight: 100 500;
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Helvetica');
+  size-adjust: 106.1%;
+  ascent-override: 91.3%;
+  descent-override: 22.73%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Inter Fallback';
+  font-weight: 600 900;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Helvetica Bold');
+  size-adjust: 101.6%;
+  ascent-override: 95.35%;
+  descent-override: 23.74%;
+  line-gap-override: 0%;
+}
+
+/* By night (Starlight's default scheme): Lumen's warm near-black. */
+:root {
+  --sl-font: Inter, 'Inter Fallback', system-ui, sans-serif;
+  --sl-font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --sl-color-white: #f2f0ec;
+  --sl-color-gray-1: #e2dfd9;
+  --sl-color-gray-2: #c4bfb7;
+  --sl-color-gray-3: #9a948c;
+  --sl-color-gray-4: #6b665f;
+  --sl-color-gray-5: #2f2c28;
+  --sl-color-gray-6: #1c1b18;
+  --sl-color-gray-7: #161513;
+  --sl-color-black: #11100e;
+
+  --sl-color-accent-low: #1e2a57;
+  --sl-color-accent: #7d96ff;
+  --sl-color-accent-high: #b4c3ff;
+
+  --sl-color-bg-nav: var(--sl-color-black);
+  --sl-color-bg-sidebar: var(--sl-color-black);
+  --sl-color-bg-inline-code: var(--sl-color-gray-6);
+  --sl-color-hairline: #26241f;
+  --sl-color-hairline-light: #2f2c28;
+  --sl-color-hairline-shade: #0b0a09;
+
+  /* The home's own: a raised surface, the frame's line, the primary action. */
+  --tw-surface: #1a1917;
+  --tw-line: #2f2c28;
+  --tw-ink-strong: #f2f0ec;
+  --tw-on-strong: #11100e;
+  --tw-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 24px 48px -24px rgb(0 0 0 / 0.7);
+  --tw-code-bg: #161513;
+  --tw-code-bar: #1c1b18;
+
+  --sl-text-h1: 2rem;
+  --sl-text-h2: 1.5rem;
+  --sl-text-h3: 1.25rem;
+  --sl-text-h4: 1.0625rem;
+  --sl-line-height: 1.7;
+  --sl-line-height-headings: 1.2;
+  --sl-sidebar-pad-x: 1.25rem;
+}
+/* By day: white paper, stone greys, Lumen's blue and navy. */
+:root[data-theme='light'] {
+  --sl-color-white: #1c1a17;
+  --sl-color-gray-1: #292622;
+  --sl-color-gray-2: #44403c;
+  --sl-color-gray-3: #57534e;
+  --sl-color-gray-4: #8f8a83;
+  --sl-color-gray-5: #d6d3ce;
+  --sl-color-gray-6: #f2f1ee;
+  --sl-color-gray-7: #f8f7f5;
+  --sl-color-black: #ffffff;
+
+  --sl-color-accent-low: #ebefff;
+  --sl-color-accent: #2d4fd6;
+  --sl-color-accent-high: #1b2f6b;
+
+  --sl-color-bg-nav: var(--sl-color-black);
+  --sl-color-bg-sidebar: var(--sl-color-black);
+  --sl-color-bg-inline-code: var(--sl-color-gray-6);
+  --sl-color-hairline: #e7e4df;
+  --sl-color-hairline-light: #ece9e4;
+  --sl-color-hairline-shade: #e7e4df;
+
+  --tw-surface: #ffffff;
+  --tw-line: #e2dfd9;
+  --tw-ink-strong: #1c1a17;
+  --tw-on-strong: #ffffff;
+  --tw-shadow: 0 1px 2px rgb(28 26 23 / 0.05), 0 24px 48px -24px rgb(28 26 23 / 0.22);
+  --tw-code-bg: #faf9f7;
+  --tw-code-bar: #f2f1ee;
+}
+@media (min-width: 50em) {
+  :root {
+    --sl-text-h1: 2.5rem;
+    --sl-text-h2: 1.625rem;
+    --sl-text-h3: 1.3125rem;
+    --sl-text-h4: 1.125rem;
+  }
+}
+
+body {
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- Type ---------- */
+h1#_top { font-weight: 650; letter-spacing: -0.03em; line-height: 1.1; }
+.sl-markdown-content :is(h2, h3, h4, h5) { font-weight: 620; letter-spacing: -0.018em; color: var(--sl-color-white); }
+.sl-markdown-content h2 { margin-top: 2.75rem; }
+.sl-markdown-content :is(h3, h4) { margin-top: 2rem; }
+.sl-markdown-content a:not(.sl-link-button):not(:where(.not-content *)) {
+  color: var(--sl-color-text-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+.sl-markdown-content a:not(.sl-link-button):not(:where(.not-content *)):hover { text-decoration-color: currentColor; }
+.sl-markdown-content :not(pre) > code:not(:where(.not-content *)) {
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 4px;
+  font-size: 0.875em;
+}
+
+/* ---------- Tables: ruled, quiet, a shade behind the head ---------- */
+.sl-markdown-content table { font-size: var(--sl-text-sm); border-collapse: collapse; }
+.sl-markdown-content :is(th, td) { border: 0; border-bottom: 1px solid var(--sl-color-hairline); padding: 0.55rem 0.9rem; }
+.sl-markdown-content th {
+  background: var(--sl-color-gray-7);
+  color: var(--sl-color-white);
+  font-weight: 600;
+  border-bottom-color: var(--sl-color-gray-5);
+}
+.sl-markdown-content tr:nth-child(2n) { background: transparent; }
+
+/* ---------- The header: page-coloured, a hairline under it ---------- */
+.header { border-bottom: 1px solid var(--sl-color-hairline); }
+.site-title { font-weight: 680; letter-spacing: -0.035em; font-size: 1.125rem; color: var(--sl-color-white); gap: 0.5rem; }
+/* The mark stands a little under the word's cap height plus descender, so the two read as one lockup. */
+.site-title img { height: 1.375rem; width: auto; }
+site-search button[data-open-modal] { border-radius: 8px; border-color: var(--sl-color-hairline-light); }
+
+/* ---------- The sidebar: small group heads, a soft pill for here ---------- */
+.sidebar-content .top-level > li > details > summary .large {
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.sidebar-content .top-level > li + li { margin-top: 1rem; }
+.sidebar-content ul ul .group-label .large { font-size: var(--sl-text-sm); font-weight: 600; color: var(--sl-color-gray-1); }
+.right-sidebar-panel h2 {
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.sidebar-content a { border-radius: 6px; }
+.sidebar-content [aria-current='page'],
+.sidebar-content [aria-current='page']:hover,
+.sidebar-content [aria-current='page']:focus {
+  color: var(--sl-color-text-accent);
+  background-color: var(--sl-color-accent-low);
+}
+.sidebar-content ul ul li { border-inline-start-color: var(--sl-color-hairline); }
+
+/* ---------- Buttons: square-ish, near-black for the one that matters ---------- */
+.sl-link-button { border-radius: 8px; font-weight: 600; }
+.sl-link-button.primary { background: var(--tw-ink-strong); border-color: var(--tw-ink-strong); color: var(--tw-on-strong); }
+.sl-link-button.primary:hover { color: var(--tw-on-strong); opacity: 0.88; }
+.sl-link-button.secondary { border-color: var(--sl-color-gray-5); color: var(--sl-color-white); background: var(--tw-surface); }
+.sl-link-button.secondary:hover { border-color: var(--sl-color-gray-4); }
+@media (min-width: 50rem) { .sl-link-button { padding: 0.75rem 1.25rem; } }
+
+/* ---------- The home ---------- */
+/* Wider than a guide: the screens are the point. */
+:root[data-has-hero] { --sl-content-width: 72rem; }
+[data-has-hero] .content-panel { padding-bottom: 4rem; }
+
+.tw-hero { display: grid; gap: 2.5rem; padding-block: 2rem 1rem; }
+.tw-hero-copy { display: grid; justify-items: center; gap: 1rem; text-align: center; }
+.tw-hero h1 {
+  max-width: 24ch;
+  margin: 0;
+  font-size: clamp(1.625rem, 0.6rem + 4.2vw, 3.5rem);
+  text-wrap: balance;
+  line-height: 1.04;
+  color: var(--sl-color-white);
+}
+.tw-hero-tagline { max-width: 60ch; margin: 0; font-size: clamp(1.0625rem, 0.95rem + 0.5vw, 1.25rem); line-height: 1.55; color: var(--sl-color-gray-2); }
+/* The agent loop: one sentence, then its three steps as a quiet mono row. */
+.tw-hero-loop { max-width: 60ch; margin: 0; font-size: 0.9375rem; line-height: 1.55; color: var(--sl-color-gray-2); }
+.tw-hero-loop a { color: var(--sl-color-white); font-weight: 600; }
+.tw-hero-loop code { font-size: 0.875em; white-space: nowrap; }
+.tw-hero-steps { display: flex; gap: 0.5rem; margin: 0; padding: 0; list-style: none; font-family: var(--sl-font-mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--sl-color-gray-3); }
+.tw-hero-steps li { margin: 0; }
+.tw-hero-steps li + li::before { content: '→'; margin-inline-end: 0.5rem; color: var(--sl-color-gray-4); }
+.tw-hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 0.5rem; }
+@media (min-width: 50rem) { .tw-hero { padding-block: 2.75rem 1.5rem; gap: 2.75rem; } }
+
+/* The proof: the code, then the screen it makes laid a little over it. On a
+   phone the screen comes first and only the stage machine stays. */
+.tw-hero-proof { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+.tw-hero-proof > * { margin: 0 !important; min-width: 0; }
+.tw-hero-shot { order: -1; }
+.tw-hero-code { display: grid; gap: 0.875rem; align-content: start; }
+.tw-hero-code > * { margin: 0 !important; }
+.tw-hero-code .expressive-code { --ec-codeFontSize: 0.75rem; --ec-codePadBlk: 0.75rem; --ec-codePadInl: 1rem; }
+.tw-hero-code .expressive-code pre { white-space: pre; }
+.tw-hero-code-page { display: none; }
+@media (min-width: 56rem) {
+  .tw-hero-proof { grid-template-columns: 38fr 62fr; gap: 0; align-items: start; }
+  .tw-hero-shot { order: 0; position: relative; z-index: 1; margin-inline-start: -2rem !important; margin-top: 1.75rem !important; }
+  .tw-hero-code { position: relative; }
+  .tw-hero-code-page { display: block; }
+  .tw-hero-code .expressive-code { --ec-codeFontSize: 0.72rem; }
+}
+
+/* A screen framed as the window it runs in: a hairline, a quiet bar, a long soft shadow. */
+.tw-window {
+  overflow: hidden;
+  border: 1px solid var(--tw-line);
+  border-radius: 12px;
+  background: var(--tw-surface);
+  box-shadow: var(--tw-shadow);
+}
+.tw-window-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 2.25rem;
+  padding-inline: 0.875rem;
+  border-bottom: 1px solid var(--tw-line);
+  background: var(--sl-color-gray-7);
+}
+.tw-window-bar span { width: 10px; height: 10px; border-radius: 50%; background: var(--sl-color-gray-5); }
+.tw-window-bar b {
+  position: absolute;
+  inset-inline: 0;
+  margin: auto;
+  width: max-content;
+  max-width: 60%;
+  overflow: hidden;
+  font: 400 0.75rem/1 var(--__sl-font-mono);
+  color: var(--sl-color-gray-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tw-window img,
+.sl-markdown-content .tw-window img { display: block; width: 100%; max-width: 100%; height: auto; border: 0; border-radius: 0; }
+.tw-hero-shot { margin: 0; }
+.tw-shot-dark { display: none !important; }
+:root[data-theme='dark'] .tw-shot-light { display: none !important; }
+:root[data-theme='dark'] .tw-shot-dark { display: block !important; }
+@media (max-width: 40rem) { .tw-window-bar b { display: none; } }
+
+/* The showcase: radio tabs, one screen at a time, every one in a 16:10 frame. */
+.tw-showcase { position: relative; margin-top: 2rem; }
+.tw-tab-input { position: absolute; opacity: 0; pointer-events: none; }
+.tw-tabs {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto 1.5rem;
+  padding: 4px;
+  gap: 2px;
+  overflow-x: auto;
+  border: 1px solid var(--tw-line);
+  border-radius: 10px;
+  background: var(--sl-color-gray-7);
+}
+.tw-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 7px;
+  font-size: 0.9375rem;
+  font-weight: 550;
+  color: var(--sl-color-gray-3);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tw-tab:hover { color: var(--sl-color-white); }
+.tw-preview {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+/* On a phone the four tabs sit two by two rather than scroll out of sight. */
+@media (max-width: 30rem) {
+  .tw-tabs { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .tw-tab { justify-content: center; padding: 0.5rem; }
+}
+.tw-panel { display: none; margin: 0; }
+.tw-panel .tw-window img { aspect-ratio: 16 / 10; object-fit: cover; object-position: top; }
+.tw-panel figcaption { max-width: 62ch; margin: 1.25rem auto 0; text-align: center; font-size: var(--sl-text-base); line-height: 1.6; color: var(--sl-color-gray-2); }
+.tw-panel figcaption a { color: var(--sl-color-text-accent); white-space: nowrap; }
+.tw-panel figcaption code { font-size: 0.875em; color: var(--sl-color-white); }
+#tw-tab-assistant:checked ~ .tw-panel-assistant,
+#tw-tab-lists:checked ~ .tw-panel-lists,
+#tw-tab-pages:checked ~ .tw-panel-pages,
+#tw-tab-dashboards:checked ~ .tw-panel-dashboards { display: block; }
+#tw-tab-assistant:checked ~ .tw-tabs .tw-tab-assistant,
+#tw-tab-lists:checked ~ .tw-tabs .tw-tab-lists,
+#tw-tab-pages:checked ~ .tw-tabs .tw-tab-pages,
+#tw-tab-dashboards:checked ~ .tw-tabs .tw-tab-dashboards {
+  background: var(--tw-surface);
+  color: var(--sl-color-white);
+  box-shadow: 0 1px 2px rgb(28 26 23 / 0.08), 0 0 0 1px var(--tw-line);
+}
+#tw-tab-assistant:focus-visible ~ .tw-tabs .tw-tab-assistant,
+#tw-tab-lists:focus-visible ~ .tw-tabs .tw-tab-lists,
+#tw-tab-pages:focus-visible ~ .tw-tabs .tw-tab-pages,
+#tw-tab-dashboards:focus-visible ~ .tw-tabs .tw-tab-dashboards { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
+
+/* The home's sections: a larger head, room above it. */
+[data-has-hero] .sl-markdown-content h2 {
+  margin-top: 6rem;
+  font-size: clamp(1.75rem, 1.2rem + 2vw, 2.5rem);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+[data-has-hero] .sl-markdown-content h2 + * { margin-top: 1rem; }
+[data-has-hero] .sl-markdown-content > p { max-width: 68ch; }
+
+/* Words beside commands. */
+.tw-start { display: grid; gap: 1.5rem; align-items: center; }
+.tw-start > * { margin: 0 !important; min-width: 0; }
+.tw-start p + p { margin-top: 1rem; }
+@media (min-width: 56rem) { .tw-start { grid-template-columns: 5fr 6fr; gap: 3rem; } }
+
+/* A new App: the schema and its connection beside the screens over them. */
+.tw-new { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; margin-top: 1.5rem !important; }
+.tw-new > * { margin: 0 !important; min-width: 0; }
+.tw-new > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.tw-new > div > * { margin: 0 !important; }
+@media (min-width: 56rem) { .tw-new { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; } }
+
+/* What comes free: short lines, two or three across, no boxes. */
+.tw-ux { display: grid; gap: 1.25rem 2rem; margin: 2.5rem 0 0 !important; padding: 0; list-style: none; font-size: var(--sl-text-sm); line-height: 1.55; color: var(--sl-color-gray-2); }
+.tw-ux li { margin: 0; padding: 0; }
+.tw-ux strong { display: block; margin-bottom: 0.2rem; font-size: var(--sl-text-base); font-weight: 620; letter-spacing: -0.01em; color: var(--sl-color-white); }
+.tw-ux a { color: var(--sl-color-text-accent); text-decoration: none; white-space: nowrap; }
+.tw-ux a:hover { text-decoration: underline; }
+.tw-ux kbd { padding: 0 0.3em; border: 1px solid var(--tw-line); border-radius: 4px; font: inherit; font-size: 0.9em; }
+@media (min-width: 40rem) { .tw-ux { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 64rem) { .tw-ux { grid-template-columns: 1fr 1fr 1fr; } }
+/* Beside the loop's code the claims stand in one column. */
+.tw-new .tw-ux-list { grid-template-columns: 1fr; margin-top: 0 !important; }
+.tw-ux code { font-size: 0.9em; }
+
+/* The three looks, small, the same list in each. */
+.tw-trio { display: grid; gap: 1rem; margin-top: 2rem !important; }
+.tw-trio a { display: grid; gap: 0.5rem; color: var(--sl-color-gray-2); text-decoration: none; font-size: var(--sl-text-sm); font-weight: 560; }
+.tw-trio img { display: block; width: 100%; height: auto; border: 1px solid var(--tw-line); border-radius: 10px; box-shadow: var(--tw-shadow); }
+.tw-trio a:hover span { color: var(--sl-color-white); }
+.tw-trio a:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 4px; border-radius: 10px; }
+@media (min-width: 40rem) { .tw-trio { grid-template-columns: 1fr 1fr 1fr; } }
+
+/* Code beside the screen it draws: the screen takes the larger share. */
+.tw-pair { display: grid; gap: 1.25rem; align-items: start; margin-top: 3rem !important; }
+.tw-pair-code { min-width: 0; }
+.tw-pair-code h3 { margin: 0 0 0.75rem; font-size: 1.125rem; font-weight: 650; letter-spacing: -0.015em; color: var(--sl-color-white); }
+.tw-pair-code p { margin: 0.75rem 0 0; font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); }
+.tw-pair-code .expressive-code { --ec-codeFontSize: 0.72rem; --ec-codePadInl: 0.875rem; }
+.tw-pair-shot { align-self: start; max-width: 52rem; }
+@media (min-width: 75rem) { .tw-pair { grid-template-columns: 21fr 29fr; gap: 2rem; align-items: center; } }
+
+/* What is already built: a ruled grid of links, square, quiet until hovered. */
+.tw-features {
+  display: grid;
+  gap: 1px;
+  margin-top: 2rem !important;
+  overflow: hidden;
+  border: 1px solid var(--tw-line);
+  border-radius: 12px;
+  background: var(--tw-line);
+}
+.tw-features a {
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
+  padding: 1.25rem 1.375rem;
+  background: var(--tw-surface);
+  color: var(--sl-color-gray-2);
+  text-decoration: none;
+  font-size: var(--sl-text-sm);
+  line-height: 1.5;
+}
+.tw-features a:hover { background: var(--sl-color-gray-7); }
+.tw-features a:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: -2px; }
+.tw-features strong { font-size: var(--sl-text-base); font-weight: 620; letter-spacing: -0.01em; color: var(--sl-color-white); }
+.tw-features code { font-size: 0.9em; }
+.tw-features strong .tw-preview { margin-inline-start: 0.4rem; font-style: normal; vertical-align: 0.15em; }
+@media (min-width: 40rem) { .tw-features { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 64rem) { .tw-features { grid-template-columns: 1fr 1fr 1fr; } }
+
+/* The closing lines: the samples, the browser, the source. */
+.tw-lines { margin-top: 5rem !important; padding-top: 1.5rem; border-top: 1px solid var(--sl-color-hairline); }
+.tw-lines p { margin: 0 0 0.75rem; max-width: 80ch; font-size: var(--sl-text-sm); line-height: 1.6; color: var(--sl-color-gray-2); }
+.tw-lines strong { color: var(--sl-color-white); font-weight: 600; }
+.tw-lines a { color: var(--sl-color-text-accent); }
+.tw-lines code { font-size: 0.875em; }
+.tw-lines .tw-foot { margin-top: 1.5rem; color: var(--sl-color-gray-3); }
+
+
+/* Screenshots: full column width, a quiet frame, never wider than the text. */
+.sl-markdown-content img { max-width: 100%; height: auto; border: 1px solid var(--sl-color-hairline); border-radius: 6px; }
+
+/* The looks gallery: the same screen in each look, two across where the
+   column has the room and one on a phone, so the looks are compared side by
+   side rather than scrolled past one at a time. */
+.sl-markdown-content .tw-looks { display: grid; gap: 1.75rem 1.25rem; }
+@media (min-width: 50rem) { .sl-markdown-content .tw-looks { grid-template-columns: 1fr 1fr; } }
+.sl-markdown-content .tw-looks > figure,
+.sl-markdown-content .tw-looks > figure > * { margin: 0; }
+.sl-markdown-content .tw-looks figcaption { margin-top: 0.5rem; font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); }
+/* A component is drawn on its own ground, often the page's white: a hairline
+   says where the picture ends. */
+.sl-markdown-content .tw-parts img { border: 1px solid var(--sl-color-hairline); }
+.sl-markdown-content .tw-parts figcaption code { font-size: 0.8125rem; }
+
+/* Search sits with the GitHub and theme controls at the right, not pinned to
+   the start of the content column: the splash home has no sidebar to line up
+   with, and one place for it on every page reads calmer. Unlayered, so it wins
+   over Starlight's @layer rules; phones keep the search icon as it was. */
+@media (min-width: 50rem) {
+  .header > div:nth-child(2) { justify-content: flex-end; }
+}
+
+/* The lightbox (src/lightbox.ts): each content image is a button that opens
+   it whole. The button is only a frame for the image, so it draws nothing of
+   its own but a focus ring. */
+.sl-markdown-content .tw-zoom {
+  display: block; max-width: 100%; margin: 0; padding: 0; border: 0; background: none;
+  color: inherit; font: inherit; cursor: zoom-in; border-radius: 6px;
+}
+.sl-markdown-content .tw-zoom:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; }
+.sl-markdown-content .tw-zoom img { display: block; }
+.tw-lightbox {
+  box-sizing: border-box; width: 100vw; max-width: none; height: 100dvh; max-height: none;
+  margin: 0; padding: 3rem 1rem 1rem; border: 0; background: transparent;
+  display: none; align-items: center; justify-content: center; overflow: auto; cursor: zoom-out;
+}
+.tw-lightbox[open] { display: flex; }
+.tw-lightbox::backdrop { background: rgb(0 0 0 / 0.82); }
+.tw-lightbox img {
+  display: block; width: auto; height: auto; max-height: calc(100dvh - 4rem); margin: auto;
+  border-radius: 6px; background: var(--sl-color-bg); cursor: default;
+}
+.tw-lightbox-close {
+  position: fixed; top: 0.75rem; right: 0.75rem; display: grid; place-items: center;
+  width: 2.5rem; height: 2.5rem; padding: 0; border: 1px solid var(--sl-color-gray-5);
+  border-radius: 999px; background: var(--sl-color-black); color: var(--sl-color-white); cursor: pointer;
+}
+.tw-lightbox-close:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
+.tw-lightbox-open { overflow: hidden; }
+@media (prefers-reduced-motion: no-preference) {
+  .tw-lightbox[open], .tw-lightbox[open]::backdrop { animation: tw-lightbox-in 160ms ease-out; }
+  @keyframes tw-lightbox-in { from { opacity: 0; } }
+}
+
+/* The home's re-branded App: one picture of two looks, its words under it. */
+.tw-brand { margin: 2rem 0 0; }
+.tw-brand figcaption { max-width: 62ch; margin: 1.25rem auto 0; text-align: center; font-size: var(--sl-text-base); line-height: 1.6; color: var(--sl-color-gray-2); }
+.tw-brand figcaption a { color: var(--sl-color-text-accent); white-space: nowrap; }
+.tw-brand figcaption code { font-size: 0.875em; color: var(--sl-color-white); }
+.tw-brand-halves { display: none; }
+@media (max-width: 40rem) {
+  .tw-brand-whole { display: none; }
+  .tw-brand-halves { display: grid; gap: 1rem; }
+  /* Each half of the sheet (two 1298-wide windows over a 700-high strip), cut by its own frame. */
+  .tw-brand-halves .tw-window img { aspect-ratio: 1298 / 700; object-fit: cover; object-position: left top; }
+  .tw-brand-halves .tw-brand-right img { object-position: right top; }
+}

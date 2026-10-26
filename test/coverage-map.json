@@ -1,0 +1,1200 @@
+{
+  "note": "The feature-to-test map: each row is a feature, the public names it owns (surface: a prefix of a test/fixtures/public-surface.json entry, as \"dsl: …\", \"cli: …\" or \"package: export …\"; a trailing $ means that name alone) and the tests that exercise it (file, and a title that file holds). test/coverage-map.test.ts fails when a public name has no row, a cited test is gone, a browser row has no spec, a row leans on an example that does not ship, or a row only Lintel covers names a key Lintel no longer spells. unmapped lists the public names no test exercises yet: it may only shrink. risk marks the features the 0.9.2 example retirement put at risk (R1–R14).",
+  "rows": [
+    {
+      "id": "segments",
+      "surface": ["dsl: app: resources.*.segments"],
+      "tests": [
+        { "file": "test/segments.test.ts" },
+        { "file": "packages/kit/src/client/filterbar.test.ts" },
+        { "file": "e2e/list-cross-filters.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "record-names",
+      "surface": ["dsl: app: resources.*.recordLabel", "dsl: app: resources.*.noun", "dsl: app: resources.*.labels"],
+      "tests": [{ "file": "test/record-label-path.test.ts" }, { "file": "packages/mistri/src/client/components/Document.test.tsx" }]
+    },
+    {
+      "id": "addresses",
+      "surface": [
+        "dsl: app: resources.*.address",
+        "dsl: app: resources.*.slug",
+        "dsl: app: views.*[kind=list].path",
+        "dsl: app: views.*[kind=dashboard].path",
+        "dsl: app: views.*[kind=form].path",
+        "dsl: app: pages.*.path"
+      ],
+      "tests": [
+        { "file": "test/app-address.test.ts" },
+        { "file": "e2e/app-addresses.spec.ts" },
+        { "file": "e2e/app-view-addresses.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "validation",
+      "surface": ["dsl: app: resources.*.validation"],
+      "tests": [
+        { "file": "test/app-dsl-refusals.test.ts" },
+        { "file": "e2e/compass-validation.spec.ts" },
+        { "file": "e2e/record-save-validation.spec.ts" }
+      ],
+      "browser": true
+    },
+    { "id": "computed", "surface": ["dsl: app: resources.*.computed"], "tests": [{ "file": "test/computed-columns.test.ts" }] },
+    {
+      "id": "rollups",
+      "surface": ["dsl: app: resources.*.rollups"],
+      "tests": [{ "file": "test/app-board-lanes.test.ts" }, { "file": "test/app-typegen.test.ts" }]
+    },
+    {
+      "id": "consumes-restocks",
+      "surface": ["dsl: app: resources.*.consumes", "dsl: app: resources.*.restocks"],
+      "tests": [
+        { "file": "test/app-consumes.test.ts" },
+        { "file": "examples/apps/lintel/tests/maintenance.test.ts", "title": "a part used comes off the shelf" }
+      ]
+    },
+    {
+      "id": "row-defined-fields",
+      "risk": "R5",
+      "surface": ["dsl: app: resources.*.defined"],
+      "tests": [
+        { "file": "test/defined-fields.test.ts" },
+        { "file": "test/command-defined-input.test.ts" },
+        { "file": "e2e/row-defined-fields.spec.ts", "title": "the New form asks the chosen category’s fields" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "money",
+      "surface": ["dsl: app: ui.currency"],
+      "tests": [{ "file": "packages/kit/src/client/components/MinorMoneyInput.test.tsx" }, { "file": "e2e/order-lines.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "files",
+      "surface": ["dsl: app: resources.*.file"],
+      "tests": [{ "file": "test/app-files.test.ts" }, { "file": "e2e/thread-attachments.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "tags",
+      "surface": ["dsl: app: resources.*.tags"],
+      "tests": [{ "file": "test/tags-served.test.ts" }, { "file": "e2e/thread-tags.spec.ts" }],
+      "browser": true
+    },
+    { "id": "search", "surface": ["dsl: app: resources.*.search"], "tests": [{ "file": "test/app-search-paths.test.ts" }] },
+    { "id": "unions", "surface": ["dsl: app: unions"], "tests": [{ "file": "test/app-union.test.ts" }] },
+    {
+      "id": "live",
+      "surface": ["dsl: app: live", "dsl: app: resources.*.live", "dsl: app: resources.*.live = false"],
+      "tests": [
+        { "file": "test/live-binding.test.ts" },
+        { "file": "test/live-change-capture.test.ts" },
+        { "file": "test/live-sync-route.test.ts" }
+      ]
+    },
+    {
+      "id": "audit",
+      "surface": ["dsl: app: resources.*.audit", "dsl: app: track"],
+      "tests": [{ "file": "e2e/record-history.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "text-references-types",
+      "surface": ["dsl: app: resources.*.text", "dsl: app: resources.*.references", "dsl: app: resources.*.types"],
+      "tests": [{ "file": "packages/kit/src/client/components/NewRecord.test.tsx" }, { "file": "e2e/tags-and-text-rules.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "display",
+      "surface": ["dsl: app: resources.*.display"],
+      "tests": [
+        { "file": "packages/kit/src/client/components/Dressed.drawings.test.tsx" },
+        { "file": "test/app-lumen-blocks.test.ts" },
+        { "file": "test/display-defaults.test.ts" }
+      ]
+    },
+    {
+      "id": "scan-signature",
+      "risk": "R14",
+      "note": "A unit test draws both inputs; the browser journey types a code into Depot's UPC scan field and draws a signature on a pick list's pad, saving each. The camera's decoding is the unit test's alone: a browser under test has no camera.",
+      "surface": ["dsl: app: resources.*.display.*.scan", "dsl: app: resources.*.display.*.signature"],
+      "tests": [{ "file": "packages/mistri/src/client/components/builtInInputs.test.tsx" }, { "file": "e2e/scan-signature.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "resource-actions",
+      "surface": ["dsl: app: resources.*.actions"],
+      "tests": [{ "file": "test/app-action-grants.test.ts" }, { "file": "test/app-command-actions.test.ts" }]
+    },
+    {
+      "id": "machines",
+      "surface": ["dsl: app: resources.*.machine"],
+      "tests": [
+        { "file": "test/app-machine.test.ts" },
+        { "file": "test/app-machine-doors.test.ts" },
+        { "file": "e2e/thread-transitions.spec.ts" }
+      ],
+      "browser": true
+    },
+    { "id": "at-timers", "surface": ["dsl: app: resources.*.at"], "tests": [{ "file": "test/tenant-timers.test.ts" }] },
+    {
+      "id": "notify",
+      "risk": "R8",
+      "surface": ["dsl: app: resources.*.notify"],
+      "tests": [
+        { "file": "test/app-notify.test.ts" },
+        { "file": "test/email-outbox.test.ts" },
+        { "file": "e2e/notifications.spec.ts", "title": "a signed-out reader has no bell" },
+        { "file": "examples/apps/lintel/tests/maintenance.test.ts", "title": "the resident hears by email" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "flows",
+      "risk": "R6",
+      "surface": ["dsl: app: resources.*.flows", "dsl: app: pages.*.sections[][kind=flows]", "dsl: app: pages.*.sections[][kind=diagram]"],
+      "tests": [
+        { "file": "test/flows.test.ts" },
+        { "file": "test/flow-runner.test.ts" },
+        { "file": "packages/kit/src/client/components/PageFlowDiagram.test.tsx" },
+        { "file": "e2e/flows.spec.ts", "title": "waits for approval on its page" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "resource-form",
+      "surface": ["dsl: app: resources.*.form", "dsl: app: resources.*.inputs"],
+      "tests": [
+        { "file": "packages/mistri/src/client/components/FormSurface.test.tsx" },
+        { "file": "test/form-rules.test.ts" },
+        { "file": "packages/kit/src/client/components/NewRecord.test.tsx" }
+      ]
+    },
+    {
+      "id": "csv-import",
+      "risk": "R7",
+      "surface": ["dsl: app: resources.*.import", "dsl: app: views.*[kind=list].import"],
+      "tests": [
+        { "file": "test/app-import-commands.test.ts" },
+        { "file": "packages/mistri/src/client/components/ImportDialog.test.tsx" },
+        { "file": "e2e/depot.spec.ts", "title": "a catalog imports from a CSV file" },
+        { "file": "e2e/depot.spec.ts", "title": "a paper count imports through Record count" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "resource-basics",
+      "surface": [
+        "dsl: app: resources$",
+        "dsl: app: resources.*.access",
+        "dsl: app: resources.*.clone",
+        "dsl: app: resources.*.delete",
+        "dsl: app: resources.*.favorite",
+        "dsl: app: resources.*.fields",
+        "dsl: app: resources.*.hidden",
+        "dsl: app: resources.*.owner",
+        "dsl: app: resources.*.page",
+        "dsl: app: resources.*.physical",
+        "dsl: app: resources.*.settings",
+        "dsl: app: resources.*.view"
+      ],
+      "tests": [{ "file": "test/app-access.test.ts" }, { "file": "test/app-editing.test.ts" }, { "file": "e2e/crm.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "sources",
+      "surface": ["dsl: app: sources", "dsl: app: connection"],
+      "tests": [
+        { "file": "test/app-sources.test.ts" },
+        { "file": "test/app-multisource-http.test.ts" },
+        { "file": "e2e/multisource-app.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "lists",
+      "surface": ["dsl: app: views$", "dsl: app: views.*[kind=list]"],
+      "tests": [
+        { "file": "packages/kit/src/client/components/AppList.test.tsx" },
+        { "file": "test/app-list-presentations.test.ts" },
+        { "file": "e2e/crm.spec.ts" },
+        { "file": "examples/apps/lintel/tests/manager.spec.ts", "title": "the rent roll lists every home" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "bulk",
+      "surface": ["dsl: app: views.*[kind=list].actions"],
+      "tests": [{ "file": "packages/kit/src/client/bulkActions.test.ts" }, { "file": "e2e/payday-work.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "filter-rail",
+      "surface": [
+        "dsl: app: views.*[kind=list].filterBar",
+        "dsl: app: views.*[kind=list].filters",
+        "dsl: app: views.*[kind=list].suggest",
+        "dsl: app: views.*[kind=list].advancedFilters"
+      ],
+      "tests": [
+        { "file": "test/app-shell.test.ts" },
+        { "file": "e2e/list-cross-filters.spec.ts" },
+        { "file": "e2e/compass-filter-rail.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "checklist",
+      "surface": ["dsl: app: views.*[kind=list].presentation[kind=checklist]", "dsl: app: views.*[kind=list].quickAdd"],
+      "tests": [{ "file": "test/app-checklist.test.ts" }, { "file": "e2e/tick.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "queue",
+      "surface": ["dsl: app: views.*[kind=list].presentation[kind=queue]"],
+      "tests": [{ "file": "packages/mistri/src/client/components/QueueList.test.tsx" }, { "file": "e2e/thread-triage.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "board",
+      "surface": ["dsl: app: views.*[kind=list].board"],
+      "tests": [
+        { "file": "packages/mistri/src/client/components/BoardList.test.tsx" },
+        { "file": "test/app-board-order.test.ts" },
+        { "file": "e2e/compass-pipeline.spec.ts" },
+        { "file": "e2e/board-planning.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "split",
+      "surface": ["dsl: app: views.*[kind=list].split"],
+      "tests": [{ "file": "e2e/thread-split.spec.ts" }, { "file": "e2e/desk-conversation.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "calendar",
+      "surface": ["dsl: app: views.*[kind=list].presentation[kind=calendar]"],
+      "tests": [{ "file": "packages/mistri/src/client/components/CalendarList.test.tsx" }, { "file": "e2e/compass-calendar.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "cards",
+      "surface": ["dsl: app: views.*[kind=list].presentation[kind=cards]"],
+      "tests": [
+        { "file": "packages/kit/src/client/components/CardsList.test.tsx" },
+        { "file": "test/app-cards.test.ts" },
+        { "file": "e2e/forecourt-marketplace.spec.ts" },
+        { "file": "examples/apps/lintel/tests/public.spec.ts", "title": "a visitor finds a home" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "tree",
+      "surface": ["dsl: app: views.*[kind=list].presentation[kind=tree]"],
+      "tests": [{ "file": "packages/mistri/src/client/components/TreeList.test.tsx" }]
+    },
+    {
+      "id": "gantt",
+      "surface": ["dsl: app: views.*[kind=list].presentation[kind=gantt]"],
+      "tests": [{ "file": "packages/mistri/src/client/components/GanttList.test.tsx" }]
+    },
+    {
+      "id": "custom-list",
+      "risk": "R10",
+      "surface": ["dsl: app: views.*[kind=list].presentation[kind=custom]"],
+      "tests": [
+        { "file": "test/app-components-surfaces.test.ts" },
+        { "file": "e2e/commons.spec.ts", "title": "the post stream: a member reacts from a chip" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "inline-edit",
+      "surface": ["dsl: app: views.*[kind=list].editable"],
+      "tests": [
+        { "file": "test/app-list-editable-http.test.ts" },
+        { "file": "test/app-list-editable.test.ts" },
+        { "file": "e2e/inline-edit.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "query-language",
+      "surface": ["dsl: app: views.*[kind=list].query"],
+      "tests": [{ "file": "test/agreement.test.ts" }, { "file": "e2e/query.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "page-sections",
+      "surface": ["dsl: app: pages", "dsl: page:"],
+      "tests": [
+        { "file": "test/app-pages.test.ts" },
+        { "file": "packages/kit/src/client/components/Page.test.tsx" },
+        { "file": "e2e/pages.spec.ts" },
+        { "file": "e2e/record-compose.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "timeline",
+      "surface": ["dsl: app: pages.*.sections[][kind=timeline]"],
+      "tests": [
+        { "file": "packages/kit/src/client/components/PageTimeline.test.tsx" },
+        { "file": "e2e/desk-conversation.spec.ts" },
+        { "file": "examples/apps/lintel/tests/manager.spec.ts", "title": "a repair page holds the conversation" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "history",
+      "surface": ["dsl: app: pages.*.sections[][kind=history]"],
+      "tests": [{ "file": "packages/kit/src/client/components/PageHistory.test.tsx" }, { "file": "e2e/record-history.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "documents",
+      "surface": ["dsl: app: pages.*.document"],
+      "tests": [
+        { "file": "packages/mistri/src/client/components/Document.test.tsx" },
+        { "file": "e2e/payday.spec.ts", "title": "open the same statement on a phone" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "forms",
+      "surface": ["dsl: app: views.*[kind=form]"],
+      "tests": [
+        { "file": "test/app-forms.test.ts" },
+        { "file": "test/saved-forms-http.test.ts" },
+        { "file": "packages/mistri/src/client/components/SavedFormSurface.test.tsx" },
+        { "file": "examples/apps/lintel/tests/public.spec.ts", "title": "asks to see it" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "multi-step-forms",
+      "surface": ["dsl: app: views.*[kind=form].steps"],
+      "tests": [
+        { "file": "packages/mistri/src/client/components/FormRoom.test.tsx" },
+        { "file": "e2e/atelier.spec.ts", "title": "New order takes its products in the lines grid" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "header-new",
+      "risk": "R9",
+      "surface": ["dsl: app: ui.shell.new"],
+      "tests": [
+        { "file": "test/app-shell-new.test.ts" },
+        { "file": "e2e/depot.spec.ts", "title": "the header's New menu lists what each role may make" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "commands",
+      "surface": ["package: export ./commands"],
+      "tests": [
+        { "file": "test/business-command-recovery.test.ts" },
+        { "file": "test/app-command-actions.test.ts" },
+        { "file": "examples/apps/lintel/tests/ledger.test.ts", "title": "the accountant records a payment" }
+      ]
+    },
+    {
+      "id": "exclusive-operations",
+      "risk": "R12",
+      "surface": [],
+      "tests": [
+        { "file": "test/command-sequences.test.ts" },
+        { "file": "test/loaner-desk.test.ts", "title": "concurrent distinct checkouts have one effect" },
+        { "file": "test/loaner-desk.test.ts", "title": "database constraints protect external writers" },
+        { "file": "e2e/loaner-desk.spec.ts", "title": "a second prepared checkout visibly refuses stale state" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "several-machines",
+      "risk": "R11",
+      "surface": [],
+      "tests": [
+        { "file": "test/command-carried-machines.test.ts" },
+        { "file": "test/atelier.test.ts", "title": "Atelier refunds never exceed what was paid" },
+        { "file": "e2e/atelier.spec.ts", "title": "refund part of a payment" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "jobs",
+      "surface": ["package: export ./jobs"],
+      "tests": [
+        { "file": "test/combinations.test.ts" },
+        { "file": "examples/apps/lintel/tests/ledger.test.ts", "title": "rent is posted once for a month" }
+      ]
+    },
+    {
+      "id": "workflows",
+      "surface": ["package: export ./workflows"],
+      "tests": [
+        { "file": "test/workflow-engine.test.ts" },
+        { "file": "test/workflow-operations-http.test.ts" },
+        { "file": "examples/apps/lintel/tests/ledger.test.ts", "title": "late fees are assessed once" }
+      ]
+    },
+    {
+      "id": "integrations",
+      "surface": ["package: export ./integration"],
+      "tests": [{ "file": "test/integrations.test.ts" }, { "file": "test/inbound-webhooks.test.ts" }]
+    },
+    {
+      "id": "signed-callback",
+      "risk": "R13",
+      "surface": [],
+      "tests": [
+        {
+          "file": "test/loaner-desk-acceptance/acceptance.test.ts",
+          "title": "a scan returns the loan once, a retried delivery replays it"
+        },
+        { "file": "examples/apps/lintel/tests/integrations.test.ts", "title": "a settled payment pays its charge once" },
+        { "file": "examples/apps/lintel/tests/integrations.test.ts", "title": "a forged callback is refused" }
+      ]
+    },
+    {
+      "id": "policy",
+      "surface": ["package: export ./policy"],
+      "tests": [
+        { "file": "test/app-policy-resources.test.ts" },
+        { "file": "examples/apps/lintel/tests/permissions.test.ts", "title": "a resident reads their own household" }
+      ]
+    },
+    {
+      "id": "dashboards",
+      "surface": ["dsl: app: views.*[kind=dashboard]"],
+      "tests": [
+        { "file": "packages/mistri/src/client/components/Dashboard.test.tsx" },
+        { "file": "test/app-dashboard-blocks.test.ts" },
+        { "file": "e2e/home-dashboard.spec.ts" },
+        { "file": "examples/apps/lintel/tests/manager.spec.ts", "title": "the manager starts on Today" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "branding",
+      "surface": ["dsl: app: branding"],
+      "tests": [{ "file": "test/app-branding-dsl.test.ts" }, { "file": "packages/mistri/src/client/components/BrandingForm.test.tsx" }]
+    },
+    {
+      "id": "components",
+      "surface": ["dsl: app: <component>", "dsl: app: pages.*.sections[][kind=custom]", "package: export ./ui"],
+      "tests": [{ "file": "test/app-components.test.ts" }, { "file": "e2e/preview-blocks.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "component-examples",
+      "surface": ["package: export ./ui/testing"],
+      "tests": [{ "file": "packages/mistri/src/client/components/sdk/sdk.surfaces.test.tsx" }]
+    },
+    {
+      "id": "free-form-pages",
+      "risk": "R4",
+      "surface": ["package: export ./page"],
+      "tests": [
+        { "file": "test/app-components-surfaces.test.ts" },
+        { "file": "e2e/depot.spec.ts", "title": "a picker walks a list on a phone" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "landing",
+      "surface": ["dsl: app: views.*[kind=landing]"],
+      "tests": [
+        { "file": "test/app-landing.test.ts" },
+        { "file": "e2e/public-pages.spec.ts" },
+        { "file": "examples/apps/lintel/tests/public.spec.ts", "title": "a visitor finds a home" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "human-check",
+      "surface": ["dsl: app: auth.challenge"],
+      "tests": [
+        { "file": "test/public-page-commands.test.ts" },
+        { "file": "test/challenge-turnstile.test.ts" },
+        { "file": "e2e/public-door.spec.ts", "title": "sends the widget's token" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "signed-out-reads",
+      "surface": ["dsl: app: auth.public"],
+      "tests": [
+        { "file": "test/app-public-access.test.ts" },
+        { "file": "examples/apps/lintel/tests/permissions.test.ts", "title": "signed out, a visitor reads the listings" },
+        { "file": "e2e/commons.spec.ts", "title": "a signed-out reader reads the front page" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "seo",
+      "surface": [],
+      "tests": [{ "file": "test/deeplink-public.test.ts" }, { "file": "test/share-card.test.ts" }, { "file": "e2e/public-pages.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "sign-in",
+      "surface": ["dsl: app: auth.providers", "dsl: app: auth.signUp", "dsl: app: auth.store", "dsl: app: auth.defaultRole"],
+      "tests": [
+        { "file": "packages/mistri/src/client/components/SignIn.test.tsx" },
+        { "file": "test/auth.test.ts" },
+        { "file": "e2e/auth-shell.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "roles",
+      "surface": [
+        "dsl: app: auth$",
+        "dsl: app: auth.roles",
+        "dsl: app: views.*[kind=list].roles",
+        "dsl: app: views.*[kind=dashboard].roles",
+        "dsl: app: views.*[kind=form].roles",
+        "dsl: app: pages.*.roles"
+      ],
+      "tests": [
+        { "file": "test/app-access.test.ts" },
+        { "file": "test/app-access-http.test.ts" },
+        { "file": "examples/apps/lintel/tests/permissions.test.ts", "title": "each role may do what authority.lock grants it" }
+      ]
+    },
+    { "id": "me", "surface": ["dsl: app: auth.me"], "tests": [{ "file": "test/app-me.test.ts" }, { "file": "test/app-me-sets.test.ts" }] },
+    {
+      "id": "home-rules",
+      "surface": ["dsl: app: home"],
+      "tests": [
+        { "file": "test/app-home.test.ts" },
+        { "file": "examples/apps/lintel/tests/portal.test.ts", "title": "a resident starts on their portal" }
+      ]
+    },
+    {
+      "id": "row-policies",
+      "surface": ["dsl: app: auth.rows"],
+      "tests": [
+        { "file": "test/app-row-policy-commands-http.test.ts" },
+        { "file": "examples/apps/lintel/tests/permissions.test.ts", "title": "a resident reads their own household" }
+      ]
+    },
+    {
+      "id": "tenancy",
+      "surface": [
+        "dsl: app: auth.tenancy",
+        "dsl: app: views.*[kind=list].realm",
+        "dsl: app: views.*[kind=dashboard].realm",
+        "dsl: app: views.*[kind=form].realm",
+        "dsl: app: pages.*.realm"
+      ],
+      "tests": [{ "file": "test/ignition-tenancy.test.ts" }, { "file": "e2e/tenant-administration.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "targets",
+      "surface": ["dsl: app: <appTarget>", "dsl: app: <presentationCopy>"],
+      "tests": [{ "file": "test/app-navigation-contract.test.ts" }, { "file": "test/http-request-target.test.ts" }]
+    },
+    {
+      "id": "app-api",
+      "surface": ["dsl: app: api"],
+      "tests": [{ "file": "test/api-read-openapi.test.ts" }, { "file": "test/app-api.test.ts" }, { "file": "test/depot-api.test.ts" }]
+    },
+    {
+      "id": "handler",
+      "surface": ["package: export ./handler"],
+      "tests": [{ "file": "test/embed-handler.test.ts" }, { "file": "e2e/embed-handler.spec.ts" }],
+      "browser": true
+    },
+    {
+      "id": "react-embed",
+      "surface": ["package: export ./react"],
+      "tests": [
+        { "file": "packages/mistri/src/embed/index.test.tsx" },
+        { "file": "e2e/embed-react.spec.ts" },
+        { "file": "e2e/embed-react-signin.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "react-routers",
+      "surface": ["package: export ./react/next", "package: export ./react/react-router", "package: export ./react/tanstack-router"],
+      "tests": [{ "file": "packages/mistri/src/embed/index.test.tsx" }]
+    },
+    {
+      "id": "maintenance",
+      "surface": ["package: export ./maintenance"],
+      "tests": [{ "file": "test/store-upgrades.test.ts" }, { "file": "test/assistant-context.test.ts" }]
+    },
+    {
+      "id": "testing-kit",
+      "risk": "R2",
+      "surface": ["package: export ./testing"],
+      "tests": [
+        { "file": "test/app-testing.test.ts" },
+        { "file": "test/app-test-kit.test.ts", "title": "results are values" },
+        { "file": "test/app-test-kit.test.ts", "title": "test init writes a suite for a row-policy App" },
+        { "file": "examples/apps/lintel/tests/ledger.test.ts", "title": "the rent poster posts this month at its slot" },
+        { "file": "examples/apps/lintel/tests/permissions.test.ts", "title": "a matrix row that is wrong fails it" }
+      ]
+    },
+    {
+      "id": "retention",
+      "surface": ["dsl: app: retention"],
+      "tests": [
+        { "file": "test/retention.test.ts", "title": "takes durations and forever, and refuses anything else" },
+        { "file": "test/retention.test.ts", "title": "prunes what is older than the window, keeps the rest, and never prunes forever" },
+        { "file": "test/retention.test.ts", "title": "a write that moved only bookkeeping columns leaves no row; a real change still does" }
+      ]
+    },
+    {
+      "id": "assistant",
+      "surface": ["dsl: app: assistant"],
+      "tests": [
+        { "file": "test/assistant-starters.test.ts" },
+        { "file": "test/assistant-context.test.ts" },
+        { "file": "e2e/assistant.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "flags",
+      "surface": ["dsl: app: flags", "dsl: app: features", "package: export ./openfeature"],
+      "tests": [
+        { "file": "test/flag-command.test.ts" },
+        { "file": "test/flag-app-catalog.test.ts" },
+        { "file": "test/app-features.test.ts" },
+        { "file": "test/openfeature-provider.test.ts" }
+      ]
+    },
+    {
+      "id": "experiments",
+      "surface": ["dsl: app: experiments", "dsl: app: audiences"],
+      "tests": [{ "file": "test/experiment-decisions.test.ts" }, { "file": "test/flag-audiences.test.ts" }]
+    },
+    { "id": "analytics", "surface": ["dsl: app: analytics"], "tests": [{ "file": "test/analytics-declarations.test.ts" }] },
+    {
+      "id": "looks-and-themes",
+      "surface": ["dsl: app: ui.theme", "dsl: app: ui.customThemes", "dsl: theme:"],
+      "tests": [
+        { "file": "packages/kit/src/client/theme.test.ts" },
+        { "file": "test/theme.test.ts" },
+        { "file": "test/theme-spec.test.ts" },
+        { "file": "e2e/theme-palettes.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "nav",
+      "surface": ["dsl: app: nav"],
+      "tests": [
+        { "file": "test/app-navigation-contract.test.ts" },
+        { "file": "test/navigation-tree.test.ts" },
+        { "file": "e2e/sidebar-groups.spec.ts" },
+        { "file": "e2e/nav-counts.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "languages",
+      "risk": "R1",
+      "surface": ["dsl: app: ui.messages", "dsl: app: ui.locale"],
+      "tests": [
+        { "file": "test/app-messages.test.ts" },
+        { "file": "packages/kit/src/client/messages.test.ts" },
+        { "file": "e2e/payday.spec.ts", "title": "Payday framework language persists" },
+        { "file": "e2e/payday.spec.ts", "title": "Payday live caption changes preserve an unsaved new-record form" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "shell",
+      "surface": [
+        "dsl: app: ui$",
+        "dsl: app: ui.shell",
+        "dsl: app: ui.appSwitcher",
+        "dsl: app: ui.logo",
+        "dsl: app: ui.footer",
+        "dsl: app: ui.csp",
+        "dsl: app: ui.export",
+        "dsl: app: ui.editing",
+        "dsl: app: id",
+        "dsl: app: name"
+      ],
+      "tests": [{ "file": "test/app-shell.test.ts" }, { "file": "e2e/auth-shell.spec.ts" }],
+      "browser": true
+    },
+    { "id": "timezone", "surface": ["dsl: app: ui.timezone"], "tests": [{ "file": "test/app-timezone-projection.test.ts" }] },
+    {
+      "id": "phone-layout",
+      "surface": [],
+      "tests": [
+        { "file": "e2e/grade.spec.ts" },
+        { "file": "e2e/payday.spec.ts", "title": "phone App menu is the sidebar in a modal drawer" }
+      ],
+      "browser": true
+    },
+    {
+      "id": "dev-mode",
+      "risk": "R3",
+      "surface": ["cli: command dev"],
+      "tests": [{ "file": "test/app-dev-mode.test.ts", "title": "dev serves the App with a kept secret and a sign-in per role" }]
+    },
+    {
+      "id": "app-package",
+      "surface": ["package: export ./app"],
+      "tests": [{ "file": "test/schema.test.ts" }, { "file": "test/app-typegen.test.ts" }]
+    },
+    {
+      "id": "schemas",
+      "surface": [
+        "package: export ./schema/app.schema.json",
+        "package: export ./schema/check.schema.json",
+        "package: export ./schema/page.schema.json",
+        "package: export ./schema/theme.schema.json"
+      ],
+      "tests": [{ "file": "test/schema.test.ts" }, { "file": "test/check-json.test.ts" }, { "file": "test/theme.test.ts" }]
+    },
+    { "id": "package-json", "surface": ["package: export ./package.json"], "tests": [{ "file": "test/scaffold.test.ts" }] },
+    { "id": "cli-command-agent", "surface": ["cli: command agent"], "tests": [{ "file": "test/agent-skill.test.ts" }] },
+    { "id": "cli-command-analytics", "surface": ["cli: command analytics"], "tests": [{ "file": "test/console-authority.test.ts" }] },
+    {
+      "id": "cli-command-api-token",
+      "surface": ["cli: command api-token"],
+      "tests": [{ "file": "test/api-token-args.test.ts" }, { "file": "test/cli.test.ts" }]
+    },
+    { "id": "cli-command-build", "surface": ["cli: command build"], "tests": [{ "file": "test/app-build-cli.test.ts" }] },
+    {
+      "id": "cli-command-check",
+      "surface": ["cli: command check"],
+      "tests": [{ "file": "test/app-check.test.ts" }, { "file": "test/check-json.test.ts" }]
+    },
+    {
+      "id": "cli-command-compare-openapi",
+      "surface": ["cli: command compare-openapi"],
+      "tests": [{ "file": "test/api-export-cli.test.ts" }]
+    },
+    { "id": "cli-command-docs", "surface": ["cli: command docs"], "tests": [{ "file": "test/docs.test.ts" }] },
+    {
+      "id": "cli-command-experiments",
+      "surface": ["cli: command experiments"],
+      "tests": [{ "file": "test/flag-app-catalog.test.ts" }, { "file": "test/cli-startup.test.ts" }]
+    },
+    {
+      "id": "cli-command-explain",
+      "surface": ["cli: command explain"],
+      "tests": [{ "file": "test/agent-brief.test.ts" }, { "file": "test/resource-http-contract.test.ts" }]
+    },
+    { "id": "cli-command-flags", "surface": ["cli: command flags"], "tests": [{ "file": "test/flag-command.test.ts" }] },
+    { "id": "cli-command-flows", "surface": ["cli: command flows"], "tests": [{ "file": "test/flows-start.test.ts" }] },
+    {
+      "id": "cli-command-grade",
+      "surface": ["cli: command grade"],
+      "tests": [{ "file": "e2e/grade.spec.ts" }, { "file": "test/grade.test.ts" }]
+    },
+    { "id": "cli-command-jobs", "surface": ["cli: command jobs"], "tests": [{ "file": "test/jobs-run.test.ts" }] },
+    { "id": "cli-command-mail-dns", "surface": ["cli: command mail-dns"], "tests": [{ "file": "test/email-dkim.test.ts" }] },
+    { "id": "cli-command-messages", "surface": ["cli: command messages"], "tests": [{ "file": "test/app-messages.test.ts" }] },
+    {
+      "id": "cli-command-migrate",
+      "surface": ["cli: command migrate"],
+      "tests": [{ "file": "test/first-run.test.ts" }, { "file": "test/migrate-live.test.ts" }]
+    },
+    { "id": "cli-command-new", "surface": ["cli: command new"], "tests": [{ "file": "test/scaffold.test.ts" }] },
+    {
+      "id": "cli-command-observe",
+      "surface": ["cli: command observe"],
+      "tests": [{ "file": "test/observe-cli.test.ts" }, { "file": "test/check-json.test.ts" }]
+    },
+    {
+      "id": "cli-command-postgres",
+      "surface": ["cli: command postgres"],
+      "tests": [{ "file": "test/http-live.test.ts" }, { "file": "test/update-guard.test.ts" }]
+    },
+    {
+      "id": "cli-command-schema",
+      "surface": ["cli: command schema"],
+      "tests": [{ "file": "test/agent-brief.test.ts" }, { "file": "test/api-token-maintenance-cli.test.ts" }]
+    },
+    { "id": "cli-command-seed", "surface": ["cli: command seed"], "tests": [{ "file": "test/seed.test.ts" }] },
+    { "id": "cli-command-shot", "surface": ["cli: command shot"], "tests": [{ "file": "e2e/shot.spec.ts" }], "browser": true },
+    { "id": "cli-command-suite", "surface": ["cli: command suite"], "tests": [{ "file": "test/suite-flags.test.ts" }] },
+    {
+      "id": "cli-command-tenant",
+      "surface": ["cli: command tenant"],
+      "tests": [{ "file": "test/api-list-order.test.ts" }, { "file": "test/experiment-exposure.test.ts" }]
+    },
+    { "id": "cli-command-test", "surface": ["cli: command test"], "tests": [{ "file": "test/app-test-kit.test.ts" }] },
+    { "id": "cli-command-theme", "surface": ["cli: command theme"], "tests": [{ "file": "test/theme-tooling.test.ts" }] },
+    { "id": "cli-command-virtual", "surface": ["cli: command virtual"], "tests": [{ "file": "test/virtualization-cli.test.ts" }] },
+    {
+      "id": "cli-flag-allowed-host",
+      "surface": ["cli: flag --allowed-host"],
+      "tests": [{ "file": "test/api-read-startup-options.test.ts" }, { "file": "test/app-api-network.test.ts" }]
+    },
+    { "id": "cli-flag-api", "surface": ["cli: flag --api"], "tests": [{ "file": "test/new-api.test.ts" }] },
+    {
+      "id": "cli-flag-api-integers",
+      "surface": ["cli: flag --api-integers"],
+      "tests": [{ "file": "test/api-read-startup-options.test.ts" }, { "file": "test/command-contracts.test.ts" }]
+    },
+    {
+      "id": "cli-flag-api-reads",
+      "surface": ["cli: flag --api-reads"],
+      "tests": [{ "file": "test/api-read-startup-options.test.ts" }, { "file": "test/app-api-row-policy.test.ts" }]
+    },
+    {
+      "id": "cli-flag-api-requests-per-minute",
+      "surface": ["cli: flag --api-requests-per-minute"],
+      "tests": [{ "file": "test/api-read-startup-options.test.ts" }, { "file": "test/app-api-row-policy.test.ts" }]
+    },
+    { "id": "cli-flag-api-token-env", "surface": ["cli: flag --api-token-env"], "tests": [{ "file": "test/http-openapi-boot.test.ts" }] },
+    { "id": "cli-flag-api-url", "surface": ["cli: flag --api-url"], "tests": [{ "file": "test/http-openapi-boot.test.ts" }] },
+    {
+      "id": "cli-flag-app",
+      "surface": ["cli: flag --app"],
+      "tests": [{ "file": "test/config-relative-sqlite.test.ts" }, { "file": "e2e/shot-text.spec.ts" }]
+    },
+    { "id": "cli-flag-app-entry", "surface": ["cli: flag --app-entry"], "tests": [{ "file": "test/app-env-entry.test.ts" }] },
+    {
+      "id": "cli-flag-app-mcp",
+      "surface": ["cli: flag --app-mcp"],
+      "tests": [{ "file": "test/app-api-row-policy.test.ts" }, { "file": "test/app-api-postgres-cli.test.ts" }]
+    },
+    { "id": "cli-flag-append", "surface": ["cli: flag --append"], "tests": [{ "file": "test/seed.test.ts" }] },
+    {
+      "id": "cli-flag-as",
+      "surface": ["cli: flag --as"],
+      "tests": [
+        { "file": "test/shot-tenant-release.test.ts" },
+        { "file": "e2e/ignition-display.spec.ts" },
+        { "file": "e2e/shot-text.spec.ts", "title": "--as <email> signs in as an account already there" }
+      ]
+    },
+    {
+      "id": "cli-flag-base-path",
+      "surface": ["cli: flag --base-path"],
+      "tests": [{ "file": "e2e/app-mounts.spec.ts" }, { "file": "test/app-check.test.ts" }]
+    },
+    {
+      "id": "cli-flag-both",
+      "surface": ["cli: flag --both"],
+      "tests": [{ "file": "e2e/shot.spec.ts" }, { "file": "test/agent-skill.test.ts" }]
+    },
+    {
+      "id": "cli-flag-brief",
+      "surface": ["cli: flag --brief"],
+      "tests": [{ "file": "test/agent-brief.test.ts" }, { "file": "test/grade.test.ts" }]
+    },
+    { "id": "cli-flag-browser", "surface": ["cli: flag --browser"], "tests": [{ "file": "test/first-run.test.ts" }] },
+    { "id": "cli-flag-bump", "surface": ["cli: flag --bump"], "tests": [{ "file": "test/command-contracts.test.ts" }] },
+    { "id": "cli-flag-click", "surface": ["cli: flag --click"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
+    {
+      "id": "cli-flag-commands",
+      "surface": ["cli: flag --commands"],
+      "tests": [{ "file": "test/new-api.test.ts" }, { "file": "test/app-api-writes-events-postgres.test.ts" }]
+    },
+    { "id": "cli-flag-compare", "surface": ["cli: flag --compare"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
+    {
+      "id": "cli-flag-config",
+      "surface": ["cli: flag --config"],
+      "tests": [{ "file": "test/config-relative-sqlite.test.ts" }, { "file": "e2e/shot-text.spec.ts" }]
+    },
+    { "id": "cli-flag-connection", "surface": ["cli: flag --connection"], "tests": [{ "file": "test/migrate-flags.test.ts" }] },
+    { "id": "cli-flag-dark", "surface": ["cli: flag --dark"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
+    { "id": "cli-flag-days", "surface": ["cli: flag --days"], "tests": [{ "file": "test/tenant-first-boot-cli.test.ts" }] },
+    {
+      "id": "cli-flag-db",
+      "surface": ["cli: flag --db"],
+      "tests": [{ "file": "test/server-shutdown-cli.test.ts" }, { "file": "test/observe-cli.test.ts" }]
+    },
+    { "id": "cli-flag-defaults", "surface": ["cli: flag --defaults"], "tests": [{ "file": "test/cli-open-defaults.test.ts" }] },
+    {
+      "id": "cli-flag-demo",
+      "surface": ["cli: flag --demo"],
+      "tests": [{ "file": "test/cli.test.ts" }, { "file": "test/api-read-startup-options.test.ts" }]
+    },
+    { "id": "cli-flag-deploy", "surface": ["cli: flag --deploy"], "tests": [{ "file": "test/check-deploy.test.ts" }] },
+    {
+      "id": "cli-flag-design",
+      "surface": ["cli: flag --design"],
+      "tests": [{ "file": "test/check-fix.test.ts" }, { "file": "test/display-defaults.test.ts" }]
+    },
+    { "id": "cli-flag-desk", "surface": ["cli: flag --desk"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
+    {
+      "id": "cli-flag-dev",
+      "surface": ["cli: flag --dev"],
+      "tests": [{ "file": "test/observe-cli.test.ts" }, { "file": "test/app-api-tenant-cli.test.ts" }]
+    },
+    { "id": "cli-flag-dev-url", "surface": ["cli: flag --dev-url"], "tests": [{ "file": "test/migrate-desired.test.ts" }] },
+    {
+      "id": "cli-flag-diff",
+      "surface": ["cli: flag --diff"],
+      "tests": [{ "file": "test/tenant-startup-cli.test.ts" }, { "file": "test/theme-tooling.test.ts" }]
+    },
+    {
+      "id": "cli-flag-dir",
+      "surface": ["cli: flag --dir"],
+      "tests": [{ "file": "test/first-run.test.ts" }, { "file": "test/agent-skill.test.ts" }]
+    },
+    {
+      "id": "cli-flag-dry-run",
+      "surface": ["cli: flag --dry-run"],
+      "tests": [{ "file": "test/flows-start.test.ts" }, { "file": "test/migrate-desired.test.ts" }]
+    },
+    {
+      "id": "cli-flag-export",
+      "surface": ["cli: flag --export"],
+      "tests": [{ "file": "test/app-multisource-cli.test.ts" }, { "file": "test/cli.test.ts" }]
+    },
+    { "id": "cli-flag-fail-on", "surface": ["cli: flag --fail-on"], "tests": [{ "file": "test/mcp.test.ts" }] },
+    {
+      "id": "cli-flag-fail-on-design-warning",
+      "surface": ["cli: flag --fail-on-design-warning"],
+      "tests": [{ "file": "test/check-json.test.ts" }]
+    },
+    {
+      "id": "cli-flag-fix",
+      "surface": ["cli: flag --fix"],
+      "tests": [{ "file": "test/display-defaults.test.ts" }, { "file": "test/theme-tooling.test.ts" }]
+    },
+    { "id": "cli-flag-flow", "surface": ["cli: flag --flow"], "tests": [{ "file": "test/flows-start.test.ts" }] },
+    {
+      "id": "cli-flag-force",
+      "surface": ["cli: flag --force"],
+      "tests": [{ "file": "test/app-test-kit.test.ts" }, { "file": "test/agent-skill.test.ts" }]
+    },
+    {
+      "id": "cli-flag-from-openapi",
+      "surface": ["cli: flag --from-openapi"],
+      "tests": [{ "file": "test/parcel-sample.test.ts" }, { "file": "test/api-read-startup-options.test.ts" }]
+    },
+    { "id": "cli-flag-full", "surface": ["cli: flag --full"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
+    {
+      "id": "cli-flag-help",
+      "surface": ["cli: flag --help"],
+      "tests": [{ "file": "test/api-token-command.test.ts" }, { "file": "test/api-token-args.test.ts" }]
+    },
+    { "id": "cli-flag-history-table", "surface": ["cli: flag --history-table"], "tests": [{ "file": "test/migrate-flags.test.ts" }] },
+    {
+      "id": "cli-flag-host",
+      "surface": ["cli: flag --host"],
+      "tests": [{ "file": "test/workflow-host.test.ts" }, { "file": "test/workflow-host-pg.test.ts" }]
+    },
+    {
+      "id": "cli-flag-jobs",
+      "surface": ["cli: flag --jobs"],
+      "tests": [{ "file": "test/migrate-app-stores.test.ts" }, { "file": "test/workflow-host.test.ts" }]
+    },
+    {
+      "id": "cli-flag-json",
+      "surface": ["cli: flag --json"],
+      "tests": [{ "file": "test/new-api.test.ts" }, { "file": "e2e/grade.spec.ts" }]
+    },
+    { "id": "cli-flag-light", "surface": ["cli: flag --light"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
+    {
+      "id": "cli-flag-lint",
+      "surface": ["cli: flag --lint"],
+      "tests": [
+        { "file": "test/trust-proxy.test.ts" },
+        { "file": "test/api-read-startup-options.test.ts" },
+        { "file": "test/tenant-startup-cli.test.ts" }
+      ]
+    },
+    { "id": "cli-flag-locale", "surface": ["cli: flag --locale"], "tests": [{ "file": "test/app-messages.test.ts" }] },
+    {
+      "id": "cli-flag-lock-timeout",
+      "surface": ["cli: flag --lock-timeout"],
+      "tests": [{ "file": "test/connection-pool-config.test.ts" }]
+    },
+    { "id": "cli-flag-matrix", "surface": ["cli: flag --matrix"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
+    {
+      "id": "cli-flag-mcp",
+      "surface": ["cli: flag --mcp"],
+      "tests": [{ "file": "test/app-multisource-cli.test.ts" }, { "file": "test/observe-cli.test.ts" }]
+    },
+    {
+      "id": "cli-flag-migrations",
+      "surface": ["cli: flag --migrations"],
+      "tests": [{ "file": "test/migrate-desired.test.ts" }, { "file": "test/migrate.test.ts" }]
+    },
+    {
+      "id": "cli-flag-mount",
+      "surface": ["cli: flag --mount"],
+      "tests": [{ "file": "test/mount.test.ts" }, { "file": "e2e/app-mounts.spec.ts" }]
+    },
+    { "id": "cli-flag-name", "surface": ["cli: flag --name"], "tests": [{ "file": "test/scaffold.test.ts" }] },
+    {
+      "id": "cli-flag-no-config",
+      "surface": ["cli: flag --no-config"],
+      "tests": [{ "file": "test/server-shutdown-cli.test.ts" }, { "file": "test/http-openapi-boot.test.ts" }]
+    },
+    { "id": "cli-flag-no-live", "surface": ["cli: flag --no-live"], "tests": [{ "file": "test/live-sync-route.test.ts" }] },
+    { "id": "cli-flag-open", "surface": ["cli: flag --open"], "tests": [{ "file": "test/cli-open-defaults.test.ts" }] },
+    {
+      "id": "cli-flag-openapi",
+      "surface": ["cli: flag --openapi"],
+      "tests": [{ "file": "test/http-openapi-boot.test.ts" }, { "file": "test/api-read-startup-options.test.ts" }]
+    },
+    {
+      "id": "cli-flag-out",
+      "surface": ["cli: flag --out"],
+      "tests": [{ "file": "e2e/shot-text.spec.ts" }, { "file": "e2e/shot.spec.ts" }]
+    },
+    { "id": "cli-flag-output-schema", "surface": ["cli: flag --output-schema"], "tests": [{ "file": "test/mcp.test.ts" }] },
+    { "id": "cli-flag-palette", "surface": ["cli: flag --palette"], "tests": [{ "file": "test/theme-tooling.test.ts" }] },
+    { "id": "cli-flag-dockerfile", "surface": ["cli: flag --dockerfile"], "tests": [{ "file": "test/app-dockerfile.test.ts" }] },
+    { "id": "cli-flag-drain-delay", "surface": ["cli: flag --drain-delay"], "tests": [{ "file": "test/server-shutdown-cli.test.ts" }] },
+    {
+      "id": "cli-flag-pending",
+      "surface": ["cli: flag --pending"],
+      "tests": [{ "file": "test/migrate-live.test.ts" }, { "file": "test/check-json.test.ts" }]
+    },
+    { "id": "cli-flag-pending-on", "surface": ["cli: flag --pending-on"], "tests": [{ "file": "test/migrate.test.ts" }] },
+    { "id": "cli-flag-phone", "surface": ["cli: flag --phone"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
+    {
+      "id": "cli-flag-policy",
+      "surface": ["cli: flag --policy"],
+      "tests": [{ "file": "test/api-token-tenant-postgres.test.ts" }, { "file": "test/shot-tenant-release.test.ts" }]
+    },
+    { "id": "cli-flag-pooler", "surface": ["cli: flag --pooler"], "tests": [{ "file": "test/connection-pool-config.test.ts" }] },
+    {
+      "id": "cli-flag-port",
+      "surface": ["cli: flag --port"],
+      "tests": [{ "file": "e2e/keyset-pager.spec.ts" }, { "file": "e2e/new-form-switch.spec.ts" }]
+    },
+    { "id": "cli-flag-press", "surface": ["cli: flag --press"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
+    { "id": "cli-flag-read-pool", "surface": ["cli: flag --read-pool"], "tests": [{ "file": "test/connection-pool-config.test.ts" }] },
+    { "id": "cli-flag-recipes", "surface": ["cli: flag --recipes"], "tests": [{ "file": "test/theme-bench.test.ts" }] },
+    {
+      "id": "cli-flag-reindex",
+      "surface": ["cli: flag --reindex"],
+      "tests": [{ "file": "test/tenant-search.test.ts" }, { "file": "test/api-export-cli.test.ts" }]
+    },
+    { "id": "cli-flag-repeatable", "surface": ["cli: flag --repeatable"], "tests": [{ "file": "test/migrate-flags.test.ts" }] },
+    { "id": "cli-flag-replicas", "surface": ["cli: flag --replicas"], "tests": [{ "file": "test/check-deploy.test.ts" }] },
+    { "id": "cli-flag-roles", "surface": ["cli: flag --roles"], "tests": [{ "file": "test/tenant-first-boot-cli.test.ts" }] },
+    {
+      "id": "cli-flag-routes",
+      "surface": ["cli: flag --routes"],
+      "tests": [{ "file": "e2e/public-pages.spec.ts" }, { "file": "test/app-check.test.ts" }]
+    },
+    {
+      "id": "cli-flag-rows",
+      "surface": ["cli: flag --rows"],
+      "tests": [{ "file": "test/seed.test.ts" }, { "file": "test/scaffold.test.ts" }]
+    },
+    {
+      "id": "cli-flag-scaffold-app",
+      "surface": ["cli: flag --scaffold-app"],
+      "tests": [{ "file": "test/first-run.test.ts" }, { "file": "test/authoring-loop.test.ts" }]
+    },
+    { "id": "cli-flag-scale", "surface": ["cli: flag --scale"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
+    { "id": "cli-flag-schema", "surface": ["cli: flag --schema"], "tests": [{ "file": "test/schema-flag.test.ts" }] },
+    { "id": "cli-flag-schema-file", "surface": ["cli: flag --schema-file"], "tests": [{ "file": "test/migrate-desired.test.ts" }] },
+    { "id": "cli-flag-search", "surface": ["cli: flag --search"], "tests": [{ "file": "test/docs.test.ts" }] },
+    {
+      "id": "cli-flag-seed",
+      "surface": ["cli: flag --seed"],
+      "tests": [{ "file": "test/virtualization-cli.test.ts" }, { "file": "test/tick-app.test.ts" }]
+    },
+    { "id": "cli-flag-shutdown-grace", "surface": ["cli: flag --shutdown-grace"], "tests": [{ "file": "test/shutdown-timings.test.ts" }] },
+    {
+      "id": "cli-flag-suite",
+      "surface": ["cli: flag --suite"],
+      "tests": [{ "file": "test/inbound-cli.test.ts" }, { "file": "test/suite-flags.test.ts" }]
+    },
+    {
+      "id": "cli-flag-template",
+      "surface": ["cli: flag --template"],
+      "tests": [{ "file": "test/new-app.test.ts" }, { "file": "e2e/new-intake.spec.ts" }]
+    },
+    {
+      "id": "cli-flag-tenant",
+      "surface": ["cli: flag --tenant"],
+      "tests": [{ "file": "test/api-token-tenant-postgres.test.ts" }, { "file": "test/shot-tenant-release.test.ts" }]
+    },
+    {
+      "id": "cli-flag-text",
+      "surface": ["cli: flag --text"],
+      "tests": [{ "file": "e2e/shot-text.spec.ts" }, { "file": "test/agent-skill.test.ts" }]
+    },
+    { "id": "cli-flag-theme", "surface": ["cli: flag --theme"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
+    {
+      "id": "cli-flag-tool",
+      "surface": ["cli: flag --tool"],
+      "tests": [{ "file": "test/first-run.test.ts" }, { "file": "test/migrate-desired.test.ts" }]
+    },
+    { "id": "cli-flag-tools", "surface": ["cli: flag --tools"], "tests": [{ "file": "test/mcp.test.ts" }] },
+    {
+      "id": "cli-flag-trust-proxy",
+      "surface": ["cli: flag --trust-proxy"],
+      "tests": [{ "file": "test/trust-proxy.test.ts" }, { "file": "test/api-read-startup-options.test.ts" }]
+    },
+    {
+      "id": "cli-flag-trust-proxy-cloudflare",
+      "surface": ["cli: flag --trust-proxy-cloudflare"],
+      "tests": [{ "file": "test/trust-proxy.test.ts" }]
+    },
+    { "id": "cli-flag-trust-proxy-hops", "surface": ["cli: flag --trust-proxy-hops"], "tests": [{ "file": "test/trust-proxy.test.ts" }] },
+    {
+      "id": "cli-flag-auth-proxy-header",
+      "surface": ["cli: flag --auth-proxy-header"],
+      "tests": [
+        { "file": "test/trust-proxy.test.ts" },
+        { "file": "test/api-read-startup-options.test.ts" },
+        { "file": "test/tenant-startup-cli.test.ts" }
+      ]
+    },
+    { "id": "cli-flag-type", "surface": ["cli: flag --type"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
+    { "id": "cli-flag-url", "surface": ["cli: flag --url"], "tests": [{ "file": "test/observe-cli.test.ts" }] },
+    {
+      "id": "cli-flag-version",
+      "surface": ["cli: flag --version"],
+      "tests": [{ "file": "test/cli.test.ts" }, { "file": "test/cli-startup.test.ts" }]
+    },
+    { "id": "cli-flag-wait", "surface": ["cli: flag --wait"], "tests": [{ "file": "test/jobs-run.test.ts" }] },
+    { "id": "cli-flag-wait-for", "surface": ["cli: flag --wait-for"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
+    { "id": "cli-flag-warnings", "surface": ["cli: flag --warnings"], "tests": [{ "file": "test/check-json.test.ts" }] },
+    { "id": "cli-flag-where", "surface": ["cli: flag --where"], "tests": [{ "file": "test/flows-start.test.ts" }] },
+    { "id": "cli-flag-width", "surface": ["cli: flag --width"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
+    {
+      "id": "cli-flag-write-authority",
+      "surface": ["cli: flag --write-authority"],
+      "tests": [{ "file": "test/api-token-args.test.ts" }, { "file": "test/new-api.test.ts" }]
+    },
+    { "id": "cli-flag-write-pool", "surface": ["cli: flag --write-pool"], "tests": [{ "file": "test/connection-pool-config.test.ts" }] },
+    {
+      "id": "decisions",
+      "surface": [
+        "cli: command decide",
+        "cli: flag --dry",
+        "cli: flag --limit",
+        "cli: flag --max-cost",
+        "cli: flag --max-error",
+        "cli: flag --pin",
+        "cli: flag --provider",
+        "cli: flag --truth",
+        "cli: flag --yes"
+      ],
+      "tests": [
+        { "file": "test/decide-eval.test.ts" },
+        { "file": "test/decide-runtime.test.ts" },
+        { "file": "examples/apps/lintel/tests/decisions.test.ts" },
+        { "file": "packages/mistri/src/client/components/DecisionChip.test.tsx" },
+        { "file": "e2e/decide.spec.ts" }
+      ],
+      "browser": true
+    }
+  ],
+  "unmapped": ["cli: flag --ahead", "cli: flag --operator", "cli: flag --rate", "cli: flag --samples"]
+}

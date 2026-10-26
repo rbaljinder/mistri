@@ -1,0 +1,20 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth none — the App
+scope ceilings: the declared resources read, and only those with access 'write' write — the App
+resource attachment reads — the App
+resource attachment access write — the App
+resource attachment delete — the App
+resource comment reads — the App
+resource comment access write — the App
+resource cycle reads — the App
+resource issue reads — the App
+resource issue access write — the App
+resource issue_label reads — the App
+resource issue_label access write — the App
+resource issue_label delete — the App
+resource label reads — the App
+resource member reads — the App
+resource project reads — the App

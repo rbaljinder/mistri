@@ -1,0 +1,203 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up open — the App
+auth default-role customer — the App
+auth rows policy — the App
+source keystone connection "keystone" — the App
+source keystone default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource lead access write — the App
+resource lead_activity access write — the App
+resource prequalification access write — the App
+resource saved_vehicle access write — the App
+resource vehicle access write — the App
+role customer read dealer — the App
+role customer read lead — features "inquiries"
+role customer read prequalification — features "rate-checks"
+role customer read program — the App
+role customer read saved_vehicle — features "shortlist"
+role customer read vehicle — the App
+role customer read vehicle_photo — the App
+role customer command checkRate — features "rate-checks"
+role customer command removeSavedVehicle — features "shortlist"
+role customer command saveVehicle — features "shortlist"
+role customer command sendInquiry — features "inquiries"
+role customer fields dealer read city — the App
+role customer fields dealer read franchise_make — the App
+role customer fields dealer read id — the App
+role customer fields dealer read joined_on — the App
+role customer fields dealer read kind — the App
+role customer fields dealer read name — the App
+role customer fields dealer read phone — the App
+role customer fields dealer read state — the App
+role customer fields dealer read status — the App
+role customer fields dealer read street — the App
+role customer fields dealer read zip — the App
+role customer fields lead read created_at — features "inquiries"
+role customer fields lead read dealer_id — features "inquiries"
+role customer fields lead read id — features "inquiries"
+role customer fields lead read last_contact_at — features "inquiries"
+role customer fields lead read message — features "inquiries"
+role customer fields lead read reference — features "inquiries"
+role customer fields lead read status — features "inquiries"
+role customer fields lead read vehicle_id — features "inquiries"
+role customer fields prequalification read created_at — features "rate-checks"
+role customer fields prequalification read credit_band — features "rate-checks"
+role customer fields prequalification read desired_payment — features "rate-checks"
+role customer fields prequalification read email — features "rate-checks"
+role customer fields prequalification read estimated_amount — features "rate-checks"
+role customer fields prequalification read estimated_apr — features "rate-checks"
+role customer fields prequalification read first_name — features "rate-checks"
+role customer fields prequalification read id — features "rate-checks"
+role customer fields prequalification read last_name — features "rate-checks"
+role customer fields prequalification read monthly_income — features "rate-checks"
+role customer fields prequalification read phone — features "rate-checks"
+role customer fields prequalification read program_id — features "rate-checks"
+role customer fields prequalification read reference — features "rate-checks"
+role customer fields prequalification read status — features "rate-checks"
+role customer fields prequalification read vehicle_id — features "rate-checks"
+role customer fields prequalification read version — features "rate-checks"
+role customer fields prequalification read zip — features "rate-checks"
+role customer fields vehicle read body — the App
+role customer fields vehicle read condition — the App
+role customer fields vehicle read dealer_id — the App
+role customer fields vehicle read description — the App
+role customer fields vehicle read drivetrain — the App
+role customer fields vehicle read est_payment — the App
+role customer fields vehicle read exterior_color — the App
+role customer fields vehicle read featured — the App
+role customer fields vehicle read features — the App
+role customer fields vehicle read fuel — the App
+role customer fields vehicle read id — the App
+role customer fields vehicle read interior_color — the App
+role customer fields vehicle read list_price — the App
+role customer fields vehicle read listed_on — the App
+role customer fields vehicle read make — the App
+role customer fields vehicle read mileage — the App
+role customer fields vehicle read model — the App
+role customer fields vehicle read received_on — the App
+role customer fields vehicle read sold_on — the App
+role customer fields vehicle read status — the App
+role customer fields vehicle read stock_number — the App
+role customer fields vehicle read trim — the App
+role customer fields vehicle read version — the App
+role customer fields vehicle read vin — the App
+role customer fields vehicle read year — the App
+role marketplace_admin read dealer — the App
+role marketplace_admin read lead — features "inquiries"
+role marketplace_admin read lead_activity — the App
+role marketplace_admin read prequalification — features "rate-checks"
+role marketplace_admin read program — the App
+role marketplace_admin read saved_vehicle — features "shortlist"
+role marketplace_admin read vehicle — the App
+role marketplace_admin read vehicle_photo — the App
+role marketplace_admin command checkRate — features "rate-checks"
+role marketplace_admin command removeSavedVehicle — features "shortlist"
+role marketplace_admin command saveVehicle — features "shortlist"
+role marketplace_admin command sendInquiry — features "inquiries"
+role marketplace_admin command sendToDealer — features "rate-checks"
+role marketplace_admin fields dealer read city — the App
+role marketplace_admin fields dealer read franchise_make — the App
+role marketplace_admin fields dealer read id — the App
+role marketplace_admin fields dealer read joined_on — the App
+role marketplace_admin fields dealer read kind — the App
+role marketplace_admin fields dealer read name — the App
+role marketplace_admin fields dealer read phone — the App
+role marketplace_admin fields dealer read state — the App
+role marketplace_admin fields dealer read status — the App
+role marketplace_admin fields dealer read street — the App
+role marketplace_admin fields dealer read zip — the App
+role marketplace_admin fields lead read created_at — features "inquiries"
+role marketplace_admin fields lead read dealer_id — features "inquiries"
+role marketplace_admin fields lead read email — features "inquiries"
+role marketplace_admin fields lead read first_name — features "inquiries"
+role marketplace_admin fields lead read id — features "inquiries"
+role marketplace_admin fields lead read last_contact_at — features "inquiries"
+role marketplace_admin fields lead read last_name — features "inquiries"
+role marketplace_admin fields lead read lost_reason — features "inquiries"
+role marketplace_admin fields lead read marketplace_account_id — features "inquiries"
+role marketplace_admin fields lead read message — features "inquiries"
+role marketplace_admin fields lead read next_follow_up_on — features "inquiries"
+role marketplace_admin fields lead read phone — features "inquiries"
+role marketplace_admin fields lead read reference — features "inquiries"
+role marketplace_admin fields lead read source — features "inquiries"
+role marketplace_admin fields lead read status — features "inquiries"
+role marketplace_admin fields lead read vehicle_id — features "inquiries"
+role marketplace_admin fields vehicle read body — the App
+role marketplace_admin fields vehicle read condition — the App
+role marketplace_admin fields vehicle read dealer_id — the App
+role marketplace_admin fields vehicle read description — the App
+role marketplace_admin fields vehicle read drivetrain — the App
+role marketplace_admin fields vehicle read est_payment — the App
+role marketplace_admin fields vehicle read exterior_color — the App
+role marketplace_admin fields vehicle read featured — the App
+role marketplace_admin fields vehicle read features — the App
+role marketplace_admin fields vehicle read fuel — the App
+role marketplace_admin fields vehicle read id — the App
+role marketplace_admin fields vehicle read interior_color — the App
+role marketplace_admin fields vehicle read list_price — the App
+role marketplace_admin fields vehicle read listed_on — the App
+role marketplace_admin fields vehicle read make — the App
+role marketplace_admin fields vehicle read mileage — the App
+role marketplace_admin fields vehicle read model — the App
+role marketplace_admin fields vehicle read received_on — the App
+role marketplace_admin fields vehicle read sold_on — the App
+role marketplace_admin fields vehicle read status — the App
+role marketplace_admin fields vehicle read stock_number — the App
+role marketplace_admin fields vehicle read trim — the App
+role marketplace_admin fields vehicle read version — the App
+role marketplace_admin fields vehicle read vin — the App
+role marketplace_admin fields vehicle read year — the App
+public read dealer — the App
+public read program — the App
+public read vehicle — the App
+public read vehicle_photo — the App
+public fields dealer read city — the App
+public fields dealer read franchise_make — the App
+public fields dealer read id — the App
+public fields dealer read joined_on — the App
+public fields dealer read kind — the App
+public fields dealer read name — the App
+public fields dealer read phone — the App
+public fields dealer read state — the App
+public fields dealer read status — the App
+public fields dealer read street — the App
+public fields dealer read zip — the App
+public fields vehicle read body — the App
+public fields vehicle read condition — the App
+public fields vehicle read dealer_id — the App
+public fields vehicle read description — the App
+public fields vehicle read drivetrain — the App
+public fields vehicle read est_payment — the App
+public fields vehicle read exterior_color — the App
+public fields vehicle read featured — the App
+public fields vehicle read features — the App
+public fields vehicle read fuel — the App
+public fields vehicle read id — the App
+public fields vehicle read interior_color — the App
+public fields vehicle read list_price — the App
+public fields vehicle read listed_on — the App
+public fields vehicle read make — the App
+public fields vehicle read mileage — the App
+public fields vehicle read model — the App
+public fields vehicle read received_on — the App
+public fields vehicle read sold_on — the App
+public fields vehicle read status — the App
+public fields vehicle read stock_number — the App
+public fields vehicle read trim — the App
+public fields vehicle read version — the App
+public fields vehicle read vin — the App
+public fields vehicle read year — the App
+public form inquire runs command inquire version 1 — features "public-forms"
+public form prequalify runs command prequalify version 1 — features "public-forms"
+
+contract checkRate v1 3bedfd966a85
+contract inquire v1 b28c35f01da4
+contract prequalify v1 1e86efabdb0d
+contract removeSavedVehicle v1 03a5af0599b3
+contract saveVehicle v1 dcfd6d489222
+contract sendInquiry v1 e0fe6c04c64f
+contract sendToDealer v1 550f91ab8653

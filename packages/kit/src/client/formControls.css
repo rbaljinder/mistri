@@ -1,0 +1,5 @@
+/* @mistriwork/ui's form controls' rules (packages/ui/src/forms.css), in the base layer beside the primitives' own
+   (style.css says why base). Apart from style.css so a first paint that draws no control does not carry them: the
+   module that first draws a TextField, a Select or a choice imports this file, and it arrives with that chunk. */
+@import '@mistriwork/ui/forms.css' layer(base);
+@import '@mistriwork/ui/preferences.css' layer(base);

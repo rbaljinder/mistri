@@ -1,0 +1,12 @@
+/* The bell's own rules, brought with it: after the base, before any look (style.css names the order).
+   A header icon like the settings gear — 32px square, the UI icon role — with
+   its unread count as a pill beside the mark, in the accent with the ground's
+   ink on it (a word on the accent never takes a fixed white). Kept to the
+   least that says it: this sheet is in every App's first paint, the menu's
+   and the room's are in their own chunk (Inbox.css). */
+@layer components {
+.account-with-inbox, .inbox-trigger { display: inline-flex; align-items: center; gap: var(--space-2); }
+.inbox-trigger { min-width: 32px; min-height: 32px; padding: 0 var(--space-2h); }
+.inbox-trigger .tw-icon { width: 18px; height: 18px; }
+.inbox-count { padding: 1px var(--space-2); border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 var(--text-xs)/16px var(--sans); }
+}

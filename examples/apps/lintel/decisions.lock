@@ -1,0 +1,4 @@
+# decisions.lock: each decision contract, and the models pinned to apply its answers.
+# Contracts are written by `mistri check --write-authority` (a change needs `--bump <decision>`);
+# pins only by `mistri decide eval --pin`. Commit it beside authority.lock.
+decision routeRepair v1 e032e67680f1

@@ -1,0 +1,54 @@
+/*
+ * What a host's stylesheet would otherwise hand the shell: the inherited
+ * type of its body (letter-spacing, line-height, text-transform) and the
+ * element rules of its reset (a border on every td, uppercase buttons), the
+ * things the shell never sets because a served page never has them.
+ *
+ * Adopted before every other sheet of the shell's (shell.ts imports it
+ * first), in its lowest layer, at no specificity: any rule of the shell's
+ * wins over it, and it wins over any rule of the host's that is in a cascade
+ * layer, since the host's layers come before `mistri`. The root inherits
+ * the initial values from its frame (shell.ts makeRoot), as a page's root
+ * does from the window; everything inside it starts from the browser's own
+ * stylesheet, as it would on a page of its own. A host's
+ * unlayered element rules still win (a layered rule cannot beat them); the
+ * iframe is the answer for those (docs: Embed in a React app).
+ *
+ * Written against `*` like the shell's sheets, and rewritten with
+ * them (scripts/embed-css.mjs).
+ */
+@layer base {
+  /* Not where an element's attributes are style (Chromium draws `hidden`, an
+     img's width, an svg's fill as presentational hints, and `all` would
+     revert those too): those keep whatever reaches them. No specificity, so
+     the shell's every rule still wins. */
+  :where(
+    *:not(
+      svg,
+      svg *,
+      [hidden],
+      [lang],
+      [width],
+      [height],
+      [align],
+      [valign],
+      [bgcolor],
+      [border],
+      [nowrap],
+      [color],
+      [face],
+      input[size],
+      ol[type],
+      ul[type],
+      li[type]
+    )
+  ) {
+    all: revert;
+  }
+  /* The frame the root sits in, as a window is to a page: nothing inherited from the host. */
+  :where(.tw-frame) {
+    all: initial;
+    display: block;
+    height: 100%;
+  }
+}

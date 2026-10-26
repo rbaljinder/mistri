@@ -1,0 +1,13 @@
+{
+  "name": "mistri",
+  "short_name": "mistri",
+  "description": "A few lines of TypeScript. A complete App.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#f8f7f5",
+  "theme_color": "#f8f7f5",
+  "icons": [
+    { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en" data-starting>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <title>tablewalk</title>
+    <style>
+      html[data-starting], html[data-starting] body { background: var(--startup-ground, #fff) !important; }
+      html[data-starting] body > :not(#startup-status):not(noscript):not(script) { visibility: hidden !important; }
+      /* The server's drawing of a public room (ssr/PublicRoom.tsx) is for a crawler and a reader without scripts; a
+         scripted reader never sees it, since the room replaces it whole behind the veil. Its pictures are lazy, and a lazy
+         picture that is not rendered is not fetched: hidden only, the twenty a list drew were fetched and resized
+         beside the room's own reads on a first visit, until the veil's cap showed the room half-drawn. */
+      @media (scripting: enabled) { html[data-starting] .public-document img { display: none; } }
+      #startup-status { display: none; }
+      html[data-starting] #startup-status { position: fixed; inset: 0; display: block; color: var(--startup-ink, #333); font: 14px/1.5 system-ui, sans-serif; zoom: calc(1 / var(--density-zoom, 1)); }
+      /* While the App is fetched the page is its shell's outline — a header band, a title, a row of figures, the
+         rows of a list — in faint ink, still: a sentence alone in the middle of a blank screen read as a site that
+         had not started. The sentence stays for a screen reader, and is said aloud on the screen only when the
+         start is slow or fails, in place of the outline. Its classes are `st-`, never the shell's `sk-`: style.css's
+         .sk-row (a grid row, padded, at a look's row height) restyled these the moment it loaded. */
+      .startup-skeleton { position: absolute; inset: 0; --sk: color-mix(in srgb, var(--startup-ink, #333) 7%, transparent); }
+      .startup-skeleton > i, .startup-skeleton b { display: block; border-radius: 4px; background: var(--sk); }
+      .startup-skeleton > .st-band { height: 52px; border-radius: 0; background: none; border-bottom: 1px solid var(--sk); }
+      .startup-skeleton > .st-page { display: grid; gap: 14px; padding: 36px clamp(16px, 3vw, 38px); max-width: 1280px; }
+      .startup-skeleton .st-title { width: min(240px, 60%); height: 24px; }
+      .startup-skeleton .st-line { width: min(420px, 80%); height: 12px; }
+      .startup-skeleton .st-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; padding-block: 18px; border-block: 1px solid var(--sk); background: none; }
+      .startup-skeleton .st-figures b { height: 28px; width: 60%; }
+      .startup-skeleton .st-row { height: 14px; margin-top: 14px; }
+      .startup-skeleton .st-row:nth-of-type(even) { width: 86%; }
+      #startup-status p { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      #startup-status a { color: inherit; }
+      /* The failure page (startup.ts failStartup; the shell's unavailable screen draws the same, features.css .unavail): the App's name, one muted line, one button. */
+      #startup-status .unavail-title { font-size: 16px; font-weight: 600; }
+      #startup-status .unavail-line { color: color-mix(in srgb, var(--startup-ink, #333) 72%, transparent); }
+      #startup-status a.unavail-action { justify-self: center; padding: 6px 14px; border: 1px solid color-mix(in srgb, var(--startup-ink, #333) 40%, transparent); border-radius: 8px; text-decoration: none; font-weight: 600; }
+      html[data-starting] #startup-status:is([data-failed], [data-slow]) { display: grid; place-content: center; gap: 12px; padding: 24px; text-align: center; }
+      #startup-status:is([data-failed], [data-slow]) .startup-skeleton { display: none; }
+      #startup-status:is([data-failed], [data-slow]) p { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; margin: 0; max-width: 32rem; overflow-wrap: anywhere; }
+    </style>
+    <script>
+      // Runs before styles and the module graph: never paint the fallback DB shell.
+      (() => {
+        const root = document.documentElement;
+        const systemDark = matchMedia('(prefers-color-scheme: dark)').matches;
+        let dark = systemDark;
+        let branding;
+        try { branding = JSON.parse(document.getElementById('mistri-branding')?.textContent || 'null'); } catch { /* No request look. */ }
+        /* The App's theme says it is dark (server/clientSurface.ts lookSchemeFor): `dark-only` is the only mode there is,
+           `dark` the one until the reader has picked any (theme.js, which stamps the same once the theme arrives). A
+           first visit would otherwise paint light and flip. */
+        const scheme = document.querySelector('meta[name="mistri-scheme"]')?.content;
+        let mode = null;
+        try { mode = localStorage.getItem('mistri.theme'); } catch { /* No stored pick. */ }
+        const picked = mode === 'system' || mode === 'light' || mode === 'dark';
+        if (scheme === 'dark-only' || (scheme === 'dark' && !picked)) {
+          dark = true;
+          root.dataset.theme = 'dark';
+          root.style.colorScheme = 'dark';
+        }
+        try {
+          if (!root.dataset.theme) {
+            dark = mode === 'dark' || (mode !== 'light' && systemDark);
+            if (mode === 'dark' || mode === 'light') root.dataset.theme = mode;
+          }
+          /* Which App this is, as addressMount.js reads the page's mount
+             (shared/mount.ts): the App at the root has no segment of its own. */
+          let place = location.pathname;
+          const mount = JSON.parse(document.querySelector('meta[name="mistri-mount"]')?.content || '{}');
+          if (mount.base && place.startsWith(mount.base)) place = place.slice(mount.base.length);
+          const apps = mount.apps || {};
+          const first = place.split('/')[1] || '';
+          const app = Object.keys(apps).find(id => apps[id] === first) ?? Object.keys(apps).find(id => apps[id] === '');
+          const signature = JSON.stringify([app === undefined ? first : encodeURIComponent(app), mode,
+            localStorage.getItem('mistri.visual-theme'), systemDark,
+            localStorage.getItem('mistri.workbench-visual-theme'), localStorage.getItem('mistri.visual-palettes'),
+            ...(branding ? [branding.value.identity] : [])]);
+          const cached = JSON.parse(sessionStorage.getItem('mistri.startup.v1') || 'null');
+          if (!branding && cached?.signature === signature && CSS.supports('color', cached.background) && CSS.supports('color', cached.text)) {
+            root.style.setProperty('--startup-ground', cached.background);
+            root.style.setProperty('--startup-ink', cached.text);
+          }
+        } catch { /* Storage is optional for startup. */ }
+        const palette = branding?.value?.theme?.[dark ? 'dark' : 'light'];
+        if (palette && /^#[0-9a-f]{6}$/i.test(palette.ground) && /^#[0-9a-f]{6}$/i.test(palette.ink)) {
+          root.style.setProperty('--startup-ground', palette.ground);
+          root.style.setProperty('--startup-ink', palette.ink);
+        }
+        if (!root.style.getPropertyValue('--startup-ground')) {
+          root.style.setProperty('--startup-ground', dark ? '#191b1d' : '#fff');
+          root.style.setProperty('--startup-ink', dark ? '#eee' : '#333');
+        }
+        /* "Check that the server is running" is said only when the server is not answering. Fifteen seconds
+           from the page's start is an ordinary cold start under load — the server busy, the dev server
+           compiling the client — so at fifteen the server is asked (/healthz: liveness, before any gate),
+           and while it answers the outline stays and it is asked again. Past a minute the page says it is
+           still loading, with Reload, whatever the server says. */
+        let base = '';
+        try { base = JSON.parse(document.querySelector('meta[name="mistri-mount"]')?.content || '{}').base || ''; } catch { /* Served at the root. */ }
+        const began = Date.now();
+        const slow = (words) => {
+          const status = document.getElementById('startup-status');
+          if (!root.hasAttribute('data-starting') || !status || status.hasAttribute('data-failed')) return;
+          status.dataset.slow = 'true';
+          status.querySelector('p').textContent = words;
+          status.querySelector('a').hidden = false;
+        };
+        const check = () => {
+          if (!root.hasAttribute('data-starting')) return;
+          if (Date.now() - began >= 60000) return slow('Still loading. This is taking longer than usual.');
+          let asked;
+          try { asked = fetch(`${base}/healthz`, { cache: 'no-store', signal: AbortSignal.timeout(5000) }); } catch (error) { asked = Promise.reject(error); }
+          asked.then((reply) => reply.ok, () => false).then((answering) => {
+            if (answering) setTimeout(check, 15000);
+            else slow('Still loading. Check that the server is running.');
+          });
+        };
+        setTimeout(check, 15000);
+      })();
+    </script>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/features.css" />
+    <link rel="stylesheet" href="/composer.css" />
+    <link rel="stylesheet" href="/sql.css" />
+    <link rel="stylesheet" href="/page.css" />
+    <link rel="stylesheet" href="/visualThemes.css" />
+    <link rel="stylesheet" href="/themeFamilies.css" />
+    <link rel="stylesheet" href="/customThemes.css" />
+    <link rel="stylesheet" href="/structure.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>&#128279;</text></svg>"
+    />
+  </head>
+  <body>
+    <div id="startup-status" role="status"><div class="startup-skeleton" aria-hidden="true"><i class="st-band"></i><div class="st-page"><b class="st-title"></b><b class="st-line"></b><div class="st-figures"><b></b><b></b><b></b></div><b class="st-row"></b><b class="st-row"></b><b class="st-row"></b><b class="st-row"></b><b class="st-row"></b></div></div><p>Loading...</p><a href="" hidden>Reload</a></div>
+    <!-- A pane the server drew (a public page, server/publicRender.ts) is the page without scripts too. -->
+    <noscript><style>#startup-status { display: none !important; } #content[data-ssr] { visibility: visible !important; }</style>JavaScript is required to open this application.</noscript>
+    <!-- The first stop on the page, so a keyboard gets past the top bar and
+         the sidebar's list of tables in one press. app.js moves the focus
+         itself: following the fragment would be a navigation the router
+         hears. -->
+    <a class="skip-link" href="#content">Skip to content</a>
+    <header class="topbar">
+      <button type="button" class="brand" id="home-button" title="Back to the schema (h)">
+        <span class="brand-mark"></span>
+        <span class="brand-name">tablewalk</span>
+      </button>
+      <!-- The name of the connection is also the way in to managing them.
+           The sidebar has a gear beside the picker, but the sidebar collapses,
+           and "which database am I on" is the one question the top bar answers
+           at all times. Clicking the answer is the obvious gesture. -->
+      <button
+        type="button"
+        class="brand-db"
+        id="db-label"
+        title="Connections…"
+        aria-label="Connections"
+      ></button>
+      <!-- Which database, and the way to a different one, in the chrome that
+           is always on screen. It lived in the sidebar, which collapses, and
+           which is otherwise entirely about the tables *within* one database
+           — the wrong altitude for the control that chooses between them. -->
+      <div class="conn-picker" id="conn-picker"></div>
+      <nav class="topnav" id="topnav" aria-label="App menu" hidden></nav>
+      <form class="querybar" id="querybar" autocomplete="off">
+        <input
+          id="query"
+          type="text"
+          spellcheck="false"
+          placeholder="customer active = true sort name limit 20"
+          aria-label="Query"
+        />
+        <button type="submit">Run</button>
+      </form>
+      <div class="topbar-actions">
+        <button
+          type="button"
+          id="sql-toggle"
+          class="icon-button"
+          aria-pressed="false"
+          title="Show the SQL under the query bar"
+          aria-label="Show the SQL"
+        >
+          SQL
+        </button>
+        <button
+          type="button"
+          id="search-button"
+          class="icon-button"
+          title="Go to a table, view or database (⌘K)"
+          aria-label="Search"
+        >
+          <!-- In an App the button is the search box (app.js adds .tn-search):
+               a mark, a word and the key. A bare "⌘K" was a shortcut with no
+               door; the Workbench keeps its key alone. -->
+          <svg class="tw-icon tn-search-icon" aria-hidden="true" focusable="false" width="1em" height="1em" viewBox="0 0 256 256" fill="currentColor"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg>
+          <span class="tn-search-hint" aria-hidden="true">Search…</span>
+          <span class="tn-search-key" aria-hidden="true">⌘K</span>
+        </button>
+        <!-- The ··· menu is a component (components/OverflowMenu.tsx); it
+             draws its own button here. -->
+        <span id="more-host" class="host-contents"></span>
+      </div>
+    </header>
+
+    <div class="explain-pane" id="explain-pane" hidden>
+      <pre class="explain" id="explain"></pre>
+      <button
+        type="button"
+        id="explain-edit"
+        class="explain-edit"
+        title="Open this statement in the SQL editor"
+        aria-label="Edit this statement and run it"
+      >Edit</button>
+    </div>
+    <div class="errors" id="errors" hidden role="alert"></div>
+    <div class="toast" id="toast" data-live="toast-live" data-alert="toast-alert" hidden></div>
+    <div class="visually-hidden" id="toast-live" role="status" aria-atomic="true"></div>
+    <div class="visually-hidden" id="toast-alert" role="alert" aria-atomic="true"></div>
+
+    <!-- The sidebar is navigation beside the content, not part of it: one
+         <main>, the pane the room is drawn in. -->
+    <div class="layout">
+      <nav class="sidebar" aria-label="Tables">
+        <input id="table-filter" type="search" placeholder="Filter tables…" aria-label="Filter tables" />
+        <ul id="table-list"></ul>
+        <div id="sidebar-app-footer"></div>
+      </nav>
+
+      <main class="content" id="content">
+        <div class="empty" id="empty">
+          <h1>Walk the database, don't list it.</h1>
+          <p>
+            Pick a table on the left, or type a query above. Click any row to open it, and
+            tablewalk will show you every row elsewhere that points at it.
+          </p>
+        </div>
+      </main>
+    </div>
+  </body>
+  <script type="module" src="/boot.js"></script>
+</html>

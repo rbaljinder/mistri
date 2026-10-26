@@ -1,0 +1,2434 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "page.schema.json",
+  "title": "mistri page",
+  "description": "One App page file (an App directory's pages/<id>.json, or the body under pages.<id>) or \u2014 via $defs/page \u2014 one entry of a mistri.json \"pages\" array. The parser in packages/engine/src/shared/page.ts is the truth; this schema is the authoring aid, kept honest by test/schema.test.ts. Both refuse unknown keys.",
+  "$ref": "#/$defs/appPage",
+  "$defs": {
+    "page": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The table a root record is chosen from. Every whose starts here."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connection": {
+          "type": "string",
+          "description": "The one connection this page is for, by id or name. Absent means every connection."
+        },
+        "listTabs": {
+          "type": "boolean",
+          "description": "Draw each run of adjacent list sections (none with a width) as one tab strip. An App's page is off unless true; a Workbench page is on unless false."
+        },
+        "empty": {
+          "enum": [
+            "hide",
+            "collapse"
+          ],
+          "description": "What a related list that says nothing of its own does while it has no rows: hide leaves it out, collapse says it in one line with the other empty lists beside it. A list's own empty wins."
+        },
+        "sections": {
+          "type": "array",
+          "maxItems": 96,
+          "items": {
+            "$ref": "#/$defs/section"
+          },
+          "description": "Absent means the record's fields, full width \u2014 the least a page can be. One screen draws at most 24: per region, the sections in no tab and its largest tab's."
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "additionalProperties": false,
+      "description": "A mistri.json page: one entry of its \"pages\" array, naming its own id (derived from the label when absent)."
+    },
+    "section": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/fields"
+        },
+        {
+          "$ref": "#/$defs/card"
+        },
+        {
+          "$ref": "#/$defs/headline"
+        },
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "$ref": "#/$defs/current"
+        },
+        {
+          "$ref": "#/$defs/metric"
+        },
+        {
+          "$ref": "#/$defs/list"
+        },
+        {
+          "$ref": "#/$defs/breakdown"
+        },
+        {
+          "$ref": "#/$defs/chart"
+        },
+        {
+          "$ref": "#/$defs/note"
+        },
+        {
+          "$ref": "#/$defs/view"
+        },
+        {
+          "$ref": "#/$defs/timeline"
+        },
+        {
+          "$ref": "#/$defs/history"
+        },
+        {
+          "$ref": "#/$defs/flows"
+        },
+        {
+          "$ref": "#/$defs/diagram"
+        },
+        {
+          "$ref": "#/$defs/custom"
+        }
+      ]
+    },
+    "region": {
+      "enum": [
+        "main",
+        "aside"
+      ],
+      "description": "Record layout region. Absent means main; aside is the optional side panel."
+    },
+    "width": {
+      "enum": [
+        "full",
+        "half",
+        "third",
+        "two-thirds"
+      ]
+    },
+    "offset": {
+      "enum": [
+        "quarter",
+        "third",
+        "half",
+        "two-thirds"
+      ]
+    },
+    "fields": {
+      "type": "object",
+      "description": "The record's own fields. No kind means fields.",
+      "properties": {
+        "kind": {
+          "const": "fields"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "show": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The fields to show, in order \u2014 a column, or a dotted path like \"account_id.name\". Absent means all of them."
+        },
+        "columns": {
+          "enum": [
+            1,
+            2,
+            3
+          ],
+          "description": "How many columns the group lays out in. Absent fits the width."
+        },
+        "names": {
+          "const": false,
+          "description": "false keeps a reference's bare id. Absent, an App shows the record it names; the Workbench always keeps ids."
+        },
+        "editable": {
+          "const": true,
+          "description": "true edits the properties in place: a choice is a picker, the rest an input, written through the resource's write grant or, where the reader has none for a column, through an action that sets just that column. The server judges every write as it always does; a reader who may do neither sees the values. For a summary, an accordion or a property rail."
+        },
+        "presentation": {
+          "enum": [
+            "summary",
+            "facts",
+            "table",
+            "properties"
+          ],
+          "description": "Default: properties in the aside, summary in the main region (a call that says the default is told so by mistri check). summary: compact properties. facts: the values alone in one line, a dot between. table: a sheet of caption and value rows in `columns` columns, empty values left out. properties: a property rail, caption beside value with a hairline between rows, every field kept and editable in place where the record may change. A box for another record is kind card, a figure with buttons kind headline; the record's head is kind header."
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      },
+      "additionalProperties": false
+    },
+    "card": {
+      "type": "object",
+      "description": "A box for the record a reference names: the first shown field is the reference (its record's name, opening its page), the rest that record's facts, with a View link at its foot. In the aside unless region says otherwise.",
+      "required": [
+        "kind",
+        "show"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "card"
+        },
+        "show": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The reference column first, then label paths through it (dealer_id, dealer_id.rating).",
+          "minItems": 1
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      }
+    },
+    "headline": {
+      "type": "object",
+      "description": "A figure with buttons: the first shown field is a large figure, the rest a row of facts, links beside.",
+      "required": [
+        "kind",
+        "show"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "headline"
+        },
+        "show": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The figure first, then the facts.",
+          "minItems": 1
+        },
+        "subfigure": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+          "description": "A headline's second figure, under the first and smaller: an estimate, a unit price."
+        },
+        "was": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+          "description": "A headline's earlier value of its figure, a number or money column: struck through beside the figure when it has one above it (a was-price).."
+        },
+        "note": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 300,
+          "description": "Small print under the links: what the figures assume."
+        },
+        "links": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "description": "One or two calls to action, each opening one of the App's views by key.",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "to"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "maxLength": 60
+                  },
+                  "to": {
+                    "$ref": "app.schema.json#/$defs/appTarget"
+                  },
+                  "intent": {
+                    "enum": [
+                      "primary",
+                      "secondary"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "to"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "maxLength": 60
+                  },
+                  "to": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                    "description": "A public form, list or dashboard view this App declares."
+                  },
+                  "intent": {
+                    "enum": [
+                      "primary",
+                      "secondary"
+                    ]
+                  },
+                  "prefill": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "description": "A public form's inputs filled from this record: form input \u2192 field path. Where the form starts, never what it sends.",
+                    "propertyNames": {
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+                    }
+                  },
+                  "defaults": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "description": "A public form's inputs filled with your words: form input \u2192 text of at most 500 characters.",
+                    "propertyNames": {
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "maxLength": 500
+                    }
+                  },
+                  "open": {
+                    "const": "modal",
+                    "description": "Draw the public form over this record instead of opening its page. The address still opens the form on its own."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      }
+    },
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "description": "The record's head as you say it (header() in the DSL), drawn in the head wherever it is written: the page's label over the name, the status column's tone a chip beside it, the facts one line under it, and the record's verbs \u2014 one filled, the destructive ones last and quiet. It says at least one of status, facts, primary, destructive and actions, and takes nothing that would place it elsewhere.",
+      "properties": {
+        "kind": {
+          "const": "header"
+        },
+        "status": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "One of the record's own columns, its display tone drawn as a chip beside the name."
+        },
+        "facts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "description": "The facts line: columns or one-hop label paths, each value dressed by its display rule; { column, after } says a word after the value (\"3 beds\"), agreeing with a count, and { column, before } a word before it (\"Born Apr 24, 2017\").",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "column",
+                  "before"
+                ],
+                "properties": {
+                  "column": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                  },
+                  "before": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "column",
+                  "after"
+                ],
+                "properties": {
+                  "column": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                  },
+                  "after": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "one",
+                          "many"
+                        ],
+                        "properties": {
+                          "one": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          },
+                          "many": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "primary": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The filled action, by its id in the resource's actions ('renew'). Otherwise the first action that is not destructive is filled; a record whose only verbs are destructive gets none."
+        },
+        "destructive": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Action ids drawn last and quiet: ['withdraw']. Update actions that confirm, or set a value the display tones call bad, are destructive without being named."
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The verbs the head draws, by id and in this order: ['resolve', 'reassign']. The record's other verbs go into More; they stay granted and reachable from the palette and useCommand. Absent, the head draws up to three and folds the rest."
+        }
+      }
+    },
+    "current": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "from",
+        "whose"
+      ],
+      "description": "The one current related row as a card (current() in the DSL) \u2014 the active lease, the latest visit: the from rows whose named column is this record, narrowed by query, the first by sort. The row's name opens it, over its show columns as facts; empty says what no row means.",
+      "properties": {
+        "kind": {
+          "const": "current"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "whose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "show": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "column"
+                ],
+                "properties": {
+                  "column": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            ]
+          },
+          "description": "Columns of from to show \u2014 a path, or { column, label } to say it in the app's words. Absent means a sensible default."
+        },
+        "query": {
+          "type": "string",
+          "description": "Extra narrowing, in the query language."
+        },
+        "sort": {
+          "type": "string",
+          "description": "Written like the query bar: \"due_on desc, name\"."
+        },
+        "empty": {
+          "$ref": "#/$defs/relatedEmpty",
+          "description": "Guidance shown when no row is current."
+        }
+      }
+    },
+    "autoValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auto"
+      ],
+      "description": "A value filled in rather than stated: the constants today (the day, on a date column), now (the moment) and me (the signed-in person) from @mistriwork/mistri/app.",
+      "properties": {
+        "auto": {
+          "enum": [
+            "today",
+            "now",
+            "me"
+          ]
+        }
+      }
+    },
+    "relatedEmpty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ],
+      "description": "Guidance shown after this related list successfully loads with no rows.",
+      "properties": {
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "description": {
+          "$ref": "#/$defs/presentationCopy",
+          "description": "A sentence under the title."
+        },
+        "action": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "label",
+            "to"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            "to": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "description": "One number about a relationship \u2014 a list you did not want the rows of.",
+      "properties": {
+        "kind": {
+          "const": "metric"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "measure": {
+          "type": "string",
+          "description": "The dashboard\u2019s words: \"count\" (the default), \"sum amount\", \"avg total as mean\". Everything but a count names a column."
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "whose": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The from rows *whose* named column is this record: \"customer_id\", or \"invoice_id.customer_id\" two references away."
+        },
+        "about": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The record this section is about, when it is not the root: a reference column of the base, like \"site_id\". whose then ends at that table."
+        },
+        "query": {
+          "type": "string",
+          "description": "Extra narrowing, in the query language."
+        },
+        "segment": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "One of the table's segments (resources.<table>.segments), its conditions ANDed with query." },
+        "format": {
+          "type": "string",
+          "enum": [
+            "percent",
+            "number",
+            "money",
+            "duration"
+          ],
+          "description": "How the figure is said, as a dashboard metric's: percent (the figure is 0\u2013100, said with %: \"avg won_flag * 100\" reads \"53.8%\"), number, money in the App's currency, or duration (the figure is seconds, said as \"10h 2m\"). Absent, a measure of one column takes that column's display rule."
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "description": "A word said after the figure (\"of 5\", \"days\")."
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      },
+      "required": [
+        "kind",
+        "from",
+        "whose"
+      ],
+      "additionalProperties": false
+    },
+    "list": {
+      "type": "object",
+      "description": "Rows related to the root: the from rows whose named column is this record \u2014 or, with same (and near), rows that share a key with it.",
+      "properties": {
+        "create": {
+          "oneOf": [
+            {
+              "const": false,
+              "description": "No Add on this list, where the reader could otherwise add a row from it."
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object",
+              "required": [
+                "label"
+              ],
+              "additionalProperties": false,
+              "description": "Create a child through a direct parent-key reference, in the child resource's New form. On a list with a query, its equalities fill the new row. Not supported with about.",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "show": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "defaults": {
+                  "type": "object",
+                  "description": "The values the new row starts with, over the child resource's form defaults: a literal, or the constant today, now or me ({ \"auto\": \"today\" } in JSON).",
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      },
+                      {
+                        "$ref": "#/$defs/autoValue"
+                      }
+                    ]
+                  }
+                },
+                "prefill": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "maxProperties": 8,
+                  "description": "Columns filled from the page's record: the new row's column to the record's column ({ patient_id: 'patient_id' }), as a headline action's prefill maps a form's input to the record's field.",
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "empty": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/relatedEmpty"
+            },
+            {
+              "enum": [
+                "hide",
+                "collapse"
+              ]
+            }
+          ],
+          "description": "Guidance for an empty related list, or hide (leave it out while it has no rows) or collapse (say so in one line with the other empty lists). A list that offers an Add collapses rather than hides, and a tab keeps at least one list."
+        },
+        "kind": {
+          "const": "list"
+        },
+        "sizing": {
+          "enum": [
+            "fit",
+            "scroll"
+          ],
+          "description": "Fit available width (default), or preserve content widths with horizontal scrolling."
+        },
+        "presentation": {
+          "description": "\"gallery\": a related list over a resource whose rows are image files, drawn as a lead photo, thumbnails and a lightbox. A cards object: the rows as cards, in the list view's cards grammar. The one current row as a card is a section of its own, kind current.",
+          "oneOf": [
+            {
+              "const": "gallery"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "primary"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "cards"
+                },
+                "primary": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                },
+                "description": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                  "description": "A text column said under the title at the card's full width, without a caption, clamped to three lines."
+                },
+                "value": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                },
+                "badge": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                },
+                "icon": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                  "description": "A column whose display rule maps its values to icons: the card wears its value's icon before the title."
+                },
+                "media": {
+                  "enum": [
+                    "cover",
+                    "avatar",
+                    "icon"
+                  ],
+                  "description": "How the image is framed. Omit or use cover for the existing picture; avatar makes it a circular portrait and falls back to initials from primary."
+                },
+                "properties": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 4,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                  }
+                },
+                "facts": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 6,
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "column",
+                          "label"
+                        ],
+                        "properties": {
+                          "column": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                          },
+                          "position": {
+                            "enum": [
+                              "before",
+                              "after"
+                            ],
+                            "description": "Where the word stands: after the value (the default) or before it."
+                          },
+                          "label": {
+                            "oneOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "one",
+                                  "many"
+                                ],
+                                "properties": {
+                                  "one": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 40
+                                  },
+                                  "many": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 40
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "footer": {
+                  "description": "Up to four values along the card's foot under a hairline, written as facts are: a catalog item's price and how long it takes.",
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 4,
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "column",
+                          "label"
+                        ],
+                        "properties": {
+                          "column": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                          },
+                          "position": {
+                            "enum": [
+                              "before",
+                              "after"
+                            ],
+                            "description": "Where the word stands: after the value (the default) or before it."
+                          },
+                          "label": {
+                            "oneOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "one",
+                                  "many"
+                                ],
+                                "properties": {
+                                  "one": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 40
+                                  },
+                                  "many": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 40
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "image": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "from",
+                        "whose"
+                      ],
+                      "properties": {
+                        "about": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                          "description": "A reference column of the card's row: the files are the record it names."
+                        },
+                        "from": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "whose": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "sort": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "whose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "show": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "column"
+                ],
+                "properties": {
+                  "column": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            ]
+          },
+          "description": "Columns of from to show \u2014 a path, or { column, label } to say it in the app's words. Absent means a sensible default."
+        },
+        "query": {
+          "type": "string",
+          "description": "Extra narrowing, in the query language."
+        },
+        "segment": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "One of the table's segments (resources.<table>.segments), its conditions ANDed with query." },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Rows to a page; with group, the rows to a group (at most 50)."
+        },
+        "sort": {
+          "type": "string",
+          "description": "Written like the query bar: \"due_on desc, name\"."
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        },
+        "totals": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "description": "Numeric columns, rollups or computed numbers summed in one ruled footer row, over every row that points at the record through its path. No query or same, no presentation."
+        },
+        "rowActions": {
+          "type": "boolean",
+          "description": "true puts a \u22ef menu at the end of each row with that row's own actions and machine verbs, as its page offers them. Not with a presentation."
+        },
+        "group": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "by"
+          ],
+          "description": "The rows under a header for each record they share, one level deep. limit then counts the rows to a group (at most 50) and group.limit the groups to a page. Tables only: not with a presentation or same; rowActions draws its \u22ef on each group's rows.",
+          "properties": {
+            "by": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+              "description": "The column, or the path up references to one, the rows are grouped under. A reference makes each group that record: its name, linked to its page. A plain column makes each group its value. It cannot end at the record the page is on."
+            },
+            "show": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "description": "Columns of the grouped record, said after its name in the header. Only where by ends at a reference."
+            },
+            "sort": {
+              "type": "string",
+              "pattern": "^\\s*[A-Za-z_][A-Za-z0-9_]*(\\s+(asc|desc|ASC|DESC))?\\s*$",
+              "description": "The groups' order, on one column of the grouped record: \"created_on desc\". Absent, the largest group first."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "description": "Groups to a page. Default 5."
+            },
+            "empty": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "pattern": "\\S"
+                },
+                {
+                  "$ref": "#/$defs/messageRef"
+                }
+              ],
+              "description": "What the group of rows with no value is called: 'Backlog'. Absent, \"No <the column>\" (\"No sprint\"). That group is always drawn last, whatever the order."
+            },
+            "sum": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 2,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  }
+                }
+              ],
+              "description": "One or two numeric columns, rollups or computed numbers of the listed rows, summed over every row of each group and said in its header after the count. Unlike totals it works beside a query."
+            }
+          }
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The record's own verbs that add to this list, by id, drawn in the list's head and not the record's: ['addBuyer']. Each is offered as the record's head offers it: granted, and while its condition holds. With actions and no create, the list draws no Add of its own."
+        },
+        "same": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "description": "Instead of whose, rows that share a key with the record: columns a listed row shares with the page's own record, each a column of both tables; over the page's own table the record itself is left out. A record with no value there lists nothing.",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        },
+        "near": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 2,
+          "description": "Number columns kept within \u00b1 this fraction of the record's value (0.25 is \u00b125%); the first is also the order, closest first.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "from"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "whose"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "same"
+                ]
+              },
+              {
+                "required": [
+                  "near"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "same"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "whose"
+                ]
+              },
+              {
+                "required": [
+                  "create"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "breakdown": {
+      "type": "object",
+      "description": "Grouped counts from a related table: the page's \"N by status\" answer.",
+      "properties": {
+        "kind": {
+          "const": "breakdown"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "whose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "about": {
+          "type": "string",
+          "minLength": 1
+        },
+        "by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What to group by: a column of from, or a dotted path ending in one."
+        },
+        "measure": {
+          "type": "string",
+          "description": "What each bar measures, the dashboard\u2019s words: \"count\" (the default), \"sum open_value\". Everything but a count names a column of from, or one of its rollups."
+        },
+        "query": {
+          "type": "string",
+          "description": "Extra narrowing, in the query language."
+        },
+        "segment": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "One of the table's segments (resources.<table>.segments), its conditions ANDed with query." },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Groups shown, biggest first."
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "percent",
+            "number",
+            "money",
+            "duration"
+          ],
+          "description": "How the figure is said, as a dashboard metric's: percent (the figure is 0\u2013100, said with %: \"avg won_flag * 100\" reads \"53.8%\"), number, money in the App's currency, or duration (the figure is seconds, said as \"10h 2m\"). Absent, a measure of one column takes that column's display rule."
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "description": "A word said after the figure (\"of 5\", \"days\")."
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      },
+      "required": [
+        "kind",
+        "from",
+        "whose",
+        "by"
+      ],
+      "additionalProperties": false
+    },
+    "timelineStream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "whose",
+        "at",
+        "show"
+      ],
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "whose": {
+          "type": "string",
+          "description": "The path from `from` back to this record."
+        },
+        "at": {
+          "type": "string",
+          "description": "The date column the stream is ordered and merged by."
+        },
+        "show": {
+          "type": "string",
+          "description": "The line each row becomes: a column, or a dotted path."
+        },
+        "detail": {
+          "type": "string",
+          "description": "A quieter second word \u2014 a kind, an author."
+        },
+        "author": {
+          "type": "string",
+          "description": "Who wrote each row: a column, or a dotted path, said beside its date."
+        },
+        "query": {
+          "type": "string",
+          "description": "Extra narrowing, in the query language."
+        },
+        "about": {
+          "type": "string",
+          "description": "A reference column of the page's table: the stream is about the row it names, and `whose` leads there."
+        },
+        "side": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "This stream's own far side, in place of the timeline's: a condition over its rows ('person_id = record.caller_id')."
+        },
+        "tone": {
+          "enum": [
+            "good",
+            "warn",
+            "bad",
+            "info",
+            "neutral"
+          ],
+          "description": "Every row of this stream on a quiet ground in this tone, in place of the timeline's tone rules."
+        },
+        "compact": {
+          "const": true,
+          "description": "Every row of this stream drawn as one line, in place of the timeline's compact rules."
+        }
+      }
+    },
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "streams"
+      ],
+      "properties": {
+        "kind": {
+          "const": "timeline"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "streams": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/timelineStream"
+          },
+          "description": "Dated child rows from several tables, merged newest-first into one stream."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Per stream, before the merge."
+        },
+        "newest": {
+          "enum": [
+            "first",
+            "last"
+          ],
+          "description": "Where the newest row sits. 'last' reads the section as a conversation: oldest first, the newest at the foot, scrolled to on arrival. Absent or 'first', newest first."
+        },
+        "composer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reply"
+          ],
+          "properties": {
+            "reply": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The command a Reply runs on this record, offered to the reader by an action of the page's resource."
+            },
+            "note": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The command an Internal note runs; absent, the composer is a reply box alone."
+            },
+            "templates": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from",
+                "label",
+                "text"
+              ],
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The resource whose rows are the canned replies."
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The column a reader picks a reply by."
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The column whose words fill the box."
+                },
+                "query": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Which rows are offered, in the query language: 'active = true' (me is the reader). Absent, every row the reader may read."
+                }
+              },
+              "description": "Canned replies: a Templates menu beside Send; picking one fills the box and sends nothing."
+            }
+          },
+          "description": "A conversation's pinned composer under the rows: a Reply / Internal note toggle running these commands, the text typed becoming the command's first text input. Not with create."
+        },
+        "tone": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "enum": [
+                "good",
+                "warn",
+                "bad",
+                "info",
+                "neutral"
+              ]
+            }
+          },
+          "description": "A row's quiet ground by one of its columns' value: { kind: { internal: 'warn' } }. Read on each stream whose table has the column and that says no tone of its own."
+        },
+        "compact": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": "Rows drawn as one line by one of their columns' value: { kind: ['system'] }."
+        },
+        "side": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "The other party's rows, drawn against the far edge on a soft surface: a condition over each stream's rows in the query language, where record.<column> is the page's record ('author_id = record.caller_id'). A stream whose table lacks a column it names is never on the far side; a stream's own side replaces it."
+        },
+        "create": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object",
+              "required": [
+                "label"
+              ],
+              "additionalProperties": false,
+              "description": "A composer: adds a row of the first stream, bound to this record through its direct parent-key reference. Not supported when that stream has a query.",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "show": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "defaults": {
+                  "type": "object",
+                  "description": "The values the new row starts with, over the child resource's form defaults: a literal, or the constant today, now or me ({ \"auto\": \"today\" } in JSON).",
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      },
+                      {
+                        "$ref": "#/$defs/autoValue"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      }
+    },
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "description": "The record's own change history, newest first: who changed which fields, from what to what, and when. Declaring one makes its resource keep a history, in reserved tables provisioned once with @mistriwork/mistri/maintenance. Not under auth.rows 'tenant'.",
+      "properties": {
+        "kind": {
+          "const": "history"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Writes shown before \"Show earlier changes\". Default 20."
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      }
+    },
+    "flows": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "description": "The record's row-driven flow runs (a resource's flows): each run's state, its steps and what a waiting one waits for, read when the section is opened. A workflow operator (operations: ['workflows']) may start a manual flow from it. The base resource must declare flows.",
+      "properties": {
+        "kind": {
+          "const": "flows"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      }
+    },
+    "diagram": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "description": "A flow drawn from its step rows: each position a column, the steps sharing one its lanes, a branch's other way to its goto, each step marked by its kind. On a flow's own page (the base is the from table of a resource's flows) it draws the flow; on the page of a resource that declares flows, the record's run over its flow's steps. The steps are read as the reader's rows when the section is drawn.",
+      "properties": {
+        "kind": {
+          "const": "diagram"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      }
+    },
+    "appPage": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The table a root record is chosen from. Every whose starts here."
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+          "not": {
+            "enum": [
+              "new",
+              "api",
+              "sign-in",
+              "welcome",
+              "form"
+            ]
+          },
+          "description": "Its address after the App's, when not its key: for a base no list view shows, or a second page over one."
+        },
+        "aside": {
+          "const": false,
+          "description": "A page that declares no aside section gets one: the record's remaining readable fields, as a property rail titled by the resource's noun. false leaves it out."
+        },
+        "layout": {
+          "enum": [
+            "record",
+            "conversation",
+            "showcase",
+            "article"
+          ],
+          "description": "The page's archetype, the arrangement of its regions. Absent is the one its sections make, chosen when the App is read (mistri check --defaults says which and why): a gallery first is a showcase, a timeline ending the main column with no list there a conversation, the record's long text with at most 12 facts and nothing else an article, anything else the record's own. record: the record's own written out (a main column, an aside a third of it beside), for a page that would be chosen as another. conversation: one timeline, last in the main column so its composer ends the thread, with the record's cards beside it and any related list in the aside. showcase: the photos (a gallery, first) at two thirds with a panel of 1 to 3 aside sections beside them, then the rest at full width; on a phone the price follows the photos. article: one column at a reading measure, with no aside and no third-width sections. Not on a document or a mistri.json page. A page's layout names a shape from this fixed set, where a dashboard's areas draws its own grid (views.*[kind=dashboard].areas)."
+        },
+        "listTabs": {
+          "type": "boolean",
+          "description": "Draw each run of adjacent list sections (none with a width) as one tab strip. An App's page is off unless true; a Workbench page is on unless false."
+        },
+        "empty": {
+          "enum": [
+            "hide",
+            "collapse"
+          ],
+          "description": "What a related list that says nothing of its own does while it has no rows: hide leaves it out, collapse says it in one line with the other empty lists beside it. A list's own empty wins."
+        },
+        "sections": {
+          "type": "array",
+          "maxItems": 96,
+          "items": {
+            "$ref": "#/$defs/section"
+          },
+          "description": "Absent means the record's fields, full width \u2014 the least a page can be. One screen draws at most 24: per region, the sections in no tab and its largest tab's."
+        },
+        "realm": {
+          "enum": [
+            "tenant",
+            "platform"
+          ],
+          "description": "Whose context the page serves: a tenant's (the default) or the platform realm's, which needs auth.tenancy.platform. Required when its base is platform-owned."
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The roles that may open the page: a reader holding none is not served it, so a record of its base opens on another page and its own address answers as one that does not exist. Each must be declared in auth.roles."
+        },
+        "document": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "label"
+          ],
+          "description": "The record on paper (document()): an invoice, a packing slip, a payslip, addressed under its record (/orders/12/invoice) and offered as a verb on it. Its sections are fields, related lists and notes; it has no path.",
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "description": "What it is, \"Invoice\": the verb on the record and the sheet's heading."
+            },
+            "number": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+              "description": "A field of the record whose value is the document's number. Absent: the record's own name."
+            },
+            "size": {
+              "enum": [
+                "a4",
+                "letter"
+              ],
+              "description": "The sheet. Absent: the paper of the App's locale, Letter in North America."
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The sender's lines under the letterhead's logo and name: an address, a registration."
+            }
+          }
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "additionalProperties": false,
+      "description": "An App page: the body keyed under pages.<id>, or one pages/<id>.json file. The key is its id."
+    },
+    "messageRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message"
+      ],
+      "description": "A message of the App's catalogs (messages/<locale>.ts), said in each reader's language: msg('lead.title').",
+      "properties": {
+        "message": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z][A-Za-z0-9_-]*)+$"
+        },
+        "args": {
+          "type": "object",
+          "description": "Each ICU argument's column path: { \"title\": \"thread_id.title\" }.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+          }
+        }
+      }
+    },
+    "presentationCopy": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        {
+          "$ref": "#/$defs/messageRef"
+        }
+      ]
+    },
+    "chart": {
+      "type": "object",
+      "description": "The related rows measured and drawn: the dashboard's chart about one record.",
+      "properties": {
+        "kind": {
+          "const": "chart"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "whose": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The from rows *whose* named column is this record: \"customer_id\", or \"invoice_id.customer_id\" two references away."
+        },
+        "about": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The record this section is about, when it is not the root: a reference column of the base, like \"site_id\". whose then ends at that table."
+        },
+        "by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What to group by: a bucketed date (\"month issued_on\") for a line, categories for a donut, two keys (\"month issued_on, status\") for stacked bars."
+        },
+        "measure": {
+          "type": "string",
+          "description": "The dashboard\u2019s words: \"count\" (the default), \"sum amount\", \"avg total as mean\". Everything but a count names a column."
+        },
+        "shape": {
+          "enum": [
+            "line",
+            "bar",
+            "donut",
+            "stacked"
+          ],
+          "description": "\"line\" (default), \"bar\" (one series, the current bar marked), \"donut\", or \"stacked\" over a two-key by."
+        },
+        "sort": {
+          "type": "string",
+          "pattern": "^\\s*[A-Za-z_][A-Za-z0-9_]*(\\s+(asc|desc|ASC|DESC))?\\s*$",
+          "description": "The order of a bar chart's or donut's categories: \"value\" (largest first), \"category\" (the key's own order), or one column of from as a list sorts (\"starts_on\", \"ended_on desc\"). Absent, a category with an order of its own keeps it (a date, a step, allowed values in their order, or the rows' own label in the order the rows were made) and any other goes largest first."
+        },
+        "query": {
+          "type": "string",
+          "description": "Extra narrowing, in the query language."
+        },
+        "segment": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "One of the table's segments (resources.<table>.segments), its conditions ANDed with query." },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "A donut's slices or a stacked chart's bars, largest kept."
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "percent",
+            "number",
+            "money",
+            "duration"
+          ],
+          "description": "How the figure is said, as a dashboard metric's: percent (the figure is 0\u2013100, said with %: \"avg won_flag * 100\" reads \"53.8%\"), number, money in the App's currency, or duration (the figure is seconds, said as \"10h 2m\"). Absent, a measure of one column takes that column's display rule."
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "description": "A word said after the figure (\"of 5\", \"days\")."
+        },
+        "height": {
+          "type": "number",
+          "minimum": 120,
+          "description": "The drawing's height in CSS pixels."
+        },
+        "target": {
+          "type": "number",
+          "description": "A goal ruled across a line or stacked bars; not on a donut."
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      },
+      "required": [
+        "kind",
+        "from",
+        "whose",
+        "by"
+      ],
+      "additionalProperties": false
+    },
+    "note": {
+      "type": "object",
+      "description": "The author speaking on a record's page: guidance, a policy, what to do next.",
+      "properties": {
+        "kind": {
+          "const": "note"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The words. Plain text; blank lines separate paragraphs."
+        },
+        "variant": {
+          "enum": [
+            "quiet",
+            "callout"
+          ],
+          "description": "quiet: small print, no mark. callout: a ground of its own, for what must be seen. Absent: the plain note."
+        },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A curated mark above the words."
+        },
+        "action": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "label",
+                "to"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "pattern": "\\S"
+                },
+                "to": {
+                  "type": "string",
+                  "pattern": "\\S"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "label",
+                "to"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "pattern": "\\S"
+                },
+                "to": {
+                  "$ref": "app.schema.json#/$defs/appTarget"
+                }
+              }
+            }
+          ],
+          "description": "A local room or checked cross-App destination. An App page only."
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "view": {
+      "type": "object",
+      "description": "An App list view drawn on a record's page, its rows narrowed to those pointing at the record. An App page only.",
+      "properties": {
+        "kind": {
+          "const": "view"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "view": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A list view's key."
+        },
+        "whose": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The view's rows *whose* named column is this record."
+        },
+        "about": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The record this section is about, when it is not the root: a reference column of the base, like \"site_id\". whose then ends at that table."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Rows per page."
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      },
+      "required": [
+        "kind",
+        "view",
+        "whose"
+      ],
+      "additionalProperties": false
+    },
+    "custom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "component"
+      ],
+      "description": "An author's own component where a section stands: its record fields and named reads are declared, planned and authorized like any section; the module only draws. Not on a page auth.public opens.",
+      "properties": {
+        "kind": {
+          "const": "custom"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "tab": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/presentationCopy"
+            },
+            {
+              "maxLength": 40
+            }
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/presentationCopy"
+        },
+        "component": {
+          "$ref": "app.schema.json#/$defs/component"
+        },
+        "record": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The record's own fields the component reads, label paths welcome."
+        },
+        "rows": {
+          "type": "object",
+          "maxProperties": 8,
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+          },
+          "description": "Named reads of rows, at most eight; the component receives each as rows.<name>.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "show"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The resource its rows come from."
+              },
+              "whose": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The from rows whose named column is this record. Absent, the rows are not tied to it."
+              },
+              "query": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The query language, without the leading table name."
+              },
+              "show": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "The columns the component reads, label paths welcome; each row carries exactly these."
+              },
+              "sort": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Written like the query bar."
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500
+              }
+            }
+          }
+        },
+        "figures": {
+          "type": "object",
+          "maxProperties": 8,
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+          },
+          "description": "Named aggregate reads, at most eight; the component receives each as figures.<name>: exact over every row the reader may see, a number with no by, a group for each value with one.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "measure"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The resource it measures."
+              },
+              "measure": {
+                "type": "string",
+                "pattern": "^(count|(sum|avg|min|max)\\s+[A-Za-z_][A-Za-z0-9_]*)$",
+                "description": "count, or an aggregate and a column: sum amount, avg amount, min due_on, max due_on."
+              },
+              "by": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Group the figure: a column, a path or a period and a date column (status, month opened_on)."
+              },
+              "whose": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The from rows whose named column is this record. Absent, the figure is over the resource's own rows, narrowed by query."
+              },
+              "query": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The query language, without the leading table name."
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500,
+                "description": "With a by, the most groups returned. Default 100."
+              }
+            }
+          }
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "description": "The component's declared props; each checked against its declaration, defaults filled."
+        },
+        "width": {
+          "$ref": "#/$defs/width"
+        },
+        "offsetLeft": {
+          "$ref": "#/$defs/offset"
+        },
+        "offsetRight": {
+          "$ref": "#/$defs/offset"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string",
+          "description": "Shown only when the root record matches this condition, in the query language: \"status = converted\"."
+        }
+      }
+    }
+  }
+}

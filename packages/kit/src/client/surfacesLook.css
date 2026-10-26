@@ -1,0 +1,88 @@
+/* A theme's patterns (`surface.ground`, `surface.nav`, docs/theming.md): six the platform draws, behind the page and
+   behind the menu and never behind a panel or a field, so a control's edge is measured on the plain surface it always
+   was (C2). Each is drawn in the theme's own line color — the page's `line`, the menu's `nav.line` — at a strength of
+   40%, 70% or all of it (paper, two families of fibers crossing, 20%, 45% or 70%), so the color is a role and `check` measures text over the darkest point of each exactly
+   (theme.ts, the pattern's composite). Gradients only: no picture, nothing that moves (C9). Fetched only when a worn
+   theme says a pattern (visualTheme.ts); the root's `data-surface-ground` and `data-surface-nav` name the kind and
+   the strength. */
+@layer theme {
+  :root[data-surface-ground] .app-mode .content {
+    --pattern: color-mix(in srgb, var(--line) 40%, transparent);
+  }
+  :root[data-surface-ground~='2'] .app-mode .content {
+    --pattern: color-mix(in srgb, var(--line) 70%, transparent);
+  }
+  :root[data-surface-ground~='3'] .app-mode .content {
+    --pattern: var(--line);
+  }
+  :root[data-surface-nav] .app-mode :is(.sidebar, .topbar) {
+    --pattern: color-mix(in srgb, var(--nav-line, var(--line)) 40%, transparent);
+  }
+  :root[data-surface-nav~='2'] .app-mode :is(.sidebar, .topbar) {
+    --pattern: color-mix(in srgb, var(--nav-line, var(--line)) 70%, transparent);
+  }
+  :root[data-surface-nav~='3'] .app-mode :is(.sidebar, .topbar) {
+    --pattern: var(--nav-line, var(--line));
+  }
+  /* Paper crosses two families of fibers, so each step is lighter (themePartsCheck.ts PAPER_STRENGTH). */
+  :root[data-surface-ground='paper 1'] .app-mode .content {
+    --pattern: color-mix(in srgb, var(--line) 20%, transparent);
+  }
+  :root[data-surface-ground='paper 2'] .app-mode .content {
+    --pattern: color-mix(in srgb, var(--line) 45%, transparent);
+  }
+  :root[data-surface-ground='paper 3'] .app-mode .content {
+    --pattern: color-mix(in srgb, var(--line) 70%, transparent);
+  }
+  :root[data-surface-nav='paper 1'] .app-mode :is(.sidebar, .topbar) {
+    --pattern: color-mix(in srgb, var(--nav-line, var(--line)) 20%, transparent);
+  }
+  :root[data-surface-nav='paper 2'] .app-mode :is(.sidebar, .topbar) {
+    --pattern: color-mix(in srgb, var(--nav-line, var(--line)) 45%, transparent);
+  }
+  :root[data-surface-nav='paper 3'] .app-mode :is(.sidebar, .topbar) {
+    --pattern: color-mix(in srgb, var(--nav-line, var(--line)) 70%, transparent);
+  }
+
+  /* Paper: a fine crosshatch of fibers. */
+  :root[data-surface-ground~='paper'] .app-mode .content,
+  :root[data-surface-nav~='paper'] .app-mode :is(.sidebar, .topbar) {
+    background-image:
+      repeating-linear-gradient(35deg, var(--pattern) 0 1px, transparent 1px 9px),
+      repeating-linear-gradient(-55deg, var(--pattern) 0 1px, transparent 1px 13px);
+  }
+  /* Grain: specks on two offset lattices, so no row of them lines up. */
+  :root[data-surface-ground~='grain'] .app-mode .content,
+  :root[data-surface-nav~='grain'] .app-mode :is(.sidebar, .topbar) {
+    background-image: radial-gradient(var(--pattern) 0.6px, transparent 1px), radial-gradient(var(--pattern) 0.6px, transparent 1px);
+    background-size:
+      5px 5px,
+      7px 7px;
+    background-position:
+      0 0,
+      2px 3px;
+  }
+  /* Grid: squares of graph paper. */
+  :root[data-surface-ground~='grid'] .app-mode .content,
+  :root[data-surface-nav~='grid'] .app-mode :is(.sidebar, .topbar) {
+    background-image: linear-gradient(var(--pattern) 1px, transparent 1px), linear-gradient(90deg, var(--pattern) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  /* Dots: a dot grid. */
+  :root[data-surface-ground~='dots'] .app-mode .content,
+  :root[data-surface-nav~='dots'] .app-mode :is(.sidebar, .topbar) {
+    background-image: radial-gradient(var(--pattern) 1px, transparent 1.5px);
+    background-size: 16px 16px;
+  }
+  /* Lines: a ruled pad. */
+  :root[data-surface-ground~='lines'] .app-mode .content,
+  :root[data-surface-nav~='lines'] .app-mode :is(.sidebar, .topbar) {
+    background-image: linear-gradient(var(--pattern) 1px, transparent 1px);
+    background-size: 100% 28px;
+  }
+  /* Scanlines: a screen's, a line every third pixel. */
+  :root[data-surface-ground~='scanlines'] .app-mode .content,
+  :root[data-surface-nav~='scanlines'] .app-mode :is(.sidebar, .topbar) {
+    background-image: repeating-linear-gradient(0deg, var(--pattern) 0 1px, transparent 1px 3px);
+  }
+}

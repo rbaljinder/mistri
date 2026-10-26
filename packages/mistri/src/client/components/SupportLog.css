@@ -1,0 +1,31 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* One box, hairlines inside: a visit is separated from the next by a rule,
+   never by a card of its own. Hierarchy is the 20px seam between visits
+   against the 4px gap inside one, not more boxes. */
+.modal.support-log { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box;
+  padding: 22px; font-family: var(--sans); background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.support-log > header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3h); }
+.support-log h2 { margin: 0; font-size: calc(18px * var(--type-k)); }
+.support-log .note { padding: 0; color: var(--ink-muted); line-height: 1.5; }
+.support-log [role="alert"] { color: var(--status-warning); }
+
+.support-log-visits { list-style: none; padding: 0; margin: 20px 0 0; }
+.support-log-visit { padding: var(--space-5) 0; border-top: 1px solid var(--line); }
+.support-log-visit p { margin: 0 0 var(--space-2); overflow-wrap: anywhere; }
+.support-log-who { font-weight: 600; }
+.support-log-when, .support-log-counts { color: var(--ink-muted); font-size: var(--text-sm); }
+.support-log-reason { color: var(--ink-muted); }
+/* A tone that carries meaning is a dot and its word, with no container. */
+.support-log-live { color: var(--accent-ink); font-weight: 400; }
+
+.support-log-changes { list-style: none; padding: 0; margin: var(--space-3h) 0 0; }
+.support-log-changes > li { margin-top: var(--space-3h); padding-left: var(--space-4); border-left: 1px solid var(--line); }
+.support-log-change-head { color: var(--ink-muted); font-size: var(--text-sm); }
+.support-log-changes dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-2) var(--space-4h); margin: var(--space-2h) 0 0; }
+.support-log-changes dt { color: var(--ink-muted); }
+.support-log-changes dd { margin: 0; overflow-wrap: anywhere; }
+.support-log-changes s { color: var(--ink-muted); }
+.support-log-withheld { color: var(--ink-muted); font-size: var(--text-sm); margin-top: var(--space-2h); }
+}

@@ -1,0 +1,266 @@
+# authority.lock: the effective authority of this App, one fact per line, then who contributes it.
+# Written by `mistri check --app <dir> --write-authority`. The server does not start or
+# reload an App whose authority differs from it, and mistri check fails until it is rewritten.
+
+auth providers email — the App
+auth sign-up invite — the App
+auth default-role user — the App
+auth rows tenant — the App
+auth platform realm enabled — the App
+auth tenant profile dealer — the App
+source keystone connection "keystone" — the App
+source keystone default — the App
+scope roles: every read and write is granted by role, within the ceilings — the App
+resource applicant access write — the App
+resource applicant owner tenant — the App
+resource autopay owner platform — the App
+resource customer owner platform — the App
+resource deal access write — the App
+resource deal owner tenant — the App
+resource deal_scenario access write — the App
+resource deal_scenario owner tenant — the App
+resource dealer owner platform — the App
+resource dealer_site owner tenant — the App
+resource dealer_user owner tenant — the App
+resource dealer_visit owner platform — the App
+resource decision_alert access write — the App
+resource decision_alert owner platform — the App
+resource funding owner platform — the App
+resource installment owner platform — the App
+resource intake_submission access write — the App
+resource intake_submission owner platform — the App
+resource lead access write — the App
+resource lead owner tenant — the App
+resource lead_activity access write — the App
+resource lead_activity owner tenant — the App
+resource lender_user owner platform — the App
+resource loan owner platform — the App
+resource loan_application access write — the App
+resource loan_application owner tenant — the App
+resource loan_document owner platform — the App
+resource payment owner platform — the App
+resource payoff_quote owner platform — the App
+resource prequalification owner platform — the App
+resource program owner global — the App
+resource saved_vehicle owner platform — the App
+resource servicing_note owner platform — the App
+resource stipulation access write — the App
+resource stipulation owner tenant — the App
+resource trade_in access write — the App
+resource trade_in owner tenant — the App
+resource underwriting_file owner platform — the App
+resource underwriting_note owner platform — the App
+resource vehicle access write — the App
+resource vehicle owner tenant — the App
+resource vehicle_photo owner tenant — the App
+role automation realm platform — the App
+role automation read decision_alert — the App
+role automation read loan_application — the App
+role automation command flagLateDecision — the App
+role dealer_support realm platform — the App
+role dealer_support read deal — the App
+role dealer_support read deal_scenario — the App
+role dealer_support read dealer — the App
+role dealer_support read dealer_user — the App
+role dealer_support read decision_alert — the App
+role dealer_support read intake_submission — the App
+role dealer_support read lead — the App
+role dealer_support read lead_activity — the App
+role dealer_support read loan_application — the App
+role dealer_support read program — the App
+role dealer_support read stipulation — the App
+role dealer_support read trade_in — the App
+role dealer_support read vehicle — the App
+role dealer_support fields dealer read city — the App
+role dealer_support fields dealer read email — the App
+role dealer_support fields dealer read franchise_make — the App
+role dealer_support fields dealer read id — the App
+role dealer_support fields dealer read joined_on — the App
+role dealer_support fields dealer read kind — the App
+role dealer_support fields dealer read legal_name — the App
+role dealer_support fields dealer read monthly_goal — the App
+role dealer_support fields dealer read name — the App
+role dealer_support fields dealer read on_hold_reason — the App
+role dealer_support fields dealer read phone — the App
+role dealer_support fields dealer read reserve_pct — the App
+role dealer_support fields dealer read state — the App
+role dealer_support fields dealer read status — the App
+role dealer_support fields dealer read street — the App
+role dealer_support fields dealer read tier — the App
+role dealer_support fields dealer read version — the App
+role dealer_support fields dealer read zip — the App
+role finance_manager realm tenant — the App
+role finance_manager read applicant — the App
+role finance_manager read deal — the App
+role finance_manager read deal_scenario — the App
+role finance_manager read dealer_user — the App
+role finance_manager read lead — the App
+role finance_manager read lead_activity — the App
+role finance_manager read loan_application — the App
+role finance_manager read program — the App
+role finance_manager read stipulation — the App
+role finance_manager read trade_in — the App
+role finance_manager read vehicle — the App
+role finance_manager read vehicle_photo — the App
+role finance_manager command addTradeIn — the App
+role finance_manager command logContact — the App
+role finance_manager command markContracted — the App
+role finance_manager command markLeadLost — the App
+role finance_manager command markStipulationReceived — the App
+role finance_manager command recordWalkIn — the App
+role finance_manager command selectScenario — the App
+role finance_manager command startDeal — the App
+role finance_manager command structureDeal — the App
+role finance_manager command submitToLender — the App
+role finance_manager command takeApplication — the App
+role finance_manager command withdrawApplication — the App
+role owner realm tenant — the App
+role owner read applicant — the App
+role owner read deal — the App
+role owner read deal_scenario — the App
+role owner read dealer_user — the App
+role owner read lead — the App
+role owner read lead_activity — the App
+role owner read loan_application — the App
+role owner read program — the App
+role owner read stipulation — the App
+role owner read trade_in — the App
+role owner read vehicle — the App
+role owner read vehicle_photo — the App
+role owner command addTradeIn — the App
+role owner command logContact — the App
+role owner command markContracted — the App
+role owner command markLeadLost — the App
+role owner command markStipulationReceived — the App
+role owner command recordWalkIn — the App
+role owner command selectScenario — the App
+role owner command startDeal — the App
+role owner command structureDeal — the App
+role owner command submitToLender — the App
+role owner command takeApplication — the App
+role owner command withdrawApplication — the App
+role sales_manager realm tenant — the App
+role sales_manager read applicant — the App
+role sales_manager read deal — the App
+role sales_manager read deal_scenario — the App
+role sales_manager read dealer_user — the App
+role sales_manager read lead — the App
+role sales_manager read lead_activity — the App
+role sales_manager read loan_application — the App
+role sales_manager read program — the App
+role sales_manager read stipulation — the App
+role sales_manager read trade_in — the App
+role sales_manager read vehicle — the App
+role sales_manager read vehicle_photo — the App
+role sales_manager command addTradeIn — the App
+role sales_manager command logContact — the App
+role sales_manager command markLeadLost — the App
+role sales_manager command markStipulationReceived — the App
+role sales_manager command recordWalkIn — the App
+role sales_manager command selectScenario — the App
+role sales_manager command startDeal — the App
+role sales_manager command structureDeal — the App
+role sales_manager command takeApplication — the App
+role salesperson realm tenant — the App
+role salesperson read applicant — the App
+role salesperson read deal — the App
+role salesperson read deal_scenario — the App
+role salesperson read dealer_user — the App
+role salesperson read lead — the App
+role salesperson read lead_activity — the App
+role salesperson read loan_application — the App
+role salesperson read program — the App
+role salesperson read stipulation — the App
+role salesperson read trade_in — the App
+role salesperson read vehicle — the App
+role salesperson read vehicle_photo — the App
+role salesperson command addTradeIn — the App
+role salesperson command logContact — the App
+role salesperson command markLeadLost — the App
+role salesperson command recordWalkIn — the App
+role salesperson command startDeal — the App
+role salesperson command takeApplication — the App
+role viewer realm tenant — the App
+role viewer read applicant — the App
+role viewer read deal — the App
+role viewer read deal_scenario — the App
+role viewer read dealer_user — the App
+role viewer read lead — the App
+role viewer read lead_activity — the App
+role viewer read loan_application — the App
+role viewer read program — the App
+role viewer read stipulation — the App
+role viewer read trade_in — the App
+role viewer read vehicle — the App
+role viewer read vehicle_photo — the App
+public form apply runs command submitApplication version 1 — features "apply"
+api version 1 — the App
+api public-spec false — the App
+api role finance_manager — the App
+api role owner — the App
+api role sales_manager — the App
+api resource deal field amount_financed — the App
+api resource deal field apr — the App
+api resource deal field id — the App
+api resource deal field lead_id — the App
+api resource deal field monthly_payment — the App
+api resource deal field reference — the App
+api resource deal field sale_price — the App
+api resource deal field status — the App
+api resource deal field term_months — the App
+api resource deal field vehicle_id — the App
+api resource deal field version — the App
+api resource lead field created_at — the App
+api resource lead field email — the App
+api resource lead field first_name — the App
+api resource lead field id — the App
+api resource lead field last_name — the App
+api resource lead field next_follow_up_on — the App
+api resource lead field phone — the App
+api resource lead field reference — the App
+api resource lead field source — the App
+api resource lead field status — the App
+api resource lead field vehicle_id — the App
+api resource lead field version — the App
+api resource loan_application field approved_amount — the App
+api resource loan_application field approved_apr — the App
+api resource loan_application field approved_term — the App
+api resource loan_application field deal_id — the App
+api resource loan_application field decided_at — the App
+api resource loan_application field id — the App
+api resource loan_application field reference — the App
+api resource loan_application field requested_amount — the App
+api resource loan_application field status — the App
+api resource loan_application field submitted_at — the App
+api resource loan_application field version — the App
+api resource vehicle field id — the App
+api resource vehicle field list_price — the App
+api resource vehicle field make — the App
+api resource vehicle field mileage — the App
+api resource vehicle field model — the App
+api resource vehicle field status — the App
+api resource vehicle field stock_number — the App
+api resource vehicle field trim — the App
+api resource vehicle field vin — the App
+api resource vehicle field year — the App
+api command logContact target {"target":"lead","targets":"one","realm":"tenant"} — the App
+api command startDeal target {"target":"lead","targets":"one","realm":"tenant"} — the App
+
+contract addTradeIn v1 d00dda30e7fc
+contract flagLateDecision v1 7a9dd92c2ada
+contract logContact v1 7c49bf15fea8
+contract markContracted v1 f2363cf782f4
+contract markLeadLost v1 10c0af8f688a
+contract markStipulationReceived v1 8b3d1cc9ce2e
+contract recordWalkIn v1 c740afa1f3cc
+contract saveApplicant v1 8d67b3269718
+contract saveCoApplicant v1 4bb9cd332f59
+contract saveVehicle v1 6569558ce452
+contract selectScenario v1 8838162fe2fb
+contract startApplication v1 631ca6e6ae1c
+contract startDeal v1 4d97060bb356
+contract structureDeal v1 08e652f6e2e8
+contract submitApplication v1 0e7facd92039
+contract submitToLender v1 861b5938a6c9
+contract takeApplication v1 d12dac2f2062
+contract withdrawApplication v1 2a89be0a4d04

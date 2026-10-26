@@ -1,0 +1,418 @@
+/* The shared kit under every look (style.css names the order). */
+@layer kit {
+/* The shared layer under all three looks, which dress Apps only: the database
+   browser carries no `data-visual-theme` and wear
+   style.css's own tokens. App token ownership stays in appnav; explicit
+   typography and density win. */
+:root[data-visual-theme] {
+  --ground: #f5f7f8;
+  --surface: #ffffff;
+  --raised: #edf1f3;
+  --line: #dce3e6;
+  --line-strong: #aebcc3;
+  --line-control: #7e8a91;
+  --ink: #202a30;
+  --ink-muted: #52636c;
+  --ink-subtle: #5d6c75;
+  --accent: #177052;
+  --accent-soft: #e4f1eb;
+  --link: #17664d;
+  --status-good: #177052;
+  --status-warning: #976114;
+  --status-critical: #b44843;
+  --status-info: #3567a0;
+  --radius: 4px;
+  --nav-ground: #202c31;
+  --nav-ink: #f2f7f5;
+  --nav-muted: #bccbcf;
+  --nav-line: #4e626b;
+  --nav-accent: #8de0bc;
+  --chart-tertiary: #b95a51;
+  --chart-secondary: #3d7294;
+  --chart-1: var(--accent);
+  --chart-2: var(--chart-secondary);
+  --chart-3: var(--chart-tertiary);
+  --chart-4: var(--status-warning);
+  --chart-5: #8070a0;
+  --chart-6: #67847b;
+  --chart-7: #8c7890;
+  --chart-8: var(--ink-subtle);
+  --chart-series-opacity: 1;
+  --shadow-pop: 0 8px 24px rgb(26 47 57 / 0.12);
+  --shadow-panel: 0 12px 38px rgb(26 47 57 / 0.16);
+  --shadow-modal: 0 20px 64px rgb(26 47 57 / 0.22);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-visual-theme]:not([data-theme="light"]) {
+    --ground: #151c20;
+    --surface: #1c252a;
+    --raised: #263238;
+    --line: #34434a;
+    --line-strong: #60737b;
+    --line-control: #6c7e86;
+    --ink: #e8eff0;
+    --ink-muted: #b4c4c9;
+    --ink-subtle: #9eb1b9;
+    --accent: #8de0bc;
+    --accent-soft: #213d33;
+    --link: #8de0bc;
+    --status-good: #8de0bc;
+    --status-warning: #e4ba73;
+    --status-critical: #f0948a;
+    --status-info: #91bde5;
+    --nav-ground: #10171a;
+    --chart-tertiary: #ea978b;
+    --chart-secondary: #8dbddb;
+  }
+}
+:root[data-visual-theme][data-theme="dark"] {
+  --ground: #151c20;
+  --surface: #1c252a;
+  --raised: #263238;
+  --line: #34434a;
+  --line-strong: #60737b;
+  --line-control: #6c7e86;
+  --ink: #e8eff0;
+  --ink-muted: #b4c4c9;
+  --ink-subtle: #9eb1b9;
+  --accent: #8de0bc;
+  --accent-soft: #213d33;
+  --link: #8de0bc;
+  --status-good: #8de0bc;
+  --status-warning: #e4ba73;
+  --status-critical: #f0948a;
+  --status-info: #91bde5;
+  --nav-ground: #10171a;
+  --chart-tertiary: #ea978b;
+  --chart-secondary: #8dbddb;
+}
+
+/* The looks track their own type (the style.css tokens); where one sets a
+   label in sentence case over a capitalised base rule, it sets the base's
+   tracking back to normal with it. */
+:root[data-visual-theme] body { font-size: var(--text-md); }
+/* A switch keeps its round track: its ends are its shape, not a control's corner. */
+:root[data-visual-theme] button,
+:root[data-visual-theme] input:not([role=switch]),
+:root[data-visual-theme] select,
+:root[data-visual-theme] textarea { border-radius: var(--radius); }
+/* Shape by role (docs/design.md, Shape): a popup is as square or as round
+   as the controls it opens from, a row in it no rounder than 5px and never
+   rounder than they are, and a panel or a dialog takes the look's larger
+   step. The database browser's own corners are style.css's; these follow the
+   look's --radius, and an App's authored one, wherever it lands on body. */
+:root[data-visual-theme] body {
+  --radius-item: min(var(--radius), 5px);
+  /* A popup stops at 12px: a theme's control may be 16px, and a menu that round loses its first row's corner. */
+  --radius-pop: min(var(--radius), 12px);
+  --radius-panel: var(--radius-lg);
+  --radius-dialog: var(--radius-lg);
+}
+:root[data-visual-theme] .topbar { min-height: 50px; padding-block: var(--space-2); gap: var(--space-6); }
+:root[data-visual-theme] .topbar .account { min-height: 40px; padding-block: var(--space-2); }
+/* The sides only where the shell has not placed the header: a content-width
+   header takes them from the App's width and gutter (features.css). */
+:root[data-visual-theme] .topbar:not([data-header-width="content"]) { padding-inline: var(--space-6); }
+:root[data-visual-theme] .brand { gap: var(--space-4); }
+:root[data-visual-theme] .brand-name { font-size: calc(19px * var(--type-k)); font-weight: 700; }
+:root[data-visual-theme] .brand-mark { width: 17px; height: 17px; border-width: 3px; }
+:root[data-visual-theme] .brand-mark::after { left: 13px; top: 4px; width: 9px; height: 3px; }
+:root[data-visual-theme] .app-mode .topbar {
+  background: var(--nav-ground);
+  border-bottom-color: var(--nav-line);
+  color: var(--nav-ink);
+}
+:root[data-visual-theme] .app-mode .topbar .brand-name { color: var(--nav-ink); }
+:root[data-visual-theme] .app-mode .topbar .brand-mark { border-color: var(--nav-accent); }
+:root[data-visual-theme] .app-mode .topbar .brand-mark::after { background: var(--nav-accent); }
+:root[data-visual-theme] .app-mode .topbar .brand:hover .brand-name { color: var(--nav-accent); }
+:root[data-visual-theme] .app-mode .topbar :is(.tn-item, .tn-search, .icon-button, .mode, .brand-db, .tn-mobile-menu) {
+  color: var(--nav-muted);
+}
+/* The brand's mark, where it is drawn in the text's colour, is the bar's ink as its name is. */
+:root[data-visual-theme] .app-mode .topbar .brand { color: var(--nav-ink); }
+:root[data-visual-theme] .app-mode .topbar .tn-mobile-menu:hover { color: var(--nav-ink); background: color-mix(in srgb, var(--nav-ink) 5%, transparent); }
+:root[data-visual-theme] .app-mode .topbar .tn-item:hover,
+:root[data-visual-theme] .app-mode .topbar .tn-item[aria-current="true"] {
+  background: color-mix(in srgb, var(--nav-ink) 5%, transparent);
+  color: var(--nav-accent);
+}
+:root[data-visual-theme] .app-mode .topbar .tn-search { background: color-mix(in srgb, var(--nav-ink) 3%, transparent); border-color: var(--nav-line); }
+:root[data-visual-theme] .app-mode .topbar .tn-search kbd { color: var(--nav-muted); border-color: var(--nav-line); }
+:root[data-visual-theme] .app-mode .topbar .tn-caret { color: var(--nav-muted); }
+/* The account is the bar's own ink too: on a dark bar the page's dim
+   text left the signed-in name all but unreadable. */
+:root[data-visual-theme] .app-mode .topbar button.account { color: var(--nav-ink); }
+:root[data-visual-theme] .app-mode .topbar button.account:hover { background: color-mix(in srgb, var(--nav-ink) 5%, transparent); }
+:root[data-visual-theme] .app-mode .topbar .tn-group.active > .tn-group-button { color: var(--nav-accent); }
+:root[data-visual-theme] .app-mode .topbar .tn-group.active > .tn-group-button::after { background: var(--nav-accent); }
+:root[data-visual-theme] .app-mode .topbar .tn-group-button[aria-expanded="true"] { color: var(--nav-ink); background: color-mix(in srgb, var(--nav-ink) 7%, transparent); }
+:root[data-visual-theme] .app-mode .topbar .mode { background: transparent; border-color: var(--nav-line); }
+/* Danger is checked against the palette's surface, not an unrelated nav
+   ground. Keep that proven pair even on a differently colored header. */
+:root[data-visual-theme] .app-mode .topbar .mode[aria-pressed="true"] { color: var(--status-critical); background: var(--surface); border-color: var(--status-critical); }
+:root[data-visual-theme] .app-mode .topbar button:focus-visible { outline-color: var(--nav-accent); }
+/* The ring is drawn inside a bar item, so on a current item filled with the
+   nav's accent (Mono) it was the fill's own colour and vanished. The
+   item's ink is the colour that reads on its fill. */
+:root[data-visual-theme] .app-mode .topbar :is(.tn-item[aria-current="true"], .tn-group.active > .tn-group-button):focus-visible { outline-color: currentColor; }
+:root[data-visual-theme] .tn-item,
+:root[data-visual-theme] .tn-trigger { font: 550 var(--type-ui) var(--sans); padding-block: var(--space-3); }
+:root[data-visual-theme] .tn-search { min-height: 32px; border-radius: var(--radius); }
+:root[data-visual-theme] .tn-pop { padding: var(--space-2h); }
+:root[data-visual-theme] .tn-popitem { min-height: 34px; font-family: var(--sans); }
+
+:root[data-visual-theme] .app-mode .content { background: var(--surface); }
+/* The look's roomier pane, unless the App set its own gutter; a content-width
+   header is told, so its brand still lines up with the content edge. */
+:root[data-visual-theme] body.app-topnav:not(.app-custom-gutter) .content { padding-inline: var(--space-6); }
+:root[data-visual-theme] body.app-topnav:not(.app-custom-gutter) .topbar[data-header-width="content"] { --app-shell-outer-gutter: 24px; }
+/* Sticky chrome must paint the page ground: transparency lets scrolled filters
+   and rows show through. Keep it above the list's sticky headers and facets.
+   As tall as a control in it (a list's New, 30px, and the padding), whether a
+   room puts one there or not: a list's bar was 6px taller than its record's. */
+:root[data-visual-theme] .crumbs { flex: none; min-height: 51px; padding-block: var(--space-3h); background: var(--ground); z-index: 5; isolation: isolate; }
+:root[data-visual-theme] .app-mode .crumbs > :is(button, .current) { font-family: var(--sans); font-size: var(--text-sm); }
+:root[data-visual-theme] .app-mode .crumbs .current { font-weight: 600; }
+:root[data-visual-theme] .applist-head { padding-top: var(--space-6); }
+/* A head holding only the hidden heading (a room that draws its own title) takes no room: the heading stays for assistive tech, the band above the room goes. */
+:root[data-visual-theme] .applist-head.dash-head:has(> .applist-title.visually-hidden:only-child) { margin: 0; padding: 0; min-height: 0; }
+:root[data-visual-theme] .applist-head-row { align-items: center; }
+:root[data-visual-theme] .applist-head-row .applist-new { min-height: 34px; padding-inline: var(--space-4h); font-weight: 600; }
+:root[data-visual-theme] .applist-head-row .applist-import { min-height: 34px; padding-inline: var(--space-4h); }
+:root[data-visual-theme] .applist-field-label,
+:root[data-visual-theme] .page-field > dt { font: 500 var(--text-sm) var(--sans); text-transform: none; letter-spacing: normal; }
+:root[data-visual-theme] .applist-filterbar { margin-block: var(--space-5) var(--space-4); }
+:root[data-visual-theme] .applist-field .dd-button,
+:root[data-visual-theme] .applist-quick-text { min-height: 32px; background: var(--surface); }
+:root[data-visual-theme] .tabs { gap: var(--space-4h); padding-top: var(--space-4); }
+:root[data-visual-theme] .tab { padding: var(--space-3) 0 var(--space-4); font-weight: 550; }
+:root[data-visual-theme] .tab[aria-selected="true"] { border-bottom-width: 3px; }
+:root[data-visual-theme] .app-mode .result-head { padding-top: var(--space-4); padding-bottom: var(--space-4); }
+:root[data-visual-theme] .app-mode table { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+:root[data-visual-theme] .app-mode th { font-family: var(--sans); color: var(--ink-muted); font-weight: 600; }
+:root[data-visual-theme] .app-mode td { border-bottom-color: var(--line); }
+:root[data-visual-theme] .app-mode tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+:root[data-visual-theme] .app-mode :is(td, th) { padding-block: var(--space-3h); }
+:root[data-visual-theme] .app-mode { --sk-row-h: 45px; --sk-head-h: 45px; }
+/* Its placeholder rows are those heights exactly, from the table's own top. */
+:root[data-visual-theme] .app-mode .sk-grid { padding-top: 0; }
+:root[data-visual-theme] .app-mode .sk-row { padding-block: 0; }
+:root[data-visual-theme] .app-mode td:first-child { font-weight: 550; }
+/* A status reads as its word (docs/design.md, the refusal list's chip soup).
+   A tone that carries meaning is a dot and its word, with no container, and
+   the rest of a vocabulary a grey dot and its word: a pill round every Status and
+   Priority was two a row, and in Mono the least important words wore the
+   loudest marks. With no tint under it a word only gains contrast. */
+:root[data-visual-theme] .tone { display: inline-flex; align-items: center; gap: var(--space-2h); padding: 0; border: 0; border-radius: 0; background: none; font: inherit; font-weight: 500; }
+:root[data-visual-theme] .tone::before { content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+/* The rest of a vocabulary wears a grey dot, its word in the ink at the cell's weight: a column of
+   statuses scans as one, and only a tone that carries meaning is coloured. */
+:root[data-visual-theme] .tone-neutral { color: var(--ink); font-weight: inherit; }
+:root[data-visual-theme] .tone-neutral::before { background: color-mix(in srgb, var(--ink-subtle) 50%, var(--surface)); }
+/* A marked value's icon is its dot: one mark before the word, not two. */
+:root[data-visual-theme] .tone-marked::before { content: none; }
+:root[data-visual-theme] .tone-neutral.tone-marked > svg { color: var(--ink-muted); }
+/* A label on a record keeps its chip: it is a thing the record has, with
+   its own ×, not a value said in a cell. */
+:root[data-visual-theme] .record-tag.tone { padding: 1px var(--space-3); border: 1px solid color-mix(in srgb, currentColor 30%, transparent); border-radius: 999px; background: color-mix(in srgb, currentColor 8%, transparent); font-size: var(--text-sm); line-height: 1.6; }
+:root[data-visual-theme] .pct-bar,
+:root[data-visual-theme] .pct-fill { border-radius: min(2px, var(--radius)); }
+/* A named record in a record's fields is a link, not a pill: "Kingsway Auto
+   Center" in a rounded box read as a tag the car had, not the dealer it
+   opens. The pill stays the Workbench's, where a bare key needs its table
+   said beside it; a bare key here keeps that small table word. */
+:root[data-visual-theme] :is(:is(.page-field, .page-sheet-row, .page-properties) dd, .page-fact) button.ref-jump {
+  padding: 0; border: 0; border-radius: 0; background: none;
+  font: inherit; color: var(--link); text-align: left;
+}
+:root[data-visual-theme] :is(:is(.page-field, .page-sheet-row, .page-properties) dd, .page-fact) button.ref-jump:hover {
+  background: none; text-decoration: underline; text-underline-offset: 3px;
+}
+/* In a header's facts a reference is a captioned value in the ink, a link only to the pointer: a row of
+   link-blue names under the title read as a row of navigation, not as what the record is (page.css). */
+:root[data-visual-theme] .page-head-facts .page-fact button.ref-jump { color: var(--ink); }
+:root[data-visual-theme] .page-head-facts .page-fact button.ref-jump:hover { color: var(--link); }
+
+:root[data-visual-theme] .dash-controls { padding-top: 20px; padding-bottom: var(--space-3); gap: var(--space-4); }
+:root[data-visual-theme] .dash-windows { padding: var(--space-1h); gap: var(--space-1); background: var(--raised); border: 1px solid var(--line); border-radius: var(--control-radius, var(--radius)); }
+:root[data-visual-theme] .dash-window { padding: var(--space-2) var(--space-4); border-radius: var(--control-radius, calc(var(--radius) - 2px)); font-family: var(--sans); }
+:root[data-visual-theme] .dash-window[aria-pressed="true"] { background: var(--surface); border-color: var(--line); color: var(--ink); box-shadow: var(--shadow-control); font-weight: 600; }
+/* A card's own fixed window is a caption, not a control: dressed as one, its words stood 9px in from the figure over
+   them in Mono and Sage. */
+:root[data-visual-theme] .dash-fixed.dash-window { padding: 0; border: 0; background: none; }
+:root[data-visual-theme] .dash-body { --page-row-gap: 32px; }
+:root[data-visual-theme] .dash-strip .home-cards { gap: var(--space-6); margin-top: var(--space-4); margin-bottom: 0; }
+:root[data-visual-theme] .dash-strip { border: none; padding: 0; }
+:root[data-visual-theme] .dash-strip .home-card { padding: var(--space-5) 0 20px; gap: var(--space-3); border-top: 3px solid var(--accent); border-radius: 0; }
+:root[data-visual-theme] .dash-strip .home-card:nth-child(2) { border-top-color: var(--chart-secondary); }
+:root[data-visual-theme] .dash-strip .home-card:nth-child(3) { border-top-color: var(--chart-tertiary); }
+:root[data-visual-theme] .dash-strip .home-card:nth-child(4) { border-top-color: var(--status-info); }
+:root[data-visual-theme] .home-card-label { color: var(--ink-muted); font-size: var(--text-base); font-weight: 550; }
+:root[data-visual-theme] .home-card-value { font: 650 calc(30px * var(--type-k))/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+:root[data-visual-theme] .dash-strip .home-card:hover { background: color-mix(in srgb, var(--accent) 3%, var(--surface)); }
+:root[data-visual-theme] :is(.page-section-head, .page-card-caption) { font: 600 var(--text-base) var(--sans); text-transform: none; letter-spacing: normal; margin-bottom: var(--space-5); }
+:root[data-visual-theme] .page-section { padding-top: var(--space-5); }
+/* A card is its own box: no section padding over it (page.css). */
+:root[data-visual-theme] .page-section.page-card-section { padding-top: 0; }
+:root[data-visual-theme] .chart-grid { stroke-dasharray: none; opacity: 0.6; }
+:root[data-visual-theme] .chart-stroke { stroke-width: 2.5px; }
+:root[data-visual-theme] .chart-area { opacity: 0.055; }
+:root[data-visual-theme] .chart-legend li { padding-block: var(--space-2); }
+:root[data-visual-theme] .pbd-row { min-height: 28px; }
+:root[data-visual-theme] .pbd-bar,
+:root[data-visual-theme] .pbd-fill { border-radius: min(2px, var(--radius)); }
+:root[data-visual-theme] .board-lane { border: none; border-radius: 0; padding: 0 var(--space-3h) 0 0; }
+:root[data-visual-theme] .board-lane-head { min-height: 32px; font-weight: 600; }
+:root[data-visual-theme] .board-card { background: var(--ground); padding: var(--space-3h) var(--space-4); }
+:root[data-visual-theme] .board-card:hover { border-color: var(--accent); }
+:root[data-visual-theme] .page-title,
+:root[data-visual-theme] .page-title-pick .dd-value { font: 600 var(--text-md) var(--sans); }
+/* A label sits on its value and the next pair starts a step below: the ratio
+   says "next field", not the size. At 22px rows and 6px under a label, a
+   record's nine fields spread down most of a screen. */
+:root[data-visual-theme] .page-field-grid { gap: var(--space-4h) 28px; grid-template-columns: var(--page-field-columns, repeat(auto-fit, minmax(min(100%, var(--page-field-min, 18rem)), 1fr))); }
+/* Not in a property rail, whose caption and value sit side by side on its own grid (page.css). */
+:root[data-visual-theme] :not(.page-properties) > .page-field { gap: var(--space-1h); }
+/* Figures in a record's fields line up as a table's do. */
+:root[data-visual-theme] .page-field > dd { font-family: var(--mono); font-size: var(--text-md); min-height: 24px; font-variant-numeric: tabular-nums; }
+:root[data-visual-theme] .page-field-edit .cell-edit { min-height: 36px; border-radius: var(--field-radius); padding: var(--space-3) var(--space-3h); box-shadow: var(--shadow-control); }
+:root[data-visual-theme] .page-field-edit .cell-edit:focus-visible { outline-offset: 0; border-color: var(--focus); }
+/* A field shows focus with the house ring, not a border colour: the looks
+   draw every field's border in their own hairline, which outranked the
+   accent border the fields' `:focus` rules asked for, so a list's filter
+   boxes showed no focus at all — and in Mono the border is the accent. The
+   palette's box is the one field whose frame is its indicator. The ring
+   stands flush on the edge and the edge takes its ink, so the two are one
+   band: a pixel of ground between them read as two boxes, a doubled edge
+   in Mono, where the edge is already the accent's black. A Select's button
+   and a record picker's trigger are fields too, and take the field's ring,
+   not a button's. A picker's text box takes none: the ring is the picker's,
+   around the whole field (below), and the box's own drew a second one inside it. */
+:root[data-visual-theme] :is(input, textarea, select):not(.palette-input, .picker-input):focus-visible,
+:root[data-visual-theme] :is(.dd-button, .record-picker-trigger):focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 0; border-color: var(--focus); }
+:root[data-visual-theme] .metric-number { font-family: var(--mono); font-size: calc(29px * var(--type-k)); }
+/* A New form's switch is not a field box: the field's height and corners squashed its track into a rounded square. */
+:root[data-visual-theme] .insert-field :is(input:not(.picker-input, [role=switch]), textarea, .dd-button, .record-picker-trigger, .picker) { min-height: 36px; border-radius: var(--field-radius); }
+:root[data-visual-theme] .insert-field label { color: var(--ink-muted); }
+/* The navigation's colors dress the menu, under every bar recipe: the side menu, the phone's drawer and (below, in
+   the bar's own rules) a top bar's menu stand on nav.ground with their entries in nav.ink and their headings, counts
+   and icons in nav.muted. The bar recipe picks the bar's shape, never whose colors the menu wears: a graphite
+   nav.ground under `bar: 'airy'` once kept the page's ink on its entries, and under `bar: 'dark'` the side menu kept
+   the page's ground (0.9.2 field report, T1 and T2). The page's inks are the nav's inside the menu, so every rule
+   that draws in them — a look's pill, a count, the identity, the footer — draws in the nav's without a rule of its
+   own; check measures nav.ink and nav.muted on nav.ground (theme.ts). */
+:root[data-visual-theme] :is(.sidebar, .mobile-nav-drawer, .mobile-nav-sidebar) {
+  --ink: var(--nav-ink);
+  --ink-muted: var(--nav-muted);
+  --ink-subtle: var(--nav-muted);
+  --line: var(--nav-line);
+  --raised: color-mix(in srgb, var(--nav-ink) 6%, var(--nav-ground));
+  --menu-ground: var(--nav-ground);
+  background: var(--nav-ground);
+  color: var(--nav-ink);
+}
+/* A top bar's menu: its entries and the folded Menu stand on the bar, which wears nav.ground (above), so the same
+   inks; only the menu, since the search beside it is a field on the page's surface. */
+:root[data-visual-theme] .app-mode .topbar .tn-links {
+  --ink: var(--nav-ink);
+  --ink-muted: var(--nav-muted);
+  --ink-subtle: var(--nav-muted);
+  --line: var(--nav-line);
+}
+/* The menu's filter is a field on the menu's ground: its edge a step of the nav's ink, as Mono draws a field's, so it
+   reaches 3:1 on whatever ground the menu wears. */
+:root[data-visual-theme] .sidebar #table-filter {
+  background: var(--nav-ground);
+  color: var(--nav-ink);
+  border-color: color-mix(in srgb, var(--nav-ink) 45%, var(--nav-ground));
+}
+:root[data-visual-theme] .sidebar :is(.nav-group, .app-nav-group) { font-family: var(--sans); }
+
+@media (max-width: 700px) {
+  /* One phone gutter for every App, whichever menu it wears: beside the
+     room's own inset, a side-menu App's 22px left Thread 40px short of each
+     edge where Compass lost 20. */
+  :root[data-visual-theme] body.app-mode:not(.app-custom-gutter) .content { padding-inline: var(--space-2); }
+  :root[data-visual-theme] body.app-topnav:not(.app-custom-gutter) .topbar[data-header-width="content"] { --app-shell-outer-gutter: 4px; }
+  :root[data-visual-theme] body.app-topnav .topbar { padding-block: var(--space-2); }
+  :root[data-visual-theme] body.app-topnav .topbar:not([data-header-width="content"]) { padding-inline: var(--space-5); }
+  :root[data-visual-theme] .brand-name { font-size: calc(18px * var(--type-k)); }
+  :root[data-visual-theme] .applist-head { padding-top: var(--space-5); }
+  :root[data-visual-theme] .dash-strip .home-cards { gap: var(--space-4) 20px; }
+  :root[data-visual-theme] .dash-strip .home-card { padding-block: var(--space-4); }
+  :root[data-visual-theme] .home-card-value { font-size: calc(26px * var(--type-k)); }
+  :root[data-visual-theme] .dash-picks { margin-left: 0; }
+  :root[data-visual-theme] .dash-controls { padding-top: var(--space-5); }
+  :root[data-visual-theme] .dash-window { padding-inline: var(--space-3); }
+  :root[data-visual-theme] .page-field-grid { grid-template-columns: minmax(0, 1fr); }
+}
+/* The database browser's phone bar keeps its own tight sides (style.css), or
+   the query box loses the width it needs at 320px. */
+@media (max-width: 600px) {
+  :root[data-visual-theme] body:not(.app-mode) .topbar { padding-inline: var(--space-4); }
+}
+
+/* Pagination is navigation, not a row of primary actions. Keep the shared
+   ghost-button dress from overriding its quieter treatment. */
+:root[data-visual-theme] .app-mode .pager { padding-top: var(--space-4); }
+:root[data-visual-theme] .app-mode .pager button.ghost:not(.fav-star) {
+  min-height: 28px; padding: var(--space-1h) var(--space-3); font-size: var(--text-sm); line-height: 1.4;
+  background: none; border-color: transparent; box-shadow: none; color: var(--ink);
+}
+:root[data-visual-theme] .app-mode .pager button.ghost:not(.fav-star):hover:not(:disabled) { background: var(--raised); }
+:root[data-visual-theme] .app-mode .pager .page-input { min-height: 28px; font-size: var(--text-sm); }
+@media (max-width: 600px) {
+  :root[data-visual-theme] .app-mode .pager button.ghost:not(.fav-star) { min-height: 36px; }
+}
+
+/* Only new preference controls and explicit Mono use unscoped rules. */
+.dd-swatches { display: inline-flex; flex: none; gap: var(--space-1h); margin-right: var(--space-2); }
+.dd-swatches > span { display: block; width: 9px; height: 14px; border: 1px solid #80808050; border-radius: min(2px, var(--radius)); }
+body.type-mono { --mono: var(--code); }
+/* Code surfaces keep the code face; a textarea of prose (a description, a reason) keeps the interface's. */
+:root[data-visual-theme] .app-mode :is(.ddl, .explain, #query, .applist-filter, pre, .sql-input, .composer-text, .agent-json) { font-family: var(--code); }
+/* A list's search box, in the kit with every other field (moved from ListFilterBar.css, which stands in the base). */
+:root[data-visual-theme] .applist-search-input { background: var(--surface); border-radius: var(--field-radius); }
+
+/* ---------- The field (docs/design.md, Access and Forms) ----------
+   Every field in an App is one control, whatever its family: a text box, a
+   Select's button, a date's text, a picker, a record picker. In a form — a
+   dialog, a command form, the New drawer, sign-in, a landing's search — each
+   is 36px tall with 14px text on the surface, so a row of them lines up (a
+   command form's were 26, 27 and 33px at 12 to 14px). A list's filter bar and
+   the pager keep their compact size and take only the states. Disabled is a
+   filled ground and dim ink with no pointer; invalid is the danger edge beside
+   the written problem, and keeps the focus ring. Those two states are every
+   look's to honour, so they stand in structure.css. */
+:root[data-visual-theme] .dd-button { background: var(--surface); }
+/* A picker is one field: the box is `.picker`, which holds its chips and its
+   words, and the text box inside it draws no edge of its own — dressed as a
+   field itself it was a 36px box inside a 42px one (B03/N02). */
+:root[data-visual-theme] :is(.modal, .form-page, .insert-form, .command-field, .insert-field, .signin-form, .front-search-form, .account-profile-field, .confirm, .form-field)
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"], .picker-input), textarea, select, .dd-button, .picker, .record-picker-trigger),
+:root[data-visual-theme] .field-control {
+  min-height: 36px; box-sizing: border-box; font-size: var(--text-md); font-family: var(--sans);
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line-control); border-radius: var(--field-radius, var(--radius));
+}
+/* One height whatever the family's own padding said: 7 + 20 + 7 and the edge
+   is 36px, so a text box, a date and a Select stand level in a row (a form
+   page's text box was 36px and its date 41px). */
+:root[data-visual-theme] :is(.modal, .form-page, .insert-form, .command-field, .insert-field, .signin-form, .front-search-form, .account-profile-field, .confirm, .form-field)
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"], .picker-input), select, .dd-button, .record-picker-trigger),
+:root[data-visual-theme] .field-control:not(textarea) { padding-block: 7px; padding-left: var(--space-3h); line-height: 20px; }
+:root[data-visual-theme] :is(.modal, .form-page, .insert-form, .command-field, .insert-field, .signin-form, .front-search-form, .account-profile-field, .confirm, .form-field) textarea { min-height: 72px; padding: var(--space-3) var(--space-3h); line-height: 1.45; }
+:root[data-visual-theme] .picker { padding-block: var(--space-1); padding-left: var(--space-3); font-family: var(--sans); }
+:root[data-visual-theme] .picker .picker-input { min-height: 0; border: 0; border-radius: 0; background: none; box-shadow: none; outline: none; font-size: var(--text-md); }
+/* The ring is the picker's, around the whole field, since its text box has no edge to hold one. */
+:root[data-visual-theme] .picker:focus-within { outline: var(--focus-width) solid var(--focus); outline-offset: 0; border-color: var(--focus); }
+/* The compact field: a filter's, a dense row's — 30px, 13px words. */
+:root[data-visual-theme] .form-field.form-field-compact :is(input:not([type="checkbox"], [type="radio"], .picker-input), select, .dd-button, .picker, .field-control:not(textarea)) { min-height: 30px; padding-block: var(--space-2); font-size: var(--text-base); }
+:root[data-visual-theme] .form-field.form-field-compact .picker { padding-block: 1px; }
+:root[data-visual-theme] .form-field.form-field-compact .picker .picker-input { font-size: var(--text-base); padding-block: 1px; }
+/* A field's label is text in every look, 13px in the text ink: a dialog's were
+   11px in the faint ink beside a form's 13px (N04). */
+:root[data-visual-theme] .form-field-label { font-family: var(--sans); color: var(--ink); }
+}

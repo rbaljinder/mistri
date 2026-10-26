@@ -1,0 +1,937 @@
+{
+  "name": "@mistriwork/engine",
+  "version": "1.0.0-rc.1",
+  "description": "The engine both products stand on: the adapters (SQLite, Postgres, MySQL), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
+  "homepage": "https://mistriwork.dev",
+  "bugs": {
+    "url": "https://github.com/rbaljinder/mistri/issues"
+  },
+  "license": "MIT",
+  "author": "Baljinder Randhawa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rbaljinder/mistri.git",
+    "directory": "packages/engine"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "README.md",
+    "mark.svg",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "mistri-built": "./dist/engine.js",
+      "default": "./src/engine.ts"
+    },
+    "./adapters/adapter.js": {
+      "mistri-built": "./dist/adapters/adapter.js",
+      "default": "./src/adapters/adapter.ts"
+    },
+    "./adapters/cache/cacheStore.js": {
+      "mistri-built": "./dist/adapters/cache/cacheStore.js",
+      "default": "./src/adapters/cache/cacheStore.ts"
+    },
+    "./adapters/commands/canonicalJson.js": {
+      "mistri-built": "./dist/adapters/commands/canonicalJson.js",
+      "default": "./src/adapters/commands/canonicalJson.ts"
+    },
+    "./adapters/connect.js": {
+      "mistri-built": "./dist/adapters/connect.js",
+      "default": "./src/adapters/connect.ts"
+    },
+    "./adapters/http/egress.js": {
+      "mistri-built": "./dist/adapters/http/egress.js",
+      "default": "./src/adapters/http/egress.ts"
+    },
+    "./adapters/layoutRefusal.js": {
+      "mistri-built": "./dist/adapters/layoutRefusal.js",
+      "default": "./src/adapters/layoutRefusal.ts"
+    },
+    "./adapters/mysql.js": {
+      "mistri-built": "./dist/adapters/mysql.js",
+      "default": "./src/adapters/mysql.ts"
+    },
+    "./adapters/mysqlDriver.js": {
+      "mistri-built": "./dist/adapters/mysqlDriver.js",
+      "default": "./src/adapters/mysqlDriver.ts"
+    },
+    "./adapters/net/networkPolicy.js": {
+      "mistri-built": "./dist/adapters/net/networkPolicy.js",
+      "default": "./src/adapters/net/networkPolicy.ts"
+    },
+    "./adapters/net/untrustedDatabase.js": {
+      "mistri-built": "./dist/adapters/net/untrustedDatabase.js",
+      "default": "./src/adapters/net/untrustedDatabase.ts"
+    },
+    "./adapters/poolMetrics.js": {
+      "mistri-built": "./dist/adapters/poolMetrics.js",
+      "default": "./src/adapters/poolMetrics.ts"
+    },
+    "./adapters/postgres.js": {
+      "mistri-built": "./dist/adapters/postgres.js",
+      "default": "./src/adapters/postgres.ts"
+    },
+    "./adapters/postgresCatalog.js": {
+      "mistri-built": "./dist/adapters/postgresCatalog.js",
+      "default": "./src/adapters/postgresCatalog.ts"
+    },
+    "./adapters/postgresCatalogDigest.js": {
+      "mistri-built": "./dist/adapters/postgresCatalogDigest.js",
+      "default": "./src/adapters/postgresCatalogDigest.ts"
+    },
+    "./adapters/postgresMaintenance.js": {
+      "mistri-built": "./dist/adapters/postgresMaintenance.js",
+      "default": "./src/adapters/postgresMaintenance.ts"
+    },
+    "./adapters/postgresPool.js": {
+      "mistri-built": "./dist/adapters/postgresPool.js",
+      "default": "./src/adapters/postgresPool.ts"
+    },
+    "./adapters/postgresPooler.js": {
+      "mistri-built": "./dist/adapters/postgresPooler.js",
+      "default": "./src/adapters/postgresPooler.ts"
+    },
+    "./adapters/postgresReadCatalog.js": {
+      "mistri-built": "./dist/adapters/postgresReadCatalog.js",
+      "default": "./src/adapters/postgresReadCatalog.ts"
+    },
+    "./adapters/postgresSchemaEpoch.js": {
+      "mistri-built": "./dist/adapters/postgresSchemaEpoch.js",
+      "default": "./src/adapters/postgresSchemaEpoch.ts"
+    },
+    "./adapters/postgresTransactionHandle.js": {
+      "mistri-built": "./dist/adapters/postgresTransactionHandle.js",
+      "default": "./src/adapters/postgresTransactionHandle.ts"
+    },
+    "./adapters/postgresValues.js": {
+      "mistri-built": "./dist/adapters/postgresValues.js",
+      "default": "./src/adapters/postgresValues.ts"
+    },
+    "./adapters/replicas.js": {
+      "mistri-built": "./dist/adapters/replicas.js",
+      "default": "./src/adapters/replicas.ts"
+    },
+    "./adapters/reservedSql.js": {
+      "mistri-built": "./dist/adapters/reservedSql.js",
+      "default": "./src/adapters/reservedSql.ts"
+    },
+    "./adapters/scoped/postgresScopeCatalog.js": {
+      "mistri-built": "./dist/adapters/scoped/postgresScopeCatalog.js",
+      "default": "./src/adapters/scoped/postgresScopeCatalog.ts"
+    },
+    "./adapters/scoped/scopedReads.js": {
+      "mistri-built": "./dist/adapters/scoped/scopedReads.js",
+      "default": "./src/adapters/scoped/scopedReads.ts"
+    },
+    "./adapters/scoped/scopedTransaction.js": {
+      "mistri-built": "./dist/adapters/scoped/scopedTransaction.js",
+      "default": "./src/adapters/scoped/scopedTransaction.ts"
+    },
+    "./adapters/scoped/sqliteScopeCatalog.js": {
+      "mistri-built": "./dist/adapters/scoped/sqliteScopeCatalog.js",
+      "default": "./src/adapters/scoped/sqliteScopeCatalog.ts"
+    },
+    "./adapters/serverSettings.js": {
+      "mistri-built": "./dist/adapters/serverSettings.js",
+      "default": "./src/adapters/serverSettings.ts"
+    },
+    "./adapters/sqlite.js": {
+      "mistri-built": "./dist/adapters/sqlite.js",
+      "default": "./src/adapters/sqlite.ts"
+    },
+    "./adapters/statementControl.js": {
+      "mistri-built": "./dist/adapters/statementControl.js",
+      "default": "./src/adapters/statementControl.ts"
+    },
+    "./adapters/storeHost.js": {
+      "mistri-built": "./dist/adapters/storeHost.js",
+      "default": "./src/adapters/storeHost.ts"
+    },
+    "./adapters/telemetry/drivers.js": {
+      "mistri-built": "./dist/adapters/telemetry/drivers.js",
+      "default": "./src/adapters/telemetry/drivers.ts"
+    },
+    "./adapters/telemetry/start.js": {
+      "mistri-built": "./dist/adapters/telemetry/start.js",
+      "default": "./src/adapters/telemetry/start.ts"
+    },
+    "./adapters/telemetry/statement.js": {
+      "mistri-built": "./dist/adapters/telemetry/statement.js",
+      "default": "./src/adapters/telemetry/statement.ts"
+    },
+    "./adapters/telemetry/trace.js": {
+      "mistri-built": "./dist/adapters/telemetry/trace.js",
+      "default": "./src/adapters/telemetry/trace.ts"
+    },
+    "./adapters/writeAttribution.js": {
+      "mistri-built": "./dist/adapters/writeAttribution.js",
+      "default": "./src/adapters/writeAttribution.ts"
+    },
+    "./adapters/writeCapture.js": {
+      "mistri-built": "./dist/adapters/writeCapture.js",
+      "default": "./src/adapters/writeCapture.ts"
+    },
+    "./adapters/writeAhead.js": {
+      "mistri-built": "./dist/adapters/writeAhead.js",
+      "default": "./src/adapters/writeAhead.ts"
+    },
+    "./adapters/writeLanes.js": {
+      "mistri-built": "./dist/adapters/writeLanes.js",
+      "default": "./src/adapters/writeLanes.ts"
+    },
+    "./schema/model.js": "./schema/model.d.ts",
+    "./schema/theme.js": "./schema/theme.d.ts",
+    "./server/auth/credentials.js": {
+      "mistri-built": "./dist/server/auth/credentials.js",
+      "default": "./src/server/auth/credentials.ts"
+    },
+    "./server/cacheService.js": {
+      "mistri-built": "./dist/server/cacheService.js",
+      "default": "./src/server/cacheService.ts"
+    },
+    "./server/cli/args.js": {
+      "mistri-built": "./dist/server/cli/args.js",
+      "default": "./src/server/cli/args.ts"
+    },
+    "./server/cli/browser.js": {
+      "mistri-built": "./dist/server/cli/browser.js",
+      "default": "./src/server/cli/browser.ts"
+    },
+    "./server/cli/bin.js": {
+      "mistri-built": "./dist/server/cli/bin.js",
+      "default": "./src/server/cli/bin.ts"
+    },
+    "./server/cli/config.js": {
+      "mistri-built": "./dist/server/cli/config.js",
+      "default": "./src/server/cli/config.ts"
+    },
+    "./server/cli/startup.js": {
+      "mistri-built": "./dist/server/cli/startup.js",
+      "default": "./src/server/cli/startup.ts"
+    },
+    "./server/cli/startupOptions.js": {
+      "mistri-built": "./dist/server/cli/startupOptions.js",
+      "default": "./src/server/cli/startupOptions.ts"
+    },
+    "./server/cli/subcommand.js": {
+      "mistri-built": "./dist/server/cli/subcommand.js",
+      "default": "./src/server/cli/subcommand.ts"
+    },
+    "./server/cli/usage.js": {
+      "mistri-built": "./dist/server/cli/usage.js",
+      "default": "./src/server/cli/usage.ts"
+    },
+    "./server/clientHttp.js": {
+      "mistri-built": "./dist/server/clientHttp.js",
+      "default": "./src/server/clientHttp.ts"
+    },
+    "./server/clientSurface.js": {
+      "mistri-built": "./dist/server/clientSurface.js",
+      "default": "./src/server/clientSurface.ts"
+    },
+    "./server/columnGrants.js": {
+      "mistri-built": "./dist/server/columnGrants.js",
+      "default": "./src/server/columnGrants.ts"
+    },
+    "./server/compileCache.js": {
+      "mistri-built": "./dist/server/compileCache.js",
+      "default": "./src/server/compileCache.ts"
+    },
+    "./server/config/locations.js": {
+      "mistri-built": "./dist/server/config/locations.js",
+      "default": "./src/server/config/locations.ts"
+    },
+    "./server/configPaths.js": {
+      "mistri-built": "./dist/server/configPaths.js",
+      "default": "./src/server/configPaths.ts"
+    },
+    "./server/configSections.js": {
+      "mistri-built": "./dist/server/configSections.js",
+      "default": "./src/server/configSections.ts"
+    },
+    "./server/connections.js": {
+      "mistri-built": "./dist/server/connections.js",
+      "default": "./src/server/connections.ts"
+    },
+    "./server/constraints.js": {
+      "mistri-built": "./dist/server/constraints.js",
+      "default": "./src/server/constraints.ts"
+    },
+    "./server/demo.js": {
+      "mistri-built": "./dist/server/demo.js",
+      "default": "./src/server/demo.ts"
+    },
+    "./server/devclient.js": {
+      "mistri-built": "./dist/server/devclient.js",
+      "default": "./src/server/devclient.ts"
+    },
+    "./server/evidence.js": {
+      "mistri-built": "./dist/server/evidence.js",
+      "default": "./src/server/evidence.ts"
+    },
+    "./server/http/baselineHeaders.js": {
+      "mistri-built": "./dist/server/http/baselineHeaders.js",
+      "default": "./src/server/http/baselineHeaders.ts"
+    },
+    "./server/http/captured.js": {
+      "mistri-built": "./dist/server/http/captured.js",
+      "default": "./src/server/http/captured.ts"
+    },
+    "./server/http/clock.js": {
+      "mistri-built": "./dist/server/http/clock.js",
+      "default": "./src/server/http/clock.ts"
+    },
+    "./server/http/connectionSource.js": {
+      "mistri-built": "./dist/server/http/connectionSource.js",
+      "default": "./src/server/http/connectionSource.ts"
+    },
+    "./server/http/context.js": {
+      "mistri-built": "./dist/server/http/context.js",
+      "default": "./src/server/http/context.ts"
+    },
+    "./server/http/crawlerText.js": {
+      "mistri-built": "./dist/server/http/crawlerText.js",
+      "default": "./src/server/http/crawlerText.ts"
+    },
+    "./server/http/dataRoutes.js": {
+      "mistri-built": "./dist/server/http/dataRoutes.js",
+      "default": "./src/server/http/dataRoutes.ts"
+    },
+    "./server/http/door.js": {
+      "mistri-built": "./dist/server/http/door.js",
+      "default": "./src/server/http/door.ts"
+    },
+    "./server/http/exportRoute.js": {
+      "mistri-built": "./dist/server/http/exportRoute.js",
+      "default": "./src/server/http/exportRoute.ts"
+    },
+    "./server/http/firstPaint.js": {
+      "mistri-built": "./dist/server/http/firstPaint.js",
+      "default": "./src/server/http/firstPaint.ts"
+    },
+    "./server/http/httpOperationRoutes.js": {
+      "mistri-built": "./dist/server/http/httpOperationRoutes.js",
+      "default": "./src/server/http/httpOperationRoutes.ts"
+    },
+    "./server/http/pageReads.js": {
+      "mistri-built": "./dist/server/http/pageReads.js",
+      "default": "./src/server/http/pageReads.ts"
+    },
+    "./server/http/pageRoutes.js": {
+      "mistri-built": "./dist/server/http/pageRoutes.js",
+      "default": "./src/server/http/pageRoutes.ts"
+    },
+    "./server/http/probes.js": {
+      "mistri-built": "./dist/server/http/probes.js",
+      "default": "./src/server/http/probes.ts"
+    },
+    "./server/http/rateLimit.js": {
+      "mistri-built": "./dist/server/http/rateLimit.js",
+      "default": "./src/server/http/rateLimit.ts"
+    },
+    "./server/http/readRouting.js": {
+      "mistri-built": "./dist/server/http/readRouting.js",
+      "default": "./src/server/http/readRouting.ts"
+    },
+    "./server/http/recordCompose.js": {
+      "mistri-built": "./dist/server/http/recordCompose.js",
+      "default": "./src/server/http/recordCompose.ts"
+    },
+    "./server/http/recordWrites.js": {
+      "mistri-built": "./dist/server/http/recordWrites.js",
+      "default": "./src/server/http/recordWrites.ts"
+    },
+    "./server/http/refusalReport.js": {
+      "mistri-built": "./dist/server/http/refusalReport.js",
+      "default": "./src/server/http/refusalReport.ts"
+    },
+    "./server/http/reply.js": {
+      "mistri-built": "./dist/server/http/reply.js",
+      "default": "./src/server/http/reply.ts"
+    },
+    "./server/http/requestOrigin.js": {
+      "mistri-built": "./dist/server/http/requestOrigin.js",
+      "default": "./src/server/http/requestOrigin.ts"
+    },
+    "./server/http/router.js": {
+      "mistri-built": "./dist/server/http/router.js",
+      "default": "./src/server/http/router.ts"
+    },
+    "./server/http/serverCore.js": {
+      "mistri-built": "./dist/server/http/serverCore.js",
+      "default": "./src/server/http/serverCore.ts"
+    },
+    "./server/http/traceRequest.js": {
+      "mistri-built": "./dist/server/http/traceRequest.js",
+      "default": "./src/server/http/traceRequest.ts"
+    },
+    "./server/http/trust.js": {
+      "mistri-built": "./dist/server/http/trust.js",
+      "default": "./src/server/http/trust.ts"
+    },
+    "./server/http/writeRefusal.js": {
+      "mistri-built": "./dist/server/http/writeRefusal.js",
+      "default": "./src/server/http/writeRefusal.ts"
+    },
+    "./server/impact.js": {
+      "mistri-built": "./dist/server/impact.js",
+      "default": "./src/server/impact.ts"
+    },
+    "./server/journal.js": {
+      "mistri-built": "./dist/server/journal.js",
+      "default": "./src/server/journal.ts"
+    },
+    "./server/layouts.js": {
+      "mistri-built": "./dist/server/layouts.js",
+      "default": "./src/server/layouts.ts"
+    },
+    "./server/migrate/cli.js": {
+      "mistri-built": "./dist/server/migrate/cli.js",
+      "default": "./src/server/migrate/cli.ts"
+    },
+    "./server/migrate/database.js": {
+      "mistri-built": "./dist/server/migrate/database.js",
+      "default": "./src/server/migrate/database.ts"
+    },
+    "./server/migrate/history.js": {
+      "mistri-built": "./dist/server/migrate/history.js",
+      "default": "./src/server/migrate/history.ts"
+    },
+    "./server/migrate/runner.js": {
+      "mistri-built": "./dist/server/migrate/runner.js",
+      "default": "./src/server/migrate/runner.ts"
+    },
+    "./server/migrate/target.js": {
+      "mistri-built": "./dist/server/migrate/target.js",
+      "default": "./src/server/migrate/target.ts"
+    },
+    "./server/openapiDraft.js": {
+      "mistri-built": "./dist/server/openapiDraft.js",
+      "default": "./src/server/openapiDraft.ts"
+    },
+    "./server/operations/diagnostics.js": {
+      "mistri-built": "./dist/server/operations/diagnostics.js",
+      "default": "./src/server/operations/diagnostics.ts"
+    },
+    "./server/operations/requestMetrics.js": {
+      "mistri-built": "./dist/server/operations/requestMetrics.js",
+      "default": "./src/server/operations/requestMetrics.ts"
+    },
+    "./server/packageVersion.js": {
+      "mistri-built": "./dist/server/packageVersion.js",
+      "default": "./src/server/packageVersion.ts"
+    },
+    "./server/product.js": {
+      "mistri-built": "./dist/server/product.js",
+      "default": "./src/server/product.ts"
+    },
+    "./server/recordHistoryOperations.js": {
+      "mistri-built": "./dist/server/recordHistoryOperations.js",
+      "default": "./src/server/recordHistoryOperations.ts"
+    },
+    "./server/recordWriteOperations.js": {
+      "mistri-built": "./dist/server/recordWriteOperations.js",
+      "default": "./src/server/recordWriteOperations.ts"
+    },
+    "./server/resourceReadHttp.js": {
+      "mistri-built": "./dist/server/resourceReadHttp.js",
+      "default": "./src/server/resourceReadHttp.ts"
+    },
+    "./server/resourceReadOperations.js": {
+      "mistri-built": "./dist/server/resourceReadOperations.js",
+      "default": "./src/server/resourceReadOperations.ts"
+    },
+    "./server/scaffoldMachine.js": {
+      "mistri-built": "./dist/server/scaffoldMachine.js",
+      "default": "./src/server/scaffoldMachine.ts"
+    },
+    "./server/seed/cli.js": {
+      "mistri-built": "./dist/server/seed/cli.js",
+      "default": "./src/server/seed/cli.ts"
+    },
+    "./server/seed/seed.js": {
+      "mistri-built": "./dist/server/seed/seed.js",
+      "default": "./src/server/seed/seed.ts"
+    },
+    "./server/serverRequests.js": {
+      "mistri-built": "./dist/server/serverRequests.js",
+      "default": "./src/server/serverRequests.ts"
+    },
+    "./server/serverTimeouts.js": {
+      "mistri-built": "./dist/server/serverTimeouts.js",
+      "default": "./src/server/serverTimeouts.ts"
+    },
+    "./server/startupWarnings.js": {
+      "mistri-built": "./dist/server/startupWarnings.js",
+      "default": "./src/server/startupWarnings.ts"
+    },
+    "./shared/addressParams.js": {
+      "mistri-built": "./dist/shared/addressParams.js",
+      "default": "./src/shared/addressParams.ts"
+    },
+    "./shared/appCards.js": {
+      "mistri-built": "./dist/shared/appCards.js",
+      "default": "./src/shared/appCards.ts"
+    },
+    "./shared/appComponents.js": {
+      "mistri-built": "./dist/shared/appComponents.js",
+      "default": "./src/shared/appComponents.ts"
+    },
+    "./shared/appDocuments.js": {
+      "mistri-built": "./dist/shared/appDocuments.js",
+      "default": "./src/shared/appDocuments.ts"
+    },
+    "./shared/appEmbeds.js": {
+      "mistri-built": "./dist/shared/appEmbeds.js",
+      "default": "./src/shared/appEmbeds.ts"
+    },
+    "./shared/appIcons.js": {
+      "mistri-built": "./dist/shared/appIcons.js",
+      "default": "./src/shared/appIcons.ts"
+    },
+    "./shared/appLinks.js": {
+      "mistri-built": "./dist/shared/appLinks.js",
+      "default": "./src/shared/appLinks.ts"
+    },
+    "./shared/appListColumns.js": {
+      "mistri-built": "./dist/shared/appListColumns.js",
+      "default": "./src/shared/appListColumns.ts"
+    },
+    "./shared/appLocale.js": {
+      "mistri-built": "./dist/shared/appLocale.js",
+      "default": "./src/shared/appLocale.ts"
+    },
+    "./shared/appMessages.js": {
+      "mistri-built": "./dist/shared/appMessages.js",
+      "default": "./src/shared/appMessages.ts"
+    },
+    "./shared/appNoun.js": {
+      "mistri-built": "./dist/shared/appNoun.js",
+      "default": "./src/shared/appNoun.ts"
+    },
+    "./shared/autoBucket.js": {
+      "mistri-built": "./dist/shared/autoBucket.js",
+      "default": "./src/shared/autoBucket.ts"
+    },
+    "./shared/autoValues.js": {
+      "mistri-built": "./dist/shared/autoValues.js",
+      "default": "./src/shared/autoValues.ts"
+    },
+    "./shared/breakdown.js": {
+      "mistri-built": "./dist/shared/breakdown.js",
+      "default": "./src/shared/breakdown.ts"
+    },
+    "./shared/breakdowntext.js": {
+      "mistri-built": "./dist/shared/breakdowntext.js",
+      "default": "./src/shared/breakdowntext.ts"
+    },
+    "./shared/clauses.js": {
+      "mistri-built": "./dist/shared/clauses.js",
+      "default": "./src/shared/clauses.ts"
+    },
+    "./shared/columnCaption.js": {
+      "mistri-built": "./dist/shared/columnCaption.js",
+      "default": "./src/shared/columnCaption.ts"
+    },
+    "./shared/commandFieldPath.js": {
+      "mistri-built": "./dist/shared/commandFieldPath.js",
+      "default": "./src/shared/commandFieldPath.ts"
+    },
+    "./shared/commandWire.js": {
+      "mistri-built": "./dist/shared/commandWire.js",
+      "default": "./src/shared/commandWire.ts"
+    },
+    "./shared/computed.js": {
+      "mistri-built": "./dist/shared/computed.js",
+      "default": "./src/shared/computed.ts"
+    },
+    "./shared/computedParse.js": {
+      "mistri-built": "./dist/shared/computedParse.js",
+      "default": "./src/shared/computedParse.ts"
+    },
+    "./shared/computedValue.js": {
+      "mistri-built": "./dist/shared/computedValue.js",
+      "default": "./src/shared/computedValue.ts"
+    },
+    "./shared/connection.js": {
+      "mistri-built": "./dist/shared/connection.js",
+      "default": "./src/shared/connection.ts"
+    },
+    "./shared/csv.js": {
+      "mistri-built": "./dist/shared/csv.js",
+      "default": "./src/shared/csv.ts"
+    },
+    "./shared/dashLayout.js": {
+      "mistri-built": "./dist/shared/dashLayout.js",
+      "default": "./src/shared/dashLayout.ts"
+    },
+    "./shared/dashboardAsks.js": {
+      "mistri-built": "./dist/shared/dashboardAsks.js",
+      "default": "./src/shared/dashboardAsks.ts"
+    },
+    "./shared/dashboardTrend.js": {
+      "mistri-built": "./dist/shared/dashboardTrend.js",
+      "default": "./src/shared/dashboardTrend.ts"
+    },
+    "./shared/declaredReferences.js": {
+      "mistri-built": "./dist/shared/declaredReferences.js",
+      "default": "./src/shared/declaredReferences.ts"
+    },
+    "./shared/definedFields.js": {
+      "mistri-built": "./dist/shared/definedFields.js",
+      "default": "./src/shared/definedFields.ts"
+    },
+    "./shared/definedValues.js": {
+      "mistri-built": "./dist/shared/definedValues.js",
+      "default": "./src/shared/definedValues.ts"
+    },
+    "./shared/displayDefaults.js": {
+      "mistri-built": "./dist/shared/displayDefaults.js",
+      "default": "./src/shared/displayDefaults.ts"
+    },
+    "./shared/dueDate.js": {
+      "mistri-built": "./dist/shared/dueDate.js",
+      "default": "./src/shared/dueDate.ts"
+    },
+    "./shared/duration.js": {
+      "mistri-built": "./dist/shared/duration.js",
+      "default": "./src/shared/duration.ts"
+    },
+    "./shared/fileBounds.js": {
+      "mistri-built": "./dist/shared/fileBounds.js",
+      "default": "./src/shared/fileBounds.ts"
+    },
+    "./shared/filter.js": {
+      "mistri-built": "./dist/shared/filter.js",
+      "default": "./src/shared/filter.ts"
+    },
+    "./shared/firstPaint.js": {
+      "mistri-built": "./dist/shared/firstPaint.js",
+      "default": "./src/shared/firstPaint.ts"
+    },
+    "./shared/form.js": {
+      "mistri-built": "./dist/shared/form.js",
+      "default": "./src/shared/form.ts"
+    },
+    "./shared/formValues.js": {
+      "mistri-built": "./dist/shared/formValues.js",
+      "default": "./src/shared/formValues.ts"
+    },
+    "./shared/funnel.js": {
+      "mistri-built": "./dist/shared/funnel.js",
+      "default": "./src/shared/funnel.ts"
+    },
+    "./shared/httpOperations.js": {
+      "mistri-built": "./dist/shared/httpOperations.js",
+      "default": "./src/shared/httpOperations.ts"
+    },
+    "./shared/iconGlyphs.js": {
+      "mistri-built": "./dist/shared/iconGlyphs.js",
+      "default": "./src/shared/iconGlyphs.ts"
+    },
+    "./shared/iconWeights.js": {
+      "mistri-built": "./dist/shared/iconWeights.js",
+      "default": "./src/shared/iconWeights.ts"
+    },
+    "./shared/imageWidths.js": {
+      "mistri-built": "./dist/shared/imageWidths.js",
+      "default": "./src/shared/imageWidths.ts"
+    },
+    "./shared/keysetPage.js": {
+      "mistri-built": "./dist/shared/keysetPage.js",
+      "default": "./src/shared/keysetPage.ts"
+    },
+    "./shared/listEmpty.js": {
+      "mistri-built": "./dist/shared/listEmpty.js",
+      "default": "./src/shared/listEmpty.ts"
+    },
+    "./shared/listFilters.js": {
+      "mistri-built": "./dist/shared/listFilters.js",
+      "default": "./src/shared/listFilters.ts"
+    },
+    "./shared/listPresentations.js": {
+      "mistri-built": "./dist/shared/listPresentations.js",
+      "default": "./src/shared/listPresentations.ts"
+    },
+    "./shared/listQuestion.js": {
+      "mistri-built": "./dist/shared/listQuestion.js",
+      "default": "./src/shared/listQuestion.ts"
+    },
+    "./shared/maskQuoted.js": {
+      "mistri-built": "./dist/shared/maskQuoted.js",
+      "default": "./src/shared/maskQuoted.ts"
+    },
+    "./shared/mentionLabel.js": {
+      "mistri-built": "./dist/shared/mentionLabel.js",
+      "default": "./src/shared/mentionLabel.ts"
+    },
+    "./shared/mentionLookup.js": {
+      "mistri-built": "./dist/shared/mentionLookup.js",
+      "default": "./src/shared/mentionLookup.ts"
+    },
+    "./shared/menuCounts.js": {
+      "mistri-built": "./dist/shared/menuCounts.js",
+      "default": "./src/shared/menuCounts.ts"
+    },
+    "./shared/model.js": {
+      "mistri-built": "./dist/shared/model.js",
+      "default": "./src/shared/model.ts"
+    },
+    "./shared/money.js": {
+      "mistri-built": "./dist/shared/money.js",
+      "default": "./src/shared/money.ts"
+    },
+    "./shared/moneyEntry.js": {
+      "mistri-built": "./dist/shared/moneyEntry.js",
+      "default": "./src/shared/moneyEntry.ts"
+    },
+    "./shared/mount.js": {
+      "mistri-built": "./dist/shared/mount.js",
+      "default": "./src/shared/mount.ts"
+    },
+    "./shared/niceTicks.js": {
+      "mistri-built": "./dist/shared/niceTicks.js",
+      "default": "./src/shared/niceTicks.ts"
+    },
+    "./shared/order.js": {
+      "mistri-built": "./dist/shared/order.js",
+      "default": "./src/shared/order.ts"
+    },
+    "./shared/page.js": {
+      "mistri-built": "./dist/shared/page.js",
+      "default": "./src/shared/page.ts"
+    },
+    "./shared/pageAnatomy.js": {
+      "mistri-built": "./dist/shared/pageAnatomy.js",
+      "default": "./src/shared/pageAnatomy.ts"
+    },
+    "./shared/pageConfig.js": {
+      "mistri-built": "./dist/shared/pageConfig.js",
+      "default": "./src/shared/pageConfig.ts"
+    },
+    "./shared/pageEmptyActions.js": {
+      "mistri-built": "./dist/shared/pageEmptyActions.js",
+      "default": "./src/shared/pageEmptyActions.ts"
+    },
+    "./shared/pageLayouts.js": {
+      "mistri-built": "./dist/shared/pageLayouts.js",
+      "default": "./src/shared/pageLayouts.ts"
+    },
+    "./shared/pageModel.js": {
+      "mistri-built": "./dist/shared/pageModel.js",
+      "default": "./src/shared/pageModel.ts"
+    },
+    "./shared/pagePaths.js": {
+      "mistri-built": "./dist/shared/pagePaths.js",
+      "default": "./src/shared/pagePaths.ts"
+    },
+    "./shared/pagePlans.js": {
+      "mistri-built": "./dist/shared/pagePlans.js",
+      "default": "./src/shared/pagePlans.ts"
+    },
+    "./shared/pageRoutes.js": {
+      "mistri-built": "./dist/shared/pageRoutes.js",
+      "default": "./src/shared/pageRoutes.ts"
+    },
+    "./shared/query.js": {
+      "mistri-built": "./dist/shared/query.js",
+      "default": "./src/shared/query.ts"
+    },
+    "./shared/queryDates.js": {
+      "mistri-built": "./dist/shared/queryDates.js",
+      "default": "./src/shared/queryDates.ts"
+    },
+    "./shared/queryOperands.js": {
+      "mistri-built": "./dist/shared/queryOperands.js",
+      "default": "./src/shared/queryOperands.ts"
+    },
+    "./shared/reads.js": {
+      "mistri-built": "./dist/shared/reads.js",
+      "default": "./src/shared/reads.ts"
+    },
+    "./shared/recordLabel.js": {
+      "mistri-built": "./dist/shared/recordLabel.js",
+      "default": "./src/shared/recordLabel.ts"
+    },
+    "./shared/recordReadKeys.js": {
+      "mistri-built": "./dist/shared/recordReadKeys.js",
+      "default": "./src/shared/recordReadKeys.ts"
+    },
+    "./shared/recordReads.js": {
+      "mistri-built": "./dist/shared/recordReads.js",
+      "default": "./src/shared/recordReads.ts"
+    },
+    "./shared/recordview.js": {
+      "mistri-built": "./dist/shared/recordview.js",
+      "default": "./src/shared/recordview.ts"
+    },
+    "./shared/referenceModel.js": {
+      "mistri-built": "./dist/shared/referenceModel.js",
+      "default": "./src/shared/referenceModel.ts"
+    },
+    "./shared/refusal.js": {
+      "mistri-built": "./dist/shared/refusal.js",
+      "default": "./src/shared/refusal.ts"
+    },
+    "./shared/relatedCreate.js": {
+      "mistri-built": "./dist/shared/relatedCreate.js",
+      "default": "./src/shared/relatedCreate.ts"
+    },
+    "./shared/resourceHttp.js": {
+      "mistri-built": "./dist/shared/resourceHttp.js",
+      "default": "./src/shared/resourceHttp.ts"
+    },
+    "./shared/richText.js": {
+      "mistri-built": "./dist/shared/richText.js",
+      "default": "./src/shared/richText.ts"
+    },
+    "./shared/rollups.js": {
+      "mistri-built": "./dist/shared/rollups.js",
+      "default": "./src/shared/rollups.ts"
+    },
+    "./shared/rowScope.js": {
+      "mistri-built": "./dist/shared/rowScope.js",
+      "default": "./src/shared/rowScope.ts"
+    },
+    "./shared/runtimeTables.js": {
+      "mistri-built": "./dist/shared/runtimeTables.js",
+      "default": "./src/shared/runtimeTables.ts"
+    },
+    "./shared/schema.js": {
+      "mistri-built": "./dist/shared/schema.js",
+      "default": "./src/shared/schema.ts"
+    },
+    "./shared/schematext.js": {
+      "mistri-built": "./dist/shared/schematext.js",
+      "default": "./src/shared/schematext.js"
+    },
+    "./shared/scopeCatalog.js": {
+      "mistri-built": "./dist/shared/scopeCatalog.js",
+      "default": "./src/shared/scopeCatalog.ts"
+    },
+    "./shared/servedApp.js": {
+      "mistri-built": "./dist/shared/servedApp.js",
+      "default": "./src/shared/servedApp.ts"
+    },
+    "./shared/sessionLease.js": {
+      "mistri-built": "./dist/shared/sessionLease.js",
+      "default": "./src/shared/sessionLease.ts"
+    },
+    "./shared/shape.js": {
+      "mistri-built": "./dist/shared/shape.js",
+      "default": "./src/shared/shape.js"
+    },
+    "./shared/slug.js": {
+      "mistri-built": "./dist/shared/slug.js",
+      "default": "./src/shared/slug.ts"
+    },
+    "./shared/sqlsaved.js": {
+      "mistri-built": "./dist/shared/sqlsaved.js",
+      "default": "./src/shared/sqlsaved.ts"
+    },
+    "./shared/stitchedPaths.js": {
+      "mistri-built": "./dist/shared/stitchedPaths.js",
+      "default": "./src/shared/stitchedPaths.ts"
+    },
+    "./shared/subtitlePath.js": {
+      "mistri-built": "./dist/shared/subtitlePath.js",
+      "default": "./src/shared/subtitlePath.ts"
+    },
+    "./shared/suggest.js": {
+      "mistri-built": "./dist/shared/suggest.js",
+      "default": "./src/shared/suggest.ts"
+    },
+    "./shared/tableSizing.js": {
+      "mistri-built": "./dist/shared/tableSizing.js",
+      "default": "./src/shared/tableSizing.ts"
+    },
+    "./shared/tagLists.js": {
+      "mistri-built": "./dist/shared/tagLists.js",
+      "default": "./src/shared/tagLists.ts"
+    },
+    "./shared/textRules.js": {
+      "mistri-built": "./dist/shared/textRules.js",
+      "default": "./src/shared/textRules.ts"
+    },
+    "./shared/theme.js": {
+      "mistri-built": "./dist/shared/theme.js",
+      "default": "./src/shared/theme.ts"
+    },
+    "./shared/themeColor.js": {
+      "mistri-built": "./dist/shared/themeColor.js",
+      "default": "./src/shared/themeColor.ts"
+    },
+    "./shared/themeFaces.js": {
+      "mistri-built": "./dist/shared/themeFaces.js",
+      "default": "./src/shared/themeFaces.ts"
+    },
+    "./shared/themeLooks.js": {
+      "mistri-built": "./dist/shared/themeLooks.js",
+      "default": "./src/shared/themeLooks.ts"
+    },
+    "./shared/themeParts.js": {
+      "mistri-built": "./dist/shared/themeParts.js",
+      "default": "./src/shared/themeParts.ts"
+    },
+    "./shared/themePartsCheck.js": {
+      "mistri-built": "./dist/shared/themePartsCheck.js",
+      "default": "./src/shared/themePartsCheck.ts"
+    },
+    "./shared/themePresets.js": {
+      "mistri-built": "./dist/shared/themePresets.js",
+      "default": "./src/shared/themePresets.ts"
+    },
+    "./shared/themeRecipes.js": {
+      "mistri-built": "./dist/shared/themeRecipes.js",
+      "default": "./src/shared/themeRecipes.ts"
+    },
+    "./shared/themeResolve.js": {
+      "mistri-built": "./dist/shared/themeResolve.js",
+      "default": "./src/shared/themeResolve.ts"
+    },
+    "./shared/themeTokens.js": {
+      "mistri-built": "./dist/shared/themeTokens.js",
+      "default": "./src/shared/themeTokens.ts"
+    },
+    "./shared/themeType.js": {
+      "mistri-built": "./dist/shared/themeType.js",
+      "default": "./src/shared/themeType.ts"
+    },
+    "./shared/unitWord.js": {
+      "mistri-built": "./dist/shared/unitWord.js",
+      "default": "./src/shared/unitWord.ts"
+    },
+    "./shared/view.js": {
+      "mistri-built": "./dist/shared/view.js",
+      "default": "./src/shared/view.ts"
+    },
+    "./shared/viewPaths.js": {
+      "mistri-built": "./dist/shared/viewPaths.js",
+      "default": "./src/shared/viewPaths.ts"
+    },
+    "./shared/viewtext.js": {
+      "mistri-built": "./dist/shared/viewtext.js",
+      "default": "./src/shared/viewtext.ts"
+    },
+    "./shared/weekStart.js": {
+      "mistri-built": "./dist/shared/weekStart.js",
+      "default": "./src/shared/weekStart.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-packages.mjs",
+    "prepack": "node ../../scripts/pack-manifest.mjs strip",
+    "postpack": "node ../../scripts/pack-manifest.mjs restore"
+  },
+  "optionalDependencies": {
+    "mysql2": "^3.23.4",
+    "pg": "^8.23.0"
+  },
+  "engines": {
+    "node": ">=24.22.1"
+  }
+}

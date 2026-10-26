@@ -1,0 +1,119 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Parcel Tracking API",
+    "version": "1.0.0",
+    "description": "A made-up carrier network's tracking API, served locally by api.mjs for the Parcel sample."
+  },
+  "servers": [{ "url": "http://127.0.0.1:4781/v1" }],
+  "security": [{ "bearer": [] }],
+  "paths": {
+    "/shipments": {
+      "get": {
+        "summary": "Shipments, most recently shipped first",
+        "parameters": [
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100 } },
+          { "name": "q", "in": "query", "description": "Tracking number or city, any part of it", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/ShipmentStatus" } },
+          { "name": "carrier_id", "in": "query", "description": "One carrier, or several", "schema": { "type": "array", "items": { "type": "string" } } },
+          { "name": "destination_state", "in": "query", "schema": { "type": "string" } },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["-shipped_at", "shipped_at", "eta"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of shipments",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Shipment" } } } }
+          },
+          "401": { "description": "No bearer token, or the wrong one" }
+        }
+      }
+    },
+    "/shipments/{tracking_number}": {
+      "get": {
+        "summary": "One shipment",
+        "parameters": [{ "name": "tracking_number", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "The shipment", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Shipment" } } } },
+          "404": { "description": "No shipment with that tracking number" }
+        }
+      }
+    },
+    "/carriers": {
+      "get": {
+        "summary": "The carriers in the network",
+        "parameters": [
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of carriers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/Carrier" } },
+                    "next_cursor": { "type": ["string", "null"] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/carriers/{id}": {
+      "get": {
+        "summary": "One carrier",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "The carrier", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Carrier" } } } },
+          "404": { "description": "No carrier with that id" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "ShipmentStatus": { "type": "string", "enum": ["label_created", "in_transit", "out_for_delivery", "delivered", "exception"] },
+      "Shipment": {
+        "type": "object",
+        "required": ["tracking_number", "status", "carrier_id", "service", "shipped_at"],
+        "properties": {
+          "tracking_number": { "type": "string", "readOnly": true, "description": "The carrier's tracking number" },
+          "status": { "$ref": "#/components/schemas/ShipmentStatus" },
+          "carrier_id": { "type": "string", "description": "The carrier moving it" },
+          "service": { "type": "string", "enum": ["ground", "two_day", "overnight"] },
+          "origin_city": { "type": "string" },
+          "origin_state": { "type": "string" },
+          "destination_city": { "type": "string" },
+          "destination_state": { "type": "string" },
+          "weight_lb": { "type": "number", "description": "Weight in pounds" },
+          "declared_value": { "type": "number", "description": "Declared value in US dollars" },
+          "shipped_at": { "type": "string", "format": "date-time" },
+          "eta": { "type": "string", "format": "date", "description": "Estimated delivery day" },
+          "delivered_at": { "type": ["string", "null"], "format": "date-time" },
+          "signed_by": { "type": ["string", "null"] },
+          "exception_reason": { "type": ["string", "null"], "description": "Why it is held, when it is" }
+        }
+      },
+      "Carrier": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "readOnly": true },
+          "name": { "type": "string" },
+          "headquarters": { "type": "string" },
+          "phone": { "type": "string" },
+          "website": { "type": "string", "format": "uri" },
+          "on_time_rate": { "type": "number", "minimum": 0, "maximum": 100, "description": "Percent of deliveries on or before their estimate, 0 to 100" },
+          "active": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

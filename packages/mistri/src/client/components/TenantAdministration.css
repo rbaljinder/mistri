@@ -1,0 +1,36 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+.modal.tenant-administration { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box; padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.tenant-administration > header, .tenant-administration > footer, .administration-actions, .administration-paging { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3h); }
+.tenant-administration > header { justify-content: space-between; }
+.tenant-administration > footer { justify-content: flex-end; margin-top: var(--space-6); }
+.tenant-administration h2 { margin: 0; font-size: calc(18px * var(--type-k)); }
+.tenant-administration h3 { font-size: calc(15px * var(--type-k)); margin: 0 0 var(--space-4h); overflow-wrap: anywhere; }
+.tenant-administration .note { padding: 0; color: var(--ink-muted); line-height: 1.5; }
+.tenant-administration ul { list-style: none; padding: 0; margin: var(--space-3h) 0; }
+.administration-targets { max-height: 16rem; overflow: auto; }
+.administration-targets li, .administration-memberships li { border-bottom: 1px solid var(--line); }
+.administration-targets li button, .administration-memberships li button { display: flex; width: 100%; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3h); text-align: left; padding: var(--space-3h); }
+.tenant-administration button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.tenant-administration button:disabled { opacity: 0.5; cursor: not-allowed; }
+.tenant-administration button, .tenant-administration dd, .administration-receipt { overflow-wrap: anywhere; }
+.administration-editor, .administration-review { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.administration-form { margin-top: 20px; }
+.administration-form fieldset { border: 0; padding: 0; margin: 0 0 var(--field-gap); min-width: 0; }
+.administration-form legend { margin-bottom: var(--space-4); color: var(--ink-muted); }
+.administration-options label { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3h); overflow-wrap: anywhere; }
+.administration-field { display: grid; gap: var(--space-3); margin-bottom: var(--field-gap); }
+.administration-field > span { color: var(--ink-muted); font-size: var(--text-sm); }
+.administration-field input { min-width: 0; width: 100%; min-height: 36px; box-sizing: border-box; padding: var(--space-3) var(--space-3); font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line-control); border-radius: var(--radius); }
+.administration-field input:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+.administration-review dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-3h) var(--space-4h); }
+.administration-review dt { color: var(--ink-muted); }
+.administration-review dd { margin: 0; }
+.administration-warning, .tenant-administration [role="alert"] { color: var(--status-warning); }
+.tenant-administration button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.administration-usage { margin-top: 20px; }
+.administration-usage-table { width: 100%; margin-top: var(--space-4h); border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.administration-usage-table th { color: var(--ink-muted); font-weight: inherit; text-align: left; }
+.administration-usage-table th, .administration-usage-table td { padding: 7px var(--space-3h) 7px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.administration-usage-table th:last-child, .administration-usage-table td:last-child { text-align: right; padding-right: 0; }
+}

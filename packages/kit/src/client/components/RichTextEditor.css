@@ -1,0 +1,202 @@
+/* The rich text editor (RichTextEditor.tsx): a control like any field —
+   its border, radius and focus ring — with a quiet toolbar of square glyph
+   buttons on its top edge that wraps rather than scrolls at phone width.
+   Loaded with the editor's chunk, never by a first page. */
+.rich-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-control);
+  border-radius: var(--field-radius, var(--radius));
+}
+.rich-editor:focus-within {
+  border-color: var(--focus);
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: -1px;
+}
+.rich-editor.is-invalid {
+  border-color: var(--status-critical);
+}
+.rich-editor.is-disabled {
+  background: var(--raised);
+  color: var(--ink-muted);
+}
+.rich-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px;
+  padding: var(--space-1h);
+  border-bottom: 1px solid var(--line);
+}
+.rich-tool-menu {
+  display: contents;
+}
+.rich-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 26px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  box-sizing: border-box;
+  font: var(--text-base)/1 var(--sans);
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-item, var(--radius));
+  cursor: pointer;
+}
+.rich-tool:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--ink);
+}
+.rich-tool:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: -2px;
+}
+.rich-tool.is-active,
+.rich-tool[aria-expanded='true'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.rich-tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.rich-tool-wide {
+  padding: 0 var(--space-2h);
+}
+.rich-tool-caret {
+  font-size: var(--text-xs);
+  color: var(--ink-subtle);
+}
+.rich-tool-gap {
+  width: 1px;
+  height: 16px;
+  margin: 0 var(--space-1);
+  background: var(--line);
+}
+/* A menu item that cannot be used yet (a table's verbs outside a table) is plainly off, not a pending request. */
+.rich-menu .page-actions-item:disabled {
+  cursor: default;
+}
+.rich-menu-h2 {
+  font-weight: 600;
+  font-size: calc(15px * var(--type-k));
+}
+.rich-menu-h3 {
+  font-weight: 600;
+}
+.rich-menu-h4 {
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.rich-link-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2h);
+  padding: var(--space-2h) var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+.rich-link-bar .field-control {
+  flex: 1 1 14rem;
+  min-height: 28px;
+  padding: var(--space-1h) var(--space-3);
+}
+.rich-editor-body {
+  min-width: 0;
+}
+.rich-text-editable {
+  min-height: 5.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-3h);
+  outline: none;
+}
+.rich-text-editable p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--ink-subtle);
+}
+.rich-text-editable .selectedCell {
+  background: var(--accent-soft);
+}
+.rich-text-editable img.ProseMirror-selectednode {
+  outline: var(--focus-width) solid var(--focus);
+}
+.rich-mentions {
+  min-width: 12rem;
+  max-width: min(20rem, calc(100vw - 16px));
+  padding: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pop, var(--radius));
+  box-shadow: var(--shadow-pop);
+}
+.rich-mention-option {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2h) var(--space-3);
+  font-size: var(--text-base);
+  border-radius: var(--radius-item, var(--radius));
+  cursor: pointer;
+}
+.rich-mention-option.is-active {
+  background: var(--accent-soft);
+}
+.rich-mention-handle {
+  color: var(--ink-subtle);
+}
+/* A team in the @ list: a quiet tag, not a colour, says it is several people. */
+.rich-mention-kind {
+  padding: 0 var(--space-2h);
+  font-size: var(--text-xs);
+  line-height: 18px;
+  color: var(--ink-muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-item, var(--radius));
+}
+.rich-mention-none {
+  padding: var(--space-2h) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--ink-muted);
+}
+/* Tiptap draws a task as <li><label><input></label><div><p>…</p></div></li>: the box beside the first line,
+   as the read view has it, not over it. The label is as tall as the text's first line so the box centres on it. */
+.rich-text-editable ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.rich-text-editable li[data-checked] {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.rich-text-editable li[data-checked] > label {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 1.55em;
+  user-select: none;
+}
+.rich-text-editable li[data-checked] > label input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.rich-text-editable li[data-checked] > div {
+  flex: 1;
+  min-width: 0;
+}
+.rich-text-editable li[data-checked][data-checked='true'] > div {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-subtle);
+}

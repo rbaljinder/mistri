@@ -1,0 +1,31 @@
+/** What TenantApiTokens says, in the tenancy room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '@mistriwork/kit/client/messages.js';
+
+export const say = defineMessages({
+  title: 'API tokens',
+  close: 'Close API tokens',
+  note: 'A token reads and acts through the App’s API as you, in this tenant, with the roles it was made with and never more than yours.',
+  loading: 'Loading tokens…',
+  failed: 'The tokens could not be read. Check your access and try again.',
+  none: 'No tokens yet.',
+  label: 'Label',
+  roles: 'Roles',
+  expires: 'Expires',
+  state: 'State',
+  active: 'active',
+  revoked: 'revoked',
+  expired: 'expired',
+  someoneElse: 'another member’s',
+  revoke: 'Revoke',
+  revoking: 'Revoking…',
+  make: 'Make a token',
+  labelHint: 'What it is for, so it can be told apart later.',
+  days: 'Days until it expires',
+  daysHint: 'At most {most}.',
+  create: 'Make token',
+  creating: 'Making…',
+  madeOnce: 'Copy it now: this is the only time it is shown.',
+  copy: 'Copy',
+  copied: 'Copied',
+  noRoles: 'You hold no role the App’s API allows, so there is no token to make.',
+});

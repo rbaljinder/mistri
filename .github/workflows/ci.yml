@@ -1,0 +1,454 @@
+# The suite, on every push and pull request.
+#
+# One job, one Node version. tablewalk pins Node 24 because `node:sqlite` is
+# built in there — testing a matrix of versions it does not support would be
+# a matrix of the same failure.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}       # run the suite on a branch with no main to open a pull request against
+
+# One run per branch. Ten pushes in an hour is ten runs of five jobs each,
+# which saturates the runners and leaves the newest — the one anybody is
+# waiting on — queued behind four superseded runs of the same suite. The
+# answer to "did that push pass" should not depend on how fast the previous
+# four were.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    # A suite that takes fifteen seconds locally has no business running for
+    # an hour here. Without a cap a hung test holds a runner until GitHub's
+    # six-hour limit and reports nothing — no logs are available for a job
+    # that never finishes, which is exactly when logs are wanted.
+    timeout-minutes: 45  # a third of the node suite, live PostgreSQL included (the whole suite: ~17 min locally, ~30 on one runner)
+
+    # The engines the adapters are written against, so the tests written
+    # against them actually run. Without these the live blocks skipped, exited
+    # zero and reported green — and the tests that skipped were the
+    # load-bearing ones: the MySQL two-step read-only escape and the Postgres
+    # BEGIN READ ONLY wrapper. A pass meant "SQLite works".
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: tablewalk
+          POSTGRES_DB: tablewalk
+        ports: ['5432:5432']
+        # Without a health check the suite starts before the server accepts
+        # connections, and the failure looks like a bug rather than a race.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      # MySQL is not started: its live tests are paused (test/live.ts PAUSED) and
+      # skip, by name, until the dialect is tested again.
+      # The cache and search services' live tests (test/services-live.test.ts)
+      # are held to the same rule as the engines: they run here or the job fails.
+      valkey:
+        image: valkey/valkey:8
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      typesense:
+        image: typesense/typesense:27.1
+        env:
+          TYPESENSE_API_KEY: tablewalk
+          TYPESENSE_DATA_DIR: /tmp
+        ports: ['8108:8108']
+
+    env:
+      TABLEWALK_TEST_PG: postgres://postgres:tablewalk@127.0.0.1:5432/tablewalk
+      TABLEWALK_TEST_ROW_PG: postgres://postgres:tablewalk@127.0.0.1:5432/tablewalk
+      TABLEWALK_TEST_VALKEY: valkey://127.0.0.1:6379
+      TABLEWALK_TEST_TYPESENSE: http://127.0.0.1:8108/
+      TABLEWALK_TEST_TYPESENSE_KEY: tablewalk
+      # A skip is a decision here, not a default. Without this a misspelled
+      # variable or a service that failed to start would leave the live tests
+      # silently unrun and the job green — which is the state this whole
+      # section exists to end.
+      TABLEWALK_REQUIRE_LIVE: '1'
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly what the
+      # lockfile says, so a green run here means the same tree a contributor
+      # has, not a resolution that happened to work today.
+      - run: npm ci
+
+      # Runs tsc, both client checkers, and the suite. The client checkers are
+      # the ones that matter most here: the client is unbundled, so nothing
+      # compiles it — a missing import or a renamed export is a runtime error
+      # nobody sees until that view is opened.
+      # The live blocks read whatever table they find rather than hardcoding
+      # one — a test naming `customer` passes for the wrong reason on a
+      # database that happens to have one. The cost is that a fresh service
+      # container has nothing to read, so it gets one small table first.
+      - run: npm run seed:live
+
+      # Six legs split the node suite by file; the first also runs the static
+      # checks and the component tests. Together they are `npm test`. Six
+      # rather than three because both matrices sat far under the concurrency
+      # ceiling while a PR waited ~30 minutes on its slowest shard: at six the
+      # browser half is a fraction of that a shard, packed by recorded time. Past six or eight
+      # it stops paying, because every shard pays `npm ci`, the Playwright
+      # install and container setup before it runs a line of test.
+      # The shard is the runner's own `--shard` (packed by recorded time), not
+      # node's `--test-shard`: the suite runs in two lanes (scripts/test-node.mjs) and each has to be split
+      # separately, or one shard inherits every slow serial file.
+      - if: matrix.shard == 1
+        run: npm run test:static && npx vitest run
+      # The first leg also runs the static checks, Vitest and the authored-App
+      # browser run, 1.4 times a leg's share of the node suite (8.5 of 6 min in
+      # run 37232818447), so it starts that far behind and takes less of it:
+      # it ran 16 minutes while the others ran 6 to 9.
+      - run: node scripts/test-node.mjs --shard=${{ matrix.shard }}/6 --head-start=1:1.4
+
+      # Authored-App suites use only public helpers, each on a desk and a phone:
+      # Lintel's own browser layer, the testing scaffold (suite login across two
+      # Apps), and the acceptance suites over two fixtures — Loaner Desk over
+      # SQLite and a real disposable Keystone PostgreSQL deployment.
+      - if: matrix.shard == 1
+        run: npx playwright install --with-deps chromium
+      - if: matrix.shard == 1
+        run: npx playwright test --config examples/apps/lintel/tests/playwright.config.ts
+      - if: matrix.shard == 1
+        run: npx playwright test --config examples/testing/playwright.config.ts --workers=1
+      - if: matrix.shard == 1
+        run: npx playwright test --config test/loaner-desk-acceptance/playwright.config.ts --workers=1
+      - if: matrix.shard == 1
+        run: npx playwright test --config test/keystone-acceptance/playwright.config.ts --workers=1
+      # The acceptance suite must be able to fail: one broken policy and one broken
+      # integration, each in a copy of Loaner Desk, must turn the test that owns it red.
+      - if: matrix.shard == 1
+        run: node --import tsx test/loaner-desk-acceptance/prove-red.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure() && matrix.shard == 1
+        with:
+          name: authored-app-browser-traces
+          path: test-results/
+          retention-days: 7
+
+  # The browser half. `npm test` never opens a page, so every behaviour that
+  # only exists once the client runs — the walk, write mode, the SQL editor,
+  # pinned columns — was unguarded in CI. Deleting the write confirmation left
+  # the suite green.
+  # Sharded across six runners, packed by recorded time: `npm run e2e --
+  # --shard=N/6` packs each lane's spec files into six bins by the seconds in
+  # test/e2e-timings.json (scripts/e2e-shards.mjs), not by Playwright's own
+  # split by test count, which ran the shards 11 to 39 minutes. Refresh the
+  # record with `npm run e2e -- --record-timings`. Each shard is its own
+  # machine, builds its own fixtures when the config loads, and shares nothing.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45  # one shard of six, packed by recorded time so they finish together (11 to 23 min in run 37232818447, before the built job took legs 1 and 3's extras); 30 left no room
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Only the one browser the suite uses. `--with-deps` because the runner
+      # has none of the shared libraries Chromium needs.
+      - run: npx playwright install --with-deps chromium
+      # The suite serves each product's client from its own `dist/client`: one
+      # `vite build` per product per shard (the runner would do it too, but a step
+      # names it in the log), then the servers of every spec send the build. Specs
+      # that need the source say `e2e-client: source` and run unbuilt
+      # (scripts/test-e2e.mjs).
+      - run: npx vite build --config vite.tablewalk.config.ts --logLevel warn
+      - run: npx vite build --config vite.mistri.config.ts --logLevel warn
+      # The public pages' server renderer: without mistri's dist/ssr a public page is
+      # sent undrawn and the specs that read its drawn HTML fail.
+      - run: npx vite build --config vite.ssr.config.ts --logLevel warn
+      # tablewalk/react as it ships: e2e/embed-built.spec.ts starts the built
+      # library in a host's page, the one run of what a host installs.
+      - run: npx vite build --config vite.embed.config.ts --logLevel warn
+      # Two workers, as before. 0.8.6 measured three on an 8-core, 16 GB laptop;
+      # a two-core, 7 GB runner is not that, so the width stays what CI has run
+      # until a shard has been seen to hold three.
+      # Each leg also runs its share of the visual-matrix smoke below, and the
+      # shares are uneven (2.1 to 4.9 min in run 37232818447), so each starts
+      # that share behind. --head-start counts it in average shards of each
+      # lane's recorded weight. At two workers that is half the share of a leg's
+      # wall: the values are each leg's smoke minutes / 9.4 min of suite / 2.
+      - run: npm run e2e -- --shard=${{ matrix.shard }}/6 --no-build --head-start=1:0.26,2:0.23,3:0.17,4:0.17,5:0.11,6:0.20
+        env:
+          TABLEWALK_E2E_WORKERS: 2
+      # Every sample-App page in every look, light and dark, desk and phone,
+      # renders without a page error and without scrolling sideways. The
+      # suite asserts behaviour; this looks at every page once. Split by App
+      # across the six shards: whole, it was twenty-two minutes on one.
+      - run: node scripts/visual-matrix.mjs --smoke --only apps --shard ${{ matrix.shard }}/6
+      # The trace of a failure is worth more than the log of it: it has the
+      # DOM at each step, which is what "the button was not there" needs.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: playwright-traces-${{ matrix.shard }}
+          # Where the config actually writes: `outputDir` in playwright.config.ts.
+          # There is no html reporter, so `playwright-report/` never existed and
+          # every red run uploaded nothing.
+          path: e2e/.results/
+          include-hidden-files: true
+          retention-days: 7
+
+  # The package as users get it, in a job of its own. These steps rode on e2e
+  # legs 1 and 3, and Web Vitals alone is 9 minutes: that leg ran 23 minutes
+  # while the others ran 11 to 18 (run 37232818447). Here they share one
+  # build instead of two, beside the legs rather than inside one.
+  built:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # The suite's legs serve the build's client from tsx servers; this serves
+      # the whole package, as users get it — compressed, content-named, split —
+      # in the browser.
+      - run: npm run build && npm run test:built:browser
+      - name: Installed public testing package
+        run: |
+          # Every package's tarball: mistri, and tablewalk beside it, install the @mistri packages at their own version.
+          npm pack --workspaces --pack-destination "$RUNNER_TEMP"
+          node scripts/test-installed-testing.mjs "$RUNNER_TEMP"/*.tgz
+      # Web Vitals on the build: layout shift, largest paint and interaction
+      # latency, each held to its budget (test/built-client-vitals.mjs), and a gate.
+      # Ignition's tenant pages are measured only where a PostgreSQL server
+      # is named, which this job has not.
+      # A gate for layout shift and LCP; INP is reported but advisory on a shared
+      # runner (see --advisory-inp in the script). The report is still written.
+      - name: Web Vitals
+        id: vitals
+        run: npm run test:built:vitals -- --report web-vitals.md --advisory-inp
+      - name: Report Web Vitals
+        if: always() && steps.vitals.outcome != 'skipped'
+        env:
+          VITALS_OUTCOME: ${{ steps.vitals.outcome }}
+        run: |
+          echo "## Web Vitals ($VITALS_OUTCOME)" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f web-vitals.md ]; then
+            cat web-vitals.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report was produced; see the Web Vitals step logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # The guides and component gallery ship together. Building alone cannot
+  # detect broken search, gallery routes, or mobile overflow in new guides.
+  documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm ci
+        working-directory: storybook
+      - run: npm run build:site
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:site:browser
+
+  # The thing people actually install.
+  #
+  # `npm pack` ships whatever `dist/` happens to hold, and for a while that
+  # was whatever the last local build left there — a tarball with a server
+  # three features out of date, which installs and runs and looks fine. So
+  # this job builds, packs every workspace package, and probes the *installed*
+  # packages rather than the repo: each product installs the @mistri packages
+  # at its own version, so it is installed beside them.
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # The destination has to exist; npm will not create it, and the error
+      # it gives for a missing one names the tarball rather than the folder.
+      - run: npm run build
+      - run: mkdir -p /tmp/pack && npm pack --workspaces --pack-destination /tmp/pack
+
+      - name: It installs, serves, and speaks MCP
+        run: |
+          npx tsx test/make-demo-db.ts /tmp/demo.db
+          mkdir -p /tmp/asuser && cd /tmp/asuser
+          npm init -y >/dev/null
+          npm install /tmp/pack/*.tgz
+
+          # The two that stop rather than serve. Both were unhandled — ignored
+          # by the parser, then rescued by the "nothing to open" gate printing
+          # the usage and exiting 1. Once the server learned to start with no
+          # connection that accident became `tablewalk --help` listening on a
+          # port and waiting for a browser, so the exit code is the assertion.
+          ./node_modules/.bin/tablewalk --help | grep -q 'graph you walk'
+          ./node_modules/.bin/tablewalk --version | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'
+          if ./node_modules/.bin/tablewalk --prot 1 >/dev/null 2>&1; then
+            echo "an unknown option was accepted" && exit 1
+          fi
+          # The App framework is a binary of its own, and each refuses the other's start by its name.
+          ./node_modules/.bin/mistri --help | grep -q 'the App framework'
+          ./node_modules/.bin/mistri --version | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'
+          ./node_modules/.bin/tablewalk check --app . 2>&1 | grep -q 'npx @mistriwork/mistri check'
+          ./node_modules/.bin/mistri --db /tmp/demo.db 2>&1 | grep -q 'npx tablewalk'
+
+          # And the first-run path: no database named, so it serves the page
+          # that asks for one. This is what `npx tablewalk` does for someone
+          # who has just installed it and typed the name.
+          ./node_modules/.bin/tablewalk --no-config --port 4224 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:4224/api/connections >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4224/ | grep -q '<title>'
+          # The client as it ships: the page names its entry by content, the
+          # entry comes back compressed and cacheable for good. The page can
+          # carry account-bound first-paint data, so it must never be cached.
+          # An unknown path answers the page too,
+          # so the entry is asked for by the name the page gives it.
+          entry="$(curl -fsS http://127.0.0.1:4224/ | grep -o 'src="/assets/[^"]*\.js"' | head -1 | cut -d'"' -f2)"
+          test -n "$entry"
+          curl -fsS -o /dev/null -D /tmp/entry.headers -H 'Accept-Encoding: gzip, br' "http://127.0.0.1:4224$entry"
+          grep -qi '^content-type: text/javascript' /tmp/entry.headers
+          grep -qi '^content-encoding: br' /tmp/entry.headers
+          grep -qi '^cache-control: public, max-age=31536000, immutable' /tmp/entry.headers
+          curl -fsS -o /dev/null -D /tmp/page.headers http://127.0.0.1:4224/
+          grep -qi '^cache-control: private, no-store' /tmp/page.headers
+          grep -qi '^vary:.*Cookie' /tmp/page.headers
+          if grep -qi '^etag:' /tmp/page.headers; then
+            echo "a page carrying first-paint data must not have a reusable ETag" && exit 1
+          fi
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'If-None-Match: *' http://127.0.0.1:4224/)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4224/api/schema)" = 409
+          kill %1
+
+          ./node_modules/.bin/tablewalk --no-config --db /tmp/demo.db --port 4223 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:4223/api/connections >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4223/ | grep -q '<title>'
+          kill %1
+          # The tool list is the tell: a stale dist answers with the tools it
+          # had when it was built, and every one of them still works.
+          printf '%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | ./node_modules/.bin/tablewalk --mcp --no-config --db /tmp/demo.db > /tmp/mcp.out
+          # The newest tools, so a dist built before they existed is caught:
+          # change_impact, and none of the App authoring tools it no longer has.
+          grep -q '"change_impact"' /tmp/mcp.out
+          ! grep -q '"validate_app"' /tmp/mcp.out
+          echo "the packed build is the current one"
+
+  # The desktop bundle, staged on every push.
+  #
+  # The bundle is assembled rather than checked in — the workspace packages laid
+  # out as an install leaves them, and a production-only install of what they
+  # need from the registry — and
+  # it went stale twice without anyone noticing, because nothing built it
+  # until release day. Both times the symptom was an app that started and
+  # then failed at something the repo had already fixed.
+  #
+  # Electron is deliberately not installed here. Staging needs Node and the
+  # root build only, so this costs a minute and catches the class of failure
+  # that matters: the bundle no longer assembles from current sources, or
+  # assembles into something that does not answer.
+  desktop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node desktop/scripts/stage.mjs
+
+      # The staged tree is what ships, so it is what gets probed — not the
+      # source it was built from. `--db` with a fresh file makes the check
+      # independent of any config on the runner.
+      - name: The staged server starts, and answers
+        run: |
+          npx tsx test/make-demo-db.ts /tmp/probe.db
+          node desktop/build/server/node_modules/tablewalk/dist/server/index.js \
+            --no-config --db /tmp/probe.db --port 4222 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:4222/api/connections >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4222/api/connections | head -c 200
+          # The client is served from the staged copy too: a bundle whose
+          # dist/client nested inside itself served a 404 here and a working
+          # page in the repo.
+          curl -fsS http://127.0.0.1:4222/ | grep -q '<title>' \
+            && echo "and the page is there"
+          kill %1
+
+  # Built on every push, not only on release, because a Dockerfile that has
+  # stopped building is worth knowing about before the day you want to ship it.
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: docker build -t tablewalk:ci .
+      - name: Create the image smoke fixture
+        run: |
+          mkdir -p "$RUNNER_TEMP/tablewalk-image-probe"
+          python3 - <<'PY'
+          import json, os, sqlite3
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'tablewalk-image-probe'
+          with sqlite3.connect(root / 'probe.db') as db:
+              db.execute('CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL)')
+              db.execute("INSERT INTO item VALUES (1, 'image smoke')")
+          (root / 'tablewalk.json').write_text(json.dumps({
+              'connections': [{'name': 'probe', 'url': '/config/probe.db'}]
+          }))
+          PY
+      - name: It starts, and answers
+        run: |
+          docker run -d --name probe -p 127.0.0.1:4111:4111 \
+            -v "$RUNNER_TEMP/tablewalk-image-probe:/config:ro" tablewalk:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:4111/api/connections >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4111/api/connections | head -c 200
+          curl -fsS http://127.0.0.1:4111/api/schema | python3 -c 'import json,sys; assert any(t["name"] == "item" for t in json.load(sys.stdin)["tables"])'
+      - name: Stop the image smoke server
+        if: always()
+        run: docker rm -f probe

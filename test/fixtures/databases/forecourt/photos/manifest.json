@@ -1,0 +1,346 @@
+{
+  "hero": {
+    "file": "hero.jpg",
+    "alt": "A slate-blue Ford Mustang GT parked in an open lot under a clear sky.",
+    "license": "CC0",
+    "source": "https://commons.wikimedia.org/wiki/File:2024_Ford_Mustang_GT_5.0_v8.jpg"
+  },
+  "photos": [
+    {
+      "file": "toyota-camry-white.jpg",
+      "thumb": "toyota-camry-white-thumb.jpg",
+      "make": "Toyota",
+      "model": "Camry",
+      "body": "Sedan",
+      "colour": "White",
+      "years": [
+        2018,
+        2024
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Moscow,_Toyota_Camry_(XV70),_Aug_2025_02.jpg"
+    },
+    {
+      "file": "tesla-model-3-white.jpg",
+      "thumb": "tesla-model-3-white-thumb.jpg",
+      "make": "Tesla",
+      "model": "Model 3",
+      "body": "Sedan",
+      "colour": "White",
+      "years": [
+        2024,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Tesla_Model_3_(2023),_long_range,_Japan,_left-front.jpg"
+    },
+    {
+      "file": "bmw-3-series-gray.jpg",
+      "thumb": "bmw-3-series-gray-thumb.jpg",
+      "make": "BMW",
+      "model": "3 Series",
+      "body": "Sedan",
+      "colour": "Gray",
+      "years": [
+        2023,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:2024_BMW_M340i_xDrive_-_2998cc_3.0_(374PS)_Petrol_-_Brooklyn_Grey_-_11-2024,_Front.jpg"
+    },
+    {
+      "file": "volkswagen-jetta-blue.jpg",
+      "thumb": "volkswagen-jetta-blue-thumb.jpg",
+      "make": "Volkswagen",
+      "model": "Jetta",
+      "body": "Sedan",
+      "colour": "Blue",
+      "years": [
+        2025,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:2025_Volkswagen_Jetta_in_Monterey_Blue_Pearl,_front_right,_04-26-2025.jpg"
+    },
+    {
+      "file": "toyota-rav4-white.jpg",
+      "thumb": "toyota-rav4-white-thumb.jpg",
+      "make": "Toyota",
+      "model": "RAV4",
+      "body": "SUV",
+      "colour": "White",
+      "years": [
+        2019,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:2021_Toyota_RAV4_PHV.jpg"
+    },
+    {
+      "file": "honda-cr-v-black.jpg",
+      "thumb": "honda-cr-v-black-thumb.jpg",
+      "make": "Honda",
+      "model": "CR-V",
+      "body": "SUV",
+      "colour": "Black",
+      "years": [
+        2023,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:2024_Honda_CR-V_2.0_eHEV_RS_Crystal_Black_Pearl_in_Indonesia_01.jpg"
+    },
+    {
+      "file": "mazda-cx-5-red.jpg",
+      "thumb": "mazda-cx-5-red-thumb.jpg",
+      "make": "Mazda",
+      "model": "CX-5",
+      "body": "SUV",
+      "colour": "Red",
+      "years": [
+        2017,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Moscow,_Mazda_CX-5_red,_Sept_2026_01.jpg"
+    },
+    {
+      "file": "tesla-model-y-gray.jpg",
+      "thumb": "tesla-model-y-gray-thumb.jpg",
+      "make": "Tesla",
+      "model": "Model Y",
+      "body": "SUV",
+      "colour": "Gray",
+      "years": [
+        2020,
+        2024
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:22_Tesla_Model_Y_Performance.jpg"
+    },
+    {
+      "file": "hyundai-ioniq-5-gray.jpg",
+      "thumb": "hyundai-ioniq-5-gray-thumb.jpg",
+      "make": "Hyundai",
+      "model": "Ioniq 5",
+      "body": "SUV",
+      "colour": "Gray",
+      "years": [
+        2022,
+        2024
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:23_Hyundai_Ioniq_5_SEL_(3).jpg"
+    },
+    {
+      "file": "chevrolet-equinox-red.jpg",
+      "thumb": "chevrolet-equinox-red-thumb.jpg",
+      "make": "Chevrolet",
+      "model": "Equinox",
+      "body": "SUV",
+      "colour": "Red",
+      "years": [
+        2018,
+        2024
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:21_Chevrolet_Equinox_Premier.jpg"
+    },
+    {
+      "file": "jeep-wrangler-blue.jpg",
+      "thumb": "jeep-wrangler-blue-thumb.jpg",
+      "make": "Jeep",
+      "model": "Wrangler",
+      "body": "SUV",
+      "colour": "Blue",
+      "years": [
+        2018,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Jeep_Wrangler_Rubicon_-_October_2025_-_Sarah_Stierch.jpg"
+    },
+    {
+      "file": "hyundai-tucson-gray.jpg",
+      "thumb": "hyundai-tucson-gray-thumb.jpg",
+      "make": "Hyundai",
+      "model": "Tucson",
+      "body": "SUV",
+      "colour": "Gray",
+      "years": [
+        2022,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Moscow,_Hyundai_Tucson_(China,_NX4)_Aug_2025_02.jpg"
+    },
+    {
+      "file": "kia-niro-ev-gray.jpg",
+      "thumb": "kia-niro-ev-gray-thumb.jpg",
+      "make": "Kia",
+      "model": "Niro EV",
+      "body": "SUV",
+      "colour": "Gray",
+      "years": [
+        2019,
+        2022
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:22_Kia_Niro_EV_EX_Premium.jpg"
+    },
+    {
+      "file": "volkswagen-golf-gti-navy.jpg",
+      "thumb": "volkswagen-golf-gti-navy-thumb.jpg",
+      "make": "Volkswagen",
+      "model": "Golf GTI",
+      "body": "Hatchback",
+      "colour": "Navy",
+      "years": [
+        2015,
+        2021
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:2016_Volkswagen_Golf_GTI_S_in_Night_Blue_Metallic,_front_left,_07-04-2026.jpg"
+    },
+    {
+      "file": "honda-civic-red.jpg",
+      "thumb": "honda-civic-red-thumb.jpg",
+      "make": "Honda",
+      "model": "Civic",
+      "body": "Hatchback",
+      "colour": "Red",
+      "years": [
+        2017,
+        2021
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:2019_Honda_Civic_Hatch_1.5_VTEC_Turbo_E_in_Bandung_Jawa_Barat_40122_01.jpg"
+    },
+    {
+      "file": "mini-cooper-green.jpg",
+      "thumb": "mini-cooper-green-thumb.jpg",
+      "make": "Mini",
+      "model": "Cooper",
+      "body": "Hatchback",
+      "colour": "Green",
+      "years": [
+        2016,
+        2023
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Moscow,_Mini_Hatch_(F56)_Cooper_S_60-years,_May_2026_02.jpg"
+    },
+    {
+      "file": "nissan-leaf-beige.jpg",
+      "thumb": "nissan-leaf-beige-thumb.jpg",
+      "make": "Nissan",
+      "model": "Leaf",
+      "body": "Hatchback",
+      "colour": "Beige",
+      "years": [
+        2018,
+        2024
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Nissan_Leaf_(ZE1)_Urban_Chrome,2021,left.jpg"
+    },
+    {
+      "file": "ford-f-150-gray.jpg",
+      "thumb": "ford-f-150-gray-thumb.jpg",
+      "make": "Ford",
+      "model": "F-150",
+      "body": "Pickup",
+      "colour": "Gray",
+      "years": [
+        2017,
+        2020
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Ford_F-150_Raptor_(49522651487).jpg"
+    },
+    {
+      "file": "chevrolet-silverado-1500-black.jpg",
+      "thumb": "chevrolet-silverado-1500-black-thumb.jpg",
+      "make": "Chevrolet",
+      "model": "Silverado 1500",
+      "body": "Pickup",
+      "colour": "Black",
+      "years": [
+        2016,
+        2018
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Chevrolet_SIlverado_Z71_(27611570309).jpg"
+    },
+    {
+      "file": "ford-ranger-blue.jpg",
+      "thumb": "ford-ranger-blue-thumb.jpg",
+      "make": "Ford",
+      "model": "Ranger",
+      "body": "Pickup",
+      "colour": "Blue",
+      "years": [
+        2024,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:2024_Ford_Ranger_Wildtrak_X_EcoBlue_4x4_-_1996cc_2.0_(205PS)_Diesel_-_Blue_Lightning_-_02-2025,_Front.jpg"
+    },
+    {
+      "file": "ford-mustang-gray.jpg",
+      "thumb": "ford-mustang-gray-thumb.jpg",
+      "make": "Ford",
+      "model": "Mustang",
+      "body": "Coupe",
+      "colour": "Gray",
+      "years": [
+        2024,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:2024_Ford_Mustang_GT_5.0_v8.jpg"
+    },
+    {
+      "file": "mazda-mx-5-miata-red.jpg",
+      "thumb": "mazda-mx-5-miata-red-thumb.jpg",
+      "make": "Mazda",
+      "model": "MX-5 Miata",
+      "body": "Coupe",
+      "colour": "Red",
+      "years": [
+        2017,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Moscow,_Mazda_MX-5_red,_Aug_2025_02.jpg"
+    },
+    {
+      "file": "subaru-outback-black.jpg",
+      "thumb": "subaru-outback-black-thumb.jpg",
+      "make": "Subaru",
+      "model": "Outback",
+      "body": "Wagon",
+      "colour": "Black",
+      "years": [
+        2015,
+        2019
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:2016_Subaru_Outback_2.6i_Limited_in_Crystal_Black_Silica,_front_right,_07-07-2026.jpg"
+    },
+    {
+      "file": "audi-a4-allroad-silver.jpg",
+      "thumb": "audi-a4-allroad-silver-thumb.jpg",
+      "make": "Audi",
+      "model": "A4 allroad",
+      "body": "Wagon",
+      "colour": "Silver",
+      "years": [
+        2020,
+        2025
+      ],
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Audi_A4_Allroad_Sport_50_TDI_Quattro_(2021)_(54814050666).jpg"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* A record page before its row answers (PageSkeleton.tsx): the head's name and four facts, then the main
+   column's sections and the aside's, at the page's own gaps (the section seam, the field gap). */
+.sk-page-head { display: grid; gap: var(--space-4); padding-bottom: var(--space-6); border-bottom: 1px solid var(--line); }
+.sk-page-facts { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--field-gap); }
+.sk-page-fact { display: grid; gap: var(--space-2); width: 8rem; }
+.sk-page-layout { padding-top: var(--space-6); }
+.sk-page-main, .sk-page-aside { display: grid; align-content: start; gap: var(--section-seam); min-width: 0; }
+.sk-page-aside { border-left: 1px solid var(--line); padding-left: var(--space-6); }
+.sk-page-section { display: grid; gap: var(--space-4); }
+.sk-page-fields { grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--space-4) var(--field-gap); }
+.sk-page-aside .sk-page-fields { grid-template-columns: minmax(0, 1fr); }
+.sk-page-field { display: grid; gap: var(--space-1h); }
+.sk-page-block { display: grid; gap: var(--space-3); }
+.sk-page-section .sk-grid { padding-inline: 0; }
+}

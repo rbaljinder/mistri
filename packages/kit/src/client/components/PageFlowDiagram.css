@@ -1,0 +1,193 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* A flow drawn: quiet boxes on hairlines, each with its kind's mark, the
+   step's words in the text colors, a branch's other way dashed under the
+   lanes so it reads as the road not taken. A run's walk is said as the
+   workflow strip says it (docs/design.md): the way walked in the ink, the
+   current step in the accent, what is ahead dim, meaning a dot and its word.
+   Here, not in page.css: the section is a part loaded on demand, so its
+   rules arrive with it and no first page carries them.
+
+   Every length is fixed here, not measured off the page: a box is as tall as
+   its kind, two lines of title and the meta lines the drawing needs
+   (--flow-lines, said by the component), so the line the way runs along,
+   the legs of a branch and the arrowheads all land where they should on the
+   first paint. */
+.flow-diagram {
+  --flow-gap: 40px;
+  --flow-head: 22px;
+  --flow-lane-gap: 10px;
+  --flow-meta: 20px;
+  --flow-box: calc(76px + var(--flow-lines, 0) * (var(--flow-meta) + 4px));
+  --flow-way: 26px;
+  --flow-end: 18px;
+  --flow-line: var(--line-strong);
+  margin-top: var(--space-2h);
+}
+/* A run's line above its drawing: the flow it follows, its state, when it began. */
+.flow-diagram-run { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-4h); font-size: var(--text-base); }
+.flow-diagram-run-name { color: var(--ink); font-weight: 600; }
+.flow-diagram-run-when { color: var(--ink-muted); font-size: var(--text-sm); }
+
+/* The width each column has decides the layout, and a container query reads
+   it without a measurement: this box is the drawing's width divided by its
+   columns, and the drawing inside it is that width times its columns again
+   — the whole width, laid out by a query on one column's share. */
+.flow-diagram-fit { container: flow-column / inline-size; width: calc(100% / var(--flow-n, 1)); }
+.flow-diagram-body { width: calc(100% * var(--flow-n, 1)); }
+
+/* Each column is two halves and a gap: the line between the halves is its
+   middle, which a branch's way lands on, so a way spans middle to middle. */
+.flow-diagram-flow, .flow-diagram-ways {
+  display: grid;
+  grid-template-columns:
+    repeat(var(--flow-n, 1), minmax(0, 1fr) minmax(0, 1fr) var(--flow-gap))
+    calc(var(--flow-end) / 2 + 1px) calc(var(--flow-end) / 2 + 1px);
+}
+.flow-diagram-flow { margin: 0; padding: 0; list-style: none; }
+.flow-diagram-position { position: relative; min-width: 0; padding-top: var(--flow-head); }
+.flow-diagram-number {
+  position: absolute; top: 0; left: 0;
+  color: var(--ink-subtle); font-size: var(--text-xs); line-height: 14px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.flow-diagram-end .flow-diagram-number { left: 50%; transform: translateX(-50%); }
+.flow-diagram-lanes {
+  position: relative; isolation: isolate;
+  display: flex; flex-direction: column; gap: var(--flow-lane-gap);
+  margin: 0; padding: 0; list-style: none;
+}
+
+/* A step: its kind's mark and word, its title over two lines at most, then
+   the branch's test and where the run stands. */
+.flow-diagram-step {
+  position: relative; box-sizing: border-box; height: var(--flow-box);
+  display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3h) var(--space-4);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.flow-diagram-kind { display: flex; align-items: center; gap: var(--space-2h); min-width: 0; height: 16px; color: var(--ink-muted); }
+.flow-diagram-kind > .tw-icon { flex: none; }
+.flow-diagram-kind-word {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--text-xs); font-weight: 500; letter-spacing: var(--track-caps); text-transform: uppercase;
+}
+/* A branch's mark is the decision diamond: a square on its corner, in the kind's ink. */
+.flow-diagram-diamond { flex: none; box-sizing: border-box; width: 9px; height: 9px; margin: 0 var(--space-1); border: 1.5px solid currentColor; transform: rotate(45deg); }
+.flow-diagram-name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  color: var(--ink); font-size: var(--text-base); font-weight: 500; line-height: 17px; overflow-wrap: anywhere;
+}
+.flow-diagram-test, .flow-diagram-state {
+  margin-top: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--text-sm); line-height: var(--flow-meta); color: var(--ink-muted);
+}
+.flow-diagram-test { font-family: var(--code); font-size: var(--text-xs); }
+.flow-diagram-test + .flow-diagram-state { margin-top: 0; }
+/* A branch's other way is drawn under the lanes at a desk; said in words where the flow runs down the page. */
+.flow-diagram-otherwise {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* The way from one column to the next, along the first lane's middle: a
+   hairline and its head, ending at the bar where lanes start together. */
+.flow-diagram-position + .flow-diagram-position::before,
+.flow-diagram-position + .flow-diagram-position::after { content: ''; position: absolute; }
+.flow-diagram-position + .flow-diagram-position::before {
+  top: calc(var(--flow-head) + var(--flow-box) / 2); left: calc(-1 * var(--flow-gap));
+  width: calc(var(--flow-gap) - var(--flow-in, 0px) - 6px); height: 1px; background: var(--flow-line);
+}
+.flow-diagram-position + .flow-diagram-position::after {
+  top: calc(var(--flow-head) + var(--flow-box) / 2 - 4px); left: calc(-1 * var(--flow-in, 0px) - 7px);
+  border-left: 7px solid var(--flow-line); border-block: 4px solid transparent;
+}
+/* Lanes that start together: a bar each side the ways meet at, a stub to each lane. */
+.flow-diagram-position[data-together] { --flow-in: 8px; }
+.flow-diagram-position[data-together] .flow-diagram-lanes::after {
+  content: ''; position: absolute; z-index: -1;
+  top: calc(var(--flow-box) / 2); bottom: calc(var(--flow-box) / 2); left: -8px; right: -8px;
+  border-inline: 1px solid var(--flow-line);
+}
+.flow-diagram-position[data-together] .flow-diagram-step::before {
+  content: ''; position: absolute; z-index: -1; top: 50%; left: -9px; right: -9px; height: 1px; background: var(--flow-line);
+}
+.flow-diagram-end-mark {
+  display: block; box-sizing: border-box; width: var(--flow-end); height: var(--flow-end);
+  margin: calc(var(--flow-box) / 2 - var(--flow-end) / 2) auto 0;
+  border: 1.5px solid var(--ink-muted); border-radius: 50%;
+}
+
+/* A branch's other way: a dashed leg down from the branch, along its row
+   under the lanes, and up into the column it lands on, its word on a chip
+   that knocks the line out behind it. */
+.flow-diagram-leg {
+  position: absolute; left: calc(50% - 0.5px); bottom: 0;
+  top: calc(var(--flow-head) + var(--flow-lanes, 1) * (var(--flow-box) + var(--flow-lane-gap)) - var(--flow-lane-gap));
+  border-left: 1px dashed var(--flow-line);
+}
+.flow-diagram-end .flow-diagram-leg { top: calc(var(--flow-head) + var(--flow-box) / 2 + var(--flow-end) / 2); }
+.flow-diagram-leg[data-in]::before {
+  content: ''; position: absolute; top: 0; left: -4.5px;
+  border-bottom: 7px solid var(--flow-line); border-inline: 4px solid transparent;
+}
+.flow-diagram-ways { height: calc(var(--flow-ways, 0) * var(--flow-way) + 12px); }
+.flow-diagram-way {
+  position: relative; grid-row: 1; align-self: start; box-sizing: border-box;
+  height: calc((var(--flow-way-row, 0) + 1) * var(--flow-way)); margin-right: -1px;
+  border: 1px dashed var(--flow-line); border-top: 0; border-radius: 0 0 var(--radius) var(--radius);
+}
+.flow-diagram-way-label {
+  position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%);
+  padding: 0 var(--space-3); white-space: nowrap;
+  color: var(--ink-muted); font-size: var(--text-xs); line-height: 17px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+}
+
+/* A run over the drawing (docs/design.md, the workflow strip): the way it
+   walked in the ink, the step it is at in the accent, a step it stopped on in
+   the danger ink, what it jumped over dashed and faint, what is ahead dim. */
+.flow-diagram-position[data-reached]::before { background: var(--ink); }
+.flow-diagram-position[data-reached]::after { border-left-color: var(--ink); }
+.flow-diagram-end[data-reached] .flow-diagram-end-mark { border-color: var(--ink); background: var(--ink); }
+.flow-diagram-step[data-state='done'] { border-color: var(--line-strong); }
+.flow-diagram-step[data-state='current'] {
+  border-color: var(--current-ink, var(--accent));
+  box-shadow: inset 0 0 0 1px var(--current-ink, var(--accent));
+  background: color-mix(in srgb, var(--current-ink, var(--accent)) 6%, var(--surface));
+}
+.flow-diagram-step[data-state='current'] .flow-diagram-kind { color: var(--current-ink, var(--accent)); }
+.flow-diagram-step[data-state='stopped'] { border-color: var(--status-critical); }
+.flow-diagram-step[data-state='skipped'] { border-style: dashed; background: transparent; }
+.flow-diagram-step:is([data-state='skipped'], [data-state='ahead']) .flow-diagram-name { color: var(--ink-muted); }
+.flow-diagram-way[data-taken] { border-color: var(--ink); border-style: solid; }
+.flow-diagram-way[data-taken] .flow-diagram-way-label { color: var(--ink); border-color: var(--line-strong); }
+.flow-diagram-state { display: flex; align-items: center; gap: var(--space-2h); }
+.flow-diagram-state .tone { flex: none; font-size: var(--text-sm); }
+.flow-diagram-when { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+
+/* Under the width a column needs, the flow runs down the page: one step
+   under the other, the way between them a hairline down the left, a box as
+   tall as its words, and a branch's other way said in the box. */
+@container flow-column (max-width: 199.98px) {
+  .flow-diagram-flow { display: flex; flex-direction: column; gap: var(--space-6); }
+  .flow-diagram-ways, .flow-diagram-leg { display: none; }
+  .flow-diagram-number, .flow-diagram-end .flow-diagram-number { left: 34px; transform: none; }
+  .flow-diagram-step { height: auto; min-height: 0; }
+  .flow-diagram-name { display: block; overflow: visible; }
+  .flow-diagram-test, .flow-diagram-state { margin-top: 0; }
+  .flow-diagram-otherwise {
+    position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal;
+    color: var(--ink-muted); font-size: var(--text-sm); line-height: 18px;
+  }
+  .flow-diagram-position + .flow-diagram-position::before {
+    top: -26px; left: 20px; width: 1px; height: calc(26px + var(--flow-head) - 6px);
+  }
+  .flow-diagram-position + .flow-diagram-position::after {
+    top: calc(var(--flow-head) - 7px); left: 16.5px;
+    border-left: 0; border-top: 7px solid var(--flow-line); border-inline: 4px solid transparent; border-bottom: 0;
+  }
+  .flow-diagram-position[data-reached]::after { border-top-color: var(--ink); }
+  .flow-diagram-position[data-together] .flow-diagram-lanes { padding-left: 28px; }
+  .flow-diagram-position[data-together] .flow-diagram-lanes::after { top: 0; bottom: 22px; left: 20px; right: auto; border-inline: 0; border-left: 1px solid var(--flow-line); }
+  .flow-diagram-position[data-together] .flow-diagram-step::before { top: 22px; left: -8px; right: auto; width: 8px; }
+  .flow-diagram-end-mark { margin: 0 0 0 calc(20.5px - var(--flow-end) / 2); }
+}
+}

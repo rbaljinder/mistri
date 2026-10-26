@@ -1,0 +1,27 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* A record's flow runs: ruled like the history, one run per entry,
+   its steps a quiet list. A failed run's problem takes the danger colour.
+   Here, not in page.css: the section is a part loaded on demand, so its rules
+   arrive with it and no first page carries them. */
+.flows { max-width: 46rem; margin-top: var(--space-2h); }
+.flows-note { margin: 0; font-size: var(--text-base); color: var(--ink-muted); }
+.flows-runs, .flows-steps { list-style: none; margin: 0; padding: 0; }
+.flows-run { padding: var(--space-3) 0; border-top: 1px solid var(--line); }
+.flows-run:first-child { border-top: 0; padding-top: var(--space-1); }
+.flows-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); font-size: var(--text-base); line-height: 1.5; cursor: pointer; }
+.flows-name { color: var(--ink); font-weight: 500; }
+.flows-state { color: var(--ink-muted); }
+.flows-state-failed { color: var(--status-critical); }
+.flows-when { margin-left: auto; font: var(--text-xs) var(--mono); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+.flows-wait { margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.flows-problem { margin: var(--space-2) 0 0; font-size: var(--text-base); color: var(--status-critical); }
+.flows-steps { margin-top: var(--space-2h); }
+.flows-step { display: flex; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.6; }
+.flows-step-label { color: var(--ink-muted); }
+.flows-step-status { color: var(--ink-subtle); }
+.flows-step-status::before { content: "· "; }
+.flows-step-failed { color: var(--status-critical); }
+.flows-start { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2h); padding-top: var(--space-3); }
+.flows-start .flows-problem { margin: 0; flex-basis: 100%; }
+}

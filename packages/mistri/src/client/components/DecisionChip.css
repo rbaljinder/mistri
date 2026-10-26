@@ -1,0 +1,86 @@
+/* A decision's suggestion at a field (DecisionChip.tsx): one line, the field's own height, muted ink. Its controls
+   keep a 44px target past their drawn size, so the line does not grow to hold them. */
+.decision-chip {
+  color: var(--ink-muted);
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  max-width: 100%;
+  min-width: 0;
+}
+.decision-chip-trailing {
+  margin-inline-start: var(--space-3);
+}
+.decision-chip-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.decision-chip-word {
+  font-size: var(--text-sm);
+  color: var(--ink-subtle);
+  white-space: nowrap;
+}
+.decision-chip .decision-chip-accept,
+.decision-chip .decision-chip-more {
+  position: relative;
+  min-height: 0;
+  padding-block: 0;
+  line-height: inherit;
+}
+.decision-chip .decision-chip-accept::after,
+.decision-chip .decision-chip-more::after {
+  content: '';
+  position: absolute;
+  inset: -12px -6px;
+}
+.decision-chip .decision-chip-more {
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font: inherit;
+}
+.decision-chip .decision-chip-more:hover {
+  color: var(--ink);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .decision-chip {
+    transition: opacity var(--t-popover) var(--ease-out);
+    @starting-style {
+      opacity: 0;
+    }
+  }
+}
+.decision-why-facts {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+}
+.decision-why-facts > div > dt,
+.decision-why-inputs dt {
+  color: var(--ink-muted);
+}
+.decision-why-facts dd {
+  margin: 0;
+}
+.decision-why-inputs {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+.decision-why-inputs > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--space-3);
+}
+.decision-why-hidden {
+  color: var(--ink-subtle);
+}
+.decision-why-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-5);
+}

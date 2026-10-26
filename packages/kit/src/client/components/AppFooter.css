@@ -1,0 +1,17 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* Under the room, not beside it: the footer takes the content's width and is
+   separated by a rule rather than a band of its own colour, so it reads as
+   the end of the page instead of a second surface. Quiet by construction —
+   dimmed text at 13px, the same step the landing's footer uses. */
+.app-footer {
+  display: grid; gap: var(--space-3h);
+  margin-top: var(--space-7); padding: 20px var(--space-4h) 28px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted); font-size: var(--text-base);
+}
+.app-footer-text { margin: 0; max-width: 70ch; line-height: 1.6; }
+.app-footer-links { display: flex; flex-wrap: wrap; gap: var(--space-3) 20px; margin: 0; padding: 0; list-style: none; }
+.app-footer-links a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.app-footer-links a:hover { color: var(--ink); }
+}

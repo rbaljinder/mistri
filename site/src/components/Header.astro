@@ -1,0 +1,136 @@
+---
+/* Starlight's header, with the home's way into the docs. The home is a splash page: no sidebar, so nothing on it
+   led anywhere but its two buttons. Docs pages have the sidebar and keep the header as it was. */
+import config from 'virtual:starlight/user-config';
+
+import LanguageSelect from 'virtual:starlight/components/LanguageSelect';
+import Search from 'virtual:starlight/components/Search';
+import SiteTitle from 'virtual:starlight/components/SiteTitle';
+import SocialIcons from 'virtual:starlight/components/SocialIcons';
+import ThemeSelect from 'virtual:starlight/components/ThemeSelect';
+
+const shouldRenderSearch = config.pagefind || config.components.Search !== '@astrojs/starlight/components/Search.astro';
+const home = Astro.locals.starlightRoute.entry.data.template === 'splash';
+/* `wide` links wait for a desk: a phone's header holds the name, the two ways in and search. */
+const links = [
+  { text: 'Docs', href: '/docs/getting-started/', wide: false },
+  { text: 'Sample Apps', href: '/docs/examples/', wide: false },
+  { text: 'Status', href: '/docs/status/', wide: true },
+  { text: 'GitHub', href: 'https://github.com/rbaljinder/mistri', wide: true },
+];
+---
+
+<div class:list={['header', { home }]}>
+  <div class="title-wrapper sl-flex">
+    <SiteTitle />
+  </div>
+  <div class="sl-flex print:hidden mid">
+    {home && (
+      <nav class="home-nav" aria-label="Main">
+        <ul>
+          {links.map((link) => (
+            <li class:list={{ wide: link.wide }}><a href={link.href}>{link.text}</a></li>
+          ))}
+        </ul>
+      </nav>
+    )}
+    {shouldRenderSearch && <Search />}
+  </div>
+  <div class="sl-hidden md:sl-flex print:hidden right-group">
+    <div class="sl-flex social-icons">
+      <SocialIcons />
+    </div>
+    <ThemeSelect />
+    <LanguageSelect />
+  </div>
+</div>
+
+<style>
+  @layer starlight.core {
+    .header {
+      display: flex;
+      gap: var(--sl-nav-gap);
+      justify-content: space-between;
+      align-items: center;
+      height: 100%;
+    }
+    .title-wrapper {
+      overflow: clip;
+      padding: 0.25rem;
+      margin: -0.25rem;
+      min-width: 0;
+    }
+    .mid {
+      align-items: center;
+      gap: 0.5rem 1.25rem;
+    }
+    .right-group,
+    .social-icons {
+      gap: 1rem;
+      align-items: center;
+    }
+    .social-icons::after {
+      content: '';
+      height: 2rem;
+      border-inline-end: 1px solid var(--sl-color-gray-5);
+    }
+    .home-nav ul {
+      display: flex;
+      gap: 0.25rem 1.25rem;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .home-nav a {
+      display: inline-block;
+      /* A target a thumb can hit: the line is 20px, the padding makes it 44. */
+      padding: 0.8rem 0.1rem;
+      color: var(--sl-color-gray-2);
+      font-size: var(--sl-text-sm);
+      text-decoration: none;
+    }
+    .home-nav a:hover {
+      color: var(--sl-color-white);
+    }
+    .home-nav .wide {
+      display: none;
+    }
+    @media (min-width: 50rem) {
+      .home-nav .wide {
+        display: list-item;
+      }
+    }
+    @media (max-width: 26rem) {
+      .home-nav ul {
+        gap: 0 0.75rem;
+      }
+    }
+    @media (min-width: 50rem) {
+      :global(:root[data-has-sidebar]) {
+        --__sidebar-pad: calc(2 * var(--sl-nav-pad-x));
+      }
+      :global(:root:not([data-has-toc])) {
+        --__toc-width: 0rem;
+      }
+      .header {
+        --__sidebar-width: max(0rem, var(--sl-content-inline-start, 0rem) - var(--sl-nav-pad-x));
+        --__main-column-fr: calc(
+          (
+              100% + var(--__sidebar-pad, 0rem) - var(--__toc-width, var(--sl-sidebar-width)) -
+                (2 * var(--__toc-width, var(--sl-nav-pad-x))) - var(--sl-content-inline-start, 0rem) - var(--sl-content-width)
+            ) / 2
+        );
+        display: grid;
+        grid-template-columns:
+          minmax(calc(var(--__sidebar-width) + max(0rem, var(--__main-column-fr) - var(--sl-nav-gap))), auto)
+          1fr
+          auto;
+        align-content: center;
+      }
+      /* Links stand beside the title, search keeps the rest of the row. */
+      .header.home .mid {
+        justify-content: space-between;
+      }
+    }
+  }
+</style>

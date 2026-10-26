@@ -1,0 +1,31 @@
+/** What AppList says, in the lists and grid room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '../../../messages.js';
+
+export const say = defineMessages({
+  theCountsCameBack: 'The counts came back the wrong length.',
+  saveThisView: 'Save this view',
+  mineDueThisWeek: 'Mine, due this week',
+  renameThisView: 'Rename this view',
+  noMatches: 'No matches',
+  noneInTab: 'No {things} in {tab} right now.',
+  addTheFirst: 'Use New to add the first {thing}.',
+  rowsTheTabAndFilters: 'Rows the tab and filters match',
+  listControls: '{caption} list controls',
+  myViews: 'My views',
+  savedViews: 'Saved views',
+  yourView: 'your view',
+  aSavedView: 'a saved view',
+  removeTheView: 'Remove the view "{name}"',
+  advanced: 'Advanced',
+  keepThisTabIts: 'Keep this tab, its filters and sort as a view of your own',
+  keepThisTabItsFilters: 'Keep this tab, its filters and sort as a saved view of this list, for everyone who opens it',
+  saveView: 'Save view…',
+  renameView: 'Rename view…',
+  contains: '{naming} contains "..."',
+  filterRecords: 'Filter records',
+  filter: 'Filter {caption}',
+  filtersApplied: '{caption} filters applied',
+  match: '{gridTotal} match',
+  captionFilters: '{caption} filters',
+  everything: 'Everything',
+});

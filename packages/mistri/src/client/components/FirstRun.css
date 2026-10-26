@@ -1,0 +1,23 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* Rules, not boxes: the steps are rows under the section's rule, a hairline
+   between them, the number or the check in a column of its own. */
+.dash-first-run { max-width: 44rem; }
+.first-run-text { max-width: 70ch; margin: var(--space-2h) 0 0; color: var(--ink-muted); font: var(--text-md)/1.55 var(--sans); }
+.first-run-steps { list-style: none; margin: var(--space-5) 0 0; padding: 0; border-top: 1px solid var(--line); }
+.first-run-step { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.first-run-mark { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; color: var(--status-good); }
+.first-run-number { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--ink-muted); font: 600 var(--text-sm) var(--sans); }
+.first-run-words { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.first-run-label { color: var(--ink); font: 500 var(--text-md)/1.4 var(--sans); }
+.first-run-detail { color: var(--ink-muted); font: var(--text-base)/1.45 var(--sans); }
+/* A step taken reads as history: quieter, the check saying why. */
+.first-run-step.is-done .first-run-label { color: var(--ink-muted); }
+/* Fresh, it is the whole screen's one question: a little air above it. */
+.dash-first-run.is-fresh { padding-top: var(--space-3); }
+@media (max-width: 600px) {
+  .dash-first-run { max-width: none; }
+  .first-run-step { grid-template-columns: 28px minmax(0, 1fr); }
+  .first-run-step > a { grid-column: 2; justify-self: start; min-height: 44px; }
+}
+}

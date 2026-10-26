@@ -1,0 +1,106 @@
+{
+  "turns": [
+    {
+      "when": "by stage",
+      "steps": [
+        {
+          "text": "Here is the open pipeline, stage by stage.",
+          "tools": [
+            {
+              "name": "show",
+              "input": {
+                "kind": "chart",
+                "title": "Open pipeline by stage",
+                "resource": "opportunity",
+                "query": "stage != closed_won and stage != closed_lost",
+                "by": "stage"
+              }
+            }
+          ]
+        },
+        {
+          "text": "Most open deals are still in qualification and proposal."
+        }
+      ]
+    },
+    {
+      "when": "bronwyn",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "run",
+              "input": {
+                "action": "lead.startWorking",
+                "id": 9,
+                "why": "Bronwyn Quinn is new and has not been contacted yet."
+              }
+            }
+          ]
+        },
+        {
+          "text": "Done: Bronwyn is being worked."
+        }
+      ]
+    },
+    {
+      "when": "new this week",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "show",
+              "input": {
+                "kind": "table",
+                "title": "New leads",
+                "resource": "lead",
+                "query": "status = new",
+                "show": [
+                  "name",
+                  "company",
+                  "source",
+                  "created_on"
+                ],
+                "sort": "created_on desc",
+                "limit": 5
+              }
+            }
+          ]
+        },
+        {
+          "text": "These are the newest leads. Each row's menu has its own actions."
+        }
+      ]
+    },
+    {
+      "when": "stale deals",
+      "steps": [
+        {
+          "text": "Looking for open deals whose close date has passed.",
+          "tools": [
+            {
+              "name": "show",
+              "input": {
+                "kind": "table",
+                "title": "Stale deals",
+                "resource": "opportunity",
+                "query": "stage != closed_won and stage != closed_lost and close_date < today",
+                "show": [
+                  "name",
+                  "stage",
+                  "amount",
+                  "close_date"
+                ],
+                "sort": "close_date",
+                "limit": 8
+              }
+            }
+          ]
+        },
+        {
+          "text": " These open deals are past their close date, the oldest first. Each needs a new date or a decision."
+        }
+      ]
+    }
+  ]
+}

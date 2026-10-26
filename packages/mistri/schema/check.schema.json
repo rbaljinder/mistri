@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mistriwork.dev/schema/check.schema.json",
+  "title": "mistri check --json",
+  "description": "What `mistri check --json` prints, and what the `check` tool of `mistri observe --mcp` answers: every step's verdict and every finding of every step. Codes and fields are the contract; messages are sentences for a person and may change. The exit code is the command's: 0 passed, 1 could not check, 2 schema types, 3 typecheck, 4 validation, 5 components, 6 pending, 7 deploy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "app", "dir", "ok", "exit", "seconds", "steps", "problems"],
+  "properties": {
+    "version": { "const": 1, "description": "This document's shape; a change to it is a new version." },
+    "app": {
+      "description": "The App checked, or null when it did not load far enough to say.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "object", "additionalProperties": false, "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" } } }
+      ]
+    },
+    "dir": { "type": "string", "description": "The App directory, from where the command ran." },
+    "ok": { "type": "boolean", "description": "Every step passed or was skipped; warnings and info never make it false." },
+    "exit": { "type": "integer", "enum": [0, 1, 2, 3, 4, 5, 6, 7], "description": "The exit code: the first step that failed." },
+    "seconds": { "type": "number", "minimum": 0 },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "status", "detail"],
+        "properties": {
+          "step": { "$ref": "#/$defs/step" },
+          "status": { "enum": ["passed", "failed", "skipped"] },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "problems": { "type": "array", "items": { "$ref": "#/$defs/problem" } },
+    "routes": {
+      "type": "array",
+      "description": "With --routes: every address the App answers to, and what it opens.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "what"],
+        "properties": { "path": { "type": "string" }, "what": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "step": { "enum": ["check", "pending", "schema types", "typecheck", "themes", "fonts", "files", "validation", "components", "routes", "design", "elevations", "segments", "defaults", "fix", "deploy"] },
+    "problem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "step", "message", "docs"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^(TS\\d+|[a-z][a-z0-9-]*)$",
+          "description": "Stable: tsc's own code for a typecheck error (TS2322), a design rule's for a design warning, and otherwise one of the codes check-codes lists (unknown-column, unknown-action, query-grammar, role-cannot-read, …)."
+        },
+        "severity": { "enum": ["error", "warning", "info"], "description": "An error fails its step; a warning and info never do." },
+        "step": { "$ref": "#/$defs/step" },
+        "file": { "type": "string", "description": "Where it was written, from where the command ran." },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "path": { "type": "string", "description": "Where in the App definition, where it can be told: views.tasks.query, resources.task.actions.close.when, pages.order[0].primary." },
+        "message": { "type": "string" },
+        "fix": { "type": "string", "description": "What to change, where the check knows it." },
+        "promise": {
+          "type": "string",
+          "pattern": "^C(?:[1-9]|1[0-3])$",
+          "description": "The theme contract's promise the code holds, C1 (text readable) to C13 (same App), on a theme-contrast, theme-edge, theme-focus, theme-chart, theme-dark, theme-budget or theme-print finding; mistri explain C2 says it."
+        },
+        "docs": { "type": "string", "format": "uri", "description": "The page that explains the code." }
+      }
+    }
+  }
+}

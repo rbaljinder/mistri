@@ -1,0 +1,148 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Desk API", "version": "1.2.0" },
+  "paths": {
+    "/contacts": {
+      "get": {
+        "summary": "Contacts, newest first",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer" } },
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["lead", "customer", "churned"] } },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["created_at", "-created_at", "name"] } },
+          { "$ref": "#/components/parameters/Tag" }
+        ],
+        "responses": {
+          "200": { "description": "A page of contacts", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Contact" } } } } }
+        }
+      }
+    },
+    "/contacts/{id}": {
+      "get": {
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "One contact", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Contact" } } } }
+        }
+      }
+    },
+    "/tickets": {
+      "get": {
+        "parameters": [
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "contact_id", "in": "query", "schema": { "type": "array", "items": { "type": "string" } } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of tickets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/Ticket" } },
+                    "next_cursor": { "type": ["string", "null"] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{id}": {
+      "get": {
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64" } }],
+        "responses": {
+          "200": { "description": "One ticket", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ticket" } } } }
+        }
+      }
+    },
+    "/accounts/{id}/notes": {
+      "get": {
+        "responses": {
+          "200": { "description": "Notes", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object" } } } } }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "responses": {
+          "200": { "description": "Up", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "responses": {
+          "200": { "description": "Events", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Event" } } } } }
+        }
+      }
+    },
+    "/events/{id}": {
+      "get": {
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "One event", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Event" } } } }
+        }
+      }
+    },
+    "/partners": {
+      "get": {
+        "responses": {
+          "200": { "description": "Partners", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "https://example.test/schemas/partner.json" } } } } }
+        }
+      }
+    },
+    "/partners/{id}": {
+      "get": {
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "One partner", "content": { "application/json": { "schema": { "$ref": "https://example.test/schemas/partner.json" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "Tag": { "name": "tag", "in": "query", "schema": { "type": "string" } }
+    },
+    "schemas": {
+      "Contact": {
+        "type": "object",
+        "required": ["id", "name", "status", "created_at"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "readOnly": true },
+          "name": { "type": "string", "description": "Full name" },
+          "email": { "type": ["string", "null"], "format": "email" },
+          "status": { "type": "string", "enum": ["lead", "customer", "churned"] },
+          "tag": { "type": "string" },
+          "score": { "type": "number" },
+          "vip": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time", "readOnly": true },
+          "birthday": { "type": "string", "format": "date" },
+          "address": { "$ref": "#/components/schemas/Address" }
+        }
+      },
+      "Address": { "type": "object", "properties": { "city": { "type": "string" } } },
+      "Ticket": {
+        "allOf": [
+          { "$ref": "#/components/schemas/TicketBase" },
+          { "type": "object", "required": ["id"], "properties": { "id": { "type": "integer", "format": "int64" }, "contact_id": { "type": "string" } } }
+        ]
+      },
+      "TicketBase": {
+        "type": "object",
+        "required": ["subject"],
+        "properties": {
+          "subject": { "type": "string" },
+          "priority": { "type": "integer" },
+          "labels": { "type": "array", "items": { "type": "string" } },
+          "meta": { "oneOf": [{ "type": "string" }, { "type": "object" }] }
+        }
+      },
+      "Event": { "oneOf": [{ "$ref": "#/components/schemas/Contact" }, { "$ref": "#/components/schemas/Ticket" }] }
+    }
+  }
+}

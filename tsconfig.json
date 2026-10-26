@@ -1,0 +1,67 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    /* NodeNext, not "bundler": there is no bundler. Relative imports carry a
+       .js extension so what tsc emits is directly runnable by Node. */
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    /* TypeScript 6 made unresolved side-effect imports an error by default. The client
+       imports its stylesheets that way (`import './Chart.css'`) and Vite, not tsc,
+       resolves them. */
+    "noUncheckedSideEffectImports": false,
+    /* The client is plain JS with no build step. allowJs lets the test suite
+       import its DOM-free modules directly rather than testing a copy. */
+    "allowJs": true,
+    "checkJs": false,
+    /* The React half of the client — src/client/react — is TypeScript with
+       JSX, checked here under strict like the server. */
+    "jsx": "react-jsx",
+    "noEmit": true,
+    /* Warm runs re-check only what an edit reached. The cache is under
+       node_modules, so it is never committed and a clean install is a cold run. */
+    "incremental": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsc/main.tsbuildinfo",
+    /* Authored Apps run as TypeScript on Node 24; tests import those sources. */
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    /* The package's server entry points, pointed at their sources. An App's
+       server module — test/fixtures/apps/ignition/assignment.ts, the docs'
+       `import { defineCommand } from '@mistriwork/mistri/commands'` — resolves that
+       specifier through the package self-reference to dist/. Under tsx
+       (npm start, every test) the server runs from src/, so a handler that
+       imported dist/ would throw dist's BusinessCommandExecutionError at
+       src's `instanceof`. tsx honours these mappings, so from source the
+       specifier lands in src/ and the classes are the same objects; plain
+       `node dist/server/index.js` never reads this file and keeps the
+       self-reference. `paths` needs no baseUrl since TS 4.1; a relative
+       target is relative to this file. `@mistriwork/mistri/app` is deliberately not
+       mapped: its one copy is packages/mistri/schema/app.mjs in both a checkout and the
+       package, and a mapping could only replace the exports map's
+       app.d.ts types with inference from the .mjs. The App-loader worker
+       (packages/mistri/src/server/app/apps.ts) runs App modules on Node's own type
+       stripping, not tsx, so it never sees these mappings — which is why
+       an App manifest must not import @mistriwork/mistri/commands. */
+    "paths": {
+      "@mistriwork/mistri/testing": ["./packages/mistri/src/server/testing.ts"],
+      "@mistriwork/mistri/handler": ["./packages/mistri/src/server/handler.ts"],
+      "@mistriwork/mistri/commands": ["./packages/mistri/src/server/commands.ts"],
+      "@mistriwork/mistri/policy": ["./packages/mistri/src/server/policy.ts"],
+      "@mistriwork/mistri/maintenance": ["./packages/mistri/src/server/maintenance.ts"],
+      "@mistriwork/mistri/jobs": ["./packages/mistri/src/server/jobs.ts"],
+      "@mistriwork/mistri/workflows": ["./packages/mistri/src/server/workflows.ts"],
+      "@mistriwork/mistri/integration": ["./packages/mistri/src/server/integration.ts"],
+      "@mistriwork/mistri/openfeature": ["./packages/mistri/src/server/openfeature.ts"],
+      "@mistriwork/mistri/handler": ["./packages/mistri/src/server/handler.ts"]
+    }
+  },
+  "include": ["packages/*/src", "test", "packs"],
+  "exclude": ["test/fixtures/apps"]
+}

@@ -1,0 +1,39 @@
+/* The bin map. Each bin is the accent mixed into the surface by its shade
+   (BinMap.tsx, shadeOf), so every look's own accent says how full, in light
+   and dark alike; a stocked bin is flat colour, its edge the same mix, an
+   empty bin the surface under a hairline, an inactive one a dashed one.
+   Tokens only; served inside @layer components and scoped to the component. */
+.c-bin-map { display: grid; gap: 16px; min-width: 0; }
+.c-bin-map-summary { margin: 0; font-size: 13px; color: var(--ink-muted); }
+.c-bin-map-aisles { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px 32px; }
+.c-bin-map-aisle { display: grid; gap: 6px; min-width: 0; }
+.c-bin-map-aisle-name { margin: 0; font-size: 12px; font-weight: 600; color: var(--ink-muted); letter-spacing: var(--track-caps, 0.05em); text-transform: uppercase; }
+.c-bin-map-grid { display: grid; gap: 3px; align-items: stretch; }
+/* The heads: a bay over its column, a level at its row's start. */
+.c-bin-map-level, .c-bin-map-bay { font-size: 11px; line-height: 14px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.c-bin-map-level { align-self: center; padding-right: 6px; }
+.c-bin-map-bay { text-align: center; }
+.c-bin-map-row { display: flex; flex-wrap: wrap; gap: 3px; }
+.c-bin-map-dock .c-bin-map-bin { max-width: none; width: 120px; }
+.c-bin-map-floor { display: flex; flex-wrap: wrap; gap: 20px 32px; }
+.c-bin-map-floor > .c-bin-map-aisle:first-child { flex: 1 1 320px; }
+
+.c-bin-map-bin, .c-bin-map-swatch {
+  background: color-mix(in srgb, var(--accent) var(--c-bin-map-shade, 0%), var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) var(--c-bin-map-shade, 0%), var(--line));
+}
+.c-bin-map-bin {
+  min-width: 0; min-height: 28px; padding: 0; border-radius: var(--radius); cursor: pointer;
+}
+.c-bin-map-bin[data-empty="true"], .c-bin-map-swatch[data-empty="true"] { background: var(--surface); border-color: var(--line); }
+.c-bin-map-bin[data-inactive="true"] { border-style: dashed; border-color: var(--ink-muted); }
+.c-bin-map-bin:hover { border-color: var(--ink); }
+.c-bin-map-bin:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.c-bin-map-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--ink-muted); }
+.c-bin-map-swatch { display: inline-block; width: 14px; height: 14px; margin-left: 8px; border-radius: var(--radius); }
+.c-bin-map-swatch:first-child { margin-left: 0; }
+
+/* A phone: aisles one under another, the bays still across, a thumb's height per level. */
+.c-bin-map[data-compact="true"] .c-bin-map-aisles { grid-template-columns: minmax(0, 1fr); }
+.c-bin-map[data-compact="true"] .c-bin-map-bin { min-height: 32px; }

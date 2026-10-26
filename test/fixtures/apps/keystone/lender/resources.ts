@@ -1,0 +1,648 @@
+import { action, count, max, min, sum } from '@mistriwork/mistri/app';
+import type { Resources } from './mistri-schema.d.ts';
+
+/* What the lender's App says about each of the suite's thirty-one tables,
+   once: which it writes (only through commands, bar the rate sheet), how
+   values dress, the captions every list, page and form uses, the figures
+   rolled up from the rows that point at a record, and the verbs a record
+   offers. The status words and tones are the suite's (SUITE.md, "Status
+   vocabularies"), copied rather than shared: each App is self-contained. */
+
+const usd = { format: 'money' } as const;
+const perMonth = { format: 'money', unit: '/mo' } as const;
+const months = { unit: 'mo' } as const;
+const LIVE_LOAN = 'status in (current, past_due, delinquent)';
+
+export const decideAction = action('Decide', { command: 'decideApplication' });
+export const addServicingNoteAction = action('Add servicing note', { command: 'recordServicingNote' });
+export const logVisitAction = action('Log visit', { command: 'logDealerVisit' });
+export const closeSubmissionAction = action('Close submission', { command: 'closeIntakeSubmission' });
+export const resources = {
+  /* ---------- underwriting ---------- */
+  loan_application: {
+    segments: {
+      unassigned: 'status = submitted',
+      in_review: 'status = in_review',
+      conditioned: 'status = conditioned',
+      open: 'status in (submitted, in_review, conditioned)',
+      approved: 'status in (approved, countered)',
+      funded: 'status = funded',
+      declined: 'status = declined',
+      withdrawn: 'status = withdrawn',
+    },
+    access: 'write',
+    favorite: true,
+    noun: 'application',
+    view: 'applications',
+    recordLabel: '{reference} · {applicant_id.first_name} {applicant_id.last_name}',
+    rollups: {
+      /* The lender's file, read onto the application the dealer submitted: one file each, so min is its value.
+         Not the bureau score: a rollup over a column some roles may not read breaks the whole record for them. */
+      decision_due: min('underwriting_file', 'decision_due_at'),
+      assigned: count('underwriting_file', { query: 'underwriter_id is not empty' }),
+      open_stips: count('stipulation', { whose: 'application_id', query: 'status in (requested, received)' }),
+      stips_to_clear: count('stipulation', { whose: 'application_id', query: 'status = received' }),
+      open_alerts: count('decision_alert', { query: 'resolved_at is empty' }),
+    },
+    display: {
+      status: { tone: { conditioned: 'warn', countered: 'warn', approved: 'good', funded: 'good', declined: 'bad', '*': 'neutral' } },
+      requested_amount: usd,
+      down_payment: usd,
+      vehicle_value: usd,
+      approved_amount: usd,
+      approved_payment: perMonth,
+      approved_apr: { format: 'percent' },
+      ltv_pct: { format: 'percent' },
+      dti_pct: { format: 'percent' },
+      pti_pct: { format: 'percent' },
+      requested_term: months,
+      approved_term: months,
+      decision_due: { format: 'relative' },
+      submitted_at: { format: 'relative' },
+    },
+    labels: {
+      reference: 'Application',
+      co_applicant_id: 'Co-applicant',
+      requested_amount: 'Requested',
+      requested_term: 'Term',
+      ltv_pct: 'LTV',
+      dti_pct: 'DTI',
+      pti_pct: 'PTI',
+      dealer_note: 'Dealer’s note',
+      submitted_at: 'Submitted',
+      decided_at: 'Decided',
+      approved_apr: 'Approved APR',
+      approved_payment: 'Payment',
+      withdrawn_reason: 'Withdrawn because',
+      open_stips: 'Open conditions',
+      stips_to_clear: 'To clear',
+      open_alerts: 'Late alerts',
+      'deal_id.status': 'Deal',
+    },
+    // The one verb each state waits on comes first, so the header fills it: Assign, then Decide.
+    actions: {
+      assignUnderwriter: action('Assign underwriter', { command: 'assignUnderwriter', bulk: true }),
+      // Starts the credit decision (server/credit-decision.ts): the check is requested, and a clear score approves by itself.
+      requestCreditCheck: action('Request credit check', { command: 'requestCreditCheck' }),
+      decideApplication: decideAction,
+      requestStipulation: action('Request condition', { command: 'requestStipulation' }),
+    },
+  },
+  underwriting_file: {
+    access: 'write',
+    noun: 'underwriting file',
+    recordLabel: 'File for {application_id.reference}',
+    display: {
+      score: { tone: { '>= 720': 'good', '< 620': 'warn', '*': 'neutral' } },
+      decision_due_at: { format: 'relative' },
+      monthly_debt: usd,
+      revolving_utilization_pct: { format: 'percent' },
+      auto_tradelines: { unit: 'accounts' },
+      open_tradelines: { unit: 'accounts' },
+    },
+    labels: {
+      assigned_at: 'Assigned',
+      pulled_at: 'Pulled',
+      revolving_utilization_pct: 'Revolving use',
+      delinquencies_24m: 'Late, 24 months',
+      inquiries_6m: 'Inquiries, 6 months',
+      decision_due_at: 'Decision due',
+    },
+  },
+  underwriting_note: {
+    access: 'write',
+    noun: 'note',
+    recordLabel: 'Note on {application_id.reference}',
+    labels: { created_at: 'Written', body: 'Note' },
+  },
+  decision_alert: {
+    access: 'write',
+    noun: 'late decision',
+    recordLabel: 'Late: {application_id.reference}',
+    display: { due_at: { format: 'relative' }, raised_at: { format: 'relative' } },
+    labels: { raised_at: 'Raised', due_at: 'Was due', resolved_at: 'Resolved' },
+  },
+  stipulation: {
+    segments: {
+      to_clear: 'status = received',
+      with_the_dealer: 'status = requested',
+      cleared: 'status in (cleared, waived)',
+    },
+    access: 'write',
+    noun: { one: 'condition', many: 'conditions' },
+    view: 'stipulations',
+    recordLabel: '{application_id.reference} · {kind}',
+    display: {
+      status: { tone: { requested: 'warn', received: 'info', cleared: 'good', waived: 'good' } },
+      kind: { values: { drivers_license: 'Driver’s license' } },
+      requested_at: { format: 'relative' },
+    },
+    labels: {
+      kind: 'Condition',
+      requested_at: 'Requested',
+      received_at: 'Received',
+      cleared_at: 'Cleared',
+      'application_id.status': 'Application status',
+    },
+    actions: {
+      clearStipulation: action('Clear condition', { command: 'clearStipulation' }),
+      waiveStipulation: action('Waive condition', { command: 'waiveStipulation' }),
+    },
+  },
+
+  /* ---------- funding ---------- */
+  funding: {
+    segments: {
+      to_receive: 'status = awaiting_contract and application_id.deal_id.status = contracted',
+      in_audit: 'status = in_audit',
+      ready_to_fund: 'status = ready',
+      rejected: 'status = rejected',
+      with_the_dealer: 'status = awaiting_contract and application_id.deal_id.status != contracted',
+    },
+    access: 'write',
+    noun: 'funding',
+    view: 'funding-queue',
+    recordLabel: 'Funding {application_id.reference}',
+    display: {
+      status: { tone: { awaiting_contract: 'neutral', in_audit: 'info', ready: 'info', rejected: 'bad', funded: 'good' } },
+      amount: usd,
+      dealer_reserve: usd,
+    },
+    labels: {
+      contract_received_on: 'Contract in',
+      funded_on: 'Funded',
+      amount: 'Wire amount',
+      reject_reason: 'Rejected because',
+      'application_id.deal_id.status': 'Deal',
+      'application_id.approved_amount': 'Approved',
+    },
+    actions: {
+      receiveContract: action('Receive contract', { command: 'receiveContract' }),
+      auditFunding: action('Audit contract', { command: 'auditFunding' }),
+      fundLoan: action('Fund loan', { command: 'fundLoan' }),
+    },
+  },
+
+  /* ---------- servicing ---------- */
+  customer: {
+    access: 'write',
+    noun: 'customer',
+    recordLabel: '{first_name} {last_name}',
+    rollups: {
+      loans: count('loan'),
+      balance: sum('loan', 'principal_balance', { query: LIVE_LOAN }),
+    },
+    display: { balance: usd, last_name: { avatar: true } },
+    labels: {
+      applicant_id: 'First application',
+      last_name: 'Customer',
+      zip: 'ZIP',
+      preferred_contact: 'Prefers',
+    },
+  },
+  loan: {
+    segments: {
+      active: LIVE_LOAN,
+      past_due: 'status in (past_due, delinquent)',
+      paid_off: 'status = paid_off',
+      charged_off: 'status = charged_off',
+      segment_1_29_days: { query: 'days_past_due < 30', label: '1–29 days' },
+      segment_30_59_days: { query: 'days_past_due >= 30 and days_past_due < 60', label: '30–59 days' },
+      segment_60_89_days: { query: 'days_past_due >= 60 and days_past_due < 90', label: '60–89 days' },
+      segment_90_days: { query: 'days_past_due >= 90', label: '90+ days' },
+    },
+    access: 'write',
+    favorite: true,
+    noun: 'loan',
+    view: 'loans',
+    recordLabel: '{loan_number} · {customer_id.first_name} {customer_id.last_name}',
+    rollups: {
+      pending_payments: count('payment', { whose: 'loan_id', query: 'status = pending' }),
+      installments_left: count('installment', { whose: 'loan_id', query: 'status in (upcoming, due, past_due)' }),
+      last_paid_on: max('payment', 'received_on', { whose: 'loan_id', query: 'status = posted' }),
+      late_fees: sum('payment', 'late_fee', { whose: 'loan_id', query: 'status = posted' }),
+    },
+    display: {
+      status: { tone: { current: 'good', past_due: 'warn', delinquent: 'bad', charged_off: 'bad', paid_off: 'neutral' } },
+      principal: usd,
+      principal_balance: usd,
+      interest_paid: usd,
+      amount_due: usd,
+      payment_amount: perMonth,
+      late_fees: usd,
+      apr: { format: 'percent' },
+      term_months: months,
+      next_due_on: { format: 'relative' },
+      last_paid_on: { format: 'relative' },
+      days_past_due: { unit: 'days', tone: { '>= 60': 'bad', '>= 30': 'bad', '> 0': 'warn', '*': 'neutral' } },
+    },
+    labels: {
+      loan_number: 'Loan',
+      vehicle_description: 'Vehicle',
+      vin: 'VIN',
+      principal: 'Amount financed',
+      apr: 'APR',
+      term_months: 'Term',
+      payment_amount: 'Payment',
+      funded_on: 'Funded',
+      first_due_on: 'First due',
+      maturity_on: 'Matures',
+      principal_balance: 'Balance',
+      next_due_on: 'Next due',
+      days_past_due: 'Past due',
+      paid_off_on: 'Paid off',
+      charged_off_on: 'Charged off',
+      pending_payments: 'Payments to post',
+      installments_left: 'Payments left',
+      last_paid_on: 'Last paid',
+    },
+    actions: {
+      recordServicingNote: addServicingNoteAction,
+      postPayment: action('Post payments', { command: 'postPayment', bulk: true }),
+      returnPayment: action('Return a payment', { command: 'returnPayment' }),
+      waiveLateFee: action('Waive a late fee', { command: 'waiveLateFee' }),
+    },
+  },
+  installment: {
+    access: 'write',
+    noun: 'installment',
+    recordLabel: '{loan_id.loan_number} · due {due_on}',
+    display: {
+      status: { tone: { due: 'info', past_due: 'bad', paid: 'good', upcoming: 'neutral', closed: 'neutral' } },
+      amount: usd,
+      principal: usd,
+      interest: usd,
+    },
+    labels: {
+      number: 'No.',
+      due_on: 'Due',
+      paid_on: 'Paid',
+    },
+  },
+  payment: {
+    segments: {
+      pending: 'status = pending',
+      returned: 'status = returned',
+      posted: 'status = posted',
+    },
+    access: 'write',
+    noun: 'payment',
+    display: {
+      status: { tone: { pending: 'info', returned: 'bad', posted: 'neutral' } },
+      amount: usd,
+      principal: usd,
+      interest: usd,
+      late_fee: usd,
+    },
+    labels: {
+      reference: 'Payment',
+      received_on: 'Received',
+      returned_reason: 'Returned because',
+    },
+  },
+  autopay: {
+    noun: 'autopay',
+    recordLabel: '{bank_name} ••{account_last4}',
+    display: { status: { tone: { active: 'good', paused: 'warn', cancelled: 'neutral' } } },
+    labels: {
+      bank_name: 'Bank',
+      account_type: 'Account',
+      account_last4: 'Last four',
+      enrolled_on: 'Enrolled',
+      cancelled_on: 'Cancelled',
+    },
+  },
+  payoff_quote: {
+    segments: {
+      issued: 'status = issued',
+      paid: 'status = paid',
+      expired: 'status = expired',
+    },
+    noun: 'payoff quote',
+    recordLabel: '{loan_id.loan_number} · good through {good_through}',
+    display: {
+      status: { tone: { issued: 'info', paid: 'good', expired: 'neutral' } },
+      amount: usd,
+      per_diem: { format: 'money', unit: '/day' },
+    },
+    labels: {
+      requested_on: 'Requested',
+      amount: 'Payoff',
+      requested_via: 'Asked by',
+    },
+  },
+  loan_document: {
+    access: 'write',
+    noun: 'document',
+    file: { content: 'data', name: 'file_name', type: 'content_type', size: 'byte_size' },
+    labels: { title: 'Document', issued_on: 'Issued', file_name: 'File', byte_size: 'Size' },
+  },
+  servicing_note: {
+    access: 'write',
+    noun: 'servicing note',
+    recordLabel: '{loan_id.loan_number} · {kind}',
+    display: {
+      kind: { tone: { promise_to_pay: 'info', hardship: 'warn', '*': 'neutral' } },
+      promise_amount: usd,
+      promise_on: { format: 'relative' },
+    },
+    labels: {
+      created_at: 'Written',
+      body: 'Note',
+      promise_amount: 'Promised',
+      promise_on: 'Promised by',
+    },
+  },
+
+  /* ---------- dealers ---------- */
+  dealer: {
+    segments: {
+      mine: 'relationship_manager_id = me',
+      active: 'status = active',
+      on_hold: 'status = on_hold',
+      prospects: 'status = prospect',
+    },
+    access: 'write',
+    favorite: true,
+    noun: 'dealer',
+    rollups: {
+      applications: count('loan_application', { query: 'submitted_at = last 90 days' }),
+      approved: count('loan_application', { query: 'status in (approved, countered, funded) and submitted_at = last 90 days' }),
+      declined: count('loan_application', { query: 'status = declined and submitted_at = last 90 days' }),
+      funded_volume: sum('funding', 'amount', { query: 'status = funded and funded_on = last 90 days' }),
+      funded_this_month: count('funding', { query: 'status = funded and funded_on = this month' }),
+      book: sum('loan', 'principal_balance', { query: LIVE_LOAN }),
+      delinquent_loans: count('loan', { query: 'status = delinquent' }),
+      listings: count('vehicle', { query: 'status = listed' }),
+      last_visit: max('dealer_visit', 'happened_on'),
+    },
+    display: {
+      status: { tone: { active: 'good', prospect: 'info', on_hold: 'warn', terminated: 'bad' } },
+      tier: { tone: { gold: 'good', '*': 'neutral' } },
+      name: { avatar: true, subtitle: 'city' },
+      reserve_pct: { format: 'percent' },
+      funded_volume: usd,
+      book: usd,
+      last_visit: { format: 'relative' },
+      monthly_goal: { unit: 'loans/mo' },
+      funded_this_month: { unit: 'loans' },
+    },
+    labels: {
+      name: 'Dealer',
+      franchise_make: 'Franchise',
+      zip: 'ZIP',
+      reserve_pct: 'Reserve',
+      joined_on: 'Dealer since',
+      on_hold_reason: 'On hold because',
+      intake_address: 'Apply-form address',
+      applications: 'Applications, 90 days',
+      approved: 'Approved, 90 days',
+      declined: 'Declined, 90 days',
+      funded_volume: 'Funded, 90 days',
+    },
+    actions: {
+      logDealerVisit: logVisitAction,
+      setDealerStatus: action('Change status', { command: 'setDealerStatus' }),
+      rotateIntakeAddress: action('Rotate apply address', { command: 'rotateIntakeAddress' }),
+    },
+  },
+  dealer_visit: {
+    segments: {
+      mine: 'lender_user_id = me',
+    },
+    access: 'write',
+    noun: 'visit',
+    recordLabel: '{dealer_id.name} · {kind} {happened_on}',
+    display: { kind: { tone: { review: 'info', '*': 'neutral' } } },
+    labels: {
+      happened_on: 'When',
+    },
+  },
+  dealer_site: {
+    noun: 'website',
+    recordLabel: '{dealer_id.name} website',
+    display: { published: { tone: { true: 'good', '*': 'neutral' } } },
+    labels: { custom_domain: 'Domain' },
+  },
+  dealer_user: {
+    hidden: ['dealer_account_id'],
+    noun: { one: 'dealer person', many: 'dealer people' },
+    display: { status: { tone: { invited: 'info', deactivated: 'neutral', active: 'neutral' } }, name: { avatar: true } },
+    labels: { joined_on: 'Joined' },
+  },
+  intake_submission: {
+    segments: {
+      open: 'status = open',
+      followed_up: 'status = followed_up',
+      closed: 'status = closed',
+    },
+    access: 'write',
+    noun: { one: 'triage submission', many: 'triage submissions' },
+    view: 'triage',
+    recordLabel: '{reference} · {first_name} {last_name}',
+    display: {
+      status: { tone: { open: 'warn', followed_up: 'info', closed: 'neutral' } },
+      monthly_income: perMonth,
+      created_at: { format: 'relative' },
+    },
+    labels: {
+      last_name: 'Applicant',
+      zip: 'ZIP',
+      monthly_income: 'Income',
+      vehicle_interest: 'Looking for',
+      dealer_hint: 'Where they shop',
+      created_at: 'Arrived',
+      closed_at: 'Closed',
+      outcome_note: 'Outcome',
+    },
+    // Following up is a mark on the row, run by name without an edit (auth.roles' `actions`); closing is a command with its outcome.
+    actions: {
+      markFollowedUp: action('Mark followed up', { set: { status: 'followed_up' }, when: 'status = open' }),
+      closeIntakeSubmission: closeSubmissionAction,
+    },
+  },
+
+  /* ---------- the rate sheet and the staff ---------- */
+  program: {
+    segments: {
+      active_programs: { query: 'active = true', label: 'Active' },
+      retired: 'active = false',
+    },
+    access: 'write',
+    noun: 'program',
+    display: {
+      tier: { tone: { super_prime: 'good', prime: 'good', near_prime: 'neutral', subprime: 'warn' } },
+      base_apr: { format: 'percent' },
+      max_ltv_pct: { format: 'percent' },
+      max_amount: usd,
+      max_term: months,
+      max_mileage: { unit: 'mi' },
+      max_vehicle_age: { unit: 'yr' },
+      min_score: { format: 'number' },
+      advertised: { tone: { true: 'info', '*': 'neutral' } },
+    },
+    labels: {
+      name: 'Program',
+      min_score: 'Minimum score',
+      max_ltv_pct: 'Maximum LTV',
+      max_term: 'Longest term',
+      max_vehicle_age: 'Oldest vehicle',
+      max_mileage: 'Most miles',
+      base_apr: 'Base APR',
+      max_amount: 'Largest loan',
+    },
+    form: {
+      description: 'A program is a row of the rate sheet: who qualifies, on what collateral, at what base rate.',
+      groups: [
+        { label: 'Program', fields: ['code', 'name', 'tier', 'description'] },
+        { label: 'Credit and collateral', fields: ['min_score', 'max_ltv_pct', 'max_vehicle_age', 'max_mileage'] },
+        { label: 'Terms', fields: ['base_apr', 'max_term', 'max_amount', 'advertised'] },
+      ],
+      defaults: { active: true, advertised: false, tier: 'prime', max_term: 72 },
+    },
+    actions: {
+      retireProgram: action('Retire program', { set: { active: false, advertised: false }, when: 'active = true' }),
+      reinstateProgram: action('Reinstate program', { set: { active: true }, when: 'active = false' }),
+    },
+  },
+  lender_user: {
+    segments: {
+      active_users: { query: 'active = true', label: 'Active' },
+      underwriting: 'active = true and role in (underwriter, credit_manager)',
+    },
+    noun: { one: 'staff member', many: 'staff' },
+    rollups: {
+      open_files: count('underwriting_file', { whose: 'underwriter_id', query: 'decided_by is empty' }),
+      decided: count('underwriting_file', { whose: 'decided_by' }),
+      dealers: count('dealer', { whose: 'relationship_manager_id' }),
+    },
+    display: { name: { avatar: true, subtitle: 'title' } },
+    labels: {
+      hired_on: 'Hired',
+      decided: 'Decisions',
+    },
+  },
+
+  /* ---------- the dealers' side, read for context ---------- */
+  deal: {
+    access: 'write',
+    noun: 'deal',
+    recordLabel: '{reference} · {dealer_id.name}',
+    display: {
+      status: { tone: { approved: 'info', contracted: 'info', funded: 'good', cancelled: 'neutral' } },
+      sale_price: usd,
+      doc_fee: usd,
+      sales_tax: usd,
+      title_fees: usd,
+      trade_allowance: usd,
+      trade_payoff: usd,
+      cash_down: usd,
+      rebate: usd,
+      service_contract: usd,
+      gap: usd,
+      amount_financed: usd,
+      monthly_payment: perMonth,
+      apr: { format: 'percent' },
+      term_months: months,
+      tax_rate: { format: 'percent' },
+    },
+    labels: {
+      reference: 'Deal',
+      title_fees: 'Title and fees',
+      gap: 'GAP',
+      term_months: 'Term',
+      apr: 'APR',
+      monthly_payment: 'Payment',
+      created_on: 'Opened',
+      updated_at: 'Updated',
+    },
+  },
+  deal_scenario: {
+    noun: 'scenario',
+    display: { cash_down: usd, amount_financed: usd, monthly_payment: perMonth, apr: { format: 'percent' }, term_months: months },
+    labels: {
+      label: 'Scenario',
+      term_months: 'Term',
+      apr: 'APR',
+      cash_down: 'Down',
+      amount_financed: 'Financed',
+      monthly_payment: 'Payment',
+    },
+  },
+  trade_in: {
+    noun: 'trade-in',
+    recordLabel: '{year} {make} {model}',
+    display: { allowance: usd, acv: usd, payoff: usd, mileage: { unit: 'mi' } },
+    labels: { vin: 'VIN', acv: 'ACV' },
+  },
+  applicant: {
+    noun: 'applicant',
+    recordLabel: '{first_name} {last_name}',
+    display: {
+      monthly_income: perMonth,
+      monthly_housing: perMonth,
+      years_at_address: { unit: 'yr' },
+      years_employed: { unit: 'yr' },
+      last_name: { avatar: true },
+    },
+    labels: {
+      last_name: 'Applicant',
+      ssn_last4: 'SSN, last four',
+      zip: 'ZIP',
+      monthly_housing: 'Housing cost',
+      years_at_address: 'At address',
+      employment_type: 'Employment',
+      years_employed: 'Employed',
+      monthly_income: 'Income',
+    },
+  },
+  lead: {
+    access: 'write',
+    noun: 'lead',
+    recordLabel: '{reference} · {first_name} {last_name}',
+    display: { status: { tone: { new: 'info', desking: 'info', submitted: 'info', sold: 'good', lost: 'neutral' } } },
+    labels: { reference: 'Lead', created_at: 'Created' },
+  },
+  lead_activity: { noun: 'lead activity', labels: { body: 'Activity', created_at: 'When' } },
+  vehicle: {
+    access: 'write',
+    noun: 'vehicle',
+    recordLabel: '{year} {make} {model} {trim}',
+    display: {
+      status: { tone: { listed: 'good', pending: 'info', sold: 'neutral', wholesale: 'neutral' } },
+      list_price: usd,
+      est_payment: perMonth,
+      mileage: { unit: 'mi' },
+      features: { format: 'items' },
+    },
+    labels: {
+      stock_number: 'Stock',
+      vin: 'VIN',
+      exterior_color: 'Exterior',
+      interior_color: 'Interior',
+      est_payment: 'Advertised payment',
+      received_on: 'On the lot since',
+    },
+  },
+  vehicle_photo: {
+    noun: 'photo',
+    recordLabel: 'caption',
+    file: { content: 'data', name: 'file_name', type: 'content_type', size: 'byte_size', thumbnail: 'thumbnail' },
+    labels: { position: 'Order' },
+  },
+
+  /* ---------- the marketplace, read for context ---------- */
+  prequalification: {
+    noun: 'pre-qualification',
+    recordLabel: '{reference} · {first_name} {last_name}',
+    display: {
+      status: { tone: { matched: 'good', no_match: 'neutral', new: 'info', '*': 'neutral' } },
+      monthly_income: perMonth,
+      desired_payment: perMonth,
+      estimated_amount: usd,
+      estimated_apr: { format: 'percent' },
+    },
+    labels: { credit_band: 'Credit', estimated_amount: 'Estimate', created_at: 'Asked' },
+  },
+  saved_vehicle: { noun: 'saved vehicle', labels: { saved_at: 'Saved' } },
+} satisfies Resources;

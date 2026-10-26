@@ -1,0 +1,70 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* The accounts screen: one panel, rules not boxes inside it. A look dresses
+   its fields, buttons and table heads as everywhere else. */
+.modal.account-administration { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box;
+  padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.account-administration > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4h); min-height: 34px; }
+.account-administration h2 { margin: 0; font-size: calc(18px * var(--type-k)); overflow-wrap: anywhere; }
+.account-administration h2:focus { outline: none; }
+.account-administration h3 { margin: 0 0 var(--space-4h); font-size: calc(15px * var(--type-k)); }
+.account-administration .note { margin: var(--space-4h) 0 20px; padding: 0; color: var(--ink-muted); line-height: 1.5; max-width: 70ch; }
+.account-admin-said { margin: var(--space-4h) 0 0; line-height: 1.5; overflow-wrap: anywhere; }
+.account-admin-said.alert, .account-admin-problem { color: var(--status-critical); }
+.account-admin-problem { margin: -8px 0 var(--space-5); font-size: var(--text-base); }
+
+/* The search box and Add account share one row. */
+.account-admin-bar { display: flex; align-items: center; gap: var(--space-3h); margin-bottom: 20px; }
+.account-admin-bar form { flex: 1 1 auto; min-width: 0; }
+.account-admin-bar input { width: 100%; max-width: 22rem; }
+
+/* Three columns under the table's 2px rule, the rows parted by hairlines; on a phone each row stacks. */
+.account-admin-heads, .account-admin-list li { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--space-4h); }
+.account-admin-heads { font-size: var(--text-sm); font-weight: 600; color: var(--ink-muted); padding-bottom: var(--space-3); border-bottom: 2px solid var(--ink); }
+.account-admin-list { list-style: none; margin: 0; padding: 0; font-size: var(--text-md); }
+.account-admin-list li { padding: var(--space-3h) 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+/* At a desk the column heads say it, so each fact's caption is for assistive tech alone; a phone shows it. */
+.account-admin-caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; color: var(--ink-muted); font-size: var(--text-sm); }
+.account-admin-list li.inactive .account-admin-fact, .account-admin-list li.inactive .account-admin-name { color: var(--ink-muted); }
+/* The name is the row's one target: a link in the link ink, its email a quiet line under it. */
+.account-admin-open { display: grid; gap: var(--space-1); width: 100%; padding: 0; text-align: left; font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.account-admin-open .account-admin-name { color: var(--link); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.account-admin-open:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; border-radius: var(--radius); }
+.account-admin-email { color: var(--ink-muted); font-size: var(--text-base); }
+/* The history: when, what changed, by whom — the same rule and hairlines, the time the narrow column. */
+.account-trail-heads, .account-trail li { grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr) minmax(0, 1.3fr); }
+.account-trail .account-admin-email { display: block; margin-top: var(--space-1); }
+.account-trail time { font-variant-numeric: tabular-nums; }
+.account-admin-pager { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3h); margin-top: var(--space-4h); font-size: var(--text-base); color: var(--ink-muted); }
+
+.account-admin-editor { margin-top: var(--space-4h); }
+/* The 20px field gap; the last field's and the actions' margin make the 24px under it (style.css, .form-actions). */
+.account-administration .form-field { margin-bottom: var(--field-gap); }
+.account-admin-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2h) var(--space-4h); margin: var(--space-4h) 0 var(--space-6); font-size: var(--text-md); }
+.account-admin-facts dt { color: var(--ink-muted); }
+.account-admin-facts dd { margin: 0; overflow-wrap: anywhere; }
+.account-admin-roles { border: 0; padding: 0; margin: 0 0 var(--field-gap); min-width: 0; }
+.account-admin-roles legend { padding: 0; margin-bottom: var(--space-3h); font-size: var(--text-base); font-weight: 500; }
+.account-admin-roles label { display: flex; align-items: center; gap: var(--space-3); min-height: 24px; margin-bottom: var(--space-2h); }
+.account-admin-hint { color: var(--ink-muted); }
+.account-admin-password, .account-admin-access { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.account-administration .form-actions { display: flex; justify-content: flex-end; gap: var(--space-3h); margin-top: var(--space-2); }
+.account-admin-access .note { margin-top: 0; }
+
+/* On a phone the dialog fills the screen and each account is two lines:
+   its name and email, then its roles and status, captions beside values. */
+@media (max-width: 760px) {
+  .account-admin-bar { flex-wrap: wrap; }
+  .account-admin-bar input { max-width: none; }
+  .account-admin-bar .btn { width: 100%; min-height: 44px; }
+  .account-admin-heads { display: none; }
+  .account-admin-list li { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4h); }
+  .account-admin-open { grid-column: 1 / -1; }
+  /* A history row is three short lines: the time, quiet; the change; who made it. Only "By" needs saying. */
+  .account-trail li { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .account-trail .account-admin-fact:first-child { color: var(--ink-muted); font-size: var(--text-base); }
+  .account-trail .account-admin-fact:not(:last-child) .account-admin-caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .account-admin-caption { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .account-administration .form-actions .btn, .account-admin-access .btn { width: 100%; min-height: 44px; }
+}
+}

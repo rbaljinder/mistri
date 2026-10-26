@@ -1,0 +1,11 @@
+/* Ledger's own dress, read against the theme allowlist and scoped to the theme where it is worn. */
+[data-part="stat"] {
+  background-image: url(./paper.png);
+  background-repeat: repeat;
+  border-top: 2px solid var(--ink);
+}
+
+[data-part="section.title"] {
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+}

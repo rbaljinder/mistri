@@ -1,0 +1,139 @@
+/* The tool's own rules: the first layer (style.css names the order). */
+@layer base {
+/* The SQL editor.
+
+   A panel rather than a page: you write a statement against something you were
+   already looking at, and losing that context to a full-screen editor makes
+   every trip to SQL a trip away from the walk. It sits over the bottom of the
+   window, tall enough to read a result in and short enough that the page it
+   came from is still there behind it. */
+
+.sql-panel {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 75;
+  display: flex; flex-direction: column;
+  max-height: 78vh;
+  background: var(--surface);
+  border-top: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-panel);
+}
+
+.sql-head {
+  display: flex; align-items: center; gap: var(--space-4h);
+  padding: var(--space-3h) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.sql-title { display: flex; align-items: baseline; gap: var(--space-3h); }
+.sql-eyebrow {
+  font: 600 var(--text-sm) var(--mono); color: var(--accent-ink);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.sql-target { font: var(--text-xs) var(--mono); color: var(--ink-subtle); }
+.sql-head-actions { margin-left: auto; display: flex; gap: var(--space-3); }
+.sql-write { color: var(--status-critical); }
+.sql-write:hover { border-color: var(--status-critical); background: color-mix(in srgb, var(--status-critical) 10%, transparent); }
+
+.sql-editor { padding: var(--space-4) var(--space-5); flex: none; position: relative; }
+.sql-input {
+  display: block; width: 100%; resize: none;
+  padding: var(--space-3h) var(--space-4);
+  border: 1px solid var(--line-control); border-radius: min(7px, var(--radius-pop));
+  background: var(--ground); color: var(--ink);
+  font: var(--text-base)/1.55 var(--mono);
+  tab-size: 2;
+}
+.sql-input:focus { outline: none; border-color: var(--focus); }
+.sql-input::placeholder { color: var(--ink-subtle); }
+
+.sql-results { overflow: auto; flex: 1; min-height: 0; padding-bottom: var(--space-4); }
+
+.sql-stats {
+  display: flex; gap: var(--space-4h); align-items: baseline;
+  padding: var(--space-1) var(--space-5) var(--space-3);
+  font: var(--text-xs) var(--mono); color: var(--ink-subtle);
+  font-variant-numeric: tabular-nums;
+}
+/* Says which kind of "there is more" this is: a page of a bounded read, or the
+   front of an answer the database computed in full. */
+.sql-truncated { color: var(--status-info); }
+
+.sql-error {
+  margin: 0 var(--space-5); padding: var(--space-3h) var(--space-4);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--status-critical) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-critical) 40%, transparent);
+  color: var(--status-critical);
+  font: var(--text-sm)/1.5 var(--mono);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 600px) {
+  body:not(.app-mode) .sql-head { flex-wrap: wrap; gap: var(--space-3); padding-inline: var(--space-4); }
+  body:not(.app-mode) .sql-title { min-width: 0; flex-wrap: wrap; }
+  body:not(.app-mode) .sql-target { overflow-wrap: anywhere; }
+  body:not(.app-mode) .sql-head-actions { flex-wrap: wrap; gap: var(--space-2h); }
+  body:not(.app-mode) .sql-head-actions button { min-height: 44px; }
+  body:not(.app-mode) .sql-error { overflow-wrap: anywhere; }
+  body:not(.app-mode) .sql-stats { flex-wrap: wrap; }
+}
+
+/* Said before the grid, because a row that opens a record should say so before
+   it is clicked rather than after. */
+.sql-walk {
+  margin: 0 var(--space-5) var(--space-2h); font: var(--text-xs) var(--mono); color: var(--accent-ink);
+}
+
+/* Anchored to the caret rather than the field — see placeAtCaret. */
+.ac-mirror {
+  position: absolute; visibility: hidden; pointer-events: none;
+  top: 0; left: -9999px;
+  overflow-wrap: break-word;
+}
+
+
+/* The statements you have kept. One row, config and personal together — to
+   whoever is looking for one they are the same thing, and the difference is
+   only whether it can be deleted. */
+.sql-saved {
+  display: flex; gap: var(--space-2h); flex-wrap: wrap;
+  padding: 0 var(--space-5) var(--space-2);
+  flex: none;
+}
+.sql-chip {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--ground);
+  overflow: hidden;
+}
+.sql-chip:hover { border-color: var(--accent); }
+.sql-chip-open {
+  padding: var(--space-1h) var(--space-3h);
+  background: none; border: none;
+  color: var(--ink-muted); cursor: pointer;
+  font: var(--text-xs) var(--mono);
+}
+.sql-chip:hover .sql-chip-open { color: var(--accent-ink); }
+.sql-chip-remove {
+  padding: var(--space-1h) var(--space-3) var(--space-1h) var(--space-1);
+  background: none; border: none;
+  color: var(--ink-subtle); cursor: pointer; font-size: var(--text-sm); line-height: 1;
+}
+.sql-chip-remove:hover { color: var(--status-critical); }
+/* Not a button: a config statement is not this browser's to delete, and an ×
+   that refuses is worse than no ×. */
+.sql-chip-tag {
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+  color: var(--ink-subtle);
+  font: var(--text-xs) var(--mono); text-transform: uppercase; letter-spacing: 0.05em;
+}
+
+/* An empty result knows its shape, and saying so is the difference between
+   "your statement returned nothing" and "something went wrong". */
+.sql-empty {
+  margin: 0 var(--space-5); padding: var(--space-3h) var(--space-4);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--raised);
+  font: var(--text-sm)/1.6 var(--mono); color: var(--ink-muted);
+}
+.sql-empty strong { color: var(--ink); }
+}

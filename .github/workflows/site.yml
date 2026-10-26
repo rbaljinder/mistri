@@ -1,0 +1,68 @@
+# Markdown documentation and website, built into site/dist/ on pushes to main.
+#
+# Cloudflare Pages, not GitHub Pages: the site lives at mistriwork.dev
+# and this repository has Pages disabled, so the old workflow failed on every
+# push — a red cross beside every commit for a deployment that was never
+# going to happen here. A workflow that cannot succeed is worse than none: it
+# trains everyone to ignore the one place failures are reported.
+#
+# Deploying needs a token this repository may not have. Rather than fail when
+# it is absent, the job says what is missing and stops — so the site deploys
+# the moment CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are added as
+# secrets, and until then an explicitly requested local deployment is
+# the deployment, which is what it has been all along.
+name: site
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'storybook/**', 'packages/*/src/client/**', 'packages/*/src/shared/**', 'examples/apps/*/widgets/**', 'examples/apps/*/pages/**', 'test/fixtures/apps/*/widgets/**', 'test/fixtures/apps/*/pages/**', 'package.json', 'packages/*/package.json', 'package-lock.json', '.github/workflows/site.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: site
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      # The component library at /components/ is a package of its own.
+      - run: npm ci --ignore-scripts
+        working-directory: storybook
+
+      - name: Build and validate the documentation site
+        run: npm run build:site
+
+      # A site without its library must not deploy: /components/ is linked from every page.
+      - run: test -f site/dist/components/index.html && test -f site/dist/components/iframe.html
+
+      - name: Is there a token to deploy with?
+        id: have
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$ACCOUNT" ]; then
+            echo "yes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "yes=false" >> "$GITHUB_OUTPUT"
+            echo "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required; the site was built but not deployed." >> "$GITHUB_STEP_SUMMARY"
+            echo "After approval, deploy the built site/dist directory to the mistri Pages project." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        if: steps.have.outputs.yes == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEPLOY_BRANCH: ${{ github.ref_name }}
+        run: npx --yes wrangler@4 pages deploy site/dist --project-name mistri --branch "$DEPLOY_BRANCH"

@@ -1,0 +1,59 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    /* One program over every package, so a declaration graph that crosses a package (@mistriwork/mistri/commands reaches
+       the engine's types) is emitted whole. tsc writes each package's tree under the stage, and
+       scripts/build-packages.mjs moves packages/<name>/src's output to packages/<name>/dist. */
+    "outDir": "node_modules/.cache/build-stage",
+    "rootDir": "packages",
+    /* A build starts from an empty stage, so it emits everything: the checkout's incremental state says what was
+       checked, not what is on disk here. */
+    "incremental": false,
+    "tsBuildInfoFile": null,
+    /* The main CLI build omits declarations and source maps.
+    
+       Originally this package had one entry point, a `bin`. Nothing imported it,
+       so the 33 `.d.ts` files described types no consumer can reach; and Node
+       ignores a source map unless it is started with `--enable-source-maps`,
+       which nothing here does. Together they were a third of the tarball —
+       930kB of files whose only reader was `npm pack`.
+    
+       The cost, stated: a stack trace from a bug report now names a line in
+       compiled JavaScript rather than in TypeScript. The build is
+       reproducible from the tag, so that is a lookup rather than a loss, and
+       turning either back on is one line. The server-only commands package
+       entry now emits its required declaration graph separately through
+       tsconfig.commands.json. */
+    "declaration": false,
+    "sourceMap": false,
+    /* The comments here say why, and since 0.9.9 they ship: whoever reads
+       dist/ — an operator chasing a stack trace without source maps, an
+       agent reading the installed package — reads the same reasons the
+       repository does. They were dropped for size (about a third of the
+       server's bytes); the owner chose readable over smaller. */
+    "removeComments": false
+    /* `npm run build` emits with --noCheck: `npm test` (test:static) has
+       typechecked every file already, and CI runs it on every change and
+       every tag. Checking again here made the build check the same program
+       twice more — this one and tsconfig.commands.json — for about half its
+       time, and the emitted JavaScript is the same either way. */
+  },
+  "include": ["packages/*/src"],
+  /* The client is Vite's, not tsc's: `vite build` bundles src/client into
+     dist/client at the same `npm run build`. With `allowJs` on and `noEmit`
+     off, tsc would otherwise *emit* the client too — a transpiled copy that
+     the bundle then landed on top of. The plain `tsc --noEmit` check still
+     sees these modules, because that runs from tsconfig.json. Each package's
+     src/shared and src/adapters are compiled here as before; the client reaches
+     them through the bundle. mistri's src/embed (@mistriwork/mistri/react) is the client
+     built once more, by vite.embed.config.ts, and is Vite's for the same reason. */
+  "exclude": [
+    "packages/*/src/client",
+    "packages/*/src/embed",
+    /* @mistriwork/ui's tests sit beside its primitives (Vitest runs them); a package ships what they test, not them. */
+    "packages/*/src/**/*.test.ts",
+    "packages/*/src/**/*.test.tsx"
+  ]
+}

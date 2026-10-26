@@ -1,0 +1,30 @@
+/** What live sync says beside a list, a record and a draft (components/LiveNotices.tsx). */
+import { defineMessages } from '../../../messages.js';
+
+export const say = defineMessages({
+  updates: { one: '{count} update', other: '{count} updates' },
+  pill: '{updates} · Show',
+  pillMany: 'Updates · Show',
+  showUpdates: 'Show the updates',
+  justNow: 'just now',
+  minutesAgo: { one: '{count} minute ago', other: '{count} minutes ago' },
+  you: 'you',
+  updatedBy: 'Updated by {who} {when}',
+  updated: 'Updated {when}',
+  changedBy: '{name} changed this {record}',
+  changedBySomeone: 'Someone changed this {record}',
+  changedByYou: 'You changed this {record} in another tab',
+  deletedBy: '{name} deleted this {record}',
+  deletedBySomeone: 'Someone deleted this {record}',
+  review: 'Review changes',
+  keepEditing: 'Keep editing',
+  theirChanges: 'Their changes',
+  original: 'Before',
+  yours: 'Yours',
+  theirs: 'Theirs',
+  takeTheirs: 'Take theirs',
+  nothingDiffers: 'None of the fields you changed were changed.',
+  reading: 'Reading their changes…',
+  couldNotRead: 'Their changes could not be read.',
+  empty: 'empty',
+});

@@ -1,0 +1,66 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* The import dialog wears the confirmation's dress (`.confirm`) at the width
+   a table of the file's rows needs, with its own scroll: the check's table
+   scrolls sideways inside its box, never the dialog. */
+.confirm.import-dialog {
+  width: min(52rem, calc(100vw - 32px)); max-width: none;
+  max-height: min(46rem, calc(100vh - 48px)); overflow-y: auto;
+}
+.import-dialog h2 { margin: 0 0 var(--space-4); font-size: var(--type-list-title); letter-spacing: var(--track-title); }
+.import-steps { margin: 0 0 var(--space-5); }
+/* A phone's dialog is a column: the heading and the steps keep their height while a long step scrolls. */
+.import-dialog > :is(h2, .import-steps) { flex: none; }
+/* The steps say where the reader is; they are not a way back (Back is). */
+.import-steps .multi-step-nav-item { cursor: default; }
+.import-steps .multi-step-nav-item[data-done] { color: var(--ink); }
+.import-lede { margin: 0 0 var(--space-4h); color: var(--ink); }
+.confirm .import-lede strong { font-family: inherit; font-size: inherit; }
+.import-note { margin: var(--space-4) 0 0; color: var(--ink-muted); font-size: var(--text-base); }
+.import-problem { margin: var(--space-4) 0 0; color: var(--status-critical); }
+.import-actions { flex-wrap: wrap; }
+/* A quiet download stands at the start of the row, the answers at its end. */
+.import-actions > .btn-quiet { margin-right: auto; }
+
+/* The file: one place to choose it or drop it. The input is the control a
+   keyboard reaches; the whole area is its label, and its focus the house ring. */
+.import-drop {
+  position: relative; display: grid; place-items: center; min-height: 128px; padding: var(--space-6);
+  border: 1px dashed var(--line-control); border-radius: var(--radius); background: var(--raised);
+  color: var(--ink-muted); text-align: center; cursor: pointer;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .import-drop { transition: background var(--t-hover) var(--ease-out), border-color var(--t-hover) var(--ease-out); }
+}
+.import-drop:hover, .import-drop.is-over { border-color: var(--accent); background: var(--accent-soft); }
+.import-drop:focus-within { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+.import-drop strong { color: var(--link); font-weight: 600; }
+.import-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* The mapping: each column of the file, its example under its name, and the field it fills. */
+.import-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-4h) 20px; margin: 0; padding: 0; list-style: none; }
+.import-map-row { min-width: 0; }
+.import-map .form-field-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The check: the file's rows as read, those with a problem first. */
+.import-preview { max-height: 22rem; overflow: auto; border-top: 2px solid var(--ink); }
+.import-preview:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+.import-preview table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
+.import-preview th { position: sticky; top: 0; z-index: 1; padding: var(--space-2h) var(--space-3h); background: var(--surface); color: var(--ink-muted); font-weight: 600; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.import-preview td { padding: var(--space-2h) var(--space-3h); border-bottom: 1px solid var(--line); vertical-align: top; max-width: 16rem; overflow-wrap: anywhere; }
+.import-preview .import-line { color: var(--ink-subtle); font-family: var(--code); font-size: var(--text-sm); }
+.import-preview .import-status { min-width: 12rem; color: var(--ink-muted); }
+.import-preview tr.is-refused .import-status { color: var(--status-critical); }
+.import-says { display: block; }
+.import-says + .import-says { margin-top: var(--space-1); }
+}
+/* Layout no look may move, brought with the dialog so it stands in no first
+   paint: the check says each row's problem whole, which a look's one-line cell
+   would cut short, and on a phone a step is the dialog's body, so its actions
+   reach the foot as a confirmation's do (structure.css). */
+@layer structure {
+.import-preview td.import-status { min-width: min(18rem, 60vw); white-space: normal; overflow: visible; text-overflow: clip; }
+@media (max-width: 640px) {
+  [role="dialog"].confirm.modal-fullscreen-mobile > .import-step { display: flex; flex-direction: column; flex: 1 0 auto; }
+}
+}

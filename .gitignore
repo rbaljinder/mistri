@@ -1,0 +1,36 @@
+node_modules/
+dist/
+.astro/
+.demo/
+# Generated sample databases/configs are local; commit only their setup scripts.
+examples/databases/**/*.db
+examples/databases/**/*.db-wal
+examples/databases/**/*.db-shm
+examples/databases/**/*.db.json
+examples/databases/**/data/
+*.log
+.DS_Store
+# `tablewalk build`'s default output, when an App is built from the checkout.
+/build/
+
+# Playwright: fixture databases, traces, HTML reports.
+e2e/.tmp/
+e2e/.results/
+playwright-report/
+test-results/
+# ...and the snapshots the Playwright MCP writes while a page is being looked at.
+.playwright-mcp/
+
+# Maintainer working notes stay local; the repository is public.
+.notes/
+
+# The visual review matrix (scripts/visual-matrix.mjs): captures, baseline and report are local.
+.visual/
+
+# scripts/pack-manifest.mjs keeps the checkout's package.json here while a pack ships the stripped one.
+package.json.pack-original
+# What scripts/pack-manifest.mjs copies into a package for a tarball, and removes after it.
+/packages/tablewalk/schema/
+/packages/*/LICENSE
+/packages/mistri/skills/
+/packages/mistri/examples/

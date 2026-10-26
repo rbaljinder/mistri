@@ -1,0 +1,33 @@
+/** What composer says, in the Workbench room (packages/kit/src/client/messages.ts says how the catalog is split). */
+import { defineMessages } from '../../messages.js';
+
+export const say = defineMessages({
+  saved: 'Saved "{name}".',
+  couldNotSaveThisBrowser: 'Could not save — this browser is not allowing local storage.',
+  key: ' · key',
+  dateRange: 'date range',
+  nullCheck: 'null check',
+  removeName: 'Remove "{name}"?',
+  mayHaveOne: 'may have one',
+  hasOne: 'has one',
+  eachParent: 'each {subject} {verb} parent {object}',
+  viewComposer: 'View composer',
+  noSavedViewCalled: 'No saved view called "{viewId}" — starting a new one.',
+  on: ' on its {on}',
+  the: 'the {fn} of {name}.{column}{where}',
+  renameColumn: 'Rename column',
+  shownAs: 'Shown as',
+  theViewIsOnly: 'The view is only stored in this browser, so this cannot be undone from here.',
+  pickAtLeastOneField: 'Pick at least one field before saving.',
+  thisViewComesFromTablewalk: 'This view comes from tablewalk.json. Use "Save as…" to keep your changes here.',
+  saveThisView: 'Save this view',
+  eGAustralianWork: 'e.g. Australian work orders',
+  thisConnectionHasNoTables: 'This connection has no tables to compose from.',
+  countFields: { one: '{count} field', other: '{count} fields' },
+  eachHasMany: 'each {name} has many {values}',
+  aCount: 'a count of {names}{where}',
+  countRelatedTables: { one: '{count} related table', other: '{count} related tables' },
+  relationPhrase: 'each {subject} {verb} {object}',
+  aggregateOver: '{aggregate} over {shortTable}',
+  headWithExtras: '{head} with {extras}',
+});
