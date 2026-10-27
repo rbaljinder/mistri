@@ -445,6 +445,9 @@ describe('the page', () => {
     expect(badge(/^All/)).toHaveTextContent('40');
     await act(async () => release());
     await vi.waitFor(() => expect(badge(/^Open/)).toHaveTextContent('12'));
+    // The batch is answered and leaves out the tab on screen, whose rows are still on the way: its badge keeps its
+    // count. Emptied for those frames, the tab narrowed, and a strip at the edge of its fold flickered (useTabFold.ts).
+    expect(badge(/^In progress/)).toHaveTextContent('40');
   });
 
   test('a known grid total becoming unknown clears its badge without reviving a cached count', async () => {

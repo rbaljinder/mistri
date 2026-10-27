@@ -437,8 +437,14 @@ body.app-mode .page-edit { font-family: var(--sans); }
 .applist-go:hover { border-color: var(--accent); color: var(--accent-ink); }
 /* Tab counts arrive late and dim: the number is context, not a control.
    Two digits' room is kept before it arrives, so the tabs after it and the
-   bar beside them do not move when it does (test/built-client-vitals.mjs). */
-.tab .tab-count { display: inline-block; min-width: 2ch; margin-left: var(--space-2h); color: var(--ink-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+   bar beside them do not move when it does (test/built-client-vitals.mjs).
+   The room is two figures drawn in the count's own type, under the number:
+   2ch left out a look's tracking, which a tab's caps carry into its count,
+   and a count arriving widened its tab by a pixel or two, enough to move a
+   strip at the edge of its fold (useTabFold.ts). */
+.tab .tab-count { display: inline-grid; margin-left: var(--space-2h); color: var(--ink-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tab .tab-count::before, .tab .tab-count > span { grid-area: 1 / 1; }
+.tab .tab-count::before { content: '00' / ''; visibility: hidden; }
 /* The count takes the tab's ink whole: faded, it was 3.3:1 on a filled tab. */
 .tab[aria-selected="true"] .tab-count { color: inherit; }
 /* Quick filters: the list's key vocabularies as one-click conditions. */
