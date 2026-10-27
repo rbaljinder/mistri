@@ -1,4 +1,5 @@
 import { COMPASS, expect, type Locator, type Page, test } from './support/ownServers';
+import { chooseTab } from './support/tabs';
 
 // This worker's own Compass (support/ownServers.ts), the App at the root.
 test.use({ servers: ['crm'] });
@@ -93,3 +94,107 @@ for (const [where, size] of [
     });
   });
 }
+
+/**
+ * The strip as each frame drew it: read in a task the frame's animation callback posts, which runs once that frame's
+ * layout, ResizeObservers and paint are done; a frame after which the page changed again before that task ran is left
+ * out, since what it holds was not drawn. Each record is the tab chosen, the tabs folded, and the strip's width.
+ */
+function recordFrames() {
+  const drawn: string[] = [];
+  (window as unknown as { stripFrames: string[] }).stripFrames = drawn;
+  let changed = 0;
+  let framed = 0;
+  new MutationObserver(() => (changed = performance.now())).observe(document, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    characterData: true,
+  });
+  const read = new MessageChannel();
+  read.port1.onmessage = () => {
+    const strip = document.querySelector<HTMLElement>('.applist-controls .tabs.folds');
+    if (changed > framed || !strip) return;
+    const chosen = strip.querySelector('[role="tab"][aria-selected="true"]');
+    const said = `${chosen?.textContent ?? ''} folded=${[...strip.querySelectorAll<HTMLElement>('[data-fold][data-folded]')].map((tab) => tab.dataset.fold)} width=${strip.getBoundingClientRect().width.toFixed(1)}`;
+    if (drawn.at(-1) !== said) drawn.push(said);
+  };
+  const frame = () => {
+    framed = performance.now();
+    read.port2.postMessage(0);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
+const framesSince = (page: Page) => page.evaluate(() => (window as unknown as { stripFrames: string[] }).stripFrames.splice(0));
+
+/** The frames drawn from the first that shows `word` chosen: what the reader saw once the tab was theirs. */
+function chosenFrames(frames: string[], word: string) {
+  const from = frames.findIndex((frame) => frame.startsWith(word));
+  return from === -1 ? frames : frames.slice(from);
+}
+
+/**
+ * A strip holds still while the tab just chosen loads its rows. The badges were each said as their batch said them,
+ * and the strip's batch leaves out the tab on screen, whose count is its grid's: from the batch's answer to the rows',
+ * that tab's badge stood empty, a narrower tab. A service-desk App's Inbox, at a desk whose strip had just too little
+ * room for its last tab, drew that tab in the row and took More away on every visit and every switch, and put them
+ * back when the rows came: the strip flickered. Where nothing folds, the search box beside it jumped instead.
+ * Compass's All counts three figures, so its badge emptying gave back 8px; the rows are held a moment, as a remote
+ * database holds them, so the frames between are many.
+ */
+test.describe('while a chosen tab loads its rows', () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/run**', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      await route.continue();
+    });
+    await page.addInitScript(recordFrames);
+  });
+
+  test('the strip, and the search beside it, do not move', async ({ page }) => {
+    const strip = await opened(page, '/leads', '.applist-controls .tabs.folds');
+    await expect(strip.locator('[role="tab"]', { hasText: 'All' }).locator('.tab-count')).toHaveText(/\d{3}/);
+    await framesSince(page);
+    await chooseTab(page, /^All/);
+    await expect(strip.locator('[role="tab"][aria-selected="true"]')).toContainText('All');
+    await page.waitForTimeout(1000);
+    const frames = chosenFrames(await framesSince(page), 'All');
+    expect(frames, 'one drawing of the strip from the choice on').toHaveLength(1);
+  });
+
+  test('a strip at the edge of its fold keeps what is under More', async ({ page }) => {
+    const strip = await opened(page, '/leads', '.applist-controls .tabs.folds');
+    await expect(strip.locator('[role="tab"]', { hasText: 'All' }).locator('.tab-count')).toHaveText(/\d{3}/);
+    await chooseTab(page, /^All/);
+    await expect(strip.locator('[role="tab"][aria-selected="true"]')).toContainText('All');
+    await page.waitForTimeout(600);
+    /* The narrowest window that draws every tab, All chosen: one pixel less and a tab goes under More. */
+    const folded = () => strip.evaluate((box) => box.querySelectorAll('[data-fold][data-folded]').length);
+    let fits = 1280;
+    let short = 600;
+    while (fits - short > 1) {
+      const width = Math.round((fits + short) / 2);
+      await page.setViewportSize({ width, height: 800 });
+      await page.waitForTimeout(150);
+      if (await folded()) short = width;
+      else fits = width;
+    }
+    /* Two pixels short of the room for every tab: an emptied badge of three figures would give it back. */
+    await page.setViewportSize({ width: fits - 2, height: 800 });
+    await expect.poll(folded).toBeGreaterThan(0);
+    await chooseTab(page, /^New/);
+    await expect(strip.locator('[role="tab"][aria-selected="true"]')).toContainText('New');
+    await page.waitForTimeout(1000);
+    await framesSince(page);
+    await chooseTab(page, /^All/);
+    await expect(strip.locator('[role="tab"][aria-selected="true"]')).toContainText('All');
+    await page.waitForTimeout(2000);
+    const frames = chosenFrames(await framesSince(page), 'All');
+    expect(frames, 'one drawing of the strip from the choice on: nothing came out from under More and went back').toHaveLength(1);
+    expect(frames[0]).not.toMatch(/folded=(\s|$)/);
+  });
+});

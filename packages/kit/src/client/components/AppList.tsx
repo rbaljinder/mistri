@@ -200,7 +200,9 @@ function knownCounts(client: ReturnType<typeof useQueryClient>): Map<string, Cou
 /** A tab's badge: its count from the batch, or the grid's own total when the tab is the one on screen. */
 function TabCount({ counted }: { counted?: Counted | null }) {
   // null is a current result with no count, not permission to show an older one.
-  return <span className="tab-count">{counted == null ? '' : `${formatNumber(counted.total)}${counted.capped ? '+' : ''}`}</span>;
+  const said = counted == null ? '' : `${formatNumber(counted.total)}${counted.capped ? '+' : ''}`;
+  /* The number in a box of its own, over the room a tab keeps for it (features.css). */
+  return <span className="tab-count">{said && <span>{said}</span>}</span>;
 }
 
 export function AppList({ entry, spec, navigate, embedded = false, newButton, inDashboard = false, onTotal }: AppListProps) {
@@ -382,15 +384,19 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
     client.setQueryData(['count', connection ?? '', 'grid', question], new Map([[question, { total: gridTotal, capped: gridCapped }]]));
   }, [gridTotal, gridCapped, gridTab, connection]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* A tab's count: the grid's own total for the tab it shows, else the counts read for the strip. */
-  const countOf = (i: number) =>
-    i === gridTab
-      ? typeof gridTotal === 'number'
-        ? { total: gridTotal, capped: gridCapped }
-        : gridCurrent
-          ? null
-          : tabCounts?.get(appListQuery(spec, i))
-      : tabCounts?.get(appListQuery(spec, i));
+  /* A tab's count: the grid's own total for the tab it shows, else the counts read for the strip. While the grid of
+     the tab just chosen is on its way, its badge says what it last said, as every other badge does while its batch
+     is: the strip's batch leaves that tab out, and once it was answered the badge stood empty until the rows came.
+     An emptied badge is a narrower tab, and a strip at the edge of its fold took its last tab out of More for those
+     few frames and put it back, on every visit to the list and every switch to a tab (a service-desk App's Inbox
+     flickered at a desk); where nothing folds, the search box beside the strip jumped instead. */
+  const countOf = (i: number) => {
+    const question = appListQuery(spec, i);
+    if (i !== gridTab) return tabCounts?.get(question);
+    if (typeof gridTotal === 'number') return { total: gridTotal, capped: gridCapped };
+    if (gridCurrent) return null;
+    return tabCounts?.has(question) ? tabCounts.get(question) : knownCounts(client)?.get(question);
+  };
   const pickTab = (i: number) => {
     if (i === litTab) return;
     state.page = 0;

@@ -564,7 +564,10 @@ export const BUDGET = {
        377,540 — the rename's shorter raw beside rc/storm's live-refresh client, which the clean break's raw ceilings
        (645_550, 1_366_200) did not carry. The raw ceilings sit about 250 bytes above the merge; the brotli ceilings are
        the clean break's. */
-    public: { script: { raw: 646_050, br: 183_325 }, style: { raw: 389_000, br: 52_275 } },
+    /* A tab's count keeps the room of two figures drawn in its own type, tracking and all (features.css): an
+       inline grid with a hidden 00 under the number, about 100 raw bytes beside the 2ch it replaces. Measured: public
+       style 389,043 / 52,229, App style 388,924 / 52,200. The raw style ceilings move to about 250 bytes of room. */
+    public: { script: { raw: 646_050, br: 183_325 }, style: { raw: 389_300, br: 52_275 } },
     /* A one-click command's revision asked as the pointer or focus reaches its button (commandSend.ts readyCommand,
        Actions.tsx), so the click sends only the execute: about 500 raw bytes, 1335.1 KiB measured. The App script's
        raw ceiling moves to 1_367_400 and keeps about 250 bytes of room; its brotli did not move past its ceiling. */
@@ -573,7 +576,7 @@ export const BUDGET = {
        rc/s5 (one mistri schema on PostgreSQL) merged after it, measured: App script 1,367,214 / 377,712, 144 bytes
        under the rename's figure in brotli. The brotli ceiling comes back to 377_825, about 100 bytes of room, as the
        other ceilings keep. */
-    app: { script: { raw: 1_367_400, br: 377_825 }, style: { raw: 388_900, br: 52_250 } },
+    app: { script: { raw: 1_367_400, br: 377_825 }, style: { raw: 389_175, br: 52_250 } },
   },
   tablewalk: {
     workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 375_300, br: 51_125 } },
