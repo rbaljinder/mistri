@@ -636,7 +636,8 @@ every look, so the picture it keeps reads on whatever page shows it.
   scrolled hid that there was more: A tenant App's ran 648px in a 627px room at a
   desk, and past a phone's edge.
 - **The App's own panes draw no scroll bar.** The content pane, the filter
-  rail, the list's control strip and every dialog hide theirs. CSS cannot ask
+  rail, the list's control strip, every dialog, the navigation rail and a
+  record's feeds and side panel hide theirs; popups and listboxes keep theirs. CSS cannot ask
   for "only while scrolling" — whether a bar fades or stands there is the
   operating system's setting, and a mouse attached to a Mac makes it
   permanent — so the choice is a bar that is always drawn or none, and a
