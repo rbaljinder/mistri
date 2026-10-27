@@ -294,8 +294,14 @@ button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-o
    that scrolls as a whole still says so.
    The cost is honest: on a desk where bars are permanent, these panes no
    longer advertise that there is more below. If that reads as too quiet, one
-   line here brings a thin themed bar back. */
-.content, .filter-rail, .applist-controls, [role="dialog"] {
+   line here brings a thin themed bar back.
+   The navigation rail and a record's feeds are panes too: the nav list, the
+   mobile nav, a conversation, the related panel, the peek panel and help. They
+   are named under `.app-mode` so the Workbench keeps its own bars. Popups and
+   listboxes are not panes — their size follows their content and the bar is
+   their only sign of more — so they keep theirs. */
+.content, .filter-rail, .applist-controls, [role="dialog"],
+body.app-mode :is(#table-list, .mobile-nav-list, .timeline-scroll, .related-panel, .peekpanel-body, .help-body) {
   scrollbar-width: none;
 }
 

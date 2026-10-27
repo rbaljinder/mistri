@@ -105,6 +105,26 @@ test.describe('Desk blocks', () => {
           }),
         )
         .toEqual({ overflows: true, atFoot: true, cut: 0 });
+      // The App's own panes draw no scroll bar, even on a Mac with a mouse (style.css): the feed that scrolls inside
+      // the page, and the navigation list. A popup's listbox keeps its bar, the only sign it has more.
+      const bars = await page.evaluate(() => {
+        const read = (element: Element | null) =>
+          element
+            ? {
+                width: getComputedStyle(element).scrollbarWidth,
+                taken: (element as HTMLElement).offsetWidth - (element as HTMLElement).clientWidth,
+              }
+            : null;
+        const popup = document.body.appendChild(document.createElement('div'));
+        popup.className = 'picker-popup';
+        const listbox = read(popup);
+        popup.remove();
+        return { feed: read(document.querySelector('.timeline-scroll')), nav: read(document.querySelector('#table-list')), listbox };
+      });
+      expect(bars.feed).toEqual({ width: 'none', taken: 0 });
+      // The nav list is behind the menu button on a phone; where it is drawn its bar is not.
+      if (bars.nav) expect(bars.nav.width).toBe('none');
+      expect(bars.listbox?.width).not.toBe('none');
     }
   });
 
