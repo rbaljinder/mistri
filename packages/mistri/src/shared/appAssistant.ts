@@ -44,7 +44,8 @@ export interface AssistantStarter {
 }
 
 interface AssistantLimits {
-  /** Input and output tokens one turn may spend, every model call in it counted. */
+  /** Input and output tokens one turn may spend, every model call in it counted; a call's cached input (the turn so far,
+   * read again) counts at a tenth, as it is billed. */
   tokensPerTurn?: number;
   /** One person's tokens in a UTC day, across their conversations; `DEFAULT_TOKENS_PER_PERSON_PER_DAY` when not named. */
   tokensPerPersonPerDay?: number;

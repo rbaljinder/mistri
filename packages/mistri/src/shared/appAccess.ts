@@ -4,7 +4,7 @@
  * without owning another authorization model. app.ts retains compatibility
  * exports for existing callers.
  */
-import { CONNECTION_HIDDEN, stateStampColumn, tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { CONNECTION_HIDDEN, findTable, stateStampColumn, tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import {
   defaultSourceOf,
   grantsByRole,
@@ -77,7 +77,7 @@ function withoutHidden(app: AppDef, schema: DatabaseSchema, access: ResolvedAcce
       const held =
         access.fields?.get(id) ??
         (() => {
-          const all = schema.tables.find((table) => table.id === id)!.columns.map((column) => column.name);
+          const all = findTable(schema, id)!.columns.map((column) => column.name);
           return { read: new Set(all), write: new Set(access.writable.has(id) ? all : []) };
         })();
       const cut = cuts.get(id);
@@ -109,7 +109,7 @@ function withMachineColumns(app: AppDef, schema: DatabaseSchema, access: Resolve
   const moved = new Map<string, readonly string[]>();
   for (const [name, resource] of Object.entries(app.resources ?? {})) {
     if (!resource.machine) continue;
-    const table = schema.tables.find((table) => table.id === name) ?? tableNamed(schema, name);
+    const table = findTable(schema, name) ?? tableNamed(schema, name);
     if (table && access.writable.has(table.id))
       moved.set(table.id, [
         resource.machine.column,
@@ -143,7 +143,7 @@ function withFileColumns(app: AppDef, schema: DatabaseSchema, access: ResolvedAc
     const file = resource.file;
     const columns = [file?.object, file?.hash].filter((column): column is string => Boolean(column));
     if (!file || !columns.length) continue;
-    const table = schema.tables.find((table) => table.id === name) ?? tableNamed(schema, name);
+    const table = findTable(schema, name) ?? tableNamed(schema, name);
     if (table && access.readable.has(table.id)) owned.set(table.id, { content: file.content, columns });
   }
   if (!owned.size) return access;
@@ -171,7 +171,7 @@ function hiddenColumns(app: AppDef, schema: DatabaseSchema): Map<string, Readonl
   for (const [name, resource] of Object.entries(app.resources ?? {})) {
     if (!resource.hidden?.length) continue;
     const at = `${app.name}: resources "${name}", "hidden"`;
-    const table = schema.tables.find((table) => table.id === name) ?? tableNamed(schema, name);
+    const table = findTable(schema, name) ?? tableNamed(schema, name);
     if (!table) throw new Error(`${at}: "${name}" is not a table in this catalog.`);
     for (const column of resource.hidden) {
       const found = table.columns.find((item) => item.name === column);
@@ -190,8 +190,7 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
     /* The declared resources, and nothing else of the connection: a table
        the App does not name is not there, as with role grants. A name this
        connection lacks reads nothing here (the App may serve several). */
-    const served = (names: string[]) =>
-      new Set(names.flatMap((name) => (schema.tables.find((table) => table.id === name) ?? tableNamed(schema, name))?.id ?? []));
+    const served = (names: string[]) => new Set(names.flatMap((name) => (findTable(schema, name) ?? tableNamed(schema, name))?.id ?? []));
     const readable = served(Object.keys(app.resources ?? {}));
     const ceiling = resourceCeiling(app);
     return { readable, writable: ceiling.read.length ? served(ceiling.write) : readable };
@@ -205,7 +204,7 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
     new Set(
       names.map((name) => {
         // Authorization names are exact addresses; never infer a secondary source from a bare name.
-        const table = schema.tables.find((table) => table.id === name);
+        const table = findTable(schema, name);
         if (!table) throw new Error(unknown(name));
         return table.id;
       }),
@@ -231,7 +230,7 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
     }
     return new Map(
       [...readable].map((resource) => {
-        const table = schema.tables.find((table) => table.id === resource)!;
+        const table = findTable(schema, resource)!;
         const all = new Set(table.columns.map((column) => column.name));
         const cap = ceiling?.get(resource) ?? { read: all, write: all };
         const rule = rules && Object.hasOwn(rules, resource) ? rules[resource] : undefined;
@@ -358,7 +357,7 @@ export function appActionGrants(
     if (!Object.hasOwn(roles, role)) continue;
     for (const [resource, labels] of Object.entries(roles[role].actions ?? {})) {
       // Exact addresses, as every grant: a bare name never finds a secondary source.
-      const table = schema.tables.find((candidate) => candidate.id === resource);
+      const table = findTable(schema, resource);
       if (!table || written.has(table.id)) continue;
       const list = granted.get(table.id) ?? [];
       for (const label of labels) {
@@ -445,7 +444,7 @@ export function appExportable(
     const grant = access.roles[role];
     const writes = grant.write === true ? realmResources(app, grant.realm, access.write) : grant.write === false ? [] : grant.write;
     for (const name of [...writes, ...(grant.export ?? [])]) {
-      const table = schema.tables.find((candidate) => candidate.id === name);
+      const table = findTable(schema, name);
       if (table) out.add(table.id);
     }
   }
@@ -464,7 +463,7 @@ export function appDeletable(app: AppDef, schema: DatabaseSchema): ReadonlySet<s
   return new Set(
     Object.entries(app.resources ?? {})
       .filter(([, resource]) => resource.delete)
-      .flatMap(([name]) => (exact ? schema.tables.find((table) => table.id === name) : tableNamed(schema, name))?.id ?? []),
+      .flatMap(([name]) => (exact ? findTable(schema, name) : tableNamed(schema, name))?.id ?? []),
   );
 }
 

@@ -23,7 +23,7 @@ import {
   type ValueKind,
 } from '@mistriwork/engine/shared/computed.js';
 import { parseComputed } from '@mistriwork/engine/shared/computedParse.js';
-import { columnKind, isFlagColumn, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, findTable, isFlagColumn, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
 import { tryResolvePath } from '@mistriwork/engine/shared/viewPaths.js';
 
@@ -49,7 +49,7 @@ export function appComputedRules(
   const exact = grantsByRole(app);
   for (const [name, resource] of Object.entries(app.resources ?? {})) {
     if (!resource.computed) continue;
-    const table = exact ? schema.tables.find((candidate) => candidate.id === name) : tableNamed(schema, name);
+    const table = exact ? findTable(schema, name) : tableNamed(schema, name);
     if (!table) continue;
     const at = `resources "${name}", computed`;
     if (schema.dialect === 'http') {
@@ -130,14 +130,20 @@ export function appComputedRules(
   return { rules, problems };
 }
 
+/* A zone's calendar, made once: making one is most of what working out a day costs, and every request asks. A bad
+   zone throws making it, and is not kept. */
+const dayFormats = new Map<string, Intl.DateTimeFormat>();
 /* The App's day, as a `today` in a query is (app.ts zonedNow): its zone's calendar, else the server's. */
 function dayIn(zone: string | undefined, now: Date): string {
   const local = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   if (!zone) return local;
   try {
-    const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(
-      now,
-    );
+    let format = dayFormats.get(zone);
+    if (!format) {
+      format = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' });
+      if (dayFormats.size < 256) dayFormats.set(zone, format);
+    }
+    const parts = format.formatToParts(now);
     const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
     return `${get('year')}-${get('month')}-${get('day')}`;
   } catch {
@@ -158,7 +164,9 @@ export function computedConstants(
 /**
  * The catalog with each table's computed columns this reader is served, their
  * constants folded: `today` the App's day in its zone, `now` the instant, `me`
- * the reader's email (nobody, for a visitor or a check).
+ * the reader's email (nobody, for a visitor or a check). `symbolic` leaves
+ * them as written, for a catalog kept across requests that folds them into a
+ * copy for each (tenantServedSchema.ts); no statement can be written from it.
  */
 export function withComputed(
   app: AppDef,
@@ -166,11 +174,12 @@ export function withComputed(
   now: Date = new Date(),
   me: string | null = null,
   zone?: string,
+  symbolic = false,
 ): DatabaseSchema {
   if (!Object.values(app.resources ?? {}).some((resource) => resource.computed)) return schema;
   const { rules } = appComputedRules(app, schema);
   if (!rules.size) return schema;
-  const values = computedConstants(app, now, me, zone);
+  const values = symbolic ? undefined : computedConstants(app, now, me, zone);
   return {
     ...schema,
     tables: schema.tables.map((table) =>
@@ -180,7 +189,7 @@ export function withComputed(
             computed: Object.fromEntries(
               Object.entries(rules.get(table.id)!).map(([key, computed]) => [
                 key,
-                { ...computed, expr: foldConstants(computed.expr, values) },
+                { ...computed, expr: values ? foldConstants(computed.expr, values) : computed.expr },
               ]),
             ),
           }

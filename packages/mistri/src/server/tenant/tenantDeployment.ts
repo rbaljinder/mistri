@@ -1,6 +1,7 @@
 import { bindTenantCommands, type TenantCommandExecutionOptions, type TenantCommandOptions } from './tenantCommands.js';
 import { captureHttpCommandFlags, captureHttpTenantFlags } from '../flags/httpRuntime.js';
 import { captureTenantData, denyTenant, TenantContextError, tenantOptions } from '@mistriwork/engine/server/evidence.js';
+import { isCapturedScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import { bindTenantReadRuntime, type TenantReadRuntimeOptions } from './tenantReadRuntime.js';
 import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 import { bindTenantRecordHistory } from './tenantRecordHistory.js';
@@ -243,9 +244,37 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
       Object.freeze(Object.fromEntries(Object.entries(registry).filter(([, command]) => (command.realm ?? 'tenant') === realm)));
     const tenantRegistry = realmRegistry('tenant'),
       platformRegistry = realmRegistry('platform');
+    /* Which commands a context offers depends on the App, this registry, the
+       catalog the context reads and its roles — never on the person — and
+       judging them walked every action and command of the App for each
+       request (a field report's large App: several milliseconds a page). A
+       context's catalog is captured and frozen, and the same object for every
+       request under one role set (tenantReadRuntime.ts), so the answer is kept
+       per catalog and role set; the person's own capabilities are projected
+       afresh below. */
+    const offered = new WeakMap<
+      object,
+      Map<string, { registered: readonly string[]; formCommands: ReturnType<typeof grantedFormCommands> }>
+    >();
+    const offeredTo = (schema: TenantReadContext['schema'], roles: readonly string[]) => {
+      const fixed = isCapturedScopeCatalog(schema);
+      const key = JSON.stringify([...roles]);
+      let byRoles = fixed ? offered.get(schema) : undefined;
+      const kept = byRoles?.get(key);
+      if (kept) return kept;
+      const made = {
+        registered: Object.freeze(servedCommandIds(visibleBusinessCommandActions(requests.app, tenantRegistry, schema, roles))),
+        formCommands: Object.freeze(grantedFormCommands(requests.app, tenantRegistry, schema, roles, 'tenant')),
+      };
+      if (fixed) {
+        if (!byRoles) offered.set(schema, (byRoles = new Map()));
+        if (byRoles.size >= 64) byRoles.delete(byRoles.keys().next().value!);
+        byRoles.set(key, made);
+      }
+      return made;
+    };
     readOptions.presentation = (principal: TenantReadContext['principal'], schema: TenantReadContext['schema']) => {
-      const registered = servedCommandIds(visibleBusinessCommandActions(requests.app, tenantRegistry, schema, principal.roles));
-      const formCommands = grantedFormCommands(requests.app, tenantRegistry, schema, principal.roles, 'tenant');
+      const { registered, formCommands } = offeredTo(schema, principal.roles);
       return projectTenantCapabilities({
         app: requests.app,
         ownership: requests.ownership,

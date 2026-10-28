@@ -53,7 +53,7 @@ interface BriefCommand {
 
 export interface Brief {
   name: string;
-  theme: 'lumen' | 'mono' | 'sage';
+  theme: 'workshop' | 'lumen' | 'mono' | 'sage';
   /** An icon name for the App's mark; absent means the scaffold picks one. */
   logo?: string;
   entities: BriefEntity[];
@@ -65,7 +65,7 @@ export interface Brief {
 export class BriefRefusal extends Error {}
 
 const NAME = /^[a-z][a-z0-9_]*$/;
-const THEMES = ['lumen', 'mono', 'sage'] as const;
+const THEMES = ['workshop', 'lumen', 'mono', 'sage'] as const;
 /** The words that begin a SQL statement's name or are reserved in the three engines: a table so named needs quoting nobody wrote. */
 const RESERVED = new Set(['order', 'group', 'user', 'table', 'select', 'index', 'transaction', 'check', 'default', 'column', 'references']);
 
@@ -98,7 +98,7 @@ function readBrief(raw: unknown): Brief {
   const app = record(root.app, '"app"');
   const name = typeof app.name === 'string' ? app.name.trim() : '';
   if (!name || !/[a-z]/i.test(name)) throw new BriefRefusal('"app.name" needs a name with a letter in it.');
-  const theme = (app.theme ?? 'lumen') as string;
+  const theme = (app.theme ?? 'workshop') as string;
   if (!(THEMES as readonly string[]).includes(theme))
     throw new BriefRefusal(`"app.theme" is "${theme}"; the built-in looks are ${THEMES.join(', ')}.`);
   if (app.logo !== undefined && !isAppIcon(app.logo))

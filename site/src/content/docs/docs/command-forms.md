@@ -33,7 +33,7 @@ Its command, `reportIssue`, says `targets: 'none'`: it names no record and inser
 
 - A room at `/report` that `nav` and `home` may name, shown only to roles granted its command.
 - One `step` per page of a stepper (without steps, one page), each asking the command's inputs it names, checked before sending, in fields that stay quiet until touched: a clean outline at rest, one focus ring on the field you are in, a danger edge on the one that is wrong, and "(optional)" beside a field that may be left empty. A form with steps shows "Step 2 of 4" beside a thin progress bar, in either style. At a desk, a form with steps drawn as a page lists its steps beside it: the ones done are links back, each with what it said in a line.
-- One filled action, in the theme's primary-action color (`colors.primary`: the ink in Lumen, the accent in Mono and Sage, or your own), Back as a quiet word (on a phone, a stepped form's actions rest at the foot of the screen); after submitting, the `done` screen with **Fill in another**.
+- One filled action, in the theme's primary-action color (`colors.primary`: the ink in Lumen, the accent in Workshop, Mono and Sage, or your own), Back as a quiet word (on a phone, a stepped form's actions rest at the foot of the screen); after submitting, the `done` screen with **Fill in another**.
 
 ## When to use it, and when not
 

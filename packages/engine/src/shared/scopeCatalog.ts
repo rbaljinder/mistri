@@ -88,6 +88,12 @@ export function isCapturedScopeCatalog(schema: DatabaseSchema): boolean {
   return !!schema && typeof schema === 'object' && capturedCatalogs.has(schema);
 }
 
+/** Whether nothing can change `schema` any more: a catalog this module
+ * captured, or one derived from a captured one that it froze all the way down. */
+export function isFixedScopeCatalog(schema: DatabaseSchema): boolean {
+  return !!schema && typeof schema === 'object' && (capturedCatalogs.has(schema) || frozenDerived.has(schema));
+}
+
 /** Deeply freeze a catalog derived from a captured one, and remember that this
  * module froze it: a later capture of it is then made once and kept. */
 export function freezeDerivedCatalog(schema: DatabaseSchema): DatabaseSchema {

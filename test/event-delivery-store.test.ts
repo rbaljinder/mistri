@@ -202,11 +202,22 @@ for (const engine of deliveryEngines)
         const claim = (await store.claim(time))!;
         assert.equal(claim.attempt, i);
         assert.equal(claim.envelope.ordinal, 0);
+        const held = await store.standing(time);
+        assert.ok(held.next !== null && held.next > time, 'a held lease ends ahead');
         assert.ok(await store.complete(claim, 'rejected', 'rejected', time + 1));
         assert.equal(await store.claim(time + 2), undefined);
+        const standing = await store.standing(time + 2);
+        assert.equal(standing.at, time + 2);
+        assert.ok(Object.isFrozen(standing) && standing.waitingSince !== null);
+        if (i < 3) {
+          // The retry is ahead: the jobs host sleeps until it, not on a timer.
+          assert.equal(standing.failed, false);
+          assert.equal(standing.next, time + 1 + Math.min(20, 10 * 2 ** (i - 1)));
+        }
         time += 1 + Math.min(20, 10 * 2 ** (i - 1));
       }
       assert.equal(await store.claim(time), undefined);
+      assert.equal((await store.standing(time)).failed, true);
       const failures = await store.inspect('failed');
       assert.equal(failures.length, 1);
       assert.equal(failures[0].attempts, 3);

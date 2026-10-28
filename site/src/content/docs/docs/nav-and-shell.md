@@ -70,6 +70,6 @@ With `notify` rules on a resource, a bell in the bar counts unread notices and `
 ## Related
 
 - [Design the navigation and shell](/docs/compose-shell/): how many groups, which placement, and what to leave out.
-- [Looks](/docs/looks/): the three built-in looks and your own.
+- [Looks](/docs/looks/): the four built-in looks and your own.
 - [Public pages](/docs/landing-pages/): the front door a signed-out visitor's `home` opens.
 - [ui reference](/docs/dsl-ui/): every shell key, generated from the schema.

@@ -12,6 +12,7 @@ import type {
   EventDeliveryOutcome,
   EventDeliveryPolicy,
   EventDeliveryPruneResult,
+  EventDeliveryStanding,
   EventDeliveryState,
   EventDiscovery,
 } from './eventDeliveryTypes.js';
@@ -41,6 +42,10 @@ export interface EventDeliveryStore {
   /** Private bounded diagnostics: no payload, actor, token or error text. */
   inspect(state?: EventDeliveryState, afterEventId?: string, limit?: number): Promise<readonly EventDeliveryInspection[]>;
   attempts(eventId: string): Promise<readonly EventDeliveryAttemptInspection[]>;
+  /** Where the destination stands, in one read and without verifying any row: the jobs host's readiness, and how
+   * long it may wait before a delivery falls due (jobHost.ts). Inspecting every waiting row for it verified each
+   * against its receipt, its siblings and its history, every few seconds. */
+  standing(now: number): Promise<EventDeliveryStanding>;
   /** Operator maintenance: a failed or unknown delivery goes back to retry
    * now, with a fresh attempt budget, recorded as a history row naming the
    * operator. Delivered and in-flight deliveries refuse, and so does a

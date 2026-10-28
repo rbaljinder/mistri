@@ -21,6 +21,7 @@ export const RECIPE_WORDS = {
     underline: 'The current entry in the top bar is marked by a 3px rule of the menu’s accent under it, with no fill.',
     pill: 'Every row is a rounded pill with room around it; the current one is filled in the accent’s tint, its word in the accent.',
     quiet: 'The current entry is barely shaded in the menu’s ink, with no accent at all: the calmest mark.',
+    slot: 'The current entry is an ink block, as inverted, with a 3px marker of the menu’s accent beside it, like a tool’s slot on a pegboard.',
   },
   bar: {
     plain: 'The top bar is the menu’s ground with a hairline under it.',
@@ -89,6 +90,8 @@ export const RECIPE_WORDS = {
   buttons: {
     accent: 'The primary button is filled in the accent; the rest are quiet.',
     raised: 'Secondary buttons are white keys with a hairline and a small shadow, raised off the page.',
+    keyed:
+      'Buttons are hard-edged keys: the primary one filled in the accent with an ink edge, like a hazard tag, the rest edged in the ink.',
   },
   links: {
     plain: 'A link to another record is in the link color without an underline.',

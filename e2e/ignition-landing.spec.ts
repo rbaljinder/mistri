@@ -12,6 +12,7 @@
 import { expect, test, type Page } from './support/harness';
 import { DEALER_NAMES, DEALERS, IGNITION_SKIP, startIgnition, type IgnitionFixture } from './support/ignitionServer';
 import { LENDER, offeredContexts } from './support/ignitionSession';
+import { isSelection, leaseOfSelection } from './support/tenantSelection';
 
 const headline = (page: Page) => page.getByRole('heading', { level: 1, name: 'Finance your next car' });
 
@@ -77,11 +78,12 @@ test.describe("Ignition landing and the lender's realm", () => {
     const signIn = page.locator('.signin');
     await signIn.getByLabel('Email').fill(north.email);
     await signIn.getByLabel('Password').fill(north.password);
-    const opened = page.waitForResponse((reply) => new URL(reply.url()).pathname === '/api/tenant/context/open');
+    // A sole membership is entered as the page loads (/api/tenant/enter), its lease beside discovery.
+    const opened = page.waitForResponse(isSelection);
     await signIn.getByRole('button', { name: 'Sign in', exact: true }).click();
     /* A native sign-in grants nothing on its own: authority is the membership.
        This account has one, so it is entered without the chooser, said by its name. */
-    expect((await opened).request().url()).toContain(`tenant=${DEALERS.north}`);
+    expect((await leaseOfSelection(await opened)).tenantId).toBe(DEALERS.north);
     await expect(page.getByRole('button', { name: `Dealer: ${DEALER_NAMES[DEALERS.north]}`, exact: true })).toBeVisible();
     await expect(page.getByRole('list', { name: 'Available dealers' })).toHaveCount(0);
     await expect(page.locator('.front')).toHaveCount(0);

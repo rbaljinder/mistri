@@ -105,7 +105,34 @@ export const refusalReasonsBelow = (error: unknown): string[] => refusalReasons(
  * the person who started the server only: never an HTTP answer.
  */
 export function startupReport(error: unknown): string {
-  return [refusalHeadline(error), ...refusalReasonsBelow(error).map((reason) => `  because: ${reason}`)].join('\n');
+  return [
+    refusalHeadline(error),
+    ...refusalReasonsBelow(error).map((reason) => `  because: ${reason}`),
+    ...faultFrames(error).map((frame) => `  ${frame}`),
+  ].join('\n');
+}
+
+/* A TypeError, a ReferenceError or a RangeError is a fault in the code that read the App, not a refusal of what its
+   author wrote: its sentence ("Cannot read properties of undefined (reading 'realm')") names nothing to go and fix,
+   and was printed with its stack swallowed (a field report). Its first frames are said beneath it, the file and line
+   a fix starts from. A refusal, however deep, is said as its sentences alone. */
+const FAULTS = new Set(['TypeError', 'ReferenceError', 'RangeError']);
+/** Where an unexpected fault in `error` (or the chain under it) happened: its first stack frames, or none for a refusal.
+    Read by name, not `instanceof`: an App module's errors are another realm's. */
+export function faultFrames(error: unknown, most = 6): string[] {
+  const seen = new Set<unknown>();
+  for (let at: unknown = error, depth = 0; at !== null && typeof at === 'object' && !seen.has(at) && depth < 8; depth++) {
+    seen.add(at);
+    const { name, stack } = at as { name?: unknown; stack?: unknown };
+    if (typeof name === 'string' && FAULTS.has(name) && typeof stack === 'string')
+      return stack
+        .split('\n')
+        .filter((line) => /^\s+at /.test(line))
+        .slice(0, most)
+        .map((line) => line.trim());
+    at = refusalCause(at) ?? (at as { cause?: unknown }).cause;
+  }
+  return [];
 }
 
 /* What a refused request's own caller may be told about why: a sentence

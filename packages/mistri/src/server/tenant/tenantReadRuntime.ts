@@ -4,7 +4,7 @@ import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape,
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { assertScopeCatalog, captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { authorizeResources } from '../app/appAccess.js';
+import { authorizeResources, markStableGrant, type ResourceAccess } from '../app/appAccess.js';
 import { appResourceCatalog } from '../app/appResources.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import type { Identity } from '../auth/auth.js';
@@ -26,7 +26,7 @@ import { assertStructuredReadFilter, ResourceReadError } from '@mistriwork/engin
 import { PathError } from '@mistriwork/engine/shared/viewPaths.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { tenantRetirement } from './tenantRetirement.js';
-import { checkTenantInvocation, revalidateTenantInvocation, type TenantInvocationGuard } from './tenantInvocation.js';
+import { checkTenantInvocation, isAdmittedAgain, revalidateTenantInvocation, type TenantInvocationGuard } from './tenantInvocation.js';
 import type { TenantCapabilities } from './tenantCapabilities.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
 import type { AdmissionCache } from './tenantAdmissionCache.js';
@@ -42,6 +42,9 @@ import { readLocale } from '../app/readerLocale.js';
 const liveRows = new WeakMap<object, RowScope>();
 
 /** The row scope `context` reads under, for live sync's filter: undefined for anything this runtime did not make. */
+/** Test-only: how many role-set read grants a runtime resolved rather than reused. */
+export const tenantReadCounters = { grants: 0 };
+const READ_GRANTS = 64;
 export const tenantLiveRowsOf = (context: object): RowScope | undefined => liveRows.get(context);
 
 export interface TenantReadContext {
@@ -54,6 +57,9 @@ export interface TenantReadContext {
   readonly zone?: string;
   /** This member's own locale, where `ui.locale` reads one (readerLocale.ts); resolved with the tenant's and the App's. */
   readonly locale?: string;
+  /** `work`, its reads of this context on one snapshot (tenantReadSource.ts `together`): for a request that asks
+      many at once — a composed record page, a page's boot, a post-write refresh. */
+  readonly together?: <T>(work: () => Promise<T>) => Promise<T>;
 }
 export interface TenantReadRuntimeOptions<Request> {
   readonly app: AppDef;
@@ -173,6 +179,31 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
   )
     return denyTenant();
   const presentation = raw.presentation as TenantReadRuntimeOptions<Request>['presentation'];
+  /* A role set's read grant, resolved once for this runtime and kept: every
+     request resolved and filtered it afresh, though its answer depends on
+     nothing but the App, this catalog and the roles, all fixed here — a field
+     report's profile put it among the largest costs of a page. Keyed by the
+     role set alone (sorted: a grant is a union, so order changes nothing),
+     never by the person or the tenant: who reads which rows is the scope,
+     composed per request and set beside the kept grant there, never kept in
+     it. Marked stable, so pruning and checks over it are kept by identity
+     too (columnGrants.ts); nothing changes these sets after they are made.
+     Bounded, oldest out first: a role set is the App's, but a deployment
+     can still be handed many. */
+  const readGrants = new Map<string, ResourceAccess>();
+  const readGrant = (roles: readonly string[]): ResourceAccess => {
+    const set = [...new Set(roles)].sort();
+    const key = JSON.stringify(set);
+    const kept = readGrants.get(key);
+    if (kept) return kept;
+    tenantReadCounters.grants++;
+    const grant = markStableGrant(
+      tenantVisibleFields(ownership, { ...resolveAppAccess(app, ownership.schema, set), writable: new Set<string>() }),
+    );
+    if (readGrants.size >= READ_GRANTS) readGrants.delete(readGrants.keys().next().value!);
+    readGrants.set(key, grant);
+    return grant;
+  };
   const verify = raw.verifySession as TenantReadRuntimeOptions<Request>['verifySession'];
   const membershipRows = raw.resolveMembershipRows as TenantReadRuntimeOptions<Request>['resolveMembershipRows'];
   const authoredRows = raw.resolveRows as TenantReadRuntimeOptions<Request>['resolveRows'];
@@ -334,7 +365,6 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
               const rows = composeTenantReadScope(ownership, principal, member, authored);
               // No snapshot yet: whatever reads next, an operation or the release fence, revalidates the membership first.
               await revalidateSession();
-              const access = resolveAppAccess(app, ownership.schema, [...acting.roles]);
               const adapter: Adapter = Object.freeze({
                 dialect: 'sqlite',
                 introspect: async () => ownership.schema,
@@ -367,11 +397,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                   return adapter;
                 },
               };
-              const guarded = authorizeResources(
-                resources,
-                tenantVisibleFields(ownership, { ...access, rows, writable: new Set() }),
-                assertActive,
-              );
+              const guarded = authorizeResources(resources, { ...readGrant([...acting.roles]), rows }, assertActive);
               const reader = guarded.adapter;
               const data = Object.freeze<ScopedReads>({
                 query: (input) =>
@@ -415,15 +441,25 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
               });
               const schema = captureScopeCatalog(guarded.schema);
               const capabilities = presentation ? captureTenantData(presentation(principal, schema)) : undefined;
-              /* This tenant's zone, read under this context's own scope: no other context can be handed it (readerZone.ts). */
-              const zone = await readZone(app.ui, schema, data.query);
-              /* This member's own locale, read the same way: under this context's scope, from their row. */
-              const locale = await readLocale(app.ui, schema, data.query);
+              /* This tenant's zone, read under this context's own scope: no other context can be handed it (readerZone.ts).
+                 This member's own locale, read the same way: under this context's scope, from their row. Neither
+                 reads the other's answer, so both are asked at once, and both are settled before either failure
+                 is told: no read of this context is left running behind it. */
+              const together = <R>(work: () => Promise<R>): Promise<R> => source.together(principal, work);
+              /* On one snapshot between them, as they are asked at once. */
+              const [zoneRead, localeRead] = await together(() =>
+                Promise.allSettled([readZone(app.ui, schema, data.query), readLocale(app.ui, schema, data.query)]),
+              );
+              if (zoneRead.status === 'rejected') throw zoneRead.reason;
+              if (localeRead.status === 'rejected') throw localeRead.reason;
+              const zone = zoneRead.value,
+                locale = localeRead.value;
               assertActive();
               const context = Object.freeze({
                 principal,
                 schema,
                 data,
+                together,
                 ...(capabilities === undefined ? {} : { capabilities }),
                 ...(zone === undefined ? {} : { zone }),
                 ...(locale === undefined ? {} : { locale }),
@@ -462,7 +498,9 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
               accepting = false;
               await Promise.allSettled([...pending]);
               if (callbackFailed || failed) return denyTenantFor(failure);
-              await revalidate();
+              // A first admission its owner makes again (tenantInvocationAdmittedAgain): that one is the fence.
+              if (isAdmittedAgain(guard)) await revalidateSession();
+              else await revalidate();
               if (fault) throw fault;
               return output as T;
             } finally {

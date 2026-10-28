@@ -117,6 +117,7 @@ MISTRI_ACCOUNT_PASSWORD=… npx @mistriwork/mistri tenant grant ops@lender.examp
 
 - **`auth.store`** is a PostgreSQL database of its own, as `"${MISTRI_AUTH_STORE}"`, never the business database: a start refuses that. `migratePostgresAuthStore` makes its schema once.
 - **`MISTRI_AUDIT_KEY`** (32 bytes or more), with support access: set for provisioning and every start, and kept for good beside the backups. Without it the support audit's past cannot be verified.
+- **A restart** of the same build on an unchanged PostgreSQL catalog skips the catalog checks: `migrate stores up` makes a validation record, and each start of a build writes down what it checked. A changed catalog, a missing record, `mistri dev` and `mistri check` check in full. The startup line says which happened.
 - **`init` and `grant`** each run again safely: a tenant already there is left, and an address that already has an account is granted, not remade.
 - **Name the proxy here too**: the tenant host takes `--trust-proxy` (or `--trust-proxy-hops`, `--trust-proxy-cloudflare`) as the ordinary host does, for its sign-in, its App API and its public forms and reads, so each visitor behind the balancer keeps a rate limit of their own and the human check is told the visitor's address, not the proxy's.
 

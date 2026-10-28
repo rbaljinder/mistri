@@ -156,7 +156,11 @@ try {
     await page.goto(origin + '/components/?path=/story/rooms-list--room');
     const preview = page.frameLocator('#storybook-preview-iframe');
     await preview.locator('#storybook-root table').first().waitFor({ state: 'visible' });
-    assert.equal(await preview.locator('html').getAttribute('data-visual-theme'), 'lumen', 'The library opens in Lumen, the default look');
+    assert.equal(
+      await preview.locator('html').getAttribute('data-visual-theme'),
+      'workshop',
+      'The library opens in Workshop, the default look',
+    );
     await page.goto(origin + '/components/?path=/story/dashboards-stat-cards--trends-and-marks&globals=look:sage');
     await preview.locator('#storybook-root .home-cards').waitFor({ state: 'visible' });
     assert.equal(await preview.locator('html').getAttribute('data-visual-theme'), 'sage');

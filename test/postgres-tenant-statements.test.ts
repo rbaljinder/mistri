@@ -36,6 +36,7 @@ import { prepareTenantStartup } from '../packages/mistri/src/server/tenant/tenan
 import { liveSkip } from './live.js';
 import { IGNITION_DIR, openIgnitionLending } from './support/ignitionLendingFixture.js';
 import { countStatements, type PgClientClass } from './support/sqlCount.js';
+import { startLatencyProxy, type LatencyProxy } from '../e2e/support/latencyProxy.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 /* A pooled connection's session SETs are the pool's, paid once per physical
@@ -54,6 +55,10 @@ async function reservePort(): Promise<number> {
   return address.port;
 }
 type Answer = { status: number; headers: Headers; text: string; body: Record<string, unknown> };
+const object = (value: unknown): Record<string, unknown> => {
+  assert.ok(value && typeof value === 'object' && !Array.isArray(value));
+  return value as Record<string, unknown>;
+};
 function deferred() {
   let resolve!: () => void;
   return {
@@ -64,8 +69,8 @@ function deferred() {
   };
 }
 
-/** Ignition served in this process, two dealer admins each in their own dealership. */
-async function deploy(t: TestContext) {
+/** Ignition served in this process, two dealer admins each in their own dealership; through `relay` when it is given. */
+async function deploy(t: TestContext, relay?: LatencyProxy) {
   const lending = await openIgnitionLending(t, 'postgres', { events: true });
   const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-statements-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -105,9 +110,10 @@ async function deploy(t: TestContext) {
     );
   }
 
+  const routed = (url: string) => (relay ? relay.route(url) : url);
   const connections: ConnectionConfig[] = [
-    { id: 'loans', name: 'loans', url: lending.source.url!, source: 'config', writable: true },
-    { id: 'applicants', name: 'applicants', url: lending.platformSources[0].url!, source: 'config' },
+    { id: 'loans', name: 'loans', url: routed(lending.source.url!), source: 'config', writable: true },
+    { id: 'applicants', name: 'applicants', url: routed(lending.platformSources[0].url!), source: 'config' },
   ];
   const prepared = await prepareTenantStartup({
     loaded,
@@ -185,7 +191,7 @@ async function deploy(t: TestContext) {
   /** The dealership's own applications, read on the control connection. */
   const own = async (tenant: string) =>
     (await lending.rows('SELECT id FROM loan_application WHERE tenant_id = ? ORDER BY id', [tenant])).map((row) => String(row.id));
-  return { counter, enter, own };
+  return { counter, enter, own, call };
 }
 
 /** Hold the first scoped read of `loan_application` on a tenant reader until released. */
@@ -237,6 +243,68 @@ const ids = (reply: Answer) => {
   return (reply.body.rows as Array<Record<string, unknown>>).map((row) => String(row.id)).sort();
 };
 
+/* What each statement is for. A message may carry several — a snapshot's BEGIN carries its relation locks, the
+   catalog digest when the attestation is due, and the membership — so a message is split where a `;` begins the
+   next statement, and each statement counted for its purpose. */
+const PURPOSES = ['transaction', 'pin', 'catalog', 'membership', 'store', 'business', 'other'] as const;
+type Purpose = (typeof PURPOSES)[number];
+const purposeOf = (statement: string): Purpose =>
+  /^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i.test(statement)
+    ? 'transaction'
+    : /^LOCK TABLE\b/i.test(statement)
+      ? 'pin'
+      : /mistri\."tenant_(tenant|membership)"/.test(statement)
+        ? 'membership'
+        : /\b(information_schema|pg_catalog|pg_class|pg_attribute|pg_namespace|pg_constraint)\b/.test(statement)
+          ? 'catalog'
+          : /\bmistri\.|pg_advisory/.test(statement)
+            ? 'store'
+            : /"public"\./.test(statement)
+              ? 'business'
+              : 'other';
+const statementsOf = (message: string): string[] =>
+  message
+    .split(/;\s+(?=(?:BEGIN|COMMIT|ROLLBACK|LOCK|SELECT|WITH|INSERT|UPDATE|DELETE|SAVEPOINT|RELEASE|SET)\b)/)
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+interface Cost {
+  messages: number;
+  transactions: number;
+  /** Round trips, counted off the wire: what one connection sent together before the server said it was ready. */
+  flights: number;
+  /** Flights that were only a membership read: a round trip of its own, where it could ride a BEGIN. */
+  aloneMembership: number;
+  statements: Record<Purpose, number>;
+}
+const costOf = (messages: readonly string[], flights: number): Cost => {
+  const statements = Object.fromEntries(PURPOSES.map((purpose) => [purpose, 0])) as Record<Purpose, number>;
+  let transactions = 0;
+  for (const message of messages) {
+    for (const statement of statementsOf(message)) {
+      statements[purposeOf(statement)] += 1;
+      if (/^BEGIN\b/i.test(statement)) transactions += 1;
+    }
+  }
+  return { messages: messages.length, transactions, flights, aloneMembership: 0, statements };
+};
+const sumOf = (costs: readonly Cost[]): Cost =>
+  costs.reduce((total, cost) => ({
+    messages: total.messages + cost.messages,
+    transactions: total.transactions + cost.transactions,
+    flights: total.flights + cost.flights,
+    aloneMembership: total.aloneMembership + cost.aloneMembership,
+    statements: Object.fromEntries(PURPOSES.map((purpose) => [purpose, total.statements[purpose] + cost.statements[purpose]])) as Record<
+      Purpose,
+      number
+    >,
+  }));
+const sayCost = (cost: Cost) =>
+  `${cost.messages} messages, ${cost.flights} flights, ${cost.transactions} transactions (` +
+  PURPOSES.filter((purpose) => cost.statements[purpose])
+    .map((purpose) => `${purpose} ${cost.statements[purpose]}`)
+    .join(', ') +
+  ')';
+
 describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres', LIVE) }, () => {
   test('a tenant list and a metadata read stay within their statement budgets', async (t) => {
     const f = await deploy(t),
@@ -267,12 +335,13 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
           console.log(sql.replace(/\s+/g, ' ').slice(0, 160));
       }
     }
-    /* A snapshot is three messages, each one round trip: BEGIN with the
-       relation locks and the catalog digest, the membership, and COMMIT,
-       which the caller does not wait for. The login's admission is kept from
-       the reads before (tenantAdmissionCache.ts), so a list is three
-       snapshots: one each for its rows and its count, and the release
-       fence's, so nine messages and its two reads. A metadata read is the
+    /* A snapshot is two messages: BEGIN with the relation locks (the
+       catalog digest when the attestation is due) and the membership, and
+       COMMIT, which the caller does not wait for; a read rides behind the
+       BEGIN. The login's admission is kept from the reads before
+       (tenantAdmissionCache.ts), so a list is three snapshots: one each for
+       its rows and its count, and the release fence's, so six messages and
+       its two reads. A metadata read is the
        release fence and, where the policy names a tenant's intake or public
        address (Ignition's dealer intake), that address read fresh:
        BEGIN, the address, the check that no other tenant holds it, and COMMIT.
@@ -285,7 +354,7 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
       0,
       'an unchanged catalog is neither described nor its store attested again',
     );
-    assert.ok(rows.business.length <= 11, `a tenant list is ${rows.business.length} business messages`);
+    assert.ok(rows.business.length <= 8, `a tenant list is ${rows.business.length} business messages`);
     assert.ok(metadata.business.length <= 3 + 4, `a tenant metadata read is ${metadata.business.length} business messages`);
     // The auth store: the session resolved once per request, then its row observed at each fence.
     assert.ok(rows.auth.length <= 20, `a tenant list is ${rows.auth.length} auth statements`);
@@ -295,6 +364,252 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
       1,
       'the cookie resolved to its session once in the request',
     );
+  });
+
+  test('a list, a record page and a save stay within their budgets, by purpose and by round trip', async (t) => {
+    /* Through a relay that holds nothing (delay 0), only to count each connection's flights: on a database 23 ms
+       away each flight is 23 ms, so a flight is what a request's cost is measured in, not a statement. */
+    const relay = await startLatencyProxy(LIVE!, 0);
+    t.after(() => relay.close());
+    const f = await deploy(t, relay),
+      north = await f.enter('north');
+    const lead = (n: number) => ({ id: `north-motors:lead:000${n}` });
+    const page = (n: number) => ({ page: 'lead', key: lead(n), rows: 10 });
+    /** The requests `asked` makes together, each costed on its own path; flights are the whole burst's. */
+    const burst = async (asked: () => Promise<Answer[]>, paths: readonly string[]) => {
+      f.counter.clear();
+      const since = Date.now();
+      const replies = await asked();
+      for (const reply of replies) assert.equal(reply.status, 200, reply.text);
+      // A COMMIT is not waited on: let the last one land before its flight is counted.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const flown = new Map<string, string[]>();
+      for (const statement of relay.statements(since)) {
+        const flight = `${statement.connection}:${statement.flight}`;
+        flown.set(flight, [...(flown.get(flight) ?? []), ...statementsOf(statement.text)]);
+      }
+      const aloneMembership = [...flown.values()].filter((sent) => sent.every((statement) => purposeOf(statement) === 'membership')).length;
+      const costs = paths.map((path) =>
+        costOf(
+          f.counter.on(path, 'postgres').filter((sql) => !SESSION.test(sql)),
+          0,
+        ),
+      );
+      return { replies, cost: { ...sumOf(costs), flights: flown.size, aloneMembership } };
+    };
+    const prepare = (n: number, command = 'qualifyLead') =>
+      north.read('/api/commands/prepare', { command, commandVersion: 1, key: lead(n) });
+    const save = async (n: number) => {
+      const prepared = await burst(async () => [await prepare(n)], ['/api/commands/prepare']);
+      const expectedVersion = (prepared.replies[0]!.body as { expectedVersion?: number }).expectedVersion;
+      const executed = await burst(
+        async () => [
+          await north.read('/api/commands/execute', {
+            command: 'qualifyLead',
+            commandVersion: 1,
+            key: lead(n),
+            expectedVersion,
+            idempotencyKey: `tenant-statements-qualify-000${n}`,
+            input: {},
+          }),
+        ],
+        ['/api/commands/execute'],
+      );
+      assert.equal(executed.replies[0]!.body.status, 'applied', executed.replies[0]!.text);
+      // What the page asks once the save has answered: the record again, the converted check, the next verb.
+      const settled = await burst(
+        () =>
+          Promise.all([
+            north.read('/api/pages/compose', page(n)),
+            north.read('/api/run', { q: `lead id = "${lead(n).id}" and status = converted`, limit: 1, offset: 0, count: 'none' }),
+            prepare(n, 'convertLead'),
+          ]),
+        ['/api/pages/compose', '/api/run', '/api/commands/prepare'],
+      );
+      return {
+        prepare: prepared.cost,
+        execute: executed.cost,
+        settle: settled.cost,
+        total: sumOf([prepared.cost, executed.cost, settled.cost]),
+      };
+    };
+    /** A create: the lead `save` qualified converted into an application, the command's execute costed alone. */
+    const convert = async (n: number) => {
+      const prepared = await prepare(n, 'convertLead');
+      assert.equal(prepared.status, 200, prepared.text);
+      const executed = await burst(
+        async () => [
+          await north.read('/api/commands/execute', {
+            command: 'convertLead',
+            commandVersion: 1,
+            key: lead(n),
+            expectedVersion: (prepared.body as { expectedVersion?: number }).expectedVersion,
+            idempotencyKey: `tenant-statements-convert-000${n}`,
+            input: {},
+          }),
+        ],
+        ['/api/commands/execute'],
+      );
+      assert.equal(executed.replies[0]!.body.status, 'applied', executed.replies[0]!.text);
+      return executed.cost;
+    };
+    // Warm: the readers' connections, the writer's, and the catalog's attestation are each paid once, on first use.
+    await burst(async () => [await north.read('/api/run', list)], ['/api/run']);
+    await burst(async () => [await north.read('/api/pages/compose', page(1))], ['/api/pages/compose']);
+    await save(1);
+    await convert(1);
+
+    const listed = (await burst(async () => [await north.read('/api/run', list)], ['/api/run'])).cost;
+    const record = (await burst(async () => [await north.read('/api/pages/compose', page(2))], ['/api/pages/compose'])).cost;
+    const saved = await save(2);
+    const created = await convert(2);
+    t.diagnostic(`tenant list: ${sayCost(listed)}`);
+    t.diagnostic(`record page: ${sayCost(record)}`);
+    for (const step of ['prepare', 'execute', 'settle', 'total'] as const) t.diagnostic(`save ${step}: ${sayCost(saved[step])}`);
+    t.diagnostic(`create execute: ${sayCost(created)}`);
+
+    /* A member's snapshot is BEGIN, its locks and its membership in one message, the read sent behind it in the same
+       flight, and a COMMIT no one waits for (tenantReadSource.ts `on`): no membership read is a round trip of its own. */
+    for (const [name, cost] of [
+      ['list', listed],
+      ['record page', record],
+      ['save', saved.total],
+    ] as const)
+      assert.equal(cost.aloneMembership, 0, `${name}: a membership read went alone`);
+    /* A list is its rows' snapshot, its count's and its release fence's: three transactions, eight messages
+       (each BEGIN carrying its membership, two reads, three COMMITs). It was eleven, each membership a message. */
+    assert.ok(listed.transactions <= 3, `a tenant list is ${listed.transactions} transactions`);
+    assert.ok(listed.messages <= 8, `a tenant list is ${listed.messages} messages`);
+    assert.ok(listed.flights <= 7, `a tenant list is ${listed.flights} flights`);
+    /* A record page: its zone, its sections, the release fence of their reads, the actions' advice in one snapshot
+       with every guard sent at once, and that advice's own fence — no second admission after it
+       (tenantContexts.ts, availability). It was forty-six messages in eleven transactions. */
+    assert.ok(record.transactions <= 10, `a record page is ${record.transactions} transactions`);
+    assert.ok(record.statements.membership <= 10, `a record page reads the membership ${record.statements.membership} times`);
+    assert.ok(record.messages <= 34, `a record page is ${record.messages} messages`);
+    assert.ok(record.flights <= 24, `a record page is ${record.flights} flights`);
+    /* A save: prepare, execute (one pipelined transaction), and what the page reads after it. It was seventy-six
+       messages in sixteen transactions. */
+    assert.ok(saved.execute.transactions === 1, `an execute is ${saved.execute.transactions} transactions`);
+    /* An update's execute is three round trips, the floor for a handler that reads what its UPDATE answers: the
+       opening (BEGIN with its fence, the receipt lookup, the target's lock and row), the UPDATE with the row read back
+       behind it, and the receipt with the COMMIT. */
+    assert.ok(saved.execute.flights <= 3, `an update's execute is ${saved.execute.flights} flights`);
+    /* A create (convertLead): the opening; the handler's own two reads, each waiting on the one before (the vehicle by
+       its stock number, then its applications); the INSERT; the new row's lock and read back with every reference it
+       makes checked in the same flight (scopedTransaction.ts); the lead read once, in full, under the lock the
+       opening took, which answers its machine, its audit and its guard (keyRows.ts `widen`); its UPDATE with the read
+       back; and the receipt, its event and the notification with the COMMIT. It was twenty-three: each reference two
+       round trips of its own, the lead read four times. */
+    assert.equal(created.transactions, 1, `a create's execute is ${created.transactions} transactions`);
+    assert.ok(created.flights <= 8, `a create's execute is ${created.flights} flights`);
+    assert.ok(saved.total.transactions <= 15, `a save is ${saved.total.transactions} transactions`);
+    assert.ok(saved.total.messages <= 62, `a save is ${saved.total.messages} messages`);
+    assert.ok(saved.total.flights <= 40, `a save is ${saved.total.flights} flights`);
+    assert.equal(record.statements.catalog + listed.statements.catalog, 0, 'a warm catalog is not described again');
+  });
+
+  /* A first page past who-am-I was three requests one after another — the person's tenants, a lease, the page's boot
+     on it — each its own admission (a field report: 0.6 s of a 2.4 s list on a database 23 ms away). Someone in one
+     dealership is entered with all three in one (`/api/tenant/enter`, shared/tenantBoot.ts). Timed at two delays of
+     the relay, a request's serial round trips are the difference over a round trip, whatever else it does. */
+  test("a first page's entry is one request, its round trips fewer than the three it folds", async (t) => {
+    const relay = await startLatencyProxy(LIVE!, 0);
+    t.after(() => relay.close());
+    const f = await deploy(t, relay),
+      north = await f.enter('north');
+    const identity = { cookie: north.cookie, 'x-mistri-account': north.accountId };
+    const record = `/ignition/leads/${encodeURIComponent('north-motors:lead:0002')}`;
+    /* Each lease a step opens, let go once it is timed, as a page leaving lets its own go: the account's contexts are
+       bounded, and a held one is not given up for another. */
+    const opened: Record<string, unknown>[] = [];
+    const letGo = async () => {
+      for (const lease of opened.splice(0))
+        await f.call(
+          '/api/tenant/context/release?app=ignition',
+          { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision },
+          identity,
+        );
+    };
+    const holding = (reply: Answer) => {
+      const lease = 'entered' in reply.body ? object(object(reply.body.entered).context) : reply.body.tabId ? reply.body : undefined;
+      if (lease) opened.push(lease);
+      return reply;
+    };
+    /* The three as the page asked them before, one after another, the boot on the lease just opened. */
+    const apart = async (path: string) => {
+      const found = await f.call('/api/tenant/bootstrap?app=ignition', undefined, identity);
+      assert.equal(found.status, 200, found.text);
+      const lease = holding(await f.call(`/api/tenant/context/open?app=ignition&tenant=${north.tenant}`, {}, identity));
+      assert.equal(lease.status, 200, lease.text);
+      const opened = lease;
+      return f.call(
+        `/api/boot?app=ignition&tenant=${north.tenant}`,
+        { path, search: '' },
+        {
+          ...identity,
+          'x-mistri-tab': String(opened.body.tabId),
+          'x-mistri-context': String(opened.body.context),
+          'x-mistri-lease-revision': String(opened.body.revision),
+        },
+      );
+    };
+    const steps: Record<string, () => Promise<Answer>> = {
+      'apart (list)': () => apart('/ignition/leads'),
+      'apart (record)': () => apart(record),
+      bootstrap: () => f.call('/api/tenant/bootstrap?app=ignition', undefined, identity),
+      open: async () => holding(await f.call(`/api/tenant/context/open?app=ignition&tenant=${north.tenant}`, {}, identity)),
+      'boot (list)': () => north.read('/api/boot', { path: '/ignition/leads', search: '' }),
+      'boot (record)': () => north.read('/api/boot', { path: record, search: '' }),
+      'enter (list)': async () =>
+        holding(await f.call('/api/tenant/enter?app=ignition', { path: '/ignition/leads', search: '' }, identity)),
+      'enter (record)': async () => holding(await f.call('/api/tenant/enter?app=ignition', { path: record, search: '' }, identity)),
+    };
+    /* The fastest of five, so a stray pause is not counted as a round trip. */
+    const fastest = async (ask: () => Promise<Answer>) => {
+      const times: number[] = [];
+      for (let run = 0; run < 5; run++) {
+        const started = performance.now();
+        const reply = await ask();
+        times.push(performance.now() - started);
+        assert.equal(reply.status, 200, reply.text);
+        if ('entered' in reply.body) assert.ok(object(object(reply.body.entered).boot).reads, reply.text);
+        await letGo();
+      }
+      return Math.min(...times);
+    };
+    for (const ask of Object.values(steps)) await ask(); // warm: connections, attestation, the App's payload
+    await letGo();
+    const DELAY = 25;
+    const at: Record<string, [number, number]> = {};
+    for (const [name, ask] of Object.entries(steps)) at[name] = [await fastest(ask), 0];
+    relay.setDelay(DELAY);
+    for (const [name, ask] of Object.entries(steps)) at[name][1] = await fastest(ask);
+    relay.setDelay(0);
+    const trips = Object.fromEntries(Object.entries(at).map(([name, [quick, slow]]) => [name, Math.round((slow - quick) / (2 * DELAY))]));
+    for (const name of Object.keys(steps))
+      t.diagnostic(
+        `${name}: ${trips[name]} serial round trips (${at[name][0].toFixed(0)} ms, ${at[name][1].toFixed(0)} ms at ${2 * DELAY} ms a trip)`,
+      );
+    /* Discovery's three snapshots and an admission's two each begin with their membership read: one round trip
+       apiece, where BEGIN and the read were two (tenantReadSource.ts `on`'s `lead`); the tenants' names and
+       sandboxes are read beside the snapshots that confirm them, and the platform membership rides its snapshot's
+       BEGIN too. A lease's first admission is fenced by its second (tenantInvocationAdmittedAgain). Discovery was
+       nine, then four, now three; opening six, then four, now three. Each budget is the count measured and one
+       more, for the relay's timing. */
+    assert.ok(trips.bootstrap <= 4, `discovery is ${trips.bootstrap} round trips`);
+    assert.ok(trips.open <= 4, `opening a lease is ${trips.open} round trips`);
+    /* Entering: the boot reads on the evidence its lease's open just kept rather than admitting again, its room's
+       reads are planned and asked as the App's metadata is, beside it, and a tenant's own address is one statement
+       with its resolution. A list was eleven, a record eighteen; now eight and twelve. */
+    const entering = { list: 9, record: 13 };
+    for (const page of ['list', 'record'] as const) {
+      assert.ok(
+        trips[`enter (${page})`] < trips[`apart (${page})`],
+        `entering a ${page} is ${trips[`enter (${page})`]} round trips, the three apart ${trips[`apart (${page})`]}`,
+      );
+      assert.ok(trips[`enter (${page})`] <= entering[page], `entering a ${page} is ${trips[`enter (${page})`]} round trips`);
+    }
   });
 
   test('two dealerships on one host, their requests interleaved, each read only their own applications', async (t) => {

@@ -23,6 +23,7 @@ import {
   captureEventOperator,
   deliveryFail,
   deliveryInteger,
+  deliveryStanding,
   deliveryRefuse,
   EventDeliveryRefusal,
   EVENT_DELIVERY_HISTORY_LIMIT,
@@ -275,6 +276,23 @@ export function openSqliteEventDeliveryStore(existingPath: string, input: EventD
         );
       }),
     /** Private bounded diagnostics omit payloads, actor IDs, tokens and errors. */
+    standing: (now) =>
+      later(() => {
+        deliveryInteger(now, 0, DELIVERY_MAX_CLOCK);
+        return transaction(false, () =>
+          deliveryStanding({
+            at: now,
+            ...db
+              .prepare(
+                `SELECT EXISTS (SELECT 1 FROM main."${t.delivery}" WHERE destination_id=? AND state='failed') AS failed,
+                (SELECT min(next_at) FROM main."${t.delivery}" WHERE destination_id=? AND state IN ('pending','retry','unknown')) AS waiting,
+                (SELECT min(next_at) FROM main."${t.delivery}" WHERE destination_id=? AND state IN ('pending','retry','unknown') AND next_at > ?) AS due,
+                (SELECT min(lease_until) FROM main."${t.delivery}" WHERE destination_id=? AND state='leased' AND lease_until > ?) AS lease`,
+              )
+              .get(destination, destination, destination, now, destination, now)!,
+          }),
+        );
+      }),
     attempts: (eventId) =>
       later(() => {
         if (typeof eventId !== 'string' || eventId.length !== 36) return deliveryFail();

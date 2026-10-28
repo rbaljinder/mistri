@@ -40,7 +40,7 @@ import { autoKeyOf } from '@mistriwork/engine/shared/autoBucket.js';
 import { funnelText } from '@mistriwork/engine/shared/funnel.js';
 
 /** What the page's boot answers gave, as the client holds them. */
-interface RoomInput {
+export interface RoomInput {
   app: string;
   /** The inside address (shared/mount.ts) and its query string. */
   path: string;
@@ -82,23 +82,121 @@ export function roomReads(input: RoomInput): RoomPlan {
     else if (!input.search) dashboardReads(input, rules, home, plan);
     return plan;
   }
-  const book = appAddressBook({
-    views: payload.views as never,
-    order: viewOrder(payload),
-    resources: payload.resources,
-    pages: payload.pages ?? [],
-    tables: schema.tables,
-    inbox: payload.inbox === true,
-    assistant: payload.assistant?.page === true,
-    projected: true,
-  });
-  const parsed = readAppSegments(book, segments);
+  const parsed = readRoom(input, segments);
   if (!parsed) return plan;
   if (parsed.kind === 'route' && parsed.target.kind === 'list') listReads(input, rules, parsed.target.view, plan);
   if (parsed.kind === 'route' && parsed.target.kind === 'dashboard' && !input.search)
     dashboardReads(input, rules, parsed.target.view, plan);
   if (parsed.kind === 'record' && !parsed.natural) recordReads(input, parsed, plan);
   return plan;
+}
+
+/** What an address's segments past the App open, read as the client's rooms read them (appAddress.ts). */
+function readRoom(input: RoomInput, segments: string[]) {
+  return readAppSegments(addressBookOf(input), segments);
+}
+
+/* The address book is every view, page and table of the App, claimed in order, and a page's first reads asked for it
+   twice (its room, and a natural key's) on every page load: on a large App a tenth of a first page's CPU. It is a pure
+   function of the views, resources and pages the reader is served, the catalog's tables and the menu's order, and a
+   reader's projection hands the same frozen objects to every request that projects the same (tenantMetadata.ts): so
+   it is made once per those objects, by identity, and read only. A handful are kept per views object, as many as the
+   shapes that share it. */
+type AddressBook = ReturnType<typeof appAddressBook>;
+interface KeptBook {
+  readonly resources: object;
+  readonly pages: object | undefined;
+  readonly tables: object;
+  readonly order: string;
+  readonly inbox: boolean;
+  readonly assistant: boolean;
+  readonly book: AddressBook;
+}
+const BOOKS_KEPT = 8;
+const addressBooks = new WeakMap<object, KeptBook[]>();
+function addressBookOf(input: RoomInput): AddressBook {
+  const { payload, schema } = input;
+  const order = viewOrder(payload);
+  const said = {
+    resources: payload.resources,
+    pages: payload.pages,
+    tables: schema.tables,
+    order: order.join('\0'),
+    inbox: payload.inbox === true,
+    assistant: payload.assistant?.page === true,
+  };
+  /* Only what cannot change is kept by: a payload built afresh, or not frozen, is read afresh. */
+  const lasting = [payload.views, payload.resources, payload.pages ?? Object.freeze([]), schema.tables].every((part) =>
+    Object.isFrozen(part),
+  );
+  let kept = lasting ? addressBooks.get(payload.views) : [];
+  if (!kept) addressBooks.set(payload.views, (kept = []));
+  const found = kept.find(
+    (book) =>
+      book.resources === said.resources &&
+      book.pages === said.pages &&
+      book.tables === said.tables &&
+      book.order === said.order &&
+      book.inbox === said.inbox &&
+      book.assistant === said.assistant,
+  );
+  if (found) return found.book;
+  const book = appAddressBook({
+    views: payload.views as never,
+    order,
+    resources: payload.resources,
+    pages: payload.pages ?? [],
+    tables: schema.tables,
+    inbox: said.inbox,
+    assistant: said.assistant,
+    projected: true,
+  });
+  kept.push({ ...said, book });
+  if (kept.length > BOOKS_KEPT) kept.shift();
+  return book;
+}
+
+/**
+ * A record its natural key addresses (`/shop/products/SKU-1049`), which `roomReads` leaves to the client: its crumb
+ * and the read that finds it by that key, as the client asks them (url.js, client Rooms.tsx `NaturalKeyRoom`), and,
+ * once that read has answered with the one row, the record's own reads by its primary key, as the room asks them
+ * when the walk has moved to it. For a host that can ask in two steps (a tenant App's boot, shared/tenantBoot.ts);
+ * none where the address is not a natural key's.
+ */
+export function naturalRecordReads(input: RoomInput): { reads: RoomRead[]; find: RoomRead; found(answer: unknown): RoomPlan } | undefined {
+  const segments = input.path.split('/').filter(Boolean).slice(1);
+  const parsed = segments.length ? readRoom(input, segments) : undefined;
+  if (!parsed || parsed.kind !== 'record' || !parsed.natural) return undefined;
+  const table = findTable(input.schema, parsed.table);
+  if (!table) return undefined;
+  const pk = primaryKey(table);
+  if (!pk.length) return undefined;
+  const { natural } = parsed;
+  return {
+    reads: parsed.target.kind === 'page' ? [] : [crumb(input, table, parsed.key)],
+    find: {
+      method: 'POST',
+      target: '/api/query',
+      body: {
+        app: input.app,
+        table: table.id,
+        filter: { groups: [[{ column: natural.column, op: '=', value: natural.value }]] },
+        limit: 2,
+        offset: 0,
+      },
+    },
+    found(answer) {
+      const plan: RoomPlan = { reads: [], batches: [] };
+      const rows = (answer as { rows?: unknown } | undefined)?.rows;
+      // One row or none: two would be no key at all (Rooms.tsx).
+      if (!Array.isArray(rows) || rows.length !== 1 || !rows[0] || typeof rows[0] !== 'object') return plan;
+      const row = rows[0] as Record<string, unknown>;
+      if (pk.some((column) => row[column] === undefined)) return plan;
+      const key = Object.fromEntries(pk.map((column) => [column, row[column]])) as Record<string, string>;
+      recordReads(input, { ...parsed, key, natural: undefined }, plan, false);
+      return plan;
+    },
+  };
 }
 
 /**
@@ -176,7 +274,13 @@ function listReads(input: RoomInput, rules: ListRules, key: string, plan: RoomPl
  * the page's compose (client recordCompose.ts), whose answers the page's
  * sections take.
  */
-function recordReads(input: RoomInput, parsed: Extract<ReturnType<typeof readAppSegments>, { kind: 'record' }>, plan: RoomPlan): void {
+function recordReads(
+  input: RoomInput,
+  parsed: Extract<ReturnType<typeof readAppSegments>, { kind: 'record' }>,
+  plan: RoomPlan,
+  /* A natural key's crumb was asked by that key, before the walk moved to the primary one. */
+  withCrumb = true,
+): void {
   const table = findTable(input.schema, parsed.table);
   if (!table) return;
   const key = parsed.key;
@@ -184,7 +288,7 @@ function recordReads(input: RoomInput, parsed: Extract<ReturnType<typeof readApp
   const target = parsed.target;
   /* An address that names a page opens it, and its crumb is the page's; a record opens through the page its table's records use (client page.js). */
   const pageId = target.kind === 'page' ? target.page : recordPage(input, table);
-  if (target.kind !== 'page') plan.reads.push(crumb(input, table, key));
+  if (target.kind !== 'page' && withCrumb) plan.reads.push(crumb(input, table, key));
   if (pageId.startsWith('suggested:'))
     plan.reads.push({ method: 'GET', target: scoped(`/api/pages/suggested?${new URLSearchParams({ table: table.id })}`) });
   plan.reads.push({
@@ -237,8 +341,9 @@ function crumb(input: RoomInput, table: TableMeta, key: Record<string, string>):
   };
 }
 
-/** The schema as a dashboard's asks read it (shared/dashboardAsks.ts), over the schema the page was answered with. */
-const lookupsOf = (rules: ListRules): AskLookups => ({
+/** The schema as a dashboard's asks read it (shared/dashboardAsks.ts), over the schema the page was answered with.
+    The assistant's table blocks are checked by the same asks (assistant/assistantTools.ts). */
+export const lookupsOf = (rules: ListRules): AskLookups => ({
   table: (id) => findTable(rules.schema, id),
   references: (id) => referencesFrom(rules.schema, id),
   referenceNames: (tableId, names) => referenceNames(rules, tableId, names),

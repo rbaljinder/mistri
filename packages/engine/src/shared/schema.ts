@@ -355,8 +355,27 @@ export function referencesFrom(schema: DatabaseSchema, tableId: string): Foreign
   return schema.foreignKeys.filter((fk) => fk.from.table === tableId);
 }
 
+/* A frozen catalog's tables by id, made the first time one is looked up: a
+   captured catalog, and those derived from it, cannot change, and startup
+   looks the same few hundred tables up in one for every command, role and
+   resource — by a scan, that was a large part of a large App's startup. A
+   catalog that can still change (one being built) is scanned as before, and
+   is never indexed, even once frozen later. The first of an id, as the scan finds it. */
+const tableIndexes = new WeakMap<readonly TableMeta[], ReadonlyMap<string, TableMeta> | null>();
+const fixed = (table: TableMeta) => Object.isFrozen(table) && 'value' in (Object.getOwnPropertyDescriptor(table, 'id') ?? {});
+
 export function findTable(schema: DatabaseSchema, tableId: string): TableMeta | undefined {
-  return schema.tables.find((t) => t.id === tableId);
+  const tables = schema.tables;
+  let index = tableIndexes.get(tables);
+  if (index === undefined) {
+    if (Object.isFrozen(tables) && tables.every(fixed)) {
+      const byId = new Map<string, TableMeta>();
+      for (const table of tables) if (!byId.has(table.id)) byId.set(table.id, table);
+      index = byId;
+    } else index = null;
+    tableIndexes.set(tables, index);
+  }
+  return index ? index.get(tableId) : tables.find((t) => t.id === tableId);
 }
 
 /**

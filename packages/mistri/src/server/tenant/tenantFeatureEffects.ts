@@ -27,6 +27,7 @@ export function tenantEffectDeployment(appId: string, storeId: string, registry:
 
 export const effectsCheck = Object.freeze<TenantStartupCheck>({
   phase: 'commands',
+  catalog: true,
   stage: 'command effects',
   run: ({ app, policy, registry, owned }) => {
     let deployment;

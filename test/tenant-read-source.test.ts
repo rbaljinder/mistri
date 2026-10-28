@@ -294,6 +294,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         'scopePlatformReads',
         'scopeReads',
         'scopeSupportReads',
+        'together',
         'withPlatformReads',
         'withReads',
       ]);

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { THEME_PRESETS, effectiveThemePalette, themePreset } from '../packages/engine/src/shared/themePresets.js';
 import { LOOKS } from '../packages/engine/src/shared/themeLooks.js';
-import { PRESETS_FILE, render } from '../scripts/theme-presets.mjs';
+import { PRESETS_FILE, changes, render } from '../scripts/theme-presets.mjs';
 import { readFileSync } from 'node:fs';
 import { authoredRoles, checkTheme } from '../packages/mistri/src/shared/themeCheck.js';
 import { DEFAULT_RECIPES, recipeAttributes } from '../packages/engine/src/shared/themeRecipes.js';
@@ -13,6 +13,24 @@ import { validationCode } from '../packages/mistri/src/server/build/checkProblem
 
 /** What each built-in look wears, from its spec in themeLooks.ts: only the parts it differs from the plain structure in. */
 const WORN: Record<string, Record<string, string>> = {
+  workshop: {
+    nav: 'slot',
+    bar: 'ruled',
+    tabs: 'rule',
+    windows: 'segmented',
+    stat: 'ruled',
+    section: 'open',
+    fields: 'open',
+    status: 'dot',
+    board: 'ruled',
+    chart: 'plain',
+    buttons: 'keyed',
+    rules: 'ink',
+    workflow: 'markers',
+    banner: 'plain',
+    steps: 'strip',
+    lanes: 'tag',
+  },
   lumen: {
     nav: 'pill',
     bar: 'airy',
@@ -51,6 +69,7 @@ const WORN: Record<string, Record<string, string>> = {
   },
 };
 const SHAPE: Record<string, { elevation: string; title?: string }> = {
+  workshop: { elevation: 'flat', title: '30px' },
   lumen: { elevation: 'raised', title: '28px' },
   mono: { elevation: 'flat', title: '30px' },
   sage: { elevation: 'soft' },
@@ -93,13 +112,25 @@ test('the built-in looks the browser wears are what their specs build to', async
   );
 });
 
+// The built file writes a palette as what it changes from the look's own colors; the checked build says each whole.
 test('every built-in passes the checks an App theme does, and checked is what the browser wears', () => {
-  for (const look of LOOKS)
-    assert.deepEqual(
-      JSON.parse(JSON.stringify({ ...compileTheme(look, look.id, () => undefined), base: look.id })),
-      themePreset(look.id),
-      `${look.id} built unchecked differs from checked`,
-    );
+  for (const look of LOOKS) {
+    const checked = compileTheme(look, look.id, () => undefined);
+    const packed = {
+      ...checked,
+      base: look.id,
+      ...(checked.palettes
+        ? {
+            palettes: checked.palettes.map((variant) => ({
+              ...variant,
+              light: changes(variant.light, checked.light),
+              dark: changes(variant.dark, checked.dark),
+            })),
+          }
+        : {}),
+    };
+    assert.deepEqual(JSON.parse(JSON.stringify(packed)), themePreset(look.id), `${look.id} built unchecked differs from checked`);
+  }
 });
 
 test("a compiled palette written back in the spec's words and compiled again is the same palette", () => {

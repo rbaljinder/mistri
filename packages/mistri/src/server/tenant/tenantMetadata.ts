@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { documentSections, parseDocument } from '@mistriwork/engine/shared/appDocuments.js';
 import { parsePageLayout } from '@mistriwork/engine/shared/pageLayouts.js';
 import { homeSourceOf, type AppDef } from '../../shared/app.js';
@@ -27,6 +28,7 @@ import { catalogLocales } from '../app/readerLocale.js';
 import type { TenantCapabilities } from './tenantCapabilities.js';
 import { appForRoles, pagesForRoles, parseOpenRoles } from '../../shared/appViewRoles.js';
 import { parseRoutePath } from '../../shared/appAddress.js';
+import { servedBaseOf } from './tenantServedSchema.js';
 
 /** Resolved embeds retain only cards/custom objects. Convert normalized card
  * captions back to authored facts before asking the ordinary list grammar. */
@@ -327,6 +329,78 @@ function permittedPage(page: PageDef, schema: DatabaseSchema, capabilities?: Ten
  * screens out of a dealership's menu by luck and left the lender's list over
  * the dealership's own documents standing in it. */
 export function projectTenantMetadata(
+  app: AppDef,
+  pages: readonly PageDef[],
+  schema: DatabaseSchema,
+  capabilities?: TenantCapabilities,
+  roles: readonly string[] = [],
+  realm: AppRealm = 'tenant',
+  zone?: string,
+  locale?: string,
+  signedOut = false,
+): ReturnType<typeof projectAfresh> {
+  /* The key is every argument by content, in order: a pure function of them, so an answer is another reader's only
+     where it would have been built the same for them. Roles keep their order — the first decides a home. */
+  const key = JSON.stringify([
+    fingerprint(app),
+    fingerprint(pages),
+    fingerprint(servedBaseOf(schema)),
+    capabilities === undefined ? null : fingerprint(capabilities),
+    [...roles],
+    realm,
+    zone ?? null,
+    locale ?? null,
+    signedOut,
+  ]);
+  const held = projections.get(key);
+  if (held) {
+    /* Most recently used last, so the bound drops the coldest. */
+    projections.delete(key);
+    projections.set(key, held);
+    return held;
+  }
+  const built = projectAfresh(app, pages, schema, capabilities, roles, realm, zone, locale, signedOut);
+  projectionsBuilt++;
+  if (projections.size >= PROJECTIONS_HELD) projections.delete(projections.keys().next().value!);
+  projections.set(key, built);
+  return built;
+}
+
+/* A tenant's App and pages are projected for each lease's catalog, grants and roles on every request that serves
+   them (`/api/app`, `/api/pages`, a composed record page), and that projection was most of what those requests
+   cost: a field report measured 126–137 ms of CPU each, per page load, though a role's answer changes only when
+   the App, the catalog or the grants do. So each is built once per everything it reads and held, frozen
+   (captureTenantData), for whoever reads the same. The bound is a few hundred shapes: roles × realms × locales of
+   one deployment, each a few dozen KiB. */
+const PROJECTIONS_HELD = 256;
+const projections = new Map<string, ReturnType<typeof projectAfresh>>();
+let projectionsBuilt = 0;
+
+/* An argument's content as a digest, remembered on a frozen object: the App and pages a deployment holds are the
+   same objects on every request, so only what a request built afresh (its catalog, a localized App) is hashed
+   again. One that could still change is hashed every time it is given. */
+const fingerprints = new WeakMap<object, string>();
+/* JSON would say a Map or a Set as `{}`, whatever it held. */
+const spelled = (_key: string, value: unknown): unknown =>
+  value instanceof Map ? { Map: [...value] } : value instanceof Set ? { Set: [...value] } : value;
+function fingerprint(value: object): string {
+  let print = fingerprints.get(value);
+  if (print === undefined) {
+    print = createHash('sha256').update(JSON.stringify(value, spelled)).digest('base64url');
+    if (Object.isFrozen(value)) fingerprints.set(value, print);
+  }
+  return print;
+}
+
+/** For tests: how many projections were built rather than found, and every one forgotten. */
+export function tenantProjectionsBuilt(): number {
+  return projectionsBuilt;
+}
+export function forgetTenantProjections(): void {
+  projections.clear();
+}
+
+function projectAfresh(
   app: AppDef,
   pages: readonly PageDef[],
   schema: DatabaseSchema,

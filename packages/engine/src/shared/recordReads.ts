@@ -97,12 +97,47 @@ export interface ReadPlan<V extends ReadView = ReadView> {
   readonly totals?: HttpBreakdownDefinition;
   readonly groups?: HttpBreakdownDefinition;
   readonly breakdown?: HttpBreakdownDefinition;
-  readonly streams?: ReadonlyArray<{ readonly error?: string; readonly empty?: boolean; readonly view?: V }>;
+  readonly streams?: ReadonlyArray<TimelineReadStream<V>>;
   readonly reads?: Readonly<Record<string, { readonly error?: string; readonly empty?: boolean; readonly view?: V }>>;
   /** A custom section's aggregate reads, each a breakdown. */
   readonly aggregates?: Readonly<
     Record<string, { readonly error?: string; readonly empty?: boolean; readonly breakdown?: HttpBreakdownDefinition }>
   >;
+}
+
+/** A timeline stream's plan, as far as its reads go (pagePlans.ts): its table, its author, its rows and its far side. */
+interface TimelineReadStream<V extends ReadView = ReadView> {
+  readonly error?: string;
+  readonly empty?: boolean;
+  readonly from?: string;
+  readonly by?: string;
+  readonly view?: V;
+  readonly key?: readonly string[];
+  readonly side?: { readonly error?: string; readonly view?: V };
+}
+
+/**
+ * A timeline stream's reads, as its section asks them (kit PageTimeline.tsx): its rows, where its author is a
+ * reference with the person's name beside it, read through the reference as a list column of it is; and where the
+ * stream has a far side, that side's rows. One rule for the section and the page's planned reads (`recordReads`),
+ * so a composed page's answer is the very read the section asks: a record page whose timeline was planned without
+ * the author's name asked it again, alone, once the page had drawn (a field report: a fifth round on a record).
+ */
+export function timelineReads<V extends ReadView>(
+  names: { readonly table: (id: string) => TableMeta | undefined; readonly namePath: (table: TableMeta) => string | undefined },
+  stream: TimelineReadStream<V>,
+): { view: V; side?: V } | undefined {
+  if (stream.error || stream.empty || !stream.view) return undefined;
+  const table = stream.from === undefined ? undefined : names.table(stream.from);
+  const reference = stream.by ? table?.columns.find((column) => column.name === stream.by)?.references : undefined;
+  const target = reference ? names.table(reference.table) : undefined;
+  const named = target && names.namePath(target);
+  const view =
+    target && named && !primaryKey(target).includes(named)
+      ? ({ ...stream.view, columns: [...(stream.view.columns ?? []), { path: `${stream.by}.${named}` }] } as V)
+      : stream.view;
+  const side = stream.side?.view && !stream.side.error && stream.key?.length ? stream.side.view : undefined;
+  return side ? { view, side } : { view };
 }
 
 /** One request, as a section sends it: its route and its body, without the owner the transport adds. */
@@ -423,7 +458,17 @@ export function recordPageReads(
         if (plan.breakdown) breakdown(plan.breakdown);
         return;
       case 'timeline':
-        for (const stream of plan.streams ?? []) if (!stream.error && !stream.empty && stream.view) view({ view: stream.view, offset: 0 });
+        for (const stream of plan.streams ?? []) {
+          const asked = timelineReads(
+            {
+              table: (id) => (names.table ? names.table(id) : findTable(names.schema, id)),
+              namePath: (table) => namePathOf(names, table),
+            },
+            stream,
+          );
+          if (asked) view({ view: asked.view, offset: 0 });
+          if (asked?.side) view({ view: asked.side, offset: 0 });
+        }
         return;
       case 'custom':
         for (const read of Object.values(plan.reads ?? {}))

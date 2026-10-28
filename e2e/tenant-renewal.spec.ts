@@ -83,18 +83,26 @@ test.describe('tenant renewal preserves mounted work', () => {
   }
 
   async function modalPresentation(page: Page) {
+    /* The App's payload as the shell takes it: its own reply, or the answer the page's boot carries for it
+       (mistri shared/tenantBoot.ts). */
+    const present = (payload: { app: { views: Record<string, unknown> } }) => {
+      // Presentation override only: genuine auth, catalog, grants, context and
+      // all writes still come from the disposable native tenant host.
+      const item = Object.values(payload.app.views).find((view) => (view as { table?: string }).table === 'item') as
+        | { open?: string }
+        | undefined;
+      expect(item).toBeTruthy();
+      item!.open = 'modal';
+    };
     await page.route(
-      (url) => url.pathname === '/api/app',
+      (url) => url.pathname === '/api/app' || url.pathname === '/api/boot',
       async (route) => {
         const response = await route.fetch();
         const json = await response.json();
-        // Presentation override only: genuine auth, catalog, grants, context and
-        // all writes still come from the disposable native tenant host.
-        const item = Object.values(json.app.views).find((view) => (view as { table?: string }).table === 'item') as
-          | { open?: string }
-          | undefined;
-        expect(item).toBeTruthy();
-        item!.open = 'modal';
+        if (new URL(route.request().url()).pathname === '/api/app') present(json);
+        else
+          for (const [key, read] of Object.entries(json.reads as Record<string, { body: { app: { views: Record<string, unknown> } } }>))
+            if (key.startsWith('GET /api/app?')) present(read.body);
         await route.fulfill({ response, json });
       },
     );

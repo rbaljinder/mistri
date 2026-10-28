@@ -607,6 +607,78 @@ for (const { dialect, skip } of ENGINES)
       },
     );
 
+    /* Hearing every write, an idle host has nothing to poll for: it once read its job and delivery tables a second
+       apart and inspected pages of waiting rows, each against its attempt history, every five seconds. It waits
+       for the next thing due (here the built-in retention's next hour) and wakes on a commit. */
+    test(
+      'an idle host that hears every write reads no job or delivery table until something is due',
+      { skip: dialect === 'postgres' ? false : 'PostgreSQL only' },
+      async (t) => {
+        const lab = await openLab(t, dialect),
+          enrollment = await enroll(t, lab);
+        const store = /(?:__mistri_|mistri\.")(?:job|delivery)/;
+        let seen: string[] = [];
+        const withWriteClient = PgConnectionManager.prototype.withWriteClient;
+        PgConnectionManager.prototype.withWriteClient = function <T>(
+          run: (client: PgQuery) => Promise<T>,
+          destroyAfter?: boolean,
+        ): Promise<T> {
+          return Reflect.apply(withWriteClient, this, [
+            (client: PgQuery) => {
+              const wrapped = Object.create(client) as PgQuery;
+              Object.defineProperty(wrapped, 'query', {
+                value: (text: string, params?: unknown[]) => {
+                  seen.push(String(text));
+                  return client.query(text, params);
+                },
+              });
+              return run(wrapped);
+            },
+            destroyAfter,
+          ]) as Promise<T>;
+        };
+        t.after(() => {
+          PgConnectionManager.prototype.withWriteClient = withWriteClient;
+        });
+        // The real clock and the default waits: what a deployed host does.
+        const host = await openTenantJobHost(enrollment, { wakeInProcess: false });
+        assert.ok(host);
+        t.after(() => host.stop());
+        host.start();
+        const listening = Date.now() + 10_000;
+        while (
+          !(
+            await lab.rows(
+              `SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND query LIKE 'LISTEN mistri_command_events%'`,
+            )
+          ).length
+        ) {
+          assert.ok(Date.now() < listening, 'the host listens');
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        // A cycle that began before the LISTEN was in place polls once more, a second on; then it is quiet.
+        await new Promise((resolve) => setTimeout(resolve, 2_500));
+        seen = [];
+        await new Promise((resolve) => setTimeout(resolve, 4_000));
+        assert.deepEqual(
+          seen.filter((text) => store.test(text)),
+          [],
+          'no job or delivery table read while idle',
+        );
+        assert.deepEqual(
+          host.readiness().map((check) => check.code),
+          ['ok', 'ok'],
+        );
+        // Still awake to work: a commit elsewhere reaches it at once.
+        await advance(lab, enrollment, 'north', 'n1', 'advance-quiet-0001');
+        const deadline = Date.now() + 10_000;
+        while (!(await settled(lab, 2))) {
+          assert.ok(Date.now() < deadline, 'the commit woke the quiet host');
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      },
+    );
+
     /* Behind a transaction-mode pooler the host cannot LISTEN on the source's URL; the connection's "listen" is
        where it does (tenantStartup.ts resolves it into the enrollment's source). */
     test(

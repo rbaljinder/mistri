@@ -1,7 +1,7 @@
 import { Refusal, type Filter, type ScopedReads, type WriteTransaction } from '../adapter.js';
 import { recordRefusalCause } from '../../shared/refusal.js';
 import type { RowScope, RowScopeFilter } from '../../shared/rowScope.js';
-import type { DatabaseSchema, TableMeta } from '../../shared/schema.js';
+import type { DatabaseSchema, ForeignKey, TableMeta } from '../../shared/schema.js';
 
 /** Physical metadata read on the writer inside its own transaction. `writable`
  * names the tables this scope may mutate; everything else stays in the graph
@@ -32,6 +32,16 @@ interface ScopeRowLocks {
    * `ride` never ran; undefined where reads are not sent behind a write.
    */
   behind?(table: TableMeta, ride: () => void): (() => boolean) | undefined;
+  /**
+   * Whether statements asked without waiting leave together (a writer that
+   * pipelines, postgresPool.ts). A row's lock and the guard read behind it,
+   * and every parent's lock and count, are then sent at once, in the order
+   * they would have been asked one by one, and judged in that order when the
+   * flight is answered: the server still grants each lock before it runs the
+   * read behind it, so each read is as fresh as it was a round trip later.
+   * Elsewhere each is asked once the one before it is answered.
+   */
+  readonly together?: boolean;
 }
 
 /**
@@ -140,6 +150,15 @@ function withOwnRows(
   return out;
 }
 
+/** One reference a write makes, to be checked; or the refusal that ends the list where one cannot be. */
+type ParentCheck =
+  | { readonly refused: string }
+  | { readonly fk: ForeignKey; readonly values: readonly unknown[]; readonly filter: Filter; readonly parent: TableMeta };
+/** A check sent: its parent's lock and its count, in flight. */
+type Asked =
+  | Extract<ParentCheck, { refused: string }>
+  | (Extract<ParentCheck, { fk: ForeignKey }> & { locked: Promise<void>; counted: Promise<number> });
+
 /** Runs INSIDE a single queued operation. The supplied guards retain actual
  * stored scalar types, not display conversions (a blob label is not a key).
  * This capability deliberately refuses side effects it cannot bound. */
@@ -186,14 +205,25 @@ export function createScopedTransaction(
     }
     return { groups: [pk.map((column) => ({ column, op: '=', value: key[column] as string | number }))] };
   };
-  const stored = async (table: TableMeta, key: Record<string, unknown>, within?: Pick<ScopedReads, 'query' | 'count'>) => {
-    within ??= guards;
-    const filter = keyFilter(table, key);
-    // Lock before looking: the guard's snapshot is then the row no other
-    // writer can move until this transaction ends, so what the scope checks
-    // is what the write will change.
-    await locks?.target(table, filter);
-    const result = await within.query({ table: table.id, filter, limit: 2, offset: 0 });
+  /* A row by its key, read after its lock. Lock before looking: the guard's
+     snapshot is then the row no other writer can move until this transaction
+     ends, so what the scope checks is what the write will change. Where the
+     writer sends together, the read leaves right behind the lock, in its
+     flight; the server runs it only once the lock is granted. */
+  const lockedRead = async (table: TableMeta, filter: Filter, within: Pick<ScopedReads, 'query' | 'count'>) => {
+    const locked = locks?.target(table, filter);
+    const read = () => within.query({ table: table.id, filter, limit: 2, offset: 0 });
+    if (!locks?.together) {
+      await locked;
+      return read();
+    }
+    const sent = read();
+    // Both heard before either is judged: the lock's failure, if it failed, is the one said.
+    await Promise.allSettled([locked, sent]);
+    await locked;
+    return sent;
+  };
+  const one = (table: TableMeta, key: Record<string, unknown>, result: { rows: Record<string, unknown>[] }) => {
     if (result.rows.length !== 1) {
       return refuse(
         `The "${table.id}" row ${keyText(key)} is outside the principal's rows: the row policy (or tenant) does not admit it, before or after this write.`,
@@ -207,35 +237,85 @@ export function createScopedTransaction(
     );
     return row;
   };
+  const stored = async (table: TableMeta, key: Record<string, unknown>, within: Pick<ScopedReads, 'query' | 'count'> = guards) =>
+    one(table, key, await lockedRead(table, keyFilter(table, key), within));
   /* Every reference a write makes must land on a row the principal reads:
      all of a new row's, and of an updated row only those whose columns the
      update sets. A reference the update leaves as it was is not this write's
      to vouch for — it was made before, and refusing over it refused every
      edit of a row whose unrelated parent (a lender's relationship manager on
-     a dealer) lies outside the scope, while telling the caller that it does. */
-  const parents = async (table: TableMeta, row: Record<string, unknown>, set?: ReadonlySet<string>) => {
+     a dealer) lies outside the scope, while telling the caller that it does.
+
+     Each reference is checked by its parent's lock, then that parent's count
+     under the principal's rows; a reference that cannot be checked ends the
+     list, refused there, so the checks before it still speak first. */
+  const parentChecks = (table: TableMeta, row: Record<string, unknown>, set?: ReadonlySet<string>): ParentCheck[] => {
+    const checks: ParentCheck[] = [];
     for (const fk of catalog.schema.foreignKeys.filter(
       (fk) => fk.from.table === table.id && (!set || fk.from.columns.some((column) => set.has(column))),
     )) {
       const values = fk.from.columns.map((column) => row[column]);
       if (values.some((value) => value === null)) continue;
-      if (!values.every(comparable))
-        return refuse(`"${table.id}".${fk.from.columns.join('+')} holds a value that is not a text or a number.`);
+      if (!values.every(comparable)) {
+        checks.push({ refused: `"${table.id}".${fk.from.columns.join('+')} holds a value that is not a text or a number.` });
+        break;
+      }
       // Parent columns stay on the SQL left-hand side so SQLite's parent
       // affinity and collation, rather than JavaScript equality, decide.
       const filter: Filter = {
         groups: [fk.to.columns.map((column, index) => ({ column, op: '=', value: values[index] as string | number }))],
       };
       const parent = catalog.schema.tables.find((table) => table.id === fk.to.table);
-      if (!parent)
-        return refuse(`"${table.id}" references "${fk.to.table}", which is not in this write's footprint: declare it read by the command.`);
-      // A parent's visibility must hold until commit, not just at this read.
-      await locks?.parent(parent, filter);
-      if ((await guards.count(fk.to.table, filter)) !== 1) {
-        return refuse(
-          `"${table.id}".${fk.from.columns.join('+')} points at the "${fk.to.table}" row ${keyText(Object.fromEntries(fk.to.columns.map((column, index) => [column, values[index]])))}, which the principal's rows do not include (or the command does not declare "${fk.to.table}" read).`,
-        );
+      if (!parent) {
+        checks.push({
+          refused: `"${table.id}" references "${fk.to.table}", which is not in this write's footprint: declare it read by the command.`,
+        });
+        break;
       }
+      checks.push({ fk, values, filter, parent });
+    }
+    return checks;
+  };
+  const unseen = (check: Extract<ParentCheck, { fk: ForeignKey }>) =>
+    `"${check.fk.from.table}".${check.fk.from.columns.join('+')} points at the "${check.fk.to.table}" row ${keyText(Object.fromEntries(check.fk.to.columns.map((column, index) => [column, check.values[index]])))}, which the principal's rows do not include (or the command does not declare "${check.fk.to.table}" read).`;
+  /** The checks sent at once (locks.together): each parent's lock, then its count, every answer heard. */
+  const ask = (checks: readonly ParentCheck[]): Asked[] =>
+    checks.map((check) => {
+      if ('refused' in check) return check;
+      const locked = locks?.parent(check.parent, check.filter) ?? Promise.resolve();
+      const counted = guards.count(check.fk.to.table, check.filter);
+      locked.catch(() => {});
+      counted.catch(() => {});
+      return { ...check, locked, counted };
+    });
+  /* Checks asked ahead of the row they are for (built from what the write
+     returned, or from what an update sets), used only where they name exactly
+     the references the row as stored holds: the same statements, sent sooner. */
+  const sameChecks = (asked: readonly Asked[], checks: readonly ParentCheck[]) =>
+    asked.length === checks.length &&
+    asked.every((guess, index) => {
+      const check = checks[index];
+      if ('refused' in guess || 'refused' in check) return 'refused' in guess && 'refused' in check && guess.refused === check.refused;
+      return guess.fk === check.fk && guess.values.every((value, at) => value === check.values[at]);
+    });
+  const parents = async (table: TableMeta, row: Record<string, unknown>, set?: ReadonlySet<string>, guessed?: readonly Asked[]) => {
+    const checks = parentChecks(table, row, set);
+    if (!locks?.together) {
+      for (const check of checks) {
+        if ('refused' in check) return refuse(check.refused);
+        // A parent's visibility must hold until commit, not just at this read.
+        await locks?.parent(check.parent, check.filter);
+        if ((await guards.count(check.fk.to.table, check.filter)) !== 1) return refuse(unseen(check));
+      }
+      return;
+    }
+    const asked = guessed && sameChecks(guessed, checks) ? guessed : ask(checks);
+    // Every answer is heard before any is judged: nothing is left in flight behind a refusal.
+    await Promise.allSettled(asked.flatMap((check) => ('refused' in check ? [] : [check.locked, check.counted])));
+    for (const check of asked) {
+      if ('refused' in check) return refuse(check.refused);
+      await check.locked;
+      if ((await check.counted) !== 1) return refuse(unseen(check));
     }
   };
   return Object.freeze({
@@ -245,13 +325,22 @@ export function createScopedTransaction(
       const table = target(request.table);
       const result = await records.insert(request);
       const filter = keyFilter(table, result.key);
+      /* The new row locked and read back, and where the writer sends together
+         its references checked in the same flight, from the row the INSERT
+         returned (parents uses them only where the stored row holds exactly
+         those). No other transaction can see this row yet, so its lock is
+         granted at once and the read answers what a count before it would. */
+      const read = lockedRead(table, filter, guards);
+      const guessed = locks?.together && result.row ? ask(parentChecks(table, result.row)) : undefined;
+      read.catch(() => {});
+      const found = await read;
       // Inside the bound and outside the principal's rows: the command's own row, answered by its key and what it wrote.
-      if (bound && (await guards.count(table.id, filter)) !== 1) {
-        await parents(table, await stored(table, result.key, bound.reads));
+      if (bound && found.rows.length !== 1) {
+        await parents(table, await stored(table, result.key, bound.reads), undefined, guessed);
         return { key: result.key, applied: result.applied, sql: result.sql };
       }
-      const row = await stored(table, result.key);
-      await parents(table, row);
+      const row = one(table, result.key, found);
+      await parents(table, row, undefined, guessed);
       madeBy(table, row);
       return result;
     },
@@ -264,15 +353,18 @@ export function createScopedTransaction(
       const moved = Object.keys(request.values ?? {}).filter((column) => protectedColumns.has(column));
       if (moved.length)
         return refuse(`A scoped update may not change "${table.id}".${moved.join(', ')}: a key, or a column another table references.`);
-      await stored(table, request.key);
+      const before = await stored(table, request.key);
+      const set = new Set(Object.keys(request.values ?? {}));
       /* The row read again after the write, sent the moment the write is: it
-         reads what the write wrote, and leaves in the write's round trip. A
-         write that fails aborts it too, and the write's failure is the one
-         thrown. */
-      const after: { row?: Promise<Record<string, unknown>> } = {};
+         reads what the write wrote, and leaves in the write's round trip, with
+         the references the write sets checked behind it, as the row will hold
+         them. A write that fails aborts them too, and the write's failure is
+         the one thrown. */
+      const after: { row?: Promise<Record<string, unknown>>; guessed?: Asked[] } = {};
       const withdraw = locks?.behind?.(table, () => {
         after.row = stored(table, request.key);
         after.row.catch(() => {});
+        if (locks.together) after.guessed = ask(parentChecks(table, { ...before, ...request.values }, set));
       });
       let result: Awaited<ReturnType<WriteTransaction['update']>>;
       try {
@@ -281,7 +373,7 @@ export function createScopedTransaction(
         withdraw?.();
       }
       if (result.affected !== 1) return refuse(`The update of "${table.id}" changed ${result.affected} rows, not one.`);
-      await parents(table, await (after.row ?? stored(table, request.key)), new Set(Object.keys(request.values ?? {})));
+      await parents(table, await (after.row ?? stored(table, request.key)), set, after.guessed);
       return result;
     },
     async remove(request) {

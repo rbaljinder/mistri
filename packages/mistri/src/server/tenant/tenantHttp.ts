@@ -69,6 +69,7 @@ import {
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
 import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
+import { databaseUnanswered, unansweredWrite } from './tenantWriteFault.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
 import type { TenantReadContext } from './tenantReadRuntime.js';
@@ -78,6 +79,18 @@ import { tenantRetirement } from './tenantRetirement.js';
 import { projectTenantMetadata, tenantSuggestedPage } from './tenantMetadata.js';
 import { tenantPagePlan, tenantReferences } from './tenantPageOperations.js';
 import { composeInputValid, composeTenantRecordPage } from './tenantCompose.js';
+import { replyJson } from './tenantReplyJson.js';
+import {
+  BRANDING_SAVE_BODY,
+  IMPORT_BODY,
+  TENANT_COMMAND_ROUTES as commands,
+  TENANT_CONTROL_ROUTES as controls,
+  TENANT_METADATA_GETS as metadataGets,
+  TENANT_METADATA_POSTS as metadataPosts,
+  TENANT_READ_ROUTES as reads,
+  TENANT_ROUTE_FIELDS as fields,
+  TENANT_WRITE_ROUTES as writes,
+} from './tenantHttpRoutes.js';
 import { tenantServedSchema } from './tenantServedSchema.js';
 import { lookupTenantPerson } from '../app/appMe.js';
 import { TenantWriteFailure } from './tenantWriteSource.js';
@@ -108,116 +121,34 @@ import { TenantTokenRefusal, type TenantTokenService } from './tenantTokenServic
 import type { TenantSearch } from './tenantSearch.js';
 import { ImportUnavailable, readImportRequest, runImport } from '../app/appImport.js';
 import { importDeclaration } from '../../shared/appImportDeclaration.js';
-import { IMPORT_LIMITS } from '../../shared/appImportDeclaration.js';
 import { leaseInbox } from './tenantInbox.js';
 import { answerLiveOff, LIVE_PATH } from '../live/liveRoute.js';
 import { liveOffResources, liveSyncOn } from '../live/liveBinding.js';
 import { trackingReads } from '../live/liveReads.js';
+import type { RoomInput } from '../http/firstPaintRooms.js';
+import { bootRoom } from './tenantBootRoom.js';
+import { itemKey, readKey, type FirstPaintData } from '@mistriwork/engine/shared/firstPaint.js';
+import {
+  TENANT_BOOT_PATH,
+  TENANT_ENTER_PATH,
+  soleTenant,
+  tenantBatchRequest,
+  tenantBootRequest,
+  tenantEnterRequest,
+  tenantReadAddress,
+  tenantReadBody,
+} from '../../shared/tenantBoot.js';
+import { PLATFORM_TENANT_ID } from '../../shared/tenantContext.js';
+import type { AppPayloadApp } from '../../shared/appPayload.js';
+import { appKeepsInbox } from '../../shared/appNotify.js';
 import { endLiveStreams } from '../live/liveStream.js';
 import { tenantLiveHub } from './tenantLive.js';
 import { openTenantLiveStream, tenantLiveAuthority, tenantLiveGrants, tenantProbe } from './tenantLiveRoute.js';
 import { brandingTenant, scopedRecordBranding, withRecordBranding, closeRecordBranding } from '../http/recordBranding.js';
 import { flagHttpRequest } from '../flags/httpRuntime.js';
 import { APP_FLAG_VALUES_PATH } from '../../shared/appFlagValues.js';
+import { timedPart, timeRequests } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
 
-const controls = new Set([
-  '/api/tenant/bootstrap',
-  '/api/tenant/context/open',
-  '/api/tenant/context/switch',
-  '/api/tenant/context/recover',
-  '/api/tenant/context/renew',
-  '/api/tenant/context/release',
-  '/api/tenant/context/resume',
-]);
-/* `/api/breakdowns` is a dashboard's cards in one request: one admission and
-   one context where each card was a request of its own. Not on a support lease,
-   whose every read is ledgered as the one read it is (below). */
-const reads = new Set([
-  '/api/query',
-  '/api/count',
-  '/api/counts',
-  '/api/run',
-  '/api/view/run',
-  '/api/breakdown',
-  '/api/breakdowns',
-  FILE_READ_PATH,
-]);
-/* The file travels as JSON text, where a quote or a line break is written with two characters (http/importRoutes.ts). */
-const IMPORT_BODY = IMPORT_LIMITS.bytes * 2 + 64 * 1024;
-/* Two raster logos at their bound (256 KiB each) as base64, the light and the dark, and the value beside them. */
-const BRANDING_SAVE_BODY = 800_000;
-const writes = new Set(['/api/update', '/api/insert', '/api/delete', '/api/revert', '/api/import', FILE_UPLOAD_PATH]);
-const commands = new Set(['/api/commands/availability', '/api/commands/prepare', '/api/commands/execute', '/api/commands/status']);
-const metadataGets = new Set(['/api/runtime', '/api/app', '/api/pages', '/api/pages/suggested']);
-const metadataPosts = new Set([
-  '/api/pages/plan',
-  '/api/pages/compose',
-  '/api/references',
-  '/api/record-history',
-  '/api/record-activity',
-  '/api/record-flows',
-  '/api/record-flows/start',
-  ...DECISION_PATHS,
-  '/api/inbox',
-  '/api/inbox/read',
-  '/api/inbox/email',
-  '/api/tokens',
-  '/api/tokens/issue',
-  '/api/tokens/revoke',
-  '/api/branding',
-  '/api/branding/save',
-  '/api/integrations',
-  '/api/integrations/save',
-  PAGE_LOAD_PATH,
-]);
-const fields: Record<string, readonly string[]> = {
-  [PAGE_LOAD_PATH]: ['page', 'params'],
-  '/api/pages/plan': ['page', 'key'],
-  '/api/pages/compose': ['page', 'key', 'rows', 'tab'],
-  '/api/references': ['table', 'key'],
-  '/api/record-history': ['table', 'key', 'before', 'limit'],
-  '/api/record-activity': ['view', 'section', 'period'],
-  '/api/record-flows': ['table', 'key'],
-  '/api/record-flows/start': ['table', 'key', 'flow'],
-  '/api/record-decisions': ['table', 'key'],
-  '/api/record-decisions/marks': ['table', 'keys'],
-  '/api/record-decisions/why': ['id'],
-  '/api/record-decisions/settle': ['id', 'action'],
-  '/api/inbox': ['limit', 'before', 'unread'],
-  '/api/inbox/read': ['ids', 'all'],
-  '/api/inbox/email': ['email'],
-  '/api/tokens': [],
-  '/api/tokens/issue': ['label', 'roles', 'operations', 'days'],
-  '/api/tokens/revoke': ['id'],
-  '/api/branding': [],
-  '/api/branding/save': ['branding', 'logo', 'darkLogo'],
-  '/api/integrations': [],
-  '/api/integrations/save': ['integration', 'secrets'],
-  '/api/query': ['table', 'filter', 'columns', 'orderBy', 'limit', 'offset'],
-  '/api/count': ['table', 'filter', 'exactCount', 'countLimit'],
-  '/api/counts': ['items', 'countLimit'],
-  '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset'],
-  '/api/view/run': ['view', 'text', 'query', 'count', 'limit', 'offset'],
-  '/api/breakdown': ['def', 'text', 'limit', 'offset'],
-  '/api/breakdowns': ['items'],
-  '/api/update': ['table', 'key', 'values', 'column', 'value', 'expected'],
-  '/api/insert': ['table', 'values', 'lines'],
-  [FILE_UPLOAD_PATH]: ['table', 'values', 'file'],
-  [FILE_READ_PATH]: ['table', 'key', 'variant', 'inline'],
-  '/api/delete': ['table', 'key', 'confirm'],
-  '/api/import': ['table', 'view', 'name', 'csv', 'mapping', 'mode', 'skipRefused'],
-  '/api/revert': ['confirm', 'expectedId', 'limit'],
-  '/api/tenant/context/open': [],
-  '/api/tenant/context/switch': ['tabId', 'expectedContext', 'expectedRevision'],
-  '/api/tenant/context/renew': ['tabId', 'expectedContext', 'expectedRevision'],
-  '/api/tenant/context/recover': ['tabId'],
-  '/api/tenant/context/release': ['tabId', 'expectedContext', 'expectedRevision'],
-  '/api/tenant/context/resume': ['tabId'],
-  '/api/commands/prepare': ['command', 'commandVersion', 'key'],
-  '/api/commands/availability': ['checks'],
-  '/api/commands/execute': ['command', 'commandVersion', 'key', 'expectedVersion', 'idempotencyKey', 'input'],
-  '/api/commands/status': ['command', 'commandVersion', 'key', 'expectedVersion', 'idempotencyKey', 'input'],
-};
 class InvalidRequest extends Error {
   constructor(readonly status = 400) {
     super('The tenant request is invalid.');
@@ -292,6 +223,38 @@ function ownerHeaders(owner: TenantContextReply): Record<string, string> {
 }
 /** What a read needs from a context, a tenant's or the platform realm's. Both
  * present their granted commands; only a tenant context presents edits. */
+/* Where one read the page's boot carries says the tables it answered from (live/liveReads.ts), as its own
+   request's `mistri-reads` header would have said them: each read apart, never the union of the boot's. */
+class ReadsTold {
+  readonly headersSent = false;
+  value: string | undefined;
+  setHeader(_name: string, value: string): void {
+    this.value = value;
+  }
+  removeHeader(): void {
+    this.value = undefined;
+  }
+}
+
+/** A reply the client takes as an answer: a success that says no error (engine http/firstPaint.ts `ok`). */
+const carriable = (reply: { status: number; body: unknown }): boolean =>
+  reply.status >= 200 &&
+  reply.status < 300 &&
+  reply.body !== null &&
+  typeof reply.body === 'object' &&
+  !('error' in reply.body) &&
+  !('errors' in reply.body && Array.isArray(reply.body.errors) && reply.body.errors.length > 0);
+
+/** What discovery answers (`/api/tenant/bootstrap`): signed out, or the account's tenants with their names and marks. */
+type TenantDiscovery =
+  | Readonly<{ status: 'signed_out' }>
+  | Readonly<{
+      status: 'ready';
+      appId: string;
+      accountId: string;
+      memberships: readonly Readonly<{ tenantId: string; name?: string; sandbox?: true }>[];
+      platform?: true;
+    }>;
 type ReadContext = Pick<TenantReadContext, 'schema' | 'data'> & {
   readonly capabilities?: TenantReadContext['capabilities'];
   readonly principal: { readonly roles: readonly string[]; readonly tenantId?: string };
@@ -299,7 +262,11 @@ type ReadContext = Pick<TenantReadContext, 'schema' | 'data'> & {
   readonly zone?: string;
   /** A tenant context's member's own locale; the platform realm reads none, as it reads no zone. */
   readonly locale?: string;
+  /** A member's context: many reads asked at once, on one snapshot (tenantReadRuntime.ts). */
+  readonly together?: TenantReadContext['together'];
 };
+/** `work` with its reads on one snapshot of `context`, where the context can share one; else as it is. */
+const together = <T>(context: ReadContext, work: () => Promise<T>): Promise<T> => (context.together ? context.together(work) : work());
 export function readAdapter(context: ReadContext): Adapter {
   return Object.freeze({
     dialect: context.schema.dialect,
@@ -361,7 +328,7 @@ async function body(req: IncomingMessage, maximum: number): Promise<Record<strin
 function send(req: IncomingMessage, res: ServerResponse, status: number, value: unknown, ownership: Record<string, string> = {}): void {
   // Serialize before installing ownership headers: a failed projection must not
   // release either a partial private body or a success-looking owner assertion.
-  const json = JSON.stringify(value);
+  const json = replyJson(value);
   if (res.destroyed || res.writableEnded) return;
   res.writeHead(status, {
     'cache-control': 'no-store',
@@ -529,6 +496,75 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       return denyTenant();
     if (expected !== undefined && expected !== value.identity.id) return denyTenant();
     return value;
+  };
+  /**
+   * The person's tenants, each with what it is called and whether it is a sandbox: `/api/tenant/bootstrap`'s answer,
+   * and the first part of `/api/tenant/enter`'s. The session is read before and after discovery and must be the same
+   * session throughout, and still live once discovery has answered. `seen` is told the tenants discovery's first
+   * snapshot found (tenantBootstrap.ts), to start what it would ask of them next beside the rest.
+   */
+  const discoverFor = async (req: IncomingMessage, seen?: (tenantIds: readonly string[]) => void): Promise<TenantDiscovery> => {
+    const proof = await verified(req);
+    let expiresAt = proof?.expiresAt;
+    /* What each tenant is called, and which is a sandbox, asked of the tenants the first snapshot found beside the
+       snapshots that confirm them, rather than after: two more round trips before the chooser could draw. Said only
+       of the tenants discovery answers with, and asked again where those are not the ones asked. */
+    let early: { ids: readonly string[]; marks: Promise<readonly [Readonly<Record<string, string>>, ReadonlySet<string>]> } | undefined;
+    const marksOf = (ids: readonly string[]) =>
+      Promise.all([
+        enrollment.names(ids).catch((): Readonly<Record<string, string>> => ({}) /* ids only */),
+        enrollment.sandboxes(ids),
+      ] as const);
+    const discovered = await enrollment.discover(
+      req,
+      async () => {
+        const current = await verified(req);
+        if (proof === null || current === null) {
+          if (proof !== current) return denyTenant();
+        } else {
+          if (proof.identity.id !== current.identity.id || proof.sessionId !== current.sessionId) return denyTenant();
+          expiresAt = Math.min(expiresAt!, current.expiresAt);
+        }
+      },
+      (ids) => {
+        if (ids.length) {
+          early = { ids, marks: marksOf(ids) };
+          early.marks.catch(() => {});
+        }
+        seen?.(ids);
+      },
+    );
+    const instant = now();
+    assertActive();
+    if (
+      proof === null
+        ? discovered.status !== 'signed_out'
+        : instant >= expiresAt! ||
+          discovered.status !== 'ready' ||
+          discovered.accountId !== proof.identity.id ||
+          discovered.appId !== app.id
+    )
+      return denyTenant();
+    if (discovered.status !== 'ready' || !discovered.memberships.length) return discovered;
+    /* Each choice with what the tenant is called, for the chooser and the
+       bar: words for a person beside the id the choice still sends. A
+       lookup that fails leaves the ids to speak for themselves. */
+    const chosen = discovered.memberships.map((member) => member.tenantId);
+    /* A sandbox says so to its members wherever its name is said.
+       Unlike a name, this is not left out quietly: a sandbox read as live
+       is the mistake the mark exists to prevent. */
+    const asked =
+      early && early.ids.length === chosen.length && early.ids.every((id, at) => id === chosen[at]) ? early.marks : marksOf(chosen);
+    const [names, sandboxes] = await asked;
+    assertActive();
+    return {
+      ...discovered,
+      memberships: discovered.memberships.map((member) => ({
+        ...member,
+        ...(Object.hasOwn(names, member.tenantId) ? { name: names[member.tenantId] } : {}),
+        ...(sandboxes.has(member.tenantId) ? { sandbox: true as const } : {}),
+      })),
+    };
   };
   /**
    * A CSV file imported into a resource the member writes (app/appImport.ts),
@@ -701,8 +737,12 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         if (req.aborted || res.destroyed) return denyTenant();
         return send(req, res, reply.status, reply.body, reply.context ? ownerHeaders(reply.context) : {});
       }
-      const control = controls.has(path),
-        selected = !control || path.endsWith('/open') || path.endsWith('/switch') || path.endsWith('/renew') || path.endsWith('/resume');
+      /* `let`, these four: an enter request, once its lease is open, is answered as the boot on that lease (below). */
+      let control = controls.has(path);
+      /* An enter request past its lease: discovery's answer and the lease, which its boot's answer carries. */
+      let entering: { found: TenantDiscovery; lease: TenantContextReply } | undefined;
+      const selected =
+        !control || path.endsWith('/open') || path.endsWith('/switch') || path.endsWith('/renew') || path.endsWith('/resume');
       const supportLog = path === SUPPORT_LOG_PATH,
         supportSessions = path === SUPPORT_SESSIONS_PATH;
       const flagValues = path === APP_FLAG_VALUES_PATH && flagHttpRequest()?.request === req;
@@ -781,7 +821,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       if (onSupport && path === '/api/breakdowns') return invalid(404);
       /* Nor a composed record page, for the same reason: its client asks the plan and each part alone. */
       if (onSupport && path === '/api/pages/compose') return invalid(404);
-      const selectors = selected && !platform ? [url.searchParams.get('tenant')!] : [];
+      /* Nor the page's boot, which is many reads in one: its client asks each read alone (shared/tenantBoot.ts). */
+      if (onSupport && path === TENANT_BOOT_PATH) return invalid(404);
+      let selectors = selected && !platform ? [url.searchParams.get('tenant')!] : [];
       if (selected && !platform) {
         parseTenantSelector(selectors);
         exposed(headers.tenant, selectors[0]);
@@ -795,7 +837,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       )
         return invalid();
       if (control && [headers.tab, headers.context, headers.revision].some((name) => header(req, name) !== undefined)) return invalid();
-      const assertion: TenantContextAssertion | undefined = control
+      let assertion: TenantContextAssertion | undefined = control
         ? undefined
         : {
             tabId: header(req, headers.tab) ?? '',
@@ -803,7 +845,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             expectedRevision: revisionHeader(req),
           };
       if (!control && (!assertion!.tabId || !assertion!.expectedContext)) return invalid();
-      const input =
+      let input =
         get || flagExposures
           ? {}
           : await body(
@@ -824,52 +866,80 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       assertActive();
       if (req.aborted || res.destroyed) return denyTenant();
       if (path === '/api/tenant/bootstrap') {
-        const proof = await verified(req);
-        let expiresAt = proof?.expiresAt;
-        const discovered = await enrollment.discover(req, async () => {
-          const current = await verified(req);
-          if (proof === null || current === null) {
-            if (proof !== current) return denyTenant();
-          } else {
-            if (proof.identity.id !== current.identity.id || proof.sessionId !== current.sessionId) return denyTenant();
-            expiresAt = Math.min(expiresAt!, current.expiresAt);
-          }
-        });
-        const instant = now();
-        assertActive();
-        if (
-          proof === null
-            ? discovered.status !== 'signed_out'
-            : instant >= expiresAt! ||
-              discovered.status !== 'ready' ||
-              discovered.accountId !== proof.identity.id ||
-              discovered.appId !== app.id
-        )
-          return denyTenant();
-        if (discovered.status !== 'ready' || !discovered.memberships.length) return send(req, res, 200, discovered);
-        /* Each choice with what the tenant is called, for the chooser and the
-           bar: words for a person beside the id the choice still sends. A
-           lookup that fails leaves the ids to speak for themselves. */
-        let names: Readonly<Record<string, string>> = {};
-        try {
-          names = await enrollment.names(discovered.memberships.map((member) => member.tenantId));
-        } catch {
-          /* ids only */
-        }
-        /* A sandbox says so to its members wherever its name is said.
-           Unlike a name, this is not left out quietly: a sandbox read as live
-           is the mistake the mark exists to prevent. */
-        const sandboxes = await enrollment.sandboxes(discovered.memberships.map((member) => member.tenantId));
-        assertActive();
+        const found = await discoverFor(req);
         if (req.aborted || res.destroyed) return denyTenant();
-        return send(req, res, 200, {
-          ...discovered,
-          memberships: discovered.memberships.map((member) => ({
-            ...member,
-            ...(Object.hasOwn(names, member.tenantId) ? { name: names[member.tenantId] } : {}),
-            ...(sandboxes.has(member.tenantId) ? { sandbox: true as const } : {}),
-          })),
-        });
+        return send(req, res, 200, found);
+      }
+      if (path === TENANT_ENTER_PATH) {
+        /* The person's tenants, and where they are entered without being asked, the lease and the page's boot on it,
+           in one request (shared/tenantBoot.ts). Nothing here is a new proof: each step is the function its own
+           route runs, in the order the page asked them, and each refuses what that route refuses. */
+        const asked = tenantEnterRequest(input, app.id) ?? invalid();
+        /* A lease in `tenantId`, in the page's own order (client tenantBrowser.ts `contextFor`): this tab's kept
+           context resumed where it is that tenant's, else a new one. A refusal is no lease: the page then asks to
+           open one itself, and hears why in that route's words. */
+        const leaseIn = async (tenantId: string): Promise<TenantContextReply | undefined> => {
+          if (asked.kept?.tenantId === tenantId) {
+            try {
+              return await contexts.resume(req, [tenantId], { tabId: asked.kept.tabId });
+            } catch {
+              /* Gone, expired, or held by another page: a new one. */
+            }
+          }
+          return contexts.open(req, [tenantId], {}).catch(() => undefined);
+        };
+        /* A lease the answer will not carry is let go at once, as a page leaving lets its own go. */
+        const letGo = async (pending: Promise<TenantContextReply | undefined> | undefined) => {
+          const lease = await pending;
+          if (lease)
+            await contexts
+              .release(req, { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision })
+              .catch(() => {});
+        };
+        /* The tenant the page has reason to expect — the link's, the one this tab kept, or else the one discovery's
+           first snapshot finds — is opened beside the rest of discovery rather than after it: opening is its own
+           admission, exactly what the page could ask of `/open` for any tenant without asking discovery first, and
+           nothing of the tenant is read before discovery has answered that it is the person's one. Where it is not,
+           the lease is let go unseen. */
+        const hint = asked.tenant ?? asked.kept?.tenantId;
+        let ahead = hint === undefined ? undefined : { tenantId: hint, lease: leaseIn(hint) };
+        let found: TenantDiscovery;
+        try {
+          /* Named nowhere, the tenant is the one discovery's first snapshot finds, where it finds one. */
+          found = await discoverFor(req, (ids) => {
+            if (ahead === undefined && ids.length === 1) ahead = { tenantId: ids[0]!, lease: leaseIn(ids[0]!) };
+          });
+        } catch (error) {
+          await letGo(ahead?.lease);
+          throw error;
+        }
+        const sole =
+          found.status === 'ready'
+            ? soleTenant(
+                (found.memberships ?? []).map((member) => member.tenantId),
+                found.platform === true,
+                asked.tenant,
+              )
+            : undefined;
+        if (ahead && ahead.tenantId !== sole) await letGo(ahead.lease);
+        const lease = sole === undefined ? undefined : ahead?.tenantId === sole ? await ahead.lease : await leaseIn(sole);
+        assertActive();
+        if (lease && (lease.tenantId !== sole || lease.realm !== undefined || req.aborted || res.destroyed)) {
+          await letGo(Promise.resolve(lease));
+          return denyTenant();
+        }
+        if (!lease) return send(req, res, 200, found);
+        /* Entered: the page's boot on that lease, answered by the boot's own branch below as a `/api/boot` request
+           bearing the lease would be — its tenant as the selector, its tab, context and revision as the assertion,
+           the address as the boot's — so each of its reads is admitted on the lease and gated as its own request. */
+        parseTenantSelector([sole!]);
+        exposed(headers.tenant, sole!);
+        entering = { found, lease };
+        control = false;
+        selectors = [sole!];
+        assertion = { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision };
+        input = { path: asked.page.path, search: asked.page.search };
+        path = TENANT_BOOT_PATH;
       }
       if (control) {
         const asserted = input as unknown as TenantContextAssertion,
@@ -1065,6 +1135,41 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             readAdapter(context),
           );
         };
+        /* The App and its pages as this context is offered them, in `locale` with the tenant's own `words`: what
+           `/api/app` and `/api/pages` answer from, and what the page's boot plans its room from. Projected once per
+           served schema, look, locale and words: the boot asks both routes together, and it was projected for each. */
+        const projections = new WeakMap<object, Array<{ look: unknown; key: string; value: ReturnType<typeof projectTenantMetadata> }>>();
+        const projected = (
+          context: ReadContext,
+          schema: ReturnType<typeof tenantServedSchema>,
+          locale: string | undefined,
+          words: Awaited<ReturnType<typeof readTenantMessages>>,
+        ) => {
+          /* The payload wears the look a save changed in place; every check above read the App it started with. */
+          const wearingNow = look?.();
+          const key = JSON.stringify([locale ?? null, words?.words.size ? words.stamp : null]);
+          const held = projections.get(schema) ?? [];
+          const found = held.find((entry) => entry.look === wearingNow && entry.key === key);
+          if (found) return found.value;
+          const worn = wearing(app, wearingNow);
+          const local = localizedApp({ app: worn, pages: [...pages] }, locale, words);
+          const said = local.app === worn ? { app: worn, pages } : captureTenantData(local);
+          /* The lease's realm, not the schema's shape, decides which
+             surface this context is offered. A support session reads as
+             the dealer it entered, so it is offered the dealer's realm. */
+          const value = projectTenantMetadata(
+            said.app,
+            said.pages,
+            schema,
+            context.capabilities,
+            context.principal.roles,
+            platform ? 'platform' : 'tenant',
+            context.zone,
+            locale,
+          );
+          projections.set(schema, [...held, { look: wearingNow, key, value }]);
+          return value;
+        };
         /* One read on this context, as its own request is answered: the
            metadata posts and the resource reads. A composed record page asks
            each of its parts through this, under the one context it holds. */
@@ -1073,6 +1178,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           schema: ReturnType<typeof tenantServedSchema>,
           path: string,
           input: Record<string, unknown>,
+          /* A read asked inside another (the page's boot): its own query string, and where the tables it answered
+             from are told, where its own request's reply would have said them. */
+          asked: { query?: URLSearchParams; told?: ReadsTold } = {},
         ): Promise<{ status: number; body: unknown }> => {
           if (path === '/api/schema') return { status: 200, body: schema };
           if (metadataGets.has(path) || metadataPosts.has(path)) {
@@ -1107,42 +1215,34 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 active: app.id,
                 apps: [{ id: app.id, name: app.name, writable: Boolean(context.capabilities?.writable.length) }],
               });
-            if (suggested) return reply({ appId: app.id, page: tenantSuggestedPage(schema, url.searchParams.get('table')!) });
+            if (path === '/api/pages/suggested')
+              return reply({ appId: app.id, page: tenantSuggestedPage(schema, (asked.query ?? url.searchParams).get('table')!) });
             if (path === '/api/app' || path === '/api/pages') {
               /* The member's words and figures (readerLocale.ts): their own row's locale (else their pick in this
                  browser), their tenant's, the App's;
                  and the tenant's own words over the App's, read under this lease's scope (recordMessages.ts). */
               const wordsTenant = platform ? undefined : (context.principal as { tenantId?: unknown }).tenantId;
-              const tenantDefault =
+              /* What the payload reads below waits on nothing of the rest — the tenant's locale and own words, the
+                 record's or the tenant's saved branding, whether its assistant is switched on, its addresses — so
+                 each is asked here at once and awaited where it is used, in the order it always was. One after
+                 another they were a round trip each before a first page could draw. */
+              const asked = <T>(work: () => Promise<T>): Promise<T> => {
+                const pending = work();
+                void pending.catch(() => {});
+                return pending;
+              };
+              const forApp = path === '/api/app';
+              const tenantDefaultAsked =
                 typeof wordsTenant === 'string' && tenantBranding?.declaration.allow.includes('locale')
-                  ? (await tenantBranding.state(wordsTenant).catch(() => undefined))?.value.locale
+                  ? asked(async () => (await tenantBranding.state(wordsTenant).catch(() => undefined))?.value.locale)
                   : undefined;
-              const locale = resolveLocale({ person: context.locale ?? pickedLocale(app, req), tenant: tenantDefault, app: app.ui.locale });
-              const tenantWords =
+              const tenantWordsAsked =
                 typeof wordsTenant === 'string'
-                  ? await readTenantMessages({ app, schema: context.schema, query: context.data.query, tenant: wordsTenant })
+                  ? asked(() => readTenantMessages({ app, schema: context.schema, query: context.data.query, tenant: wordsTenant }))
                   : undefined;
-              /* The payload wears the look a save changed in place; every check above read the App it started with. */
-              const worn = wearing(app, look?.());
-              const local = localizedApp({ app: worn, pages: [...pages] }, locale, tenantWords);
-              const said = local.app === worn ? { app: worn, pages } : captureTenantData(local);
-              /* The lease's realm, not the schema's shape, decides which
-                 surface this context is offered. A support session reads as
-                 the dealer it entered, so it is offered the dealer's realm. */
-              const metadata = projectTenantMetadata(
-                said.app,
-                said.pages,
-                schema,
-                context.capabilities,
-                context.principal.roles,
-                platform ? 'platform' : 'tenant',
-                context.zone,
-                locale,
-              );
-              /* Where each custom component is served, for the page to load it the first time it is drawn. */
-              const branding =
-                path === '/api/app'
-                  ? await scopedRecordBranding({
+              const brandingAsked = forApp
+                ? asked(() =>
+                    scopedRecordBranding({
                       app,
                       schema: context.schema,
                       data: context.data,
@@ -1151,15 +1251,41 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                       req,
                       publicly: false,
                       tenant: brandingTenant(req, app, url, platform ? undefined : context.principal.tenantId),
-                    })
-                  : undefined;
+                    }),
+                  )
+                : undefined;
               /* A tenant's own branding, where the App lets its tenants brand it: the lease's tenant, never one the
                  request names. The platform realm keeps the App's brand; a support operator sees the dealer's. */
               const tenantId = platform ? undefined : (context.principal as { tenantId?: unknown }).tenantId;
-              const own =
-                path === '/api/app' && !branding && tenantBranding && typeof tenantId === 'string'
-                  ? await tenantBranding.presentation(tenantId, { roles: context.principal.roles })
+              const ownAsked =
+                forApp && tenantBranding && typeof tenantId === 'string'
+                  ? asked(async () =>
+                      (await brandingAsked) ? undefined : tenantBranding.presentation(tenantId, { roles: context.principal.roles }),
+                    )
                   : undefined;
+              const offeredTo = app.assistant?.roles;
+              const assistantAsked =
+                forApp &&
+                app.assistant !== undefined &&
+                !platform &&
+                !onSupport &&
+                typeof tenantId === 'string' &&
+                (!offeredTo || context.principal.roles.some((role: string) => offeredTo.includes(role))) &&
+                assistantSwitch !== undefined
+                  ? asked(() => assistantSwitch.offered(tenantId))
+                  : undefined;
+              /* The tenant's own addresses, for a link it hands out: every member of its own lease,
+                 by the lease's tenant and never one the request names, read fresh so a rotation shows on the
+                 next load. Never on the platform realm or a support session, which are not the tenant. */
+              const addressesAsked =
+                forApp && !platform && !onSupport && typeof tenantId === 'string' ? asked(() => enrollment.addresses(tenantId)) : undefined;
+              const tenantDefault = await tenantDefaultAsked;
+              const locale = resolveLocale({ person: context.locale ?? pickedLocale(app, req), tenant: tenantDefault, app: app.ui.locale });
+              const tenantWords = await tenantWordsAsked;
+              const metadata = projected(context, schema, locale, tenantWords);
+              /* Where each custom component is served, for the page to load it the first time it is drawn. */
+              const branding = await brandingAsked;
+              const own = branding ? undefined : await ownAsked;
               const branded = metadata.app && withRecordBranding(metadata.app, branding ?? own);
               /* The App's catalog in this reader's words beside the components that say it (`useMessage`). */
               const catalog = components && Object.keys(components).length ? componentMessages(app, locale, tenantWords) : undefined;
@@ -1167,7 +1293,6 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               /* The assistant is drawn only where its routes answer (tenantAssistant.ts): a tenant's own lease, a
                  role it is offered to, a model to talk to, and the tenant's switch on, read on every page load. Never
                  on the platform realm or a support session. */
-              const offeredTo = app.assistant?.roles;
               const keepAssistant =
                 path === '/api/app' &&
                 shown?.assistant !== undefined &&
@@ -1176,7 +1301,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 typeof tenantId === 'string' &&
                 (!offeredTo || context.principal.roles.some((role: string) => offeredTo.includes(role))) &&
                 assistantSwitch !== undefined &&
-                (await assistantSwitch.offered(tenantId));
+                (await (assistantAsked ?? assistantSwitch.offered(tenantId)));
               let served = shown;
               if (served?.assistant !== undefined && !keepAssistant) {
                 const { assistant: _assistant, ...rest } = served;
@@ -1204,13 +1329,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   platform &&
                   context.principal.roles.some((role: string) => app.auth?.roles?.[role]?.supportAudit === true);
                 const apiTokens = tokens !== undefined && !platform && !onSupport;
-                /* The tenant's own addresses, for a link it hands out: every member of its own lease,
-                   by the lease's tenant and never one the request names, read fresh so a rotation shows on the
-                   next load. Never on the platform realm or a support session, which are not the tenant. */
-                const addresses =
-                  path === '/api/app' && !platform && !onSupport && typeof tenantId === 'string'
-                    ? await enrollment.addresses(tenantId)
-                    : undefined;
+                const addresses = await addressesAsked;
                 served = {
                   ...served,
                   ...(supportAudit ? { supportAudit: true as const } : {}),
@@ -1517,15 +1636,19 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               /* On the primary whole, related lists and all: a record is
                  where a person looks for what they saved (readRouting.ts). */
               await primaryReads(() =>
-                composeTenantRecordPage({
-                  schema,
-                  planned,
-                  key: input.key as Record<string, unknown>,
-                  rows: input.rows,
-                  tab: input.tab,
-                  app: metadata.app,
-                  ask: (asked, given) => route(context, schema, asked, given),
-                }),
+                /* Its reads leave together, on one snapshot: each on one of its own took a reader of the pool, a
+                   BEGIN, a LOCK and a COMMIT apiece (a field report: 35 statements in 35 round trips). */
+                together(context, () =>
+                  composeTenantRecordPage({
+                    schema,
+                    planned,
+                    key: input.key as Record<string, unknown>,
+                    rows: input.rows,
+                    tab: input.tab,
+                    app: metadata.app,
+                    ask: (part, given) => route(context, schema, part, given, { told: asked.told }),
+                  }),
+                ),
               ),
             );
           }
@@ -1554,7 +1677,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           /* And each says which tables it answered from, as an App's own reads do (live/liveReads.ts): a member's
              page asks it again only when one of them changes, where without it every change asked every list,
              count and breakdown on the page. Only a member follows changes (the live route below). */
-          const told = liveSyncOn() && app.live && !platform && !onSupport ? trackingReads(reader, schema, res) : reader;
+          const told = liveSyncOn() && app.live && !platform && !onSupport ? trackingReads(reader, schema, asked.told ?? res) : reader;
           const dispatch = () =>
             dispatchResourceReadHttp(path as ResourceHttpPath, input, told, schema, {
               app: APP_READS,
@@ -1570,34 +1693,174 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         /* A computed column that says `me` is this reader's: their session is
            asked only where one does, since asking it costs a store read. */
         const readerEmail = computedSaysMe ? ((await verified(req))?.identity.who ?? null) : null;
-        const result = await within(async (context) =>
-          route(context, tenantServedSchema(context, app, new Date(now()), readerEmail), path, input),
-        );
-        let value = result.value.body;
-        if (path === '/api/pages/compose' && value && typeof value === 'object' && 'checks' in value) {
-          /* Which of its verbs the record offers: advice, asked as its own
-             request asks it (the command's footprint, in one read snapshot),
-             once the page's reads are in. A refusal leaves them to the page. */
+        /* A composed record page without its `checks`, and with which of its verbs the record offers: advice,
+           asked as its own request asks it (the command's footprint, in one read snapshot), once the page's
+           reads are in. A refusal leaves them to the page. */
+        const withVerbs = async (value: unknown): Promise<unknown> => {
+          if (!value || typeof value !== 'object' || !('checks' in value)) return value;
           const { checks, ...composed } = value as {
             checks: Array<{ command: string; commandVersion: number; keys: unknown[] }>;
             reads: unknown[];
           };
-          value = composed;
-          if (checks.length) {
-            const asked = { checks };
-            try {
-              const verbs = await (platform
-                ? contexts.availabilityPlatform(req, expected, asked, { signal: controller.signal })
-                : contexts.availability(req, selectors, expected, asked, { signal: controller.signal }));
-              value = {
-                ...composed,
-                reads: [...composed.reads, { path: '/api/commands/availability', body: asked, status: 200, reply: verbs.value }],
-              };
-            } catch {
-              /* The page asks its verbs itself. */
-            }
+          if (!checks.length) return composed;
+          const asked = { checks };
+          try {
+            const verbs = await (platform
+              ? contexts.availabilityPlatform(req, expected, asked, { signal: controller.signal })
+              : contexts.availability(req, selectors, expected, asked, { signal: controller.signal }));
+            return {
+              ...composed,
+              reads: [...composed.reads, { path: '/api/commands/availability', body: asked, status: 200, reply: verbs.value }],
+            };
+          } catch {
+            /* The page asks its verbs itself. */
+            return composed;
           }
+        };
+        if (path === TENANT_BOOT_PATH) {
+          /* The page's first reads in one (shared/tenantBoot.ts), on the one context this request holds: the
+             runtime, the App, its pages and its schema, each as its own request is answered, and then the room
+             the address opens, planned as an ordinary App's first page plans it (http/firstPaintRooms.ts) and
+             each read asked through the route its own request reaches. Each answer is keyed by that request as
+             the tenant transport sends it, and only a success is carried: anything else, the page asks itself
+             and hears in its own words. Asked with `reads` instead, it is a batch of the page's own reads asked in
+             one moment past its first (shared/tenantBoot.ts `tenantBatchRequest`): those, and nothing planned. */
+          const batch = input.reads === undefined ? undefined : (tenantBatchRequest(input) ?? invalid());
+          const page = batch ? undefined : (tenantBootRequest(input, app.id) ?? invalid());
+          const leaseTenant = platform ? PLATFORM_TENANT_ID : selectors[0];
+          const keyOf = (method: 'GET' | 'POST', target: string, body?: Record<string, unknown>) =>
+            readKey(method, tenantReadAddress(target, app.id, leaseTenant), tenantReadBody(body));
+          const following = liveSyncOn() && app.live && !platform;
+          /* Every read on one snapshot of the one context, as a composed page's are (tenantReadSource.ts `together`). */
+          const reading = within((context) =>
+            together(context, async () => {
+              const schema = tenantServedSchema(context, app, new Date(now()), readerEmail);
+              const answers: FirstPaintData['reads'] = {};
+              const itemAnswers: FirstPaintData['items'] = {};
+              /* One read, as its own request would be gated and answered; a request fault (a bad question, a
+               record not found) is that read's alone and leaves the context standing. */
+              /* Each timed as a part of the request where server timing is on (serverTiming.ts), by its route alone. */
+              const one = (target: string, body: Record<string, unknown> | undefined) =>
+                timedPart(
+                  `read.${new URL(target, 'http://mistri.invalid').pathname.replace(/^\/api\//, '').replace(/[^a-z0-9-]+/gi, '.')}`,
+                  () => answerOne(target, body),
+                );
+              const answerOne = async (target: string, body: Record<string, unknown> | undefined) => {
+                const address = new URL(target, 'http://mistri.invalid');
+                const at = address.pathname;
+                const given = tenantReadBody(body) ?? {};
+                const query = new URLSearchParams(address.search);
+                query.delete('app');
+                const getting = at === '/api/schema' || metadataGets.has(at);
+                if (
+                  at === TENANT_BOOT_PATH ||
+                  !(getting || reads.has(at) || metadataPosts.has(at)) ||
+                  getting !== (body === undefined) ||
+                  [...query.keys()].some((key) => at !== '/api/pages/suggested' || key !== 'table') ||
+                  (at === '/api/pages/suggested' && query.getAll('table').length !== 1) ||
+                  (at === '/api/pages/compose' && !composeInputValid(given))
+                )
+                  return undefined;
+                try {
+                  if (!getting) tenantRecord(given, fields[at]);
+                } catch {
+                  return undefined;
+                }
+                const told = new ReadsTold();
+                try {
+                  const reply = await route(context, schema, at, given, { query, told });
+                  return carriable(reply) ? { body: reply.body, reads: following ? told.value : undefined } : undefined;
+                } catch (error) {
+                  /* A refusal in the read's own words is the read's: the page asks it and hears them. One that is
+                   the context's ends the boot, as it would have ended the read. */
+                  if (error instanceof TenantRequestFault || error instanceof HttpError) return undefined;
+                  throw error;
+                }
+              };
+              const carry = (key: string, answer: { body: unknown; reads?: string } | undefined) => {
+                if (answer) answers[key] = { body: answer.body, ...(answer.reads === undefined ? {} : { reads: answer.reads }) };
+                return answer?.body;
+              };
+              /* Each read asked once, however many plans name it: the room is planned twice below. */
+              const asking = new Map<string, Promise<unknown>>();
+              const ask = (method: 'GET' | 'POST', target: string, body?: Record<string, unknown>) => {
+                const key = keyOf(method, target, body);
+                let answer = asking.get(key);
+                if (!answer) asking.set(key, (answer = one(target, body).then((read) => carry(key, read))));
+                return answer;
+              };
+              if (batch) {
+                await Promise.all(batch.map((read) => ask(read.method, read.path, read.body)));
+                return { reads: answers, items: itemAnswers };
+              }
+              const plannedRoom = bootRoom(ask, one, (kind, key, body) => {
+                itemAnswers[itemKey(kind, app.id, key)] = { body };
+              });
+              /** The reads the room at the page's address asks, planned from `payload`. */
+              const askRoom = (payload: AppPayloadApp, pages: RoomInput['pages']) =>
+                plannedRoom({ app: app.id, path: page!.path, search: page!.search, payload, schema, pages, me: {}, visitor: false });
+              /* The room's reads leave with the App's rather than after them. Its plan needs the App's payload, and
+                 what that payload reads — the tenant's words and locale, its branding, its assistant's switch, its
+                 addresses — moves no read the room asks; so the room is planned first from the App as this context
+                 is offered it in the App's own words, and those reads are asked at once. Planned again from the
+                 payload the page is answered with, anything that plan names and the first did not is asked then: the
+                 answer is never short of a read the page will ask. A read only the first named is answered unused. */
+              let early: Promise<unknown> = Promise.resolve();
+              try {
+                const projection = projected(
+                  context,
+                  schema,
+                  resolveLocale({ person: context.locale ?? pickedLocale(app, req), tenant: undefined, app: app.ui.locale }),
+                  undefined,
+                );
+                if (projection.app)
+                  early = askRoom(projection.app as unknown as AppPayloadApp, { pages: projection.pages as RoomInput['pages']['pages'] });
+              } catch {
+                /* Planned once, from the payload. */
+              }
+              void early.catch(() => {});
+              const [, payload, pageList] = await Promise.all([
+                ask('GET', '/api/runtime'),
+                ask('GET', '/api/app'),
+                ask('GET', '/api/pages'),
+                ask('GET', '/api/schema'),
+                /* The bell's count (InboxBell.tsx), where the App keeps an inbox: drawn with the bar, it would
+                 otherwise be one more round after the page's. */
+                appKeepsInbox(app) && enrollment.deployment.inbox !== undefined ? ask('POST', '/api/inbox', { limit: 1 }) : undefined,
+              ]);
+              const appPayload = (payload as { app?: AppPayloadApp } | undefined)?.app;
+              await Promise.all([appPayload && pageList ? askRoom(appPayload, pageList as RoomInput['pages']) : undefined, early]);
+              return { reads: answers, items: itemAnswers };
+            }),
+          );
+          /* Entered, a boot that fails is the boot's alone: the lease is open and the page's, so it is answered
+             with discovery's, and the page asks its boot itself on it and hears why in that request's words. */
+          const booted = entering ? await reading.catch(() => undefined) : await reading;
+          if (!booted) {
+            assertActive();
+            if (req.aborted || res.destroyed) return denyTenant();
+            return send(req, res, 200, { ...entering!.found, entered: { context: entering!.lease } }, ownerHeaders(entering!.lease));
+          }
+          /* A record page's verbs, as its own compose request would have carried them. */
+          const carried = Object.fromEntries(
+            await Promise.all(
+              Object.entries(booted.value.reads).map(async ([key, read]) =>
+                key.startsWith('POST /api/pages/compose?') ? [key, { ...read, body: await withVerbs(read.body) }] : [key, read],
+              ),
+            ),
+          ) as FirstPaintData['reads'];
+          assertActive();
+          if (req.aborted || res.destroyed) return denyTenant();
+          const boot = { reads: carried, items: booted.value.items };
+          if (entering)
+            return send(req, res, 200, { ...entering.found, entered: { context: booted.context, boot } }, ownerHeaders(booted.context));
+          return send(req, res, 200, boot, ownerHeaders(booted.context));
         }
+        const result = await within(async (context) =>
+          route(context, tenantServedSchema(context, app, new Date(now()), readerEmail), path, input),
+        );
+        let value = result.value.body;
+        if (path === '/api/pages/compose') value = await withVerbs(value);
         const failure =
           result.value.status >= 400 ||
           (value &&
@@ -1845,7 +2108,10 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           const failure = businessCommandHttpError(
             error instanceof BusinessCommandExecutionError || error instanceof AppAccessDenied
               ? error
-              : new BusinessCommandExecutionError(error instanceof InvalidRequest ? 'invalid_input' : 'forbidden', 'unknown'),
+              : new BusinessCommandExecutionError(
+                  error instanceof InvalidRequest ? 'invalid_input' : databaseUnanswered(error) ? 'temporarily_unavailable' : 'forbidden',
+                  'unknown',
+                ),
             path.endsWith('/status'),
           );
           reportRefusal(req, failure.status, failure.body.code, failure.body.message, error);
@@ -1853,6 +2119,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         }
         if (writes.has(path)) {
           const unknown = completedWrite || (error instanceof TenantWriteFailure && error.outcome === 'unknown');
+          if (!unknown && databaseUnanswered(error)) {
+            const failure = unansweredWrite(path);
+            reportRefusal(req, failure.status, 'temporarily_unavailable', String(failure.body.error), error, true);
+            return send(req, res, failure.status, failure.body);
+          }
           /* The App's rules refused the record: the same rejected envelope a
              plain App answers (dataWriteRoutes.ts), so the form keeps the
              draft and marks the fields. Names and fixed sentences only. */
@@ -1925,6 +2196,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     const path = (req.url ?? '/').split('?')[0];
     return probe(req, res, path) || observerRoute(req, res, new URL(req.url ?? '/', 'http://localhost'));
   });
+  /* Outermost, so a request's timing covers every listener above (serverTiming.ts); nothing when off. */
+  timeRequests(server);
   applyServerTimeouts(server);
   const close = server.close.bind(server);
   const retire = tenantRetirement(

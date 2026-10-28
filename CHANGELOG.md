@@ -5,15 +5,69 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
-## 1.0.0-rc.1
+## 1.0.0-rc.2
 
 The first release candidate, and the first release of mistri: the App framework
 is split out of tablewalk, which is now only the standalone database browser.
 There is no upgrade path from a tablewalk 0.9 App database; reset and reseed it.
+This entry describes the whole first release, and its first entries are what a
+field report measured against a remote database.
 
 - **The App framework is `@mistriwork/mistri`, and `tablewalk` is the database browser.** Scaffold with
   `npm create mistri`; the command is `mistri`, its config `mistri.json`, its variables `MISTRI_*` and its working
   directory `.mistri/`. The site is https://mistriwork.dev. The next entries are in the order they matter.
+- **A tenant App on a remote database is fast.** A field report on a real deploy, a container and a hosted PostgreSQL
+  about 20 ms away, measured a list at 8 to 10 s, a record at 16 to 18 s, a save settling in 15 to 23 s and a start in
+  146 to 174 s on half a vCPU. The same deploy, moved to one vCPU (which alone was worth about a fifth), now lists in
+  about 0.7 s, opens a record in about 0.8 s and settles a save in about 0.55 s; a new build starts in about 59 s and
+  restarts unchanged in about 21 s. Time was in round trips and in work repeated per request, not in the database. The
+  entries below are how it was done, and `MISTRI_SERVER_TIMING=1` is how to see it.
+- **A tenant App's first page is who-am-I and one request.** Someone in a single tenant is entered by
+  `POST /api/tenant/enter`, which answers discovery, opens or resumes the lease and reads the page's boot on it, where
+  the page asked who-am-I, the person's tenants, a lease and then the boot, each a round trip of its own. The route
+  runs the same functions in the same order and adds no proof: a person in several tenants, in the platform realm or
+  following a link to another tenant gets discovery's answer alone and the chooser, and it refuses lease headers,
+  selectors and support realms. The boot reads the runtime, the App, its pages, schema and the bell's count on that
+  lease and plans the room's own reads beside them. A list is two requests, and entering is eight database round
+  trips for a list where it was eleven and twelve for a record where it was eighteen. The tenant's flows are preloaded
+  beside the entry, so no network round trip stands in front of entering.
+- **A save's checks leave together, and reads asked together leave together.** On a pipelining PostgreSQL writer a row's
+  lock and the guard read behind it, and every reference's lock and count, go in one flight and are judged in the order
+  they were asked; a create reads its references from the row the INSERT returned. A create goes from twenty-three
+  flights to eight (523 ms to 224 ms at 10 ms each way), and a handler's `Promise.all` of reads costs one flight
+  instead of one apiece. A write still waits for every operation asked before it, a read asked after a write waits for
+  it, and the first failure in the order asked is every later operation's. SQLite and MySQL still run one at a time.
+- **A tenant's catalog is built once, and a person's grant is resolved once per role set.** A request used to rebuild
+  its served catalog, copy and re-check its row scope and filter the role's grant afresh, most of what a large App
+  spent a request on. The served catalog is kept per captured catalog, App and zone, and per only as much of the clock
+  and the reader as building it read; a computed column that says `now`, `today` or `me` is left as written and each
+  request is served a copy with them folded only in the tables that say one. A large App's first page goes from 52 ms
+  of CPU to 9, and its request context from about 39 ms to 2. Nothing is kept across a change of catalog, and a grant
+  is never keyed by the person or the tenant.
+- **A save settles in one batched refresh, and an idle jobs host sleeps.** The reads a write sets off, which were six
+  requests each with its own admission and snapshot, go as one `POST /api/boot` with `reads` on the lease, one
+  snapshot for all of them; a host that refuses a batch is asked read by read. The jobs host's readiness is one
+  aggregate statement per store, and a host that hears every write over PostgreSQL LISTEN sleeps until the next thing
+  due, with a five minute fallback; enqueue and redrive NOTIFY at commit. Claim, lease and retry rules are unchanged.
+- **`MISTRI_SERVER_TIMING=1` shows where a request's time goes.** Every response carries a `Server-Timing` header and
+  one JSON log line: the total to headers, the process's CPU over the request, the session's resolution, per database
+  the flights sent (a pipelined batch counts once) and the time awaiting the server, the wait for a connection per
+  pool, and a composed first page's planned reads. At startup it logs ten `SELECT 1` round trips to each database on a
+  connection of its own, which is the round trip from where the server runs. Nothing it prints names a statement, a row
+  or a key. Off, each entry point is one boolean.
+- **A production build's restart skips the checks a recorded start already made.** A tenant App's start checked its
+  declarations against the catalog twice and dry-ran enrollment, about 520 round trips. The start that checks now
+  writes one row per App and source to the `validation-record` store, which `mistri migrate stores up` provisions and
+  a start never does. The same build, or another of the same declarations, on the same catalog skips the catalog
+  checks; another build on the same catalog reads the catalog once and checks it whole; another catalog, no record or
+  an unreadable one is a full check, as are a source App, `--dev` and `mistri check`. A record never stops a start.
+  Behind a 20 ms relay Ignition starts in 8.4 s where it took 15.8.
+- **Workshop is the default App look, and every look offers the same twelve palettes.** Workshop is warm paper, ink
+  type and fills, condensed capitals and square corners; Lumen, Mono and Sage stay. The palettes are Crimson, Safety
+  orange, Amber, Moss, Emerald, Teal, Cobalt, Violet, Plum, Rose, Slate and Ink, each its hue at the depths a look
+  draws it, light and dark. Workshop wears Safety orange, Lumen Cobalt, and Mono and Sage Ink. Barlow is fetched only
+  by a page wearing Workshop and Inter only with Lumen. `test/contrast.test.ts` measures every palette in every look
+  and mode.
 - **A save is a fixed number of database round trips.** On PostgreSQL a save is one flight for the BEGIN and what it
   reads first, one for each awaited dependent read or write, and a last one that carries the COMMIT, history, notices
   and the receipt. Preparing a command is BEGIN and COMMIT, and a click skips it. The writer pipelines, which works
@@ -428,6 +482,38 @@ The rest of this release, in the order it was made:
   `--yes` under `--max-cost`, and prints what one record would send with `--dry`. A row-policy App names its policy
   with `--policy`. `startTestApp({ decisions })` and `evaluateDecision` test a decision against a scripted model.
 - Lintel suggests a technician for each new repair (`routeRepair`).
+
+- **A connection cut during a save answers 503, not 403.** A write or command that failed because the database did not
+  answer (a cut, a terminated backend, a pool that could not lend a connection) says `temporarily_unavailable` with
+  outcome `not_applied`, and a writer reopening itself says the same; it used to say "forbidden". A cut after the BEGIN
+  still answers outcome `unknown`, as the transaction contract says.
+- **A sign-in store is read once every few seconds, not thirteen times a request.** What a PostgreSQL store answers
+  about a session is kept for five seconds (`MISTRI_AUTH_SESSION_CACHE`, 0 to 60) and any write through the process
+  drops it before the write leaves and when it is answered, so a sign-out or a revoked session is seen at once here; one
+  made elsewhere is honored for at most the TTL. Behind a transaction-mode pooler a statement and its transaction leave
+  in one round trip where three were awaited. `MISTRI_AUTH_POOL` (1 to 64, default 4) sizes the store's pool.
+- **A large tenant App opens its port in seconds.** Startup checked each command and role against the same catalog
+  again and again; it now works each answer out once. A synthetic App of 250 tables, 150 commands and 10 roles spends
+  1.9 s of CPU in enrollment where it spent 6.4, and 2.7 where it spent 14.9. Every refusal says the same words.
+- **A tenant's record page asks half as many round trips.** The membership rides in the message that begins a read
+  snapshot, a tenant reader pipelines, and an action's guards are asked at once. A record page goes from 46 messages in
+  46 flights to 33 in 22, and a save with what the page reads after it from 60 flights to 32.
+- **The assistant says it is working, keeps its turns short and says what went wrong.** A question that matched
+  nothing no longer draws "No rows match." and goes looking again; a turn's cached input counts a tenth against
+  `tokensPerTurn`, and a result is cut to about 6,000 characters. The panel says "Working..." at once and what each
+  tool is doing, says why a refused conversation was refused with New conversation beside it, and reopens its last
+  conversation only for the same account and customer. A restart mid-turn, a bare 5xx or a stream that closes early
+  says the connection dropped, with Try again. `mistri check` no longer crashes on a tenant App placing the assistant
+  as a page.
+- **A conversation's top edge no longer cuts a message.** At its foot a conversation stands a little shorter than its
+  most so its top falls where a message starts; the height was floored and put the edge up to a pixel inside one, and
+  it is now rounded to within half a pixel of a line's start.
+- **Workshop's primary actions are the look's primary color under an App accent.** A record's first action drew in the
+  App's accent while the list's New and the dashboard's action drew in Safety orange. Every primary verb is the look's
+  key now; the App's accent keeps its links and marks.
+- **A reloaded record page by a person in two tenants chooses one first,** where it asked for a lease it could not name.
+- **`prove-red` runs a checkout's CLI from source,** as the seeds do; with the built bin it failed before any variant
+  ran.
 
 ## 0.9.9
 

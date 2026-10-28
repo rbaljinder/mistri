@@ -17,7 +17,6 @@
  * It names only tables the reader is served: a rollup over a table they cannot
  * read refreshes when its own table changes, or on focus.
  */
-import type { ServerResponse } from 'node:http';
 import type { Adapter, CountItem } from '@mistriwork/engine/adapters/adapter.js';
 import type { DatabaseSchema, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { rollupReads } from '@mistriwork/engine/shared/rollups.js';
@@ -91,7 +90,12 @@ export function readTables(schema: DatabaseSchema, base: string, request: unknow
  * from: the union over the request's reads, or no header once one of them
  * cannot be told.
  */
-export function trackingReads(adapter: Adapter, schema: DatabaseSchema, reply: ServerResponse): Adapter {
+export function trackingReads(
+  adapter: Adapter,
+  schema: DatabaseSchema,
+  /* The reply that says them, or what stands for one: a tenant page's boot tells each read it carries apart. */
+  reply: { readonly headersSent: boolean; setHeader(name: string, value: string): unknown; removeHeader(name: string): unknown },
+): Adapter {
   const seen = new Set<string>();
   let unknown = false;
   const note = (base: string, request: unknown) => {

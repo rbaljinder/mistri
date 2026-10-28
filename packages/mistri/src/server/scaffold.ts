@@ -1726,7 +1726,7 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
   const ui = {
     logo: opts.brief?.logo ?? (hero ? (hero.icon === 'table' ? 'stack' : hero.icon) : 'stack'),
     /* Lumen is the default look, written out so the choice is the author's to see and change. */
-    theme: { preset: opts.brief?.theme ?? 'lumen' },
+    theme: { preset: opts.brief?.theme ?? 'workshop' },
     shell: { placement: 'top' },
   };
   const pagesTree = Object.fromEntries(pages.map(({ key, page }) => [key, new Ref(identifier(key, 'Page'), page)]));

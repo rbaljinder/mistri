@@ -15,7 +15,12 @@
  *   `SET TRANSACTION READ ONLY`, in the same round trip as its BEGIN.
  * - A statement sent outside a transaction is wrapped in one of its own:
  *   BEGIN with the settings, the statement, COMMIT. A bare statement is
- *   exactly what a pooler may run on any server connection.
+ *   exactly what a pooler may run on any server connection. On a client that
+ *   pipelines, the three leave together: one round trip, not three, and the
+ *   same statements in the same order on the same connection. The statement
+ *   cannot run outside them: the BEGIN and the settings are one simple query,
+ *   so a setting that fails leaves the transaction aborted, the statement
+ *   refused in it, and the COMMIT a ROLLBACK.
  * - An untrusted lease — user-authored SQL — fences each statement with a
  *   savepoint, and before its transaction ends runs the part of DISCARD ALL
  *   a transaction block allows. An advisory lock or a prepared statement
@@ -58,7 +63,7 @@ const EDGES =
  * comments, so this does too: a misread edge here is a transaction left open
  * on a pooled server connection, not a cosmetic slip.
  */
-function head(text: string): string {
+export function statementHead(text: string): string {
   let i = 0;
   while (i < text.length) {
     if (/\s/.test(text[i])) {
@@ -100,6 +105,9 @@ export function transactionScoped(
     /** The path a store's unqualified names resolve on (the authentication
      * store's, for Better Auth), set per transaction for the same reason. */
     searchPath?: string;
+    /** The client sends each query as it is asked (node-postgres's `pipeline`):
+     * a statement's own transaction is then sent with it, not around it. */
+    pipelines?: boolean;
   }>,
 ): TransactionScopedClient {
   let closed: Error | undefined;
@@ -189,7 +197,41 @@ export function transactionScoped(
     }
   };
 
+  /* BEGIN with the settings, the statement and COMMIT asked at once. Each is
+     answered on its own (a pipelining client syncs every query), so a failed
+     statement leaves the transaction aborted and the COMMIT behind it ends it
+     as a ROLLBACK: nothing is left open, and nothing commits. Trusted
+     statements only: an untrusted one is fenced by a savepoint it awaits. */
+  const together = async (request: unknown, params: unknown): Promise<unknown> => {
+    const opened = raw(`BEGIN${reader ? ' READ ONLY' : ''}; ${settings}`),
+      answer = raw(request, params),
+      ended = raw('COMMIT');
+    for (const pending of [opened, answer, ended]) void pending.catch(() => {});
+    try {
+      await opened;
+    } catch (error) {
+      await answer.catch(() => {});
+      await ended.catch(() => raw('ROLLBACK').catch(() => {}));
+      throw error;
+    }
+    let result: unknown;
+    try {
+      result = await answer;
+    } catch (error) {
+      await ended.catch(() => raw('ROLLBACK').catch(() => {}));
+      throw error;
+    }
+    try {
+      await ended;
+    } catch (error) {
+      await raw('ROLLBACK').catch(() => {});
+      throw error;
+    }
+    return result;
+  };
+
   const alone = async (request: unknown, params: unknown): Promise<unknown> => {
+    if (options.pipelines && !options.untrusted) return together(request, params);
     try {
       await raw(`BEGIN${reader ? ' READ ONLY' : ''}; ${settings}${options.untrusted ? `; SAVEPOINT ${MARK}` : ''}`);
     } catch (error) {
@@ -224,7 +266,7 @@ export function transactionScoped(
           : undefined;
     // Nothing to read an edge from: the driver says what is wrong with it.
     if (text === undefined) return raw(request, params);
-    const statement = head(text);
+    const statement = statementHead(text);
     if (BEGINS.test(statement)) return open ? raw(request, params) : begin(text, request, params);
     if (ENDS.test(statement)) return open ? end(request, params) : raw(request, params);
     if (EDGES.test(statement)) return raw(request, params);

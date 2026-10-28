@@ -210,8 +210,9 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                     { readable: read, writable: write, validation, reader: actorReader(app, schema, authorized.actor) },
                     raw,
                   );
-                  const operations = new TransactionOperations();
-                  const accept = <A, R>(input: A, work: (snapshot: A) => Promise<R>): Promise<R> => {
+                  // Reads asked together go on together, in their order (TransactionOperations.read).
+                  const operations = new TransactionOperations(true);
+                  const accept = <A, R>(input: A, work: (snapshot: A) => Promise<R>, read = false): Promise<R> => {
                     let snapshot: A;
                     try {
                       snapshot = snapshotScopedData(input);
@@ -220,10 +221,11 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                         throw error;
                       });
                     }
-                    return operations.run(async () => {
+                    const job = async (): Promise<R> => {
                       current();
                       return work(snapshot);
-                    });
+                    };
+                    return read ? operations.read(job) : operations.run(job);
                   };
                   const readResult = async <R>(work: Promise<R>): Promise<R> => {
                     const result = await work;
@@ -232,9 +234,9 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                   };
                   const records = Object.freeze<WriteTransaction>({
                     query: (request) =>
-                      accept(request, (request) => readResult(tx.query({ ...request, table: localTable(request.table) }))),
+                      accept(request, (request) => readResult(tx.query({ ...request, table: localTable(request.table) })), true),
                     count: (table, filter) =>
-                      accept({ table, filter }, (request) => readResult(tx.count(localTable(request.table), request.filter))),
+                      accept({ table, filter }, (request) => readResult(tx.count(localTable(request.table), request.filter)), true),
                     insert: (request) => accept(request, (request) => tx.insert({ ...request, table: localTable(request.table, true) })),
                     update: (request) => accept(request, (request) => tx.update({ ...request, table: localTable(request.table, true) })),
                     remove: (request) => accept(request, (request) => tx.remove({ ...request, table: localTable(request.table, true) })),

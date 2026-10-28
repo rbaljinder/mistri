@@ -28,7 +28,7 @@ import type { TenantReadContext } from './tenantReadRuntime.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { TenantWriteFailure } from './tenantWriteSource.js';
 import { refusedFields } from './tenantWriteKindContract.js';
-import { narrowTenantInvocation, tenantInvocationGuard } from './tenantInvocation.js';
+import { narrowTenantInvocation, tenantInvocationAdmittedAgain, tenantInvocationGuard } from './tenantInvocation.js';
 import {
   isSupportEvidence,
   markSupportRefusal,
@@ -40,7 +40,7 @@ import {
 } from './tenantSupportLease.js';
 import type { SupportReadContext } from './tenantSupportReadRuntime.js';
 import { requireFreshAdmission } from './tenantAdmissionCache.js';
-import { tenantAnswerProvenByCommit } from './tenantRequestRuntime.js';
+import { tenantAnswerProvenByCommit, tenantAnswerProvenByFence } from './tenantRequestRuntime.js';
 
 interface TenantContextsOptions<Request> {
   readonly deployment: TenantDeployment<Request>;
@@ -61,7 +61,11 @@ interface TenantContextResult<T> {
   readonly context: TenantContextReply;
   readonly value: T;
 }
-type Family = 'read' | 'preview' | 'write' | 'prepare' | 'execute' | 'status';
+/* Availability is a command family as prepare is, with prepare's options and failure classes; it is named apart
+   only because it acts on nothing, so a fenced answer needs no second admission (below). */
+type Family = 'read' | 'preview' | 'write' | 'availability' | 'prepare' | 'execute' | 'status';
+const commandFamily = (family: Family): boolean =>
+  family === 'availability' || family === 'prepare' || family === 'execute' || family === 'status';
 /** A tab holds one lease: a tenant's, the platform realm's, or a support
  * session's inside one dealer. A support lease reads that dealer's rows through
  * its own read family, every read ledgered before a body is released; it acts
@@ -371,7 +375,14 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
     });
   const candidate = async (request: Request, target: Target, initial?: { started: number; proof: VerifiedSessionInstance }) => {
     // The window set here is bounded by the evidence: never evidence kept from an earlier request.
-    requireFreshAdmission(request);
+    const admitted = requireFreshAdmission(request);
+    try {
+      return await admittedCandidate(request, target, initial);
+    } finally {
+      admitted();
+    }
+  };
+  const admittedCandidate = async (request: Request, target: Target, initial?: { started: number; proof: VerifiedSessionInstance }) => {
     const started = initial?.started ?? clock();
     if (started > Number.MAX_SAFE_INTEGER - lifetime) return denyTenant();
     const proof = initial?.proof ?? (await session(request));
@@ -411,7 +422,8 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       target.realm === 'platform'
         ? deployment.withPlatformContext(request, (context) => context.principal, narrowed)
         : deployment.withContext(request, target.selectors, (context) => context.principal, narrowed);
-    const first = await admit(guard);
+    // Compared with the second admission's only, and released by none: that admission's snapshot is its fence.
+    const first = await admit(tenantInvocationAdmittedAgain(guard));
     const finalSession = await session(request);
     if (finalSession.identity.id !== proof.identity.id || finalSession.sessionId !== proof.sessionId) return denyTenant();
     const principal = await admit(
@@ -476,8 +488,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       let captured: A;
       try {
         captured = captureTenantData(input);
-        if (family === 'prepare' || family === 'execute' || family === 'status')
-          commandOptions = captureTenantCommandExecution(options ?? {});
+        if (commandFamily(family)) commandOptions = captureTenantCommandExecution(options ?? {});
       } catch (error) {
         invalidInput = true;
         throw error;
@@ -550,7 +561,11 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         // Admitting again would only repeat both. Everything that acts is
         // fenced again here.
         // A committed write's answer is not: its transaction held the membership from BEGIN to COMMIT (tenantRequestRuntime.ts).
-        if (family !== 'read' && !tenantAnswerProvenByCommit(request)) await bound.withContext(request, selectors, () => undefined);
+        // Nor is availability's, which acts on nothing: it is advice read in one snapshot, and its runtime's release
+        // fence ran this lease's guard and observed the membership after it, as a read's does. Asking again was
+        // a second admitted context and a third membership snapshot on every record page.
+        if (family !== 'read' && !tenantAnswerProvenByCommit(request) && !(family === 'availability' && tenantAnswerProvenByFence(request)))
+          await bound.withContext(request, selectors, () => undefined);
         current();
         return captureTenantData({ context: reply(tab, lease, window), value });
       } finally {
@@ -567,13 +582,13 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
           if (supported) markSupportRefusal(failure, error as TenantSupportUnavailable);
           return failure;
         };
-        if (family === 'prepare' || family === 'execute' || family === 'status') {
+        if (commandFamily(family)) {
           if (error instanceof BusinessCommandExecutionError) throw tagged(error);
           throw tagged(
             recordRefusalCause(
               new BusinessCommandExecutionError(
                 invalidInput ? 'invalid_input' : 'forbidden',
-                family !== 'prepare' && !supported ? 'unknown' : 'not_applied',
+                family !== 'prepare' && family !== 'availability' && !supported ? 'unknown' : 'not_applied',
               ),
               error,
             ),
@@ -1330,7 +1345,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       options?: TenantCommandExecutionOptions,
     ) {
       return execute(
-        'prepare',
+        'availability',
         request,
         selectors,
         expected,

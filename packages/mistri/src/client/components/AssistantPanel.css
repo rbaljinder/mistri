@@ -114,7 +114,16 @@
 .assistant-body > * { flex-shrink: 0; }
 .assistant-empty, .assistant-note, .assistant-working, .assistant-waiting { margin: 0; color: var(--ink-muted); }
 .assistant-note { font-size: var(--text-sm); }
-.assistant-problem { margin: 0; color: var(--status-critical); }
+.assistant-problem { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); color: var(--status-critical); }
+.assistant-problem p { margin: 0; }
+/* The way on from a problem is a quiet word in the ink, not a second alarm. */
+.assistant-problem button {
+  padding: 1px var(--space-2); border: 1px solid var(--line); border-radius: var(--radius);
+  background: none; font: inherit; font-size: var(--text-sm); color: var(--ink); cursor: pointer;
+}
+@media (hover: hover) {
+  .assistant-problem button:hover { background: var(--raised); }
+}
 .assistant-person { align-self: flex-end; max-width: 85%; }
 .assistant-person p {
   margin: 0; padding: var(--space-3) var(--space-3h); white-space: pre-wrap; overflow-wrap: anywhere;

@@ -19,6 +19,7 @@ import { isWriteConflict, type Condition, type Filter, type WriteTransaction } f
 import { parseQuery, type QueryPerson } from '@mistriwork/engine/shared/query.js';
 import {
   columnKind,
+  findTable,
   isJsonType,
   type ColumnKind,
   type ColumnMeta,
@@ -168,7 +169,11 @@ export function commandCatalog(
 ): CommandCatalog | undefined {
   const tables: Record<string, CommandTable> = {};
   for (const name of footprint) {
-    const meta = schema.tables.find((table) => table.id === logical(name));
+    /* Named once, not once per table scanned: `logical` reads the App's
+       sources each time, and every command's footprint is cataloged at
+       startup, for every role that is granted it. */
+    const id = logical(name);
+    const meta = findTable(schema, id);
     if (!meta) return undefined;
     tables[name] = Object.freeze({
       name,

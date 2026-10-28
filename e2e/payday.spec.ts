@@ -274,7 +274,8 @@ test.describe('Payday payroll workflow', () => {
     /* 0.8.9's fold toggle made each top-level heading 40px against 0.8.8's 26.4px, and Enrollments and
        Documents fell out of a 1440x900 window. The fold is held to a plain heading drawn beside it, and the
        offsets below are measured: 0.8.8's at Sage's comfortable zoom (24px at 1.1), re-measured when Sage
-       began an App compact (ca0a0ed8d) and the heading's 10px text stood on the 11px step (80077020f). */
+       began an App compact (ca0a0ed8d) and the heading's 10px text stood on the 11px step (80077020f), and again
+       when a heading's line became its capitals' own height (style.css, line-height 1), 2px shorter. */
     const sample = await startSample('payday');
     try {
       await page.setViewportSize({ width: 1440, height: 900 });
@@ -303,15 +304,15 @@ test.describe('Payday payroll workflow', () => {
           copy.remove();
           return height;
         });
-      expect(plain).toBeCloseTo(25, 0);
+      expect(plain).toBeCloseTo(23, 0);
       for (const group of groups) expect(group.height).toBeCloseTo(plain, 0);
       // The same gap from each heading to its first room, and the rooms where they were measured.
       for (const group of groups) {
         const first = rows[rows.indexOf(group) + 1];
-        expect(first.top - group.top).toBeCloseTo(26, 0);
+        expect(first.top - group.top).toBeCloseTo(24, 0);
       }
       const offsets = groups.map((group) => group.top - rows[0].top);
-      [25.2, 151.9, 253.5, 405.4].forEach((offset, i) => expect(Math.abs(offsets[i] - offset)).toBeLessThan(1));
+      [25.2, 149.9, 249.5, 399.4].forEach((offset, i) => expect(Math.abs(offsets[i] - offset)).toBeLessThan(1));
       expect(rows.at(-1)!.bottom).toBeLessThanOrEqual(900);
     } finally {
       await sample.stop();

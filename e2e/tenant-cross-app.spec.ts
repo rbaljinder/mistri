@@ -6,6 +6,7 @@ import { follow } from './support/app.js';
 import { count, rows, scalar } from './support/db.js';
 import { startTenantProof, type TenantProofFixture } from './support/tenantProofServer.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
+import { isSelection, leaseOfSelection } from './support/tenantSelection.js';
 
 /* The App framework's tenant client lives in the mistri package, outside the kit's client root: Vite serves it by path. */
 const TENANT_BROWSER = `/@fs${fileURLToPath(new URL('../packages/mistri/src/client/tenantBrowser.ts', import.meta.url))}`;
@@ -88,7 +89,7 @@ async function choose(
   if (!entered) await page.getByRole('list', { name: 'Available tenants' }).getByRole('button', { name: tenant, exact: true }).click();
   const response = await reply;
   expect(response.status()).toBe(200);
-  const owner = (await response.json()) as TenantContextReply;
+  const owner = await leaseOfSelection(response);
   expect(owner).toMatchObject({ appId: app.appId, tenantId: tenant });
   // The bar's control on a desk, the account menu's first item on a phone: its words are the same either way.
   await expect(page.locator('.tenant-control-host')).toContainText(`Tenant: ${tenant}`);
@@ -118,12 +119,7 @@ async function enter(page: Page, app: Fixture, role: keyof Fixture['accounts'] =
       ).status(),
     ).toBe(200);
   // The viewer's one membership is entered without the chooser.
-  const entered =
-    role === 'viewer'
-      ? page.waitForResponse(
-          (response) => new URL(response.url()).pathname === '/api/tenant/context/open' && response.request().method() === 'POST',
-        )
-      : undefined;
+  const entered = role === 'viewer' ? page.waitForResponse(isSelection) : undefined;
   await page.goto(`${app.origin}/${app.appId}/${app.model.work}?tenant=northstar`);
   if (nativeForm) {
     await expect(page.getByRole('heading', { name: `Sign in to ${app.appName}`, exact: true })).toBeVisible();

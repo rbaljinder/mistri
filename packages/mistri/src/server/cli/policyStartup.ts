@@ -12,15 +12,23 @@ import type { LoadedApp } from '../app/apps.js';
 import { placeLoadFailure, sayPlace } from '../app/appLive.js';
 import { AppUnderPolicyStartupError } from '../policy/appRowPolicy.js';
 import { refusalCause, refusalHeadline, refusalReasons, refusalReasonsBelow } from '@mistriwork/engine/server/evidence.js';
+import { faultFrames } from '@mistriwork/engine/shared/refusal.js';
 
 export async function policyStartupLines(error: unknown, loaded: LoadedApp | undefined): Promise<string[]> {
   const [cause, ...below] = refusalReasons(error);
+  /* A fault in the code that read the App (a TypeError) is placed by its own stack: its sentence names nothing the
+     author wrote to search for, and said alone it was a dead end (a field report). */
+  const frames = faultFrames(error).map((frame) => `  ${frame}`);
   if (!(error instanceof AppUnderPolicyStartupError) || !cause)
-    return [`Policy startup error: ${refusalHeadline(error)}`, ...refusalReasonsBelow(error).map((because) => `  because: ${because}`)];
+    return [
+      `Policy startup error: ${refusalHeadline(error)}`,
+      ...refusalReasonsBelow(error).map((because) => `  because: ${because}`),
+      ...frames,
+    ];
   /* The catalog says the App's name first ("Spoke: resources …"); the place is found from the definition path after it. */
   const named = loaded && cause.startsWith(`${loaded.app.name}: `) ? cause.slice(loaded.app.name.length + 2) : cause;
   const place = loaded
     ? await placeLoadFailure(named, loaded.dir ?? dirname(loaded.path), refusalCause(error)).catch(() => undefined)
     : undefined;
-  return [`App error: ${cause}`, ...(place?.file ? sayPlace(place) : []), ...below.map((because) => `  because: ${because}`)];
+  return [`App error: ${cause}`, ...(place?.file ? sayPlace(place) : []), ...below.map((because) => `  because: ${because}`), ...frames];
 }

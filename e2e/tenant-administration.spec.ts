@@ -1,4 +1,5 @@
 import type { APIResponse, Response } from '@playwright/test';
+import { isSelection, selectionRoute } from './support/tenantSelection.js';
 import { test, expect, type Locator, type Page } from './support/harness.js';
 import { administrationPolicy, startTenantAdministration, type TenantAdministrationFixture } from './support/tenantAdministrationServer.js';
 import {
@@ -583,14 +584,14 @@ test.describe('native tenant administration browser integration', () => {
         selectionCommitted = gate();
       let selectionDelivered!: Promise<Response>;
       const login = await selfMemberChooser(page, app, async () => {
-        await page.route('**/api/tenant/context/open?*', async (route) => {
+        await page.route(selectionRoute, async (route) => {
           const response = await route.fetch({ maxRetries: 0 });
           expect(response.status()).toBe(200);
           selectionCommitted.release();
           await releaseSelection.promise;
           await route.fulfill({ response });
         });
-        selectionDelivered = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/tenant/context/open');
+        selectionDelivered = page.waitForResponse(isSelection);
       });
       try {
         // The sole membership's selection, made as the page loaded, is held after it committed.
@@ -675,7 +676,7 @@ test.describe('native tenant administration browser integration', () => {
       await page.setViewportSize({ width, height: 900 });
       let selected!: Promise<Response>;
       const login = await selfMemberChooser(page, app, async () => {
-        selected = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/tenant/context/open');
+        selected = page.waitForResponse(isSelection);
       });
       expect((await selected).status()).toBe(200);
       await expect(page.locator('.tenant-control-host')).toContainText('Tenant: north');

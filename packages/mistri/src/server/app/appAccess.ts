@@ -305,14 +305,20 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
   const capturedRows = access.rows === undefined ? undefined : snapshotRowScope(full, access.rows);
   // Physical post-image checks also follow outgoing parents. A row predicate
   // must not grant parent visibility that the resource ceiling denied.
+  /* A snapshot (rowScope.ts), and the captured one itself where the ceiling
+     takes nothing from it: every read the facade binds hands this scope on,
+     and a snapshot is checked once rather than copied at each of them. */
   const rows =
     capturedRows === undefined
       ? undefined
-      : Object.freeze(
-          Object.fromEntries(
-            Object.entries(capturedRows).map(([resource, rule]) => [resource, access.readable.has(resource) ? rule : false]),
-          ),
-        );
+      : Object.entries(capturedRows).every(([resource, rule]) => rule === false || access.readable.has(resource))
+        ? capturedRows
+        : snapshotRowScope(
+            full,
+            Object.fromEntries(
+              Object.entries(capturedRows).map(([resource, rule]) => [resource, access.readable.has(resource) ? rule : false]),
+            ),
+          );
   if (rows !== undefined) {
     access = { ...access, rows };
     // A table a role runs granted actions on is written through the same scoped writer.

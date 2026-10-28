@@ -196,6 +196,18 @@ export function sendAhead(client: PgQuery, statements: readonly PipelinedStateme
 }
 
 /**
+ * Whether an answer sent ahead still waits for exactly `statement`: asking it
+ * then sends nothing. False once a statement of the transaction's own has
+ * dropped it, or where nothing was sent ahead.
+ */
+export function waitsAhead(client: PgQuery, statement: Readonly<{ text: string; values?: readonly unknown[] }>): boolean {
+  const state = transactions.get(client);
+  if (!state?.ahead.size) return false;
+  const key = said(statement.values?.length ? [statement.text, [...statement.values]] : [statement.text]);
+  return key !== undefined && (state.ahead.get(key)?.length ?? 0) > 0;
+}
+
+/**
  * Send a read now that a caller will answer later reads from itself (a row
  * read in full, answered by projection: scoped/keyRows.ts), rather than the
  * handle answering one identical query with it. `take` says it answered one,

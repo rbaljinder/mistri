@@ -160,6 +160,23 @@ for (const engine of jobEngines)
       );
     });
 
+    test('standing reads failure, the longest wait and the next moment due without reading a row', async (t) => {
+      const store = await (await engine.fixture(t, policy())).open();
+      assert.deepEqual(await store.standing(1_000), { failed: false, waitingSince: null, next: null, at: 1_000 });
+      await store.enqueue(request('idempotency-key-late', { runAt: 5_000 }), 1_000);
+      await store.enqueue(request('idempotency-key-soon', { runAt: 1_200 }), 1_000);
+      const before = await store.standing(1_100);
+      assert.deepEqual(before, { failed: false, waitingSince: 1_200, next: 1_200, at: 1_100 });
+      assert.ok(Object.isFrozen(before));
+      // Due now: waiting, and no longer ahead; the later one is next.
+      assert.deepEqual(await store.standing(1_300), { failed: false, waitingSince: 1_200, next: 5_000, at: 1_300 });
+      // A held lease's end is a moment ahead: the host wakes for an expiry it would otherwise poll for.
+      const [claim] = await store.claim(1_300);
+      assert.deepEqual(await store.standing(1_300), { failed: false, waitingSince: 5_000, next: 2_300, at: 1_300 });
+      await store.fail(claim.id, claim.fence, 1_400, 'rejected');
+      assert.deepEqual(await store.standing(1_400), { failed: true, waitingSince: 5_000, next: 5_000, at: 1_400 });
+    });
+
     test('claim leases at most the in-flight bound per namespace and the requested limit', async (t) => {
       const store = await (await engine.fixture(t, policy({ maxInFlight: 2 }))).open();
       for (let i = 0; i < 3; i++) await store.enqueue(request(`idempotency-key-000${i}`), 1_000);

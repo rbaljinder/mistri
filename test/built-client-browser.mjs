@@ -136,11 +136,16 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
 // the wide landing; scripts/bundle-budget.mjs, its newest paragraphs) to every first stylesheet. Cold visits measured
 // 244.6 KB the staff sign-in, 442.5 KB Forecourt's landing, 445.9 KB its list, 535.9 KB Tick's list and 392.5 KB the
 // Workbench; only the sign-in passed its ceiling, which moves to about 0.5% above.
-const FIRST_PAINT_WIRE_KB = { public: 245.8, app: 446.7, lumen: 537, workbench: 425 };
+// rc.2 makes Workshop the look an App wears by default, so Tick's list is held as a Workshop App: Barlow's regular and
+// condensed bold preloaded beside Workshop's sheet, the semibold fetched where the page sets a word in it (65.1 KB of
+// faces where Lumen's Inter was 47.1), and every built-in look's twelve palettes in the entry (about 1.4 KB in brotli
+// on every first paint, scripts/bundle-budget.mjs). Measured: 246.5 KB the staff sign-in, 448 KB Forecourt's list and
+// 562 KB Tick's list; each ceiling passed moves to about 0.5% above.
+const FIRST_PAINT_WIRE_KB = { public: 247.8, app: 450.3, workshop: 565, workbench: 425 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/workbench', '/assets/tenant'],
   app: ['/assets/workbench', '/assets/tenant', '/assets/public'],
-  lumen: ['/assets/workbench', '/assets/tenant', '/assets/public'],
+  workshop: ['/assets/workbench', '/assets/tenant', '/assets/public'],
   workbench: ['/assets/chrome', '/assets/tenant', '/assets/public'],
 };
 
@@ -299,7 +304,7 @@ try {
     },
   );
   servers.push(forecourt);
-  // Tick wears Lumen, the look an App wears by default, and so Lumen's face (lumenLook.css).
+  // Tick wears Workshop, the look an App wears by default, and so Workshop's faces (workshopLook.css).
   const tickDb = join(scratch, 'tick.db');
   execFileSync(process.execPath, [join(root, 'examples/databases/tick/seed.mjs'), tickDb], { cwd: root, stdio: 'ignore' });
   const tick = await start('tick', ['--config', `${tickDb}.json`, '--app', 'examples/apps/tick']);
@@ -317,7 +322,7 @@ try {
     ['Forecourt staff sign-in (the public surface)', `${forecourt.origin}/sign-in`, signIn, 'public'],
     ['Forecourt public landing', `${forecourt.origin}/`, landing, 'app'],
     ['Forecourt list (an App list page)', `${forecourt.origin}/vehicles`, list, 'app'],
-    ['Tick list (a Lumen App, its face preloaded)', `${tick.origin}/`, tasks, 'lumen'],
+    ['Tick list (a Workshop App, its faces preloaded)', `${tick.origin}/`, tasks, 'workshop'],
     ['Workbench landing', `${workbench.origin}/`, schema, 'workbench'],
   ]) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -325,23 +330,27 @@ try {
     assert.deepEqual(cold.errors, [], `${label}: errors on a cold visit`);
     assertShipped(label, cold.files);
     const faces = cold.files.filter((file) => file.path.endsWith('.woff2'));
-    if (surface === 'lumen') {
-      /* Once: the preload's request is the one the sheet's @font-face uses, not a second. */
-      assert.deepEqual(
-        faces.map((file) => file.path.replace(/-[\w-]{8}\.woff2$/, '')),
-        ['/assets/inter-latin'],
-        `${label}: Lumen's face, fetched once`,
+    if (surface === 'workshop') {
+      /* Each once: a preload's request is the one the sheet's @font-face uses, not a second. The semibold is not
+         preloaded, and is fetched only where the page sets a word in it. */
+      const names = faces.map((file) => file.path.replace(/-[\w-]{8}\.woff2$/, ''));
+      assert.deepEqual(names, [...new Set(names)], `${label}: each face fetched once`);
+      for (const face of ['/assets/barlow-400', '/assets/barlow-semi-condensed-700'])
+        assert.ok(names.includes(face), `${label}: Workshop's ${face}`);
+      assert.ok(
+        names.every((name) => name.startsWith('/assets/barlow-')),
+        `${label}: only Barlow (${names})`,
       );
-      assert.equal(faces[0].headers['content-type'], 'font/woff2', `${label}: the face's type`);
+      for (const face of faces) assert.equal(face.headers['content-type'], 'font/woff2', `${label}: the face's type`);
       assert.ok(
         await cold.page.evaluate(
           () =>
-            globalThis.document.fonts.check('16px Inter') &&
-            globalThis.getComputedStyle(globalThis.document.body).fontFamily.startsWith('Inter'),
+            globalThis.document.fonts.check('16px Barlow') &&
+            globalThis.getComputedStyle(globalThis.document.body).fontFamily.startsWith('Barlow'),
         ),
-        `${label}: the page is set in Inter`,
+        `${label}: the page is set in Barlow`,
       );
-    } else assert.deepEqual(faces, [], `${label}: only a page wearing Lumen fetches its face`);
+    } else assert.deepEqual(faces, [], `${label}: only a page wearing a look with faces of its own fetches them`);
     const chunks = cold.files.filter((file) => /^\/assets\/.+\.js$/.test(file.path)).map((file) => file.path.replace(/-[\w-]{8}\.js$/, ''));
     await cold.page.close();
     const warm = await visit(context, url, ready);

@@ -39,13 +39,17 @@ Writes exist only on a `"writable": true` connection. An App's writer pool commi
 
 `--read-pool`, `--write-pool` and `--lock-timeout` (or `MISTRI_READ_POOL`, `MISTRI_WRITE_POOL`, `MISTRI_LOCK_TIMEOUT`) are the defaults for every pool whose connection names none. MySQL keeps up to four readers and its own writers; SQLite and HTTP sources take no `pool`.
 
+### The sign-in store
+
+A `postgres://` sign-in store (`auth.store`) is read once for a signed-in person every few seconds, not on every request: what it answered about a session is kept in the process for `MISTRI_AUTH_SESSION_CACHE` seconds (default 5, 0 to 60), and a page's burst of calls shares one read. A sign-out, a ban or a role change made through this process is seen by its next request. One made elsewhere — another instance, `mistri` maintenance, SQL — is honored by this process for at most that long; set `0` to read the store on every check. `MISTRI_AUTH_POOL` sets its connections per process (default 4).
+
 ### Capacity planning
 
 Across a deployment:
 
     pods × databases × (read + write + 1)
 
-plus up to 4 for a `postgres://` sign-in store, 2 for `--jobs` on PostgreSQL, and short-lived ones for startup checks and query cancels. Ten pods at `"read": 16` is 210 connections, past a stock `max_connections` of 100. Fewer writers per pod (`--write-pool 2`) is the first lever; a pooler is the second.
+plus up to 4 for a `postgres://` sign-in store (`MISTRI_AUTH_POOL`, 1 to 64), 2 for `--jobs` on PostgreSQL, and short-lived ones for startup checks and query cancels. Ten pods at `"read": 16` is 210 connections, past a stock `max_connections` of 100. Fewer writers per pod (`--write-pool 2`) is the first lever; a pooler is the second.
 
 A writer makes about `1000 / transaction_ms` saves a second (at 20 ms and a three-trip save, about sixty for the default four); a reader serves about `1000 / hold_ms` reads. Past a few thousand a second the event loop is the limit: add pods.
 
@@ -57,6 +61,10 @@ A writer makes about `1000 / transaction_ms` saves a second (at 20 ms and a thre
 | Checkouts queued behind long holds | The database is slow: look at the statements in the [observer](/docs/observe/) |
 | Pools calm, event loop busy | The process is the limit: add pods |
 | `timedOut` rising | Checkouts gave up after 10 seconds |
+
+### One request's time
+
+`MISTRI_SERVER_TIMING=1` answers every request with a `Server-Timing` header, and logs it as one JSON line: `total`, `cpu`, `auth` (resolving the session), and per database (`db-app`, `db-auth`) the round trips sent and the time spent awaiting them, and per pool the wait for a connection. At startup it logs ten `SELECT 1` round trips to each database, measured from where the server runs. It names no statement, row or key; it is off by default.
 
 ## Read replicas
 
@@ -87,7 +95,7 @@ PgBouncer in `pool_mode = transaction` and RDS Proxy hand a server connection to
 npx @mistriwork/mistri --pooler transaction --config mistri.json --app ./my-app
 ```
 
-Nothing is then set on a session: each statement runs in its own `BEGIN READ ONLY` (`BEGIN` on the writer) with `SET LOCAL statement_timeout`, and user SQL is fenced by a savepoint. A single read costs three round trips instead of one, but a save does not multiply: the writer pipelines inside its transaction, so a save is the `BEGIN` with its opening reads, one round trip for each dependent read or write it awaits, and a last one that carries the `COMMIT`, history and receipt. The authentication store (`auth.store`) works the same way, its search path set in each transaction. Run `migrate up` and `migrate stores up` on a URL without the pooler: they hold a session lock. Expect jobs to poll rather than wake on `LISTEN` unless the connection also names the database without the pooler:
+Nothing is then set on a session: each statement runs in its own `BEGIN READ ONLY` (`BEGIN` on the writer) with `SET LOCAL statement_timeout`, and user SQL is fenced by a savepoint. A single read costs three round trips instead of one, but a save does not multiply: the writer pipelines inside its transaction, so a save is the `BEGIN` with its opening reads, one round trip for each dependent read or write it awaits, and a last one that carries the `COMMIT`, history and receipt. The authentication store (`auth.store`) works the same way, its search path set in each transaction, except that its client sends a statement with its `BEGIN` and `COMMIT` in one round trip. Run `migrate up` and `migrate stores up` on a URL without the pooler: they hold a session lock. Expect jobs to poll rather than wake on `LISTEN` unless the connection also names the database without the pooler:
 
 ```json
 { "name": "main", "url": "${POOLED_URL}", "listen": "${DIRECT_URL}" }

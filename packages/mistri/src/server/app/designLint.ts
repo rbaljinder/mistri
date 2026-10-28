@@ -881,7 +881,7 @@ function shellFindings(app: AppDef): DesignFinding[] {
   const fixes: string[] = [];
   if (!app.ui.theme) {
     missing.push('no look');
-    fixes.push("ui: { theme: { preset: 'lumen' } } (or mono, sage; mistri docs looks)");
+    fixes.push("ui: { theme: { preset: 'workshop' } } (or lumen, mono, sage; mistri docs looks)");
   }
   if (!app.ui.logo) {
     missing.push('no logo');

@@ -26,8 +26,10 @@ import { SQLITE_AUTH_META_DDL, SQLITE_AUTH_META_TABLE, SQLITE_AUTH_STORE_VERSION
 import { layoutRefusal, sqliteLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
 import { postgresPoolDefaults, type PgPool, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { transactionScoped } from '@mistriwork/engine/adapters/postgresPooler.js';
+import { probeRoundTrips, timeClient, timePoolCheckouts, type ProbeClient } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
 import { pgConnectionOptions } from '@mistriwork/engine/adapters/postgresValues.js';
 import { RUNTIME_SCHEMA } from '@mistriwork/engine/shared/runtimeTables.js';
+import { authReadTtlMs, createAuthStoreReads, type AuthStoreReads } from './authStoreReads.js';
 
 const POSTGRES_URL = /^postgres(ql)?:\/\//i;
 
@@ -45,6 +47,8 @@ export interface AuthStoreHandle {
   readonly prepare: (migrate: () => Promise<void>) => Promise<void>;
   /** The open handle for the tenant binding's synchronous observations; the file store only. */
   readonly file?: DatabaseSync;
+  /** What the PostgreSQL store answered about sessions, kept briefly (authStoreReads.ts); the file is read in place. */
+  readonly reads?: AuthStoreReads;
   /** Idempotent. */
   readonly close: () => void;
 }
@@ -123,14 +127,28 @@ interface PoolModule {
 /** A statement's cap on the store, on a session or in each transaction. */
 const AUTH_STATEMENT_CAP_MS = 30_000;
 
+/** Connections the store's pool holds: MISTRI_AUTH_POOL, 1 to 64, default 4. */
+const DEFAULT_AUTH_POOL = 4;
+const MAX_AUTH_POOL = 64;
+export function authPoolSize(environment: NodeJS.ProcessEnv = process.env): number {
+  const raw = environment.MISTRI_AUTH_POOL?.trim();
+  if (!raw) return DEFAULT_AUTH_POOL;
+  const size = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+  if (!(Number.isInteger(size) && size >= 1 && size <= MAX_AUTH_POOL))
+    throw new RangeError(`MISTRI_AUTH_POOL takes a whole number from 1 to ${MAX_AUTH_POOL}; "${raw}" is not one.`);
+  return size;
+}
+
 /**
  * The driver's client, made safe behind a transaction-mode pooler: every
  * statement runs in a transaction that sets the store's search path and cap
  * with `SET LOCAL` (postgresPooler.ts), whether Better Auth's Kysely adapter,
  * pg-pool's own `pool.query` or the platform's observers sent it. A query
- * with a callback, as pg-pool's is, is answered through it.
+ * with a callback, as pg-pool's is, is answered through it. The client
+ * pipelines (the pool's `pipeline`), so a statement and the transaction
+ * around it leave together: one round trip where they were three.
  */
-function transactionPooledClient(Client: ClientClass): ClientClass {
+export function transactionPooledClient(Client: ClientClass): ClientClass {
   return class extends (Client as new (options: Record<string, unknown>) => PgQuery) {
     #scoped = transactionScoped(
       { query: (request: unknown, params?: unknown) => super.query(request as string, params as unknown[]) } as PgQuery,
@@ -139,6 +157,7 @@ function transactionPooledClient(Client: ClientClass): ClientClass {
         capMs: AUTH_STATEMENT_CAP_MS,
         untrusted: false,
         searchPath: POSTGRES_AUTH_SEARCH_PATH,
+        pipelines: true,
       },
     );
     override query(...args: unknown[]): never {
@@ -155,6 +174,55 @@ function transactionPooledClient(Client: ClientClass): ClientClass {
         (error: unknown) => done(error),
       );
       return undefined as never;
+    }
+  } as unknown as ClientClass;
+}
+
+/**
+ * The client every statement to the store leaves through, whoever sent it,
+ * told to the store's kept reads before it leaves and when it is answered:
+ * how a sign-out or a ban in this process drops what was kept
+ * (authStoreReads.ts). Outermost, so it sees what the caller sent, not the
+ * transaction a transaction-mode pooler's client wraps it in.
+ */
+export function observedClient(Client: ClientClass, reads: AuthStoreReads): ClientClass {
+  return class extends (Client as new (options: Record<string, unknown>) => PgQuery & { on(event: 'end', listener: () => void): unknown }) {
+    constructor(options: Record<string, unknown>) {
+      super(options);
+      this.on('end', () => reads.ended(this));
+    }
+    override query(...args: unknown[]): never {
+      const request = args[0];
+      const text =
+        typeof request === 'string'
+          ? request
+          : request && typeof request === 'object' && typeof (request as { text?: unknown }).text === 'string'
+            ? (request as { text: string }).text
+            : undefined;
+      const answered = reads.statement(this, text);
+      const done = args.at(-1);
+      if (typeof done === 'function') {
+        args[args.length - 1] = (error: unknown, result: unknown) => {
+          answered();
+          (done as (error: unknown, result: unknown) => void)(error, result);
+        };
+      }
+      let pending: unknown;
+      try {
+        pending = (super.query as (...given: unknown[]) => unknown)(...args);
+      } catch (error) {
+        answered();
+        throw error;
+      }
+      if (typeof done !== 'function') {
+        if (pending && typeof (pending as Promise<unknown>).then === 'function') (pending as Promise<unknown>).then(answered, answered);
+        // A submittable (a cursor, a stream) says it is done by its events.
+        else if (request && typeof (request as { once?: unknown }).once === 'function') {
+          (request as { once(event: string, listener: () => void): void }).once('end', answered);
+          (request as { once(event: string, listener: () => void): void }).once('error', answered);
+        } else answered();
+      }
+      return pending as never;
     }
   } as unknown as ClientClass;
 }
@@ -180,14 +248,19 @@ export async function openPostgresAuthStore(url: string): Promise<AuthStoreHandl
      setting stays on whichever server connection the pooler lent and
      follows it to the pooler's next client: each statement carries the path
      and the cap in its own transaction, as the App's pools do. Small and
-     short-lived: sign-in traffic is a few statements per request. */
+     short-lived: with sessions read once per few seconds (authStoreReads.ts),
+     a page's burst of calls is a read or two, and sign-in a few statements;
+     MISTRI_AUTH_POOL sizes it where that is not enough. */
   const pooled = postgresPoolDefaults().pooler === 'transaction';
+  const size = authPoolSize();
+  const reads = createAuthStoreReads(url, authReadTtlMs());
   const pool = new Pool({
     ...pgConnectionOptions(url),
-    max: 4,
+    max: size,
     connectionTimeoutMillis: 10_000,
     idleTimeoutMillis: 30_000,
-    ...(pooled ? { Client: transactionPooledClient(Client) } : {}),
+    Client: observedClient(pooled ? transactionPooledClient(Client) : Client, reads),
+    ...(pooled ? { pipeline: true } : {}),
     onConnect: async (client: { query(text: string): Promise<unknown>; on(event: 'error', listener: () => void): unknown }) => {
       /* An idle client's error is the pool's to hear; a leased one's is its
          own. When the store's backends are ended under a lease (a failover,
@@ -201,6 +274,11 @@ export async function openPostgresAuthStore(url: string): Promise<AuthStoreHandl
     },
   });
   pool.on('error', () => {});
+  /* Server timing (serverTiming.ts), when on: the store's checkouts and round trips, as `auth`. */
+  timePoolCheckouts(pool, 'auth');
+  (pool as unknown as { on(event: 'connect', listener: (client: object) => void): void }).on('connect', (client) =>
+    timeClient(client, 'auth'),
+  );
   let closed = false;
   const close = () => {
     if (closed) return;
@@ -213,10 +291,20 @@ export async function openPostgresAuthStore(url: string): Promise<AuthStoreHandl
     close();
     throw error;
   }
+  /* With server timing on, the round trip to the store, once, on a connection of its own. */
+  void probeRoundTrips(
+    'auth',
+    () =>
+      new (Client as unknown as new (options: Record<string, unknown>) => ProbeClient)({
+        ...pgConnectionOptions(url),
+        connectionTimeoutMillis: 10_000,
+      }),
+  );
   return {
     kind: 'postgres',
     label: `postgresql auth store (the ${POSTGRES_AUTH_PREFIX} tables in schema ${RUNTIME_SCHEMA})`,
     database: pool,
+    reads,
     /* Attested, not migrated: Better Auth's own migration is not run here.
        The layout it would plan against is exactly the one just attested. */
     prepare: async () => {

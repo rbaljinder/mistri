@@ -52,7 +52,7 @@ Take a topic only when something in it is still open. Each bullet is one questio
 - A reader of the data outside the App (API, reports, exports)? (default: CSV export only)
 
 **6. Look and feel**
-- A built-in look: Lumen (default, soft and modern), Mono (black and white, dense) or Sage (warm, soft cards)?
+- A built-in look: Workshop (default, paper and ink, condensed capitals), Lumen (soft and modern), Mono (black and white, dense) or Sage (warm, soft cards)? And one of the twelve palettes?
 - A product or screenshot to echo? (default: none; a screenshot beats adjectives)
 - Density, brand color, logo? (default: comfortable, the look's own color, an icon from the App icons)
 - Dark mode, and phone use? (default: both work; say so only if phone is the main device)
@@ -99,4 +99,4 @@ string, `"<type> [<argument>] [!] [unique] [=<default>]"`:
 machine, its states in the order given. `roles` grant `read` and `write` (`true` or a list of entities) and the
 `commands` a role may run. A command names the entity it acts on, a `when` condition for where its button shows, the
 columns it `set`s, and the `refuse` rules in the reader's words: the stub lists each as a TODO, because a rule is code
-only the person's data can settle. `app.theme` is `lumen`, `mono` or `sage`; `app.logo` an icon from the App icons.
+only the person's data can settle. `app.theme` is `workshop`, `lumen`, `mono` or `sage`; `app.logo` an icon from the App icons.

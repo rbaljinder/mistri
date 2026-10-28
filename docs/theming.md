@@ -1,10 +1,11 @@
 # Theming
 
 Visual themes change presentation, not routes, data access, or authored layouts.
-The runtime has three looks for Apps: Lumen, the default (with Violet, Teal,
-Emerald, Rose and Amber palettes), Mono and Sage. Readers choose a look and
+The runtime has four looks for Apps: Workshop, the default, then Lumen, Mono
+and Sage, and twelve palettes that are the same twelve in every look
+([Palettes](#palettes)). Readers choose a look, a palette and
 System/Light/Dark independently in More > Preferences. With no choice, an App
-wears its preset, and Lumen where it names none. Any other look is the App's
+wears its preset, and Workshop in Safety orange where it names none. Any other look is the App's
 own, written with `defineTheme` ([Bring Your Own Theme](#bring-your-own-theme);
 the site's [Themes and branding](../site/src/content/docs/docs/themes.md) page
 has three to start from: a neutral kit, a printed page and a colored bar). The database browser — `npx tablewalk <db>`, and an App's
@@ -19,7 +20,8 @@ this file is the contract.
 
 | Preset | Character |
 | --- | --- |
-| Lumen | The default. Flat, calm and modern: a warm, faintly tinted shell around white working surfaces, elevation only on what floats (menus, dialogs, drawers), one confident accent for the primary action, the current room, selection, focus, the main chart series and the current step; a menu whose current room is a soft pill with quiet counts on its lists of work; metrics in a divided strip; record fields in a property rail; tables on hairlines with the record's name as the row's anchor and a head that sticks; statuses as a dot and their word (grey where neutral); a workflow as a track of segments; charts as a 1.5px line in one hue's steps; Inter, shipped with the look. **Violet**, **Teal**, **Emerald**, **Rose** and **Amber** palettes change only the accent's family. |
+| Workshop | The default. The desk as a workbench, ported from a field report's theme: warm paper, ink-black type and one hue — Safety orange unless a palette says another — kept to the few marks a reader takes for the brand color: the primary verb's fill (the ink's words on it, edged in the ink, as a hazard tag prints them), links and the current tab's rule, a 3px marker beside the menu's ink block, the focus ring, a checked box and a chart's first series. Fills, rules and selection stay the ink, and nothing is tinted. Titles, section heads and labels in Barlow Semi Condensed's bold capitals, the rest in Barlow, shipped with the look; 2px ink rules part the sections; 2px corners; nothing floats; the menu's current entry an ink block with the hue's marker beside it, on a faint grain. |
+| Lumen | Flat, calm and modern: a warm, faintly tinted shell around white working surfaces, elevation only on what floats (menus, dialogs, drawers), one confident accent for the primary action, the current room, selection, focus, the main chart series and the current step; a menu whose current room is a soft pill with quiet counts on its lists of work; metrics in a divided strip; record fields in a property rail; tables on hairlines with the record's name as the row's anchor and a head that sticks; statuses as a dot and their word (grey where neutral); a workflow as a track of segments; charts as a 1.5px line in one hue's steps; Inter, shipped with the look. Its blue is the **Cobalt** palette; every other palette changes only the accent's family. |
 | Mono | Black and white: square corners, rules in the ink over grey hairlines, monospace figures and labels, the current tab inverted; colour only for status. |
 | Sage | A soft workspace: warm cream grounds with a dashboard's sections and stat cards on white panels (a soft shadow, the 8px radius and its 12px larger step) and tables open on the ground, near-black ink for text and calls to action, sage green for charts and good news, a warm tint for what is chosen, and meaning in soft tinted pills. |
 
@@ -37,14 +39,39 @@ a workflow is a track of segments, a dashboard's steps are a strip, and board
 lanes are headed by tinted strips (Lumen's exceptions, in
 [design.md](design.md#the-refusal-list-after-impeccablestyle-kept-where-it-applies)).
 
-Each includes light and dark palettes. Selecting one never rewrites the App's
+Each includes light and dark colors. Selecting one never rewrites the App's
 manifest. An author picks the App's default with
 `ui: { theme: { preset: 'sage' } }`, or builds on one in a custom definition
-with `extends: 'sage'`; the same goes for `lumen` and `mono`. A built-in look's
-palettes are chosen the same way: Violet, Teal, Emerald, Rose and Amber are
-Lumen's (`ui: { theme: { preset: 'lumen', palette: 'teal' } }`), each a
-navy-deep primary and a brighter link of one family, light and dark. A reader can pick another under Palette in
-Preferences while that look is on. An App's own
+with `extends: 'sage'`; the same goes for `workshop`, `lumen` and `mono`. A
+built-in look's palette is chosen the same way
+(`ui: { theme: { preset: 'lumen', palette: 'teal' } }`). A reader can pick
+another under Palette in Preferences while that look is on.
+
+### Palettes
+
+A palette is a colour identity apart from the look, from one registry
+(`packages/engine/src/shared/lookPalettes.ts`): **Crimson** (`crimson`),
+**Safety orange** (`safety`), **Amber** (`amber`), **Moss** (`moss`),
+**Emerald** (`emerald`), **Teal** (`teal`), **Cobalt** (`cobalt`), **Violet**
+(`violet`), **Plum** (`plum`), **Rose** (`rose`), **Slate** (`slate`) and
+**Ink** (`ink`). Every built-in look offers all twelve, in that order, and
+wears one by default: Workshop Safety orange, Lumen Cobalt, Mono and Sage Ink
+(each look's own ink). The look keeps its grounds, neutrals, type, shape and
+recipes and decides which roles the hue reaches:
+
+| Look | What a palette changes |
+| --- | --- |
+| Workshop | The primary verb's fill and its words, links and the current tab's rule, the menu's marker, the focus ring, a checked box and the first chart series. Selection, the menu's block and the rules stay the ink; no tint. |
+| Lumen | The accent and its pale tint, links, the focus ring, the menu's mark and the first chart series. |
+| Mono, Sage | The same as Lumen, on the look's own neutral tint for what is chosen. |
+
+A palette's first series takes the place of the look's series nearest its
+hue, and the rest follow in the look's order wherever each neighbour stays
+apart for a colour-blind reader. Every palette in every look, light and dark,
+is measured by `test/contrast.test.ts`: text and links 4.5:1, the words on a
+fill 4.5:1, the focus ring 3:1, adjacent series apart. A built-in look's own
+colours are its default palette, so its picker lists the twelve and no
+separate Default; `palette: 'default'` still names the look's own. An App's own
 `accent`, `radius` and `font` win over the look, so a brand colour stays the
 App's; the accent is the charts' first series as well. Mono is the one
 exception to the radius: it is square, an authored radius included.
@@ -120,28 +147,28 @@ printed page's rules and capitals), fetched only when one picks it. The values
 are attributes the shipped sheets answer (`data-look-<part>`); an App writes no
 CSS.
 
-| Part       | Values                                                                                                    |
-| ---------- | --------------------------------------------------------------------------------------------------------- |
-| `nav`      | `tint`, `inverted` (Mono), `wash` (own), `underline` (own), `pill` (Lumen), `quiet` (Sage)                |
-| `bar`      | `plain`, `ruled` (Mono), `dark` (own), `airy` (Lumen), `soft` (Sage)                                      |
-| `tabs`     | `pill`, `inverted` (Mono), `underline` (Lumen), `rule` (own), `chosen` (Sage)                             |
-| `windows`  | `segmented`, `lifted` (Lumen), `chosen` (Sage)                                                            |
-| `stat`     | `plain`, `framed` (Mono), `topline` (own), `ruled` (own), `icon` (own), `panel` (Sage), `divided` (Lumen) |
-| `section`  | `open` (Lumen), `card` (own), `panel` (Sage)                                                              |
-| `fields`   | `open`, `panel` (Sage), `card` (own), `rail` (Lumen)                                                      |
-| `table`    | `open`, `tinted` (own), `hairline` (Sage), `card` (own), `quiet` (Lumen)                                  |
-| `status`   | `dot`, `pill` (Sage), `pill-dot` (own), `quiet` (Lumen)                                                   |
-| `board`    | `ruled`, `soft` (Sage), `strip` (Lumen)                                                                   |
-| `chart`    | `plain`, `wash` (Sage), `gradient` (own), `line` (Lumen)                                                  |
-| `buttons`  | `accent`, `raised` (Lumen)                                                                                |
-| `links`    | `plain`, `underline` (Mono)                                                                               |
-| `rules`    | `ink`, `hairline` (Lumen, Sage)                                                                           |
-| `avatar`   | `plain`, `large` (Sage), `round` (Lumen)                                                                  |
-| `workflow` | `markers` (Lumen), `pills` (own)                                                                          |
-| `banner`   | `tint`, `gradient` (own), `plain` (Lumen)                                                                 |
-| `steps`    | `flat`, `tinted` (own), `strip` (Lumen)                                                                   |
-| `lanes`    | `tint`, `tag` (own), `plain` (own)                                                                        |
-| `header`   | `plain`, `band` (Sage), `hero` (own)                                                                      |
+| Part       | Values                                                                                                                  |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `nav`      | `tint`, `inverted` (Mono), `wash` (own), `underline` (own), `pill` (Lumen), `quiet` (Sage), `slot` (Workshop)           |
+| `bar`      | `plain`, `ruled` (Workshop, Mono), `dark` (own), `airy` (Lumen), `soft` (Sage)                                          |
+| `tabs`     | `pill`, `inverted` (Mono), `underline` (Lumen), `rule` (Workshop), `chosen` (Sage)                                      |
+| `windows`  | `segmented` (Workshop), `lifted` (Lumen), `chosen` (Sage)                                                               |
+| `stat`     | `plain`, `framed` (Mono), `topline` (own), `ruled` (Workshop), `icon` (own), `panel` (Sage), `divided` (Lumen)          |
+| `section`  | `open` (Workshop, Lumen), `card` (own), `panel` (Sage)                                                                  |
+| `fields`   | `open` (Workshop), `panel` (Sage), `card` (own), `rail` (Lumen)                                                         |
+| `table`    | `open` (Workshop), `tinted` (own), `hairline` (Sage), `card` (own), `quiet` (Lumen)                                     |
+| `status`   | `dot` (Workshop), `pill` (Sage), `pill-dot` (own), `quiet` (Lumen)                                                      |
+| `board`    | `ruled` (Workshop), `soft` (Sage), `strip` (Lumen)                                                                      |
+| `chart`    | `plain` (Workshop), `wash` (Sage), `gradient` (own), `line` (Lumen)                                                     |
+| `buttons`  | `accent`, `raised` (Lumen), `keyed` (Workshop)                                                                          |
+| `links`    | `plain`, `underline` (Mono)                                                                                             |
+| `rules`    | `ink` (Workshop), `hairline` (Lumen, Sage)                                                                              |
+| `avatar`   | `plain`, `large` (Sage), `round` (Lumen)                                                                                |
+| `workflow` | `markers` (Workshop, Lumen), `pills` (own)                                                                              |
+| `banner`   | `tint`, `gradient` (own), `plain` (Workshop, Lumen)                                                                     |
+| `steps`    | `flat`, `tinted` (own), `strip` (Workshop, Lumen)                                                                       |
+| `lanes`    | `tint`, `tag` (Workshop), `plain` (own)                                                                                 |
+| `header`   | `plain`, `band` (Sage), `hero` (own)                                                                                    |
 
 Each value is pictured on the CRM (the former Compass sample) in the site's recipe gallery
 (`site/src/content/docs/docs/theme-recipes.md`, its pictures under
@@ -204,11 +231,11 @@ spelling is refused with its new one.
 
 ### Past the menu: bands, patterns, parts and icons
 
-Four things a theme may say that no built-in look does, each held to the
-contract as a recipe is, and each worn only where it is said: a theme that
-says none of them sets no attribute and fetches no sheet, so every built-in
-and every theme written before them draws as it did (the computed-style
-snapshot of every look holds this).
+Four things a theme may say that no built-in look does (but Workshop's menu
+grain, a pattern), each held to the contract as a recipe is, and each worn
+only where it is said: a theme that says none of them sets no attribute and
+fetches no sheet, so every theme written before them draws as it did (the
+computed-style snapshot of every look holds this).
 
 - **A band.** `recipes.table: 'banded'` lays every other row of a table on
   `band` (in each mode's `colors`; omitted, `raised`), and `check` measures
@@ -332,6 +359,8 @@ and Dark choose which mode of those colors to display. A definition's
 `palette` before 1.0; it was renamed so that `palette` names only a
 variation, as `ui.theme.palette` and `palettes` do.)
 
+A built-in look's palettes are the shared twelve ([Palettes](#palettes)); a
+theme that extends one and names no colours of its own keeps them.
 Optionally add up to 20 `palettes`, each with a unique lowercase `id`, a
 `label` of 1–60 characters, and both `light` and `dark` objects. These objects
 accept partial color roles, including empty objects; omitted roles inherit

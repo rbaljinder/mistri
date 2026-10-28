@@ -163,7 +163,7 @@ export function audienceBranding(
 /** The App's look as one theme: its preset or its own theme, with its accent laid over as a tenant's would be. */
 function ownLook(ui: AppUi): ThemeDefinition {
   const preset = ui.theme?.preset;
-  const base = ui.customThemes?.find((theme) => theme.id === preset) ?? themePreset(preset) ?? themePreset('lumen')!;
+  const base = ui.customThemes?.find((theme) => theme.id === preset) ?? themePreset(preset) ?? themePreset('workshop')!;
   const accent = ui.theme?.accent;
   const value: TenantBrandingValue = {
     ...(ui.theme?.palette && ui.theme.palette !== 'default' ? { palette: ui.theme.palette } : {}),
@@ -322,6 +322,9 @@ export function tenantTheme(declaration: BrandingDeclaration, value: TenantBrand
        series stays, as it did, and an accent that was already the first series is still held to the check. */
     if (palette.chart1 === palette.accent || !palette.chart2 || chartsApart(accent, palette.chart2)) palette.chart1 = accent;
     palette.accent = accent;
+    /* The words a look chose for its own accent fill (Workshop's ink on its orange) read on that fill, not this one:
+       they are derived again for the tenant's, as for an App's accent (themePresets.ts, overlayPalette). */
+    delete palette.onAccent;
     /* A tenant picks one color, and it must read as text on the page: `accentInk` said, so the check holds the pick
        to it where an App's theme, which names its inks, is given the one that reads. */
     palette.accentInk = accent;

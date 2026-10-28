@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "The engine both products stand on: the adapters (SQLite, Postgres, MySQL), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -153,6 +153,10 @@
     "./adapters/telemetry/drivers.js": {
       "mistri-built": "./dist/adapters/telemetry/drivers.js",
       "default": "./src/adapters/telemetry/drivers.ts"
+    },
+    "./adapters/telemetry/serverTiming.js": {
+      "mistri-built": "./dist/adapters/telemetry/serverTiming.js",
+      "default": "./src/adapters/telemetry/serverTiming.ts"
     },
     "./adapters/telemetry/start.js": {
       "mistri-built": "./dist/adapters/telemetry/start.js",
@@ -867,6 +871,10 @@
     "./shared/themeFaces.js": {
       "mistri-built": "./dist/shared/themeFaces.js",
       "default": "./src/shared/themeFaces.ts"
+    },
+    "./shared/chartSeparation.js": {
+      "mistri-built": "./dist/shared/chartSeparation.js",
+      "default": "./src/shared/chartSeparation.ts"
     },
     "./shared/themeLooks.js": {
       "mistri-built": "./dist/shared/themeLooks.js",

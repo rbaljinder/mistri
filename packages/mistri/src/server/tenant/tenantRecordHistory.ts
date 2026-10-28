@@ -12,7 +12,7 @@ import { journalFieldsMatch, latestRevertible, summarise, type JournalEntry, typ
 import { runRecordedTransaction, type HistoryDraft, type PreparedWrite } from '@mistriwork/engine/server/recordHistoryOperations.js';
 import type { TenantReadSource } from './tenantReadSource.js';
 import { TenantWriteFailure, type TenantWriteSource } from './tenantWriteSource.js';
-import { refusedFields } from './tenantWriteKindContract.js';
+import { tenantWriteFailed } from './tenantWriteKindContract.js';
 import {
   bindTenantWriteRuntime,
   tenantInverseImages,
@@ -35,8 +35,9 @@ const failed = (error: unknown, committed = false): TenantWriteFailure => {
     committed || error instanceof TransactionOutcomeUnknown || (error instanceof TenantWriteFailure && error.outcome === 'unknown')
       ? 'unknown'
       : 'not_applied';
-  // A record the App's rules refused, before anything was applied: the person's to fix, so its fields are said.
-  return new TenantWriteFailure(outcome, outcome === 'not_applied' ? refusedFields(error) : undefined);
+  /* A record the App's rules refused, before anything was applied: the person's to fix, so its fields are said. The
+     error is kept as its cause, for the owner: a database that did not answer is told apart from a refusal by it. */
+  return tenantWriteFailed(outcome, error);
 };
 const keyFilter = (key: Record<string, string | number>): Filter => ({
   groups: [Object.entries(key).map(([column, value]) => ({ column, op: '=', value }))],

@@ -182,13 +182,15 @@ test('App palette defaults are scoped to their named preset', () => {
   const parse = (theme: unknown) => parseAppConfig({ name: 'App', ...HOME, ui: { customThemes, theme } }, 'app');
   assert.equal(parse({ preset: 'sample', palette: 'mint' }).ui.theme?.palette, 'mint');
   assert.equal(parse({ preset: 'mono', palette: 'default' }).ui.theme?.palette, 'default');
-  // A built-in look's own palettes are authorable, and only its own.
+  // A built-in look's palettes are authorable: every built-in offers the same twelve.
   assert.equal(parse({ preset: 'lumen', palette: 'teal' }).ui.theme?.palette, 'teal');
+  assert.equal(parse({ preset: 'sage', palette: 'teal' }).ui.theme?.palette, 'teal');
+  assert.equal(parse({ preset: 'workshop', palette: 'cobalt' }).ui.theme?.palette, 'cobalt');
   for (const theme of [
     { palette: 'mint' },
     { palette: 'default' },
     { preset: 'mono', palette: 'mint' },
-    { preset: 'sage', palette: 'teal' },
+    { preset: 'sage', palette: 'sunset' },
     { preset: 'sample', palette: 'missing' },
     { preset: 'sample', palette: 'Bad' },
   ]) {
@@ -257,7 +259,8 @@ test('new theme families validate through the public contract with legible palet
     for (const variant of preset.palettes ?? []) {
       for (const mode of ['light', 'dark'] as const) {
         const palette = { ...preset[mode], ...variant[mode] };
-        assert.ok(variant[mode]?.focus, `${preset.id}/${variant.id} ${mode} names its own focus ring`);
+        // The built file says a palette as what it changes; one that moves the accent says its ring with it.
+        if (variant[mode]?.accent) assert.ok(variant[mode]?.focus, `${preset.id}/${variant.id} ${mode} names its own focus ring`);
         for (const ground of ['surface', 'ground', 'raised'] as const) {
           assert.ok(contrastRatio(palette.focus!, palette[ground]!) >= 3, `${preset.id}/${variant.id} ${mode} focus on ${ground}`);
         }
@@ -343,21 +346,28 @@ test('contrast warnings also check colors inherited from a new theme base', () =
   assert.ok(themeWarnings([custom]).some((warning) => /inkMuted\/surface.*1.00:1/.test(warning)));
 });
 
-test('the three built-in looks read as a sans interface with AA accents, and every one is an inheritable base', () => {
+test('the four built-in looks read as a sans interface with AA accents, and every one is an inheritable base', () => {
   assert.deepEqual(
     THEME_PRESETS.map((preset) => preset.id),
-    ['lumen', 'mono', 'sage'],
+    ['workshop', 'lumen', 'mono', 'sage'],
   );
-  assert.deepEqual([...THEME_BASES], ['lumen', 'mono', 'sage']);
+  assert.deepEqual([...THEME_BASES], ['workshop', 'lumen', 'mono', 'sage']);
   assert.equal(parseAppConfig({ name: 'Unchanged default', ...HOME }, 'app').ui.theme, undefined);
   for (const preset of THEME_PRESETS) {
     // The interface and its data are always one sans; a look may set its
-    // titles in a book face, and nothing else.
-    assert.match(preset.fonts?.ui ?? '', /sans-serif$/, `${preset.id} interface face`);
+    // titles in a book face or a condensed cut of its own sans (Workshop's), and nothing else.
+    const ui = preset.fonts?.ui ?? '';
+    const heading = preset.fonts?.heading ?? '';
+    assert.match(ui, /sans-serif$/, `${preset.id} interface face`);
     assert.equal(preset.fonts?.data, preset.fonts?.ui, `${preset.id} data face`);
-    assert.ok(preset.fonts?.heading === preset.fonts?.ui || /(^|, )serif$/.test(preset.fonts?.heading ?? ''), `${preset.id} heading face`);
+    assert.ok(
+      heading === ui || /(^|, )serif$/.test(heading) || (/Condensed/.test(heading) && heading.includes(ui.split(',')[0]!)),
+      `${preset.id} heading face`,
+    );
     for (const mode of ['light', 'dark'] as const) {
-      assert.ok(contrastRatio(preset[mode].accent, preset[mode].ground!) >= 4.5, `${preset.id} ${mode} accent on background`);
+      // The accent as text: Workshop's accent is a fill only, and its words in the accent's place are the ink.
+      const text = preset[mode].accentInk ?? preset[mode].accent;
+      assert.ok(contrastRatio(text, preset[mode].ground!) >= 4.5, `${preset.id} ${mode} accent on background`);
     }
   }
   const sage = themePreset('sage')!;
@@ -367,7 +377,7 @@ test('the three built-in looks read as a sans interface with AA accents, and eve
   assert.equal(inherited.radius?.field, sage.radius?.field);
   assert.equal(inherited.dark.navGround, sage.dark.navGround);
   assert.equal(inherited.light.accent, authored.light.accent);
-  assert.throws(() => parseThemes([{ ...sample(), base: 'studio' as never }], 'app'), /base must be one of lumen, mono, sage/);
+  assert.throws(() => parseThemes([{ ...sample(), base: 'studio' as never }], 'app'), /base must be one of workshop, lumen, mono, sage/);
 });
 
 test('Compass loads its theme through a normal imported module', async () => {

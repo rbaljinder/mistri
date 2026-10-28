@@ -190,3 +190,48 @@ test("the record's row is read once for every section that reads it, and each ot
     ),
   );
 });
+
+/* A timeline's author that is a reference is said by name, read through the reference (kit PageTimeline.tsx): the
+   page's planned read is that very read, so its answer is taken and nothing is asked again once the page has drawn. A
+   stream's far side is asked beside its rows, as the section asks it. */
+test("a timeline's reads are the section's own: the author's name beside its rows, and its far side", () => {
+  const owner = {
+    ...note,
+    id: 'person',
+    name: 'person',
+    columns: [column('id', { type: 'INTEGER', primaryKey: true, nullable: false }), column('name')],
+  };
+  const activity: TableMeta = {
+    ...note,
+    id: 'activity',
+    name: 'activity',
+    columns: [...note.columns, column('author_id', { references: { table: 'person', column: 'id' } }), column('at')],
+  };
+  const withPeople = { ...schema, tables: [...schema.tables, owner, activity] } as DatabaseSchema;
+  const rows = view('activity', ['body', 'at']);
+  const side = view('activity', ['account_id']);
+  const plans: ReadPlan[] = [
+    {
+      index: 0,
+      streams: [
+        { from: 'activity', by: 'author_id', view: rows, key: ['account_id'], side: { view: side } },
+        { from: 'activity', by: 'body', view: rows },
+        { from: 'activity', empty: true, view: rows },
+      ],
+    },
+  ];
+  const { reads } = recordPageReads(
+    { ...names, schema: withPeople },
+    { id: 'account', sections: [{ kind: 'timeline' } as ReadSection] },
+    account,
+    plans,
+    { id: 1 },
+    { rows: 10, history: false },
+  );
+  const views = reads.map((read) => read.body.view as { columns: Array<{ path: string }> });
+  assert.deepEqual(
+    views.map((asked) => asked.columns.map((item) => item.path)),
+    [['body', 'at', 'author_id.name'], ['account_id'], ['body', 'at']],
+  );
+  assert.ok(reads.every((read) => read.path === '/api/view/run' && read.body.offset === 0));
+});

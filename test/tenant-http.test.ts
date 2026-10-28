@@ -1541,6 +1541,118 @@ test('bootstrap discloses only own membership suggestions and open attests the v
   assert.equal(count.body.exact, true);
 });
 
+/* `/api/tenant/enter` folds discovery, the lease and the boot into one request (shared/tenantBoot.ts): each step is
+   the function its own route runs, so it must refuse everything those routes refuse, and enter nobody the chooser
+   would have asked. */
+test('enter enters only a sole membership, and refuses whatever discovery, open and the boot refuse', async (t) => {
+  const f = await fixture(t);
+  const at = (query = '') => `/api/tenant/enter?app=${appId}${query}`;
+  const enter = (body: Record<string, unknown> = {}, cookie = 'alice', query = '', extra: Record<string, string> = {}) =>
+    f.call(at(query), { path: `/${appId}`, search: '', ...body }, { cookie: `fixture=${cookie}`, ...extra });
+  const lease = (reply: Answer) => object(object(reply.body.entered).context) as Context;
+  const enters = (reply: Answer) => owned(reply, lease(reply));
+  const none = (reply: Answer) => {
+    assert.equal(reply.status, 200, reply.text);
+    noPrivate(reply);
+    assert.equal('entered' in reply.body, false, reply.text);
+    for (const header of ownerHeaders.slice(2)) assert.equal(reply.headers.get(header), null, header);
+  };
+  const discovery = async (cookie = 'alice') => {
+    const reply = await f.call(`/api/tenant/bootstrap?app=${appId}`, undefined, { cookie: `fixture=${cookie}` });
+    assert.equal(reply.status, 200, reply.text);
+    return reply.body;
+  };
+
+  /* Several tenants: discovery's answer, word for word, and the chooser: no lease is opened or attested. */
+  const several = await enter();
+  none(several);
+  assert.deepEqual(several.body, await discovery());
+  /* Nor where the link names one of them, or this tab kept one: the chooser is still asked. */
+  none(await enter({ tenant: 'north' }));
+  const held = await f.open('north');
+  none(await enter({ kept: { tenantId: 'north', tabId: held.tabId } }));
+  owned(await f.data('/api/query', held, { table: 'item' }), held);
+
+  /* One tenant: entered, on the lease `/open` would have opened, with the page's boot on it. */
+  await f.maintenance((admin) =>
+    admin
+      .putMembership({ ...f.grant, tenantId: 'south', membershipId: 'south-alice', status: 'revoked', expectedVersion: '1' })
+      .then(() => {}),
+  );
+  const one = await enter();
+  const entered = lease(one);
+  owned(one, entered);
+  assert.deepEqual({ ...one.body, entered: undefined }, { ...(await discovery()), entered: undefined });
+  assert.equal(entered.tenantId, 'north');
+  assert.equal(entered.revision, 1);
+  assert.notEqual(entered.tabId, held.tabId);
+  const boot = object(object(one.body.entered).boot);
+  const asked = await f.call(f.select('/api/boot'), { path: `/${appId}`, search: '' }, f.headers(entered));
+  owned(asked, entered);
+  assert.deepEqual(Object.keys(object(boot.reads)).sort(), Object.keys(object(asked.body.reads)).sort());
+  assert.ok(
+    Object.keys(object(boot.reads)).some((key) => key.startsWith(`GET /api/app?app=${appId}&tenant=north`)),
+    JSON.stringify(boot),
+  );
+  owned(await f.data('/api/query', entered, { table: 'item' }), entered);
+  /* The link naming that tenant enters it; naming another — one no longer the person's — asks. */
+  enters(await enter({ tenant: 'north' }));
+  none(await enter({ tenant: 'south' }));
+  none(await enter({ tenant: 'nowhere' }));
+  /* This tab's kept context, let go by its last page, is resumed rather than another opened, once. */
+  const released = await f.call(`/api/tenant/context/release?app=${appId}`, assertion(entered));
+  assert.equal(released.status, 200, released.text);
+  const resumed = lease(await enter({ kept: { tenantId: 'north', tabId: entered.tabId } }));
+  assert.equal(resumed.tabId, entered.tabId);
+  const again = lease(await enter({ kept: { tenantId: 'north', tabId: entered.tabId } }));
+  assert.notEqual(again.tabId, entered.tabId, 'a context resumes once; held, the next page opens its own');
+  /* Another account's kept tab is not this one's to resume. */
+  const bobs = await f.open('north', 'bob');
+  assert.equal((await f.call(`/api/tenant/context/release?app=${appId}`, assertion(bobs), { cookie: 'fixture=bob' })).status, 200);
+  assert.notEqual(lease(await enter({ kept: { tenantId: 'north', tabId: bobs.tabId } })).tabId, bobs.tabId);
+
+  /* What the request may say: an address of this App, a tenant, a kept context; never a realm, a selector or a lease. */
+  for (const [body, query, extra] of [
+    [{ path: '/elsewhere' }, '', {}],
+    [{ search: 'q=1' }, '', {}],
+    [{ tenant: '@platform' }, '', {}],
+    [{ tenant: '' }, '', {}],
+    [{ kept: { tenantId: 'north' } }, '', {}],
+    [{ kept: { tenantId: '@platform', tabId: 'x' } }, '', {}],
+    [{ reads: [] }, '', {}],
+    [{}, '&tenant=north', {}],
+    [{}, '&realm=platform', {}],
+    [{}, '&realm=support&tenant=north', {}],
+    [{}, '', f.headers(entered)],
+  ] as const) {
+    const reply = await enter(body, 'alice', query, extra as Record<string, string>);
+    /* A field no route of the three takes is refused as any control route refuses one (403); the rest are 400s. */
+    assert.equal(reply.status, 'reads' in body ? 403 : 400, `${JSON.stringify([body, query])}: ${reply.text}`);
+    denied(reply);
+  }
+  assert.equal((await f.call(at(), undefined)).status, 405);
+
+  /* Signed out: discovery's answer, and nothing opened. */
+  const out = await enter({}, 'nobody');
+  none(out);
+  assert.deepEqual(out.body, { status: 'signed_out' });
+  /* A suspended tenant opens no lease: discovery's answer alone, and the page hears `/open`'s refusal itself. */
+  await f.maintenance((admin) => admin.putTenant({ tenantId: 'north', status: 'suspended', expectedVersion: '1' }).then(() => {}));
+  none(await enter());
+  denied(await f.call(f.select('/api/tenant/context/open'), {}));
+  await f.maintenance((admin) => admin.putTenant({ tenantId: 'north', status: 'active', expectedVersion: '2' }).then(() => {}));
+  enters(await enter());
+  /* A revoked membership: no tenant, no lease. */
+  await f.maintenance((admin) => admin.putMembership({ ...f.grant, status: 'revoked', expectedVersion: '1' }).then(() => {}));
+  const revoked = await enter();
+  none(revoked);
+  assert.deepEqual(revoked.body.memberships, []);
+  /* An expired session is refused outright, as discovery refuses it. */
+  f.sessions.bob = { ...f.sessions.bob!, expiresAt: 1001 };
+  f.setTime(1001);
+  denied(await enter({}, 'bob'));
+});
+
 test("a bounded count passes the tenant allowlist, stays the tenant's own, and says capped past its bound", async (t) => {
   const f = await fixture(t),
     a = await f.open();

@@ -67,10 +67,10 @@ npm run review
 npm run test:interactions
 ```
 
-The review script captures every story in Lumen and Sage at desktop and phone
+The review script captures every story in Workshop, Lumen and Sage at desktop and phone
 widths, each in both light and dark mode. It checks theme application, render errors and document overflow, and
 writes screenshots and JSON under the ignored `.artifacts/` directory. Set
-`STORYBOOK_LOOKS=lumen,mono,sage` for every look,
+`STORYBOOK_LOOKS=workshop,lumen,mono,sage` for every look,
 `STORYBOOK_FILTER=records-` for a focused pass, or `STORYBOOK_URL` for another
 running preview. Interaction checks exercise keyboard navigation, nested popups,
 form validation, Back, submission, refusal and draft retention.

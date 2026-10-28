@@ -17,6 +17,11 @@ import { RUNTIME_CONTROL_PREFIXES, RUNTIME_SCHEMA, RUNTIME_SCHEMA_FUNCTIONS } fr
    application's own advisory locks. */
 export const MIGRATION_LOCK = '7431627679384207';
 
+/** One private client for `run`, ended after it: a store's few statements outside any pool (the validation record's). */
+export async function withPostgresClient<T>(url: string, run: (client: PgQuery) => Promise<T>): Promise<T> {
+  return withClient(url, run);
+}
+
 async function withClient<T>(url: string, run: (client: PgQuery) => Promise<T>): Promise<T> {
   if (typeof url !== 'string' || !/^postgres(ql)?:\/\//i.test(url))
     throw new Refusal('Command journal migration requires a postgres:// URL.');

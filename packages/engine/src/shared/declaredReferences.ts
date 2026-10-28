@@ -17,7 +17,7 @@
  * judged when the App loads and again, against the catalog in hand, at every
  * compile, so an edge that has stopped being true is dropped rather than run.
  */
-import { columnKind, primaryKey, type DatabaseSchema, type ForeignKey, type TableMeta } from './schema.js';
+import { columnKind, findTable, primaryKey, type DatabaseSchema, type ForeignKey, type TableMeta } from './schema.js';
 
 /** One declaration as a resource block says it, in the source's local logical names. */
 export interface DeclaredReference {
@@ -84,10 +84,23 @@ export function declaredEdge(schema: DatabaseSchema, reference: DeclaredReferenc
  */
 export function impliedEdges(schema: DatabaseSchema): ForeignKey[] {
   const edges: ForeignKey[] = [];
+  /* Each table's single-column keys, read once: a scan of the graph for every leg of every composite made this a
+     large part of pruning a tenant App's catalog, which startup does once per command footprint and role. */
+  let singles: Map<string, Set<string>> | undefined;
+  const singleKeys = () => {
+    const by = new Map<string, Set<string>>();
+    for (const other of schema.foreignKeys)
+      if (other.from.columns.length === 1) {
+        const columns = by.get(other.from.table);
+        if (columns) columns.add(other.from.columns[0]);
+        else by.set(other.from.table, new Set(other.from.columns));
+      }
+    return by;
+  };
   for (const fk of schema.foreignKeys) {
     if (fk.declared || fk.from.columns.length < 2) continue;
-    const from = schema.tables.find((table) => table.id === fk.from.table);
-    const to = schema.tables.find((table) => table.id === fk.to.table);
+    const from = findTable(schema, fk.from.table);
+    const to = findTable(schema, fk.to.table);
     if (!from || !to) continue;
     fk.from.columns.forEach((name, index) => {
       const column = from.columns.find((item) => item.name === name);
@@ -97,12 +110,7 @@ export function impliedEdges(schema: DatabaseSchema): ForeignKey[] {
       const legs = fk.from.columns.filter((other) => other !== name);
       if (legs.some((other) => from.columns.find((item) => item.name === other)?.nullable !== false)) return;
       // A column that is already a single-column key is that key's, and needs no second edge.
-      if (
-        schema.foreignKeys.some(
-          (other) => other.from.table === from.id && other.from.columns.length === 1 && other.from.columns[0] === name,
-        )
-      )
-        return;
+      if ((singles ??= singleKeys()).get(from.id)?.has(name)) return;
       edges.push({
         // Named by what it joins, not after the constraint: a composite's name usually spells the column a tenant never reads.
         name: `${from.id}.${name}->${to.id}`,

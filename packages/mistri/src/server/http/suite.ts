@@ -24,6 +24,7 @@ import {
 import type { SuiteLinkHost } from '../auth/suiteLinkHttp.js';
 import type { FlagAuthorityOptions } from '../flags/authority.js';
 import { openSuiteFlags, type SuiteFlags, type SuiteFlagsOptions } from './suiteFlags.js';
+import { timeRequests } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
 
 export interface SuiteHost {
   id: string;
@@ -297,6 +298,8 @@ export async function createSuite(
     const host = customTarget(req);
     if (!host || !host.server.emit('upgrade', req, socket, head)) socket.destroy();
   });
+  /* Outermost, so a request's timing covers every listener above (serverTiming.ts); nothing when off. */
+  timeRequests(server);
   applyServerTimeouts(server);
   const close = () => {
     stopping = true;

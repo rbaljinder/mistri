@@ -72,7 +72,8 @@ test('selected-control contrast composites transparent tints on the actual opaqu
 });
 
 test('navigation overlay checks can expose a failure hidden by the base surface pair', () => {
-  const base = THEME_PRESETS.find((theme) => theme.id === 'mono')!;
+  // Mono's own colors only: its palettes say a menu accent of their own, measured on their own.
+  const base = { ...THEME_PRESETS.find((theme) => theme.id === 'mono')!, palettes: undefined };
   const theme = { ...base, label: 'Overlay', light: { ...base.light, navGround: '#000000', navInk: '#ffffff', navAccent: '#757575' } };
   const warnings = themeWarnings([theme]);
   assert.ok(!warnings.some((warning) => /Overlay.*light.*nav\.accent\/nav\.ground/.test(warning)));

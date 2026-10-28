@@ -63,11 +63,11 @@ test('custom themes: app default, browser override, reload, mode, removal and re
   available = false;
   await page.reload();
   await expect(page.locator('.chart-donut')).toBeVisible();
-  // A stored pick the App no longer offers falls back to Lumen, the default,
-  // not to bare tokens: the page is dark here, so Lumen's dark surface.
-  await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'lumen');
+  // A stored pick the App no longer offers falls back to Workshop, the default,
+  // not to bare tokens: the page is dark here, so Workshop's dark surface.
+  await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'workshop');
   expect(await page.locator('html').evaluate((node) => (node as HTMLElement).style.getPropertyValue('--surface'))).toBe(
-    themePreset('lumen')!.dark.surface,
+    themePreset('workshop')!.dark.surface,
   );
   available = true;
   await page.reload();
@@ -161,7 +161,7 @@ for (const system of ['light', 'dark'] as const) {
   });
 }
 
-test('appearance: Sage is selectable, responsive, and reversible back to the default Lumen', async ({ page }) => {
+test('appearance: Sage is selectable, responsive, and reversible back to the default Workshop', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto(`${CRM}/`);
   await expect(page.locator('.chart-donut')).toBeVisible();
@@ -200,8 +200,8 @@ test('appearance: Sage is selectable, responsive, and reversible back to the def
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('menuitem', { name: /Preferences/ }).click();
   await prefs.getByRole('button', { name: 'Visual theme', exact: true }).click();
-  await page.getByRole('option', { name: 'Lumen', exact: true }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'lumen');
+  await page.getByRole('option', { name: 'Workshop', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'workshop');
   await expect(header).toHaveCSS('background-color', original);
 });
 

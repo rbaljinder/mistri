@@ -1,0 +1,126 @@
+/* Workshop, the look an App wears when it names none (themeLooks.ts): fetched
+   when a worn theme picks one of its recipes (keyed buttons, the slot menu), as Lumen's sheet
+   is, and so not in the first stylesheet the Workbench and every other look
+   share. Its other recipes are in Lumen's, the brand sheet and the surfaces'. */
+/* Barlow, a grotesk cut from road and workshop signage (SIL Open Font
+   License; its text in fonts/Barlow-OFL.txt and dist/client/fonts/): the
+   regular and semibold for the interface and data, the semi-condensed bold
+   for titles, section heads and labels in capitals. Declared here so only a
+   page wearing Workshop asks for it; the server preloads the regular and the
+   condensed bold beside this sheet (server/clientSurface.ts, lookPreloads).
+   `swap`, as Lumen's Inter: the page is held until this sheet is in, and the
+   fallback below is cut to Barlow's measure, so the swap barely moves a line. */
+@font-face {
+  font-family: Barlow;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/barlow-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: Barlow;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/barlow-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/barlow-semi-condensed-700.woff2') format('woff2');
+}
+/* The faces that stand in until Barlow arrives: Arial (Liberation Sans, its
+   metric twin, on Linux) scaled to Barlow's width and given Barlow's ascent and
+   descent (1.0 and 0.2 of the em, no line gap), as Lumen cuts Arial to Inter's.
+   Measured in Chromium over a line of interface text with its figures:
+   Barlow's regular is 92.3% of Arial's, its semibold 89.5% of Arial Bold's,
+   and the semi-condensed bold 82.1% of Arial Bold's. An override is said of
+   the adjusted size, so each is Barlow's ratio over the face's size-adjust. */
+@font-face {
+  font-family: 'Barlow Fallback';
+  font-weight: 100 500;
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Helvetica');
+  size-adjust: 92.3%;
+  ascent-override: 108.34%;
+  descent-override: 21.67%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Barlow Fallback';
+  font-weight: 600 900;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Helvetica Bold');
+  size-adjust: 89.5%;
+  ascent-override: 111.73%;
+  descent-override: 22.35%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Barlow Semi Condensed Fallback';
+  font-weight: 100 900;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Helvetica Bold');
+  size-adjust: 82.1%;
+  ascent-override: 121.8%;
+  descent-override: 24.36%;
+  line-gap-override: 0%;
+}
+@layer look {
+  /* Keyed buttons: the primary verb is a hazard key, the accent edged in the ink; a secondary key is edged in the
+     ink too, so every key on a page reads as hardware. A table's heads already stand on the ink rule its sections
+     do (themeFamilies.css, rules.head at the look's 2px).
+     The key is the look's primary-action color and its words (`--primary`, the palette's hue with the ink on it), as
+     a list's New and a dashboard's action are, re-pointed as a form's one action is (features.css): a button reads
+     `--accent`, which an App's own `ui.theme.accent` is worn over, so a record's first action was the App's blue
+     with paper words beside an orange New. */
+  :root[data-look-buttons='keyed'] .app-mode .btn-primary {
+    --accent: var(--primary);
+    --on-accent: var(--on-primary);
+    border: 1px solid var(--ink);
+  }
+  :root[data-look-buttons='keyed'] .app-mode .btn-secondary {
+    border-color: var(--ink);
+  }
+  /* The slot menu: the current entry is the ink block `inverted` draws (themeFamilies.css), and beside it a 3px
+     marker of the menu's accent — under it in the top bar, at its leading edge in the side menu — parted from the
+     block by 2px of the menu's ground, so the marker reads on the ground it stands on (3:1, test/contrast.test.ts)
+     and never on the block, which is dark by day and light by night. The palette reaches the menu as a mark,
+     never as a fill. The block is the menu's own ink: a theme that names `nav.current` draws its block instead
+     (structure.css, data-nav-current), and with it no marker. */
+  :root[data-look-nav='slot'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) {
+    background: var(--nav-ink);
+    color: var(--nav-ground);
+    border-radius: var(--radius);
+    box-shadow:
+      inset 0 -3px 0 var(--nav-accent),
+      inset 0 -5px 0 var(--nav-ground);
+  }
+  :root[data-look-nav='slot']
+    .app-mode
+    .topbar
+    :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true'])
+    :is(.tn-caret, .nav-icon) {
+    color: inherit;
+  }
+  :root[data-look-nav='slot'] :is(#table-list, .mobile-nav-list) button[aria-current='true'] {
+    background: var(--nav-ink);
+    color: var(--nav-ground);
+    box-shadow:
+      inset 3px 0 0 var(--nav-accent),
+      inset 5px 0 0 var(--nav-ground);
+  }
+  /* Held under a pointer too, over the menu's own hover tint. */
+  @media (hover: hover) {
+    :root[data-look-nav='slot'] :is(#table-list, .mobile-nav-list) button[aria-current='true']:hover {
+      background: var(--nav-ink);
+      color: var(--nav-ground);
+    }
+  }
+  :root[data-look-nav='slot'] :is(#table-list, .mobile-nav-list) button[aria-current='true'] :is(.rows, svg, .nav-icon) {
+    color: var(--nav-ground);
+  }
+  :root[data-look-nav='slot'] #table-list button[aria-current='true']:focus-visible {
+    outline: 2px solid var(--nav-ground);
+    outline-offset: -4px;
+  }
+}

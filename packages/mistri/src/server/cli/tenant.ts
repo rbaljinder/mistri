@@ -101,12 +101,16 @@ export async function startTenantServing(
         );
     // Close the load→watch gap. The original normalized definition and the
     // one read under observation must agree before importing server policy.
-    const observed = await loadApp(opts.apps[0], {
-      ...loadOptions,
-      ...(loaded.entry ? { entry: loaded.entry } : {}),
-      ...(opts.commands ? { commands: opts.commands } : {}),
-    });
-    if (changed || JSON.stringify(observed) !== JSON.stringify(loaded)) throw new Error('The tenant App changed during startup; restart.');
+    // A build has no gap to close: it watches nothing, and its load checked every file against its manifest.
+    if (!loaded.build) {
+      const observed = await loadApp(opts.apps[0], {
+        ...loadOptions,
+        ...(loaded.entry ? { entry: loaded.entry } : {}),
+        ...(opts.commands ? { commands: opts.commands } : {}),
+      });
+      if (changed || JSON.stringify(observed) !== JSON.stringify(loaded))
+        throw new Error('The tenant App changed during startup; restart.');
+    }
     if (
       configPath &&
       (JSON.stringify(await loadConfig(configPath, CONFIG_SECTIONS)) !== loadedConfigSignature ||
@@ -114,13 +118,32 @@ export async function startTenantServing(
     ) {
       throw new Error('The tenant connection configuration changed during startup; restart.');
     }
-    const { enrollment, authStoreExclusion, jobLines, adviceLines } = await prepareTenantStartup({
+    const startup = {
       loaded,
       connections: registry.configs(),
       policyFile: opts.policy,
       ...(opts.commands ? { commandsFile: opts.commands } : {}),
       ...(opts.jobs ? { jobsFile: opts.jobs } : {}),
-    });
+    };
+    /* A production build trusts what its build checked, and the validation record says what an earlier start of it
+       checked against this database (tenantValidationRecord.ts). `--dev` and `mistri check` always check in full. */
+    const { buildFingerprints, ValidationRecordFallback } = await import('../tenant/tenantValidationRecord.js');
+    const record = await buildFingerprints(
+      loaded,
+      { policy: opts.policy, ...(opts.commands ? { commands: opts.commands } : {}), ...(opts.jobs ? { jobs: opts.jobs } : {}) },
+      registry.configs(),
+      { dev: Boolean(opts.dev), check: Boolean(opts.checkApp) },
+    );
+    let prepared: Awaited<ReturnType<typeof prepareTenantStartup>>;
+    try {
+      prepared = await prepareTenantStartup(startup, process.env, record ? { record } : {});
+    } catch (error) {
+      if (!(error instanceof ValidationRecordFallback)) throw error;
+      console.error(`mistri: validation record: ${error.check} reads the catalog the record let this start skip; checking in full.`);
+      prepared = await prepareTenantStartup(startup);
+    }
+    const { enrollment, authStoreExclusion, jobLines, adviceLines, validation } = prepared;
+    if (validation) console.error(`mistri: validation record: ${validation.say}.`);
     if (changed) throw new Error('Tenant deployment files changed during validation; restart.');
     if (opts.checkApp) {
       stopWatching();
@@ -225,6 +248,14 @@ export async function startTenantServing(
         ...(api ? { api: { ...api, ...(opts.trustedProxies?.length ? { trustedProxies: opts.trustedProxies } : {}) } } : {}),
       });
       made = owner;
+      /* Kept once the host has enrolled, so a record never names a start that did not serve; in the background, since
+         nothing waits on it, and a failure is said once: the next start checks in full, as this one would have. */
+      validation?.commit().catch((error: unknown) => {
+        const code = (error as { code?: unknown } | undefined)?.code;
+        console.error(
+          `mistri: validation record: not kept (${typeof code === 'string' ? `PostgreSQL ${code}` : 'no answer'}); the next start checks in full.`,
+        );
+      });
     } catch (error) {
       auth.close();
       throw error;

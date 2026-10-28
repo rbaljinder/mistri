@@ -20,6 +20,7 @@
  *     `session()` is the whole server-side check, answering the `who` the
  *     journal and the write scope already read.
  */
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -76,7 +77,14 @@ import type { PgQuery, PgPool, PgClient, PgResult } from '@mistriwork/engine/ada
 import { assertPostgresAuthStore, withPostgresAuthModels } from '../../adapters/auth/postgresAuthStore.js';
 import { runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import { nativeAccountEligible, readSqliteEligibleAccountRoles } from './nativeAccountObservation.js';
-import { instantOf, postgresObserver, type AccountRoles, type StoreObserver } from './storeObserver.js';
+import {
+  instantOf,
+  observedSessionKey,
+  observedSessionOf,
+  postgresObserver,
+  type AccountRoles,
+  type StoreObserver,
+} from './storeObserver.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { signInState } from './signInState.js';
 import { signInLockoutPlugin } from './signInLockout.js';
@@ -97,6 +105,7 @@ import { checkApiReadCatalog } from '../api/apiReadCatalog.js';
 import type { ApiTenantCatalog } from '../api/apiTenantCommandCatalog.js';
 import { assertAppApiContext } from '../api/appApiValidation.js';
 import { TransactionOperations } from '@mistriwork/engine/adapters/adapter.js';
+import { timedSum } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
 import { observePostgresAccountToken } from './postgresApiTokenObservation.js';
 import { ApiTokenStoreUnavailable, throughApiTokenStore, throughApiTokenStoreAsync } from './apiTokenStoreFailure.js';
 import { captureApiTokenCommandContext } from './apiTokenCommandContext.js';
@@ -1760,6 +1769,41 @@ export async function createAppAuth(
     const signInInstants = new WeakMap<VerifiedSessionInstance, number>();
     const displayNames = new WeakMap<VerifiedSessionInstance, string>();
     const sessionsAsked = new WeakMap<IncomingMessage, Promise<Identity | null>>();
+    /* Better Auth's answer for a request's session: read from a PostgreSQL
+       store, or kept from a read of it a moment ago (authStoreReads.ts says
+       how long and what drops it). What that read depends on is the request's
+       cookies and its Authorization header, so the two, digested, are the
+       key: another request gets a kept answer only by presenting the same
+       credentials, and with them it would read the same. Only a signed-in
+       answer is kept, one whose session has since expired is read again, and
+       every caller gets its own copy. The row a session observation reads
+       (storeObserver.ts) is kept beside it from the same read, so the
+       observations a request makes after it cost nothing. */
+    const reads = handle.reads;
+    /* Timed as the request's `auth` where server timing is on (serverTiming.ts). */
+    const sessionOf = (req: IncomingMessage, fixed: boolean) => timedSum('auth', () => readSession(req, fixed));
+    const readSession = async (req: IncomingMessage, fixed: boolean) => {
+      const headers = fromNodeHeaders(req.headers);
+      const ask = () => auth.api.getSession(fixed ? { headers, query: { disableCookieCache: true, disableRefresh: true } } : { headers });
+      if (!reads) return ask();
+      const presented = createHash('sha256')
+        .update(JSON.stringify([req.headers.cookie ?? null, req.headers.authorization ?? null]))
+        .digest('base64url');
+      const got = await reads.read(
+        `get-session:${fixed ? 'fixed' : 'refreshing'}:${presented}`,
+        async (mark) => {
+          const answer = await ask();
+          const row = observedSessionOf(answer?.session, answer?.user);
+          if (row && typeof answer?.session?.id === 'string') reads.prime(observedSessionKey(answer.session.id), row, mark);
+          return answer;
+        },
+        {
+          keep: (answer) => Boolean(answer?.user && answer.session),
+          usable: (answer) => instantOf(answer?.session?.expiresAt) > Date.now(),
+        },
+      );
+      return got && structuredClone(got);
+    };
     const stepUps = {
       instants: new WeakMap<VerifiedSessionInstance, number | null>(),
       providers: new WeakMap<VerifiedSessionInstance, string>(),
@@ -1937,7 +1981,7 @@ export async function createAppAuth(
           sessionsAsked.set(
             req,
             (asked = (async () => {
-              const got = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+              const got = await sessionOf(req, false);
               if (!got?.user) return null;
               const user = got.user as { id: string; email?: string; name?: string; role?: string | null; emailVerified?: unknown };
               const role = await embedRole(
@@ -1963,10 +2007,7 @@ export async function createAppAuth(
       sessionInstance: async (req) => {
         try {
           if (closed) return denyTenant();
-          const got = await auth.api.getSession({
-            headers: fromNodeHeaders(req.headers),
-            query: { disableCookieCache: true, disableRefresh: true },
-          });
+          const got = await sessionOf(req, true);
           if (closed) return denyTenant();
           if (got === null) return null;
           if (!got?.user || !got.session) return denyTenant();
@@ -2088,7 +2129,7 @@ export async function createAppAuth(
         runtime,
         loaded.app.id,
         () => closed,
-        postgresObserver(handle.database as PgQuery),
+        postgresObserver(handle.database as PgQuery, handle.reads),
         signInInstants,
         displayNames,
         stepUps,

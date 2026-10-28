@@ -12,7 +12,7 @@ import {
   type SqlFragment,
   type SqlStyle,
 } from '../adapter.js';
-import type { DatabaseSchema } from '../../shared/schema.js';
+import { findTable, type DatabaseSchema } from '../../shared/schema.js';
 import { COUNT_EACH_MAX, countEachRows } from '../../shared/reads.js';
 import { isCapturedScopeCatalog } from '../../shared/scopeCatalog.js';
 import { ScopedRelations, snapshotRowScope, type RowScope } from '../../shared/rowScope.js';
@@ -92,7 +92,7 @@ export function createScopedReads(
   const schema = isCapturedScopeCatalog(catalog) ? catalog : structuredClone(catalog);
   const scope = snapshotRowScope(schema, input);
   const tableFor = (id: string) => {
-    const table = schema.tables.find((table) => table.id === id);
+    const table = findTable(schema, id);
     if (!table) throw new Refusal('Unknown resource in scoped read.');
     return table;
   };

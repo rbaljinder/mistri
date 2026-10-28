@@ -88,7 +88,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
    from 127.0.0.1 hundreds of times, so Better Auth's per-address limits are lifted on a loopback server. */
 process.env.MISTRI_TEST_AUTH_LIMITS ??= 'off';
 export const OUT = join(ROOT, '.visual');
-export const LOOKS = ['lumen', 'mono', 'sage'];
+export const LOOKS = ['workshop', 'lumen', 'mono', 'sage'];
 /* An App's own look: nothing chosen, so the App's `ui.theme` is what draws.
    Stories have no App, so no such column. */
 export const APP_DEFAULT = 'default';

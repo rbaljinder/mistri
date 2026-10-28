@@ -231,6 +231,34 @@ export function tenantAddressQuery(owned: TenantOwnershipSnapshot, column: strin
     WHERE ${quoted(key)} = $1 LIMIT 2`;
 }
 
+/** PostgreSQL's `tenantAddressQuery` and the address's resolution (`intakeAddressQuery`) in one statement: a row
+ * per profile row the tenant key finds (two at most, as there), each with how many rows its value resolves to (two at
+ * most) and the least of their tenant keys. The tenant's address was a round trip, and its resolution another that
+ * waited on it, in front of every entry that shows one; the two are one snapshot either way, so asking them together
+ * changes nothing they say. `heldAddress` still reads the rows and `tenantOwnAddress` the resolution, which names one
+ * tenant only where it found exactly one row. One parameter, the tenant id. */
+export function tenantOwnAddressQuery(owned: TenantOwnershipSnapshot, column: string): string {
+  assertIntakeColumn(owned, column);
+  if (owned.schema.dialect !== 'postgres') return denyTenant();
+  const key = intakeProfileKey(owned),
+    physical = owned.resources[owned.profile ?? denyTenant()] ?? denyTenant();
+  const dot = physical.indexOf('.');
+  if (dot < 1) return denyTenant();
+  const table = `${quoted(physical.slice(0, dot))}.${quoted(physical.slice(dot + 1))}`;
+  return `SELECT held.address, resolved.tenant, resolved.found FROM (
+      SELECT ${quoted(column)}::text AS address FROM ${table} WHERE ${quoted(key)} = $1 LIMIT 2
+    ) held LEFT JOIN LATERAL (
+      SELECT min(hit.tenant) AS tenant, count(*)::int AS found FROM (
+        SELECT ${quoted(key)}::text AS tenant FROM ${table} WHERE ${quoted(column)} COLLATE "C" = held.address LIMIT 2
+      ) hit
+    ) resolved ON true`;
+}
+/** The resolution `tenantOwnAddressQuery` carried on the held row, in `intakeAddressQuery`'s rows: one where it
+ * found exactly one, none otherwise — `intakeTenantOf` names a tenant only for one row. */
+export function ownAddressResolution(rows: readonly Record<string, unknown>[]): readonly Record<string, unknown>[] {
+  return rows.length === 1 && rows[0].found === 1 ? [{ tenant: rows[0].tenant }] : [];
+}
+
 /** Which of a tenant's addresses to read, by the policy's columns, each optional. */
 export interface TenantAddressesLookup {
   readonly tenantId: string;

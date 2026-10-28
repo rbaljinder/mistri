@@ -18,7 +18,9 @@ import { appAddressBook, recordSegments, type AddressBook } from '../../shared/a
 import { viewOrder } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { labelColumn, primaryKey, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { dashboardListQuery } from '@mistriwork/engine/shared/dashboardAsks.js';
 import type { Loop } from '@mistriwork/engine/server/http/firstPaint.js';
+import { lookupsOf } from '../http/firstPaintRooms.js';
 import type { AssistantCatalog, CatalogVerb } from './assistantCatalog.js';
 
 /** A block as the panel draws it: a dashboard section, or one record's card. */
@@ -69,6 +71,14 @@ class ToolRefusal extends Error {}
 const MAX_ROWS = 50;
 const SHOWN_TO_MODEL = 20;
 const TEXT_TO_MODEL = 160;
+/* What one tool result may be, as JSON: about 1,700 tokens. Every later step of the turn reads every earlier result
+   again, so a wide table's twenty rows told back whole were paid for five times over; a field report's "Which tickets
+   are mine?" spent its 60,000 tokens in five steps. Past this a result is cut to fit, and says so. */
+const RESULT_CHARS = 6_000;
+/* A table block's rows the model is told: enough to name and link a few. The person sees the block itself. */
+const TABLE_ROWS_TO_MODEL = 5;
+const RECORDS_TO_MODEL = 20;
+const CHOICES_TO_MODEL = 20;
 
 const quoted = (value: unknown): string => {
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
@@ -80,7 +90,53 @@ const quoted = (value: unknown): string => {
 const clipped = (value: unknown): unknown =>
   typeof value === 'string' && value.length > TEXT_TO_MODEL ? `${value.slice(0, TEXT_TO_MODEL)}…` : value;
 
+/**
+ * A result as the model is told it, at most RESULT_CHARS of JSON: a list in it (rows, records, fields) is halved
+ * until the whole fits, an object of values loses its last keys, and `cut` says how many went, so the model asks for
+ * fewer columns or rows rather than taking a part for the whole.
+ */
+function fitted(result: unknown, most = RESULT_CHARS): string {
+  let text = JSON.stringify(result);
+  if (text.length <= most || !result || typeof result !== 'object' || Array.isArray(result)) return text;
+  const out = { ...(result as Record<string, unknown>) };
+  let cut = 0;
+  for (const [key, value] of Object.entries(out)) {
+    if (text.length <= most) break;
+    if (Array.isArray(value)) {
+      let kept = value;
+      while (kept.length > 1 && text.length > most) {
+        kept = kept.slice(0, Math.ceil(kept.length / 2));
+        out[key] = kept;
+        text = JSON.stringify({ ...out, cut: cut + value.length - kept.length });
+      }
+      cut += value.length - kept.length;
+    } else if (value && typeof value === 'object') {
+      const entries = Object.entries(value);
+      let kept = entries;
+      while (kept.length > 1 && text.length > most) {
+        kept = kept.slice(0, Math.ceil(kept.length / 2));
+        out[key] = Object.fromEntries(kept);
+        text = JSON.stringify({ ...out, cut: cut + entries.length - kept.length });
+      }
+      cut += entries.length - kept.length;
+    }
+  }
+  if (cut) out.cut = `${cut} left out to keep this short: ask for fewer columns or rows`;
+  text = JSON.stringify(out);
+  // A single value too long to keep (it was clipped already) is said as the part that fits.
+  return text.length <= most ? text : JSON.stringify({ partial: text.slice(0, most) });
+}
+
+/* One turn's reads share their catalog: each tool call asked `/api/schema` again, a request through the tenant host's
+   admission per call on a slow deployment. A session is one turn. */
+const contexts = new WeakMap<ToolSession, ReturnType<typeof makeContext>>();
 function toolContext(session: ToolSession) {
+  let context = contexts.get(session);
+  if (!context) contexts.set(session, (context = makeContext(session)));
+  return context;
+}
+
+function makeContext(session: ToolSession) {
   let schema: Promise<DatabaseSchema> | undefined;
   let book: AddressBook | undefined;
   const target = (path: string) => `${path}${path.includes('?') ? '&' : '?'}app=${encodeURIComponent(session.app)}`;
@@ -232,7 +288,15 @@ async function find(context: Context, session: ToolSession, input: Record<string
       /* A table this text cannot be compared on is not a match. */
     }
   }
-  return { result: { ...catalog, records }, label: `Searched for “${text}”`, count: records.length };
+  return {
+    result: {
+      ...catalog,
+      records: records.slice(0, RECORDS_TO_MODEL),
+      ...(records.length > RECORDS_TO_MODEL ? { more: records.length - RECORDS_TO_MODEL } : {}),
+    },
+    label: `Searched for “${text}”`,
+    count: records.length,
+  };
 }
 
 async function describe(context: Context, session: ToolSession, input: Record<string, unknown>) {
@@ -250,7 +314,7 @@ async function describe(context: Context, session: ToolSession, input: Record<st
           name: column.name,
           type: column.type,
           ...(!column.nullable && column.default === undefined && form?.defaults?.[column.name] === undefined ? { required: true } : {}),
-          ...(column.allowed ? { choices: column.allowed } : {}),
+          ...(column.allowed ? { choices: column.allowed.slice(0, CHOICES_TO_MODEL) } : {}),
           ...(column.references ? { references: column.references.table } : {}),
           ...(form?.defaults?.[column.name] !== undefined ? { default: form.defaults[column.name] } : {}),
         }));
@@ -290,7 +354,7 @@ async function describe(context: Context, session: ToolSession, input: Record<st
     type: column.type,
     ...(column.primaryKey ? { key: true } : {}),
     ...(column.nullable ? {} : { required: true }),
-    ...(column.allowed ? { choices: column.allowed } : {}),
+    ...(column.allowed ? { choices: column.allowed.slice(0, CHOICES_TO_MODEL) } : {}),
     ...(column.references ? { references: column.references.table } : {}),
   }));
   const changes = session.catalog.resources.find((each) => each.name === resource)?.verbs.map((verb) => `${resource}.${verb.id}`) ?? [];
@@ -382,11 +446,6 @@ async function show(context: Context, session: ToolSession, input: Record<string
     const sort = typeof input.sort === 'string' && input.sort.trim() ? input.sort.trim() : undefined;
     if (sort && !SORT.test(sort)) throw new ToolRefusal('sort is one column, then asc or desc: "created_on desc".');
     const limit = Math.max(1, Math.min(MAX_ROWS, Number.isInteger(input.limit) ? (input.limit as number) : 10));
-    const { rows, total } = await context.run(
-      `${table.id}${condition ? ` ${condition}` : ''} show ${show.join(', ')}${sort ? ` sort ${sort}` : ''} limit ${limit}`,
-      limit,
-      'exact',
-    );
     const section = {
       kind: 'rows',
       title: title ?? '',
@@ -396,14 +455,37 @@ async function show(context: Context, session: ToolSession, input: Record<string
       ...(sort ? { sort } : {}),
       limit,
     };
+    /* Read as the panel will read it: the dashboard's own question for this section (shared/dashboardAsks.ts), the
+       names of its references and its keys with it. A block is drawn only over a read that answered, so a question
+       the panel's table could not ask is the model's to correct, never a table that says "No rows match." */
+    const rules = { schema: await context.catalogSchema(), resources: session.payload.resources };
+    const { rows, total } = await context.run(dashboardListQuery(lookupsOf(rules), section).query, limit, 'exact');
+    const [pk] = primaryKey(table);
+    const told = await Promise.all(
+      rows.slice(0, TABLE_ROWS_TO_MODEL).map(async (row) => {
+        const out: Record<string, unknown> = Object.fromEntries(
+          [...new Set([...(pk ? [pk] : []), ...show])].filter((name) => name in row).map((name) => [name, clipped(row[name])]),
+        );
+        const address = pk && row[pk] !== undefined ? await context.addressOf(table.id, { [pk]: row[pk] }) : undefined;
+        if (address) out.address = address;
+        return out;
+      }),
+    );
+    const matched = total ?? rows.length;
+    /* An empty table is not an answer: "No rows match." under a title said less than one sentence does, and sent
+       the model looking again. Nothing is drawn; the model says so. */
+    if (!rows.length)
+      return {
+        result: {
+          shown: 'nothing',
+          total: 0,
+          note: 'No rows match, so no table was drawn. Say so in a sentence; if that is unexpected, check the condition with describe.',
+        },
+        label: `Found no ${table.id} for ${title ?? 'that'}`,
+      };
     return {
-      result: {
-        shown: 'table',
-        rows: rows.length,
-        total: total ?? rows.length,
-        first: rows.slice(0, 10).map((row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, clipped(v)]))),
-      },
-      label: `Showed ${title ?? table.id}: ${total ?? rows.length} ${total === 1 ? 'row' : 'rows'}`,
+      result: { shown: 'table', total: matched, drawn: rows.length, first: told },
+      label: `Showed ${title ?? table.id}: ${matched} ${matched === 1 ? 'row' : 'rows'}`,
       block: { kind: 'section', section } as AssistantBlock,
     };
   }
@@ -499,6 +581,25 @@ async function propose(
   };
 }
 
+/** What a tool call is doing, in a few words, said while it runs (the panel's working line). */
+export function runningLabel(name: string, input: unknown): string {
+  const args = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+  const said = (value: unknown) => (typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, 60) : '');
+  const label =
+    name === 'find' && said(args.text)
+      ? `Searching for “${said(args.text)}”`
+      : name === 'describe' && (said(args.action) || said(args.resource))
+        ? `Looking at ${said(args.action) || said(args.resource)}`
+        : name === 'query' && said(args.q)
+          ? `Reading ${said(args.q).split(' ')[0]}`
+          : name === 'show' && (said(args.title) || said(args.resource))
+            ? `Drawing ${said(args.title) || said(args.resource)}`
+            : name === 'run' && said(args.action)
+              ? `Preparing ${said(args.action)}`
+              : 'Working';
+  return `${label}…`;
+}
+
 /** Answer one tool call. A refusal is told to the model as an error it can correct; anything else is a failed step. */
 export async function answerTool(session: ToolSession, name: string, input: unknown, id: string): Promise<ToolAnswer> {
   const context = toolContext(session);
@@ -526,7 +627,7 @@ export async function answerTool(session: ToolSession, name: string, input: unkn
             : await show(context, session, args);
     const display: DisplayItem[] = [{ type: 'step', id, tool: name, label: answered.label }];
     if ('block' in answered && answered.block) display.push({ type: 'block', id, block: answered.block });
-    return { result: JSON.stringify(answered.result), display };
+    return { result: fitted(answered.result), display };
   } catch (error) {
     if (session.signal.aborted) throw error;
     const message = error instanceof ToolRefusal ? error.message : 'That could not be read just now.';

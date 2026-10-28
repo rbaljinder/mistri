@@ -18,8 +18,8 @@ import { compileBreakdown, compileBreakdownCount, type BreakdownDef } from '../p
 import { ScopedRelations, snapshotRowScope, type RowScope, type RowScopeFilter } from '../packages/engine/src/shared/rowScope.js';
 import { TenantContextError } from '../packages/engine/src/server/evidence.js';
 import { createTenantMembershipIssuer, type TenantMembershipEvidence } from '../packages/mistri/src/server/tenant/tenantMembership.js';
-import type { TenantOwnershipInput } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
-import { composePublicReadScope, composeTenantReadScope } from '../packages/mistri/src/server/tenant/tenantReadScope.js';
+import { captureTenantOwnership, type TenantOwnershipInput } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
+import { composeCounters, composePublicReadScope, composeTenantReadScope } from '../packages/mistri/src/server/tenant/tenantReadScope.js';
 import type { TenantPublicEvidence } from '../packages/mistri/src/server/tenant/tenantPublicRead.js';
 import {
   readRecords,
@@ -646,4 +646,32 @@ test('a public scope reads one tenant exactly, denies unnamed tables, and passes
   denied(() => composePublicReadScope(f.ownership, { ...visitor('north'), appId: 'other' }, { items: true }));
   denied(() => composePublicReadScope(f.ownership, { ...visitor('north'), realm: 'tenant' } as never, { items: true }));
   denied(() => composePublicReadScope(f.ownership, visitor('north'), { items: true, ghost: true }));
+});
+
+/* A composition is kept by what it is composed of (tenantReadScope.ts): the
+   ownership, both layers as snapshots, and the tenant. Never the person, and
+   never across tenants: the same layers for another tenant compose afresh. */
+test('a kept composition is shared only by the same layers and the same tenant', (t) => {
+  const f = fixture(t);
+  const owned = captureTenantOwnership(f.ownership);
+  const layer = snapshotRowScope(owned.schema, { ...f.allow, items: eq('status', 'open') });
+  const all = snapshotRowScope(owned.schema, f.allow);
+  const before = composeCounters.composed;
+  const north = composeTenantReadScope(owned, member(), layer, all);
+  // Another person of the same tenant, with the same layers: the same composition.
+  assert.equal(composeTenantReadScope(owned, { ...member(), accountId: 'bob', membershipId: 'membership-2' }, layer, all), north);
+  assert.equal(composeCounters.composed - before, 1);
+  const south = composeTenantReadScope(owned, { ...member(), tenantId: 'south' }, layer, all);
+  assert.notEqual(south, north);
+  assert.equal(composeCounters.composed - before, 2);
+  const tenantOf = (scope: RowScope) => (scope.items as RowScopeFilter).groups[0].find((c) => c.column === 'tenant_id')?.value;
+  assert.equal(tenantOf(north), 'north');
+  assert.equal(tenantOf(south), 'south');
+  // Other layers compose their own, and a layer that is not a snapshot is composed every time.
+  assert.notEqual(composeTenantReadScope(owned, member(), all, all), north);
+  const plain = { ...f.allow, items: eq('status', 'open') };
+  const counted = composeCounters.composed;
+  composeTenantReadScope(owned, member(), plain, all);
+  composeTenantReadScope(owned, member(), plain, all);
+  assert.equal(composeCounters.composed - counted, 2);
 });

@@ -36,6 +36,8 @@ const GATED = new Set(['serious', 'critical']);
    where this runs). */
 const LOOKS: Array<{ look?: string; mode: 'light' | 'dark' }> = [
   { mode: 'light' },
+  { look: 'workshop', mode: 'dark' },
+  { look: 'lumen', mode: 'light' },
   { look: 'lumen', mode: 'dark' },
   { look: 'mono', mode: 'light' },
   { look: 'mono', mode: 'dark' },

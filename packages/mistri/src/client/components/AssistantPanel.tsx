@@ -89,7 +89,7 @@ import {
   type StreamEvent,
 } from './assistantStream.js';
 import { Button } from '@mistriwork/ui/Button.js';
-import { assistantApi, assistantTenant } from './assistantRequest.js';
+import { assistantApi, assistantOwner } from './assistantRequest.js';
 import { ConversationList, DeleteConversation, RenameField, type ConversationSummary } from './ConversationList.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { CommandForm } from './CommandForm.js';
@@ -109,8 +109,8 @@ const Dashboard = onDemand(() => import('./Dashboard.js'), 'Dashboard');
 type Summary = ConversationSummary;
 
 /* Where the person was, kept while the page is: closing the panel and opening it again returns to the same conversation. */
-/* The panel reopens on the conversation it last showed, in the customer it was shown in. */
-let lastConversation: { tenant: string; id: string | null } = { tenant: '', id: null };
+/* The panel reopens on the conversation it last showed, for the person and in the customer it was shown to. */
+let lastConversation: { owner: string; id: string | null } = { owner: '', id: null };
 
 const LIST_QUERY = 'assistant-conversations';
 const phone = () => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches;
@@ -604,8 +604,8 @@ interface AssistantProps {
 
 /** The trigger's panel, beside the page or full screen over its content. */
 export function AssistantPanel({ app, record, onClose }: { app: string; record: boolean; onClose: () => void }) {
-  // Another customer is another history: the panel starts again in it.
-  return <Assistant key={assistantTenant()} app={app} record={record} mode="panel" onClose={onClose} />;
+  // Another customer, or another person, is another history: the panel starts again in it.
+  return <Assistant key={assistantOwner()} app={app} record={record} mode="panel" onClose={onClose} />;
 }
 
 /** The App's assistant room (`placement: 'page'`), on the conversation its address names. */
@@ -613,15 +613,15 @@ export function AssistantRoom({ conversation }: { conversation?: string }) {
   const app = activeApp() as AppPayloadApp | null;
   if (!app?.assistant?.page) return null;
   return (
-    <Assistant key={`${assistantTenant()}\n${conversation ?? ''}`} app={app.id} record={false} mode="page" conversation={conversation} />
+    <Assistant key={`${assistantOwner()}\n${conversation ?? ''}`} app={app.id} record={false} mode="page" conversation={conversation} />
   );
 }
 
 function Assistant({ app, record, mode, onClose, conversation: addressed }: AssistantProps) {
   const room = mode === 'page';
-  const tenant = assistantTenant();
+  const owner = assistantOwner();
   const [conversation, setConversation] = useState<string | null>(
-    room ? (addressed ?? null) : lastConversation.tenant === tenant ? lastConversation.id : null,
+    room ? (addressed ?? null) : lastConversation.owner === owner ? lastConversation.id : null,
   );
   const [started, setStarted] = useState<string | null>(null);
   const [items, setItems] = useState<PanelItem[]>([]);
@@ -630,7 +630,14 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
   const [editing, setEditing] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState<string | undefined>();
-  const [problem, setProblem] = useState<string | null>(null);
+  /* What went wrong, and the way on from it: `again` for a turn cut off on the way, `fresh` for a conversation this
+     person may not open (a field report's panel stayed blank over a 403 it never said). */
+  const [problem, setProblem] = useState<{ text: string; again?: true; fresh?: true } | null>(null);
+  /* The last turn sent, and whether the server had kept the person's words before it was cut off: kept, it is retried
+     from them; not, the same request is sent again. */
+  const sent = useRef<{ path: '/api/assistant/turn' | '/api/assistant/resolve'; request: Record<string, unknown>; kept: boolean } | null>(
+    null,
+  );
   const [withRecord, setWithRecord] = useState(true);
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [deletingOpen, setDeletingOpen] = useState(false);
@@ -657,12 +664,12 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
   });
 
   const conversations = useQuery({
-    queryKey: [LIST_QUERY, app, tenant],
+    queryKey: [LIST_QUERY, app, owner],
     queryFn: async () =>
       (await assistantApi(`/api/assistant?app=${encodeURIComponent(app)}`)) as { conversations: Summary[]; ready: boolean },
   });
   const opened = useQuery({
-    queryKey: ['assistant-conversation', app, tenant, conversation],
+    queryKey: ['assistant-conversation', app, owner, conversation],
     // Not the one this panel's own turn just started: its items are already here.
     enabled: conversation !== null && conversation !== started,
     staleTime: Infinity,
@@ -677,12 +684,16 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened.data]);
   useEffect(() => {
-    if (!room) lastConversation = { tenant, id: conversation };
+    if (!room) lastConversation = { owner, id: conversation };
   }, [room, conversation]);
   // A conversation that is gone (deleted in another tab, or another account's) starts a new one —
-  // unless this panel's own turn has since answered for it.
+  // unless this panel's own turn has since answered for it. One refused is said, with the way out.
   useEffect(() => {
     if (!opened.isError || conversation === started) return;
+    if ((opened.error as { status?: number } | null)?.status !== 404) {
+      setProblem({ text: say('couldNotOpen', { message: opened.error.message }), fresh: true });
+      return;
+    }
     if (room) go(assistantEntry(), 'replace');
     else setConversation(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -773,8 +784,13 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
     async (path: '/api/assistant/turn' | '/api/assistant/resolve', request: Record<string, unknown>) => {
       const controller = new AbortController();
       stop.current = controller;
+      const turn = { path, request, kept: false };
+      sent.current = turn;
       setBusy(true);
       setProblem(null);
+      /* Said at once and kept still: the server reads the App and the catalog before its first event, and a field
+         report waited seventy seconds under a bare question. Then each tool says what it is doing as it runs. */
+      setRunning(say('working'));
       pinned.current = true;
       try {
         await stream(
@@ -782,15 +798,24 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
           { app, ...request },
           (event: StreamEvent) => {
             if (event.event === 'conversation' && typeof event.data.id === 'string') adopt(event.data.id);
-            if (event.event === 'running') setRunning(say('working'));
-            if (event.event === 'step' || event.event === 'done') setRunning(undefined);
-            if (event.event === 'error' && typeof event.data.message === 'string') setProblem(event.data.message);
+            if (event.event === 'conversation' && typeof event.data.person === 'number') turn.kept = true;
+            if (event.event === 'running') setRunning(typeof event.data.label === 'string' ? event.data.label : say('working'));
+            // Between steps the model is at work again; once it writes, its words are the sign.
+            if (event.event === 'step') setRunning(say('working'));
+            if (event.event === 'text' || event.event === 'done') setRunning(undefined);
+            if (event.event === 'error' && typeof event.data.message === 'string')
+              setProblem({ text: say('couldNotAnswer', { message: event.data.message }) });
             setItems((now) => applyEvent(now, event));
           },
           controller.signal,
         );
       } catch (error) {
-        if (!controller.signal.aborted) setProblem(error instanceof Error ? error.message : String(error));
+        if (!controller.signal.aborted)
+          setProblem(
+            (error as { lost?: boolean } | null)?.lost
+              ? { text: say('connectionLost'), again: true }
+              : { text: say('couldNotAnswer', { message: error instanceof Error ? error.message : String(error) }) },
+          );
       } finally {
         if (controller.signal.aborted)
           setItems((now) => [...applyEvent(now, { event: 'done', data: {} }), { type: 'note', text: say('stopped') }]);
@@ -825,6 +850,13 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
     if (at < 0 || !conversation) return;
     setItems([...cutAt(items, at), items[at]]);
     void run('/api/assistant/turn', { conversation, text: (items[at] as { text: string }).text, retry: true });
+  };
+  /* A turn cut off on the way, tried again: from the person's words if the server kept them, else sent as it was. */
+  const again = () => {
+    const turn = sent.current;
+    if (!turn || busy) return;
+    if (turn.path === '/api/assistant/turn' && turn.kept && conversation) return retry();
+    void run(turn.path, turn.request);
   };
   const resolve = (proposal: Proposal, outcome: ProposalOutcome) => {
     if (!conversation) return;
@@ -875,7 +907,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
     }
     setStarted(null);
     setConversation(id);
-    void queryClient.invalidateQueries({ queryKey: ['assistant-conversation', app, tenant, id] });
+    void queryClient.invalidateQueries({ queryKey: ['assistant-conversation', app, owner, id] });
   };
   const startNew = () => {
     stop.current?.abort();
@@ -900,7 +932,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
   };
   const rename = async (id: string, title: string) => {
     // Drawn at once; the list read again says what the server kept.
-    queryClient.setQueryData([LIST_QUERY, app, tenant], (was: { conversations: Summary[]; ready: boolean } | undefined) =>
+    queryClient.setQueryData([LIST_QUERY, app, owner], (was: { conversations: Summary[]; ready: boolean } | undefined) =>
       was ? { ...was, conversations: was.conversations.map((each) => (each.id === id ? { ...each, title } : each)) } : was,
     );
     try {
@@ -1161,9 +1193,19 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
                 <p className="assistant-working">{running}</p>
               )}
               {problem && (
-                <p className="assistant-problem" role="alert">
-                  {say('couldNotAnswer', { message: problem })}
-                </p>
+                <div className="assistant-problem" role="alert">
+                  <p>{problem.text}</p>
+                  {problem.again && !busy && (
+                    <button type="button" onClick={again}>
+                      {say('tryAgain')}
+                    </button>
+                  )}
+                  {problem.fresh && (
+                    <button type="button" onClick={startNew}>
+                      {say('newConversation')}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </ActionOutcomes.Provider>

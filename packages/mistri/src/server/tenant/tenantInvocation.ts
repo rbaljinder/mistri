@@ -34,6 +34,25 @@ export function narrowTenantInvocation<P extends InvocationPrincipal = TenantMem
     checkTenantInvocation(assert, principal);
   }, verifier<P>(parent));
 }
+/* Guards whose admission is only the first of two: the owner admits again, afresh, before anything it was given
+   leaves the server (tenantContexts.ts `candidate`). */
+const admittedAgain = new WeakSet<TenantInvocationGuard<never>>();
+/**
+ * The guard for an admission its owner makes again before it releases anything: a lease's first admission, whose
+ * principal is only compared with the second's. The read runtime's release fence — a fresh membership snapshot
+ * after the work — is then the second admission's own snapshot, which must find the same membership, and that
+ * admission keeps its fence; asked here too it was one more round trip in front of every lease. The session is
+ * still asked at release. A guard issued this way is a new one, so no other admission is ever unfenced by it.
+ */
+export function tenantInvocationAdmittedAgain<P extends InvocationPrincipal = TenantMembershipEvidence>(
+  parent: TenantInvocationGuard<P>,
+): TenantInvocationGuard<P> {
+  const guard = narrowTenantInvocation<P>(parent, () => {});
+  admittedAgain.add(guard as TenantInvocationGuard<never>);
+  return guard;
+}
+export const isAdmittedAgain = <P extends InvocationPrincipal>(guard: TenantInvocationGuard<P> | undefined): boolean =>
+  guard !== undefined && admittedAgain.has(guard as TenantInvocationGuard<never>);
 export function revalidateTenantInvocation<P extends InvocationPrincipal = TenantMembershipEvidence>(
   guard: TenantInvocationGuard<P> | undefined,
   principal: P,

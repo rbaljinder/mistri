@@ -242,7 +242,7 @@ function breakdown(data: Fixtures, resource: string, by: string, measure: string
 }
 
 export function fixtureHost(data: Fixtures, options: RenderOptions, navigations: Navigation[], commands: CommandCall[] = []): UiHost {
-  const look: UiLook = { look: options.look ?? 'lumen', mode: options.mode ?? 'light', density: 'comfortable' };
+  const look: UiLook = { look: options.look ?? 'workshop', mode: options.mode ?? 'light', density: 'comfortable' };
   const viewer = options.viewer ?? { signedIn: false };
   const served = options.commands ?? {};
   const values =

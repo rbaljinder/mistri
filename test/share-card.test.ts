@@ -64,15 +64,16 @@ const cardPath = (html: string) => {
 };
 
 test('a card is drawn from words and the look: the App accent, a plain colour only, the mark only from an icon', () => {
-  const lumen = themePreset('lumen')!.light;
+  // An App that names no look is drawn in Workshop's.
+  const look = themePreset('workshop')!.light;
   const plain = shareCard({ site: 'Lot', title: '  Toyota \n Corolla ', ui: {} })!;
   assert.deepEqual(plain, {
     site: 'Lot',
     title: 'Toyota Corolla',
-    ground: lumen.ground,
-    ink: lumen.ink,
-    muted: lumen.inkMuted,
-    accent: lumen.accent,
+    ground: look.ground,
+    ink: look.ink,
+    muted: look.inkMuted,
+    accent: look.accent,
   });
   const own = shareCard({
     site: 'Lot',
@@ -84,11 +85,8 @@ test('a card is drawn from words and the look: the App accent, a plain colour on
   assert.equal(own.ground, themePreset('sage')!.light.ground);
   assert.equal(own.summary, undefined, 'a summary that only repeats the title is left off');
   assert.deepEqual(own.mark, APP_ICON_GLYPHS.car[1]);
-  // A look's CSS expression is not a colour the renderer reads: that role is Lumen's.
-  assert.equal(
-    shareCard({ site: 'Lot', title: 'x', ui: { theme: { accent: 'color-mix(in srgb, red 50%, blue)' } } })!.accent,
-    lumen.accent,
-  );
+  // A look's CSS expression is not a colour the renderer reads: that role is the default look's.
+  assert.equal(shareCard({ site: 'Lot', title: 'x', ui: { theme: { accent: 'color-mix(in srgb, red 50%, blue)' } } })!.accent, look.accent);
   assert.equal(shareCard({ site: 'Lot', title: '   ', ui: {} }), undefined);
   assert.equal(shareCard({ site: 'Lot', title: 'x'.repeat(300), ui: {} })!.title.length, 110);
   assert.notEqual(cardVersion(plain), cardVersion({ ...plain, title: 'Toyota Corolla LE' }));

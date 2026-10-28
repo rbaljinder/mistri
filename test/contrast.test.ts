@@ -10,6 +10,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { effectiveThemeDefinition, effectiveThemePalette, THEME_PRESETS } from '../packages/engine/src/shared/themePresets.js';
+import { LOOK_PALETTES } from '../packages/engine/src/shared/lookPalettes.js';
+import { chartPairFailure } from '../packages/mistri/src/shared/themeCheck.js';
 import type { ThemePalette } from '../packages/engine/schema/theme.js';
 
 type Rgba = [number, number, number, number];
@@ -83,8 +85,71 @@ test('every built-in look, palette and mode meets AA on the pairs the design sys
         measured++;
       }
     }
-  assert.ok(measured >= 6, 'looks were measured');
+  // Every look in every one of the shared palettes, light and dark: 4 × 12 × 2 at least.
+  assert.ok(measured >= THEME_PRESETS.length * LOOK_PALETTES.length * 2, `every look, palette and mode was measured (${measured})`);
   assert.deepEqual(failures, []);
+});
+
+test('every built-in look offers the same palettes, its own colors are one of them, and its charts stay apart', () => {
+  const ids = LOOK_PALETTES.map((palette) => palette.id);
+  assert.ok(ids.length >= 12, 'at least twelve palettes');
+  assert.equal(new Set(ids).size, ids.length, 'one id each');
+  // Lumen's five keep their ids, so an App that names one keeps it.
+  for (const id of ['violet', 'teal', 'emerald', 'rose', 'amber']) assert.ok(ids.includes(id), id);
+  const failures: string[] = [];
+  for (const look of THEME_PRESETS) {
+    assert.deepEqual(
+      (look.palettes ?? []).map((palette) => palette.id),
+      ids,
+      `${look.id} offers every palette, in the registry's order`,
+    );
+    assert.ok(ids.includes(look.defaultPalette!), `${look.id} wears one of them by default`);
+    assert.deepEqual(
+      effectiveThemeDefinition(look, look.defaultPalette).light,
+      look.light,
+      `${look.id}'s own colors are its default palette's`,
+    );
+    for (const id of ids)
+      for (const mode of ['light', 'dark'] as const) {
+        const palette = effectiveThemePalette(effectiveThemeDefinition(look, id)[mode], mode === 'dark') as unknown as Record<
+          string,
+          string
+        >;
+        for (let n = 1; n < 8; n++) {
+          const a = palette[`chart${n}`],
+            b = palette[`chart${n + 1}`];
+          if (!a || !b || !/^#[0-9a-f]{6}$/i.test(a) || !/^#[0-9a-f]{6}$/i.test(b)) continue;
+          const failed = chartPairFailure(a, b);
+          if (failed)
+            failures.push(
+              `${look.id}/${id}/${mode}: chart${n} ${a} beside chart${n + 1} ${b} is ${failed.distance.toFixed(1)} apart for ${failed.vision}`,
+            );
+        }
+      }
+  }
+  assert.deepEqual(failures, []);
+});
+
+test('Workshop is the look an App wears by default, and its palette marks the brand signals but tints nothing', () => {
+  assert.equal(THEME_PRESETS[0]!.id, 'workshop');
+  const workshop = THEME_PRESETS[0]!;
+  assert.equal(workshop.defaultPalette, 'safety');
+  for (const palette of LOOK_PALETTES)
+    for (const mode of ['light', 'dark'] as const) {
+      const worn = effectiveThemeDefinition(workshop, palette.id)[mode];
+      const at = `${palette.id}/${mode}`;
+      // The primary verb is filled in the hue, and a form's primary press with it.
+      assert.equal(worn.primary, worn.accent, `${at}: the primary verb is the accent's fill`);
+      // Links (and the current tab's rule, drawn in the link), the menu's marker and the first series carry the hue.
+      assert.equal(worn.navAccent, worn.link, `${at}: the menu's marker is the link's hue`);
+      if (palette.id !== 'ink') {
+        assert.notEqual(worn.link, worn.ink, `${at}: links carry the hue`);
+        assert.notEqual(worn.chart1, worn.ink, `${at}: the first series carries the hue`);
+      }
+      // No tint and no inked fill moves: selection, the menu's block and the rules stay the paper's and the ink's.
+      for (const role of ['accentSoft', 'accentInk', 'navInk', 'rulesSection', 'rulesHead', 'ground', 'surface'] as const)
+        assert.equal(worn[role], workshop[mode][role], `${at}: ${role} stays the look's own`);
+    }
 });
 
 /** The custom properties a rule declares, with var(--x) references to its own or the base rule's resolved. */

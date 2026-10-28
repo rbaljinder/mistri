@@ -30,6 +30,7 @@ import { HttpError, send, sendBusy } from './reply.js';
 import { routedPath, servedApp, traceRequest } from './traceRequest.js';
 import { setBaselineHeaders } from './baselineHeaders.js';
 import type { Bound } from './trust.js';
+import { timeRequests } from '../../adapters/telemetry/serverTiming.js';
 
 /* From source, Vite's modules are addressed from the root whatever the base
    (devclient.ts): its own paths and the client's files, never a page, the
@@ -189,6 +190,8 @@ export function listen(options: Listening, answering: Answering): Server {
   commandOperations.set(server, pending);
   if (SOURCE_CLIENT && options.sourceClient !== false) attachDevClient(server);
   /* Explicit, rather than Node's defaults; serverTimeouts.ts says why. */
+  /* Outermost, so a request's timing covers every listener above (serverTiming.ts); nothing when off. */
+  timeRequests(server);
   applyServerTimeouts(server);
   return server;
 }

@@ -48,11 +48,15 @@ export interface LatencyProxy {
   statements(since?: number): Statement[];
   /** Every wait inside an open transaction longer than `over` ms, from `since` on. */
   heldOpen(since?: number, over?: number): HeldOpen[];
+  /** Hold each chunk `delay` ms from now on: changed only while nothing is in flight, or chunks pass each other. A
+      request timed at two delays costs its serial round trips their difference each, whatever else it does. */
+  setDelay(delay: number): void;
   close(): Promise<void>;
 }
 
 /** Relay to `target`'s host and port, holding each chunk `delay` ms in each direction, in order. */
-export async function startLatencyProxy(target: string, delay: number): Promise<LatencyProxy> {
+export async function startLatencyProxy(target: string, initial: number): Promise<LatencyProxy> {
+  let delay = initial;
   const { hostname, port } = new URL(target);
   const sockets = new Set<Socket>();
   const statements: Statement[] = [];
@@ -62,6 +66,12 @@ export async function startLatencyProxy(target: string, delay: number): Promise<
   const server = createServer((client) => {
     const id = ++connections;
     const upstream = createConnection({ host: hostname, port: Number(port || 5432) });
+    /* Each chunk leaves when its delay is up, as node-postgres's own socket
+       sends it (setNoDelay): Nagle's wait for an acknowledgement would hold a
+       second message of one flight back behind the first, and charge a
+       pipelined client a round trip no real network does. */
+    client.setNoDelay(true);
+    upstream.setNoDelay(true);
     sockets.add(client).add(upstream);
     client.on('close', () => sockets.delete(client));
     upstream.on('close', () => sockets.delete(upstream));
@@ -177,6 +187,9 @@ export async function startLatencyProxy(target: string, delay: number): Promise<
     },
     statements: (since = 0) => statements.filter((statement) => statement.at >= since),
     heldOpen: (since = 0, over = 0) => held.filter((wait) => wait.at >= since && wait.waited > over),
+    setDelay: (value: number) => {
+      delay = value;
+    },
     async close() {
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((done) => server.close(() => done()));

@@ -12,6 +12,7 @@ import { TenantContextError, TenantRequestFault } from '../packages/engine/src/s
 import { captureTenantOwnership } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
 import {
   createTenantReadRuntime,
+  tenantReadCounters,
   type TenantReadContext,
   type TenantReadRuntimeOptions,
 } from '../packages/mistri/src/server/tenant/tenantReadRuntime.js';
@@ -233,7 +234,7 @@ test('tenant runtime exposes only frozen read authority, with membership resourc
   frozen(runtime);
   assert.deepEqual(Reflect.ownKeys(runtime).sort(), ['retire', 'withContext']);
   const result = await runtime.withContext(request, ['north'], async (context) => {
-    assert.deepEqual(Reflect.ownKeys(context).sort(), ['data', 'principal', 'schema']);
+    assert.deepEqual(Reflect.ownKeys(context).sort(), ['data', 'principal', 'schema', 'together']);
     assert.deepEqual(Reflect.ownKeys(context.data).sort(), ['count', 'countBreakdown', 'countView', 'query', 'runBreakdown', 'runView']);
     frozen(context);
     assert.deepEqual([...context.principal.roles], ['reviewer']);
@@ -437,6 +438,53 @@ test('concurrent tenant contexts keep separate principals, scopes and failures',
   );
   release.release();
   assert.deepEqual([...(await north)], [1, 5]);
+});
+
+/* A role set's grant is resolved once per runtime and kept (tenantReadRuntime.ts
+   readGrant): the person, their tenant and their rows are never part of what is
+   kept, so the same roles hand each person their own scope, and other roles are
+   never handed the kept one. */
+test('a kept role-set grant never carries one person or tenant into another', async (t) => {
+  const f = await fixture(t);
+  const membership = { status: 'active' as const, validUntil: 10_000, expectedVersion: null };
+  await f.transaction(async (admin) => {
+    await admin.putMembership({ ...membership, tenantId: 'north', accountId: 'bob', membershipId: 'north-bob', roles: ['reviewer'] });
+    await admin.putMembership({
+      ...membership,
+      tenantId: 'north',
+      accountId: 'carol',
+      membershipId: 'north-carol',
+      roles: ['administrator'],
+    });
+  });
+  // Bob's own rule narrows the items he reads; Alice and Carol read every row of their tenant.
+  const bobs: RowScope = { item: { groups: [[{ column: 'name', op: '=', value: 'Five' }]] }, restricted: true, country: true };
+  const runtime = f.issue({
+    verifySession: (input) => ({ id: input.cookie, who: input.cookie }),
+    resolveRows: (principal) => (principal.accountId === 'bob' ? bobs : f.rows),
+  });
+  const read = async (cookie: string, tenant: string) =>
+    plain(
+      await runtime.withContext({ cookie }, [tenant], async ({ data, schema, principal }) => ({
+        roles: [...principal.roles],
+        ids: (await data.query(query())).rows.map((row) => row.id),
+        tables: schema.tables.map((table) => table.id).sort(),
+      })),
+    );
+  const before = tenantReadCounters.grants;
+  assert.deepEqual(await read('alice', 'north'), { roles: ['reviewer'], ids: [1, 5], tables: ['country', 'item'] });
+  assert.deepEqual(await read('bob', 'north'), { roles: ['reviewer'], ids: [5], tables: ['country', 'item'] });
+  // Alice again, after Bob: her rows, not his narrower ones the same grant was last handed with.
+  assert.deepEqual(await read('alice', 'north'), { roles: ['reviewer'], ids: [1, 5], tables: ['country', 'item'] });
+  assert.deepEqual(await read('alice', 'south'), { roles: ['reviewer'], ids: [2], tables: ['country', 'item'] });
+  assert.equal(tenantReadCounters.grants - before, 1, 'one role set, resolved once for three people and two tenants');
+  // Other roles resolve their own grant: the administrator reads the resource the reviewer may not.
+  const carol = await read('carol', 'north');
+  assert.deepEqual(carol.roles, ['administrator']);
+  assert.deepEqual(carol.tables, ['country', 'item', 'restricted']);
+  assert.equal(tenantReadCounters.grants - before, 2);
+  assert.deepEqual(await read('bob', 'north'), { roles: ['reviewer'], ids: [5], tables: ['country', 'item'] });
+  assert.equal(tenantReadCounters.grants - before, 2);
 });
 
 for (const selectors of [[], ['north', 'north'], ['north', 'south'], ['North'], ['north '], ['missing']]) {

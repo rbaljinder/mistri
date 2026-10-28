@@ -114,10 +114,12 @@ export async function runTenantCommandTransaction<T>(
   // ordinary values, reads and updates keep the field facade above. The source
   // still proves actual tenant rows and conservative non-cascading eligibility.
   const removal = authorizeTransaction(ownership.schema, { readable: read, writable: write, ...(validation ? { validation } : {}) }, raw);
-  const operations = new TransactionOperations();
+  /* Reads asked together start together, in the order asked (TransactionOperations.read); the writer beneath decides
+     whether they leave in one flight. Anything else waits for everything asked before it, as each always did. */
+  const operations = new TransactionOperations(true);
   let accepting = true,
     failure: { error: unknown } | undefined;
-  const invoke = <A, R>(input: A, work: (captured: A) => Promise<R>): Promise<R> => {
+  const invoke = <A, R>(input: A, work: (captured: A) => Promise<R>, read = false): Promise<R> => {
     if (!accepting) return Promise.reject(new AppAccessDenied());
     let captured!: A, invalid: { error: unknown } | undefined;
     try {
@@ -125,14 +127,15 @@ export async function runTenantCommandTransaction<T>(
     } catch (error) {
       invalid = { error };
     }
-    return operations.run(async () => {
+    const job = async (): Promise<R> => {
       if (failure) throw failure.error;
       if (invalid) throw invalid.error;
       await scope.session();
       const result = captureTenantData(await work(captured));
       await scope.session();
       return result;
-    });
+    };
+    return read ? operations.read(job) : operations.run(job);
   };
   const keyFor = (table: string, input: unknown): Readonly<Record<string, string | number>> => {
     tenantRecord(input);
@@ -211,16 +214,24 @@ export async function runTenantCommandTransaction<T>(
     Object.fromEntries(Object.entries(row).filter(([column]) => fields.get(table)?.read.has(column)));
   const records = Object.freeze<WriteTransaction>({
     query: (input) =>
-      invoke(input, async (value) => {
-        assertStructuredReadFilter(value.filter, 'column');
-        const result = await tx.query({ ...value, table: authorization.table(value.table) });
-        return { ...result, sql: { text: '', params: [] } };
-      }),
+      invoke(
+        input,
+        async (value) => {
+          assertStructuredReadFilter(value.filter, 'column');
+          const result = await tx.query({ ...value, table: authorization.table(value.table) });
+          return { ...result, sql: { text: '', params: [] } };
+        },
+        true,
+      ),
     count: (table, filter) =>
-      invoke({ table, filter }, (value) => {
-        assertStructuredReadFilter(value.filter, 'column');
-        return tx.count(authorization.table(value.table), value.filter);
-      }),
+      invoke(
+        { table, filter },
+        (value) => {
+          assertStructuredReadFilter(value.filter, 'column');
+          return tx.count(authorization.table(value.table), value.filter);
+        },
+        true,
+      ),
     insert: (input) =>
       invoke(input, async (value) => {
         const table = authorization.table(value.table, true),

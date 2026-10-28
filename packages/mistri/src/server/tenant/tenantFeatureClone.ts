@@ -15,6 +15,7 @@ const clones = (app: AppDef) => Object.values(app.resources ?? {}).some((resourc
 
 export const cloneCheck = Object.freeze<TenantStartupCheck>({
   phase: 'commands',
+  catalog: true,
   stage: 'the resources marked clone',
   run: ({ app, owned, policy }) => {
     try {

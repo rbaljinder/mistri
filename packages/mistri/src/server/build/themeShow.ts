@@ -387,7 +387,7 @@ export async function runTheme(
       const { loadApp } = await import('../app/apps.js');
       const loaded = await loadApp(dir, { lock: 'report' });
       themes = loaded.app.ui.customThemes ?? [];
-      worn = loaded.app.ui.theme?.preset ?? 'lumen';
+      worn = loaded.app.ui.theme?.preset ?? 'workshop';
     } catch (error) {
       console.error(`mistri theme show: the App did not load: ${(error as Error).message}`);
       return 1;
@@ -396,7 +396,7 @@ export async function runTheme(
     }
   }
   const find = (given: string) => {
-    const id = given === '.' ? (worn ?? 'lumen') : given;
+    const id = given === '.' ? (worn ?? 'workshop') : given;
     return themes.find((theme) => theme.id === id) ?? themePreset(id);
   };
   const theme = find(name);

@@ -16,7 +16,7 @@ import { brotliCompressSync, constants as zlib, createBrotliCompress, createGzip
 import { readFile, readdir } from 'node:fs/promises';
 import { extname, join, normalize, relative, sep } from 'node:path';
 import { SOURCE_CLIENT, devClient, type ClientFiles } from './devclient.js';
-import { localePreloads, lookPreloads, SURFACE_PAGES, surfaceFor, type PageGrounds } from './clientSurface.js';
+import { localePreloads, lookPreloads, SURFACE_PAGES, surfaceFor, tenantPreloads, type PageGrounds } from './clientSurface.js';
 import { FONT_TOKENS, PALETTE_TOKENS, parseThemes, shapeTokens } from '../shared/theme.js';
 import { headingWeight, inheritThemePreset, lookNavRole } from '../shared/themePresets.js';
 import { typeTokens } from '../shared/themeType.js';
@@ -186,6 +186,8 @@ interface ShellTitle {
   faces?: readonly string[];
   /** The App theme's own faces: their `@font-face` rules and the heading face's preload (clientSurface.ts appFaceHead). */
   appFaces?: string;
+  /** A tenant host's page: its shell page preloads the tenant's flows too (clientSurface.ts tenantPreloads). */
+  tenant?: true;
   /** The reader's locale where the server knows it (an App's), so a non-English reader's chrome words are preloaded (clientSurface.ts localePreloads). */
   locale?: string;
   /** The page's first answers (http/firstPaint.ts), asked only when a page — not a file — is what is sent. */
@@ -399,10 +401,14 @@ async function drawnPane(shell: ShellTitle | undefined, data: ShellData | undefi
   }
 }
 
-/** The page asking for its look's sheets and its reader's words beside the entry (clientSurface.ts), ahead of the entry's own script. */
+/** The page asking for its look's sheets, its reader's words and a tenant host's flows beside the entry (clientSurface.ts), ahead of the entry's own script. */
 function withLooks(html: string, shell: ShellTitle | undefined, files: Iterable<string>): string {
   const assets = [...files];
-  const links = lookPreloads(shell?.looks ?? [], assets, shell?.faces) + (shell?.appFaces ?? '') + localePreloads(shell?.locale, assets);
+  const links =
+    lookPreloads(shell?.looks ?? [], assets, shell?.faces) +
+    (shell?.appFaces ?? '') +
+    localePreloads(shell?.locale, assets) +
+    (shell?.tenant && !shell.workbench && surfaceFor(shell.path ?? '') === 'shell' ? tenantPreloads(assets) : '');
   if (!links) return html;
   return /<script type="module"/i.test(html)
     ? html.replace(/<script type="module"/i, (match) => `${links.trimStart()}    ${match}`)

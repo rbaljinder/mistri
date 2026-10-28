@@ -183,11 +183,12 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
         );
         // Include facade refusals in the transaction failure state, even
         // when a trusted handler catches them before they reach an adapter.
-        const operations = new TransactionOperations();
+        // Reads asked together go on together, in their order (TransactionOperations.read).
+        const operations = new TransactionOperations(true);
         try {
           const result = await run({
-            query: (request) => operations.run(async () => tx.query({ ...request, table: table(request.table) })),
-            count: (local, filter) => operations.run(async () => tx.count(table(local), filter)),
+            query: (request) => operations.read(async () => tx.query({ ...request, table: table(request.table) })),
+            count: (local, filter) => operations.read(async () => tx.count(table(local), filter)),
             insert: (request) => operations.run(async () => tx.insert({ ...request, table: table(request.table, true) })),
             update: (request) => operations.run(async () => tx.update({ ...request, table: table(request.table, true) })),
             remove: (request) => operations.run(async () => tx.remove({ ...request, table: table(request.table, true) })),

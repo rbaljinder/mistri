@@ -212,12 +212,17 @@ export async function chooseTenant(me, requestedApp, incomingLocation, kit) {
   wearLook(me, me.look);
   // Audited support: the server offers it, and a password sign-in needs the account's email.
   tenancy.configureTenantSupport(me.tenantSupport === true && typeof me.who === 'string' ? { who: me.who } : undefined);
+  /* The address the page opens where it is entered in the link's tenant, or with none named, its one: discovery
+     carries the lease and this page's boot with it then (shared/tenantBoot.ts `TENANT_ENTER_PATH`). */
+  const linked = link.search ? `${link.pathname}?${link.search}` : link.pathname;
+  const linkedQuery = linked.indexOf('?');
   const selection = tenancy.initialTenantSelection(
     $('content'),
     typeof me.appName === 'string' ? me.appName : me.appId,
     link.tenantId ?? undefined,
     typeof me.platformLabel === 'string' ? me.platformLabel : undefined,
     typeof me.tenantLabel === 'string' ? me.tenantLabel : undefined,
+    { path: linkedQuery < 0 ? linked : linked.slice(0, linkedQuery), search: linkedQuery < 0 ? '' : linked.slice(linkedQuery) },
   );
   await showAccount(me, kit);
   void lookSheetReady().then(finishStartup);
@@ -227,17 +232,21 @@ export async function chooseTenant(me, requestedApp, incomingLocation, kit) {
      boot.js): its menu, bar and room arrived in parts, and each moved the
      page under the reader's eyes (test/built-client-vitals.mjs). */
   shellRoot().setAttribute('data-starting', '');
-  const incoming =
-    link.tenantId && chosen.tenantId !== link.tenantId
-      ? `/${encodeURIComponent(me.appId)}`
-      : link.search
-        ? `${link.pathname}?${link.search}`
-        : link.pathname;
+  const incoming = link.tenantId && chosen.tenantId !== link.tenantId ? `/${encodeURIComponent(me.appId)}` : linked;
   const tenantIncoming = tenancy.qualifyTenantLink(incoming, me.appId, chosen.tenantId);
+  /* The page's first reads in one, on the lease just opened (shared/tenantBoot.ts): the runtime, the App, its
+     pages and schema and the room's own reads, which the shell's requests below take as their answers. Asked
+     before anything else asks, so none of them goes out on its own. Entered with discovery, they are held already. */
+  const query = incoming.indexOf('?');
+  const booted = tenancy.enteredWithBoot(chosen)
+    ? Promise.resolve()
+    : tenancy.loadTenantBoot(query < 0 ? incoming : incoming.slice(0, query), query < 0 ? '' : incoming.slice(query));
   navReplace(shown(tenantIncoming));
   unmount($('content'));
   await Promise.resolve();
   kit.showWorkspaceOpening();
+  await booted;
+  if (kit.retired() || sessionIdentity().mode === 'locked') return null;
   return { incoming, tenantIncoming };
 }
 

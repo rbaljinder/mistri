@@ -79,6 +79,31 @@ function derivedSchema(app: AppDef, schema: DatabaseSchema): DatabaseSchema | un
 }
 const servedOnce = new WeakMap<DatabaseSchema, WeakMap<AppDef, DatabaseSchema>>();
 
+/* Each served table by id, and each reference by the tables it joins: asked for every table of every command's
+   footprint, a scan of the whole catalog and its graph each time was most of what binding a large App's commands
+   cost. `served` is derivedSchema's own, made once per catalog and App and never changed, so its index is kept
+   with it. The first of each, as the scans found it. */
+interface ServedIndex {
+  tables: Map<string, TableMeta>;
+  references: Map<string, Map<string, DatabaseSchema['foreignKeys']>>;
+}
+const servedIndexes = new WeakMap<DatabaseSchema, ServedIndex>();
+function servedIndex(served: DatabaseSchema): ServedIndex {
+  let index = servedIndexes.get(served);
+  if (index) return index;
+  index = { tables: new Map(), references: new Map() };
+  for (const table of served.tables) if (!index.tables.has(table.id)) index.tables.set(table.id, table);
+  for (const key of served.foreignKeys) {
+    let to = index.references.get(key.from.table);
+    if (!to) index.references.set(key.from.table, (to = new Map()));
+    const list = to.get(key.to.table);
+    if (list) list.push(key);
+    else to.set(key.to.table, [key]);
+  }
+  servedIndexes.set(served, index);
+  return index;
+}
+
 /**
  * One table's derived names as its commands read them. `served` is `derivedSchema`'s, `local` maps the footprint's
  * logical tables to their local names: a rollup over rows the command does not read is no value it may judge.
@@ -90,16 +115,18 @@ function commandDerived(
   meta: TableMeta,
   local: ReadonlyMap<string, string>,
 ): CommandDerived | undefined {
-  const table = served.tables.find((item) => item.id === logical);
+  const index = servedIndex(served);
+  const table = index.tables.get(logical);
   if (!table || (!table.rollups && !table.computed)) return undefined;
   const rollups: Record<string, WhenRollup | string> = {};
   for (const [name, rollup] of Object.entries(table.rollups ?? {})) {
     const dot = rollup.via.lastIndexOf('.');
     const childId = rollup.via.slice(0, dot);
     const via = rollup.via.slice(dot + 1).split('+');
-    const fk = served.foreignKeys.find(
-      (key) => key.from.table === childId && key.to.table === logical && key.from.columns.join('+') === via.join('+'),
-    );
+    const fk = index.references
+      .get(childId)
+      ?.get(logical)
+      ?.find((key) => key.from.columns.join('+') === via.join('+'));
     const child = local.get(childId);
     rollups[name] =
       rollup.of || !fk

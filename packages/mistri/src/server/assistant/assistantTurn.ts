@@ -14,7 +14,7 @@
 import type { AppAssistant } from '../../shared/appAssistant.js';
 import type { AssistantOwner, AssistantStore, ConversationState, StoredEvent } from '../../adapters/assistant/assistantStore.js';
 import type { AssistantModel, ModelBlock, ModelMessage, ModelTool, ModelUsage } from './assistantModel.js';
-import { answerTool, type DisplayItem, type Proposal, type ToolSession } from './assistantTools.js';
+import { answerTool, runningLabel, type DisplayItem, type Proposal, type ToolSession } from './assistantTools.js';
 import { estimateTokens } from './assistantCatalog.js';
 
 /** Steps (model calls) one turn may take before it stops and says so. */
@@ -208,6 +208,10 @@ interface TurnContext {
 }
 
 const total = (usage: ModelUsage) => usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+/* What a step weighs against `tokensPerTurn`: every step resends the turn so far, and its cached part is read at a
+   tenth of the price. Counted whole, a five-step answer over a long catalog met a 60,000-token limit having said
+   nothing (a field report). The day's spend is the bill and keeps counting it whole. */
+const turnWeight = (usage: ModelUsage) => usage.input + usage.output + usage.cacheWrite + Math.ceil(usage.cacheRead / 10);
 const today = () => new Date().toISOString().slice(0, 10);
 const now = () => new Date().toISOString();
 
@@ -258,7 +262,7 @@ async function compactIfLong(context: TurnContext, events: StoredEvent[]): Promi
     .trim();
   if (text) await append(context, 'summary', { text, through: lastPerson.seq - 1 });
   await context.store.spend(context.owner, today(), total(reply.usage));
-  return total(reply.usage);
+  return turnWeight(reply.usage);
 }
 
 /**
@@ -301,7 +305,7 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
         },
         session.signal,
       );
-      spent += total(reply.usage);
+      spent += turnWeight(reply.usage);
       await context.store.spend(context.owner, today(), total(reply.usage));
       const uses = reply.content.filter((block) => block.type === 'tool_use') as Array<{
         type: string;
@@ -324,7 +328,7 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
       let proposed = false;
       for (const use of pendingTools) {
         if (session.signal.aborted) break;
-        emit('running', { id: use.id, tool: use.name });
+        emit('running', { id: use.id, tool: use.name, label: runningLabel(use.name, use.input) });
         if (use.name === 'run' && proposed) {
           const refusal = JSON.stringify({ error: 'One change at a time: wait for the outcome of the first.' });
           results.push({ id: use.id, content: refusal, isError: true });
@@ -355,7 +359,7 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
        answers over and over spent what the caps never saw. */
     const lost = (error as { usage?: ModelUsage } | null)?.usage;
     if (lost && total(lost) > 0) {
-      spent += total(lost);
+      spent += turnWeight(lost);
       await context.store.spend(context.owner, today(), total(lost)).catch(() => {});
     }
     if (streamed) await append(context, 'assistant', { content: [{ type: 'text', text: streamed }], model: context.assistant.model });

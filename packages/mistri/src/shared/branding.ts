@@ -445,6 +445,8 @@ export function validateBranding(binding: BrandingBinding, raw: unknown, selecti
         const accent = mode === 'dark' ? mix(color, '#ffffff', 0.62) : color.toLowerCase();
         /* A brand color must read as text as it is: `accentInk` said, so it is held to it and never derived. */
         Object.assign(palette, { accent, accentInk: accent, link: accent, chart1: accent, accentSoft: mix(accent, palette.surface, 0.14) });
+        /* The words a look chose for its own accent fill (Workshop's ink on its orange) read on that fill, not the brand's. */
+        delete palette.onAccent;
       }
       // A branded tint preserves every family's search-field ground and ink.
       // The full stored color remains the accent; bar style cannot inject CSS.

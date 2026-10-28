@@ -6,21 +6,22 @@ a look and declare display rules (`mistri docs looks`, `mistri docs vocabularies
 For what a whole App of a kind looks like on its first try, see
 [recipes.md](recipes.md); this file is the rule for each part.
 
-## The look: Lumen unless the work says otherwise
+## The look: Workshop unless the work says otherwise
 
 Write `ui.theme` even for the default, so the choice is visible in review.
 
 | The App is | Look | Example |
 | --- | --- | --- |
-| Operations, sales, a desk, anything with a dashboard home | `preset: 'lumen'` (the default) | [lintel/app.ts:171](../../../examples/apps/lintel/app.ts#L171) |
+| Operations, field work, a desk, anything run from a dashboard home | `preset: 'workshop'` (the default) | `mistri docs looks` |
+| A polished workspace product: sales, a client-facing desk | `preset: 'lumen'` | [lintel/app.ts:171](../../../examples/apps/lintel/app.ts#L171) |
 | Dense back office: ledgers, admin tables, read in rows all day | `preset: 'mono'` | `mistri docs looks` |
 | People, care, scheduling: soft cards, a calmer page | `preset: 'sage'` | `mistri docs looks` |
 | A brand or a reading product with its own grounds and inks | a `defineTheme` in `theme.ts`, `extends` a built-in | `mistri docs themes` |
 | A tenant App whose tenants want their own logo and accent | `branding` plus a `brandingForm()` section | `mistri docs themes` |
 
-- **Adjust before you define**: `accent`, `radius`, `font` on a built-in look,
+- **Adjust before you define**: `palette` (one of the twelve every look offers: `crimson`, `safety`, `amber`, `moss`, `emerald`, `teal`, `cobalt`, `violet`, `plum`, `rose`, `slate`, `ink`), then `accent`, `radius`, `font` on a built-in look,
   beside `preset` in `ui.theme` (Lintel writes only the preset, line 159 above).
-- **A theme of your own is small**: `extends: 'sage'` (or `'lumen'`, `'mono'`)
+- **A theme of your own is small**: `extends: 'sage'` (or `'workshop'`, `'lumen'`, `'mono'`)
   and only what differs, registered in `customThemes` and named in
   `theme: { preset }`. It is done when `mistri check --app .` passes: the
   validator measures text and the accent at 4.5:1, controls and the first four

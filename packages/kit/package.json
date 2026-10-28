@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/kit",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -553,6 +553,10 @@
       "mistri-built": "./dist/client/prompt.js",
       "default": "./src/client/prompt.js"
     },
+    "./client/readGathering.js": {
+      "mistri-built": "./dist/client/readGathering.js",
+      "default": "./src/client/readGathering.ts"
+    },
     "./client/recordCompose.js": {
       "mistri-built": "./dist/client/recordCompose.js",
       "default": "./src/client/recordCompose.ts"
@@ -689,8 +693,8 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.1",
-    "@mistriwork/ui": "1.0.0-rc.1",
+    "@mistriwork/engine": "1.0.0-rc.2",
+    "@mistriwork/ui": "1.0.0-rc.2",
     "intl-messageformat": "12.1.2",
     "qrcode-generator": "^2.0.4"
   },

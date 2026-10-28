@@ -31,7 +31,7 @@ import type {
  * its sheet.
  */
 export const RECIPE_MENU = {
-  nav: { tint: null, inverted: null, wash: 'brand', underline: 'brand', pill: 'lumen', quiet: 'sage' },
+  nav: { tint: null, inverted: null, wash: 'brand', underline: 'brand', pill: 'lumen', quiet: 'sage', slot: 'workshop' },
   bar: { plain: null, ruled: null, dark: 'brand', airy: 'lumen', soft: 'sage' },
   tabs: { pill: null, inverted: null, underline: 'lumen', rule: 'brand', chosen: 'sage' },
   windows: { segmented: null, lifted: 'lumen', chosen: 'sage' },
@@ -42,7 +42,7 @@ export const RECIPE_MENU = {
   status: { dot: null, pill: 'sage', 'pill-dot': 'lumen', quiet: 'lumen' },
   board: { ruled: null, soft: 'sage', strip: 'lumen' },
   chart: { plain: null, wash: 'sage', gradient: 'lumen', line: 'lumen' },
-  buttons: { accent: null, raised: 'lumen' },
+  buttons: { accent: null, raised: 'lumen', keyed: 'workshop' },
   links: { plain: null, underline: null },
   rules: { ink: null, hairline: null },
   avatar: { plain: null, large: 'sage', round: 'lumen' },

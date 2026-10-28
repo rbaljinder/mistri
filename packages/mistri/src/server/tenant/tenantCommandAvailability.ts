@@ -95,6 +95,9 @@ export async function collectTenantAvailability(batch: TenantAvailabilityBatch):
           );
         },
         signal,
+        // Each check reads through its own operations over the one snapshot, which sends a read as soon as it is
+        // asked (tenantReadSource.ts readBatch): asked in turn, six action guards were six round trips per record page.
+        { concurrent: true },
       ),
     [...footprint],
   );

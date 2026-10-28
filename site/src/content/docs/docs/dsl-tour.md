@@ -194,13 +194,13 @@ lease, so it is a command rather than a plain `set` action like Tick's:
 
 ## 6. A look
 
-Lintel wears the default look, Lumen. To try another, change its `ui` and save:
+Lintel wears a look of its own, Lumen with one recipe changed; an App that names none wears Workshop. To try another, change its `ui` and save:
 
 ```ts
   ui: { theme: { preset: 'sage' } },
 ```
 
-[Looks](/docs/looks/) shows all three.
+[Looks](/docs/looks/) shows all four, and the twelve palettes each offers.
 
 ## Run it
 

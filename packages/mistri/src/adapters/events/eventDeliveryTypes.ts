@@ -178,6 +178,29 @@ export interface EventDeliveryClaim {
   readonly deadline: number;
   readonly envelope: CommandEventEnvelope;
 }
+/** Where a destination stands, read without any row's receipt or history (EventDeliveryStore `standing`). */
+export interface EventDeliveryStanding {
+  /** Some delivery has failed. */
+  readonly failed: boolean;
+  /** When the longest-waiting pending, retrying or unknown delivery was due, or null with none waiting. */
+  readonly waitingSince: number | null;
+  /** The next moment after `at` a delivery falls due or a lease runs out, or null with none ahead. */
+  readonly next: number | null;
+  /** The store's clock when it looked: the database's on PostgreSQL, so `next - at` is a wait free of skew. */
+  readonly at: number;
+}
+/** A standing row as either store reads it: PostgreSQL's `next` already the earlier of its two, SQLite's `due` and `lease` apart. */
+export function deliveryStanding(row: Readonly<Record<string, unknown>> | undefined): EventDeliveryStanding {
+  const time = (value: unknown): number | null => (value === null || value === undefined ? null : Number(value));
+  const ahead = [time(row?.next), time(row?.due), time(row?.lease)].filter((value): value is number => value !== null);
+  return Object.freeze({
+    failed: row?.failed === true || Number(row?.failed) === 1,
+    waitingSince: time(row?.waiting),
+    next: ahead.length ? Math.min(...ahead) : null,
+    at: Number(row?.at),
+  });
+}
+
 export interface EventDeliveryInspection {
   readonly eventId: string;
   readonly receiptId: string;

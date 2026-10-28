@@ -61,6 +61,10 @@ import {
   createPostgresTenantAdministration,
   createPostgresTenantMembershipGuard,
   migratePostgresTenantStore,
+  postgresTenantMembershipLookupRows,
+  postgresTenantMembershipLookupStatement,
+  postgresTenantMembershipsRows,
+  postgresTenantMembershipsStatement,
   readPostgresTenantMembership,
   readPostgresTenantMemberships,
   TenantStoreUnavailable,
@@ -408,6 +412,7 @@ describe('the tenant store on PostgreSQL, against a real server', { skip: liveSk
       await admin.putMembership(grant({ accountId: composed, membershipId: 'composed' }));
       await admin.putMembership(grant({ accountId: decomposed, membershipId: 'decomposed' }));
       await admin.putMembership(grant({ accountId: '\uFFFD', membershipId: 'replacement' }));
+      await admin.putMembership(grant({ accountId: "o'quote\\slash", membershipId: 'quoted' }));
       for (const tenantId of ['a_b', 'a0', 'a-b'])
         await admin.putMembership(grant({ tenantId, accountId: 'x', membershipId: `x-${tenantId}` }));
     });
@@ -438,6 +443,23 @@ describe('the tenant store on PostgreSQL, against a real server', { skip: liveSk
       ['a-b', 'a0', 'a_b'],
       'code-unit order, not the database locale',
     );
+    /* The same reads as statements a snapshot begins with (tenantReadSource.ts `on`'s `lead`): the values written in
+       as literals say exactly what the parameters said — case, normal form, a quote and a backslash — and nothing
+       more. */
+    for (const accountId of ['Alice', 'alice', 'ALICE', composed, decomposed, '\uFFFD', "o'quote\\slash", "x' OR '1'='1", 'x']) {
+      const one = lookup({ accountId });
+      const literal = await transaction(control, async () =>
+        postgresTenantMembershipLookupRows(owner(), one, (await control.query(postgresTenantMembershipLookupStatement(owner(), one))).rows),
+      );
+      assert.deepEqual(literal, await read(accountId), accountId);
+      const all = { appId: 'app', accountId, source: owner().source, deployment: 'generation-1' };
+      const listed = await transaction(control, async () => {
+        const asked = postgresTenantMembershipsStatement(owner(), all, clock);
+        return postgresTenantMembershipsRows(owner(), all, (await control.query(asked.sql)).rows, asked.instant, clock);
+      });
+      assert.deepEqual(listed, await transaction(control, () => readPostgresTenantMemberships(control, owner(), all, clock)), accountId);
+    }
+    assert.throws(() => postgresTenantMembershipLookupStatement(owner(), lookup({ accountId: '\uD800' })), denied);
     const collations = (
       await control.query(`SELECT a.attname AS name, l.collname AS collation FROM pg_attribute a
       JOIN pg_collation l ON l.oid = a.attcollation WHERE a.attrelid = '${m}'::regclass AND a.attnum > 0 ORDER BY a.attnum`)

@@ -30,7 +30,7 @@ const option = (name) => {
   const at = args.indexOf(name);
   return at >= 0 ? args[at + 1] : undefined;
 };
-const looks = (option('--look') ?? 'lumen').split(',');
+const looks = (option('--look') ?? 'workshop').split(',');
 for (const look of looks)
   if (look !== APP_DEFAULT && !LOOKS.includes(look)) throw new Error(`--look ${look}: one of ${[APP_DEFAULT, ...LOOKS].join(', ')}`);
 const mode = option('--mode') ?? 'light';

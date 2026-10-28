@@ -9,7 +9,7 @@
 import { effectiveDisplay, declaredDisplayOf } from '@mistriwork/engine/shared/displayDefaults.js';
 import type { AppDef } from '../../shared/appModel.js';
 import { minorToMajor, rowCurrency } from '@mistriwork/engine/shared/money.js';
-import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { findTable, tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { Condition } from '@mistriwork/engine/adapters/adapter.js';
 import type { CommandCatalog } from './commandDb.js';
 
@@ -30,7 +30,9 @@ export function withSaying(
   return Object.freeze(
     Object.fromEntries(
       Object.entries(catalog).map(([name, table]) => {
-        const meta = schema.tables.find((item) => item.id === logical(name));
+        // Named once, not once per table the catalog holds: `logical` reads the App's sources each time.
+        const id = logical(name);
+        const meta = findTable(schema, id);
         if (!meta) return [name, table];
         const resource = app.resources?.[meta.id] ?? (tableNamed(schema, meta.name) ? app.resources?.[meta.name] : undefined);
         let display: ReturnType<typeof effectiveDisplay> | undefined;

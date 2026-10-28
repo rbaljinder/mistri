@@ -341,7 +341,7 @@ $0.70; CPU is billed on active use only, ~$1 at a light load. **≈ $13/month**;
 | Traffic | Endpoint | Why |
 | --- | --- | --- |
 | The App's reads and writes, its command stores, jobs, events | PgBouncer, port 6432, user `role|bouncer`, `MISTRI_POOLER=transaction` | Server connections stay few however many instances run |
-| `auth.store` (sessions, accounts, tokens) | PgBouncer, port 6432, or direct | Since rc.1 its search path and statement cap are set per transaction behind `--pooler transaction` (`packages/mistri/src/server/auth/authStore.ts`); before, it relied on a startup `options` parameter PgBouncer does not carry, and every sign-in failed with `relation "user" does not exist` |
+| `auth.store` (sessions, accounts, tokens) | PgBouncer, port 6432, or direct | Since rc.1 its search path and statement cap are set per transaction behind `--pooler transaction` (`packages/mistri/src/server/auth/authStore.ts`); before, it relied on a startup `options` parameter PgBouncer does not carry, and every sign-in failed with `relation "user" does not exist`. Since rc.2 its client pipelines, so each statement and its transaction are one round trip, and a session is read once per `MISTRI_AUTH_SESSION_CACHE` seconds (default 5, `authStoreReads.ts`): a field report had a list page make 116 transactions on it, eleven observations of the session per API call at three round trips each. `MISTRI_AUTH_POOL` (default 4) sizes its pool |
 | `migrate up`, `migrate stores up`, `pg_dump` | Direct, port 5432 | Session advisory locks; PlanetScale also advises direct for DDL |
 
 **What transaction mode breaks, and what mistri already does about it.**
@@ -359,7 +359,8 @@ PlanetScale lists persistent prepared statements, temporary tables,
 Each statement outside a transaction becomes `BEGIN; SET LOCAL …; stmt;
 COMMIT`: a single read costs three round trips instead of one. That is the
 price of the pooler, and a reason to keep the container's region next to the
-database's. A save does not pay it per statement: a writer pipelines inside its
+database's. A client that pipelines — every writer, and the `auth.store` pool —
+sends the three together and waits once. A save does not pay it per statement: a writer pipelines inside its
 transaction, so a save is one flight for the `BEGIN` and what is read behind it,
 one for each awaited dependent read or write, and a last one with the `COMMIT`,
 and a transaction-mode pooler keeps the pipeline on one server connection.

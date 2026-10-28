@@ -17,7 +17,7 @@ import { FILE_MAX_BYTES_DEFAULT, isTenantApp, type AppFileDef } from '../../shar
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { TENANT_FILE_MOST } from '@mistriwork/engine/server/http/reply.js';
 import { plainImportTargets } from '../../shared/appImport.js';
-import { primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { findTable, primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import {
   BusinessCommandDefinitionError,
@@ -34,7 +34,7 @@ import { sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import { withSaying } from './commandSaying.js';
 import { versionColumn } from './commandRevision.js';
 import { commandLookupProblem } from './commandLookupRules.js';
-import { captureTenantData, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
+import { captureTenantData, isCapturedTenantData, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { issueTargetColumns, issueTargetUnreadable } from './commandActorColumns.js';
 import { genericWriteEntitled, genericWriteOf } from './genericWriteBrand.js';
 import { flowCommandOf } from './flowCommandBrand.js';
@@ -315,14 +315,28 @@ type AccessOf = (roles: readonly string[]) => ReturnType<typeof resolveAppAccess
  * catalog are captured and never change, and a resolution walks every
  * readable resource's columns once a role says `fields`. Asked afresh for
  * each command, table and role, a large tenant App spent minutes at
- * startup and looked hung.
+ * startup and looked hung. A deployment binds several authorizers over the
+ * same captured App and catalog (the tenant's, the platform's), so the
+ * resolutions are kept with those two and shared, and go when they do.
  */
+const resolutions = new WeakMap<DatabaseSchema, WeakMap<AppDef, Map<string, ReturnType<typeof resolveAppAccess>>>>();
+/** Test-only: how many sets of roles were resolved rather than reused. */
+export const accessCounters = { resolved: 0 };
 function accessMemo(app: AppDef, schema: DatabaseSchema): AccessOf {
-  const resolved = new Map<string, ReturnType<typeof resolveAppAccess>>();
+  let resolved: Map<string, ReturnType<typeof resolveAppAccess>> | undefined;
+  if (isCapturedTenantData(app) && isCapturedTenantData(schema)) {
+    let byApp = resolutions.get(schema);
+    if (!byApp) resolutions.set(schema, (byApp = new WeakMap()));
+    resolved = byApp.get(app);
+    if (!resolved) byApp.set(app, (resolved = new Map()));
+  } else resolved = new Map();
   return (roles) => {
     const key = JSON.stringify([...roles].sort());
     let access = resolved.get(key);
-    if (!access) resolved.set(key, (access = resolveAppAccess(app, schema, roles)));
+    if (!access) {
+      accessCounters.resolved++;
+      resolved.set(key, (access = resolveAppAccess(app, schema, roles)));
+    }
     return access;
   };
 }
@@ -335,7 +349,7 @@ function accessMemo(app: AppDef, schema: DatabaseSchema): AccessOf {
  */
 function unboundedEditors(app: AppDef, schema: DatabaseSchema, table: string, accessOf: AccessOf): string[] {
   if (app.resources?.[table]?.machine) return [];
-  const all = schema.tables.find((item) => item.id === table)?.columns.length ?? 0;
+  const all = findTable(schema, table)?.columns.length ?? 0;
   return Object.keys(app.auth?.roles ?? {}).filter((role) => {
     const access = accessOf([role]);
     if (!access.writable.has(table)) return false;
@@ -396,7 +410,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
     if (managed !== undefined) {
       tenantRecord(managed);
       for (const [resource, column] of Object.entries(managed)) {
-        const table = schema.tables.find((table) => table.id === resource);
+        const table = findTable(schema, resource);
         if (!table || table.isView || typeof column !== 'string' || !table.columns.some((field) => field.name === column))
           throw new Error();
       }
@@ -477,33 +491,49 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
      preparing and a refusal would say them. */
   const judgedColumnsReadable = (id: string, command: AnyBusinessCommand) => {
     const resource = logicalResource(app, command.source, command.target);
-    const table = schema.tables.find((item) => item.id === resource);
+    const table = findTable(schema, resource);
     if (!table) return;
-    for (const role of declaredRoles) {
-      if (!granted([role], id)) continue;
-      const seen = accessOf([role]).fields?.get(resource)?.read;
-      if (!seen) continue;
-      const hidden = (column: string) => !seen.has(column);
-      /* The command's `when`, and each input's that asks it only of some records. */
-      const judged = [
+    /* The command's `when`, and each input's that asks it only of some records: read where a granted role
+       narrows the target's columns, as before. */
+    let judged: Array<{ text: string; said: string }> | undefined;
+    const judgedOf = () =>
+      (judged ??= [
         ...(command.when === undefined ? [] : [{ text: command.when, said: '"when"' }]),
         ...command.fields.flatMap((field) =>
           field.type !== 'group' && field.type !== 'lines' && field.when !== undefined
             ? recordComparisons(field.when).map((text) => ({ text, said: `input "${field.name}"'s "when"` }))
             : [],
         ),
-      ];
-      for (const { text, said } of judged) {
-        /* Its own columns, and those under the rollups and computed columns it derives (commandWhen.ts): a `when`
-           the command's own binding refuses is said there, with its reason. */
-        const logicalOf = (local: string) => logicalResource(app, command.source, local);
-        const footprint = commandCatalog(schema, command.read, logicalOf);
-        let reads: readonly string[] | undefined;
-        try {
-          reads = footprint && compileWhen(withDerived(footprint, app, schema, logicalOf)[command.target], text, new Date(), ANYONE).reads;
-        } catch {
-          reads = undefined;
+      ]);
+    /* Its own columns, and those under the rollups and computed columns it derives (commandWhen.ts): a `when`
+       the command's own binding refuses is said there, with its reason. What a condition reads is the
+       command's, not a role's, so it is compiled once and each granted role's columns judged against it:
+       compiled again for every role, a large App's ten roles made it a tenth of startup. */
+    const logicalOf = (local: string) => logicalResource(app, command.source, local);
+    let derived: ReturnType<typeof withDerived> | undefined | null;
+    const readsOf = new Map<string, readonly string[] | undefined>();
+    const readsBy = (text: string): readonly string[] | undefined => {
+      if (readsOf.has(text)) return readsOf.get(text);
+      let reads: readonly string[] | undefined;
+      try {
+        if (derived === undefined) {
+          const footprint = commandCatalog(schema, command.read, logicalOf);
+          derived = footprint ? withDerived(footprint, app, schema, logicalOf) : null;
         }
+        reads = derived ? compileWhen(derived[command.target], text, new Date(), ANYONE).reads : undefined;
+      } catch {
+        reads = undefined;
+      }
+      readsOf.set(text, reads);
+      return reads;
+    };
+    for (const role of declaredRoles) {
+      if (!granted([role], id)) continue;
+      const seen = accessOf([role]).fields?.get(resource)?.read;
+      if (!seen) continue;
+      const hidden = (column: string) => !seen.has(column);
+      for (const { text, said } of judgedOf()) {
+        const reads = readsBy(text);
         if (reads?.some(hidden)) {
           invalid(
             `Command "${id}" is granted to role "${role}", which does not read a column of "${resource}" its ${said} judges ` +
@@ -556,7 +586,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
       /* Named with the rule: a command reads and writes only within the
        resources' own ceilings, and its target is always written. */
       for (const table of read) {
-        if (!rootRead.has(table) || !schema.tables.some((item) => item.id === table)) {
+        if (!rootRead.has(table) || !findTable(schema, table)) {
           invalid(
             `Command "${id}" reads "${table}", which is outside the App's resource ceiling [outside-ceiling]: ` +
               `a command reads only resources the App declares. Declare resources.${table}, or drop it from the command's footprint.`,
@@ -564,10 +594,10 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         }
       }
       /* A target's revision is its non-null integer `version` column when it has one, else the row's digest (commandRevision.ts). */
-      const versionField =
-        command.targets === 'none' ? undefined : versionColumn(schema.tables.find((item) => item.id === logical(command.target))?.columns);
+      const targetId = logical(command.target);
+      const versionField = command.targets === 'none' ? undefined : versionColumn(findTable(schema, targetId)?.columns);
       for (const table of write) {
-        const meta = schema.tables.find((item) => item.id === table);
+        const meta = findTable(schema, table);
         if (meta?.isView) invalid(`Command "${id}" writes "${table}", which is a view: a command writes tables.`);
         if (!rootWrite.has(table) || meta?.isView !== false) {
           invalid(
@@ -679,7 +709,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           const named = (local: string) => logicalResource(app, source, local);
           for (const local of locals) {
             const looked = named(local),
-              table = schema.tables.find((item) => item.id === looked);
+              table = findTable(schema, looked);
             if (!rootRead.has(looked) || !table)
               invalid(`Command "${id}" looks up "${looked}", which is outside the application resource ceiling.`);
             // A lookup is the handler's own read, before its transaction: a

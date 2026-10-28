@@ -596,7 +596,10 @@ test('caught resource mapping and write refusals still force transaction rollbac
   }
 });
 
-test('concurrent callback operations are serialized before reaching the transaction adapter', async () => {
+/* Reads a handler asks together pass on together, in the order asked: the adapter beneath decides whether they
+   leave together (a pipelining PostgreSQL writer) or one by one (TransactionOperations.read), and reaches the
+   database in the order they were asked either way. */
+test('concurrent callback reads reach the transaction adapter together, and the database in the order asked', async () => {
   const f = fixture();
   const adapter = f.adapters.get('primary-db')!;
   const original = adapter.transaction!;
@@ -623,7 +626,7 @@ test('concurrent callback operations are serialized before reaching the transact
     .transaction(async (tx) => {
       assert.deepEqual(await Promise.all([tx.count('loan'), tx.count('reference'), tx.count('loan')]), [1, 1, 1]);
     });
-  assert.equal(maximum, 1);
+  assert.equal(maximum, 3);
   assert.deepEqual(
     f.calls.map((call) => call.operation),
     ['begin', 'count', 'count', 'count', 'commit'],

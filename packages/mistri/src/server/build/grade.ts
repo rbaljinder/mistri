@@ -379,7 +379,7 @@ export async function runGrade(
       /* A theme graded by name answers for what it causes: a colour that is one of its tokens, and a layout finding the
          App's own look does not have on the same page and window (its type and density). The rest is the App's. */
       const own = loaded.app.ui.customThemes ?? [];
-      const wornId = loaded.app.ui.theme?.preset ?? 'lumen';
+      const wornId = loaded.app.ui.theme?.preset ?? 'workshop';
       const wornLabel = [...own, ...THEME_PRESETS].find((theme) => theme.id === wornId)?.label ?? wornId;
 
       /* A whole-App grade over every look is thousands of captures and ran 25 minutes in silence: each capture says where it

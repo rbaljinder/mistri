@@ -37,7 +37,10 @@ draws. Concretely:
   card nobody has to press.
 - **Record text is data.** Tool results are JSON the model is told is data
   from the App's records, never instructions; the system prompt says so, and
-  the structure above means it does not have to be believed.
+  the structure above means it does not have to be believed. A result is
+  short on purpose (`fitted` in `assistantTools.ts`: about 6,000 characters,
+  a table block's first five rows in its shown columns, twenty records from a
+  search), because every later step of the turn reads it again.
 
 Tenancy follows from the first point for an ordinary App with a row policy:
 the scope is the request's. A tenant App (`auth.rows: 'tenant'`) is served by
@@ -128,7 +131,9 @@ existing components in the App's look:
   (`Dashboard.tsx`): the same keys an author writes (`from`, `query`, `show`,
   `sort`, `limit`, `by`, `measure`, `shape`), checked against the person's
   readable resources and then asked once through the read the section will
-  draw, so a block that would fail never reaches the panel. Rows open their
+  draw (a table's is the dashboard's own, `dashboardListQuery`), so a block
+  that would fail never reaches the panel, and a table that matched nothing is
+  not drawn: the model is told so and says it in a sentence. Rows open their
   records; charts and figures are the dashboard's. A chart keeps the shape the
   model asks for; unasked, groups of a kind are bars and a calendar bucket a
   line.
@@ -176,8 +181,9 @@ changes mid-conversation the new model reads the earlier replies' words and
 calls but not their thinking, which was another model's), tool results with what the panel drew, proposals and their outcomes,
 summaries. Every statement names `(app, tenant, account)`; a conversation id
 from another person is simply not found. Usage is a row per model call, and
-the caps are read from it: tokens per turn, per person per day, per App per
-day (`limits`; a person's day is 200,000 tokens unless the App names
+the caps are read from it: tokens per turn (where a call's cached input, the
+turn so far read again, counts at a tenth, as it is billed), per person per day,
+per App per day (`limits`; a person's day is 200,000 tokens unless the App names
 another figure, so an App that forgets a cap still has one), and in a tenant App per tenant per day (the tenant policy's
 `assistant.tokensPerTenantPerDay`). A turn past a cap is refused before the model is asked.
 
@@ -220,7 +226,16 @@ text appears as it is written with nothing pulsing; tool steps are one quiet
 line each, folded; blocks reserve their height before their rows arrive so
 nothing below them moves; the composer is pinned at the panel's foot. Enter
 sends, Shift+Enter breaks a line, Escape stops a running turn and then closes.
-On a phone the panel is the whole screen.
+On a phone the panel is the whole screen. A turn says "Working…" the moment it
+is sent, still text in the muted ink, and then what each tool is doing as it
+runs ("Reading lead…", the `running` event's `label`), until the model's words
+arrive. A turn cut off on the way — the network gone, the server restarted, a
+proxy's bare 5xx, a stream closed before its `done` — says the connection to
+the server dropped, with Try again: retried from the person's words when the
+server had kept them, else sent as it was. A conversation the server refuses
+to open says why, with New conversation beside it; one that is gone starts a
+new one quietly. The panel reopens on its last conversation only for the same
+account and customer.
 
 **One column.** Wide — full screen, or the page — the conversation reads in one
 centred column of at most 760px: the words, the person's messages (at its right
@@ -307,7 +322,9 @@ owner holds that key and its bill, never a tenant.
   its tab's lease, the host recovers that lease as this login (admitting the
   membership again) and takes the tenant from it (`tenant/tenantAssistant.ts`).
   An id from the other tenant is not found; a request that names a tenant is
-  refused.
+  refused. The assistant's page (`placement: 'page'`) is a tenant room: it is
+  served inside a customer, and a nav that places it in a `platform` group is
+  refused where it is written (`shared/appTenancy.ts`).
 - **Every tool call is a tenant request.** The assistant's reads go to the
   tenant data server on the lease, with the same membership check and read
   scope a page's own fetch gets, admitted per call: a person removed

@@ -361,7 +361,7 @@ async function provisionAppStores(
   }
   type Target = NonNullable<ReturnType<typeof storeTargetOf>>;
   /* Where a step provisions: the connection's address, its engine, and the store target a SQLite or PostgreSQL one has. */
-  type Step = (where: { url: string; dialect: string; target?: Target }) => Promise<string>;
+  type Step = (where: { url: string; dialect: string; target?: Target }) => Promise<string | undefined>;
   /** A store kept only in SQLite or PostgreSQL. */
   class Unkept extends Error {}
   const kept = (where: { target?: Target }, what: string): Target => {
@@ -399,7 +399,8 @@ async function provisionAppStores(
         const where = { url, dialect: dialectOf(url), target: storeTargetOf(url) };
         for (const step of todo) {
           try {
-            write(`  ${config.name}: ${await step(where)}`);
+            const done = await step(where);
+            if (done !== undefined) write(`  ${config.name}: ${done}`);
           } catch (error) {
             if (!(error instanceof Unkept)) throw error;
             write(`  ${config.name}: ${error.message}, and this connection is ${where.dialect}`);
@@ -444,6 +445,11 @@ async function provisionAppStores(
     if (historyRules(app, loaded.pages).size) add(home, unbound('record-history', 'record history', true));
     /* Live sync's change store, where every tenant's writes are told to the pages that show them. */
     add(home, unbound('live-change', 'live sync store', true));
+    /* What a production build's start last validated (tenantValidationRecord.ts): PostgreSQL's only, and never
+       required — a database without it is checked in full at every start, so a SQLite one is passed over unsaid. */
+    add(home, async (where) =>
+      where.dialect === 'postgres' ? await unbound('validation-record', 'validation record', false)(where) : undefined,
+    );
     /* The event store, the effects' destinations and the jobs' stores, each bound to every tenant of the App. */
     if (registryOf && (jobs || commands.some((command) => getCommandEvents(command) || getCommandEffects(command))))
       add(home, async (where) => {

@@ -49,11 +49,29 @@ const RECOVERY_MS = 10_000;
 type Answer = { status: number; text: string; body: Record<string, unknown> };
 type Lease = { tabId: string; context: string; accountId: string; tenantId: string; revision: number };
 
-/* A TCP proxy in front of the server: `latencyMs` on every chunk each way, and `cut()` ends every connection through it. */
+/* A TCP proxy in front of the server: `latencyMs` on every chunk each way, and `cut()` ends every connection through it.
+   `cutAt` arms one cut on the wire rather than on a clock, so it lands where the test says whatever the machine's
+   speed: every connection ends when the client sends a chunk carrying those bytes — the statement dropped unsent —
+   or, `answered`, once that chunk has reached the server and its connection's next answer comes back, which is lost. */
 async function proxy(target: URL, latencyMs: number) {
   const sockets = new Set<Socket>();
-  const relay = (from: Socket, to: Socket) =>
-    from.on('data', (chunk) => {
+  let armed: { bytes: Buffer; answered: boolean; fired: () => void; server?: Socket } | undefined;
+  const cut = () => {
+    for (const socket of sockets) socket.destroy();
+  };
+  const fire = () => {
+    const { fired } = armed!;
+    armed = undefined;
+    cut();
+    fired();
+  };
+  const relay = (from: Socket, to: Socket, toServer: boolean) =>
+    from.on('data', (chunk: Buffer) => {
+      if (armed && !toServer && armed.server === from) return fire();
+      if (armed && toServer && !armed.server && chunk.includes(armed.bytes)) {
+        if (!armed.answered) return fire();
+        armed.server = to;
+      }
       from.pause();
       setTimeout(() => {
         if (!to.destroyed) to.write(chunk);
@@ -71,8 +89,8 @@ async function proxy(target: URL, latencyMs: number) {
         outbound.destroy();
       });
     }
-    relay(inbound, outbound);
-    relay(outbound, inbound);
+    relay(inbound, outbound, true);
+    relay(outbound, inbound, false);
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -84,11 +102,18 @@ async function proxy(target: URL, latencyMs: number) {
     get open() {
       return sockets.size;
     },
-    cut() {
-      for (const socket of sockets) socket.destroy();
+    cut,
+    /** Arms the cut; the answer says, once asked, whether it fired, and disarms it if it had not. */
+    cutAt(text: string, answered: boolean): () => boolean {
+      let hit = false;
+      armed = { bytes: Buffer.from(text), answered, fired: () => (hit = true) };
+      return () => {
+        if (!hit) armed = undefined;
+        return hit;
+      };
     },
     async close() {
-      this.cut();
+      cut();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };
@@ -418,9 +443,47 @@ test(
       await eventually(() => f.list(north));
     }
 
+    /* A save cut on the wire, deterministically, at each step it takes: its BEGIN dropped unsent, and run with its
+       answer lost; then its UPDATE, both ways. Nothing committed in any of them, and the database failing is said as
+       the database's, never as the person refused (a 403 told them they could not edit a record they could). Cut
+       before the BEGIN was answered, it is a 503, not applied. Cut inside the transaction, its ROLLBACK goes
+       unanswered, and an unanswered ROLLBACK is an unknown outcome by the adapters' contract: the write is
+       unconfirmed (200, outcome unknown), for the client to reconcile. */
+    const opening = 'BEGIN; LOCK TABLE "public"."ticket" IN ROW EXCLUSIVE MODE';
+    for (const [label, bytes, answered] of [
+      ['its BEGIN unsent', opening, false],
+      ['its BEGIN run, the answer lost', opening, true],
+      ['its UPDATE unsent', 'UPDATE "public"."ticket"', false],
+      ['its UPDATE run, the answer lost', 'UPDATE "public"."ticket"', true],
+    ] as const) {
+      // A writer a cut closed reopens itself first (tenantWriterLifecycle.ts): the next save then reaches the wire.
+      await eventually(() => f.rename(north, 'north-1', `Printer, before ${label}`));
+      const fired = link!.cutAt(bytes, answered);
+      const saved = await f.rename(north, 'north-2', `Screen, ${label}`);
+      const said = `${label}: ${saved.status} ${saved.text}`;
+      assert.ok(fired(), `${label}: the save never sent it, ${said}`);
+      if (bytes === opening) {
+        assert.equal(saved.status, 503, said);
+        assert.equal(saved.body.outcome, 'not_applied', said);
+      } else {
+        assert.equal(saved.status, 200, said);
+        assert.equal(saved.body.outcome, 'unknown', said);
+      }
+      const listed = await eventually(() => f.list(north));
+      assert.ok(
+        !(listed.body.rows as Array<{ title: string }>).some((row) => row.title === `Screen, ${label}`),
+        `${label}: nothing committed`,
+      );
+    }
+
     const again = await f.lease('north');
     assert.equal((await eventually(() => f.list(again))).status, 200);
-    const fresh = await f.follow(again);
+    // The live stream is the reopened writer's to bind again: until it has, live sync is off here (204).
+    let fresh = await f.follow(again);
+    for (const deadline = Date.now() + RECOVERY_MS; fresh.status === 204 && Date.now() < deadline;) {
+      await delay(100);
+      fresh = await f.follow(again);
+    }
     assert.equal(fresh.status, 200);
     assert.ok(await fresh.until('hello'));
     assert.equal((await eventually(() => f.rename(again, 'north-1', 'Printer after the cut'))).status, 200);

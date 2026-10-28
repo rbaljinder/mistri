@@ -2,6 +2,7 @@ import { test, expect, type Page } from './support/harness.js';
 import { scalar } from './support/db.js';
 import { startTenantApp, type TenantAppFixture } from './support/tenantServer.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
+import { isSelection, leaseOfSelection } from './support/tenantSelection.js';
 import { COMMAND_JOURNAL_TABLES } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { sqliteAuditRows } from '../test/support/commandTargets.js';
 
@@ -37,14 +38,14 @@ test.describe('the platform realm in the browser', () => {
         })
       ).status(),
     ).toBe(200);
-    const response = page.waitForResponse((reply) => new URL(reply.url()).pathname === '/api/tenant/context/open');
+    const response = page.waitForResponse(isSelection);
     await page.goto(`${app.origin}/${app.appId}/${link}`);
     if (who === 'bob')
       await page.getByRole('list', { name: 'Available dealers' }).getByRole('button', { name: choice, exact: true }).click();
     const reply = await response;
     expect(reply.status()).toBe(200);
     await expect(page.getByRole('button', { name: current, exact: true })).toBeVisible();
-    return (await reply.json()) as TenantContextReply;
+    return leaseOfSelection(reply);
   };
   /** A request on the tab's own lease, outside the UI: what the server says, not what the page shows. */
   const call = (page: Page, owner: TenantContextReply, path: string, data: Record<string, unknown>) =>

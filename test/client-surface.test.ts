@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SURFACE_PAGES, surfaceFor } from '../packages/engine/src/server/clientSurface.js';
+import { SURFACE_PAGES, surfaceFor, tenantPreloads } from '../packages/engine/src/server/clientSurface.js';
 import { withHead } from '../packages/engine/src/server/clientHttp.js';
 import { landingRoute, publicFormRoute } from '../packages/mistri/src/client/publicRoutes.js';
 
@@ -61,4 +61,23 @@ test("the database browser's page tells the entry to start its main, and no othe
   /* Before the entry's script, which reads it as it starts. */
   assert.ok(workbench.indexOf(meta) < workbench.indexOf('<script'));
   assert.ok(!withHead(html, { mount: { base: '', json: '{}' }, path: '/compass' }).includes('mistri-shell'));
+});
+
+/* The shell imports the tenant's flows once who-am-I says the session is a tenant's (appChrome.js loadTenancy): on a
+   tenant host the page asks for them beside the entry, so entering does not wait a round trip more for them. */
+test("a tenant host's shell page preloads the tenant's flows, in the mode the loader asks them", () => {
+  const files = [
+    'assets/index-a1.js',
+    'assets/tenant-B2c3.js',
+    'assets/tenant-D4e5.css',
+    'assets/tenantLive-F6.js',
+    'assets/TenantAdministration-G7.js',
+  ];
+  assert.equal(
+    tenantPreloads(files),
+    '    <link rel="modulepreload" crossorigin href="/assets/tenant-B2c3.js">\n' +
+      '    <link rel="preload" as="style" crossorigin href="/assets/tenant-D4e5.css">\n',
+  );
+  /* A dev server's page names no built files, and so preloads nothing. */
+  assert.equal(tenantPreloads([]), '');
 });

@@ -1,16 +1,16 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.1 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.2 scope, stable and preview features, current limitations and planned work.
 ---
 
-The 1.0.0-rc.1 scope, stable and preview features, current limitations and planned work.
+The 1.0.0-rc.2 scope, stable and preview features, current limitations and planned work.
 
 ```sh
 npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.1**, the first release candidate and the first release under the mistri name:
+This site describes **mistri 1.0.0-rc.2**, the first release candidate and the first release under the mistri name:
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -69,7 +69,7 @@ stable.
 
 | Feature | Status |
 | --- | --- |
-| The three built-in looks: Lumen (the default, set in Inter), Mono and Sage; `defineTheme`, `ui.theme` and `customThemes`; a look's named palettes; the theme validator in `mistri check` | Stable |
+| The four built-in looks: Workshop (the default, set in Barlow), Lumen (set in Inter), Mono and Sage; `defineTheme`, `ui.theme` and `customThemes`; the twelve palettes every look offers; the theme validator in `mistri check` | Stable |
 | Tenant branding (`branding`, `brandingForm()`, the `branding` store) | Stable |
 
 ### Access, commands and data

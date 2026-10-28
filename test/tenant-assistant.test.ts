@@ -23,6 +23,7 @@ import { ADMINISTRATION_JOURNAL_TABLES as journal } from '../packages/mistri/src
 import { createTenantAssistant } from '../packages/mistri/src/server/tenant/tenantAssistant.js';
 import { TENANT_TABLES } from '../packages/mistri/src/server/tenant/tenantStoreContract.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
+import { appSurfaceForRealm } from '../packages/mistri/src/shared/appTenancy.js';
 import {
   ADMINISTRATION_HTTP_HEADER as administrationHeader,
   ADMINISTRATION_HTTP_ROOT,
@@ -51,11 +52,16 @@ interface Event {
 const of = (events: Event[], kind: string) => events.filter((event) => event.event === kind).map((event) => event.data);
 
 /** The fixture with an assistant, a switch the platform owner holds, and a tenant admin who may turn it off. */
-async function assistantFixture(t: Parameters<typeof tenantSupportFixture>[0], dialect: 'sqlite' | 'postgres', cap?: number) {
+async function assistantFixture(
+  t: Parameters<typeof tenantSupportFixture>[0],
+  dialect: 'sqlite' | 'postgres',
+  cap?: number,
+  declared: Record<string, unknown> = {},
+) {
   setAssistantModel(undefined);
   const tenantPolicy: Record<string, unknown> = {};
   const f = await tenantSupportFixture(t, dialect, {
-    manifest: (raw) => Object.assign(raw, { assistant: {} }),
+    manifest: (raw) => Object.assign(raw, { assistant: declared }),
     tenantPolicy,
   });
   const { avery, sam, oscar } = f.accounts;
@@ -255,8 +261,8 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
 
   test(`${dialect}: a person removed mid-conversation is refused at the next call`, { skip }, async (t) => {
     const h = await assistantFixture(t, dialect);
-    const { f } = h,
-      { sam } = f.accounts;
+    const { f } = h;
+    const { sam } = f.accounts;
     applied(await h.setSwitch('north', true));
     const north = await h.lease(sam, 'north');
     assert.equal((await h.assistant(sam, north, '/api/assistant/turn', { text: 'show me the leads' })).status, 200);
@@ -354,6 +360,36 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
     // South's day is its own.
     const south = await h.lease(sam, 'south');
     assert.deepEqual(of((await h.assistant(sam, south, '/api/assistant/turn', { text: 'hello' })).events, 'note'), []);
+  });
+
+  test(`${dialect}: an assistant placed as a page is the tenant's room, and answers inside the customer`, { skip }, async (t) => {
+    /* A field report: `placement: [..., 'page']` in an App with the platform realm threw "Cannot read properties of
+       undefined (reading 'realm')" at load, since the page's nav word has no view behind it. */
+    const h = await assistantFixture(t, dialect, undefined, { placement: ['panel', 'record', 'page'] });
+    const { f } = h,
+      { sam } = f.accounts;
+    applied(await h.setSwitch('north', true));
+    const north = await h.lease(sam, 'north');
+    const served = (await h.servedApp(sam, north)) as { assistant?: { page?: true }; nav: Array<{ view?: string }> };
+    assert.equal(served.assistant?.page, true);
+    assert.ok(
+      served.nav.some((node) => node.view === 'assistant'),
+      JSON.stringify(served.nav),
+    );
+    const asked = await h.assistant(sam, north, '/api/assistant/turn', { text: 'show me the leads' });
+    assert.equal(asked.status, 200, JSON.stringify(asked.body));
+    assert.match(JSON.stringify(h.requests.at(-1)!.messages), /North lead/);
+    // The page is the tenant's: the platform realm's menu does not name it, and placing it in a platform group is refused.
+    const app = parseAppConfig({ ...supportManifest(f.path), assistant: { placement: ['panel', 'page'] } }, 'page');
+    const menu = (realm: 'tenant' | 'platform') =>
+      JSON.stringify(appSurfaceForRealm(app, [], realm).app.nav).includes('"view":"assistant"');
+    assert.deepEqual([menu('tenant'), menu('platform')], [true, false]);
+    const manifest = supportManifest(f.path);
+    manifest.nav[1].children.push('assistant');
+    assert.throws(
+      () => parseAppConfig({ ...manifest, assistant: { placement: ['panel', 'page'] } }, 'page'),
+      /places the assistant's page in a "platform" group/,
+    );
   });
 
   test(`${dialect}: a support session has no assistant`, { skip }, async (t) => {

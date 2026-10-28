@@ -3,15 +3,23 @@
  * and one delivery store per job destination on the jobs' source, activates
  * one publisher per destination and one runner, and drives them with a
  * `setTimeout` chain, never `setInterval`: again at once after work, and
- * never two cycles at a time. Idle, it waits a second, then twice as long
- * each time nothing moved, up to a ceiling (`nextIdleWait`): an idle cycle
- * is some eighty statements, and a second apart that was about sixty a
- * second against a metered PostgreSQL doing nothing. A command in this
- * process that writes facts wakes it (commandEventSignal.ts), and on
+ * never two cycles at a time. A command in this process that writes facts,
+ * or a job enqueued here, wakes it (commandEventSignal.ts), and on
  * PostgreSQL so does one in any other process, by LISTEN/NOTIFY
- * (postgresCommandEventWake.ts), so a fact is picked up at once; the
- * ceiling bounds only work scheduled for later, a listener that is down, and
- * a SQLite store written by another process.
+ * (postgresCommandEventWake.ts), so new work is picked up at once.
+ *
+ * Idle, it waits for the next thing due, which an idle cycle reads in one
+ * statement per store (`standing`): a job's `runAt`, a retry, a lease running
+ * out, the next slot of a job at times, the next timer sweep. While it hears
+ * every write — PostgreSQL with its LISTEN in place, and no flow tail, whose
+ * history rows announce nothing — that is the whole wait, up to a fallback of
+ * minutes (`QUIET_MS`). Otherwise (SQLite, which another process may write;
+ * a listener down or behind a transaction-mode pooler; work past due that
+ * the cycle could not take) it polls: a second, then twice as long each
+ * time nothing moved, up to a ceiling (`nextIdleWait`). An idle cycle once
+ * polled a second apart, some sixty statements a second against a metered
+ * PostgreSQL doing nothing; its readiness snapshot inspected pages of waiting
+ * rows, each verified against its attempt history, every five seconds.
  *
  * A publisher or runner that halts stays halted; readiness says so, and a
  * restart is the recovery. Recreating one in-process would evade the bounds
@@ -92,7 +100,7 @@ interface JobHostOptions {
   readonly now?: () => number;
   /** The first wait after an idle cycle. */
   readonly idleMs?: number;
-  /** The longest an idle host waits between cycles. */
+  /** The longest an idle host waits between cycles: given, it bounds the wait for what is due too. */
   readonly maxIdleMs?: number;
   /** false: only another process's wake reaches it. Tests use it to prove LISTEN/NOTIFY alone. */
   readonly wakeInProcess?: false;
@@ -157,8 +165,10 @@ export interface JobHost {
   stop(): Promise<void>;
 }
 
-/** The longest an idle host waits between cycles, unless told otherwise. */
+/** The longest an idle host that polls waits between cycles, unless told otherwise. */
 const MAX_IDLE_MS = 30_000;
+/** The longest an idle host that hears every write waits: a fallback, for a notification lost with its connection. */
+const QUIET_MS = 5 * 60_000;
 
 /** The wait before the next cycle: none after work, else double the last idle wait, from `idleMs` up to `maxIdleMs`. */
 export function nextIdleWait(last: number | undefined, worked: boolean, idleMs: number, maxIdleMs: number): number {
@@ -293,7 +303,8 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       throw new JobDeclarationError(`Jobs: "${job.id}" is the server's own job; an App's jobs are named otherwise.`);
   const now = options.now ?? Date.now,
     idleMs = options.idleMs ?? 1_000,
-    maxIdleMs = options.maxIdleMs ?? MAX_IDLE_MS;
+    maxIdleMs = options.maxIdleMs ?? MAX_IDLE_MS,
+    quietMs = options.maxIdleMs ?? QUIET_MS;
   const clock = options.now ? ('caller' as const) : ('database' as const);
   // A tenant App's host is the one that knows its tenants: its workflows keep each tenant's instances apart.
   const tenancy = options.tenants !== undefined;
@@ -465,36 +476,48 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
   let jobsCheck = check('jobs', 'ok'),
     deliveryCheck = check('events.delivery', 'ok');
   let refreshedAt = Number.NEGATIVE_INFINITY;
-  /** Bounded reads: one row to see failure, a page to see age. No payload, input or id leaves here. */
-  async function refresh(): Promise<void> {
+  /* From the last standing read: when, on this process's clock, the stores next have something fall due, and
+     whether something already due was left waiting. Unknown (a store unavailable) reads as both: poll. */
+  let nextDue = Number.POSITIVE_INFINITY;
+  let overdue = true;
+  /** One statement a store, no row read: what readiness reports and when the next thing falls due. `idle` reads
+   * it now — the wait about to begin is sized by it — and a busy host at most every few seconds. */
+  async function refresh(idle: boolean): Promise<void> {
     const at = now();
-    if (at - refreshedAt < SNAPSHOT_MS) return;
+    if (!idle && at - refreshedAt < SNAPSHOT_MS) return;
     refreshedAt = at;
-    const late = (time: number | null) => time !== null && time + BACKLOG_LEASES * deployment.store.leaseMs < at;
+    const wall = Date.now();
+    let ahead = Number.POSITIVE_INFINITY,
+      behind = false;
+    const late = (time: number | null, storeAt: number) => time !== null && time + BACKLOG_LEASES * deployment.store.leaseMs < storeAt;
+    const note = (standing: Readonly<{ waitingSince: number | null; next: number | null; at: number }>) => {
+      if (standing.next !== null) ahead = Math.min(ahead, wall + Math.max(0, standing.next - standing.at));
+      if (standing.waitingSince !== null && standing.waitingSince <= standing.at) behind = true;
+    };
     try {
-      const failed = (await jobs.inspect({ state: 'failed' }, 1)).length + (await jobs.inspect({ state: 'unknown' }, 1)).length;
-      const waiting = [...(await jobs.inspect({ state: 'scheduled' }, 128)), ...(await jobs.inspect({ state: 'retry' }, 128))];
-      jobsCheck = check('jobs', failed ? 'work_failed' : waiting.some((row) => late(row.runAt)) ? 'backlog_pressure' : 'ok');
+      const standing = await jobs.standing(at);
+      note(standing);
+      jobsCheck = check('jobs', standing.failed ? 'work_failed' : late(standing.waitingSince, standing.at) ? 'backlog_pressure' : 'ok');
     } catch {
       jobsCheck = check('jobs', 'unknown');
+      behind = true;
     }
     try {
       let code: ReadinessCode = 'ok';
       for (const { job, store } of deliveries) {
-        // A delivery's 'unknown' is retryable; a job's may still hold a handler lease.
-        const failed = (await store.inspect('failed', '', 1)).length;
-        const waiting = [
-          ...(await store.inspect('pending', '', 128)),
-          ...(await store.inspect('retry', '', 128)),
-          ...(await store.inspect('unknown', '', 128)),
-        ];
-        if (failed) code = 'work_failed';
-        else if (code === 'ok' && (pressure.has(job) || waiting.some((row) => late(row.nextAt)))) code = 'backlog_pressure';
+        // A delivery's 'unknown' is retryable, and counted as waiting; a job's may still hold a handler lease.
+        const standing = await store.standing(at);
+        note(standing);
+        if (standing.failed) code = 'work_failed';
+        else if (code === 'ok' && (pressure.has(job) || late(standing.waitingSince, standing.at))) code = 'backlog_pressure';
       }
       deliveryCheck = check('events.delivery', code);
     } catch {
       deliveryCheck = check('events.delivery', 'unknown');
+      behind = true;
     }
+    nextDue = ahead;
+    overdue = behind;
   }
 
   async function cycle(): Promise<boolean> {
@@ -511,7 +534,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     if (!stopping && flowTail && (await flowTail.tick())) worked = true;
     if (!stopping && (await enqueueSlots())) worked = true;
     if (!stopping && (await runner.tick()).status === 'ran') worked = true;
-    if (!stopping) await refresh();
+    if (!stopping) await refresh(!worked);
     return worked;
   }
 
@@ -657,10 +680,26 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       active = undefined;
     }));
   };
-  /* The last wait scheduled, and when it fires: a wake shortens a long one
-     and never lengthens a short one. */
+  /* The last polling wait, which the next one doubles, and when the scheduled
+     cycle fires: a wake shortens a long wait and never lengthens a short one. */
   let waited: number | undefined;
   let due = 0;
+  /** How long until a machine timer's next sweep, so a quiet wait never sleeps past it. */
+  const untilSweep = (): number => (timers.length ? Math.max(0, swept + SWEEP_MS - now()) : Number.POSITIVE_INFINITY);
+  /** The wait after a cycle: none after work; for the next thing due while every write is heard; else a poll. */
+  const idleWait = (worked: boolean): number => {
+    if (worked) {
+      waited = 0;
+      return 0;
+    }
+    const hearing = !flowTail && heard?.hearing() === true;
+    let wait: number;
+    if (hearing && !overdue) {
+      waited = 0;
+      wait = quietMs;
+    } else wait = waited = nextIdleWait(waited, false, idleMs, maxIdleMs);
+    return Math.min(wait, untilSlot(), Math.max(0, nextDue - Date.now()), untilSweep());
+  };
   /* A wake heard while a cycle runs: that cycle may already have read past
      the fact, so the next one follows at a wake's delay rather than an idle
      wait's — which, with a long idle wait, was the fact left for a minute. */
@@ -669,7 +708,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     const again = woken && !worked;
     woken = false;
     if (!again) {
-      schedule(Math.min(nextIdleWait(waited, worked, idleMs, maxIdleMs), untilSlot()));
+      schedule(idleWait(worked));
       return;
     }
     // As a wake between cycles does: soon, and the idle waits after it start short.
@@ -678,7 +717,6 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
   };
   const schedule = (delay: number): void => {
     if (stopping) return;
-    waited = delay;
     due = Date.now() + delay;
     timer = setTimeout(() => {
       timer = undefined;
@@ -691,6 +729,8 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
   let started = false;
   let unlisten: (() => void) | undefined;
   let listening: Promise<CommandEventListener | undefined> | undefined;
+  /** The listener once its first LISTEN is in place: until then, and without one, the host polls. */
+  let heard: CommandEventListener | undefined;
   const wake = (): void => {
     if (!started || stopping) return;
     // The cycle running now looks again soon after it ends, and from then the waits start short again.
@@ -756,7 +796,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       const listenUrl = pg ? wakeListenUrl((target as { postgres: string }).postgres, pg.pooler, options.listen) : undefined;
       if (listenUrl) {
         listening = listenForCommandEvents(listenUrl, wake).then(
-          (listener) => (stopping ? void listener.close() : listener),
+          (listener) => (stopping ? void listener.close() : (heard = listener)),
           () => undefined,
         );
       }

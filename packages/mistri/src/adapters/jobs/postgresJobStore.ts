@@ -26,6 +26,8 @@
  *   transaction; the description stands for the layout trust window and is
  *   taken again after any failure (postgresRelations.ts LayoutTrust).
  */
+import { jobEnqueued } from '../events/commandEventSignal.js';
+import { NOTIFY_COMMAND_EVENTS } from '../events/postgresCommandEventWake.js';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   describePostgresRelations,
@@ -63,6 +65,7 @@ import {
   captureJobPolicy,
   jobFail,
   jobInteger,
+  jobStanding,
   JobRefusal,
   jobRefuse,
   JobStoreUnavailable,
@@ -542,7 +545,7 @@ export async function openPostgresJobStore(
     policy,
     enqueue: async (request, now) => {
       const value = captureJobEnqueue(policy, request);
-      return transaction('write', now, async (client, at) => {
+      const enqueued = await transaction('write', now, async (client, at) => {
         const found = async () =>
           (
             await read(
@@ -580,11 +583,19 @@ export async function openPostgresJobStore(
             ns,
           ],
         );
-        if (inserted.rowCount === 1) return Object.freeze({ id, runAt, replayed: false });
+        if (inserted.rowCount === 1) {
+          /* A host in another process hears it at this transaction's commit, and never for one that rolls back
+             (postgresCommandEventWake.ts): it waits for what is due, not on a timer. */
+          await client.query(NOTIFY_COMMAND_EVENTS);
+          return Object.freeze({ id, runAt, replayed: false });
+        }
         // Another enqueue of the same key committed first: it is the job.
         const raced = await found();
         return raced ? replay(raced) : jobFail();
       });
+      // Committed: a host in this process looks now, without waiting for the notification's round trip.
+      if (!enqueued.replayed) jobEnqueued();
+      return enqueued;
     },
     claim: async (now, limit = policy.maxInFlight) => {
       jobInteger(limit, 1, 64);
@@ -714,6 +725,25 @@ export async function openPostgresJobStore(
         return Object.freeze(inspected);
       });
     },
+    /* One statement, no row verified: the host's readiness and its next wake read this, where they inspected
+       pages of rows, each checked against its history, every few seconds (jobHost.ts). */
+    standing: (now) => {
+      jobInteger(now, 0, JOB_MAX_CLOCK);
+      return transaction('read', undefined, async (client) => {
+        const [row] = await read(
+          client,
+          `WITH c AS (SELECT ${clock === 'caller' ? '$2::bigint' : 'floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint'} AS at)
+          SELECT c.at,
+            EXISTS (SELECT 1 FROM ${q(t.job)} WHERE namespace = $1 AND state IN ('failed', 'unknown')) AS failed,
+            (SELECT min(run_at) FROM ${q(t.job)} WHERE namespace = $1 AND state IN ('scheduled', 'retry')) AS waiting,
+            least((SELECT min(run_at) FROM ${q(t.job)} WHERE namespace = $1 AND state IN ('scheduled', 'retry') AND run_at > c.at),
+              (SELECT min(lease_until) FROM ${q(t.job)} WHERE namespace = $1 AND state IN ('leased', 'unknown') AND lease_until > c.at)) AS next
+          FROM c`,
+          clock === 'caller' ? [ns, now] : [ns],
+        );
+        return jobStanding(row);
+      });
+    },
     attempts: async (id) => {
       if (typeof id !== 'string' || id.length !== 36) return jobFail();
       return transaction('read', undefined, async (client) => Object.freeze((await history(client, id)).map(jobAttemptInspection)));
@@ -738,6 +768,8 @@ export async function openPostgresJobStore(
           [attempt, attempt + (row.max_attempts as number), at, row.id, row.attempts],
         );
         if (changed.rowCount !== 1) return jobFail();
+        // Runnable again: a host anywhere hears it at commit, as it hears an enqueue.
+        await client.query(NOTIFY_COMMAND_EVENTS);
         return verifyRow(client, (await rowById(client, row.id as string))!);
       });
     },

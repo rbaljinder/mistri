@@ -193,9 +193,20 @@ export function grouped(items: readonly PanelItem[]): DrawnItem[] {
 }
 
 /**
+ * A turn whose connection to the server dropped before the answer finished: the network went, the server restarted,
+ * or a proxy answered in its place ("Container suddenly disconnected" as a bare 500, a field report). There is no
+ * sentence of the server's to say, only that the turn can be tried again.
+ */
+class ConnectionLost extends Error {
+  // The panel says it in its own words (connectionLost); there is no sentence here to show.
+  readonly lost = true;
+}
+
+/**
  * A turn: POSTed as `api()` posts (the App named, the account said), read
  * as a stream. Resolves when the stream ends; a refusal before it starts
- * throws with the server's sentence.
+ * throws with the server's sentence, and a turn cut off on the way throws
+ * ConnectionLost.
  */
 export async function stream(
   path: '/api/assistant/turn' | '/api/assistant/resolve',
@@ -204,6 +215,10 @@ export async function stream(
   signal: AbortSignal,
 ): Promise<void> {
   const { url, payload } = scopeApiRequest(path, body, state.activeConnection);
+  // A stop is the person's own, never a lost connection.
+  const cut = (error: unknown): never => {
+    throw signal.aborted ? error : new ConnectionLost();
+  };
   const res = await fetchServer(url, {
     method: 'POST',
     credentials: 'same-origin',
@@ -212,16 +227,24 @@ export async function stream(
     // The account, and in a tenant App the tab's lease, from which alone the server takes the tenant.
     headers: { 'content-type': 'application/json', ...assistantHeaders() },
     body: JSON.stringify(payload),
-  });
+  }).catch(cut);
   if (!res.ok || !res.body) {
-    let message = `${res.status}`;
+    let message: string | undefined;
     try {
       const said = (await res.json()) as { error?: unknown };
       if (typeof said.error === 'string') message = said.error;
     } catch {
-      /* The status is all there is to say. */
+      /* Not the server's own answer. */
     }
-    throw Object.assign(new Error(message), { status: res.status });
+    // A server error without the server's sentence was said by whatever stood between: a gateway, a proxy.
+    if (message === undefined && res.status >= 500) throw new ConnectionLost();
+    throw Object.assign(new Error(message ?? `${res.status}`), { status: res.status });
   }
-  await readEvents(res.body, onEvent);
+  // Every turn the server finishes ends in `done`; a stream that closes before it was cut off.
+  let finished = false;
+  await readEvents(res.body, (event) => {
+    if (event.event === 'done') finished = true;
+    onEvent(event);
+  }).catch(cut);
+  if (!finished && !signal.aborted) throw new ConnectionLost();
 }

@@ -3,7 +3,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isProxy } from 'node:util/types';
 import { inWriteLanes, recordLane } from '@mistriwork/engine/adapters/writeLanes.js';
 import { withWriteAhead, type WriteAhead } from '@mistriwork/engine/adapters/writeAhead.js';
-import { isWriteConflict, Refusal, TransactionOperations, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import {
+  isWriteConflict,
+  Refusal,
+  TransactionOperations,
+  type QueryResult,
+  type WriteTransaction,
+} from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import type { CommandEventBatch } from '../../adapters/events/commandEventTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
@@ -666,12 +672,18 @@ async function executeUntraced(
               )
             : undefined;
           const store = draft?.records ?? records;
-          const operations = new TransactionOperations();
-          const accept = <Request, Result>(request: Request, run: (snapshot: Request) => Promise<Result>): Promise<Result> => {
+          /* A handler's reads asked together start together here, in the order asked, and the store beneath decides
+             whether they leave together: a writer that pipelines sends them in one flight, any other one by one. */
+          const operations = new TransactionOperations(true);
+          const accept = <Request, Result>(
+            request: Request,
+            run: (snapshot: Request) => Promise<Result>,
+            read = false,
+          ): Promise<Result> => {
             // Capture before joining the queue: handlers still own their arguments.
             try {
               const snapshot = scoped ? snapshotScopedData(request) : structuredClone(request);
-              return operations.run(() => run(snapshot));
+              return read ? operations.read(() => run(snapshot)) : operations.run(() => run(snapshot));
             } catch (error) {
               return operations.run(async () => {
                 throw error;
@@ -738,15 +750,23 @@ async function executeUntraced(
           // retain identity, not potentially sensitive fields from the deleted row.
           const tx = Object.freeze<WriteTransaction>({
             query: (request) =>
-              accept(request, async (request) => {
-                checkCancelled();
-                return store.query(request);
-              }),
+              accept(
+                request,
+                async (request) => {
+                  checkCancelled();
+                  return store.query(request);
+                },
+                true,
+              ),
             count: (table, filter) =>
-              accept({ table, filter }, async ({ table, filter }) => {
-                checkCancelled();
-                return store.count(table, filter);
-              }),
+              accept(
+                { table, filter },
+                async ({ table, filter }) => {
+                  checkCancelled();
+                  return store.count(table, filter);
+                },
+                true,
+              ),
             insert: (request) =>
               accept(request, async (request) => {
                 checkCancelled();
@@ -773,19 +793,33 @@ async function executeUntraced(
               accept(request, async (request) => {
                 checkCancelled();
                 if (request.table === command.target) guardTarget(request.key);
-                // A machine's column moves along an edge of its graph, and its `since` with it.
-                request = await machineUpdate(authorized.machine, request, store, now(), authorized.catalog, authorized.timezone);
+                /* A machine's column moves along an edge of its graph, and its `since` with it. The audit's before image
+                   is read with the state, in its one read, where the machine reads one. */
+                let seen: QueryResult | undefined;
+                request = await machineUpdate(
+                  authorized.machine,
+                  request,
+                  store,
+                  now(),
+                  authorized.catalog,
+                  authorized.timezone,
+                  auditing ? Object.keys(request.values) : [],
+                  (found) => (seen = found),
+                );
                 request = bindMoments(authorized, request);
                 // The before image is the audit's; a command that keeps none does not read it.
-                const before = auditing
-                  ? await store.query({
-                      table: request.table,
-                      columns: Object.keys(request.values),
-                      limit: 2,
-                      offset: 0,
-                      filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
-                    })
-                  : undefined;
+                const audited = Object.keys(request.values);
+                const before = !auditing
+                  ? undefined
+                  : seen && seen.rows.every((row) => audited.every((column) => Object.hasOwn(row, column)))
+                    ? { rows: seen.rows.map((row) => Object.fromEntries(audited.map((column) => [column, row[column]]))) }
+                    : await store.query({
+                        table: request.table,
+                        columns: audited,
+                        limit: 2,
+                        offset: 0,
+                        filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
+                      });
                 let result: Awaited<ReturnType<WriteTransaction['update']>>;
                 try {
                   result = await store.update(request);
@@ -1631,6 +1665,9 @@ async function machineUpdate<
   now: Date,
   catalog: Catalog,
   timezone: string | undefined,
+  /** Columns the caller reads of the same row as it stands (an audit's before image): read with the state. */
+  also: readonly string[] = [],
+  read?: (found: QueryResult) => void,
 ): Promise<T> {
   const graph = machine?.tables.get(request.table);
   if (!graph || !Object.hasOwn(request.values, graph.column)) return request;
@@ -1641,13 +1678,14 @@ async function machineUpdate<
   );
   const found = await store.query({
     table: request.table,
-    columns: [graph.column, ...(graph.since ? [graph.since] : []), ...stamps],
+    columns: [...new Set([graph.column, ...(graph.since ? [graph.since] : []), ...stamps, ...also])],
     limit: 2,
     offset: 0,
     filter: {
       groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value: value as string | number }))],
     },
   });
+  read?.(found);
   if (found.rows.length !== 1) return request;
   const from = String(found.rows[0][graph.column]),
     to = String(request.values[graph.column]);

@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 const origin = process.env.STORYBOOK_URL || 'http://localhost:6006';
 const output = new URL('../.artifacts/', import.meta.url);
 const filter = process.env.STORYBOOK_FILTER || '';
-const looks = (process.env.STORYBOOK_LOOKS || 'lumen,sage').split(',');
+const looks = (process.env.STORYBOOK_LOOKS || 'workshop,lumen,sage').split(',');
 const response = await fetch(`${origin}/index.json`);
 assert(response.ok, `Storybook index returned ${response.status}`);
 const index = await response.json();

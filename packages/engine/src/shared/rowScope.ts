@@ -6,7 +6,8 @@
  */
 import { buildWhere, OPS, type Filter, type SqlFragment, type SqlStyle } from './filter.js';
 import { Refusal } from './refusal.js';
-import type { DatabaseSchema } from './schema.js';
+import { findTable, type DatabaseSchema } from './schema.js';
+import { isFixedScopeCatalog } from './scopeCatalog.js';
 import { qualifiedTable } from './sqlRelation.js';
 import { tryResolvePath } from './viewPaths.js';
 
@@ -85,13 +86,36 @@ export function captureRowScope(input: RowScope): RowScope {
   return scope as RowScope;
 }
 
+/* The scopes this module copied, froze and checked, each with the catalogs it
+   was checked against. A tenant read snapshotted one request's scope again at
+   every layer it crossed — composed, authorized, bound, and once more per
+   statement — each a full copy and a scan of the catalog for every resource:
+   a field report's profile put it among the largest costs of a page. A
+   snapshot is frozen all the way down and was made here, never by a caller,
+   so checking it again against the same catalog object could only pass and
+   copy it to an equal value: it is handed back as it is. A catalog that can
+   still change is checked afresh every time, as before; so is anything a
+   caller built, however frozen. */
+const snapshots = new WeakMap<object, WeakSet<DatabaseSchema>>();
+const checkedAgainst = (scope: object, schema: DatabaseSchema) => snapshots.get(scope)?.has(schema) === true;
+
+/** Test-only: how many row scopes were copied and checked in full rather than handed back. */
+export const rowScopeCounters = { checked: 0 };
+
+/** Whether `value` is a row scope snapshotRowScope made: plain data, frozen all the way down, that nothing can change. */
+export function isRowScopeSnapshot(value: unknown): boolean {
+  return value !== null && typeof value === 'object' && snapshots.has(value);
+}
+
 /** Capture can precede an async catalog load; catalog validation cannot. */
 export function snapshotRowScope(schema: DatabaseSchema, input: RowScope): RowScope {
+  if (input !== null && typeof input === 'object' && checkedAgainst(input, schema)) return input;
   const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+  rowScopeCounters.checked++;
   const scope = captureRowScope(input);
   let conditions = 0;
   for (const [id, policy] of Object.entries(scope)) {
-    const table = schema.tables.find((table) => table.id === id);
+    const table = findTable(schema, id);
     if (!table) return invalid();
     if (typeof policy === 'boolean') continue;
     if (
@@ -128,6 +152,12 @@ export function snapshotRowScope(schema: DatabaseSchema, input: RowScope): RowSc
       }
     }
   }
+  // Kept only against a catalog nothing can change; checked against one that can, it is checked again next time.
+  if (isFixedScopeCatalog(schema)) {
+    const against = snapshots.get(scope);
+    if (against) against.add(schema);
+    else snapshots.set(scope, new WeakSet([schema]));
+  }
   return scope as RowScope;
 }
 
@@ -160,6 +190,18 @@ function withoutRepeats(policy: RowScopeFilter): Filter {
   };
 }
 
+/* A catalog's table names, lower-cased: what a scoped relation's name must not
+   shadow. The same for every statement compiled over a catalog nothing can
+   change, so it is listed once for such a catalog, not once per statement. */
+const reservedOf = new WeakMap<DatabaseSchema, readonly string[]>();
+function reservedNames(schema: DatabaseSchema): readonly string[] {
+  const kept = reservedOf.get(schema);
+  if (kept) return kept;
+  const names = schema.tables.map((table) => table.name.toLowerCase());
+  if (isFixedScopeCatalog(schema)) reservedOf.set(schema, names);
+  return names;
+}
+
 /** Every occurrence of a resource reads the same filtered relation, including
  * LEFT JOIN targets and correlated aggregate children. CTE bindings precede
  * outer filters, independent of SQL SELECT/FROM expression order. Call finish
@@ -180,7 +222,7 @@ export class ScopedRelations {
     scope?: RowScope,
   ) {
     this.scope = scope === undefined ? undefined : snapshotRowScope(schema, scope);
-    this.reserved = new Set(schema.tables.map((table) => table.name.toLowerCase()));
+    this.reserved = new Set(reservedNames(schema));
   }
 
   table = (id: string): string => {
@@ -188,7 +230,7 @@ export class ScopedRelations {
     const existing = this.names.get(id);
     if (existing) return this.style.quote(existing);
     if (this.finished) throw new Error('Row scope relations must be planned before outer parameters.');
-    const table = this.schema.tables.find((table) => table.id === id);
+    const table = findTable(this.schema, id);
     if (!table || !table.columns.length) return invalid();
     // '$' cannot occur in JoinPlan's sanitized aliases; catalog names still
     // need a case-insensitive collision check to avoid CTE self-shadowing.
@@ -237,7 +279,7 @@ export class ScopedRelations {
     if (existing) return this.style.quote(existing);
     if (this.finished) throw new Error('Filtered relations must be planned before outer parameters.');
     const source = this.table(id);
-    const table = this.schema.tables.find((table) => table.id === id);
+    const table = findTable(this.schema, id);
     if (!table || !table.columns.length) return invalid();
     let name: string;
     do {

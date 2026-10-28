@@ -584,25 +584,70 @@ export interface TellRequest {
   message: string;
 }
 
-/** Drain accepted operations before commit/rollback, then refuse escaped handles. */
+/**
+ * Drain accepted operations before commit/rollback, then refuse escaped handles.
+ *
+ * Each operation starts once every operation asked before it has settled
+ * (`run`), so a handler's statements reach the database in the order it asked
+ * them. Reads asked together — a handler's `Promise.all` — waited on each
+ * other all the same, a round trip each, though nothing in one could change
+ * what another reads. On a transaction told its writer sends together
+ * (`together`, a pipelining PostgreSQL writer), a read (`read`) starts beside
+ * the reads still in flight, in the order asked, so they leave in one flight;
+ * it still waits for every write asked before it, and every write waits for
+ * every read before it. Only operations in flight together overlap: one
+ * awaited before the next is asked is answered before the next starts.
+ *
+ * What a caller hears is unchanged. Each operation settles in the order asked,
+ * after the ones before it, and the first failure in that order is every later
+ * operation's failure, whether the later one had started or not — a read that
+ * ran beside a failed one is answered with that failure, never its own rows —
+ * and finish() rethrows it. Elsewhere `read` is `run`.
+ */
 export class TransactionOperations {
   private active = true;
-  private operations = new Serial();
   private failure: { error: unknown } | undefined;
+  /** Settles once every operation asked so far has: where the next write starts, and where each one settles. */
+  private settled: Promise<unknown> = Promise.resolve();
+  /** Settles once the last operation that was not a read has: where a read starts, beside the reads after it. */
+  private written: Promise<unknown> = Promise.resolve();
+
+  constructor(private readonly together = false) {}
 
   run<T>(work: () => Promise<T>): Promise<T> {
+    return this.enqueue(work, false);
+  }
+
+  /** A read: it changes nothing another operation reads, so on a transaction that sends together it starts beside reads in flight. */
+  read<T>(work: () => Promise<T>): Promise<T> {
+    return this.enqueue(work, this.together);
+  }
+
+  private enqueue<T>(work: () => Promise<T>, beside: boolean): Promise<T> {
     if (!this.active) return Promise.reject(new Refusal('This transaction is no longer active.'));
-    const result = this.operations.run(async () => {
+    const before = this.settled;
+    const ran = (beside ? this.written : before).then(() => {
       // Some engine errors roll back the transaction themselves. Running a
       // later queued write (including a receipt) could then autocommit it.
       if (this.failure) throw this.failure.error;
-      try {
-        return await work();
-      } catch (error) {
-        this.failure = { error };
-        throw error;
-      }
+      return work();
     });
+    // Settled in the order asked: a failure before this one is this one's, and this one's is recorded only in its turn.
+    const result = ran.then(
+      (value) =>
+        before.then(() => {
+          if (this.failure) throw this.failure.error;
+          return value;
+        }),
+      (error: unknown) =>
+        before.then(() => {
+          if (this.failure) throw this.failure.error;
+          this.failure = { error };
+          throw error;
+        }),
+    );
+    this.settled = result.catch(() => {});
+    if (!beside) this.written = this.settled;
     // Fire-and-forget failures are still observed and rethrown by finish().
     void result.catch(() => {});
     return result;
@@ -610,7 +655,7 @@ export class TransactionOperations {
 
   async finish(): Promise<void> {
     this.active = false;
-    await this.operations.run(async () => {});
+    await this.settled;
     if (this.failure) throw this.failure.error;
   }
 }

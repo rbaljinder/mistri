@@ -510,13 +510,12 @@ function managerFixture(pooler: 'session' | 'transaction') {
         pools.push(this);
       }
     },
-    // What a pg_cancel_backend is sent from; counted, never connected anywhere.
+    /* What a pg_cancel_backend is sent from; never connected anywhere. The cancel is counted, not the Client: with
+       MISTRI_SERVER_TIMING=1 the round-trip probe (serverTiming.ts) dials one of its own for its SELECT 1s. */
     Client: class {
-      constructor() {
-        cancelClients += 1;
-      }
       async connect() {}
-      async query() {
+      async query(text: string) {
+        if (text.includes('pg_cancel_backend')) cancelClients += 1;
         return {};
       }
       async end() {}
@@ -613,4 +612,77 @@ test("a BEGIN with a prologue gets its settings before the prologue, and the pro
   const alone = await transactionScoped(raw, { role: 'write', capMs: 30_000, untrusted: false }).query('BEGIN');
   assert.equal(Array.isArray(alone), false);
   assert.equal(sent.at(-1), WRITE_BEGIN);
+});
+
+/* A pipelining client (node-postgres's `pipeline`, which the App's writers and
+   the authentication store use) sends what it is asked without waiting: a
+   statement's own transaction leaves with it, one round trip where three were
+   awaited in turn. Each part is answered on its own, as pg syncs each query. */
+function pipelined(fail?: RegExp) {
+  const sent: string[] = [];
+  let flights = 0,
+    waiting = false;
+  const raw: PgQuery = {
+    query: (async (request: string | { text: string }) => {
+      const text = typeof request === 'string' ? request : request.text;
+      sent.push(text);
+      // A flight is what leaves before anything is answered.
+      if (!waiting) {
+        waiting = true;
+        flights += 1;
+        setImmediate(() => {
+          waiting = false;
+        });
+      }
+      await tick();
+      if (fail?.test(text)) throw Object.assign(new Error(`refused: ${text}`), { code: 'XX000' });
+      const result = { rows: [{ text }], fields: [], rowCount: 1 };
+      return text.includes('; ') ? text.split('; ').map(() => result) : result;
+    }) as unknown as PgQuery['query'],
+  };
+  return { raw, sent, flights: () => flights };
+}
+
+test('on a pipelining client a lone statement leaves with its BEGIN and COMMIT in one flight', async () => {
+  for (const role of ['read', 'write'] as const) {
+    const { raw, sent, flights } = pipelined();
+    const client = transactionScoped(raw, { role, capMs: 30_000, untrusted: false, pipelines: true });
+    const answer = (await client.query('SELECT $1::int AS n', [1])) as unknown as PgResult<{ text: string }>;
+    assert.equal(answer.rows[0].text, 'SELECT $1::int AS n', 'the statement is what is answered');
+    assert.deepEqual(sent, [role === 'read' ? READ_BEGIN : WRITE_BEGIN, 'SELECT $1::int AS n', 'COMMIT']);
+    assert.equal(flights(), 1);
+  }
+  // Without the option, the three are awaited in turn, as before.
+  const { raw, flights } = pipelined();
+  await transactionScoped(raw, { role: 'write', capMs: 30_000, untrusted: false }).query('SELECT 1', []);
+  assert.equal(flights(), 3);
+});
+
+test('a pipelined statement that fails is the one thrown, and the COMMIT behind it ends the aborted transaction', async () => {
+  const failing = pipelined(/^UPDATE/);
+  const client = transactionScoped(failing.raw, { role: 'write', capMs: 30_000, untrusted: false, pipelines: true });
+  await assert.rejects(client.query('UPDATE t SET x = 1', []), /refused: UPDATE/);
+  // PostgreSQL answers a COMMIT in an aborted transaction by rolling it back; nothing else is sent.
+  assert.deepEqual(failing.sent, [WRITE_BEGIN, 'UPDATE t SET x = 1', 'COMMIT']);
+  // Settings that fail: the statement behind them was refused in the aborted transaction, and the setting is thrown.
+  const unset = pipelined(/^BEGIN/);
+  await assert.rejects(
+    transactionScoped(unset.raw, { role: 'write', capMs: 30_000, untrusted: false, pipelines: true }).query('SELECT 1', []),
+    /refused: BEGIN/,
+  );
+  assert.deepEqual(unset.sent, [WRITE_BEGIN, 'SELECT 1', 'COMMIT']);
+  // A COMMIT that fails is thrown, and the connection is not handed back mid-transaction.
+  const uncommitted = pipelined(/^COMMIT$/);
+  await assert.rejects(
+    transactionScoped(uncommitted.raw, { role: 'write', capMs: 30_000, untrusted: false, pipelines: true }).query('SELECT 1', []),
+    /refused: COMMIT/,
+  );
+  assert.deepEqual(uncommitted.sent, [WRITE_BEGIN, 'SELECT 1', 'COMMIT', 'ROLLBACK']);
+});
+
+test('an untrusted lease never pipelines its statement: the savepoint that fences it is awaited first', async () => {
+  const { raw, sent, flights } = pipelined();
+  await transactionScoped(raw, { role: 'read', capMs: 30_000, untrusted: true, pipelines: true }).query('SELECT 1', []);
+  assert.equal(sent[0], `${READ_BEGIN}; SAVEPOINT mistri_statement`);
+  assert.ok(flights() > 1);
 });

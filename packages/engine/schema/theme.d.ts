@@ -1,5 +1,5 @@
 /** Built-in structural styles. Custom themes inherit one without changing app layout. */
-export type ThemeBase = 'lumen' | 'mono' | 'sage';
+export type ThemeBase = 'workshop' | 'lumen' | 'mono' | 'sage';
 
 /**
  * One mode's colors as a compiled theme holds them: `ThemeColors` flattened, each
@@ -291,7 +291,7 @@ export type ThemeDensity = 'compact' | 'comfortable' | 'spacious';
  */
 export interface ThemeRecipes {
   /** The side menu's current entry and its rows. */
-  nav?: 'tint' | 'inverted' | 'wash' | 'underline' | 'pill' | 'quiet';
+  nav?: 'tint' | 'inverted' | 'wash' | 'underline' | 'pill' | 'quiet' | 'slot';
   /** The top bar and its search. */
   bar?: 'plain' | 'ruled' | 'dark' | 'airy' | 'soft';
   /** A record's tabs and the selected tab. */
@@ -313,7 +313,7 @@ export interface ThemeRecipes {
   /** A chart's areas and marks. */
   chart?: 'plain' | 'wash' | 'gradient' | 'line';
   /** The primary button. */
-  buttons?: 'accent' | 'raised';
+  buttons?: 'accent' | 'raised' | 'keyed';
   /** Links in text. */
   links?: 'plain' | 'underline';
   /** A page section's rule: in the ink, or a hairline. */
@@ -380,8 +380,8 @@ export interface ThemeColors {
       fill that is too bright to be text. `link` follows it when `link` is omitted. */
   accentInk?: string;
   /** A form's primary action — Continue, Submit, Add — as a fill: every command form, New form and stepper presses in
-      it. Omitted, the look's choice (Lumen's ink, so a form says "next" by weight rather than hue; Mono's and Sage's
-      accent), following the theme's own `ink` or `accent` where the look's was that color; the `accent` for a theme
+      it. Omitted, the look's choice (Lumen's ink, so a form says "next" by weight rather than hue; Workshop's, Mono's
+      and Sage's accent), following the theme's own `ink` or `accent` where the look's was that color; the `accent` for a theme
       that extends nothing. Name your accent or brand here to have forms press in it. */
   primary?: string;
   /** The words on `primary`; checked at 4.5:1 on it. Omitted, taken as `onAccent` is. Said only beside `primary`. */

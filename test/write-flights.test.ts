@@ -39,7 +39,9 @@ interface Budget {
  * shows statements sent behind its BEGIN and taken (`within` holds it to that), so a
  * write that falls back to one flight per statement fails here before it fails the budget.
  * Before the unscoped path sent ahead, they were tick 4, thread 6, compass 5, payday 3/12,
- * forecourt 1/10, depot 3/17 and commons 3/7.
+ * forecourt 1/10, depot 3/17 and commons 3/7. Before reads asked together left together, a held row
+ * was read whole once (`widen`) and history's read after an update rode behind it, they were
+ * payday 10, depot 15 and commons 4.
  */
 const BUDGETS: Record<string, { write: string; budget: Budget }> = {
   // 3: BEGIN with the row's lock and row behind it, the UPDATE, COMMIT.
@@ -48,18 +50,20 @@ const BUDGETS: Record<string, { write: string; budget: Budget }> = {
   thread: { write: 'update:markReady', budget: { execute: 3 } },
   // 4: BEGIN with lock and row, the UPDATE, the row read back, COMMIT.
   compass: { write: 'update:startWorking', budget: { execute: 4 } },
-  /* prepare 2: BEGIN with the row read behind it, COMMIT. execute 10: BEGIN with lock and row, then the handler's
-     reads and writes each awaited (the balance, the request), history's read after the write, the inbox notice's
-     recipient, the notice, COMMIT. */
-  payday: { write: 'approveTimeOff', budget: { prepare: 2, execute: 10 } },
-  /* prepare 1: a single read outside a transaction. execute 8 under the row policy: BEGIN with lock and scoped row,
-     the guarded read (asked in its turn), the UPDATE with its read back, the activity INSERT, its lock and its scoped
-     read, the parent's, COMMIT. */
-  forecourt: { write: 'closeInquiry', budget: { prepare: 1, execute: 8 } },
-  // prepare 2 / execute 15, for a pick list of one line (it grows with the lines: each is awaited).
-  depot: { write: 'pickList', budget: { prepare: 2, execute: 15 } },
-  // prepare 2 / execute 4: BEGIN with lock and row (which answers the guard), the UPDATE, history's read after it, history with COMMIT.
-  commons: { write: 'lockThread', budget: { prepare: 2, execute: 4 } },
+  /* prepare 2: BEGIN with the row read behind it, COMMIT. execute 7: BEGIN with lock and row, the handler's balance
+     read and its UPDATE (each awaited), the request read whole again once (the balance's write dropped what was kept;
+     its lock keeps it from moving, so that one read answers the machine and history's before image), the request's
+     UPDATE with history's read after it behind it, the inbox notice's recipient, the notice with COMMIT. */
+  payday: { write: 'approveTimeOff', budget: { prepare: 2, execute: 7 } },
+  /* prepare 1: a single read outside a transaction. execute 6 under the row policy: BEGIN with lock and scoped row,
+     the guarded read (asked in its turn), the UPDATE with its read back, the activity INSERT, then its lock, its
+     scoped read and its parent's lock and count sent together, COMMIT. */
+  forecourt: { write: 'closeInquiry', budget: { prepare: 1, execute: 6 } },
+  /* prepare 2 / execute 11, for a pick list of one line (it grows with the lines: each is awaited). The line's product
+     and its stock levels are asked together and leave in one flight; the list's UPDATE carries history's read after it. */
+  depot: { write: 'pickList', budget: { prepare: 2, execute: 11 } },
+  // prepare 2 / execute 3: BEGIN with lock and row (which answers the guard), the UPDATE with history's read after it behind it, history with COMMIT.
+  commons: { write: 'lockThread', budget: { prepare: 2, execute: 3 } },
   // Ignition is a tenant App (tenant store, membership fence): e2e/write-storm.spec.ts measures its Qualify lead save
   // (prepare 2 flights, execute 3), so it is not repeated here.
 };

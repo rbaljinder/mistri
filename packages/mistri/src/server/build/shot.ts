@@ -282,7 +282,7 @@ export function shotLooks(loaded: LoadedApp, asked: readonly string[], palette?:
 }
 
 /** The theme the App wears before a reader picks one. */
-const worn = (loaded: LoadedApp) => loaded.app.ui.theme?.preset ?? 'lumen';
+const worn = (loaded: LoadedApp) => loaded.app.ui.theme?.preset ?? 'workshop';
 
 /**
  * What the page reads to wear a look (client visualTheme.ts): a built-in look

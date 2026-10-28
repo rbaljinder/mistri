@@ -73,10 +73,15 @@ async function fixture(t: TestContext, dialect: 'sqlite' | 'postgres') {
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
   const origin = `http://127.0.0.1:${address.port}`;
-  const environment = ['BETTER_AUTH_SECRET', 'MISTRI_AUTH_ADMIN_EMAIL', 'MISTRI_AUTH_ADMIN_PASSWORD'].map(
+  const environment = ['BETTER_AUTH_SECRET', 'MISTRI_AUTH_ADMIN_EMAIL', 'MISTRI_AUTH_ADMIN_PASSWORD', 'MISTRI_AUTH_SESSION_CACHE'].map(
     (name) => [name, process.env[name]] as const,
   );
   process.env.BETTER_AUTH_SECRET = 'synthetic-sign-in-age-secret-at-least-thirty-two-characters';
+  /* These cases change the store over a connection of their own, as another
+     process would, and a PostgreSQL store's kept reads honor a change made
+     elsewhere only once they expire (authStoreReads.ts). Nothing is kept, so
+     every observation reads the row the case just changed. */
+  process.env.MISTRI_AUTH_SESSION_CACHE = '0';
   delete process.env.MISTRI_AUTH_ADMIN_EMAIL;
   delete process.env.MISTRI_AUTH_ADMIN_PASSWORD;
   try {

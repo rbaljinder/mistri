@@ -85,6 +85,13 @@ const provenByCommit = new WeakSet<object>();
 /** The request's last run answered from a committed transaction, which held the membership from BEGIN to COMMIT. */
 export const tenantAnswerProvenByCommit = (request: unknown): boolean =>
   request !== null && typeof request === 'object' && provenByCommit.has(request);
+/* The requests whose last run released an answer only after its release
+   fence passed: the session and the invocation guard, then the membership in
+   a snapshot of its own, after the last thing the answer read. */
+const provenByFence = new WeakSet<object>();
+/** The request's last run was fenced after everything its answer read: what a read's own release fence proves. */
+export const tenantAnswerProvenByFence = (request: unknown): boolean =>
+  request !== null && typeof request === 'object' && provenByFence.has(request);
 /* Refusals that are the membership's own: read afresh at admission, or met by
    the writer's fence before anything ran. Never an unknown outcome. */
 const refusedMembership = new WeakSet<object>();
@@ -182,6 +189,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
       });
       pending.add(held);
       provenByCommit.delete(request as object);
+      provenByFence.delete(request as object);
       let committed = false,
         accepting = true,
         attempted = false,
@@ -449,9 +457,11 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
              is told so, as admission told them, and never something about the
              record or the request. */
           proved = true;
+          let fencedAfter = false;
           if (failure ? !fenced && !committed : !(committed && !outside)) {
             try {
               await reader.assertCurrent(admitted);
+              fencedAfter = !failure;
             } catch (error) {
               const membership = evidenceRefused(error);
               /* Kept evidence it refuses, with nothing run inside a
@@ -475,6 +485,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
           }
           if (failure) throw failure.error;
           if (committed && !outside) provenByCommit.add(request as object);
+          if (fencedAfter) provenByFence.add(request as object);
           active();
           return result;
         }

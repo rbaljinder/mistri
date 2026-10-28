@@ -28,6 +28,7 @@ import {
 import type { ThemeDefinition } from '../../../engine/src/shared/theme.js';
 import type { ResolvedBranding } from '../../../mistri/src/shared/branding.js';
 import { THEME_PRESETS, themePreset } from '../../../engine/src/shared/themePresets.js';
+import { LOOK_PALETTES } from '../../../engine/src/shared/lookPalettes.js';
 
 const CUSTOM: ThemeDefinition = {
   id: 'custom',
@@ -103,27 +104,27 @@ test('flipping between an App and its Workbench tells the picker', () => {
   }
 });
 
-test('inside an App, Mono is the look when nobody picks one', () => {
+test('inside an App, Workshop is the look when nobody picks one', () => {
   app();
-  expect(DEFAULT_VISUAL_THEME).toBe('lumen');
-  expect(visualThemeChoice()).toBe('lumen');
-  expect(root()).toHaveAttribute('data-visual-theme', 'lumen');
-  expect(root()).toHaveAttribute('data-theme-style', 'lumen');
-  expect(visualThemeOverrides().font).toBe(themePreset('lumen')!.fonts!.data);
-  expect(validVisualTheme(null)).toBe('lumen');
+  expect(DEFAULT_VISUAL_THEME).toBe('workshop');
+  expect(visualThemeChoice()).toBe('workshop');
+  expect(root()).toHaveAttribute('data-visual-theme', 'workshop');
+  expect(root()).toHaveAttribute('data-theme-style', 'workshop');
+  expect(visualThemeOverrides().font).toBe(themePreset('workshop')!.fonts!.data);
+  expect(validVisualTheme(null)).toBe('workshop');
 });
 
 test("the picker offers the built-in looks, then the App's own themes", () => {
-  expect(visualThemeOptions().map((theme) => theme.value)).toEqual(['default', 'lumen', 'mono', 'sage']);
+  expect(visualThemeOptions().map((theme) => theme.value)).toEqual(['default', 'workshop', 'lumen', 'mono', 'sage']);
   app([CUSTOM]);
-  expect(visualThemeOptions().map((theme) => theme.value)).toEqual(['lumen', 'mono', 'sage', 'custom']);
+  expect(visualThemeOptions().map((theme) => theme.value)).toEqual(['workshop', 'lumen', 'mono', 'sage', 'custom']);
 });
 
-test("a retired or unknown stored theme falls back to the App's preset, then Mono", () => {
+test("a retired or unknown stored theme falls back to the App's preset, then Workshop", () => {
   window.localStorage.setItem(VISUAL_THEME_KEY, 'dispatch');
   initVisualTheme();
   app();
-  expect(visualThemeChoice()).toBe('lumen');
+  expect(visualThemeChoice()).toBe('workshop');
   app([], 'mono');
   expect(visualThemeChoice()).toBe('mono');
 });
@@ -144,12 +145,12 @@ test('a stored custom preference resolves after the registry loads and survives 
   window.localStorage.setItem(VISUAL_THEME_KEY, 'custom');
   initVisualTheme();
   app();
-  expect(visualThemeChoice()).toBe('lumen');
+  expect(visualThemeChoice()).toBe('workshop');
   app([CUSTOM]);
   expect(visualThemeChoice()).toBe('custom');
   expect(root()).toHaveAttribute('data-theme-style', 'lumen');
   app([]);
-  expect(visualThemeChoice()).toBe('lumen');
+  expect(visualThemeChoice()).toBe('workshop');
   expect(window.localStorage.getItem(VISUAL_THEME_KEY)).toBe('custom');
   app([CUSTOM]);
   expect(visualThemeChoice()).toBe('custom');
@@ -250,7 +251,7 @@ test('unavailable preference storage falls back at boot but still allows tab-loc
   vi.spyOn(window, 'localStorage', 'get').mockReturnValue({ getItem, setItem } as unknown as Storage);
   initVisualTheme();
   app();
-  expect(visualThemeChoice()).toBe('lumen');
+  expect(visualThemeChoice()).toBe('workshop');
   setVisualTheme('mono');
   expect(visualThemeChoice()).toBe('mono');
   expect(root()).toHaveAttribute('data-visual-theme', 'mono');
@@ -286,6 +287,17 @@ test('palette selection layers over the theme, retains both modes and leaves str
   expect(visualThemePalette(false).accent).toBe(CUSTOM.light.accent);
 });
 
+test.each(THEME_PRESETS)('$label offers the twelve palettes, its own colors under the one it names', (preset) => {
+  app([], preset.id);
+  // No separate Default: a built-in look's own colors are its default palette's.
+  expect(visualPaletteOptions().map((p) => p.value)).toEqual(LOOK_PALETTES.map((palette) => palette.id));
+  expect(visualPaletteChoice()).toBe(preset.defaultPalette);
+  expect(visualThemePalette(false)).toEqual(preset.light);
+  setVisualPalette('crimson');
+  expect(visualPaletteChoice()).toBe('crimson');
+  expect(visualThemePalette(false).accent).not.toBe(preset.light.accent);
+});
+
 test('palette preferences restore per App and theme; retired choices fall back safely', () => {
   configureVisualThemes([VARIANTS], 'custom', true, 'violet', 'one');
   expect(visualPaletteChoice()).toBe('violet');
@@ -297,8 +309,9 @@ test('palette preferences restore per App and theme; retired choices fall back s
   setVisualPalette('violet');
   configureVisualThemes([VARIANTS], 'custom', true, undefined, 'one');
   expect(visualPaletteChoice()).toBe('default');
+  // A built-in look's own colors are its default palette's, named: Mono's ink.
   setVisualTheme('mono');
-  expect(visualPaletteChoice()).toBe('default');
+  expect(visualPaletteChoice()).toBe('ink');
   setVisualTheme('custom');
   setVisualPalette('violet');
   configureVisualThemes([{ ...VARIANTS, palettes: VARIANTS.palettes!.slice(0, 1) }], 'custom', true, undefined, 'one');
@@ -346,7 +359,7 @@ test('Workbench palettes persist in a namespace separate from every App and them
   expect(visualThemeChoice()).toBe('lumen');
   expect(visualPaletteChoice()).toBe('teal');
   configureVisualThemes([], 'lumen', true, undefined, 'workbench');
-  expect(visualPaletteChoice()).toBe('default');
+  expect(visualPaletteChoice()).toBe('cobalt');
   setVisualPalette('violet');
   configureVisualThemes();
   expect(visualPaletteChoice()).toBe('teal');

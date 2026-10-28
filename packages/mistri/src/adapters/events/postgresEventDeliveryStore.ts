@@ -35,6 +35,7 @@ import type { PgQuery, PgWriteClientSource } from '@mistriwork/engine/adapters/p
 import { foldRelations, layoutTrust, type LayoutTrust } from '../commands/postgresRelations.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { COMMAND_EVENT_TABLES as eventTables } from './commandEventSchema.js';
+import { NOTIFY_COMMAND_EVENTS } from './postgresCommandEventWake.js';
 import type { CommandEventEnvelope } from './commandEventTypes.js';
 import type { EventDeliveryStore } from './eventDeliveryContract.js';
 import {
@@ -60,6 +61,7 @@ import {
   captureEventOperator,
   deliveryFail,
   deliveryInteger,
+  deliveryStanding,
   deliveryRefuse,
   deliveryText,
   EventDeliveryRefusal,
@@ -795,6 +797,24 @@ export async function openPostgresEventDeliveryStore(
         return Object.freeze(inspected);
       });
     },
+    /* One statement, no row verified: the host's readiness and its next wake read this (jobHost.ts). */
+    standing: (now) => {
+      deliveryInteger(now, 0, DELIVERY_MAX_CLOCK);
+      return transaction('read', undefined, async (client) => {
+        const [row] = await read(
+          client,
+          `WITH c AS (SELECT ${clock === 'caller' ? '$2::bigint' : 'floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint'} AS at)
+          SELECT c.at,
+            EXISTS (SELECT 1 FROM ${q(t.delivery)} WHERE destination_id = $1 AND state = 'failed') AS failed,
+            (SELECT min(next_at) FROM ${q(t.delivery)} WHERE destination_id = $1 AND state IN ('pending', 'retry', 'unknown')) AS waiting,
+            least((SELECT min(next_at) FROM ${q(t.delivery)} WHERE destination_id = $1 AND state IN ('pending', 'retry', 'unknown') AND next_at > c.at),
+              (SELECT min(lease_until) FROM ${q(t.delivery)} WHERE destination_id = $1 AND state = 'leased' AND lease_until > c.at)) AS next
+          FROM c`,
+          clock === 'caller' ? [destination, now] : [destination],
+        );
+        return deliveryStanding(row as Readonly<Record<string, unknown>> | undefined);
+      });
+    },
     attempts: async (eventId) => {
       if (typeof eventId !== 'string' || eventId.length !== 36) return deliveryFail();
       return transaction('read', undefined, async (client) =>
@@ -824,6 +844,8 @@ export async function openPostgresEventDeliveryStore(
         if (changed.rowCount !== 1) return deliveryFail();
         const after = (await rowOf(client, id))!;
         await verifyRow(client, after);
+        // Due again: a host anywhere hears it at commit (postgresCommandEventWake.ts).
+        await client.query(NOTIFY_COMMAND_EVENTS);
         return inspectDeliveryRow(after);
       });
     },
