@@ -32,7 +32,7 @@ import { readSqliteReadCatalog } from '@mistriwork/engine/adapters/scoped/sqlite
 import { assertScopeCatalog, captureScopeCatalog, mapScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import { snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { mapAppScopedReads } from '../app/appResources.js';
-import { captureTenantData, denyTenant, denyTenantFor, TenantContextError } from '@mistriwork/engine/server/evidence.js';
+import { captureTenantData, denyTenant, denyTenantFor, TenantContextError, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import {
   parseTenantSelector,
   type TenantMembershipEvidence,
@@ -122,6 +122,7 @@ import {
 import { readSqliteRecordActivity, readSqliteRecordHistory } from '../../adapters/history/sqliteRecordHistory.js';
 import { readPostgresRecordActivity, readPostgresRecordHistory } from '../../adapters/history/postgresRecordHistory.js';
 import { assertInboxQuery, type InboxQuery, type StoredNotice } from '../../adapters/inbox/inbox.js';
+
 import {
   assertBrandingLogoQuery,
   assertBrandingQuery,
@@ -132,8 +133,19 @@ import {
 } from '../../adapters/branding/branding.js';
 import { readSqliteBranding, readSqliteBrandingLogo } from '../../adapters/branding/sqliteBranding.js';
 import { readPostgresBranding, readPostgresBrandingLogo } from '../../adapters/branding/postgresBranding.js';
-import { readSqliteInbox } from '../../adapters/inbox/sqliteInbox.js';
-import { readPostgresInbox } from '../../adapters/inbox/postgresInbox.js';
+import { readSqliteInbox, sqliteInboxMail } from '../../adapters/inbox/sqliteInbox.js';
+import { postgresInboxMail, readPostgresInbox } from '../../adapters/inbox/postgresInbox.js';
+
+/** One person's email switch in one inbox: the same names an inbox read takes. */
+interface EmailSwitchQuery {
+  readonly app: string;
+  readonly recipient: string;
+}
+function assertEmailSwitchQuery(query: EmailSwitchQuery): void {
+  tenantRecord(query, ['app', 'recipient']);
+  if (typeof query.app !== 'string' || !query.app || typeof query.recipient !== 'string' || !query.recipient)
+    throw new Refusal('Invalid notification read.');
+}
 
 /** Private pinned source, not a public credential or session/deployment issuer. */
 /** A discovery's tenants, as a sandbox lookup takes them: tenant ids, at most a discovery's worth. */
@@ -245,6 +257,8 @@ export interface TenantReadSource {
   readRecordActivity(query: RecordActivityQuery): Promise<StoredRecordChange[]>;
   /** One person's notices in one inbox (tenantInbox.ts). Admits nobody: the caller names the lease's own inbox. */
   readInbox(query: InboxQuery): Promise<StoredNotice[]>;
+  /** Whether one person asked an inbox for no email: the outbox's switch, read on the reader (inboxMail.ts). */
+  readEmailOff(query: EmailSwitchQuery): Promise<boolean>;
   /** One tenant's saved branding in one App, or null (adapters/branding). */
   readBranding(query: BrandingQuery): Promise<StoredBranding | null>;
   /** One logo of an App by the hash of its bytes. */
@@ -791,6 +805,11 @@ export function openSqliteTenantReadSource(
         invoke(query, (value) => {
           assertInboxQuery(value);
           return readSqliteInbox(db, value);
+        }),
+      readEmailOff: (query: EmailSwitchQuery) =>
+        invoke(query, (value) => {
+          assertEmailSwitchQuery(value);
+          return sqliteInboxMail(async (work) => work(db)).emailOff(value.app, value.recipient);
         }),
       readBranding: (query: BrandingQuery) =>
         invoke(query, (value) => {
@@ -1674,6 +1693,11 @@ export async function openPostgresTenantReadSource(
         invoke(query, (value, lease) => {
           assertInboxQuery(value);
           return readPostgresInbox(lease.client, value);
+        }),
+      readEmailOff: (query: EmailSwitchQuery) =>
+        invoke(query, (value, lease) => {
+          assertEmailSwitchQuery(value);
+          return postgresInboxMail((work) => work(lease.client)).emailOff(value.app, value.recipient);
         }),
       readBranding: (query: BrandingQuery) =>
         invoke(query, (value, lease) => {

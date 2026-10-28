@@ -10,6 +10,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { WriteLanes } from '@mistriwork/engine/adapters/writeLanes.js';
+import { isPoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { renamedWriteAhead, withWriteAhead, writeAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 import { commandsOf } from '../stores/commandStores.js';
 import { SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
@@ -77,6 +78,16 @@ import { assertBrandingWrite, type BrandingWrite } from '../../adapters/branding
 const paused = (): never => {
   throw new TenantUnavailableError();
 };
+/* A write that failed before its verifier was entered pauses the writer: its
+   connection may be in a state no later write should meet. A checkout the pool
+   refused (poolMetrics.ts: its queue, or the database's connection limit with
+   no connection held to wait for) is the one such failure that leased
+   nothing, so nothing on any connection moved. Paused for it, the writer closed whenever
+   the write pool's queue ran two seconds long, and every write, inbox and live
+   stream of the deployment went with it until the reopen: one busy moment
+   became a minute of refusals (a field report, at twelve users on half a core).
+   It is answered as busy, a 503 to try again, and the writer stays open. */
+const refusedCheckout = (error: unknown): boolean => isPoolBusy(error);
 
 export { TenantIntakeMoved, TenantWriteFailure } from './tenantWriteKindContract.js';
 
@@ -115,8 +126,10 @@ function queuedInboxMail(
   const queued =
     <K extends keyof InboxMailStore>(name: K) =>
     (...args: Parameters<InboxMailStore[K]>): ReturnType<InboxMailStore[K]> => {
-      if (closed())
-        return Promise.reject(tenantWriteFailed('not_applied', new Error('The tenant writer is closed.'))) as ReturnType<InboxMailStore[K]>;
+      /* Unavailable, as `paused` says it: a plain closed-writer error beneath
+         the failure read as a denial, so a person's inbox answered 403 "The
+         tenant context could not be verified" while the writer reopened. */
+      if (closed()) return Promise.reject(tenantWriteFailed('not_applied', new TenantUnavailableError())) as ReturnType<InboxMailStore[K]>;
       const captured = captureTenantData(args) as Parameters<InboxMailStore[K]>;
       return run(() => (store()[name] as (...args: unknown[]) => Promise<unknown>)(...captured)) as ReturnType<InboxMailStore[K]>;
     };
@@ -547,7 +560,7 @@ export async function openSqliteTenantWriteSource(
           if (
             error instanceof TransactionOutcomeUnknown ||
             (error instanceof CommandTransactionFailure && error.outcome === 'unknown') ||
-            (attempted && !entered)
+            (attempted && !entered && !refusedCheckout(error))
           )
             life.pause(receipt);
           if (moved && !completed && kind.moved) throw kind.moved();
@@ -932,7 +945,7 @@ export async function openPostgresTenantWriteSource(
           if (
             error instanceof TransactionOutcomeUnknown ||
             (error instanceof CommandTransactionFailure && error.outcome === 'unknown') ||
-            (attempted && !entered)
+            (attempted && !entered && !refusedCheckout(error))
           )
             life.pause(receipt);
           if (moved && !completed && kind.moved) throw kind.moved();

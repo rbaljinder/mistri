@@ -111,6 +111,27 @@ test('a full pool refuses a checkout at its queue-wait budget, long before the d
   await connections.close();
 });
 
+/* A burst a pool works through well inside the wait is waited for, not refused: a page's boot has up to eight reads
+   in flight, and at eight queued per connection a field report saw two thirds of the tabs opened at one moment by 25
+   people turned away busy while the server's loop sat idle. */
+test('a burst the pool answers inside the wait is served, not refused for its size', async () => {
+  const { connections } = manager();
+  // Two readers, twelve pages opening at once with eight reads in flight each (a boot's fan-out, measured): a
+  // millisecond's work apiece, so the last is answered long before the wait runs out.
+  const reads = Array.from({ length: 12 * 8 }, () =>
+    connections.withReadClient(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return 'ran';
+    }),
+  );
+  const answers = await Promise.allSettled(reads);
+  assert.deepEqual(
+    answers.filter((answer) => answer.status === 'rejected').map((answer) => String((answer as PromiseRejectedResult).reason)),
+    [],
+  );
+  await connections.close();
+});
+
 test('a checkout past the queue bound is refused at once, and a late connection is given back', async () => {
   const { connections, pool } = manager({ queueWaitMs: 5_000, queuePerConnection: 1 });
   let release!: () => void;

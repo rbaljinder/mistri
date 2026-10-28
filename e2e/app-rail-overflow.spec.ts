@@ -124,3 +124,39 @@ test('a folded rail with a menu taller than the window leaves the page no taller
   }));
   expect(page_.scroll).toBeLessThanOrEqual(page_.inner);
 });
+
+/*
+ * The fold belongs to the desktop sidebar. The phone drawer's nav carries the
+ * `sidebar` class too, so a stored fold used to hide it and the drawer opened
+ * empty (with the rail it was also squeezed to 56px).
+ */
+test('a sidebar folded on the desktop never empties or narrows the phone menu drawer', async ({ page }) => {
+  const drawerShowsItems = async () => {
+    await page.locator('.tn-mobile-menu').click();
+    const nav = page.locator('#mobile-app-navigation');
+    await expect(nav).toBeVisible();
+    await expect(nav.locator('.mobile-nav-list button').first()).toBeVisible();
+    expect((await nav.boundingBox())!.width).toBeGreaterThan(150);
+    await page.locator('.mobile-nav-close').click();
+    await expect(nav).toBeHidden();
+  };
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${origin}/`);
+  await expect(page.locator('#table-list button').first()).toBeVisible();
+  await page.locator('.sidebar-footer > .sidebar-collapse').click();
+  await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
+
+  await page.setViewportSize({ width: 412, height: 800 });
+  await expect(page.locator('body')).toHaveClass(/app-mobile-nav/);
+  await drawerShowsItems();
+
+  await page.reload();
+  await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
+  await drawerShowsItems();
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.locator('body')).not.toHaveClass(/app-mobile-nav/);
+  await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
+  await expect(page.locator('.layout > .sidebar')).toBeVisible();
+  expect((await page.locator('.layout > .sidebar').boundingBox())!.width).toBeLessThan(80);
+});

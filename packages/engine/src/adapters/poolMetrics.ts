@@ -21,9 +21,16 @@ const SATURATION_MEMORY_MS = 60_000;
  * saturated server held every request for the driver's ten-second timeout and
  * then failed it as a 500: slow, and no better informed. Past either bound the
  * request is refused at once, as busy, and its client is told to come back.
+ *
+ * The count is about as many checkouts as a connection works through in that
+ * wait (a few tens of milliseconds each): past it, the wait would run out
+ * anyway. At eight, a burst a server answers well inside the wait was refused
+ * at once — a page's boot has up to eight reads in flight, and a field report saw
+ * two thirds of the tabs opened at one moment by 25 people turned away busy
+ * on a server with its loop idle. The wait is what bounds a slow server.
  */
 export const POOL_QUEUE_WAIT_MS = 2_000;
-export const POOL_QUEUE_PER_CONNECTION = 8;
+export const POOL_QUEUE_PER_CONNECTION = 64;
 
 /** What a person is told when the server is busy, and how soon to try again. */
 export const POOL_BUSY_MESSAGE = 'The server is busy; try again in a moment.';
@@ -31,15 +38,18 @@ export const POOL_BUSY_RETRY_AFTER_SECONDS = 1;
 
 /**
  * A checkout refused because the pool is full and its queue is too long or
- * has waited too long. Thrown before anything was leased, so no statement
+ * has waited too long, or because the database refused this process another
+ * connection and the pool held none to wait for (`connection_limit`, the
+ * refusal as its cause). Thrown before anything was leased, so no statement
  * ran: a read can be asked again and a write was never begun.
  */
 export class PoolBusy extends Error {
   constructor(
     readonly role: 'read' | 'write',
-    readonly why: 'queue_full' | 'queue_timeout',
+    readonly why: 'queue_full' | 'queue_timeout' | 'connection_limit',
+    cause?: unknown,
   ) {
-    super(POOL_BUSY_MESSAGE);
+    super(POOL_BUSY_MESSAGE, cause === undefined ? undefined : { cause });
     this.name = 'PoolBusy';
   }
 }

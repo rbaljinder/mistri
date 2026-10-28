@@ -473,12 +473,7 @@ export async function readInboxFor(
       ...(options.unread ? { unread: true } : {}),
     }),
     unreadOf(store, recipient, namespace),
-    appRulesEmail(options.app) && holdsMail(store)
-      ? store
-          .inboxMail()
-          .emailOff(namespace, recipient)
-          .then((off) => ({ email: !off }))
-      : {},
+    appRulesEmail(options.app) && emailSwitchOf(store) ? emailSwitchOf(store)!(namespace, recipient).then((off) => ({ email: !off })) : {},
   ]);
   const visible = await visibleTo(options.reader, options.schema, [...new Map([...rows, ...unread].map((row) => [row.id, row])).values()]);
   const notices = rows
@@ -531,6 +526,15 @@ export async function markInboxFor(options: InboxOptions & { ids?: unknown; all?
 
 const holdsMail = (adapter: unknown): adapter is { inboxMail(): InboxMailStore } =>
   typeof adapter === 'object' && adapter !== null && typeof (adapter as { inboxMail?: unknown }).inboxMail === 'function';
+/* How an inbox read asks for the email switch: on the store's reader where it
+   has one (a tenant deployment's), so the read needs no writer; otherwise
+   through its outbox. */
+function emailSwitchOf(store: unknown): ((app: string, recipient: string) => Promise<boolean>) | undefined {
+  const reads = (store as { readEmailOff?: unknown } | null)?.readEmailOff;
+  if (typeof reads === 'function')
+    return (app, recipient) => (reads as (app: string, recipient: string) => Promise<boolean>).call(store, app, recipient);
+  return holdsMail(store) ? (app, recipient) => store.inboxMail().emailOff(app, recipient) : undefined;
+}
 
 /**
  * Whether the reader's notices are emailed to them too, and turning that off

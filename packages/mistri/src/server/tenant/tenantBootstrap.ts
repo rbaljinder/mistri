@@ -1,6 +1,13 @@
 import { isPromise, isProxy } from 'node:util/types';
 import type { Identity } from '../auth/auth.js';
-import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
+import {
+  captureTenantData,
+  denyTenant,
+  denyTenantFor,
+  tenantIdentifier,
+  tenantOptions,
+  tenantRecord,
+} from '@mistriwork/engine/server/evidence.js';
 import type { TenantMembershipRecord } from './tenantMembership.js';
 import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
@@ -254,8 +261,11 @@ export function createTenantBootstrap<Request>(options: TenantBootstrapOptions<R
           memberships: barrier.map((record) => ({ tenantId: record.tenantId })),
           ...(platform ? { platform: true as const } : {}),
         });
-      } catch {
-        return denyTenant();
+      } catch (error) {
+        /* A read the database did not answer stays unavailable (503): said as a
+           denial, a busy pool turned new tabs away as if their person had lost
+           their tenants (a field report, at a step from 25 to 50 users). */
+        return denyTenantFor(error);
       } finally {
         pending.delete(held);
         finish();

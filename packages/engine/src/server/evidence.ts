@@ -16,7 +16,8 @@
  */
 import { isProxy, isUint8Array } from 'node:util/types';
 import { TransactionOutcomeUnknown } from '../adapters/adapter.js';
-import { Refusal, recordRefusalCause } from '../shared/refusal.js';
+import { PoolBusy } from '../adapters/poolMetrics.js';
+import { Refusal, recordRefusalCause, refusalCause } from '../shared/refusal.js';
 import type { DatabaseSchema } from '../shared/schema.js';
 import { isCapturedScopeCatalog } from '../shared/scopeCatalog.js';
 import { isRowScopeSnapshot } from '../shared/rowScope.js';
@@ -55,6 +56,12 @@ export function databaseFault(error: unknown): boolean {
   if (error instanceof TenantUnavailableError) return true;
   if (error instanceof TenantContextError || !(error instanceof Error)) return false;
   if (error instanceof TransactionOutcomeUnknown) return true;
+  /* A pool that would not lend a connection in time (poolMetrics.ts): nothing
+     was leased, so nothing was asked. Under load this is the commonest fault
+     there is, and answered as a denial it told a person their tenant context
+     was gone because the server was busy (a field report: 403s on reads at
+     twelve users on half a core). */
+  if (error instanceof PoolBusy) return true;
   // A check refused because the engine could not answer (the SQLite catalog
   // scan): the cause, one level deep and itself a raw driver error, decides.
   if (error instanceof Refusal) return !(error.cause instanceof Refusal) && databaseFault(error.cause);
@@ -88,10 +95,28 @@ export class TenantRequestFault extends Error {
   }
 }
 
+/**
+ * Whether the database not answering is what failed, under however many
+ * refusals and failures it was recorded: a tenant write's failure is
+ * value-free on purpose and keeps what failed beneath it, and a read that
+ * waited on that write (an inbox's mail) refuses with it as its cause. Read
+ * positively, as `databaseFault` is, and a denial anywhere on the way down
+ * stays a denial: it decided something, whatever lies beneath it.
+ */
+export function databaseUnanswered(error: unknown): boolean {
+  let at: unknown = error;
+  for (let depth = 0; at !== null && typeof at === 'object' && depth < 16; depth++) {
+    if (databaseFault(at)) return true;
+    if (at instanceof TenantContextError) return false;
+    at = refusalCause(at) ?? (at instanceof Error ? at.cause : undefined);
+  }
+  return false;
+}
+
 /** Deny, unless the cause is the database failing to answer: then the tenant
  * context is unavailable. Fails closed either way. */
 export const denyTenantFor = (cause: unknown): never => {
-  throw recordRefusalCause(databaseFault(cause) ? new TenantUnavailableError() : new TenantContextError(), cause);
+  throw recordRefusalCause(databaseUnanswered(cause) ? new TenantUnavailableError() : new TenantContextError(), cause);
 };
 
 /* What a capture produced, with what it cost: the nodes, characters and depth

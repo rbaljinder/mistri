@@ -6,6 +6,7 @@ import {
   assertScopeCatalog,
   captureScopeCatalog,
   mapScopeCatalog,
+  mapScopeCounters,
   scopeCatalogDifference,
 } from '../packages/engine/src/shared/scopeCatalog.js';
 import { withDeclaredDates } from '../packages/mistri/src/shared/declaredDates.js';
@@ -489,6 +490,41 @@ test('mapping rewrites exact identities and relationships, preserves pair order 
   assert.deepEqual(input, before);
   ids.set('child', 'changed');
   assert.equal(mapped.tables[1].id, 'archive.tickets');
+});
+
+test('a mapping of a captured catalog is made once and shared; one of caller data is made every time', () => {
+  const captured = captureScopeCatalog(schema());
+  const ids = () =>
+    new Map([
+      ['parent', 'people'],
+      ['child', 'tickets'],
+    ]);
+  const before = mapScopeCounters.mapped;
+  const first = mapScopeCatalog(captured, ids());
+  assert.equal(mapScopeCatalog(captured, ids()), first);
+  assert.equal(mapScopeCounters.mapped - before, 1);
+  // Another mapping of the same catalog is its own.
+  const other = mapScopeCatalog(
+    captured,
+    new Map([
+      ['parent', 'archive.people'],
+      ['child', 'archive.tickets'],
+    ]),
+  );
+  assert.notEqual(other, first);
+  assert.deepEqual(
+    other.tables.map((table) => table.id),
+    ['archive.people', 'archive.tickets'],
+  );
+  // A caller's catalog can change after it is mapped, so it is never kept.
+  const input = schema();
+  mapScopeCatalog(input, ids());
+  input.tables[0].columns.push(column('added'));
+  assert.ok(mapScopeCatalog(input, ids()).tables[0].columns.some((value) => value.name === 'added'));
+  assert.equal(mapScopeCounters.mapped - before, 4);
+  // A refused mapping is not kept as an answer.
+  assert.throws(() => mapScopeCatalog(captured, new Map([['missing', 'logical']])), Refusal);
+  assert.throws(() => mapScopeCatalog(captured, new Map([['missing', 'logical']])), Refusal);
 });
 
 test('mapping ignores unknown unrelated graphs but refuses either direction of a crossing FK or column reference', () => {

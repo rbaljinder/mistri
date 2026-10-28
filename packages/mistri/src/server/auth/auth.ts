@@ -59,6 +59,7 @@ import { registerNativeAccounts, registerSuiteAccountObservations } from './auth
 import {
   captureTenantData,
   denyTenant,
+  denyTenantFor,
   recordRefusalCause,
   tenantIdentifier,
   tenantOptions,
@@ -1147,8 +1148,12 @@ function registerAppAuthRuntime(
         if (observer.synchronous) observer.checkSession(proof);
         else await observer.checkSession(proof);
         assertCurrent();
-      } catch {
-        return denyTenant();
+      } catch (error) {
+        /* A store that did not answer (a pool that would not lend a
+           connection, a statement cancelled, a connection lost) decided
+           nothing about the session: still refused, but as unavailable,
+           which a tenant host answers 503 rather than as a lost context. */
+        return denyTenantFor(error);
       }
     },
     lookupAccountCurrent: async (accountId) => {
@@ -2053,8 +2058,9 @@ export async function createAppAuth(
             stepUps.providers.set(proof, evidence.provider);
           }
           return proof;
-        } catch {
-          return denyTenant();
+        } catch (error) {
+          // As `observeSession`: the store not answering is unavailable, never a denial of the session.
+          return denyTenantFor(error);
         }
       },
       // Nothing is signed in here, and nothing may become so.

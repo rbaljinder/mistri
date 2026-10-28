@@ -111,7 +111,11 @@ test('a step that finds nothing is refused with the step and the address, and no
   assert.deepEqual(said, []);
 });
 
-test('--matrix shoots every built-in look, light and dark, desk and phone, and indexes them', async (t) => {
+/* A matrix is four pictures a look, every built-in look and then the App's own: about 113 s on a CI runner since
+   Workshop made the built-in looks four, against the suite's 120 s for one test. */
+const MATRIX = { timeout: 300_000 };
+
+test('--matrix shoots every built-in look, light and dark, desk and phone, and indexes them', MATRIX, async (t) => {
   const { code, said, warned, out } = await shoot(t, '--matrix', '/tickets');
   assert.equal(code, 0, warned.join('\n'));
   const expected = THEME_PRESETS.flatMap((look) =>
@@ -124,7 +128,7 @@ test('--matrix shoots every built-in look, light and dark, desk and phone, and i
   for (const file of expected) assert.ok(index.includes(`src="${file}"`), `${file} is on the index`);
 });
 
-test("--matrix shoots the App's own theme as well as the built-in looks", async (t) => {
+test("--matrix shoots the App's own theme as well as the built-in looks", MATRIX, async (t) => {
   const { code, warned, out } = await shootWith(
     t,
     { customThemes: [{ kind: 'theme', id: 'harbor', label: 'Harbor', extends: 'sage' }], theme: { preset: 'harbor' } },

@@ -33,6 +33,8 @@ import { provisionPostgresLiveChange } from '../packages/mistri/src/adapters/liv
 import { defineAppTenantPolicy } from '../packages/mistri/src/server/policy/appTenantPolicy.js';
 import { createTenantEnrollment } from '../packages/mistri/src/server/tenant/tenantEnrollment.js';
 import { createTenantHttpServer } from '../packages/mistri/src/server/tenant/tenantHttp.js';
+import { tenantWriterReopen } from '../packages/mistri/src/server/tenant/tenantWriterLifecycle.js';
+import { pausedTenantWriters } from '../packages/mistri/src/server/tenant/tenantWriterHealth.js';
 import {
   createPostgresTenantAdministration,
   migratePostgresTenantStore,
@@ -275,7 +277,16 @@ async function start(t: TestContext, name: string, options: { through?: (url: st
     };
     return { status: response.status, events, until, stop: () => controller.abort() };
   };
-  return { appId, url: database.url, control, open, lease, list, rename, follow };
+  /** The live route's bare answer on a lease: its status and when it says to come back. */
+  const knock = async (lease: Lease) => {
+    const response = await fetch(`${origin}${select('/api/live', lease.tenantId)}`, {
+      headers: leaseHeaders(lease),
+      signal: AbortSignal.timeout(15_000),
+    });
+    await response.body?.cancel();
+    return { status: response.status, retryAfter: response.headers.get('retry-after') };
+  };
+  return { appId, url: database.url, control, open, lease, list, rename, follow, knock };
 }
 
 /** Asked again until it answers 200, for at most RECOVERY_MS: the bound on recovery every case holds. */
@@ -380,6 +391,46 @@ for (const pooler of ['session', 'transaction'] as const) {
   );
 }
 
+/* A field report: while a writer an uncertain write had closed was reopening,
+   its hub was gone and the live route answered 204, which a browser reads as
+   live sync off for the rest of the page load (729 such answers in four
+   minutes). The writer is back in a moment, and the route says so: 503, with
+   when to ask again, and the stream is answered again once it has reopened. */
+test(
+  'while a closed writer reopens, the live route says to come back, and the stream returns',
+  { skip: liveSkip('postgres', LIVE), timeout: 120_000 },
+  async (t) => {
+    const backoff = { ...tenantWriterReopen };
+    Object.assign(tenantWriterReopen, { firstMs: 1500, maxMs: 1500 });
+    t.after(() => Object.assign(tenantWriterReopen, backoff));
+    t.mock.method(console, 'error', () => {});
+    const f = await start(t, 'reopen');
+    const north = await f.lease('north');
+    const before = await f.follow(north);
+    assert.ok(await before.until('hello'));
+    // The writer's next checkout fails before its transaction is entered: it closes and reopens.
+    const proto = PgConnectionManager.prototype as unknown as { withClient(write: boolean, ...rest: unknown[]): Promise<unknown> };
+    const original = proto.withClient;
+    let cut = 0;
+    const fault = t.mock.method(proto, 'withClient', function (this: unknown, write: boolean, ...rest: unknown[]) {
+      if (write && cut === 0) {
+        cut++;
+        return Promise.reject(new Error('Connection terminated unexpectedly'));
+      }
+      return original.call(this, write, ...rest);
+    });
+    assert.equal((await f.rename(north, 'north-1', 'Printer fixed')).status, 503);
+    fault.mock.restore();
+    assert.deepEqual(pausedTenantWriters(), [`${f.appId}/business`]);
+    assert.deepEqual(await f.knock(north), { status: 503, retryAfter: '1' });
+    const deadline = Date.now() + RECOVERY_MS;
+    while (pausedTenantWriters().length && Date.now() < deadline) await delay(50);
+    const stream = await f.follow(north);
+    assert.equal(stream.status, 200);
+    assert.ok(await stream.until('hello'));
+  },
+);
+
 test(
   'every backend of the database terminated between requests: reads, writes, leases and the live stream come back',
   { skip: liveSkip('postgres', LIVE), timeout: 120_000 },
@@ -478,9 +529,9 @@ test(
 
     const again = await f.lease('north');
     assert.equal((await eventually(() => f.list(again))).status, 200);
-    // The live stream is the reopened writer's to bind again: until it has, live sync is off here (204).
+    // The live stream is the reopened writer's to bind again: until it has, the route says to come back (503).
     let fresh = await f.follow(again);
-    for (const deadline = Date.now() + RECOVERY_MS; fresh.status === 204 && Date.now() < deadline;) {
+    for (const deadline = Date.now() + RECOVERY_MS; fresh.status === 503 && Date.now() < deadline;) {
       await delay(100);
       fresh = await f.follow(again);
     }

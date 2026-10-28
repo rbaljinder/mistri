@@ -1087,6 +1087,45 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
     assert.ok(sent.take().length > 2);
   });
 
+  /* Slowness is never a refusal: an auth store that did not answer an
+     observation (a statement cancelled, a pool that would not lend a
+     connection) decided nothing about the session. Answered 403 "The tenant
+     context could not be verified", it told the browser its context was gone. */
+  test('an observation the auth store does not answer is unavailable (503), never a lost context', async (t) => {
+    const f = await fixture(t);
+    await f.grant(f.member);
+    const context = await f.open(f.member);
+    const specifier = 'pg';
+    const pg = (await import(specifier)) as { default?: { Client: { prototype: PgQuery } }; Client?: { prototype: PgQuery } };
+    const prototype = (pg.Client ?? pg.default!.Client).prototype as PgQuery & Record<string, unknown>;
+    const original = prototype.query;
+    let cancelled = 0;
+    prototype.query = function (this: unknown, request: unknown, ...rest: unknown[]) {
+      const text = typeof request === 'string' ? request : (request as { text?: string } | null)?.text;
+      // The observation's own read of the session row and its account (storeObserver.ts), not Better Auth's.
+      if (text?.includes('u.banned') && text.includes('JOIN')) {
+        cancelled++;
+        const error = Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014', severity: 'ERROR' });
+        // A pool asks with a callback, a client with a promise.
+        const callback = rest.at(-1);
+        if (typeof callback === 'function') return void queueMicrotask(() => callback(error));
+        return Promise.reject(error);
+      }
+      return (original as (...given: unknown[]) => unknown).call(this, request, ...rest);
+    } as PgQuery['query'];
+    t.after(() => {
+      prototype.query = original;
+    });
+    const reply = await f.data('/api/query', context, { table: 'item' });
+    prototype.query = original;
+    assert.ok(cancelled > 0, 'the observation reached the store');
+    refused(reply);
+    assert.equal(reply.status, 503, reply.text);
+    assert.equal(reply.body.code, 'tenant_temporarily_unavailable');
+    // The store answers again, and so does the context.
+    assert.equal((await f.data('/api/query', context, { table: 'item' })).status, 200);
+  });
+
   test('a sign-out in this process is refused at once, inside what was kept', async (t) => {
     const f = await fixture(t, { keptSessions: undefined });
     await f.grant(f.member);

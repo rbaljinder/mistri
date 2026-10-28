@@ -8,11 +8,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { test, type TestContext } from 'node:test';
+import { mock, test, type TestContext } from 'node:test';
 import { readSqliteReadCatalog } from '../packages/engine/src/adapters/scoped/sqliteScopeCatalog.js';
 import { captureTenantOwnership } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
 import { openSqliteTenantReadSource, type TenantReadSource } from '../packages/mistri/src/server/tenant/tenantReadSource.js';
-import { TenantContextError } from '../packages/engine/src/server/evidence.js';
+import { TenantContextError, TenantUnavailableError } from '../packages/engine/src/server/evidence.js';
 import { provisionSqliteTenantStore, TENANT_TABLES as tables } from '../packages/mistri/src/server/tenant/tenantStore.js';
 import { mapScopeCatalog } from '../packages/engine/src/shared/scopeCatalog.js';
 
@@ -388,6 +388,39 @@ test('source attestation failure never becomes an empty discovery result', async
   const service = createTenantBootstrap(options(f.open()));
   f.db.exec(`UPDATE "${tables.meta}" SET store_id='secret-other-store'`);
   await assert.rejects(service.read({}), safe);
+  await service.retire();
+});
+
+/* A membership read the database did not answer (a pool that would not lend a
+   connection in time, a busy file) is the server being busy, not the person's
+   context being gone: discovery said 403 "could not be verified" for it, and a
+   loaded server turned new tabs away (a field report: tenant/enter at a step
+   from 25 to 50 users). It is unavailable, and still answers nothing. */
+test('a membership read the database did not answer is unavailable, never a denial', async (t) => {
+  const f = fixture(t);
+  f.add('north');
+  const service = createTenantBootstrap(options(f.open()));
+  const prepare = DatabaseSync.prototype.prepare;
+  const busy = mock.method(DatabaseSync.prototype, 'prepare', function (this: DatabaseSync, sql: string) {
+    if (sql.includes(`JOIN main."${tables.membership}"`))
+      throw Object.assign(new Error('database is locked'), { code: 'ERR_SQLITE_ERROR' });
+    return prepare.call(this, sql);
+  });
+  try {
+    await assert.rejects(service.read({}), (error) => {
+      assert.ok(error instanceof TenantUnavailableError);
+      assert.equal('cause' in error, false);
+      return true;
+    });
+  } finally {
+    busy.mock.restore();
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(await service.read({}))), {
+    status: 'ready',
+    appId: 'app',
+    accountId: 'alice',
+    memberships: [{ tenantId: 'north' }],
+  });
   await service.retire();
 });
 

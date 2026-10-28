@@ -4,6 +4,7 @@ import type { IncomingMessage } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { isPromise, isProxy } from 'node:util/types';
+import { isPoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { Serial, TransactionOutcomeUnknown, type TransactionOperations } from '@mistriwork/engine/adapters/adapter.js';
 import { PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
@@ -1901,7 +1902,8 @@ async function openAdministration(
           live();
           return captureTenantData(returned);
         } catch (error) {
-          if (error instanceof TransactionOutcomeUnknown || (attempted && !entered)) uncertain();
+          // A checkout the pool refused leased nothing: busy, not uncertain (tenantWriteSource.ts says why).
+          if (error instanceof TransactionOutcomeUnknown || (attempted && !entered && !isPoolBusy(error))) uncertain();
           throw new TenantAdministrationFailure(completed || error instanceof TransactionOutcomeUnknown ? 'unknown' : 'not_applied');
         }
       };

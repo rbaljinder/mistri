@@ -5,15 +5,15 @@ SQLite users do not need the PostgreSQL driver.
 
 Each configured PostgreSQL database opens up to three pools lazily, on first use:
 
-| Setting | Readers | Writers | Background writer |
-| --- | --- | --- | --- |
-| Maximum connections | The database browser 4, an App as many as its writers, by default; `pool.read` or `--read-pool`, 1 to 64 | An App: twice the cores, 4 to 16, by default; `pool.write` or `--write-pool`, 1 to 64. The database browser: 1 | 1 |
-| Queue wait | 2 seconds, 8 queued per connection | 2 seconds, 8 queued per connection | — |
-| Connect/acquisition timeout | 10 seconds | 10 seconds | 10 seconds |
-| Idle expiry | 30 seconds | 30 seconds | 30 seconds |
-| Statement timeout | 30 seconds | 30 seconds | 30 seconds |
-| Lock timeout | — | 5 seconds; `--lock-timeout` | 5 seconds |
-| Default transaction read-only | On | Database default | Database default |
+| Setting                       | Readers                                                                                                  | Writers                                                                                                        | Background writer |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Maximum connections           | The database browser 4, an App as many as its writers, by default; `pool.read` or `--read-pool`, 1 to 64 | An App: twice the cores, 4 to 16, by default; `pool.write` or `--write-pool`, 1 to 64. The database browser: 1 | 1                 |
+| Queue wait                    | 2 seconds, 64 queued per connection                                                                      | 2 seconds, 64 queued per connection                                                                            | —                 |
+| Connect/acquisition timeout   | 10 seconds                                                                                               | 10 seconds                                                                                                     | 10 seconds        |
+| Idle expiry                   | 30 seconds                                                                                               | 30 seconds                                                                                                     | 30 seconds        |
+| Statement timeout             | 30 seconds                                                                                               | 30 seconds                                                                                                     | 30 seconds        |
+| Lock timeout                  | —                                                                                                        | 5 seconds; `--lock-timeout`                                                                                    | 5 seconds         |
+| Default transaction read-only | On                                                                                                       | Database default                                                                                               | Database default  |
 
 The last three rows are set once per physical connection, or per transaction
 behind a [transaction-mode pooler](../site/src/content/docs/docs/performance.md#behind-a-transaction-mode-pooler).
@@ -26,7 +26,7 @@ concurrent calls inside a transaction are serialized on that transaction's
 client. The order writes run in is the next section's.
 
 A checkout that finds every connection leased queues, but not for long: past
-two seconds, or past eight waiting per connection, it is refused with `PoolBusy`
+two seconds, or past sixty-four waiting per connection, it is refused with `PoolBusy`
 (`packages/engine/src/adapters/poolMetrics.ts`) rather than held for the ten-second driver
 timeout and failed as a 500. The HTTP layer answers it 503 with `Retry-After: 1`
 and the code `server_busy`. Nothing was leased, so nothing ran: a write says
@@ -119,7 +119,7 @@ and orders its writes by record instead of all at once:
 
 - A write that names one record — an `update` or `remove` by its key, an App
   save of a record — waits only for earlier writes of that record (its table
-  and primary key, the values as text), and waits in its lane *without* a
+  and primary key, the values as text), and waits in its lane _without_ a
   connection. Two saves of one record commit in the order they arrived; saves
   of different records run side by side, each on a writer of its own.
 - A write whose rows are known only inside it — a command, a row-policy or
@@ -197,6 +197,25 @@ about sixteen a second and four make about sixty, where the one queue made
 about six. This holds through PgBouncer in transaction mode, which is why a
 small `max_connections` is enough.
 `scripts/write-throughput.mjs` measures it.
+
+**A tenant App holds several of those per process.** `read + write + 1` is one
+connection manager's. A tenant App on one PostgreSQL source has a request
+reader and a membership reader (`read` each), the tenant writer (`write`, a
+reader for record history, the background writer), the administration and
+support writers (`write` each), and with them configured the jobs host (`write`
+and a background writer), the email outbox and the integrations store (`write`
+each), the assistant (one) and two `LISTEN` connections, besides
+`MISTRI_AUTH_POOL` for a `postgres://` sign-in store: at most
+`3 × read + 6 × write + 5 + auth`. Pools open as they are used and writers
+close after 30 idle seconds, so far fewer are held: measured at 6/5/3 with
+four people, 16 idle and 22 at the peak, the growth almost all in the two
+readers and the auth store. When the database refuses another connection
+(53300, "too many connections for role"), the pool goes on with the
+connections it holds and a checkout waits for one of them; holding none, it is
+answered busy (503).
+The log says `connection limit reached: the app write pool holds N of M`, once
+in 30 seconds. Size the pools so the peak stays under the role's limit, or put
+a pooler in front.
 
 Point the App at a pooler's port (PlanetScale's is 6432, with `--pooler
 transaction`) and keep migrations and `pg_dump` on the direct port 5432; see
@@ -556,12 +575,12 @@ administration writer.
   snapshot read; the held row locks make that reread redundant here.
 - **Where the fence is taken:**
 
-  | Operation | Pins | Fence |
-  | --- | --- | --- |
-  | Read, count, view, breakdown, membership check, discovery | mapped tables `ACCESS SHARE`, one read-only snapshot | unlocked reread of tenant and membership in that snapshot |
-  | Generic write, record history and Undo | writable scope tables `ROW EXCLUSIVE`, other mapped tables `ACCESS SHARE` | tenant row, then membership row, `FOR SHARE` before the callback, held to COMMIT |
-  | Business command | as a write | the same, with receipt and audit on the same writer |
-  | Administration | none on the stores | tenant row, then membership row, `FOR UPDATE`, read before the change so the audit's before-image is what is changed |
+  | Operation                                                 | Pins                                                                      | Fence                                                                                                                |
+  | --------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+  | Read, count, view, breakdown, membership check, discovery | mapped tables `ACCESS SHARE`, one read-only snapshot                      | unlocked reread of tenant and membership in that snapshot                                                            |
+  | Generic write, record history and Undo                    | writable scope tables `ROW EXCLUSIVE`, other mapped tables `ACCESS SHARE` | tenant row, then membership row, `FOR SHARE` before the callback, held to COMMIT                                     |
+  | Business command                                          | as a write                                                                | the same, with receipt and audit on the same writer                                                                  |
+  | Administration                                            | none on the stores                                                        | tenant row, then membership row, `FOR UPDATE`, read before the change so the audit's before-image is what is changed |
 
 - **Outcomes.** As the adapter's: a failure after COMMIT was sent, or an
   unacknowledged ROLLBACK, is `unknown` and closes the writer rather than
@@ -651,7 +670,7 @@ it. Nothing else in the manifest changes.
   say so, each with the file rule's error (`Authentication storage must
   remain separate from the captured business database and its SQLite
   sidecars.`) unless noted, and a SQLite connection is never a collision:
-  - *Before anything is opened,* each URL is read the way the driver reads
+  - _Before anything is opened,_ each URL is read the way the driver reads
     it — pg-connection-string, so `?host=` and `?port=` override the
     authority, with pg's defaults and `PGHOST`, `PGPORT`, `PGDATABASE` and
     `PGUSER` filling what the URL leaves out — and a store reaching the same
@@ -662,7 +681,7 @@ it. Nothing else in the manifest changes.
     addresses) is one host, and case, trailing dots and IPv4/IPv6 spellings
     are canonicalised. The password and role are not compared, and `${VAR}`
     references on a connection are expanded first.
-  - *Once the store is open,* every configured PostgreSQL connection is
+  - _Once the store is open,_ every configured PostgreSQL connection is
     dialled as the registry dials it and asked for its server's identity —
     `system_identifier` from `pg_control_system()`, executable by `PUBLIC`
     on a stock server — and its `current_database()`. The same server and
@@ -671,7 +690,7 @@ it. Nothing else in the manifest changes.
     leaves it unknown, and unknown is treated as the same server, so a
     matching database name refuses. (A streaming replica shares its
     primary's identity, which is right: it serves the same data.)
-  - *In depth,* a connection whose role has `USAGE` on a `mistri`
+  - _In depth,_ a connection whose role has `USAGE` on a `mistri`
     schema on the store's server, in any database, is refused
     (`… connection "name" can use a "mistri" schema on the
     authentication store's PostgreSQL server …`). The standalone browser's
@@ -698,6 +717,7 @@ it. Nothing else in the manifest changes.
   a PostgreSQL business source work with either native auth-store engine; on a
   SQLite source they need the file store, whose final invitation verifier is
   synchronous, and startup refuses the pair.
+
 - **Sessions and restart.** A session is a row, not process state: a server
   restart, or a second instance on the same store, sees every session the
   first issued, and a sign-out on one is a sign-out on all. The startup log

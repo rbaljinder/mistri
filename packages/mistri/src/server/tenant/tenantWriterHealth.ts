@@ -18,3 +18,9 @@ export function markTenantWriterPaused(key: object, name: string): () => void {
 export function pausedTenantWriters(): readonly string[] {
   return [...paused.values()];
 }
+
+/** Whether the writer named `app/source` is closed and reopening: what it refuses meanwhile is unavailable, not off. */
+export function tenantWriterPaused(name: string): boolean {
+  for (const value of paused.values()) if (value === name) return true;
+  return false;
+}

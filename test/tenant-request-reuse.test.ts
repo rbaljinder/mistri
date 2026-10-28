@@ -29,6 +29,7 @@ import { createSqliteTenantAdministration, provisionSqliteTenantStore } from '..
 import { openSqliteTenantWriteSource } from '../packages/mistri/src/server/tenant/tenantWriteSource.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import { scopeCatalogCounters } from '../packages/engine/src/shared/scopeCatalog.js';
+import { accessCounters } from '../packages/mistri/src/server/tenant/tenantAccess.js';
 import type { ViewDef } from '../packages/engine/src/shared/view.js';
 import { parseTestApp } from './support/commandCatalog.js';
 
@@ -49,6 +50,8 @@ const counters = () => ({
   pruned: pruneCounters.pruned,
   catalogs: scopeCatalogCounters.captured,
   copied: captureCounters.copied,
+  access: accessCounters.resolved,
+  accessAsked: accessCounters.asked,
 });
 const since = (before: ReturnType<typeof counters>) => {
   const after = counters();
@@ -335,9 +338,12 @@ test('a burst of forty reads, an availability check and a prepare for one member
       ownership: burst.ownership,
       capabilities: burst.capabilities,
       pruned: burst.pruned,
+      access: burst.access,
     },
-    { ownership: 0, capabilities: 0, pruned: 0 },
+    { ownership: 0, capabilities: 0, pruned: 0, access: 0 },
   );
+  // The availability check and the prepare each asked what their roles may do, and were answered from what was kept.
+  assert.ok(burst.accessAsked >= 2, `${burst.accessAsked} access answers asked for`);
   /* What is still captured is the database's own catalog, read back in each
      snapshot and judged against the deployed one (three captures each), and
      once in the prepare's write transaction: never a catalog derived again. */

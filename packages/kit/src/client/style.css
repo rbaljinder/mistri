@@ -706,7 +706,9 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
    window the button is pinned to. */
 .sidebar-reveal:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
 
-body.sidebar-hidden .sidebar { display: none; }
+/* The fold is the desktop sidebar's. The phone drawer's nav carries `.sidebar`
+   too, and the stored fold must never empty it. */
+body.sidebar-hidden .sidebar:not(.mobile-nav-sidebar) { display: none; }
 body.sidebar-hidden .sidebar-reveal { display: inline-flex; }
 .sidebar-reveal-label { display: none; }
 
@@ -723,7 +725,7 @@ body.sidebar-hidden .sidebar-reveal { display: inline-flex; }
    its entries' marks instead of hiding it. The words stay in the tree,
    visually hidden, as each button's accessible name; a hovered mark says it
    (its title). Group headings become rules between runs of marks. */
-body.app-nav-rail.sidebar-hidden .sidebar { display: flex; width: 56px; }
+body.app-nav-rail.sidebar-hidden .sidebar:not(.mobile-nav-sidebar) { display: flex; width: 56px; }
 body.app-nav-rail.sidebar-hidden .sidebar-reveal { display: none; }
 body.app-nav-rail.sidebar-hidden #table-filter { display: none; }
 body.app-nav-rail.sidebar-hidden .sidebar-filter-row { justify-content: center; margin: var(--space-3) 0; }

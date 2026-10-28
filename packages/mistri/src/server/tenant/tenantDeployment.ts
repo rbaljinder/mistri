@@ -520,6 +520,11 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
       inbox: Object.freeze({
         inboxReady: async () => true,
         readInbox: (query: InboxQuery) => reader.readInbox(query),
+        /* The switch an inbox read shows, on the reader: asked through the
+           outbox, every inbox read took a write connection behind the
+           writer's transactions (a field report: four in ten of the write
+           pool's checkouts under load were this one SELECT). */
+        readEmailOff: (app: string, recipient: string) => reader.readEmailOff({ app, recipient }),
         markInboxRead: (mark: InboxMark) => writer.markInboxRead(mark),
         /* The outbox beside it and each inbox's email switch, for the host's
            sender (tenantNoticeMail.ts) and a person's own switch on their lease. */

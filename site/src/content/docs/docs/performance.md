@@ -15,7 +15,7 @@ Size PostgreSQL pools for a deployment, read the meters when it is slow, and run
 
 - At most `read + write + 1` connections per process to each PostgreSQL database, opened when first needed; idle ones close after 30 seconds.
 - A write that waits more than five seconds for a lock is refused with nothing applied: 503, `Retry-After: 1`, code `row_locked`.
-- A request that finds every reader or writer busy queues for at most two seconds, and at most eight per connection may queue. Past either it is refused at once: 503, `Retry-After: 1`, code `server_busy`, with nothing run (a write says `not_applied`). The page asks a busy read again a few times and shows a write's refusal.
+- A request that finds every reader or writer busy queues for at most two seconds, and at most sixty-four per connection may queue. Past either it is refused at once: 503, `Retry-After: 1`, code `server_busy`, with nothing run (a write says `not_applied`). The page asks a busy read again a few times and shows a write's refusal.
 - Readiness reports `pool_saturated` while a checkout queues; the support bundle's [capacity section](/docs/observe/#the-capacity-section) says why.
 
 ## When to use it
@@ -26,14 +26,14 @@ Size PostgreSQL pools for a deployment, read the meters when it is slow, and run
 
 ## PostgreSQL pools
 
-| Setting | Readers | Writers | Background writer |
-| --- | --- | --- | --- |
-| Connections | The database browser: 4; an App: as many as its writers; `pool.read` or `--read-pool`, 1 to 64 | An App: twice the cores, 4 to 16; `pool.write` or `--write-pool`, 1 to 64. The database browser: 1 | 1 |
-| Queue wait (then 503 `server_busy`) | 2 s; 8 queued per connection | 2 s; 8 queued per connection | — |
-| Acquisition timeout | 10 s | 10 s | 10 s |
-| Statement timeout | 30 s | 30 s | 30 s |
-| Lock timeout | — | 5 s; `--lock-timeout` (0.1 to 30) | 5 s |
-| Read-only | Yes | Database default | Database default |
+| Setting                             | Readers                                                                                        | Writers                                                                                            | Background writer |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------- |
+| Connections                         | The database browser: 4; an App: as many as its writers; `pool.read` or `--read-pool`, 1 to 64 | An App: twice the cores, 4 to 16; `pool.write` or `--write-pool`, 1 to 64. The database browser: 1 | 1                 |
+| Queue wait (then 503 `server_busy`) | 2 s; 64 queued per connection                                                                  | 2 s; 64 queued per connection                                                                      | —                 |
+| Acquisition timeout                 | 10 s                                                                                           | 10 s                                                                                               | 10 s              |
+| Statement timeout                   | 30 s                                                                                           | 30 s                                                                                               | 30 s              |
+| Lock timeout                        | —                                                                                              | 5 s; `--lock-timeout` (0.1 to 30)                                                                  | 5 s               |
+| Read-only                           | Yes                                                                                            | Database default                                                                                   | Database default  |
 
 Writes exist only on a `"writable": true` connection. An App's writer pool commits two saves of one record in arrival order and saves of different records side by side; a save over a row someone changed since is refused. A job's command writes through the background writer. The database browser keeps one writer.
 
@@ -49,18 +49,18 @@ Across a deployment:
 
     pods × databases × (read + write + 1)
 
-plus up to 4 for a `postgres://` sign-in store (`MISTRI_AUTH_POOL`, 1 to 64), 2 for `--jobs` on PostgreSQL, and short-lived ones for startup checks and query cancels. Ten pods at `"read": 16` is 210 connections, past a stock `max_connections` of 100. Fewer writers per pod (`--write-pool 2`) is the first lever; a pooler is the second.
+plus up to 4 for a `postgres://` sign-in store (`MISTRI_AUTH_POOL`, 1 to 64), 2 for `--jobs` on PostgreSQL, and short-lived ones for startup checks and query cancels. A tenant App keeps several pools per database (its readers, writers, jobs, outbox and integrations), at most `3 × read + 6 × write + 5` per pod, though it holds far fewer: pools open as they are used. A pool the database refuses another connection goes on with the ones it holds, and the log says `connection limit reached`. Ten pods at `"read": 16` is 210 connections, past a stock `max_connections` of 100. Fewer writers per pod (`--write-pool 2`) is the first lever; a pooler is the second.
 
 A writer makes about `1000 / transaction_ms` saves a second (at 20 ms and a three-trip save, about sixty for the default four); a reader serves about `1000 / hold_ms` reads. Past a few thousand a second the event loop is the limit: add pods.
 
 ### Reading the pool meters
 
-| What the meters show | What to do |
-| --- | --- |
-| `waiting` above zero, holds short, event loop idle | The pool is the limit: raise `pool.read` |
-| Checkouts queued behind long holds | The database is slow: look at the statements in the [observer](/docs/observe/) |
-| Pools calm, event loop busy | The process is the limit: add pods |
-| `timedOut` rising | Checkouts gave up after 10 seconds |
+| What the meters show                               | What to do                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `waiting` above zero, holds short, event loop idle | The pool is the limit: raise `pool.read`                                       |
+| Checkouts queued behind long holds                 | The database is slow: look at the statements in the [observer](/docs/observe/) |
+| Pools calm, event loop busy                        | The process is the limit: add pods                                             |
+| `timedOut` rising                                  | Checkouts gave up after 10 seconds                                             |
 
 ### One request's time
 
@@ -69,19 +69,22 @@ A writer makes about `1000 / transaction_ms` saves a second (at 20 ms and a thre
 ## Read replicas
 
 ```json title="mistri.json"
-{ "connections": [{ "name": "app", "url": "${DATABASE_URL}", "writable": true,
-    "replicas": ["${REPLICA_1_URL}", "postgres://app@replica-2/app"] }] }
+{
+  "connections": [
+    { "name": "app", "url": "${DATABASE_URL}", "writable": true, "replicas": ["${REPLICA_1_URL}", "postgres://app@replica-2/app"] }
+  ]
+}
 ```
 
 A connection's `replicas` are copies of its database, PostgreSQL or MySQL (SQLite is refused), resolved like `url`. Each gets a reader pool the size of the primary's, opened on first use.
 
-| Read | Where |
-| --- | --- |
-| A list's rows and counts, the Workbench grid, a dashboard's charts and breakdowns, search, an export | A replica, in turn |
-| A record's own row, a record page and its related lists | The primary |
-| Writes, commands, imports, raw SQL, the catalog, history, the inbox, sign-in, MCP tools | The primary |
-| Anything from a browser in the 10 seconds after it wrote | The primary |
-| A tenant App's lists, counts and breakdowns | A replica, under the same membership and row scope |
+| Read                                                                                                 | Where                                              |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| A list's rows and counts, the Workbench grid, a dashboard's charts and breakdowns, search, an export | A replica, in turn                                 |
+| A record's own row, a record page and its related lists                                              | The primary                                        |
+| Writes, commands, imports, raw SQL, the catalog, history, the inbox, sign-in, MCP tools              | The primary                                        |
+| Anything from a browser in the 10 seconds after it wrote                                             | The primary                                        |
+| A tenant App's lists, counts and breakdowns                                                          | A replica, under the same membership and row scope |
 
 Row policies are compiled into each statement, so a replica answers the same rows the primary would. Replica sessions are read-only. A replica that refuses or drops a connection is skipped for 30 seconds and its read runs again on the primary; a bad filter is not run twice. A write sets a `mistri_fresh` cookie for 10 seconds (HttpOnly, SameSite=Lax, on the App's base path), and a request that carries it reads the primary, whichever pod answers. A caller with a bearer token has no cookies, so its writes are remembered by token in the process that took them. In a tenant App a member the replica has not seen yet is answered by the primary, and a revoked one is refused on the replica once the revocation has replicated; writes and commands always check the primary. The support bundle's capacity section lists each replica's pool as `replica`, and a trace marks each read `mistri.read.pool`.
 

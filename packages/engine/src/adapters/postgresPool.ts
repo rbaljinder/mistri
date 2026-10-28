@@ -137,6 +137,14 @@ export const MAX_READERS = 64;
 /** What pg-pool says when no connection came free within the acquisition timeout. */
 const ACQUISITION_TIMEOUT = /timeout exceeded when trying to connect/i;
 
+/** The server refused this process another connection: too many for its role, or for the server (SQLSTATE 53300). */
+const atConnectionLimit = (error: unknown): boolean =>
+  error !== null && typeof error === 'object' && (error as { code?: unknown }).code === '53300';
+/** How long a pool the server refused stays at the connections it holds before it asks for more: its idle timeout. */
+const LIMIT_HOLD_MS = 30_000;
+/** How many times one checkout asks again after a refusal, a held connection having gone meanwhile. */
+const LIMIT_ATTEMPTS = 3;
+
 /** Whether `value` is a reader pool size a manager accepts: a whole number from 1 to 64. */
 export function isReaderCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= MAX_READERS;
@@ -241,6 +249,10 @@ export class PgConnectionManager {
   private readonly network?: NetworkPolicy;
   private readonly pipelineReads: boolean;
   private readonly timingLabel: string;
+  /** A pool the server refused another connection, held at what it had until the timer lets it ask again. */
+  private readonly limitHolds: Partial<Record<OwnRole, ReturnType<typeof setTimeout>>> = {};
+  /** When each pool last said it reached the connection limit: once a spell, not once a checkout. */
+  private readonly limitSaid: Partial<Record<OwnRole, number>> = {};
 
   constructor(
     private readonly connectionString: string,
@@ -389,6 +401,7 @@ export class PgConnectionManager {
 
   close(): Promise<void> {
     this.closed = true;
+    for (const timer of Object.values(this.limitHolds)) clearTimeout(timer);
     this.closing ??= Promise.all([this.endPools(), ...(this.replicas?.pools ?? []).map((replica) => replica.close())]).then(() => {});
     return this.closing;
   }
@@ -541,7 +554,7 @@ export class PgConnectionManager {
     const had = timing?.poolWait(`${this.timingLabel}-${role}`);
     let client: PgClient;
     try {
-      client = await (bounded ? this.connectWithin(pool, write ? 'write' : 'read') : pool.connect());
+      client = await (bounded ? this.connectWithin(pool, write ? 'write' : 'read') : this.connectHeld(pool, role));
       had?.();
     } catch (error) {
       had?.();
@@ -707,7 +720,7 @@ export class PgConnectionManager {
    * straight back to the pool rather than leaked.
    */
   private connectWithin(pool: PgPool, role: 'read' | 'write'): Promise<PgClient> {
-    const connecting = pool.connect();
+    const connecting = this.connectHeld(pool, role);
     return new Promise<PgClient>((resolve, reject) => {
       let over = false;
       const timer = setTimeout(() => {
@@ -726,6 +739,62 @@ export class PgConnectionManager {
         },
       );
     });
+  }
+
+  /**
+   * `pool.connect()`, within the connections the server allows. Refused
+   * another one (53300), the pool is held at the connections it has, so this
+   * checkout and the next wait for one of them as they would behind a full
+   * pool, and it asks for more again after LIMIT_HOLD_MS; holding none, the
+   * checkout is refused as busy. A refusal at open leased nothing, so nothing
+   * on any connection moved: a tenant writer stays open on it
+   * (tenantWriteSource.ts). It used to rise as a database fault, and a
+   * tenant writer closed for it and reopened into the same refusal, again and
+   * again, with two commands in three failing at three users while its one
+   * connection sat idle (a field report: pools sized past the role's limit).
+   */
+  private async connectHeld(pool: PgPool, role: OwnRole): Promise<PgClient> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await pool.connect();
+      } catch (error) {
+        if (!atConnectionLimit(error)) throw error;
+        const held = this.holdAtLimit(pool, role, error);
+        if (!held || this.closed || attempt >= LIMIT_ATTEMPTS)
+          throw new PoolBusy(role === 'read' ? 'read' : 'write', 'connection_limit', error);
+      }
+    }
+  }
+
+  /** Holds `pool` at the connections it has (pg-pool reads `options.max` at each checkout), says so once a spell, and returns how many. */
+  private holdAtLimit(pool: PgPool, role: OwnRole, refusal: unknown): number {
+    const found = pool as { totalCount?: unknown; options?: { max?: unknown } };
+    const held = typeof found.totalCount === 'number' ? found.totalCount : 0;
+    const size = this.meters[role].size;
+    const options = found.options;
+    if (held > 0 && options && typeof options.max === 'number') {
+      options.max = Math.min(options.max, held);
+      clearTimeout(this.limitHolds[role]);
+      const timer = setTimeout(() => {
+        delete this.limitHolds[role];
+        options.max = size;
+      }, LIMIT_HOLD_MS);
+      timer.unref?.();
+      this.limitHolds[role] = timer;
+    }
+    const now = Date.now();
+    if (now - (this.limitSaid[role] ?? -Infinity) >= LIMIT_HOLD_MS) {
+      this.limitSaid[role] = now;
+      const why = refusal instanceof Error ? refusal.message : 'refused';
+      console.error(
+        `mistri: connection limit reached: the ${this.timingLabel} ${role} pool holds ${held} of ${size} connections; the database refused another (${why}). ` +
+          (held
+            ? `It goes on with ${held} and asks for more in ${LIMIT_HOLD_MS / 1000} s. `
+            : 'Its checkouts are answered busy (503, try again) until one opens. ') +
+          "This process's pools ask for more connections than the database allows: lower the pools (--read-pool, --write-pool, the auth pool) or raise the limit.",
+      );
+    }
+    return held;
   }
 
   /**
