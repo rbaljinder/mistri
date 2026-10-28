@@ -128,7 +128,7 @@ export function startingSpec(host: AppHost): Record<string, unknown> {
   return {
     id: `${host.app.app.id}-theme`,
     label: `${host.app.app.name}`.slice(0, 60),
-    extends: preset && (THEME_BASES as readonly string[]).includes(preset) ? preset : 'lumen',
+    extends: preset && (THEME_BASES as readonly string[]).includes(preset) ? preset : 'workshop',
   };
 }
 
@@ -209,7 +209,7 @@ export function startThemeBench(context: { apps: () => readonly AppHost[] }): Th
         return json(res, 200, {
           apps: context.apps().map((item) => ({ id: item.app.app.id, name: item.app.app.name, home: appHome(mount, item.app.app.id) })),
           app: host?.app.app.id,
-          spec: host ? startingSpec(host) : { id: 'bench', label: 'Bench', extends: 'lumen' },
+          spec: host ? startingSpec(host) : { id: 'bench', label: 'Bench', extends: 'workshop' },
           recipes: Object.fromEntries(Object.entries(RECIPE_MENU).map(([part, values]) => [part, Object.keys(values)])),
           bases: THEME_BASES,
           type: benchType(),

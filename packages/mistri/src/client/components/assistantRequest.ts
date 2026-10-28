@@ -23,10 +23,15 @@ export function assistantHeaders(): Record<string, string> {
   };
 }
 
-/** Whose conversations the panel shows: the lease's tenant, so the history switches with the customer. */
-export function assistantTenant(): string {
+/**
+ * Whose conversations the panel shows: the account's, in the lease's tenant, so the history switches with the customer
+ * and with the person. The panel is kept while the page is, and a conversation it last showed was reopened for whoever
+ * signed in next in that tab, who could only be refused it.
+ */
+export function assistantOwner(): string {
   const identity = captureSessionIdentity();
-  return (identity.tenantRequired && captureTenantLease(identity)?.tenantId) || '';
+  const tenant = (identity.tenantRequired && captureTenantLease(identity)?.tenantId) || '';
+  return `${identity.accountId ?? ''}\n${tenant}`;
 }
 
 export async function assistantApi(path: string, body?: Record<string, unknown>): Promise<unknown> {

@@ -15,12 +15,15 @@ const here = dirname(fileURLToPath(import.meta.url));
 const app = join(here, '../fixtures/apps/loaner-desk');
 const suite = join(here, 'acceptance.test.ts');
 const packageRoot = dirname(createRequire(import.meta.url).resolve('@mistriwork/mistri/package.json'));
-// The package's own CLI, as `npx @mistriwork/mistri` runs it; from an unbuilt checkout, its source under tsx.
-const bin = join(packageRoot, JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')).bin.mistri);
-const built = existsSync(bin);
+/* In a checkout, the CLI's source under tsx, as the seeds run it (examples/databases/lintel/seed.mjs): a checkout's
+   built CLI resolves the other packages only under --conditions=mistri-built — without it, the engine's .ts under
+   Node's own type stripping, whose `.js` imports name no file — and may be older than the source. Installed, the
+   package's own bin, as `npx @mistriwork/mistri` runs it. */
+const source = join(packageRoot, 'src/server/index.ts');
+const built = !existsSync(source);
 const cli = built
-  ? [bin]
-  : ['--import', pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href, join(packageRoot, 'src/server/index.ts')];
+  ? [join(packageRoot, JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')).bin.mistri)]
+  : ['--import', pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href, source];
 const cliEnv = built ? process.env : { ...process.env, TSX_TSCONFIG_PATH: join(packageRoot, '../../tsconfig.json') };
 
 const VARIANTS = [

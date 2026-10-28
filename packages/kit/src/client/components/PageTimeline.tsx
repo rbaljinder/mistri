@@ -6,7 +6,7 @@
  */
 import { useContext, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { findTable, labelPath, primaryKey, state } from '../core.js';
+import { findTable, labelPath, state } from '../core.js';
 import { shell } from '../shellMode.js';
 import { resourceOf } from './appRooms.js';
 import { headingOf, recordNoun } from '@mistriwork/engine/shared/appNoun.js';
@@ -14,6 +14,7 @@ import { dayOf, formatDateTime, formatDayHeading, formatTimeOfDay } from '../loc
 import { hueOf, initialsOf } from './valueModel.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { relatedCreatePlan } from '@mistriwork/engine/shared/relatedCreate.js';
+import { timelineReads } from '@mistriwork/engine/shared/recordReads.js';
 import { type TimelineTone } from '@mistriwork/engine/shared/pageModel.js';
 import { canInsert, openRelatedRecord } from '../insert.js';
 import { PageRenderContext, usePageApi, type SlotProps } from './pageContext.js';
@@ -195,16 +196,19 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
           if (!stream.view) throw new Error(say('thisActivityStreamHasNoView'));
           const table = findTable(stream.from) as TableMeta | undefined;
           /* An author that is a reference (`author: 'owner_id'`) says the person's name, as a list column of the same
-             reference does: read through the reference to the record's label, where this reader reads that table. */
-          const reference = stream.by ? table?.columns.find((c) => c.name === stream.by)?.references : undefined;
-          const target = reference ? (findTable(reference.table) as TableMeta | undefined) : undefined;
-          const named = target && labelPath(target);
-          const byPath = named && !primaryKey(target).includes(named) ? `${stream.by}.${named}` : stream.by;
-          const view =
-            byPath && byPath !== stream.by ? { ...stream.view, columns: [...(stream.view.columns ?? []), { path: byPath }] } : stream.view;
-          /* The other party's rows are the same read narrowed by the section's `side`, asked beside it: their keys. */
+             reference does: read through the reference to the record's label, where this reader reads that table.
+             The other party's rows are the same read narrowed by the section's `side`, asked beside it: their keys.
+             Both as the page's planned reads ask them (shared recordReads.ts `timelineReads`), so a composed page's
+             answers are these very reads. */
           if (stream.side?.error) throw new Error(stream.side.error);
-          const others = stream.side?.view && stream.key?.length ? api('/api/view/run', { view: stream.side.view, offset: 0 }) : undefined;
+          const asked = timelineReads(
+            { table: (id) => findTable(id) as TableMeta | undefined, namePath: (target) => labelPath(target) },
+            stream,
+          )!;
+          const view = asked.view;
+          const named = asked.view !== stream.view ? asked.view.columns?.at(-1)?.path : undefined;
+          const byPath = named ?? stream.by;
+          const others = asked.side ? api('/api/view/run', { view: asked.side, offset: 0 }) : undefined;
           const [got, otherRows] = await Promise.all([api('/api/view/run', { view, offset: 0 }), others]);
           if (!('view' in got)) throw new Error(got.errors[0]?.message ?? say('thisActivityStreamCould'));
           if (otherRows && !('view' in otherRows)) throw new Error(otherRows.errors[0]?.message ?? say('thisActivityStreamCould'));
@@ -277,12 +281,16 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
       if (whole > room + 1) {
         const origin = box.getBoundingClientRect().top - box.scrollTop;
         const over = whole - room;
+        /* The box's height and its scroll are whole pixels and a face's lines are not (Barlow's start at fractions):
+           floored, the edge fell up to a pixel inside the line it was meant to start. Rounded, it falls within half a
+           pixel of that line's start, on either side, so a line is taken only where rounding lands no lower. */
         const edge = [...box.querySelectorAll<HTMLElement>('.timeline-day-label, [data-timeline-row], .timeline-fold')]
           .filter((line) => line.offsetHeight > 0)
           .map((line) => line.getBoundingClientRect().top - origin)
-          .filter((top) => top >= over - 1)
+          .filter((top) => top >= over - 0.5)
           .sort((a, b) => a - b)[0];
-        if (edge !== undefined && edge - over > 1) box.style.maxHeight = `${Math.floor(whole - edge)}px`;
+        const height = edge === undefined ? room : Math.round(whole - edge);
+        if (height < room) box.style.maxHeight = `${height}px`;
       }
       box.scrollTop = box.scrollHeight;
     };

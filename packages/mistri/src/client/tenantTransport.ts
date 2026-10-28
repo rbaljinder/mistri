@@ -22,6 +22,17 @@ import { MUTATION_PATHS } from '@mistriwork/kit/client/writePaths.js';
 import { isTenantName, replaceTenantNames } from './tenantNames.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
 import { fileReads } from '@mistriwork/kit/client/liveReads.js';
+import { firstPaintRead } from '@mistriwork/kit/client/firstPaint.js';
+import {
+  TENANT_BATCH_MOST,
+  TENANT_BATCH_READS,
+  TENANT_BOOT_PATH,
+  TENANT_ENTER_PATH,
+  soleTenant,
+  type TenantBatchRead,
+} from '../shared/tenantBoot.js';
+import { readKey } from '@mistriwork/engine/shared/firstPaint.js';
+import { gatheringReads } from '@mistriwork/kit/client/readGathering.js';
 
 /* The file travels as JSON text, where a quote or a line break is two characters (server/http/importRoutes.ts). */
 const IMPORT_BODY = IMPORT_LIMITS.bytes * 2 + 64 * 1024;
@@ -235,6 +246,15 @@ async function request(
 export async function discoverTenants(): Promise<readonly string[]> {
   const snapshot = captureSessionIdentity();
   const { value } = await request(snapshot, `/api/tenant/bootstrap?${new URLSearchParams({ app: snapshot.appId! })}`);
+  return discovered(value, snapshot, false).tenants;
+}
+
+/** Discovery's answer, checked: the choices, and whether the platform realm is one of them. */
+function discovered(
+  value: Record<string, unknown>,
+  snapshot: SessionIdentitySnapshot,
+  entering: boolean,
+): { tenants: readonly string[]; memberships: readonly string[]; platform: boolean } {
   if (value.status === 'signed_out') {
     invalidateSession('expired');
     throw unavailable();
@@ -245,7 +265,9 @@ export async function discoverTenants(): Promise<readonly string[]> {
     value.accountId !== snapshot.accountId ||
     !Array.isArray(value.memberships) ||
     value.memberships.length > 256 ||
-    Object.keys(value).some((key) => !['status', 'appId', 'accountId', 'memberships', 'platform'].includes(key)) ||
+    Object.keys(value).some(
+      (key) => !['status', 'appId', 'accountId', 'memberships', 'platform', ...(entering ? ['entered'] : [])].includes(key),
+    ) ||
     ('platform' in value && value.platform !== true)
   )
     throw unavailable();
@@ -263,13 +285,62 @@ export async function discoverTenants(): Promise<readonly string[]> {
       throw unavailable();
     if (typeof member.name === 'string') named.push([member.tenantId, member.name]);
     if (member.sandbox === true) sandboxed.push(member.tenantId);
-    return member.tenantId;
+    return member.tenantId as string;
   });
   if (new Set(result).size !== result.length) throw unavailable();
   // What each is called, for the chooser and the bar to say (tenantNames.ts).
   replaceTenantNames(named, sandboxed);
   // The platform realm is one more choice, under its reserved id.
-  return Object.freeze(value.platform === true ? [...result, PLATFORM_TENANT_ID] : result);
+  const platform = value.platform === true;
+  return { tenants: Object.freeze(platform ? [...result, PLATFORM_TENANT_ID] : result), memberships: result, platform };
+}
+
+/** What entering answered: the choices, and where the person was entered without being asked, the lease and its boot. */
+export interface TenantEntry {
+  readonly tenants: readonly string[];
+  readonly lease?: TenantContextReply;
+  /** The page's boot on that lease (shared/tenantBoot.ts), when the host could read it. */
+  readonly boot?: Record<string, unknown>;
+}
+
+/**
+ * Discovery, and for someone with one tenant, the lease in it and the page's boot on that lease, in one request
+ * (shared/tenantBoot.ts `TENANT_ENTER_PATH`). The lease is taken only where it is the very one discovery's own answer
+ * would have the chooser enter (shared `soleTenant`): this tab's kept context resumed, or a new one.
+ */
+export async function enterTenant(
+  page: { readonly path: string; readonly search: string },
+  requested?: string,
+  kept?: { readonly tenantId: string; readonly tabId: string },
+): Promise<TenantEntry> {
+  const snapshot = captureSessionIdentity();
+  account(snapshot);
+  if (snapshot.tenant || requested === PLATFORM_TENANT_ID) throw unavailable();
+  const { value, response } = await request(snapshot, `${TENANT_ENTER_PATH}?${new URLSearchParams({ app: snapshot.appId! })}`, {
+    path: page.path,
+    search: page.search,
+    ...(requested === undefined ? {} : { tenant: requested }),
+    ...(kept ? { kept: { tenantId: kept.tenantId, tabId: kept.tabId } } : {}),
+  });
+  const found = discovered(value, snapshot, true);
+  if (!('entered' in value)) return { tenants: found.tenants };
+  const entered = value.entered;
+  if (
+    !object(entered) ||
+    Object.keys(entered).some((key) => key !== 'context' && key !== 'boot') ||
+    ('boot' in entered && !object(entered.boot))
+  )
+    throw unavailable();
+  const lease = context(entered.context, snapshot, response);
+  const sole = soleTenant(found.memberships, found.platform, requested);
+  if (
+    sole === undefined ||
+    lease.tenantId !== sole ||
+    lease.realm !== undefined ||
+    (kept?.tenantId === sole && lease.tabId === kept.tabId ? lease.revision < 1 : lease.revision !== 1)
+  )
+    throw unavailable();
+  return { tenants: found.tenants, lease, ...(object(entered.boot) ? { boot: entered.boot } : {}) };
 }
 
 /** The caller retires browser state before dispatch. A lost acknowledgement
@@ -406,6 +477,113 @@ const pause = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener('abort', stop, { once: true });
   });
 
+/* Each answer a boot carried, by its body, with the lease it was read on: taken only under that very lease (a
+   renewal's is another), and so only on its context, by its account. */
+const boots = new WeakMap<object, TenantContextReply>();
+
+/**
+ * The page's boot (client tenantBootLoad.ts asks it, shared/tenantBoot.ts says
+ * why), on the lease just opened: its reply, and the lease it attests, or
+ * none. Its refusal is nobody's: no lease is fenced or ended over it, and each
+ * read it would have answered is asked alone, where a read the lease truly
+ * refuses is refused in its own words.
+ */
+export async function tenantBootReply(
+  path: string,
+  search: string,
+): Promise<{ value: Record<string, unknown>; owner: TenantContextReply } | undefined> {
+  const snapshot = captureSessionIdentity();
+  const owner = selected(snapshot);
+  const address = `${TENANT_BOOT_PATH}?${new URLSearchParams({ app: owner.appId, ...selector(owner.tenantId) })}`;
+  const { response, value } = await request(snapshot, address, { path, search }, owner, undefined, true, undefined);
+  return response.ok && currentLease(snapshot, owner) && owns(response.headers, owner) ? { value, owner } : undefined;
+}
+/** An answer the boot carried, read on `owner`'s context: taken only on that same context. */
+export const carriedOn = (body: object, owner: TenantContextReply): void => void boots.set(body, owner);
+
+/* ---------- reads asked in one moment go as one (shared/tenantBoot.ts TENANT_BATCH_READS) ---------- */
+
+type Batched = { body: Record<string, unknown>; reads?: string } | undefined;
+interface Gathered {
+  readonly snapshot: SessionIdentitySnapshot;
+  readonly owner: TenantContextReply;
+  readonly asked: Array<{ read: TenantBatchRead; key: string; answer: (value: Batched) => void }>;
+}
+/* The reads of each lease asked in this moment, gathered until it ends. */
+const gathering = new Map<TenantContextReply, Gathered>();
+/* A lease whose host would not batch (a support lease answers 404): each of its reads is asked alone from then on. */
+const unbatched = new WeakSet<TenantContextReply>();
+
+/**
+ * This read's answer, when other reads of the same lease are asked in the same moment, one whose reads belong
+ * together (kit client/readGathering.ts: a write's refresh): they go as one request
+ * (`POST /api/boot` with `reads`), read by the host on one context and one snapshot, and each takes its own answer
+ * from it. Undefined — the read is asked alone, as ever — when it was the only one, or the batch could not answer
+ * it: refused, failed, a lease that moved on, or a read the host would not carry. A batch's failure is nobody's:
+ * nothing is fenced over it, and each of its reads hears its own answer by asking.
+ */
+function batched(
+  snapshot: SessionIdentitySnapshot,
+  owner: TenantContextReply,
+  read: TenantBatchRead,
+  address: string,
+  signal?: AbortSignal,
+): Promise<Batched> {
+  if (!TENANT_BATCH_READS.has(read.path.split('?')[0]) || unbatched.has(owner) || signal?.aborted) return Promise.resolve(undefined);
+  return new Promise((answer) => {
+    let group = gathering.get(owner);
+    if (group && (group.snapshot !== snapshot || group.asked.length >= TENANT_BATCH_MOST)) {
+      gathering.delete(owner);
+      void sendGathered(group);
+      group = undefined;
+    }
+    if (!group) {
+      const opened: Gathered = { snapshot, owner, asked: [] };
+      group = opened;
+      gathering.set(owner, opened);
+      /* The moment: what the same task and its promises ask, and a timer's turn after. */
+      setTimeout(() => {
+        if (gathering.get(owner) === opened) gathering.delete(owner);
+        void sendGathered(opened);
+      }, 0);
+    }
+    group.asked.push({ read, key: readKey(read.method, address, read.body), answer });
+  });
+}
+
+async function sendGathered(group: Gathered): Promise<void> {
+  const { snapshot, owner, asked } = group;
+  if (asked.length < 2 || !currentLease(snapshot, owner)) {
+    for (const each of asked) each.answer(undefined);
+    return;
+  }
+  let answers: Record<string, unknown> = {};
+  try {
+    const address = `${TENANT_BOOT_PATH}?${new URLSearchParams({ app: owner.appId, ...selector(owner.tenantId) })}`;
+    const { response, value } = await request(
+      snapshot,
+      address,
+      { reads: asked.map((each) => each.read) },
+      owner,
+      undefined,
+      true,
+      undefined,
+    );
+    if (response.status === 404) unbatched.add(owner);
+    if (response.ok && currentLease(snapshot, owner) && owns(response.headers, owner) && object(value.reads)) answers = value.reads;
+  } catch {
+    /* Each read asks alone. */
+  }
+  for (const each of asked) {
+    const carried = Object.hasOwn(answers, each.key) ? answers[each.key] : undefined;
+    each.answer(
+      object(carried) && object(carried.body)
+        ? { body: carried.body, ...(typeof carried.reads === 'string' ? { reads: carried.reads } : {}) }
+        : undefined,
+    );
+  }
+}
+
 /** The metadata gate is read-only. Unsupported authoring/SQL/export/write paths
  * refuse locally; they cannot fall through to the ordinary connection protocol. */
 export async function tenantReadApi(
@@ -437,12 +615,39 @@ export async function tenantReadApi(
     url.searchParams.getAll('table').length > 1
   )
     throw unavailable();
+  /* As a batch names it (shared/tenantBoot.ts TenantBatchRead): before the lease is named in it. */
+  const bare = `${url.pathname}${url.search}`;
   url.searchParams.set('app', owner.appId);
   for (const [key, named] of Object.entries(selector(owner.tenantId))) url.searchParams.set(key, named);
+  /* As the server keys what the page's boot carried (shared/tenantBoot.ts `tenantReadAddress`). */
+  const address = `${url.pathname}${url.search}`;
+  /* The page's boot answered this request on this very lease (tenantBootLoad.ts): its answer, once. */
+  const carried = firstPaintRead(payload === undefined ? 'GET' : 'POST', address, payload);
+  if (carried && boots.get(carried.body as object) === owner && currentLease(snapshot, owner)) {
+    publishable(snapshot, owner);
+    fileReads(carried.body, carried.reads);
+    return carried.body as Record<string, unknown>;
+  }
+  /* Asked in the same moment as other reads of this lease — a write's refresh, a room's reads — it goes with them. */
+  /* Outside such a moment a read goes at once, as ever: not even a turn later. */
+  const together = gatheringReads()
+    ? await batched(
+        snapshot,
+        owner,
+        payload === undefined ? { method: 'GET', path: bare } : { method: 'POST', path: bare, body: payload },
+        address,
+        signal,
+      )
+    : undefined;
+  if (together && currentLease(snapshot, owner)) {
+    publishable(snapshot, owner);
+    fileReads(together.body, together.reads);
+    return together.body;
+  }
   let delivered: Awaited<ReturnType<typeof request>>;
   for (let attempt = 0; ; attempt++) {
     try {
-      delivered = await request(snapshot, `${url.pathname}${url.search}`, payload, owner, signal);
+      delivered = await request(snapshot, address, payload, owner, signal);
       break;
     } catch (error) {
       // An old revision's slow answer is that revision's alone: no retry, no fence (as for any of its answers).

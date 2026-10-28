@@ -9,7 +9,7 @@ import { relative, resolve } from 'node:path';
 import { isPublicCommandPage, isTenantApp, problemsOf } from '../../shared/app.js';
 import { ticketKeyStart } from '../forms/publicTicket.js';
 import type { PageDef } from '@mistriwork/engine/shared/page.js';
-import { refusalHeadline, refusalReasonsBelow } from '@mistriwork/engine/shared/refusal.js';
+import { faultFrames, refusalHeadline, refusalReasonsBelow } from '@mistriwork/engine/shared/refusal.js';
 import { assertAppScopes, loadApp, mergeAppPages, type LoadedApp } from '../app/apps.js';
 import { BUILD_ENTRY_KINDS, type BuildEntryKind } from '../app/appBuild.js';
 import { assertAppSearch } from '../app/appSearchRuntime.js';
@@ -177,6 +177,7 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
           : `App error: ${refusalHeadline(err)}`,
       );
       if (problems.length === 1) for (const because of refusalReasonsBelow(err)) console.error(`  because: ${because}`);
+      for (const frame of faultFrames(err)) console.error(`  ${frame}`);
       if (opts.embedded) throw err;
       process.exit(1);
     }

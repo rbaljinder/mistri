@@ -32,11 +32,12 @@ test('an App lets its tenants change only what branding.allow names, and only it
   const ok = declare({ allow: ['name', 'logo', 'accent', 'radius', 'density'], editors: ['admin'] });
   assert.deepEqual(ok.allow, ['name', 'logo', 'accent', 'radius', 'density']);
   assert.equal(ok.themes.length, 1);
+  // Every built-in look offers the twelve palettes, so a tenant of an App on one may pick among them.
+  assert.deepEqual(declare({ allow: ['palette'], editors: ['admin'] }).allow, ['palette']);
   const refusals: Array<[unknown, RegExp, unknown?]> = [
     [{ allow: ['name'], editors: ['admin'] }, /needs a tenant App/, { roles: { admin: {} } }],
     [{ allow: ['ink'], editors: ['admin'] }, /Grounds, ink and recipes stay the App's/],
     [{ allow: ['preset'], editors: ['admin'] }, /needs more than one theme/],
-    [{ allow: ['palette'], editors: ['admin'] }, /no theme offered has a palette/],
     [{ allow: ['name', 'name'], editors: ['admin'] }, /twice/],
     [{ allow: ['name'], editors: [] }, /must name the tenant roles/],
     [{ allow: ['name'], editors: ['nobody'] }, /not a tenant role/],

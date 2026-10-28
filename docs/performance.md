@@ -125,6 +125,11 @@ unintended statement fails a test.
 - **A record page is one request.** `/api/pages/compose` answers every read its
   open sections will ask, each under the reader's own grants. A press on a row
   starts it before the click is over; a closed tab reads nothing.
+- **A tenant App's first page is one request past its lease.** `/api/boot`
+  answers the runtime, the App, its pages and schema and the first room's
+  reads on one context, so a list or a record settles in four rounds
+  (who-am-I, the member's tenants, the lease, the boot) where it took six or
+  seven (`e2e/tenant-boot-budget.spec.ts`).
 - **No catalog on a warm write.** A command's transaction checks one epoch
   (SQLite's schema version; on PostgreSQL the epoch store).
 - **Pages by key.** Next, Previous and Last read the rows after or before the

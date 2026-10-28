@@ -55,7 +55,7 @@ function prepare(options: RenderOptions): void {
       ...(options.timezone ? { timezone: options.timezone } : {}),
     }),
   });
-  document.documentElement.dataset.visualTheme = options.look ?? 'lumen';
+  document.documentElement.dataset.visualTheme = options.look ?? 'workshop';
   document.documentElement.dataset.theme = options.mode ?? 'light';
 }
 

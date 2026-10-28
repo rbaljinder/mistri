@@ -19,7 +19,7 @@ const CRM = COMPASS;
    both, closing and reloading, which is the one thing a seeded preference
    cannot prove — and the rest start from the stored choice. The dialog is
    driven again at the end of every one of these, for the boundaries. The
-   pair is a look other than the default (Lumen), so the pick is a change. */
+   pair is a look other than the default (Workshop), so the pick is a change. */
 const THROUGH_DIALOG = 'sage';
 
 /** Nothing the reader is shown may reach past the window, at any width. */
@@ -97,7 +97,7 @@ for (const theme of THEME_PRESETS)
         };
       });
       expect(bar).toEqual({ inside: true, underline: false });
-      /* A record's tabs are in sentence case, the look's own; Mono alone sets
+      /* A record's tabs are in sentence case, the look's own; Mono and Workshop set
        them as a label. The Workbench's capitals survived a font shorthand. */
       const recordTab = await page.evaluate(() => {
         const tab = document.createElement('button');
@@ -108,7 +108,7 @@ for (const theme of THEME_PRESETS)
         tab.remove();
         return transform;
       });
-      expect(recordTab).toBe(theme.id === 'mono' ? 'uppercase' : 'none');
+      expect(recordTab).toBe(theme.id === 'mono' || theme.id === 'workshop' ? 'uppercase' : 'none');
 
       // Room at every width, on the room with the most in it.
       for (const width of [1440, 1024, 390, 320]) {
@@ -295,7 +295,10 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
             .map((el) => el.textContent),
         };
       });
-      expect(shape.title).toMatchObject({ size: '20px', face: shape.headingFace });
+      // The list title's step, on the look's own base: Workshop's 14px (Barlow is a narrow face) scales it with the rest.
+      const base = parseFloat(THEME_PRESETS.find((preset) => preset.id === id)?.type?.base ?? '13px');
+      expect(shape.title).toMatchObject({ face: shape.headingFace });
+      expect(parseFloat(shape.title!.size)).toBeCloseTo((20 * base) / 13, 2);
       expect(shape.title!.weight).toBeLessThanOrEqual(700);
       expect(shape.title!.tracking).toBeLessThan(0);
       if (id === 'sage') {

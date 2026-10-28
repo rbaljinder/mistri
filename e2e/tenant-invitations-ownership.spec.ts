@@ -1,4 +1,5 @@
 import type { Response } from '@playwright/test';
+import { isSelection, selectionRoute } from './support/tenantSelection.js';
 import { test, expect, invitationArtifactOptions, type Page } from './support/invitationTest.js';
 import { startTenantInvitations, type TenantInvitationFixture } from './support/tenantInvitationServer.js';
 import {
@@ -163,16 +164,14 @@ test('unknown invitation survives a held real business selection for the same na
   try {
     let selected!: Promise<Response>;
     await selfMemberChooser(page, app, async () => {
-      await page.route('**/api/tenant/context/open?*', async (route) => {
+      await page.route(selectionRoute, async (route) => {
         const response = await route.fetch({ maxRetries: 0, timeout: 45_000 });
         expect(response.status()).toBe(200);
         committed.release();
         await release.promise;
         await route.fulfill({ response });
       });
-      selected = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/tenant/context/open', {
-        timeout: 45_000,
-      });
+      selected = page.waitForResponse(isSelection, { timeout: 45_000 });
     });
     // The sole membership's selection, made as the page loaded, is held after it committed.
     // A sole member is never shown the chooser while it is entered, held or not.

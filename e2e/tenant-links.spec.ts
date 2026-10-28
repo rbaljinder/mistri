@@ -325,9 +325,11 @@ test.describe('private tenant browser links', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    await page.route('**/api/app?*', async (route) => {
+    /* The App's metadata arrives in the page's boot, the one read the shell asks once its lease is open
+       (mistri shared/tenantBoot.ts): holding it holds the App. */
+    await page.route('**/api/boot?*', async (route) => {
       const target = new URL(route.request().url());
-      if (target.pathname !== '/api/app' || target.searchParams.get('tenant') !== 'north') {
+      if (target.pathname !== '/api/boot' || target.searchParams.get('tenant') !== 'north') {
         await route.continue();
         return;
       }

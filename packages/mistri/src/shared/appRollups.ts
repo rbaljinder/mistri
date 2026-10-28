@@ -15,7 +15,14 @@ import { grantsByRole, type AppDef, type AppRollup } from './appModel.js';
 import { ANYONE, saidAt } from '@mistriwork/engine/shared/query.js';
 import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import type { Condition, Filter } from '@mistriwork/engine/shared/filter.js';
-import { columnKind, tableNamed, type DatabaseSchema, type MachineStates, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import {
+  columnKind,
+  findTable,
+  tableNamed,
+  type DatabaseSchema,
+  type MachineStates,
+  type TableMeta,
+} from '@mistriwork/engine/shared/schema.js';
 import { machineStates } from './appMachine.js';
 import { backrefsTo, hopName, tryResolvePath } from '@mistriwork/engine/shared/viewPaths.js';
 import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
@@ -49,12 +56,29 @@ export function appRollupRules(
   const rules = new Map<string, Record<string, Rollup>>();
   const problems: string[] = [];
   const exact = grantsByRole(app);
-  const named = (name: string): TableMeta | undefined =>
-    exact ? schema.tables.find((table) => table.id === name) : tableNamed(schema, name);
+  /* A table by name, and the App's resources by the table each names, each read once a call: asked for every
+     resource, rollup and served table by a scan of the catalog and of the resources, this was most of what making a
+     catalog cost, and startup makes one for every command's footprint. The first of an id, as a scan finds it. */
+  const byId = new Map<string, TableMeta>();
+  for (const table of schema.tables) if (!byId.has(table.id)) byId.set(table.id, table);
+  const named = (name: string): TableMeta | undefined => (exact ? byId.get(name) : tableNamed(schema, name));
+  let declaredOn: Map<string, Array<NonNullable<AppDef['resources']>[string]>> | undefined;
+  /** The resources that name this table, in declaration order. */
+  const resourcesOn = (tableId: string) => {
+    if (!declaredOn) {
+      declaredOn = new Map();
+      for (const [name, resource] of Object.entries(app.resources ?? {})) {
+        const id = named(name)?.id;
+        if (id === undefined) continue;
+        const list = declaredOn.get(id);
+        if (list) list.push(resource);
+        else declaredOn.set(id, [resource]);
+      }
+    }
+    return declaredOn.get(tableId) ?? [];
+  };
   const declaredRollup = (tableId: string, key: string) =>
-    Object.entries(app.resources ?? {}).some(
-      ([name, resource]) => named(name)?.id === tableId && Boolean(resource.rollups && Object.hasOwn(resource.rollups, key)),
-    );
+    resourcesOn(tableId).some((resource) => Boolean(resource.rollups && Object.hasOwn(resource.rollups, key)));
   /* A rollup of a rollup waits for the plain ones; `nested` is every such
      one, so a third level is refused by name rather than by order. */
   const deferred: Array<() => void> = [];
@@ -67,12 +91,15 @@ export function appRollupRules(
     if (rollup.query === undefined) return {};
     /* A computed column the query names is judged first, by the rule a summed one is: one that cannot be read
        here (it reads a rollup, a reference or the reader) is said by name, not as an unknown word. */
-    const declared = Object.entries(app.resources ?? {}).find(([resource]) => named(resource)?.id === child.id)?.[1].computed ?? {};
+    const declared = resourcesOn(child.id)[0]?.computed ?? {};
     for (const name of Object.keys(declared))
       if (new RegExp(`(?<![\\w.$])${name}(?![\\w$])`).test(rollup.query) && computedRead(child, name, `${here} query`) === false)
         return false;
-    // Parsed where the child's computed columns are names, so `breached = true` reads as the list's own filter would.
-    readable ??= withComputed(app, schema, now ?? new Date(), null, zone);
+    /* Parsed where the child's computed columns are names, so `breached = true` reads as the list's own filter would.
+       Only their names and kinds are read here — what a named one says is folded by computedRead — so they are left
+       as written: folded, a child's `now` column made every rollup over it read the instant, named or not, and the
+       catalog was never kept (tenantServedSchema.ts). */
+    readable ??= withComputed(app, schema, now ?? new Date(), null, zone, true);
     /* `now` is the request's instant; a date phrase reads the App's wall clock (zonedNow), as a list's does. Read
        as given, `today` was the server's day, and a rollup counted Tokyo's tasks for a team in Chicago. */
     // `me` is read as anyone's here, so the rule below says why a rollup cannot ask it.
@@ -162,9 +189,7 @@ export function appRollupRules(
     name: string,
     here: string,
   ): { type: string; expression: Rollup['expression'] } | false | undefined => {
-    const declared = Object.entries(app.resources ?? {}).find(
-      ([resource, block]) => named(resource)?.id === child.id && block.computed && Object.hasOwn(block.computed, name),
-    )?.[1].computed![name];
+    const declared = resourcesOn(child.id).find((block) => block.computed && Object.hasOwn(block.computed, name))?.computed![name];
     if (!declared) return undefined;
     const said = `"${child.name}.${name}"`;
     let parsed: ComputedNode | undefined;
@@ -282,7 +307,7 @@ export function appRollupRules(
   const twoHops = (rollup: AppRollup, child: TableMeta, table: TableMeta, here: string): Rollup | undefined => {
     const [first, second] = rollup.whose!.split('.');
     const out = schema.foreignKeys.filter((fk) => fk.from.table === child.id && (hopName(fk) === first || fk.name === first));
-    const middle = out.length === 1 ? schema.tables.find((candidate) => candidate.id === out[0].to.table) : undefined;
+    const middle = out.length === 1 ? findTable(schema, out[0].to.table) : undefined;
     if (!middle) {
       hop(child, child, first, here);
       return undefined;
@@ -481,7 +506,7 @@ export function appRollupRules(
   for (const judge of deferred) judge();
   // Served in the order they were declared, a rollup of a rollup where it was written.
   for (const [id, served] of rules) {
-    const order = Object.keys(Object.entries(app.resources ?? {}).find(([name]) => named(name)?.id === id)?.[1].rollups ?? {});
+    const order = Object.keys(resourcesOn(id)[0]?.rollups ?? {});
     rules.set(id, Object.fromEntries(order.filter((key) => Object.hasOwn(served, key)).map((key) => [key, served[key]])));
   }
   return { rules, problems };
@@ -501,7 +526,15 @@ export function withRollups(app: AppDef, given: DatabaseSchema, now?: Date, me: 
  * (appSegments.ts servedSegments): what loading judges every segment against,
  * so a mistyped one is named rather than quietly not served.
  */
-export function appCatalog(app: AppDef, given: DatabaseSchema, now?: Date, me: string | null = null, zone?: string): DatabaseSchema {
+export function appCatalog(
+  app: AppDef,
+  given: DatabaseSchema,
+  now?: Date,
+  me: string | null = null,
+  zone?: string,
+  /** Computed columns' constants left as written (withComputed). */
+  symbolic = false,
+): DatabaseSchema {
   const schema = withMachineStates(app, given);
   const { rules } = appRollupRules(app, schema, now, zone);
   const rolled = rules.size
@@ -521,7 +554,7 @@ export function appCatalog(app: AppDef, given: DatabaseSchema, now?: Date, me: s
         }),
       }
     : rolled;
-  return withUnions(app, withComputed(app, withTags, now, me, zone));
+  return withUnions(app, withComputed(app, withTags, now, me, zone, symbolic));
 }
 
 /**
@@ -549,7 +582,7 @@ function statedCatalog(app: AppDef, schema: DatabaseSchema): DatabaseSchema {
   const segmentsOf = new Map<string, Record<string, string>>();
   for (const [name, resource] of Object.entries(app.resources ?? {})) {
     if (!resource.machine && !resource.segments) continue;
-    const table = exact ? schema.tables.find((candidate) => candidate.id === name) : tableNamed(schema, name);
+    const table = exact ? findTable(schema, name) : tableNamed(schema, name);
     if (!table) continue;
     if (resource.machine) byTable.set(table.id, { column: resource.machine.column, states: machineStates(resource.machine) });
     if (resource.segments)

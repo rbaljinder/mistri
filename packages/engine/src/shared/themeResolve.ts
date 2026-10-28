@@ -14,7 +14,7 @@
  * 3. Otherwise the first `for.roles` entry, in the order it is written, that
  *    the account holds: a portal's look is the App's design.
  * 4. Otherwise the tenant's saved theme: its staff's default.
- * 5. Otherwise the App's `ui.theme.preset`, and Lumen where it names none.
+ * 5. Otherwise the App's `ui.theme.preset`, and Workshop where it names none.
  *
  * Each id is taken only where the App offers it (a built-in look or one of
  * its own), so a theme removed since a pick was saved falls through to the
@@ -47,7 +47,7 @@ export interface ThemeAsk {
 }
 
 /** The look in force when the App says nothing and nobody picked. */
-const DEFAULT_THEME = 'lumen';
+const DEFAULT_THEME = 'workshop';
 
 /** The theme a page wears, where it came from and, for a role's, which role. */
 export function resolveTheme(ask: ThemeAsk): { id: string; source: ThemeSource; role?: string } {

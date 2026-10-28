@@ -26,7 +26,7 @@ import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import { tryResolvePath } from '@mistriwork/engine/shared/viewPaths.js';
 import { type AppDef, type ResourceDef } from './appModel.js';
 import { humanName, isRecord } from '@mistriwork/engine/shared/model.js';
-import { tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { findTable, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
 import { nearest } from '@mistriwork/engine/shared/suggest.js';
 
@@ -131,7 +131,7 @@ export function withDeclaredSegments(app: AppDef, schema: DatabaseSchema): Datab
 
 function tableOf(app: AppDef, schema: DatabaseSchema, resource: string): TableMeta | undefined {
   const physical = app.resources?.[resource]?.physical ?? resource;
-  return schema.tables.find((table) => table.id === resource) ?? tableNamed(schema, physical);
+  return findTable(schema, resource) ?? tableNamed(schema, physical);
 }
 
 /**
@@ -213,7 +213,7 @@ function takenBy(block: ResourceDef, table: TableMeta, name: string): string | u
  * correlated subquery per row wherever it stands.
  */
 export function segmentCost(schema: DatabaseSchema, tableId: string, name: string): 'columns' | 'joins' | 'subquery' | undefined {
-  const table = schema.tables.find((candidate) => candidate.id === tableId);
+  const table = findTable(schema, tableId);
   if (!table?.segments || !Object.hasOwn(table.segments, name)) return undefined;
   const parsed = parseViewQuery(schema, tableId, name, undefined, { me: ANYONE });
   if (parsed.errors.length) return undefined;

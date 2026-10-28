@@ -27,6 +27,7 @@ import type { LiveKey } from '../../adapters/live/liveChange.js';
 import type { LiveAuthority, LiveDelivery } from './liveFilter.js';
 import { guard, type LiveHub, type LiveTap } from './liveHub.js';
 import type { LivePosition } from './liveStore.js';
+import { registerGauge } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
 
 const LIVE_LIMITS = Object.freeze({
   streams: 2_000,
@@ -63,6 +64,8 @@ interface LiveStreamOptions {
 
 /* Every open stream, for the caps and the server's close. */
 const streams = new Set<LiveStream>();
+/* Open streams, in the process entry of server timing (nothing when it is off). */
+registerGauge('sse', () => streams.size);
 const byAccount = new Map<string, number>();
 let heartbeat: ReturnType<typeof setInterval> | undefined;
 
@@ -86,7 +89,11 @@ class LiveStream {
   private opened = false;
   private ended = false;
   private wantsReset = false;
-  private pending?: { tables: LiveDelivery['tables']; self: boolean; primary: boolean };
+  private pending?: {
+    tables: LiveDelivery['tables'];
+    self: boolean;
+    primary: boolean;
+  };
   private flushTimer?: ReturnType<typeof setTimeout>;
   private lifetime?: ReturnType<typeof setTimeout>;
   private refresher?: ReturnType<typeof setInterval>;
@@ -154,7 +161,10 @@ class LiveStream {
     /* Before a replay, hello holds the cursor asked for: a client that drops before the replay's change asks for it again. */
     const replaying = Boolean(this.pending || this.wantsReset) && this.cursorParts() !== undefined;
     const off = this.options.off ?? [];
-    this.write('hello', { cursor: replaying ? this.options.cursor! : this.cursor(), ...(off.length ? { off } : {}) });
+    this.write('hello', {
+      cursor: replaying ? this.options.cursor! : this.cursor(),
+      ...(off.length ? { off } : {}),
+    });
     this.lifetime = setTimeout(() => guard('stream', () => this.end('lifetime')), this.limits.lifetimeMs);
     this.lifetime.unref?.();
     this.refresher = setInterval(() => guard('stream', () => this.current().catch(() => {})), this.limits.authorityMs);
@@ -200,11 +210,18 @@ class LiveStream {
 
   private add(delivery: LiveDelivery, primary: boolean): void {
     if (!delivery.tables.size) return;
-    const pending = (this.pending ??= { tables: new Map(), self: true, primary: false });
+    const pending = (this.pending ??= {
+      tables: new Map(),
+      self: true,
+      primary: false,
+    });
     for (const [id, table] of delivery.tables) {
       const known = pending.tables.get(id);
       if (!known) {
-        pending.tables.set(id, { keys: table.keys === 'many' ? 'many' : new Map(table.keys), kinds: new Set(table.kinds) });
+        pending.tables.set(id, {
+          keys: table.keys === 'many' ? 'many' : new Map(table.keys),
+          kinds: new Set(table.kinds),
+        });
         continue;
       }
       for (const kind of table.kinds) known.kinds.add(kind);
@@ -254,7 +271,10 @@ class LiveStream {
     this.pending = undefined;
     const tables: Record<string, { keys: LiveKey[] | 'many'; kinds: string[] }> = {};
     for (const [id, table] of pending.tables)
-      tables[id] = { keys: table.keys === 'many' ? 'many' : [...table.keys.values()], kinds: [...table.kinds].sort() };
+      tables[id] = {
+        keys: table.keys === 'many' ? 'many' : [...table.keys.values()],
+        kinds: [...table.kinds].sort(),
+      };
     this.write('change', {
       cursor: this.cursor(),
       tables,
@@ -335,7 +355,11 @@ export async function openLiveStream(options: LiveStreamOptions): Promise<void> 
       'cache-control': 'no-store',
       'retry-after': String(options.limits?.retryAfterSeconds ?? LIVE_LIMITS.retryAfterSeconds),
     });
-    res.end(JSON.stringify({ error: 'Too many pages are following changes right now.' }));
+    res.end(
+      JSON.stringify({
+        error: 'Too many pages are following changes right now.',
+      }),
+    );
     return;
   }
   await stream.open();

@@ -147,6 +147,21 @@ the context's grants and row scope — and its verbs' availability as
 `/api/commands/availability` does. On a support lease it answers 404, and the
 page asks the plan and each read alone, each ledgered as the one read it is.
 
+A first page is one request past the lease (`/api/boot`,
+`packages/mistri/src/shared/tenantBoot.ts`). An ordinary App's page arrives
+with its first answers in it; a tenant App's cannot, because its reads need the
+lease the page opens. So once the lease is open the shell asks for the page in
+one read on it: the host answers the runtime, the App, its pages, its schema
+and the bell's count, plans the room the address opens as an ordinary App's
+first page plans it (a natural key's record found by its key first), and asks
+each of the room's reads through its own route on the one context. Each answer
+is keyed by the request it answers, and the shell's requests take them once;
+anything the boot did not carry, or a refusal in a read's own words, the page
+asks itself. A boot that fails fences nothing, and a support lease is answered
+404, as for a composed record. The projected App and pages are kept per
+everything the projection reads (the App, the lease's catalog and grants, its
+roles in order, realm, zone and locale) and handed to whoever reads the same.
+
 A write — a record's save, New, Delete or Undo, a command's prepare or
 execute — is proven by the writer's fence alone. It reads no membership in a
 snapshot of its own before its transaction or after it: the fence locks the

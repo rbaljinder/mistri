@@ -260,7 +260,7 @@ describe('the prose agrees with the code it describes', () => {
 });
 
 describe('the default look', () => {
-  /* An App wears Lumen unless it names another (packages/engine/src/shared/themeLooks.ts). A guide that still called Mono the
+  /* An App wears Workshop unless it names another (packages/engine/src/shared/themeLooks.ts). A guide that still called Mono the
      default sent an agent to set a preset it believed was the fallback. */
   test('no guide or skill names another look the default', () => {
     const roots = [new URL('../site/src/content/docs/docs/', import.meta.url), new URL('../skills/mistri/', import.meta.url)];
@@ -270,7 +270,7 @@ describe('the default look', () => {
         if (!name.endsWith('.md')) continue;
         const text = readFileSync(new URL(name, root), 'utf8');
         for (const match of text.matchAll(
-          /the default \((mono|sage|canvas|iris|ink|signal|tray)\)|\b(mono|sage),? (?:is |as )?the default\b/gi,
+          /the default \((lumen|mono|sage|canvas|iris|ink|signal|tray)\)|\b(lumen|mono|sage),? (?:is |as )?the default\b|\b(?:lumen|mono|sage),? \(the default\b/gi,
         ))
           stale.push(`${name}: ${match[0]}`);
       }

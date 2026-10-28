@@ -1074,6 +1074,35 @@ const parsesBySchema = new WeakMap<object, Map<string, ParseResult | { dated: tr
 /** Set by `compileCondition` when a date phrase resolved: 1 by day, 2 by the millisecond. */
 let nowRead = 0;
 
+/* ---------- what a piece of work read of the clock and the reader ----------
+
+   A caller that keeps what it built from parses and folded constants (a tenant's served catalog,
+   tenantServedSchema.ts) may keep it only as long as what it read holds: nothing, the calendar day, or the
+   instant — the parse cache's own three answers — and whether a computed column folded the reader in. Kept parses
+   count as the parse they stand for. Synchronous work only: the watch is one variable, as `nowRead` is. */
+interface Reads {
+  clock: 0 | 1 | 2;
+  reader: boolean;
+}
+let watching: Reads | undefined;
+/** `work`'s value, and how finely it read the clock (0 not, 1 by day, 2 the instant) and whether it read the reader. */
+export function readsOf<T>(work: () => T): { value: T } & Readonly<Reads> {
+  const outer = watching;
+  const reads: Reads = (watching = { clock: 0, reader: false });
+  try {
+    return { value: work(), ...reads };
+  } finally {
+    watching = outer;
+    if (outer) noteRead(reads.clock, reads.reader);
+  }
+}
+/** A read of the clock (1 the day, 2 the instant) or of the reader, told to whatever work is watching (readsOf). */
+export function noteRead(clock: 0 | 1 | 2, reader = false): void {
+  if (!watching) return;
+  if (clock > watching.clock) watching.clock = clock;
+  if (reader) watching.reader = true;
+}
+
 function freezeDeep<T>(value: T): T {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -1091,7 +1120,9 @@ export function parseQuery(input: string, options: ParseOptions = {}): ParseResu
   // States handed in beside the text are rare (a board's lanes) and never kept: the cache is keyed by the catalog.
   if (options.states) {
     nowRead = 0;
-    return freezeDeep(parseUncached(input, options));
+    const result = freezeDeep(parseUncached(input, options));
+    noteRead(nowRead as 0 | 1 | 2);
+    return result;
   }
   const schemaKey = options.schema ?? NO_SCHEMA;
   let kept = parsesBySchema.get(schemaKey);
@@ -1103,11 +1134,13 @@ export function parseQuery(input: string, options: ParseOptions = {}): ParseResu
   if (hit && !('dated' in hit)) {
     kept.delete(key);
     kept.set(key, hit);
+    noteRead(marker && 'dated' in marker ? 1 : 0);
     return hit;
   }
   nowRead = 0;
   const result = freezeDeep(parseUncached(input, options));
   const used: number = nowRead;
+  noteRead(used as 0 | 1 | 2);
   if (used !== 2) {
     if (used === 1) kept.set(base, { dated: true });
     const at = used === 1 ? dayKey(base, options.now) : base;

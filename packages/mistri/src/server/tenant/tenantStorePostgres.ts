@@ -378,6 +378,29 @@ function record(owner: TenantStoreBinding, accountId: string, tenantId: string, 
   return membershipRecord(owner, accountId, tenantId, row);
 }
 
+/* The tenant and membership rows a read revalidates against, by tenant and account: `$1`/`$2` where
+   it is asked on its own, two literals where it rides in a snapshot's prologue. */
+const membershipSql = (tenant: string, account: string) =>
+  `SELECT t.status AS tenant_status, t.version AS tenant_version,
+        m.id, m.status, m.version, m.roles_json, m.valid_until::float8 AS valid_until
+      FROM ${q(tables.tenant)} AS t JOIN ${q(tables.membership)} AS m ON m.tenant_id = t.id
+      WHERE t.id = ${tenant} AND t.kind = 'tenant' AND m.account_id = ${account} AND m.kind = 'member' AND m.status <> 'revoked'`;
+
+/* A string as a PostgreSQL literal, as node-postgres's escapeLiteral writes one: quotes doubled, and
+   backslashes doubled under E'' so the value reads the same whatever standard_conforming_strings
+   says. Only identifiers reach it, already held to their shape; a NUL, which no literal can carry,
+   is refused rather than sent. */
+function literal(value: string): string {
+  if (typeof value !== 'string' || value.includes('\0')) return denyTenant();
+  const quoted = `'${value.replace(/'/g, "''").replace(/\\/g, '\\\\')}'`;
+  return value.includes('\\') ? ` E${quoted}` : quoted;
+}
+
+function membershipRows(owner: TenantStoreBinding, accountId: string, tenantId: string, rows: readonly Record<string, unknown>[]) {
+  if (rows.length > 1) return denyTenant();
+  return rows[0] ? record(owner, accountId, tenantId, rows[0]) : null;
+}
+
 /** Unlocked read on the caller's snapshot: the read path's counterpart of
  * `readSqliteTenantMembershipSnapshot`. Neither starts nor ends a transaction. */
 export async function readPostgresTenantMembership(
@@ -390,20 +413,48 @@ export async function readPostgresTenantMembership(
       query = lookup(inputLookup, owner);
     wellFormed(query.accountId);
     await attest(client, owner);
-    const rows = (
-      await client.query(
-        `SELECT t.status AS tenant_status, t.version AS tenant_version,
-        m.id, m.status, m.version, m.roles_json, m.valid_until::float8 AS valid_until
-      FROM ${q(tables.tenant)} AS t JOIN ${q(tables.membership)} AS m ON m.tenant_id = t.id
-      WHERE t.id = $1 AND t.kind = 'tenant' AND m.account_id = $2 AND m.kind = 'member' AND m.status <> 'revoked'`,
-        [query.tenantId, query.accountId],
-      )
-    ).rows;
-    if (rows.length > 1) return denyTenant();
-    return rows[0] ? record(owner, query.accountId, query.tenantId, rows[0]) : null;
+    const rows = (await client.query(membershipSql('$1', '$2'), [query.tenantId, query.accountId])).rows;
+    return membershipRows(owner, query.accountId, query.tenantId, rows);
     // A refusal stays one; a database that failed to answer is a fault.
   } catch (error) {
     return denyTenantFor(error);
+  }
+}
+
+/**
+ * The same membership read as a statement without parameters, for a read
+ * snapshot whose store attestation already stands to send in the message that
+ * begins it (tenantReadSource.ts): the membership is then read where the
+ * snapshot is taken, in the round trip that BEGIN already costs, instead of in
+ * one of its own. The values are the evidence's own tenant and account,
+ * written in as literals; what comes back is judged by
+ * `assertPostgresTenantMembershipRows`, exactly as the read above is.
+ */
+export function postgresTenantMembershipStatement(input: TenantStoreBinding, evidence: TenantMembershipEvidence): string {
+  const owner = binding(input),
+    value = captureTenantData(evidence);
+  const query = evidenceQuery(value, owner);
+  wellFormed(query.tenantId, query.accountId, value.membershipId, ...value.roles);
+  return membershipSql(literal(query.tenantId), literal(query.accountId));
+}
+
+/** `assertPostgresTenantMembershipSnapshot` over rows `postgresTenantMembershipStatement` read in
+ * the caller's snapshot, for the evidence it was written for. Grants nothing. */
+export function assertPostgresTenantMembershipRows(
+  input: TenantStoreBinding,
+  evidence: TenantMembershipEvidence,
+  rows: readonly Record<string, unknown>[],
+  now: () => number = Date.now,
+): void {
+  try {
+    const owner = binding(input),
+      value = captureTenantData(evidence);
+    const query = evidenceQuery(value, owner);
+    wellFormed(query.accountId, value.membershipId, ...value.roles);
+    const instant = clock(now);
+    assertCurrentRecord(value, membershipRows(owner, query.accountId, query.tenantId, rows), instant);
+  } catch (error) {
+    denyTenantFor(error);
   }
 }
 
@@ -431,6 +482,40 @@ export async function assertPostgresTenantMembershipSnapshot(
 }
 
 /** Complete bounded discovery on the caller's snapshot, in exact byte order. */
+const membershipsSql = (account: string, instant: string) =>
+  `SELECT t.id AS tenant_id, t.status AS tenant_status, t.version AS tenant_version,
+        m.id, m.status, m.version, m.roles_json, m.valid_until::float8 AS valid_until
+      FROM ${q(tables.tenant)} AS t JOIN ${q(tables.membership)} AS m ON m.tenant_id = t.id
+      WHERE m.account_id = ${account} AND t.kind = 'tenant' AND m.kind = 'member'
+        AND t.status = 'active' AND m.status = 'active' AND m.valid_until > ${instant}
+      ORDER BY t.id LIMIT 257`;
+
+function membershipsLookup(input: TenantStoreBinding, inputLookup: TenantMembershipListLookup) {
+  const owner = binding(input),
+    query = captureTenantData(inputLookup);
+  tenantRecord(query, ['appId', 'accountId', 'source', 'deployment']);
+  lookup({ ...query, tenantId: 'discovery' }, owner);
+  wellFormed(query.accountId);
+  return { owner, query };
+}
+
+function membershipsOf(
+  owner: TenantStoreBinding,
+  accountId: string,
+  rows: readonly Record<string, unknown>[],
+  instant: number,
+  now: () => number,
+): readonly TenantMembershipRecord[] {
+  if (rows.length > 256) return denyTenant();
+  const result = rows.map((row) => {
+    if (typeof row.tenant_id !== 'string') return denyTenant();
+    return record(owner, accountId, row.tenant_id, row);
+  });
+  const completed = clock(now);
+  if (completed < instant || result.some((entry) => completed >= entry.validUntil)) return denyTenant();
+  return captureTenantData(result);
+}
+
 export async function readPostgresTenantMemberships(
   client: PgQuery,
   input: TenantStoreBinding,
@@ -438,34 +523,75 @@ export async function readPostgresTenantMemberships(
   now: () => number = Date.now,
 ): Promise<readonly TenantMembershipRecord[]> {
   try {
-    const owner = binding(input),
-      query = captureTenantData(inputLookup);
-    tenantRecord(query, ['appId', 'accountId', 'source', 'deployment']);
-    lookup({ ...query, tenantId: 'discovery' }, owner);
-    wellFormed(query.accountId);
+    const { owner, query } = membershipsLookup(input, inputLookup);
     const instant = clock(now);
     await attest(client, owner);
-    const rows = (
-      await client.query(
-        `SELECT t.id AS tenant_id, t.status AS tenant_status, t.version AS tenant_version,
-        m.id, m.status, m.version, m.roles_json, m.valid_until::float8 AS valid_until
-      FROM ${q(tables.tenant)} AS t JOIN ${q(tables.membership)} AS m ON m.tenant_id = t.id
-      WHERE m.account_id = $1 AND t.kind = 'tenant' AND m.kind = 'member'
-        AND t.status = 'active' AND m.status = 'active' AND m.valid_until > $2
-      ORDER BY t.id LIMIT 257`,
-        [query.accountId, instant],
-      )
-    ).rows;
-    if (rows.length > 256) return denyTenant();
-    const result = rows.map((row) => {
-      if (typeof row.tenant_id !== 'string') return denyTenant();
-      return record(owner, query.accountId, row.tenant_id, row);
-    });
-    const completed = clock(now);
-    if (completed < instant || result.some((entry) => completed >= entry.validUntil)) return denyTenant();
-    return captureTenantData(result);
+    const rows = (await client.query(membershipsSql('$1', '$2'), [query.accountId, instant])).rows;
+    return membershipsOf(owner, query.accountId, rows, instant, now);
   } catch {
     return denyTenant();
+  }
+}
+
+/**
+ * An account's memberships, the read above as a statement without parameters, for a read snapshot to send in the
+ * message that begins it (tenantReadSource.ts): discovery's snapshots were each BEGIN, then this, two round trips
+ * where one carries both. The account and the instant are written in as literals; what comes back is judged by
+ * `postgresTenantMembershipsRows`, exactly as the read above judges its own, and only once the snapshot's catalog and
+ * store attestation has stood.
+ */
+export function postgresTenantMembershipsStatement(
+  input: TenantStoreBinding,
+  inputLookup: TenantMembershipListLookup,
+  now: () => number = Date.now,
+): { readonly sql: string; readonly instant: number } {
+  const { query } = membershipsLookup(input, inputLookup);
+  const instant = clock(now);
+  if (!Number.isSafeInteger(instant)) return denyTenant();
+  return Object.freeze({ sql: membershipsSql(literal(query.accountId), String(instant)), instant });
+}
+
+/** The rows `postgresTenantMembershipsStatement` read, judged as `readPostgresTenantMemberships` judges its own. */
+export function postgresTenantMembershipsRows(
+  input: TenantStoreBinding,
+  inputLookup: TenantMembershipListLookup,
+  rows: readonly Record<string, unknown>[],
+  instant: number,
+  now: () => number = Date.now,
+): readonly TenantMembershipRecord[] {
+  try {
+    const { owner, query } = membershipsLookup(input, inputLookup);
+    return membershipsOf(owner, query.accountId, rows, instant, now);
+  } catch {
+    return denyTenant();
+  }
+}
+
+/**
+ * One membership, the read `readPostgresTenantMembership` makes, as a statement without parameters for the message
+ * that begins a snapshot (an admission's, which has no evidence yet to fence on): its tenant and account written in
+ * as literals, its rows judged by `postgresTenantMembershipLookupRows` as that read judges its own.
+ */
+export function postgresTenantMembershipLookupStatement(input: TenantStoreBinding, inputLookup: TenantMembershipLookup): string {
+  const owner = binding(input),
+    query = lookup(inputLookup, owner);
+  wellFormed(query.accountId);
+  return membershipSql(literal(query.tenantId), literal(query.accountId));
+}
+
+/** The rows `postgresTenantMembershipLookupStatement` read, judged as `readPostgresTenantMembership` judges its own. */
+export function postgresTenantMembershipLookupRows(
+  input: TenantStoreBinding,
+  inputLookup: TenantMembershipLookup,
+  rows: readonly Record<string, unknown>[],
+): TenantMembershipRecord | null {
+  try {
+    const owner = binding(input),
+      query = lookup(inputLookup, owner);
+    wellFormed(query.accountId);
+    return membershipRows(owner, query.accountId, query.tenantId, rows);
+  } catch (error) {
+    return denyTenantFor(error);
   }
 }
 
@@ -547,6 +673,22 @@ export function postgresTenantMembershipFenceAhead(
 
 /* ---------- the platform realm ---------- */
 
+/* The unlocked platform read: the anchor and the membership in one statement, the platform's id and the account
+   given as placeholders or, for the message that begins a snapshot, literals. */
+const platformSql = (platform: string, account: string) =>
+  `SELECT p.status AS platform_status, p.version AS platform_version,
+        m.id, m.status, m.version, m.roles_json, m.valid_until::float8 AS valid_until
+      FROM ${q(tables.tenant)} AS p LEFT JOIN ${q(tables.membership)} AS m
+        ON m.tenant_id = p.id AND m.account_id = ${account} AND m.kind = 'member' AND m.status <> 'revoked'
+      WHERE p.id = ${platform} AND p.kind = 'platform'`;
+
+function platformRows(owner: TenantStoreBinding, accountId: string, rows: readonly Record<string, unknown>[]) {
+  if (rows.length > 1) return denyTenant();
+  if (!rows[0] || rows[0].id === null) return null;
+  const { platform_status, platform_version, ...member } = rows[0];
+  return platformMembershipRecord(owner, accountId, { ...member, platform_status, platform_version });
+}
+
 /** The `@platform` row, then the account's membership in it: the tenant
  * fence's order on the platform realm's anchor. Locked FOR SHARE on the
  * writer, unlocked on a read snapshot, where two statements see one state. */
@@ -560,22 +702,8 @@ async function platformRead(
      snapshot either way. Locked, they stay two: the fence's lock order is the
      anchor, then the membership, and `FOR SHARE` cannot reach the nullable
      side of the join that would make them one. */
-  if (!lock) {
-    const rows = (
-      await client.query(
-        `SELECT p.status AS platform_status, p.version AS platform_version,
-        m.id, m.status, m.version, m.roles_json, m.valid_until::float8 AS valid_until
-      FROM ${q(tables.tenant)} AS p LEFT JOIN ${q(tables.membership)} AS m
-        ON m.tenant_id = p.id AND m.account_id = $2 AND m.kind = 'member' AND m.status <> 'revoked'
-      WHERE p.id = $1 AND p.kind = 'platform'`,
-        [PLATFORM_TENANT_ID, query.accountId],
-      )
-    ).rows;
-    if (rows.length > 1) return denyTenant();
-    if (!rows[0] || rows[0].id === null) return null;
-    const { platform_status, platform_version, ...member } = rows[0];
-    return platformMembershipRecord(owner, query.accountId, { ...member, platform_status, platform_version });
-  }
+  if (!lock)
+    return platformRows(owner, query.accountId, (await client.query(platformSql('$1', '$2'), [PLATFORM_TENANT_ID, query.accountId])).rows);
   const platform = (
     await client.query(`SELECT status, version FROM ${q(tables.tenant)} WHERE id = $1 AND kind = 'platform'${lock ? ' FOR SHARE' : ''}`, [
       PLATFORM_TENANT_ID,
@@ -599,7 +727,7 @@ async function platformRead(
 }
 
 /** Unlocked read on the caller's snapshot: the platform twin of readPostgresTenantMembership. */
-export async function readPostgresPlatformMembership(
+async function readPostgresPlatformMembership(
   client: PgQuery,
   input: TenantStoreBinding,
   inputLookup: PlatformMembershipLookup,
@@ -610,6 +738,34 @@ export async function readPostgresPlatformMembership(
     wellFormed(query.accountId);
     await attest(client, owner);
     return await platformRead(client, owner, query, false);
+  } catch {
+    return denyTenant();
+  }
+}
+
+/**
+ * The platform membership `readPostgresPlatformMembership` reads, as a statement without parameters for the message
+ * that begins a snapshot (discovery asks it beside its second membership list, and its BEGIN was a round trip of its
+ * own): the account written in as a literal, its rows judged by `postgresPlatformMembershipRows`.
+ */
+export function postgresPlatformMembershipStatement(input: TenantStoreBinding, inputLookup: PlatformMembershipLookup): string {
+  const owner = binding(input),
+    query = platformLookup(inputLookup, owner);
+  wellFormed(query.accountId);
+  return platformSql(literal(PLATFORM_TENANT_ID), literal(query.accountId));
+}
+
+/** The rows `postgresPlatformMembershipStatement` read, judged as `readPostgresPlatformMembership` judges its own. */
+export function postgresPlatformMembershipRows(
+  input: TenantStoreBinding,
+  inputLookup: PlatformMembershipLookup,
+  rows: readonly Record<string, unknown>[],
+): PlatformMembershipRecord | null {
+  try {
+    const owner = binding(input),
+      query = platformLookup(inputLookup, owner);
+    wellFormed(query.accountId);
+    return platformRows(owner, query.accountId, rows);
   } catch {
     return denyTenant();
   }

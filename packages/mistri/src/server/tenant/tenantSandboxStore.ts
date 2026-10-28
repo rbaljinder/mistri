@@ -135,22 +135,28 @@ const DDL = {
 };
 /** Each table's columns as the database has them, or null where it has no such table. */
 async function layout(session: SandboxSession): Promise<Record<keyof typeof COLUMNS, string[] | null>> {
-  const read = async (name: string): Promise<string[] | null> => {
-    const table = runtimeName(session.dialect, name);
-    const rows =
-      session.dialect === 'sqlite'
-        ? await session.all(`SELECT name FROM pragma_table_info(?) ORDER BY cid`, [table])
-        : await session.all(
-            `SELECT column_name AS name FROM information_schema.columns WHERE table_schema = '${runtimeSchema('postgres')}' AND table_name = ? ORDER BY ordinal_position`,
-            [table],
-          );
-    return rows.length ? rows.map((row) => String(row.name)) : null;
+  const names = { tenant: SANDBOX_TABLES.tenant, item: SANDBOX_TABLES.item, meta: SANDBOX_TABLES.meta };
+  const tables = Object.fromEntries(Object.entries(names).map(([key, name]) => [key, runtimeName(session.dialect, name)])) as Record<
+    keyof typeof COLUMNS,
+    string
+  >;
+  if (session.dialect === 'sqlite') {
+    const read = async (table: string): Promise<string[] | null> => {
+      const rows = await session.all(`SELECT name FROM pragma_table_info(?) ORDER BY cid`, [table]);
+      return rows.length ? rows.map((row) => String(row.name)) : null;
+    };
+    return { tenant: await read(tables.tenant), item: await read(tables.item), meta: await read(tables.meta) };
+  }
+  /* The three tables in one read: a member's chooser asks this before it draws, and each read is a round trip. */
+  const rows = await session.all(
+    `SELECT table_name AS "table", column_name AS name FROM information_schema.columns WHERE table_schema = '${runtimeSchema('postgres')}' AND table_name IN (?, ?, ?) ORDER BY table_name, ordinal_position`,
+    [tables.tenant, tables.item, tables.meta],
+  );
+  const columnsOf = (table: string): string[] | null => {
+    const found = rows.filter((row) => row.table === table).map((row) => String(row.name));
+    return found.length ? found : null;
   };
-  return {
-    tenant: await read(SANDBOX_TABLES.tenant),
-    item: await read(SANDBOX_TABLES.item),
-    meta: await read(SANDBOX_TABLES.meta),
-  };
+  return { tenant: columnsOf(tables.tenant), item: columnsOf(tables.item), meta: columnsOf(tables.meta) };
 }
 const sameColumns = (found: readonly string[] | null, expected: readonly string[]) =>
   !!found && found.length === expected.length && found.every((column, index) => column === expected[index]);

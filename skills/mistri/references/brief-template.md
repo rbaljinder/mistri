@@ -48,7 +48,7 @@ Assumed, not asked (strike what is wrong): <list, or none>
 
 ```json mistri-brief
 {
-  "app": { "name": "<App name>", "theme": "lumen", "logo": "calendar" },
+  "app": { "name": "<App name>", "theme": "workshop", "logo": "calendar" },
   "entities": {
     "client": { "name": "text!", "email": "email unique", "phone": "phone" },
     "booking": {

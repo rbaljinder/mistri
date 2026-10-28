@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { jobEnqueued } from '../events/commandEventSignal.js';
 import type { SQLOutputValue } from 'node:sqlite';
 import type { JobStore } from './jobStoreContract.js';
 import { assertSqliteJobStore, JOB_TABLES as t, openJobStoreFile } from './jobStoreSchema.js';
@@ -26,6 +27,7 @@ import {
   captureJobPolicy,
   jobFail,
   jobInteger,
+  jobStanding,
   JobRefusal,
   jobRefuse,
   JOB_HISTORY_LIMIT,
@@ -204,6 +206,10 @@ export function openSqliteJobStore(existingPath: string, input: JobPolicyInput):
           },
           now,
         );
+      }).then((enqueued) => {
+        // Committed: a host in this process looks now (commandEventSignal.ts).
+        if (!enqueued.replayed) jobEnqueued();
+        return enqueued;
       }),
     claim: (now, limit = policy.maxInFlight) =>
       later(() => {
@@ -357,6 +363,23 @@ export function openSqliteJobStore(existingPath: string, input: JobPolicyInput):
               .all(...values, captured.limit)
               .map((row) => verifyRow(row)),
           ),
+        );
+      }),
+    standing: (now) =>
+      later(() => {
+        jobInteger(now, 0, JOB_MAX_CLOCK);
+        return transaction(false, () =>
+          jobStanding({
+            at: now,
+            ...db
+              .prepare(
+                `SELECT EXISTS (SELECT 1 FROM main."${t.job}" WHERE state IN ('failed','unknown')) AS failed,
+                (SELECT min(run_at) FROM main."${t.job}" WHERE state IN ('scheduled','retry')) AS waiting,
+                (SELECT min(run_at) FROM main."${t.job}" WHERE state IN ('scheduled','retry') AND run_at > ?) AS due,
+                (SELECT min(lease_until) FROM main."${t.job}" WHERE state IN ('leased','unknown') AND lease_until > ?) AS lease`,
+              )
+              .get(now, now)!,
+          }),
         );
       }),
     attempts: (id) =>

@@ -101,12 +101,20 @@ test('a footer group in a window shorter than the menu scrolls under the rows ab
     const payload = await response.json();
     payload.app.ui.shell = { ...payload.app.ui.shell, placement: 'side' };
     payload.app.nav = [
+      /* Rows enough to outrun a 360px window at any look's density: five rooms under three headings fit it in
+         Workshop's 25px rows. None of these is over the opportunity or task tables the rows below are found by. */
       {
         group: 'sales',
         label: 'Sales',
         children: [
           { view: 'leads', label: 'Leads' },
           { view: 'accounts', label: 'Accounts' },
+          { view: 'account-tree', label: 'Account tree' },
+          { view: 'activities', label: 'Activities' },
+          { view: 'campaigns', label: 'Campaigns' },
+          { view: 'campaign-schedule', label: 'Campaign schedule' },
+          { view: 'products', label: 'Products' },
+          { view: 'sales-team', label: 'Sales team' },
         ],
       },
       {

@@ -19,7 +19,7 @@ import {
   type DeleteRequest,
   type TellRequest,
 } from '../adapters/adapter.js';
-import { freezeDerivedCatalog, isCapturedScopeCatalog } from '../shared/scopeCatalog.js';
+import { freezeDerivedCatalog, isCapturedScopeCatalog, isFixedScopeCatalog } from '../shared/scopeCatalog.js';
 import { compileView, resolveAggregate, tryResolvePath, type ViewDef } from '../shared/view.js';
 import { rollupReads, type Rollup } from '../shared/rollups.js';
 import { compileBreakdown, measureConditions, type BreakdownDef } from '../shared/breakdown.js';
@@ -93,7 +93,13 @@ export function markStableGrant<T extends ColumnGrant>(grant: T): T {
   stableGrants.add(grant.readable);
   return grant;
 }
-const prunedCatalogs = new WeakMap<DatabaseSchema, WeakMap<object, { access: ColumnGrant; pruned: DatabaseSchema }>>();
+/* What a stable grant's pruning was made from: its sets by identity, and only
+   whether it had a row scope, which is all pruning reads of one. A tenant's
+   grant is kept per role set and handed each request with that person's own
+   scope beside it (tenantReadRuntime.ts), so the scope itself is never the
+   key, and never kept here past its request. */
+type PrunedFrom = Pick<ColumnGrant, 'writable' | 'creatable' | 'fields' | 'internal'> & { scoped: boolean; pruned: DatabaseSchema };
+const prunedCatalogs = new WeakMap<DatabaseSchema, WeakMap<object, PrunedFrom>>();
 /* A tenant request resolves its grant afresh each time, so its sets are never
    the same objects twice, and every read in it pruned the catalog again
    (G118). A captured catalog is frozen, and pruning reads nothing of the grant
@@ -137,17 +143,21 @@ export function accessibleSchema(schema: DatabaseSchema, access: ColumnGrant): D
   let byGrant = prunedCatalogs.get(schema);
   if (!byGrant) prunedCatalogs.set(schema, (byGrant = new WeakMap()));
   const kept = byGrant.get(access.readable);
+  const scoped = access.rows !== undefined;
   if (
     kept &&
-    kept.access.writable === access.writable &&
-    kept.access.creatable === access.creatable &&
-    kept.access.fields === access.fields &&
-    kept.access.internal === access.internal &&
-    kept.access.rows === access.rows
+    kept.writable === access.writable &&
+    kept.creatable === access.creatable &&
+    kept.fields === access.fields &&
+    kept.internal === access.internal &&
+    kept.scoped === scoped
   )
     return kept.pruned;
-  const pruned = pruneCatalog(schema, access);
-  byGrant.set(access.readable, { access, pruned });
+  // Frozen over a captured catalog, as the content path's is: what reads it later (resourceChecks) may then keep by its identity.
+  const made = pruneCatalog(schema, access);
+  const pruned = isCapturedScopeCatalog(schema) ? freezeDerivedCatalog(made) : made;
+  const { writable, creatable, fields, internal } = access;
+  byGrant.set(access.readable, { writable, creatable, fields, internal, scoped, pruned });
   return pruned;
 }
 
@@ -163,22 +173,44 @@ function pruneCatalog(schema: DatabaseSchema, access: ColumnGrant): DatabaseSche
     fk.from.columns.every((column) => readable(fk.from.table, column)) &&
     fk.to.columns.every((column) => readable(fk.to.table, column));
   const kept = schema.foreignKeys.filter(reaches);
+  const keptSet = new Set(kept);
   /* A composite key this reader cannot follow whole — a tenant's
      `(tenant_id, group_id)`, whose ownership column no tenant reads — is still
      followed by a leg that names one row alone (declaredReferences.ts
      impliedEdges), so `group_id` keeps its link and its label.
      Only where the composite is dropped: a reader who reads it whole has it. */
-  const dropped = schema.foreignKeys.filter((fk) => !fk.declared && fk.from.columns.length > 1 && !kept.includes(fk));
+  const dropped = schema.foreignKeys.filter((fk) => !fk.declared && fk.from.columns.length > 1 && !keptSet.has(fk));
+  // The single-column keys kept, by table: a leg is added only where none already leaves its column.
+  const keptSingle = new Map<string, Set<string>>();
+  for (const fk of kept)
+    if (fk.from.columns.length === 1) {
+      const columns = keptSingle.get(fk.from.table);
+      if (columns) columns.add(fk.from.columns[0]);
+      else keptSingle.set(fk.from.table, new Set(fk.from.columns));
+    }
   const legs = dropped.length
     ? impliedEdges({ ...schema, foreignKeys: dropped }).filter(
-        (edge) =>
-          reaches(edge) &&
-          !kept.some(
-            (fk) => fk.from.table === edge.from.table && fk.from.columns.length === 1 && fk.from.columns[0] === edge.from.columns[0],
-          ),
+        (edge) => reaches(edge) && !keptSingle.get(edge.from.table)?.has(edge.from.columns[0]),
       )
     : [];
   const foreignKeys = legs.length ? [...kept, ...legs] : kept;
+  /* Each edge by the table it leaves, and the tables an inferred edge points
+     at: asked below for every column of every table, a scan of the whole
+     graph each time made one pruning of a few hundred tables cost
+     milliseconds, and startup prunes once per command and role. */
+  const served = new Set(foreignKeys);
+  const leaving = (edges: readonly ForeignKey[]) => {
+    const by = new Map<string, ForeignKey[]>();
+    for (const edge of edges) {
+      const list = by.get(edge.from.table);
+      if (list) list.push(edge);
+      else by.set(edge.from.table, [edge]);
+    }
+    return by;
+  };
+  const servedFrom = leaving(foreignKeys),
+    allFrom = leaving(schema.foreignKeys);
+  const inferredTo = new Set(schema.foreignKeys.flatMap((fk) => (fk.declared ? [] : [fk.to.table])));
   return {
     ...schema,
     tables: schema.tables
@@ -211,7 +243,7 @@ function pruneCatalog(schema: DatabaseSchema, access: ColumnGrant): DatabaseSche
                   access.writable.has(table.id) &&
                   !table.isView &&
                   table.columns.some((column) => column.primaryKey) &&
-                  !schema.foreignKeys.some((fk) => fk.to.table === table.id && !fk.declared) &&
+                  !inferredTo.has(table.id) &&
                   table.columns.every(
                     (column) => readable(table.id, column.name) && (access.fields?.get(table.id)?.write.has(column.name) ?? true),
                   ),
@@ -254,19 +286,15 @@ function pruneCatalog(schema: DatabaseSchema, access: ColumnGrant): DatabaseSche
               // column is a key of its own this reader follows: its own single key, or
               // the leg the composite implies. Beside a tenant's composite, a single key
               // lost its link here and its cells drew the raw id.
-              const followed = foreignKeys.some(
+              const followed = (servedFrom.get(table.id) ?? []).some(
                 (edge) =>
-                  edge.from.table === table.id &&
                   edge.from.columns.length === 1 &&
                   edge.from.columns[0] === column.name &&
                   edge.to.table === reference?.table &&
                   edge.to.columns[0] === reference?.column,
               );
               const hiddenEdge =
-                !followed &&
-                schema.foreignKeys.some(
-                  (fk) => fk.from.table === table.id && fk.from.columns.includes(column.name) && !foreignKeys.includes(fk),
-                );
+                !followed && (allFrom.get(table.id) ?? []).some((fk) => fk.from.columns.includes(column.name) && !served.has(fk));
               if (!reference || (readable(reference.table, reference.column) && !hiddenEdge)) return metadata;
               const { references: _references, ...visible } = metadata;
               return visible;
@@ -312,6 +340,9 @@ export function requestData<T>(value: T, ancestors = new Set<object>()): T {
   return Object.fromEntries(entries) as T;
 }
 
+/* A pruned catalog's full-catalog comparison (resourceChecks), kept per pruned catalog nothing can change. */
+const comparisons = new WeakMap<DatabaseSchema, DatabaseSchema>();
+
 /** Every read and write check against one grant, over the catalog it prunes: an App role's (app/appAccess.ts) and a connection's hidden columns (hiddenColumns.ts) alike. */
 export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
   const schema = accessibleSchema(full, access);
@@ -323,19 +354,35 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
   /* With the legs pruning followed in place of a composite key the reader
      cannot read whole (pruneCatalog): the full catalog joins on the composite
      only under its own hop name, so `group_id` is the same join on both. */
-  const legs = schema.foreignKeys.filter(
-    (fk) => !full.foreignKeys.some((other) => other.name === fk.name && other.from.table === fk.from.table),
-  );
-  const followed = legs.length ? { ...full, foreignKeys: [...full.foreignKeys, ...legs] } : full;
-  const unpruned = access.fields
-    ? {
-        ...followed,
-        tables: full.tables.map((table) => {
-          const read = access.fields!.get(table.id)?.read;
-          return read ? { ...table, columns: table.columns.filter((column) => read.has(column.name)) } : table;
-        }),
-      }
-    : followed;
+  /* Built when a view or breakdown is compiled, not for every request: the
+     scan of every edge against every edge was among a tenant read's largest
+     costs in a field report's profile, for a catalog most requests never
+     compare. Kept per pruned catalog where both catalogs are fixed: such a
+     pruning is the answer for one grant's content (accessibleSchema), and
+     the columns cut here are that grant's `fields`, so the same pruned
+     catalog always stands beside the same comparison. */
+  let compared: DatabaseSchema | undefined;
+  const unprunedCatalog = (): DatabaseSchema => {
+    if (compared) return compared;
+    const fixed = isCapturedScopeCatalog(full) && isFixedScopeCatalog(schema);
+    const kept = fixed ? comparisons.get(schema) : undefined;
+    if (kept) return (compared = kept);
+    const legs = schema.foreignKeys.filter(
+      (fk) => !full.foreignKeys.some((other) => other.name === fk.name && other.from.table === fk.from.table),
+    );
+    const followed = legs.length ? { ...full, foreignKeys: [...full.foreignKeys, ...legs] } : full;
+    const made = access.fields
+      ? {
+          ...followed,
+          tables: full.tables.map((table) => {
+            const read = access.fields!.get(table.id)?.read;
+            return read ? { ...table, columns: table.columns.filter((column) => read.has(column.name)) } : table;
+          }),
+        }
+      : followed;
+    if (fixed) comparisons.set(schema, made);
+    return (compared = made);
+  };
   const assertRead = (table: string) => {
     if (!access.readable.has(table)) throw new AppAccessDenied();
   };
@@ -517,7 +564,7 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     const compiled = compileView(schema, view, ANSI_STYLE);
     // Pruning can change hop disambiguation. Refuse if the full compiler would
     // execute a different relationship from the one checked above.
-    if (compiled.text !== compileView(unpruned, view, ANSI_STYLE).text) throw new AppAccessDenied();
+    if (compiled.text !== compileView(unprunedCatalog(), view, ANSI_STYLE).text) throw new AppAccessDenied();
     return view;
   };
   const breakdownFor = (input: BreakdownDef) => {
@@ -536,7 +583,7 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     assertAnyRows(breakdown.filter);
     for (const where of measureConditions(breakdown.measures)) assertAnyRows(where);
     const compiled = compileBreakdown(schema, breakdown, ANSI_STYLE);
-    if (compiled.text !== compileBreakdown(unpruned, breakdown, ANSI_STYLE).text) throw new AppAccessDenied();
+    if (compiled.text !== compileBreakdown(unprunedCatalog(), breakdown, ANSI_STYLE).text) throw new AppAccessDenied();
     return breakdown;
   };
   const assertRelatedWrites = (table: string, fields?: string[]) => {

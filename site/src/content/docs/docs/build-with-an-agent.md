@@ -151,7 +151,7 @@ the App's machine moves it with matching stamps, and dates over the last 90
 days with some work due today or overdue. `--seed <n>` makes the same rows
 again; a table that already holds rows is refused unless `--append`.
 
-The draft passes `check` and `check --design` as written: Lumen, a logo and
+The draft passes `check` and `check --design` as written: Workshop, a logo and
 a grouped menu with the lookups folded; an Overview home of counts, the main
 table's flow as steps, a trend by month and a donut where its columns allow;
 statuses as tones; records named by their parent; a record page for every
@@ -293,7 +293,7 @@ yes or no; a no is fixed before the page is done.
 - The folded rail and the phone menu still reach every entry.
 
 **Before calling it done**
-- The look was chosen on purpose (Lumen, Mono, Sage or a theme of the App's
+- The look was chosen on purpose (Workshop, Lumen, Mono, Sage or a theme of the App's
   own), and a theme of its own passes `mistri check`.
 - Home is a dashboard a person starts the day on.
 - Status, money, people and dates are drawn (a tone, a currency, an avatar, a

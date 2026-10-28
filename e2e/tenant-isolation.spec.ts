@@ -3,6 +3,7 @@ import { test, expect, type Page } from './support/harness.js';
 import { follow } from './support/app.js';
 import { startTenantApp, type TenantAccount, type TenantAppFixture } from './support/tenantServer.js';
 import { TENANT_HTTP_HEADERS as names, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
+import { isSelection, leaseOfSelection } from './support/tenantSelection.js';
 
 // These tests start only their own private browser host. They do not enroll a
 // CLI server, touch the shared e2e/.tmp database, or substitute session proofs.
@@ -66,7 +67,7 @@ test.describe('private tenant browser ownership', () => {
     if (!entered) await page.getByRole('list', { name: 'Available tenants' }).getByRole('button', { name: tenant, exact: true }).click();
     const response = await reply;
     expect(response.status()).toBe(200);
-    const owner = (await response.json()) as TenantContextReply;
+    const owner = await leaseOfSelection(response);
     expect(owner.tenantId).toBe(tenant);
     owned(response, owner);
     await expect(page.getByRole('button', { name: `Tenant: ${tenant}`, exact: true })).toBeVisible();
@@ -84,11 +85,7 @@ test.describe('private tenant browser ownership', () => {
     await login(page, account);
     // Bob's one membership is entered without the chooser; Alice, a member of two, is asked.
     const sole = account === app.accounts.bob;
-    const entered = sole
-      ? page.waitForResponse(
-          (response) => new URL(response.url()).pathname === '/api/tenant/context/open' && response.request().method() === 'POST',
-        )
-      : undefined;
+    const entered = sole ? page.waitForResponse(isSelection) : undefined;
     await page.goto(`${app.origin}/${app.appId}/item`);
     if (!sole) await expect(page.getByRole('heading', { name: 'Choose a tenant' })).toBeVisible();
     const owner = await choose(page, tenant, false, entered);

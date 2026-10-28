@@ -41,8 +41,8 @@ after(() => rmSync(work, { recursive: true, force: true }));
 const WORKSHOP = `import { defineTheme } from '@mistriwork/mistri/app';
 
 export const workshop = defineTheme({
-  id: 'workshop',
-  label: 'Workshop',
+  id: 'garage',
+  label: 'Garage',
   extends: 'lumen',
   colors: {
     light: {
@@ -81,7 +81,7 @@ export default defineApp({
   resources: { task: {} },
   views: { tasks: listView('Tasks', 'task') },
   home: 'tasks',
-  ui: { customThemes: [workshop], theme: { preset: 'workshop' } },
+  ui: { customThemes: [workshop], theme: { preset: 'garage' } },
 });
 `;
 
@@ -235,7 +235,7 @@ describe('a theme ships its own faces', () => {
     const over = fontWarnings(heavyApp, big);
     assert.ok(over.some((line) => /fonts\/big\.woff2 is 160 KB as served.*subset: false/.test(line)));
     assert.ok(over.some((line) => /past the 150 KB budget/.test(line)));
-    assert.match(fontBudgetProblem(heavyApp, big)!, /the theme "workshop" 200 KB are past the 150 KB budget/);
+    assert.match(fontBudgetProblem(heavyApp, big)!, /the theme "garage" 200 KB are past the 150 KB budget/);
     assert.equal(fontBudgetProblem(app, fonts), undefined);
     /* Each theme is its own budget: a page wears one, and fetches only its faces. Two themes of 100 KB each are
        within it, though the App serves 200 KB in all. */
@@ -367,7 +367,7 @@ describe('a theme failure says the value that passes', () => {
       at[steps.at(-1)!] = fix!.value;
     }
     const fixed = compiled(raw);
-    const left = checkTheme(fixed, {}).filter((problem) => problem.themeId === 'workshop');
+    const left = checkTheme(fixed, {}).filter((problem) => problem.themeId === 'garage');
     /* Each fix is proved alone; written together, one can move a pair another fixed (an accent darkened beside
        its own tint, and the pill menu's current entry on that tint): what is left, a second run fixes. */
     assert.ok(left.length <= 3, left.map((problem) => problem.message).join('\n'));
@@ -376,24 +376,24 @@ describe('a theme failure says the value that passes', () => {
 
   test('the summary counts what to change per theme, palette and mode', () => {
     const theme = compiled();
-    assert.equal(themeSummary([theme], checkThemeWithFixes(theme)), 'Workshop light: 5 to fix · dark: 1 · Racing green light: 1');
-    assert.equal(themeSummary([THEME_PRESETS[0]!], []), '1 theme, 5 palettes: every color passes, light and dark');
+    assert.equal(themeSummary([theme], checkThemeWithFixes(theme)), 'Garage light: 5 to fix · dark: 1 · Racing green light: 1');
+    assert.equal(themeSummary([THEME_PRESETS[0]!], []), '1 theme, 12 palettes: every color passes, light and dark');
   });
 
   test("a fix is written into the theme's own source: a literal replaced, an inherited color added beside its kin", () => {
     const dir = appDir('fix-source', { 'theme.ts': WORKSHOP, 'app.ts': APP });
-    assert.deepEqual(themePlace(dir, 'workshop', 'colors.light.status.critical'), { file: join(dir, 'theme.ts'), line: 13 });
-    assert.equal(themePlace(dir, 'workshop', 'palettes[0].light.accentInk')?.line, 24);
+    assert.deepEqual(themePlace(dir, 'garage', 'colors.light.status.critical'), { file: join(dir, 'theme.ts'), line: 13 });
+    assert.equal(themePlace(dir, 'garage', 'palettes[0].light.accentInk')?.line, 24);
     // An inherited color is placed at the nearest key that would say it.
-    assert.equal(themePlace(dir, 'workshop', 'palettes[0].dark.inkMuted')?.line, 25);
+    assert.equal(themePlace(dir, 'garage', 'palettes[0].dark.inkMuted')?.line, 25);
     const said = (path: string, value: string | string[]) => ({ path, value, said: `${path}: ${value}` });
-    assert.ok('done' in writeThemeFix(dir, 'workshop', said('colors.light.accentInk', '#ba4400'), '#e8590c'));
-    assert.ok('done' in writeThemeFix(dir, 'workshop', said('palettes[0].dark.inkMuted', '#868686'), undefined));
-    assert.ok('done' in writeThemeFix(dir, 'workshop', said('colors.dark.status.critical', '#ff8080'), undefined));
+    assert.ok('done' in writeThemeFix(dir, 'garage', said('colors.light.accentInk', '#ba4400'), '#e8590c'));
+    assert.ok('done' in writeThemeFix(dir, 'garage', said('palettes[0].dark.inkMuted', '#868686'), undefined));
+    assert.ok('done' in writeThemeFix(dir, 'garage', said('colors.dark.status.critical', '#ff8080'), undefined));
     const order = ['#2557e0', '#0e9a6c', '#3559e6', '#d97706', '#e0428a', '#0e8fb0', '#a3510b', '#94a3b8'];
-    assert.ok('done' in writeThemeFix(dir, 'workshop', said('colors.light.chart', order), writtenAt(compiled(), 'colors.light.chart')));
+    assert.ok('done' in writeThemeFix(dir, 'garage', said('colors.light.chart', order), writtenAt(compiled(), 'colors.light.chart')));
     // Not the value it was read as: left, and said.
-    assert.match((writeThemeFix(dir, 'workshop', said('colors.light.link', '#c34700'), '#123456') as { left: string }).left, /by hand/);
+    assert.match((writeThemeFix(dir, 'garage', said('colors.light.link', '#c34700'), '#123456') as { left: string }).left, /by hand/);
     const text = readFileSync(join(dir, 'theme.ts'), 'utf8');
     assert.match(text, /accentInk: '#ba4400',\n {6}link: '#e8590c'/);
     assert.match(text, /dark: \{ inkMuted: '#868686' \}/);
@@ -463,17 +463,17 @@ describe('theme show', () => {
 
 test("shot and grade wear a built-in look or the App's own theme, and a palette every one of them has", () => {
   const loaded = {
-    app: { id: 'tiny', name: 'Tiny', ui: { customThemes: [compiled()], theme: { preset: 'workshop' } } },
+    app: { id: 'tiny', name: 'Tiny', ui: { customThemes: [compiled()], theme: { preset: 'garage' } } },
   } as unknown as LoadedApp;
   assert.deepEqual(
     shotLooks(loaded, ['all']).map((look) => [look.theme, look.own]),
-    [...THEME_PRESETS.map((theme) => [theme.id, false]), ['workshop', true]],
+    [...THEME_PRESETS.map((theme) => [theme.id, false]), ['garage', true]],
   );
   assert.deepEqual(shotLooks(loaded, [], 'racing'), [
-    { app: 'tiny', theme: 'workshop', own: true, palette: 'racing', label: 'Workshop Racing green' },
+    { app: 'tiny', theme: 'garage', own: true, palette: 'racing', label: 'Garage Racing green' },
   ]);
   assert.deepEqual(shotLooks(loaded, []), []);
-  assert.throws(() => shotLooks(loaded, ['harbor']), /"harbor" is not a look: .*Tiny"'s own \(workshop\)/);
+  assert.throws(() => shotLooks(loaded, ['harbor']), /"harbor" is not a look: .*Tiny"'s own \(garage\)/);
   assert.throws(() => shotLooks(loaded, ['mono'], 'racing'), /--palette "racing" is not a palette of Mono/);
 });
 
@@ -492,10 +492,10 @@ test('check says the fix at the line, check --fix writes it and the next run pas
   assert.equal(first.code, 4, first.out);
   const report = JSON.parse(first.out) as { steps: Array<{ step: string; detail: string }>; problems: Array<Record<string, any>> };
   assert.deepEqual(report.steps.slice(0, 2), [
-    { step: 'themes', status: 'failed', detail: 'Workshop light: 5 to fix · dark: 1 · Racing green light: 1' },
+    { step: 'themes', status: 'failed', detail: 'Garage light: 5 to fix · dark: 1 · Racing green light: 1' },
     { step: 'fonts', status: 'passed', detail: '1 face, 40 KB, heading preloaded' },
   ]);
-  const critical = report.problems.find((problem) => problem.path === 'ui.customThemes.workshop.colors.light.status.critical')!;
+  const critical = report.problems.find((problem) => problem.path === 'ui.customThemes.garage.colors.light.status.critical')!;
   assert.equal(critical.code, 'theme-contrast');
   assert.equal(critical.line, 13);
   assert.match(critical.file, /theme\.ts$/);

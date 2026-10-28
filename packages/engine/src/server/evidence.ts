@@ -19,6 +19,7 @@ import { TransactionOutcomeUnknown } from '../adapters/adapter.js';
 import { Refusal, recordRefusalCause } from '../shared/refusal.js';
 import type { DatabaseSchema } from '../shared/schema.js';
 import { isCapturedScopeCatalog } from '../shared/scopeCatalog.js';
+import { isRowScopeSnapshot } from '../shared/rowScope.js';
 import { carryServerRequest } from './serverRequests.js';
 
 /** Private admission errors reveal neither membership existence nor provider data. */
@@ -110,7 +111,9 @@ interface Cost {
 }
 const capturedData = new WeakMap<object, Cost>();
 /* A scope catalog (shared/scopeCatalog.ts) is detached, validated and deeply
-   frozen plain data too; its cost is measured once, without copying it. */
+   frozen plain data too; its cost is measured once, without copying it. So is
+   a row scope snapshotRowScope made (shared/rowScope.ts): a tenant read hands
+   its request's scope through several captures, and each copied it whole. */
 const catalogCosts = new WeakMap<object, Cost>();
 function catalogCost(value: object): Cost {
   let cost = catalogCosts.get(value);
@@ -130,17 +133,36 @@ function catalogCost(value: object): Cost {
   catalogCosts.set(value, cost);
   return cost;
 }
+/* A caller's value frozen all the way down — every object and array in it frozen as given, plain data with no
+   accessor (a copy refuses one) and no proxy — is one nothing can change either: freezing cannot be undone, and a
+   frozen object's values cannot be swapped. A policy's row scope is such a constant (`Object.freeze({ lead: true,
+   … })`), handed back on every request and copied afresh by each, so every request's scope was new data and nothing
+   keyed by it was ever found again (tenantReadScope.ts). Its capture is kept with it, and reused as a captured value
+   is: same object, same cost charged. */
+const frozenCaptures = new WeakMap<object, object>();
 /** Test-only: how many objects and arrays captures have copied, as opposed to reused. */
 export const captureCounters = { copied: 0 };
+
+/** Whether a value is one captureTenantData froze all the way down, or a
+ * captured scope catalog: data that cannot change for as long as it lives, so
+ * an answer derived from it alone may be kept with it (a WeakMap keyed by it)
+ * and is gone when it is. A reload captures new values and starts afresh. */
+export function isCapturedTenantData(value: unknown): boolean {
+  return value !== null && typeof value === 'object' && (capturedData.has(value) || isCapturedScopeCatalog(value as DatabaseSchema));
+}
 
 /** Server evidence is data, never getters, proxies, thenables or inherited grants. */
 export function captureTenantData<T>(input: T): T {
   let nodes = 0,
     characters = 0,
     reach = 0,
-    bytes = 0;
+    bytes = 0,
+    /* Objects copied that were not frozen as given: a subtree with none is the caller's constant. */
+    thawed = 0;
   const reuse = (value: object, depth: number): unknown => {
-    const cost = capturedData.get(value) ?? (isCapturedScopeCatalog(value as DatabaseSchema) ? catalogCost(value) : undefined);
+    const cost =
+      capturedData.get(value) ??
+      (isCapturedScopeCatalog(value as DatabaseSchema) || isRowScopeSnapshot(value) ? catalogCost(value) : undefined);
     if (!cost) return undefined;
     // Exactly the counts a fresh copy of this value would have added.
     if ((nodes += cost.nodes) > 262_144 || depth + cost.depth > 24 || (characters += cost.characters) > 16_777_216) return denyTenant();
@@ -149,7 +171,7 @@ export function captureTenantData<T>(input: T): T {
   };
   const copy = (value: unknown, depth = 0): unknown => {
     if (value !== null && typeof value === 'object' && !isProxy(value)) {
-      const kept = reuse(value, depth);
+      const kept = reuse(frozenCaptures.get(value) ?? value, depth);
       if (kept !== undefined) return kept;
     }
     if (++nodes > 262_144 || depth > 24) return denyTenant();
@@ -176,7 +198,9 @@ export function captureTenantData<T>(input: T): T {
     const keys = Reflect.ownKeys(value);
     if (keys.length > 65_537) return denyTenant();
     captureCounters.copied++;
-    const before = { nodes: nodes - 1, characters, reach, bytes };
+    const before = { nodes: nodes - 1, characters, reach, bytes, thawed };
+    // Counted after `before`: the value itself must have been frozen too, not only what it holds.
+    if (!Object.isFrozen(value)) thawed++;
     reach = depth;
     let result: object;
     if (array) {
@@ -199,12 +223,14 @@ export function captureTenantData<T>(input: T): T {
       }
       result = Object.freeze(record);
     }
-    if (bytes === before.bytes)
+    if (bytes === before.bytes) {
       capturedData.set(result, {
         nodes: nodes - before.nodes,
         characters: characters - before.characters,
         depth: reach - depth,
       });
+      if (thawed === before.thawed) frozenCaptures.set(value, result);
+    }
     reach = Math.max(reach, before.reach);
     return result;
   };

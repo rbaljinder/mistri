@@ -25,6 +25,7 @@
  */
 import type { Query, QueryClient, QueryKey } from '@tanstack/react-query';
 import { composedReads } from '@mistriwork/kit/client/composedHook.js';
+import { gatherReads } from '@mistriwork/kit/client/readGathering.js';
 import { state } from '@mistriwork/kit/client/core.js';
 import { dirtyDraft } from '@mistriwork/kit/client/write.js';
 import { queryClient } from '@mistriwork/kit/client/components/mount.js';
@@ -251,6 +252,8 @@ export function invalidateLive(batch: LiveBatch, client: QueryClient = queryClie
      page's own write had committed when that write was answered, so it is measured from there: what the write's own
      refresh began since already shows it, and is neither asked twice nor stripped of a compose's answers. */
   const arrived = liveMark(client);
+  /* What the change asks again now, it asks in one moment: a transport that can, sends it as one request. */
+  gatherReads();
   const own = batch.self && !batch.reset ? ownWriteMark() : undefined;
   const since = own ?? arrived;
   /* A refetch is the reader's own read, not a composed page's answer from before the change. */

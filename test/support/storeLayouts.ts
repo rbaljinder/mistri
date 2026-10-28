@@ -351,6 +351,14 @@ export const PROVISION: Readonly<Record<string, Provisioners>> = {
       await (await import('../../packages/mistri/src/server/tenant/tenantSandboxStore.js')).provisionPostgresTenantSandboxes(url);
     },
   },
+  // PostgreSQL only: a SQLite file has no catalog digest for a record to vouch for.
+  'validation-record': {
+    postgres: async (url) => {
+      await (
+        await import('../../packages/mistri/src/adapters/validation/postgresValidationRecord.js')
+      ).provisionPostgresValidationRecordAt(url);
+    },
+  },
   'suite-grants': {
     sqlite: async (path) => {
       const db = new DatabaseSync(path);

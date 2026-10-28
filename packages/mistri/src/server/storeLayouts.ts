@@ -462,6 +462,23 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
       }),
     },
   },
+  {
+    id: 'validation-record',
+    title: "what a production build's start last validated, so a restart on the same build and catalog checks nothing again",
+    tables: { prefix: '__mistri_validation_' },
+    /* PostgreSQL only: a production tenant App's database. A SQLite start checks in full, as it always did. */
+    current: { postgres: 1 },
+    read: marked({ postgres: { table: '__mistri_validation_meta' } }),
+    upgrades: {},
+    provision: {
+      postgres: async (url) =>
+        (await import('../adapters/validation/postgresValidationRecord.js')).provisionPostgresValidationRecordAt(url),
+    },
+    attest: {
+      postgres: async (client) =>
+        (await import('../adapters/validation/postgresValidationRecord.js')).postgresValidationRecordReady(client),
+    },
+  },
   /* A suite's stores are bound to it, as the flag control is to its deployment: a suite's start provisions them
      (all three together in the runtime schema on PostgreSQL, suiteStoresPostgres.ts), so none has a `provision` here. */
   {

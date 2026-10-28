@@ -232,6 +232,32 @@ test('a command refreshes its record once: the Done that follows with no write b
   }
 });
 
+/* A field report: a save on a boot-drawn record page asked its compose, lists and counts twice at once — the receipt's
+   refresh and the page's own, spelled with another scope, each asked it, the second cancelling the first mid-flight. */
+test('a second refresh of the same record from another surface joins the first, never asking a read twice', async () => {
+  const stops: Array<() => void> = [];
+  try {
+    const plan = shown(['page-plan', 'tick', 'task-page', JSON.stringify(key), '', 1], stops);
+    const root = shown(['page-root', 'tick', 'task-page', JSON.stringify(key), 1], stops);
+    const related = shown(['page-list', { base: 'note' }, 0], stops);
+    await answered();
+    // The write the refreshes follow.
+    composedReads()!.forget();
+    refreshAfterCommand(queryClient, ticket);
+    refreshRecordInPlace(queryClient, { ...ticket, queryScope: 1 }, true);
+    refreshRecordInPlace(queryClient, { ...ticket, connection: '' }, false);
+    await answered();
+    expect([plan.count, root.count, related.count], 'each asked once').toEqual([2, 2, 2]);
+    // A further write is news to every surface.
+    composedReads()!.forget();
+    refreshRecordInPlace(queryClient, { ...ticket, queryScope: undefined }, true);
+    await answered();
+    expect(plan.count).toBe(3);
+  } finally {
+    for (const stop of stops) stop();
+  }
+});
+
 test("a record's sections ask again only once its compose is back, which answers them (G173)", async () => {
   const stops: Array<() => void> = [];
   try {

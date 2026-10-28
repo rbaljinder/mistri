@@ -15,7 +15,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { appResourceCatalog } from '../packages/mistri/src/server/app/appResources.js';
 import { scaffoldApp } from '../packages/mistri/src/server/scaffold.js';
 import { appAdvisories, type LoadedApp } from '../packages/mistri/src/server/app/apps.js';
-import { AppProblems, parseAppConfig, parseAppPages } from '../packages/mistri/src/shared/app.js';
+import { AppProblems, parseAppConfig, parseAppPages, problemsOf } from '../packages/mistri/src/shared/app.js';
 import type { DatabaseSchema, TableMeta } from '../packages/engine/src/shared/schema.js';
 
 const ROOT = resolve('.');
@@ -228,6 +228,23 @@ describe('a load names every refusal in one run', () => {
       () => parseAppConfig({ name: 'Desk', views: { tasks: { kind: 'list' } }, home: 'tasks' }, 'app.json'),
       (err: Error) => err.message === 'app.json: views "tasks" has no "from": a list view shows the rows of one resource.',
     );
+  });
+
+  test('a fault gathered among the problems says where it happened; a refusal reads as it always did', () => {
+    // A field report: "Cannot read properties of undefined (reading 'realm')", with nothing to search for.
+    const fault = (() => {
+      try {
+        return (undefined as unknown as { realm: string }).realm;
+      } catch (error) {
+        return error;
+      }
+    })();
+    const [said] = problemsOf(fault);
+    assert.match(
+      said,
+      /^Cannot read properties of undefined \(reading 'realm'\) \(an internal error, at .*authoring-loop\.test\.ts:\d+:\d+\)\)$/,
+    );
+    assert.deepEqual(problemsOf(new Error('app.json: views "tasks" has no "from".')), ['app.json: views "tasks" has no "from".']);
   });
 
   test('the pages parse names every page too', () => {

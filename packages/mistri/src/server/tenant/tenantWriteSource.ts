@@ -29,9 +29,9 @@ import {
   readSqliteScopeCatalog,
   type SqliteScopeCatalog,
 } from '@mistriwork/engine/adapters/scoped/sqliteScopeCatalog.js';
-import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import { snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { mapScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
-import { captureTenantData, denyTenant } from '@mistriwork/engine/server/evidence.js';
+import { captureTenantData, denyTenant, TenantUnavailableError } from '@mistriwork/engine/server/evidence.js';
 import {
   assertTenantOwnership,
   captureTenantOwnership,
@@ -70,6 +70,13 @@ import type { InboxMailStore } from '../../adapters/inbox/inboxMail.js';
 import { bindTenantInboxStore } from './tenantInbox.js';
 import { bindTenantBrandingStore } from './tenantBrandingStore.js';
 import { assertBrandingWrite, type BrandingWrite } from '../../adapters/branding/branding.js';
+
+/* A writer an uncertain outcome closed is reopening itself (tenantWriterLifecycle.ts). What it turns away meanwhile
+   decided nothing about the person, so it is said as the database not answering, a 503 to try again, as /readyz says
+   it: not as a denial, which told a person mid-edit they could not edit the record. */
+const paused = (): never => {
+  throw new TenantUnavailableError();
+};
 
 export { TenantIntakeMoved, TenantWriteFailure } from './tenantWriteKindContract.js';
 
@@ -304,7 +311,8 @@ export async function openSqliteTenantWriteSource(
     const physical = new Map(Object.entries(owned.resources));
     const ids = new Set(physical.values());
     const toPhysical = (logical: string) => physical.get(logical) ?? denyTenant();
-    const allTrue: RowScope = Object.freeze(Object.fromEntries([...physical.keys()].map((id) => [id, true])));
+    // A snapshot, so every write's composition with it is kept (tenantReadScope.ts).
+    const allTrue: RowScope = snapshotRowScope(owned.schema, Object.fromEntries([...physical.keys()].map((id) => [id, true])));
     let baseline: string | undefined;
     const attest = (db: DatabaseSync, _initialCatalog: SqliteScopeCatalog) => {
       if (!db.isTransaction) return denyTenant();
@@ -392,8 +400,8 @@ export async function openSqliteTenantWriteSource(
       let input: { readonly evidence: Evidence; readonly rows: RowScope };
       let tables: readonly string[] | undefined;
       try {
-        if (closing() || typeof run !== 'function' || (assertActive !== undefined && typeof assertActive !== 'function'))
-          return denyTenant();
+        if (closing()) return paused();
+        if (typeof run !== 'function' || (assertActive !== undefined && typeof assertActive !== 'function')) return denyTenant();
         input = kind.capture(evidence, rows, owned);
         tables = footprintOf(owned, command, footprint);
       } catch (error) {
@@ -411,15 +419,15 @@ export async function openSqliteTenantWriteSource(
         // A null/absent evidence value must not throw before that boundary.
         let lastTime = input.evidence?.verifiedAt;
         const live = (): number => {
-          if (closing()) return denyTenant();
+          if (closing()) return paused();
           if (assertActive) synchronous(assertActive());
           const instant = now();
           if (isPromise(instant)) void Promise.prototype.then.call(instant, undefined, () => {});
           // This clock belongs to the source, not the request owner. It can
           // synchronously cancel/retire the request at the final precommit check.
           if (assertActive) synchronous(assertActive());
+          if (closing()) return paused();
           if (
-            closing() ||
             typeof instant !== 'number' ||
             !Number.isSafeInteger(instant) ||
             !Number.isSafeInteger(lastTime) ||
@@ -549,7 +557,7 @@ export async function openSqliteTenantWriteSource(
     };
     const markInboxRead = (mark: InboxMark): Promise<number> => {
       try {
-        if (closing()) return denyTenant();
+        if (closing()) return paused();
         assertInboxMark(mark);
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
@@ -559,7 +567,7 @@ export async function openSqliteTenantWriteSource(
     };
     const writeBranding = (write: BrandingWrite): Promise<number> => {
       try {
-        if (closing()) return denyTenant();
+        if (closing()) return paused();
         assertBrandingWrite(write);
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
@@ -639,7 +647,8 @@ export async function openPostgresTenantWriteSource(
     const physical = new Map(Object.entries(owned.resources));
     const ids = new Set(physical.values());
     const toPhysical = (logical: string) => physical.get(logical) ?? denyTenant();
-    const allTrue: RowScope = Object.freeze(Object.fromEntries([...physical.keys()].map((id) => [id, true])));
+    // A snapshot, so every write's composition with it is kept (tenantReadScope.ts).
+    const allTrue: RowScope = snapshotRowScope(owned.schema, Object.fromEntries([...physical.keys()].map((id) => [id, true])));
     let baseline: string | undefined;
     /* Every owned relation, pinned in the message that begins each write
        transaction, before the schema epoch (or the catalog digest) is read
@@ -741,8 +750,8 @@ export async function openPostgresTenantWriteSource(
       let input: { readonly evidence: Evidence; readonly rows: RowScope };
       let tables: readonly string[] | undefined;
       try {
-        if (closing() || typeof run !== 'function' || (assertActive !== undefined && typeof assertActive !== 'function'))
-          return denyTenant();
+        if (closing()) return paused();
+        if (typeof run !== 'function' || (assertActive !== undefined && typeof assertActive !== 'function')) return denyTenant();
         input = kind.capture(evidence, rows, owned);
         tables = footprintOf(owned, command, footprint);
       } catch (error) {
@@ -761,14 +770,14 @@ export async function openPostgresTenantWriteSource(
         // Shape validation happens inside the classified failure boundary.
         let lastTime = input.evidence?.verifiedAt;
         const live = (): number => {
-          if (closing()) return denyTenant();
+          if (closing()) return paused();
           if (assertActive) synchronous(assertActive());
           const instant = now();
           if (isPromise(instant)) void Promise.prototype.then.call(instant, undefined, () => {});
           // The source's clock can synchronously retire the request owner.
           if (assertActive) synchronous(assertActive());
+          if (closing()) return paused();
           if (
-            closing() ||
             typeof instant !== 'number' ||
             !Number.isSafeInteger(instant) ||
             !Number.isSafeInteger(lastTime) ||
@@ -933,7 +942,7 @@ export async function openPostgresTenantWriteSource(
     };
     const markInboxRead = (mark: InboxMark): Promise<number> => {
       try {
-        if (closing()) return denyTenant();
+        if (closing()) return paused();
         assertInboxMark(mark);
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
@@ -943,7 +952,7 @@ export async function openPostgresTenantWriteSource(
     };
     const writeBranding = (write: BrandingWrite): Promise<number> => {
       try {
-        if (closing()) return denyTenant();
+        if (closing()) return paused();
         assertBrandingWrite(write);
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));

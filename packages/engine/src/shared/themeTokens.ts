@@ -5,7 +5,7 @@
  */
 import type { ThemePalette } from '../../schema/theme.js';
 
-export const THEME_BASES = ['lumen', 'mono', 'sage'] as const;
+export const THEME_BASES = ['workshop', 'lumen', 'mono', 'sage'] as const;
 /** Each role as the custom property it is worn as: its spec path, hyphenated (`nav.ground` is `--nav-ground`, `chart[0]` is `--chart-1`). */
 export const PALETTE_TOKENS = {
   ground: '--ground',

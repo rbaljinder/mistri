@@ -412,3 +412,154 @@ test('a person who may neither run the verb nor write sees the record and no but
   expect(screen.queryByRole('button', { name: 'Start working' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Edit Felix Duval' })).toBeNull();
 });
+
+/* A turn's events, sent when the test says: what the panel draws between them is what a slow server shows. */
+function held() {
+  let send!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start: (controller) => void (send = controller),
+  });
+  const encoder = new TextEncoder();
+  return {
+    response: new Response(body, {
+      headers: {
+        'x-mistri-account': 'ada',
+        'content-type': 'text/event-stream',
+      },
+    }),
+    say: (event: string, data: unknown) => send.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)),
+    end: () => send.close(),
+  };
+}
+const turnsAnswer = (...answers: Array<() => Response>) => {
+  const fallback = fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url) === '/api/assistant/turn') return answers.shift()?.() ?? fallback(url, init);
+    // No conversation carried over from another test is reopened here.
+    if (String(url).startsWith('/api/assistant/conversation')) return json({ error: 'No such conversation.' }, 404);
+    return fallback(url, init);
+  });
+};
+
+test('a turn says it is working at once, then what each tool is doing, and nothing moves', async () => {
+  const stream = held();
+  turnsAnswer(() => stream.response);
+  const user = userEvent.setup();
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.type(await screen.findByRole('textbox', { name: 'Message the assistant' }), 'Which leads are mine?{Enter}');
+  // Before the server has said anything: a field report waited seventy seconds under the bare question.
+  expect(await screen.findByText('Working…')).toBeInTheDocument();
+  stream.say('conversation', { id: 'c1', title: 'Mine', person: 1 });
+  stream.say('running', { id: 't1', tool: 'query', label: 'Reading lead…' });
+  expect(await screen.findByText('Reading lead…')).toBeInTheDocument();
+  expect(screen.getByText('Reading lead…').getAnimations?.() ?? []).toEqual([]);
+  stream.say('step', { id: 't1', tool: 'query', label: 'Read 3 leads' });
+  expect(await screen.findByText('Working…')).toBeInTheDocument();
+  stream.say('text', { delta: 'Three are yours.' });
+  stream.say('done', { state: 'idle', tokens: 10 });
+  stream.end();
+  expect(await screen.findByText('Three are yours.')).toBeInTheDocument();
+  expect(screen.queryByText('Working…')).toBeNull();
+  expect(screen.getByText('1 step')).toBeInTheDocument();
+});
+
+test('a turn cut off on the way says the connection dropped, and Try again sends it again', async () => {
+  // A proxy's bare 500 before the stream opened: nothing was kept, so the same words go again.
+  turnsAnswer(
+    () => new Response('Container suddenly disconnected', { status: 500 }),
+    () => {
+      const stream = held();
+      stream.say('conversation', { id: 'c1', title: 'Mine', person: 1 });
+      stream.say('text', { delta: 'Half an ans' });
+      stream.end();
+      return stream.response;
+    },
+  );
+  const user = userEvent.setup();
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.type(await screen.findByRole('textbox', { name: 'Message the assistant' }), 'Which leads are mine?{Enter}');
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('The connection to the server dropped before the answer finished.');
+  expect(alert).not.toHaveTextContent('500');
+  await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+  // The stream closed without its end: the server had kept the words, so the turn is retried from them.
+  expect(await screen.findByText('Half an ans')).toBeInTheDocument();
+  await user.click(
+    within(await screen.findByRole('alert')).getByRole('button', {
+      name: 'Try again',
+    }),
+  );
+  expect(bodies()).toEqual([
+    ['/api/assistant/turn', { app: 'compass', text: 'Which leads are mine?' }],
+    ['/api/assistant/turn', { app: 'compass', text: 'Which leads are mine?' }],
+    [
+      '/api/assistant/turn',
+      {
+        app: 'compass',
+        conversation: 'c1',
+        text: 'Which leads are mine?',
+        retry: true,
+      },
+    ],
+  ]);
+});
+
+test('a conversation the server refuses is said with a way out, and is never reopened for the next person', async () => {
+  const user = userEvent.setup();
+  turnsAnswer(() =>
+    events(['conversation', { id: 'c7', title: 'Mine', person: 1 }], ['text', { delta: 'Yours.' }], ['done', { state: 'idle', tokens: 4 }]),
+  );
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.type(await screen.findByRole('textbox', { name: 'Message the assistant' }), 'Hello{Enter}');
+  expect(await screen.findByText('Yours.')).toBeInTheDocument();
+  cleanup();
+
+  // Reopened, the conversation is refused (the customer's lease is no longer the server's): said, not a blank panel.
+  const fallback = fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url, init) =>
+    String(url).startsWith('/api/assistant/conversation') ? json({ error: 'Choose a customer first.' }, 403) : fallback(url, init),
+  );
+  const opened = () => fetcher.mock.calls.filter(([url]) => String(url).startsWith('/api/assistant/conversation')).length;
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('This conversation could not be opened: Choose a customer first.');
+  expect(within(alert).getByRole('button', { name: 'New conversation' })).toBeInTheDocument();
+  cleanup();
+
+  // Another person signed in to the same tab is not handed the last one's conversation to be refused.
+  const before = opened();
+  establishSessionIdentity({
+    signedIn: true,
+    accountId: 'bob',
+    appId: 'compass',
+  });
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  expect(await screen.findByText(/Ask about your records/)).toBeInTheDocument();
+  expect(opened()).toBe(before);
+  cleanup();
+
+  // The way out is a new conversation.
+  establishSessionIdentity({
+    signedIn: true,
+    accountId: 'ada',
+    appId: 'compass',
+  });
+  turnsAnswer(() =>
+    events(['conversation', { id: 'c8', title: 'Mine', person: 1 }], ['text', { delta: 'Again.' }], ['done', { state: 'idle', tokens: 4 }]),
+  );
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.type(await screen.findByRole('textbox', { name: 'Message the assistant' }), 'Hello{Enter}');
+  expect(await screen.findByText('Again.')).toBeInTheDocument();
+  cleanup();
+  fetcher.mockImplementation(async (url, init) =>
+    String(url).startsWith('/api/assistant/conversation') ? json({ error: 'Choose a customer first.' }, 403) : fallback(url, init),
+  );
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.click(
+    within(await screen.findByRole('alert')).getByRole('button', {
+      name: 'New conversation',
+    }),
+  );
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(await screen.findByText(/Ask about your records/)).toBeInTheDocument();
+});

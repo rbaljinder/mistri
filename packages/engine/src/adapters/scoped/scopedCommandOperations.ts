@@ -12,7 +12,9 @@ export function scopedCommandInvoker(
   verify: () => void = () => {},
 ) {
   let failed = false;
-  return <A, R>(input: A, work: (input: A) => Promise<R>): Promise<R> => {
+  /* `read`: the work only reads, so on a transaction that sends together it may start beside reads in flight
+     (TransactionOperations.read); a failure still poisons every operation after it, in the order asked. */
+  return <A, R>(input: A, work: (input: A) => Promise<R>, read = false): Promise<R> => {
     let captured = input;
     let invalid: { error: unknown } | undefined;
     if (scoped) {
@@ -22,7 +24,7 @@ export function scopedCommandInvoker(
         invalid = { error };
       }
     }
-    return operations.run(async () => {
+    const job = async (): Promise<R> => {
       if (scoped && failed) throw new Refusal('This scoped transaction has failed.');
       try {
         if (invalid) throw invalid.error;
@@ -45,6 +47,7 @@ export function scopedCommandInvoker(
         failed = true;
         throw error;
       }
-    });
+    };
+    return read ? operations.read(job) : operations.run(job);
   };
 }

@@ -73,7 +73,13 @@ export class KeyRows {
     scope: RowScope,
     table: TableMeta,
     filter: Filter | undefined,
-  ): { key: string; also: ReadonlyArray<{ column: string; value: string | number | boolean }> } | undefined {
+  ):
+    | {
+        key: string;
+        values: Readonly<Record<string, string | number>>;
+        also: ReadonlyArray<{ column: string; value: string | number | boolean }>;
+      }
+    | undefined {
     const pk = table.columns.filter((column) => column.primaryKey).map((column) => column.name);
     const group = filter?.groups.length === 1 ? filter.groups[0] : undefined;
     if (!pk.length || !group || group.length < pk.length) return undefined;
@@ -95,7 +101,7 @@ export class KeyRows {
       also.push({ column: condition.column, value: condition.value });
     }
     if (Object.keys(values).length !== pk.length) return undefined;
-    return { key: JSON.stringify([this.#scope(scope), table.id, pk.map((column) => values[column])]), also };
+    return { key: JSON.stringify([this.#scope(scope), table.id, pk.map((column) => values[column])]), values, also };
   }
 
   /** Keep the rows a full read of `table` by its key will answer (`rows`, the driver's own, unconverted). */
@@ -120,7 +126,13 @@ export class KeyRows {
    * `sql`); `format` turns a driver row into the read's own (binary or not, as
    * the read's executor would). With `keeps`, a full read by key that is asked
    * in its turn is kept for those after it (a guard's read: its rows are the
-   * driver's own).
+   * driver's own). With `widen`, a read by key of a row the transaction holds
+   * locked (`held`), with nothing kept of it since the transaction last
+   * changed something, is sent as a full read through `widen.reads` (whose
+   * rows are the driver's own) and kept, and answered from it: the row cannot
+   * move while the lock is held, so the reads of it that follow — the guard
+   * reads of the write it is read for — are answered from it too, rather
+   * than each asked in its turn.
    */
   over<R extends Reads>(
     reads: R,
@@ -129,6 +141,10 @@ export class KeyRows {
     statementOf: (request: QueryRequest) => SqlFragment | undefined,
     format: (row: Row, request: QueryRequest) => Row,
     keeps: boolean,
+    widen?: {
+      held(table: TableMeta, key: Readonly<Record<string, string | number>>): boolean;
+      reads: Pick<ScopedReads, 'query'>;
+    },
   ): R {
     const query = async (request: QueryRequest): Promise<QueryResult> => {
       const table = schema.tables.find((candidate) => candidate.id === request?.table);
@@ -137,31 +153,49 @@ export class KeyRows {
           ? this.#guarded(scope, table, request.filter)
           : undefined;
       const key = guarded && !guarded.also.length ? guarded.key : undefined;
-      const kept = guarded === undefined ? undefined : this.#entries.get(guarded.key);
-      if (kept && kept.generation === this.generation()) {
+      // Asked again after a statement that moved the generation, of a column the row does not carry, or of a value it does not hold exactly: in its turn.
+      const answer = async (kept: Kept): Promise<QueryResult | undefined> => {
         const rows = await kept.rows;
         const names = request.columns?.length ? request.columns : table!.columns.map((column) => column.name);
         const sql = statementOf(request);
-        // Asked again after a statement that moved the generation, of a column the row does not carry, or of a value it does not hold exactly: in its turn.
         if (
-          rows &&
-          sql &&
-          kept.generation === this.generation() &&
-          rows.every((row) => names.every((name) => Object.hasOwn(row, name))) &&
-          rows.every((row) =>
+          !rows ||
+          !sql ||
+          kept.generation !== this.generation() ||
+          !rows.every((row) => names.every((name) => Object.hasOwn(row, name))) ||
+          !rows.every((row) =>
             guarded!.also.every((condition) => Object.hasOwn(row, condition.column) && row[condition.column] === condition.value),
           )
-        ) {
-          kept.take?.();
-          return {
-            columns: [...names],
-            rows: rows
-              .slice(0, clampLimit(request.limit))
-              .map((row) => format(Object.fromEntries(names.map((name) => [name, row[name]])), request)),
-            ms: 0,
-            sql,
-          };
-        }
+        )
+          return undefined;
+        kept.take?.();
+        return {
+          columns: [...names],
+          rows: rows
+            .slice(0, clampLimit(request.limit))
+            .map((row) => format(Object.fromEntries(names.map((name) => [name, row[name]])), request)),
+          ms: 0,
+          sql,
+        };
+      };
+      const current = this.generation();
+      const kept = guarded === undefined ? undefined : this.#entries.get(guarded.key);
+      if (kept && kept.generation === current) {
+        const answered = await answer(kept);
+        if (answered) return answered;
+      } else if (key !== undefined && current !== undefined && widen?.held(table!, guarded!.values)) {
+        const sent = widen.reads.query({ table: request.table, filter: request.filter, limit: 2, offset: 0 });
+        /* Its generation is the one it was sent under: what waited for the COMMIT leaves in front of it, in its flight
+           (postgresTransactionHandle), moving the generation as it goes, and the row it reads is after that. Kept
+           under the generation before it was sent, it would answer nothing after it. Reads are sent as they are
+           asked (createScopedReads compiles before it executes), so this is that moment. */
+        const generation = this.generation();
+        // A failure is the read's own: thrown as it would have been asked.
+        const full = await sent;
+        const read: Kept = { generation: generation ?? current, rows: Promise.resolve(full.rows) };
+        this.#entries.set(key, read);
+        const answered = await answer(read);
+        if (answered) return answered;
       }
       if (!keeps || key === undefined || request.columns?.length) return reads.query(request);
       const generation = this.generation();

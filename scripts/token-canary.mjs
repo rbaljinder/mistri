@@ -54,7 +54,7 @@ const OWN = Object.fromEntries(
     .filter(([, value]) => value),
 );
 
-export const CANARY_LOOKS = ['lumen', 'mono', 'sage', 'own'];
+export const CANARY_LOOKS = ['workshop', 'lumen', 'mono', 'sage', 'own'];
 
 /* The tokens that are the same under every theme on purpose: what is drawn over a photograph (the lightbox, a
    gallery's count and steps, a hero's words and actions) is judged against the photo, not the page, and a scrim

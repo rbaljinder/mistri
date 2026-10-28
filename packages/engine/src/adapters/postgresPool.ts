@@ -49,6 +49,7 @@ import type { NetworkPolicy } from './net/networkPolicy.js';
 import { transactionScoped } from './postgresPooler.js';
 import { balancedPoolSize, inBackgroundWork, isWriterCount, lockTimeoutMs, MAX_WRITERS, writeOrder, writerPoolSize } from './writeLanes.js';
 import { startSpan } from './telemetry/trace.js';
+import type * as ServerTiming from './telemetry/serverTiming.js';
 import { configureServerSettings, serverSettings } from './serverSettings.js';
 import { MAX_REPLICAS, noteWrite, primaryReads, ReplicaSet } from './replicas.js';
 
@@ -160,7 +161,21 @@ export interface PgConnectionOptions {
   readonly replicas?: readonly string[];
   /** Set when an untrusted client typed the address: it is dialled sealed, through this policy (untrustedDatabase.ts). */
   readonly network?: NetworkPolicy;
+  /**
+   * Readers send each query as it is asked, as writers do: for an owner that
+   * asks several statements of one snapshot at once and waits on them in
+   * order (a tenant read source, `readSnapshot`'s `ahead`). Off for every
+   * other reader, whose callers ask one statement at a time anyway.
+   */
+  readonly pipelineReads?: boolean;
+  /** What server timing calls this database (serverTiming.ts): `app` unless a replica's manager says otherwise. */
+  readonly timingLabel?: string;
 }
+
+/* Server timing (telemetry/serverTiming.ts) is loaded with the first pool, not with this module: a print-and-exit
+   flag reaches this file through the settings it reads and never opens a pool (test/cli-startup.test.ts counts what
+   it loads). Every lease comes from a pool, so a lease always finds it loaded. */
+let timing: typeof ServerTiming | undefined;
 
 /** What no one chose: an App (keyed writes) reads as widely as it writes, never fewer, because writes without
  * readers to match only moved the queue to the reads; the database browser keeps four. */
@@ -189,9 +204,15 @@ export function configurePostgresPools(options: { readers?: number; pooler?: Poo
 }
 
 /** The defaults, as this server's settings leave them. */
-export function postgresPoolDefaults(): Readonly<{ readers: number; pooler: PoolerMode }> {
+export function postgresPoolDefaults(): Readonly<{
+  readers: number;
+  pooler: PoolerMode;
+}> {
   const settings = serverSettings();
-  return { readers: settings.readers ?? defaultReaders(writerPoolSize()), pooler: settings.pooler };
+  return {
+    readers: settings.readers ?? defaultReaders(writerPoolSize()),
+    pooler: settings.pooler,
+  };
 }
 
 /** The pools a manager opens itself; a replica's readers are another manager's. */
@@ -218,6 +239,8 @@ export class PgConnectionManager {
   /** This database's replicas, each a manager of its own whose writers are never opened. */
   private readonly replicas?: ReplicaSet<PgConnectionManager>;
   private readonly network?: NetworkPolicy;
+  private readonly pipelineReads: boolean;
+  private readonly timingLabel: string;
 
   constructor(
     private readonly connectionString: string,
@@ -235,6 +258,8 @@ export class PgConnectionManager {
       throw new RangeError(`A PostgreSQL write pool holds 1 to ${MAX_WRITERS} connections; ${String(writers)} is not one of them.`);
     this.pooler = options.pooler ?? serverSettings().pooler;
     this.network = options.network;
+    this.pipelineReads = options.pipelineReads === true;
+    this.timingLabel = options.timingLabel ?? 'app';
     this.capMs = options.capMs ?? STATEMENT_TIMEOUT_MS;
     this.queueWaitMs = options.queueWaitMs ?? POOL_QUEUE_WAIT_MS;
     this.queuePerConnection = options.queuePerConnection ?? POOL_QUEUE_PER_CONNECTION;
@@ -251,7 +276,16 @@ export class PgConnectionManager {
        bounds: a replica is where this pool's reads go, so it must hold them. */
     if (replicas.length)
       this.replicas = new ReplicaSet(
-        replicas.map((url) => new PgConnectionManager(url, onLoad, load, { ...options, readers, writers, replicas: undefined })),
+        replicas.map(
+          (url) =>
+            new PgConnectionManager(url, onLoad, load, {
+              ...options,
+              readers,
+              writers,
+              replicas: undefined,
+              timingLabel: 'app-replica',
+            }),
+        ),
       );
     const run = (client: PgQuery, text: unknown, params?: unknown) =>
       (client.query as (text: unknown, params?: unknown) => Promise<unknown>)(text, params);
@@ -312,7 +346,11 @@ export class PgConnectionManager {
       return [this.meters[role].stats(this.pooler, typeof total === 'number' ? total : null)];
     });
     const replicas = (this.replicas?.pools ?? []).flatMap((replica, index) =>
-      replica.stats().map((stats): PoolRoleStats => ({ ...stats, role: 'replica', replica: index + 1 })),
+      replica.stats().map((stats): PoolRoleStats => ({
+        ...stats,
+        role: 'replica',
+        replica: index + 1,
+      })),
     );
     return [...own, ...replicas];
   }
@@ -332,7 +370,12 @@ export class PgConnectionManager {
   }
 
   /** Each replica: whether it is in use now, and how many reads it answered and handed back to the primary. */
-  replicaHealth(): ReadonlyArray<{ replica: number; healthy: boolean; served: number; fellBack: number }> {
+  replicaHealth(): ReadonlyArray<{
+    replica: number;
+    healthy: boolean;
+    served: number;
+    fellBack: number;
+  }> {
     const set = this.replicas;
     return set
       ? set.pools.map((_, index) => ({
@@ -377,9 +420,13 @@ export class PgConnectionManager {
 
   private async createPool(role: OwnRole): Promise<PgPool> {
     const pg = await this.load();
+    timing ??= await import('./telemetry/serverTiming.js');
     this.assertOpen();
     this.onLoad(pg);
-    const module = pg as { Pool?: new (options: PgPoolOptions) => PgPool; default?: { Pool?: new (options: PgPoolOptions) => PgPool } };
+    const module = pg as {
+      Pool?: new (options: PgPoolOptions) => PgPool;
+      default?: { Pool?: new (options: PgPoolOptions) => PgPool };
+    };
     const Pool = module.Pool ?? module.default?.Pool;
     if (!Pool) throw new Error('Could not find a Pool export in the "pg" package.');
     const write = role !== 'read';
@@ -392,12 +439,18 @@ export class PgConnectionManager {
       /* Readers only: a writer is opened for a write and may go. The idle
          ones never keep the process alive by themselves, so a one-shot mode
          that forgets to close still exits. */
-      ...(write ? {} : { min: Math.min(WARM_READERS, this.meters[role].size), allowExitOnIdle: true }),
+      ...(write
+        ? {}
+        : {
+            min: Math.min(WARM_READERS, this.meters[role].size),
+            allowExitOnIdle: true,
+          }),
       /* A writer sends each statement as it is asked, not after the one
          before it is answered: a transaction that asks several at once
          (pipelined, postgresTransactionHandle.ts) pays one round trip for
-         them. One asked at a time is sent and answered exactly as before. */
-      ...(write ? { pipeline: true } : {}),
+         them. One asked at a time is sent and answered exactly as before.
+         A reader only where its owner asked (pipelineReads). */
+      ...(write || this.pipelineReads ? { pipeline: true } : {}),
       /* pg awaits this hook for every physical client before its first
          checkout. Behind a transaction-mode pooler a session setting would
          land on whichever server connection the client holds at that moment
@@ -427,6 +480,27 @@ export class PgConnectionManager {
     // pg removes failed idle clients itself; an unhandled pool error would crash Node.
     pool.on('error', () => {});
     this.opened[role] = pool;
+    /* In use and waiting, for the process entry of server timing (a no-op when it is off). pg-pool's own counters. */
+    const counts = pool as unknown as {
+      totalCount?: number;
+      idleCount?: number;
+      waitingCount?: number;
+    };
+    if (timing.serverTimingOn()) {
+      timing.registerGauge(`pool-${role}-use`, () => (counts.totalCount ?? 0) - (counts.idleCount ?? 0));
+      timing.registerGauge(`pool-${role}-wait`, () => counts.waitingCount ?? 0);
+    }
+    /* With server timing on, the round trip from here to this database, once, on a connection of its own: a
+       driver without a Client (a test's) is not measured. */
+    if (!write)
+      void timing.probeRoundTrips(this.timingLabel, () => {
+        const found = pg as {
+          Client?: PgClientClass;
+          default?: { Client?: PgClientClass };
+        };
+        const Client = found.Client ?? found.default?.Client;
+        return Client && new Client({ ...this.dialOptions(), connectionTimeoutMillis: 10_000 });
+      });
     return pool;
   }
 
@@ -450,7 +524,10 @@ export class PgConnectionManager {
        lane (writeLanes.ts) and the statements that follow. */
     const waiting =
       write && this.meters[role].full()
-        ? startSpan('writer wait', { childOnly: true, attributes: { 'db.client.connection.pool.name': role } })
+        ? startSpan('writer wait', {
+            childOnly: true,
+            attributes: { 'db.client.connection.pool.name': role },
+          })
         : undefined;
     const meter = this.meters[role];
     /* The background writer is one connection that jobs wait for by design;
@@ -461,10 +538,13 @@ export class PgConnectionManager {
       throw new PoolBusy(write ? 'write' : 'read', 'queue_full');
     }
     const checkout = meter.begin();
+    const had = timing?.poolWait(`${this.timingLabel}-${role}`);
     let client: PgClient;
     try {
       client = await (bounded ? this.connectWithin(pool, write ? 'write' : 'read') : pool.connect());
+      had?.();
     } catch (error) {
+      had?.();
       if (error instanceof PoolBusy) {
         checkout.failed(true);
         waiting?.fail('pool_busy');
@@ -477,6 +557,7 @@ export class PgConnectionManager {
       throw error;
     }
     waiting?.end();
+    timing?.timeClient(client, this.timingLabel);
     const giveBack = checkout.acquired();
     const scoped =
       this.pooler === 'transaction'
@@ -485,6 +566,9 @@ export class PgConnectionManager {
             capMs: this.capMs,
             untrusted: destroyAfter,
             ...(write ? { lockTimeoutMs: this.lockMs } : {}),
+            /* A writer's client pipelines (below): a statement it sends outside
+               a transaction leaves with its BEGIN and COMMIT, in one round trip. */
+            pipelines: (client as { pipeline?: unknown }).pipeline === true,
           })
         : undefined;
     let destroy = destroyAfter;
@@ -653,10 +737,16 @@ export class PgConnectionManager {
   private async cancel(pid: number | null | undefined): Promise<void> {
     if (!pid) return;
     try {
-      const pg = (await this.load()) as { Client?: PgClientClass; default?: { Client?: PgClientClass } };
+      const pg = (await this.load()) as {
+        Client?: PgClientClass;
+        default?: { Client?: PgClientClass };
+      };
       const Client = pg.Client ?? pg.default?.Client;
       if (!Client) return;
-      const client = new Client({ ...this.dialOptions(), connectionTimeoutMillis: 10_000 });
+      const client = new Client({
+        ...this.dialOptions(),
+        connectionTimeoutMillis: 10_000,
+      });
       client.on('error', () => {});
       await client.connect();
       try {

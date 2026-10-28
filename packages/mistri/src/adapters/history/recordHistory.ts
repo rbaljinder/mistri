@@ -284,6 +284,8 @@ export interface RecordHistorySink {
   ): Promise<Record<string, unknown> | undefined>;
   /** Up to `limit` rows whose columns equal these values: the members of a team a notice mentions. */
   rows(table: string, where: Record<string, string | number>, columns: string[], limit: number): Promise<Record<string, unknown>[]>;
+  /** A read sent behind this table's UPDATE, in its round trip (CaptureSource.behind); absent where nothing rides. */
+  behind?(table: string, ride: () => void): (() => boolean) | undefined;
   append(row: RecordChangeRow): Promise<void>;
   /** A notice, appended in the same transaction (inbox/inbox.ts). */
   notify(row: NoticeRow): Promise<void>;
@@ -399,16 +401,37 @@ export function captureRecordHistory(
         [...new Set([...columns, ...(owner ? [owner] : []), ...(watched ?? [])])],
         true,
       );
-      const result = await write(request);
+      const read = watched ? [...new Set([...columns, ...watched])] : columns;
+      /* The after image asked the moment the write is sent, where the writer sends together: it leaves in the
+         write's round trip, behind it, and reads what it wrote, rather than a round trip of its own after. Only
+         where the write sets no key column, so the key it is read by is the one written. It is answered before the
+         write's outcome is acted on, so nothing is left in flight behind a write that failed (the transaction's
+         ROLLBACK comes after it); a write that fails fails it too, and the write's failure is the one thrown. */
+      let early: Promise<Record<string, unknown> | undefined> | undefined;
+      const withdraw =
+        before && !Object.keys(request.key).some((column) => Object.hasOwn(request.values, column))
+          ? sink.behind?.(request.table, () => {
+              early = sink.read(request.table, request.key, read);
+              early.catch(() => {});
+            })
+          : undefined;
+      let result: UpdateResult;
+      try {
+        result = await write(request);
+      } finally {
+        withdraw?.();
+        await early?.catch(() => undefined);
+      }
       if (result.affected !== 1 || !before) return result;
       // A key column the update moved is read back under its new value.
+      const keyMoved = Object.keys(request.key).some((column) => Object.hasOwn(result.applied, column));
       const key = Object.fromEntries(
         Object.entries(request.key).map(([column, value]) => [
           column,
           Object.hasOwn(result.applied, column) ? (result.applied[column] as string | number) : value,
         ]),
       );
-      const after = await sink.read(request.table, key, watched ? [...new Set([...columns, ...watched])] : columns);
+      const after = await (early && !keyMoved ? early : sink.read(request.table, key, read));
       if (!after) return result;
       const moved = columns.filter((column) => !same(before[column], after[column]) && column !== owner);
       // Writing the value a record already holds is not a change to it, and nor is the platform advancing its own bookkeeping.

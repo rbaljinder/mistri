@@ -75,7 +75,7 @@ The checks are `mistri docs build-with-an-agent`'s; a test keeps them identical.
 - The folded rail and the phone menu still reach every entry.
 
 **Before calling it done** — the whole App, once every page passes
-- The look was chosen on purpose (Lumen, Mono, Sage or a theme of the App's
+- The look was chosen on purpose (Workshop, Lumen, Mono, Sage or a theme of the App's
   own), and a theme of its own passes `mistri check`.
 - Home is a dashboard a person starts the day on.
 - Status, money, people and dates are drawn (a tone, a currency, an avatar, a

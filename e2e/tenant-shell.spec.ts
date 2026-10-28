@@ -2,6 +2,7 @@ import { test, expect, type Page } from './support/harness.js';
 import { scalar } from './support/db.js';
 import { startTenantApp, type TenantAppFixture, type TenantAccount } from './support/tenantServer.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
+import { isSelection } from './support/tenantSelection.js';
 
 // The tenant shell's own chrome, through genuine native sign-in: a sole
 // membership entered without the chooser, the header's New menu, and the bell
@@ -37,7 +38,7 @@ test.describe('the tenant shell', () => {
         if (document.querySelector('.tenant-chooser')) seen.chooser++;
       }).observe(document, { childList: true, subtree: true });
     });
-    const opened = page.waitForResponse((reply) => new URL(reply.url()).pathname === '/api/tenant/context/open');
+    const opened = page.waitForResponse(isSelection);
     await page.goto(`${app.origin}/${app.appId}/item`);
     expect((await opened).status()).toBe(200);
     await expect(page.getByRole('button', { name: 'Tenant: north', exact: true })).toBeVisible();

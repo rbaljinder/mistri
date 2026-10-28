@@ -99,7 +99,7 @@ export function effectiveThemePalette(palette: ThemePalette, dark: boolean, own:
      would not. An App's accent is not the one the theme chose them for, so they are chosen again. */
   const under = authored ? { ...palette, onAccent: undefined, accentInk: undefined, accent } : palette;
   const onAccent = under.onAccent ?? deriveOnAccent(under);
-  const accentInk = under.accentInk ?? deriveAccentInk(under);
+  const accentInk = under.accentInk ?? deriveAccentInk(under, Boolean(authored));
   /* What a theme left as its accent and an App's accent is drawn as a line or a word, not a fill: a link, the ring, the
      menu's current mark, the first series. It follows the accent's ink; a color the theme chose for it stays. */
   const ink = accentInk ?? accent;

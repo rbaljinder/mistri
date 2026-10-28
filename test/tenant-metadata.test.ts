@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TenantContextError, refusalReasons } from '../packages/engine/src/server/evidence.js';
-import { captureTenantPages, projectTenantMetadata, tenantSuggestedPage } from '../packages/mistri/src/server/tenant/tenantMetadata.js';
+import {
+  captureTenantPages,
+  forgetTenantProjections,
+  projectTenantMetadata,
+  tenantProjectionsBuilt,
+  tenantSuggestedPage,
+} from '../packages/mistri/src/server/tenant/tenantMetadata.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { parsePageBody, parsePagesConfig, type PageDef, type PageSection } from '../packages/engine/src/shared/page.js';
 import { resolvePageEmbeds } from '../packages/mistri/src/shared/appPages.js';
@@ -95,6 +101,60 @@ test('metadata permits visible alternate-key relationships and about sums withou
     ['item-detail', 'note-detail'],
   );
   assert.doesNotMatch(JSON.stringify(result.pages), /"value":0/);
+});
+test('a projection is built once for everything it reads, and never handed to a reader who reads otherwise', () => {
+  forgetTenantProjections();
+  const definition = app({
+    auth: {
+      rows: 'tenant',
+      roles: { owner: { read: true, write: true }, clerk: { read: ['item'] } },
+    },
+    views: {
+      items: { kind: 'list', from: 'item', show: ['name', 'status'] },
+      notes: { kind: 'list', from: 'note', show: ['name'], roles: ['owner'] },
+    },
+    nav: ['items', 'notes'],
+  });
+  const pages = captureTenantPages(definition, [page()]);
+  const capabilities = (writable: string[]): TenantCapabilities => ({ resources: {}, writable, grantedCommands: [] });
+  const built = tenantProjectionsBuilt();
+  /* Each request brings its own catalog object: the same content is the same answer, built once. */
+  const owner = projectTenantMetadata(definition, pages, schema(), capabilities(['item']), ['owner']);
+  const again = projectTenantMetadata(definition, pages, schema(), capabilities(['item']), ['owner']);
+  assert.equal(again, owner);
+  assert.equal(tenantProjectionsBuilt(), built + 1);
+  assert.ok(Object.isFrozen(owner.app));
+  /* Another role, other grants, another catalog, realm, zone or locale: each its own answer. */
+  const clerk = projectTenantMetadata(definition, pages, schema(), capabilities(['item']), ['clerk']);
+  assert.notEqual(clerk, owner);
+  assert.ok(Object.hasOwn(owner.app!.views, 'notes'));
+  assert.ok(!Object.hasOwn(clerk.app!.views, 'notes'));
+  const readOnly = projectTenantMetadata(definition, pages, schema(), capabilities([]), ['owner']);
+  assert.notEqual(readOnly, owner);
+  assert.deepEqual(readOnly.app!.writableTables, []);
+  assert.deepEqual(owner.app!.writableTables, ['item']);
+  const narrower = schema();
+  narrower.tables.pop();
+  narrower.foreignKeys = [];
+  const pruned = projectTenantMetadata(definition, pages, narrower, capabilities(['item']), ['owner']);
+  assert.notEqual(pruned, owner);
+  assert.ok(!Object.hasOwn(pruned.app!.views, 'notes'));
+  for (const other of [
+    projectTenantMetadata(definition, pages, schema(), capabilities(['item']), ['owner'], 'platform'),
+    projectTenantMetadata(definition, pages, schema(), capabilities(['item']), ['owner'], 'tenant', 'Asia/Kolkata'),
+    projectTenantMetadata(definition, pages, schema(), capabilities(['item']), ['owner'], 'tenant', undefined, 'de-DE'),
+    projectTenantMetadata(definition, pages, schema(), capabilities(['item']), ['owner', 'clerk']),
+    projectTenantMetadata(definition, pages, schema(), capabilities(['item']), ['clerk', 'owner']),
+  ])
+    assert.notEqual(other, owner);
+  /* A catalog changed in place after it was read is read again, never taken for the one it was. */
+  const mutable = schema();
+  const before = projectTenantMetadata(definition, pages, mutable, capabilities(['item']), ['owner']);
+  mutable.tables.pop();
+  mutable.foreignKeys = [];
+  const after = projectTenantMetadata(definition, pages, mutable, capabilities(['item']), ['owner']);
+  assert.notEqual(after, before);
+  assert.ok(!Object.hasOwn(after.app!.views, 'notes'));
 });
 function plain(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value));

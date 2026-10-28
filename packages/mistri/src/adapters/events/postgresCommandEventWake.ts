@@ -18,8 +18,10 @@
  * unless the connection names a direct `"listen"` URL, which skips the pooler
  * (the writers' `NOTIFY` still goes through it: PostgreSQL delivers it to any
  * listener on the database at commit).
+ * A job enqueued or redriven on PostgreSQL sends the same notification, so a
+ * host waits for work rather than polling for it (jobHost.ts).
  * A listener that loses its connection reconnects after a pause, and while
- * it is down the host's idle ceiling bounds how late a fact is seen.
+ * it is down (`hearing()` false) the host polls again, up to its idle ceiling.
  */
 
 import { pgConnectionOptions } from '@mistriwork/engine/adapters/postgresValues.js';
@@ -57,6 +59,8 @@ type ListenClientClass = new (options: {
 }) => ListenClient;
 
 export interface CommandEventListener {
+  /** A LISTEN is in place now: false while a lost connection waits to reconnect, when a fact may go unheard. */
+  hearing(): boolean;
   close(): Promise<void>;
 }
 
@@ -141,6 +145,7 @@ export async function listenForWake(
 
   await open();
   return Object.freeze({
+    hearing: () => !closed && client !== undefined,
     async close(): Promise<void> {
       closed = true;
       if (retry) clearTimeout(retry);

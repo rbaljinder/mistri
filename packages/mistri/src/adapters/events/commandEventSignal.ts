@@ -20,6 +20,14 @@ export function onCommandEvents(listener: () => void): () => void {
   };
 }
 
+/**
+ * A job was enqueued in this process, its transaction committed: the same nudge, so a host that sleeps until
+ * something falls due (jobHost.ts) hears of work as it is written rather than when its wait runs out.
+ */
+export function jobEnqueued(): void {
+  commandEventsAppended();
+}
+
 /** A batch of command facts was just appended in this process. */
 export function commandEventsAppended(): void {
   for (const listener of listeners) {

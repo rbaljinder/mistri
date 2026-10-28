@@ -361,7 +361,7 @@ test('a page says where its Apps are mounted, and under a base path its own file
 test("a page says the density its App's look starts at, so boot zooms once", async () => {
   const { withHead } = await import('../packages/engine/src/server/clientHttp.js');
   const { lookDensityFor } = await import('../packages/engine/src/server/clientSurface.js');
-  assert.equal(lookDensityFor({}), 'compact', 'Lumen, every App by default');
+  assert.equal(lookDensityFor({}), 'compact', 'Workshop, every App by default');
   assert.equal(lookDensityFor(undefined), undefined, 'the Workbench');
   const page = '<!doctype html><html><head><meta charset="utf-8" /></head><body></body></html>';
   assert.match(withHead(page, { density: 'compact' }), /<meta name="mistri-density" content="compact">\n {2}<\/head>/);
@@ -391,7 +391,8 @@ test("the face is asked for where the App's look is set in it, not wherever its 
   const { lookFacesFor, lookSheetsFor } = await import('../packages/engine/src/server/clientSurface.js');
   const { compileTheme } = await import('../packages/mistri/src/shared/themeSpec.js');
   const { themePreset } = await import('../packages/engine/src/shared/themePresets.js');
-  assert.deepEqual(lookFacesFor({}), ['lumen'], 'an App that names no look wears Lumen');
+  assert.deepEqual(lookFacesFor({}), ['workshop'], 'an App that names no look wears Workshop, set in Barlow');
+  assert.deepEqual(lookFacesFor({ theme: { preset: 'lumen' } }), ['lumen']);
   assert.deepEqual(lookFacesFor({ theme: { preset: 'sage' } }), []);
   assert.deepEqual(lookFacesFor({ theme: { preset: 'mono' } }), []);
   assert.deepEqual(lookFacesFor(undefined), [], 'the Workbench');

@@ -21,6 +21,7 @@ import { TenantCommandStartupError } from './tenantStartupError.js';
 // A jobs module names only ids in its refusals: they reach the operator in their own words.
 export const jobsCheck = Object.freeze<TenantStartupCheck>({
   phase: 'commands',
+  catalog: true,
   run: ({ app, policy, registry, owned, configured, jobs }) => {
     if (!jobs) return;
     if (!registry) throw new TenantCommandStartupError("--jobs requires a --commands registry: a job runs one of the App's commands.");

@@ -24,12 +24,17 @@ const theme = (extra: Record<string, unknown>, extendsLook = 'lumen') =>
 const checked = (compiled: ReturnType<typeof theme>) => checkThemeWithFixes(compiled).map((problem) => problem.message);
 const refuse = (extra: Record<string, unknown>, pattern: RegExp) => assert.throws(() => theme(extra), pattern);
 
-test('the built-in looks say none of it: no band, pattern, part or icon weight, no attribute and no sheet', () => {
+/* Workshop's menu grain is the one pattern a built-in wears (docs/design.md, Workshop's exceptions): the look is the
+   field report's, and its ink menu reads as a printed sheet only with it. Nothing else a built-in says reaches the
+   parts or the surfaces. */
+test('the built-in looks say none of it: no band, part or icon weight, and no pattern but Workshop menu grain', () => {
   for (const look of THEME_PRESETS) {
     const { attributes, sheets } = recipeAttributes(look);
-    for (const name of ['data-parts', 'data-surface-ground', 'data-surface-nav', 'data-icons'])
-      assert.equal(attributes[name], undefined, `${look.id} ${name}`);
-    assert.ok(!sheets.includes('parts') && !sheets.includes('surfaces'), look.id);
+    const grained = look.id === 'workshop';
+    for (const name of ['data-parts', 'data-surface-ground', 'data-icons']) assert.equal(attributes[name], undefined, `${look.id} ${name}`);
+    assert.equal(attributes['data-surface-nav'], grained ? 'grain 1' : undefined, `${look.id} data-surface-nav`);
+    assert.ok(!sheets.includes('parts'), look.id);
+    assert.equal(sheets.includes('surfaces'), grained, `${look.id} surfaces sheet`);
     assert.equal(look.light.band, undefined);
   }
 });

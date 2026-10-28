@@ -33,6 +33,7 @@
  * would not (appComputed.ts).
  */
 import type { SqlStyle } from './filter.js';
+import { noteRead } from './query.js';
 import type { ColumnMeta, DatabaseSchema } from './schema.js';
 
 export const COMPUTED_TYPES = ['boolean', 'number', 'date'] as const;
@@ -248,13 +249,17 @@ export function computedKind(node: ComputedNode, kindOf: (path: string) => Value
 
 /** The expression with its constants as this request's values: the App's day, the instant, the reader. */
 export function foldConstants(node: ComputedNode, values: { today: string; now: string; me: string | null }): ComputedNode {
+  /* Each constant folded is told to whatever keeps the catalog it is folded into (query.ts readsOf). */
   const fold = (n: ComputedNode): ComputedNode => {
     switch (n.k) {
       case 'today':
+        noteRead(1);
         return { k: 'date', value: values.today };
       case 'now':
+        noteRead(2);
         return { k: 'instant', value: values.now };
       case 'me':
+        noteRead(0, true);
         return values.me === null ? { k: 'nobody' } : { k: 'text', value: values.me };
       case 'op':
         return { ...n, left: fold(n.left), right: fold(n.right) };

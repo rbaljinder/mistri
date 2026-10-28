@@ -12,6 +12,13 @@ import { namedCommands } from './support/commandCatalog.js';
  * pre-commit window lies: a sign-out during a write's callback refuses its
  * commit; one after COMMIT leaves it applied and refuses the next request.
  *
+ * Those cases change the store as another process would, so they run with
+ * nothing kept (MISTRI_AUTH_SESSION_CACHE=0): every observation reads the
+ * store. What a few seconds of kept reads changes (authStoreReads.ts) is
+ * proven at the end: a signed-in request's cost on the store, cold, warm and
+ * in a page's burst; a sign-out in this process refused at once, before a
+ * commit too; one elsewhere refused once what was kept expires.
+ *
  * The business source is PostgreSQL too, in another database on the same
  * server, which is what separation permits. Live and opt-in like the other
  * PostgreSQL suites; the role needs CREATEDB for the dedicated databases.
@@ -19,6 +26,7 @@ import { namedCommands } from './support/commandCatalog.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -227,8 +235,11 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
       publicInvitations?: boolean;
       sqliteAuth?: boolean;
       missingInvitations?: boolean;
+      /** MISTRI_AUTH_SESSION_CACHE for this App's auth store; undefined leaves it unset (the default). */
+      keptSessions?: string | undefined;
     } = {},
   ) {
+    const kept = 'keptSessions' in options ? options.keptSessions : '0';
     for (const statement of [...RESET, ...SETUP]) await control.query(statement);
     /* CASCADE: the store's later tables (an identity provider's sessions, SCIM's links, OAuth's grants) hang off a
        session or a user and are deleted with them, so they go too rather than each being named here. */
@@ -258,14 +269,19 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
     };
     const port = await reservePort(),
       origin = `http://127.0.0.1:${port}`;
-    const previous = process.env.BETTER_AUTH_SECRET;
+    const previous = process.env.BETTER_AUTH_SECRET,
+      previousKept = process.env.MISTRI_AUTH_SESSION_CACHE;
     process.env.BETTER_AUTH_SECRET = 'synthetic-postgres-auth-tenant-secret-at-least-thirty-two-characters';
+    if (kept === undefined) delete process.env.MISTRI_AUTH_SESSION_CACHE;
+    else process.env.MISTRI_AUTH_SESSION_CACHE = kept;
     let runtime: AppAuthRuntime;
     try {
       runtime = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin], excludeConnections: [connection] });
     } finally {
       if (previous === undefined) delete process.env.BETTER_AUTH_SECRET;
       else process.env.BETTER_AUTH_SECRET = previous;
+      if (previousKept === undefined) delete process.env.MISTRI_AUTH_SESSION_CACHE;
+      else process.env.MISTRI_AUTH_SESSION_CACHE = previousKept;
     }
     let owner: Owner | undefined;
     const privateOwners: Array<() => Promise<void>> = [];
@@ -1007,4 +1023,123 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
       }
       // Final-observation guarantee only, not an atomic auth/business transaction.
     });
+
+  /**
+   * Every statement this process sends the App's auth store, as its pool's
+   * clients send them, from now until the test ends; the test's own client is
+   * not counted, nor a new connection's setup (`SET search_path …`).
+   */
+  async function authStatements(t: TestContext) {
+    const specifier = 'pg';
+    const pg = (await import(specifier)) as { default?: { Client: { prototype: PgQuery } }; Client?: { prototype: PgQuery } };
+    const prototype = (pg.Client ?? pg.default!.Client).prototype as PgQuery & Record<string, unknown>;
+    const original = prototype.query;
+    const database = new URL(authUrl).pathname.slice(1);
+    const seen: string[] = [];
+    prototype.query = function (this: { database?: string }, request: unknown, ...rest: unknown[]) {
+      const text = typeof request === 'string' ? request : (request as { text?: string } | null)?.text;
+      if (this !== (auth as unknown) && this.database === database && text !== undefined && !text.startsWith('SET ')) seen.push(text);
+      return (original as (...given: unknown[]) => unknown).call(this, request, ...rest);
+    } as PgQuery['query'];
+    t.after(() => {
+      prototype.query = original;
+    });
+    return {
+      /** What was sent since the last take. */
+      take: () => seen.splice(0),
+    };
+  }
+
+  test('a signed-in read costs the auth store at most two statements cold and none warm, and a page-like burst of sixteen no more', async (t) => {
+    const f = await fixture(t, { keptSessions: '3' });
+    await f.grant(f.member);
+    const context = await f.open(f.member);
+    const sent = await authStatements(t);
+    const read = async () => {
+      const reply = await f.data('/api/query', context, { table: 'item' });
+      assert.equal(reply.status, 200, reply.text);
+    };
+    // Cold: Better Auth reads the session by its token and then its account; every observation after it is that read.
+    await sleep(3_100);
+    sent.take();
+    await read();
+    const cold = sent.take();
+    assert.ok(cold.length <= 2, `cold: ${cold.length}\n${cold.join('\n')}`);
+    // Warm: nothing at all.
+    await read();
+    await read();
+    assert.deepEqual(sent.take(), []);
+    // A page's burst, arriving cold together, reads once between them.
+    await sleep(3_100);
+    sent.take();
+    await Promise.all(Array.from({ length: 16 }, read));
+    const burst = sent.take();
+    assert.ok(burst.length <= 2, `burst: ${burst.length}\n${burst.join('\n')}`);
+  });
+
+  test('with nothing kept, a signed-in read observes the store at every fence, as before the cache', async (t) => {
+    const f = await fixture(t);
+    await f.grant(f.member);
+    const context = await f.open(f.member);
+    const sent = await authStatements(t);
+    assert.equal((await f.data('/api/query', context, { table: 'item' })).status, 200);
+    // The session and its account, then the session again at each fence: the cost a field report measured.
+    assert.ok(sent.take().length > 2);
+  });
+
+  test('a sign-out in this process is refused at once, inside what was kept', async (t) => {
+    const f = await fixture(t, { keptSessions: undefined });
+    await f.grant(f.member);
+    const context = await f.open(f.member);
+    assert.equal((await f.data('/api/query', context, { table: 'item' })).status, 200);
+    const out = await f.call('/api/auth/sign-out', {}, f.signedIn(f.member));
+    assert.equal(out.status, 200, out.text);
+    refused(await f.data('/api/query', context, { table: 'item' }));
+    refused(await f.data('/api/update', context, { table: 'item', key: { id: 'north-item' }, values: { name: 'After' } }));
+    refused(await f.call(`/api/tenant/context/open?app=${appId}&tenant=north`, {}, f.signedIn(f.member)));
+    assert.equal(await itemName('north-item'), 'North item');
+  });
+
+  test("a sign-out in this process during a command's callback refuses its commit, inside what was kept", async (t) => {
+    const f = await fixture(t, { keptSessions: undefined });
+    await f.grant(f.member);
+    const context = await f.open(f.member),
+      entered = gate(),
+      release = gate();
+    hold.__tablewalkTenantAuthHold = async () => {
+      entered.release();
+      await release.promise;
+    };
+    t.after(() => {
+      delete hold.__tablewalkTenantAuthHold;
+      release.release();
+    });
+    const pending = f.data('/api/commands/execute', context, {
+      command: 'advance',
+      commandVersion: 1,
+      key: { id: 'north-task' },
+      expectedVersion: 0,
+      idempotencyKey: 'pg-auth-kept-window-0001',
+      input: {},
+    });
+    await entered.promise;
+    const out = await f.call('/api/auth/sign-out', {}, f.signedIn(f.member));
+    assert.equal(out.status, 200, out.text);
+    release.release();
+    const answer = await pending;
+    assert.ok(answer.status >= 400 || answer.body.status !== 'applied', answer.text);
+    assert.equal(await taskVersion('north-task'), 0, 'the business effect rolled back');
+    assert.equal(await receipts(), 0);
+  });
+
+  test('a sign-out elsewhere is refused here once what was kept expires', async (t) => {
+    const f = await fixture(t, { keptSessions: '1' });
+    await f.grant(f.member);
+    const context = await f.open(f.member);
+    assert.equal((await f.data('/api/query', context, { table: 'item' })).status, 200);
+    // Another process ends the session: this one may answer from what it kept for at most the TTL.
+    await auth.query(`DELETE FROM ${S}.auth_session WHERE "userId" = $1`, [f.member.accountId]);
+    await sleep(1_100);
+    refused(await f.data('/api/query', context, { table: 'item' }));
+  });
 });

@@ -248,10 +248,14 @@ button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-o
 #table-list .view-tag { color: var(--status-info); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; }
 /* App nav (--app): group headings between runs of entries, entries the
    connection cannot honour, and the row that flips to the full table list. */
+/* Its line is the capitals' own height (line-height 1, set after the `font` shorthand resets it): a face's
+   `normal` leading made the line 12px in Helvetica and 14px in Barlow, and at 14px a folding heading's center
+   sat too near the row under it for axe's 24px target spacing (WCAG 2.5.8) wherever the menu is compact. */
 #table-list li.nav-group {
   padding: var(--space-3h) var(--space-3) var(--space-1) calc(8px + var(--nav-group-inset, 0px));
   color: var(--ink-muted);
   font: var(--text-xs) var(--sans);
+  line-height: 1;
   text-transform: uppercase; letter-spacing: 0.06em;
 }
 #table-list .nav-missing { color: var(--ink-muted); }

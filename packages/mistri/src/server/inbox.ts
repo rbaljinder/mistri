@@ -292,6 +292,10 @@ const parseKey = (text: string): Record<string, string | number> | undefined => 
  * Which of these notices the reader may still see, by the read that opens
  * each record's page: one query per resource for a one-column key. A
  * resource the reader's catalog does not have hides every notice on it.
+ * The reads are asked at once: one after another, each was a round trip to
+ * the database, and the bell's unread count reads up to UNREAD_CAP notices
+ * over however many resources they name — a field report saw the inbox
+ * double in time as a person's notices spread over more of them.
  */
 async function visibleTo(reader: Adapter, schema: DatabaseSchema, notices: readonly StoredNotice[]): Promise<Set<number>> {
   const visible = new Set<number>();
@@ -301,17 +305,17 @@ async function visibleTo(reader: Adapter, schema: DatabaseSchema, notices: reado
     if (!key) continue;
     byResource.set(notice.resource, [...(byResource.get(notice.resource) ?? []), { id: notice.id, key }]);
   }
-  for (const [resource, items] of byResource) {
+  const asked = [...byResource].map(async ([resource, items]) => {
     const table = findTable(schema, resource);
     const pk = table ? primaryKey(table) : [];
-    if (!table || !pk.length) continue;
+    if (!table || !pk.length) return;
     const exact = items.filter(
       (item) => Object.keys(item.key).length === pk.length && pk.every((column) => Object.hasOwn(item.key, column)),
     );
     if (pk.length === 1) {
       const [column] = pk;
       const values = [...new Set(exact.map((item) => item.key[column]))];
-      if (!values.length) continue;
+      if (!values.length) return;
       const found = await reader.query({
         table: resource,
         columns: [column],
@@ -321,27 +325,30 @@ async function visibleTo(reader: Adapter, schema: DatabaseSchema, notices: reado
       });
       const seen = new Set(found.rows.map((row) => String(row[column])));
       for (const item of exact) if (seen.has(String(item.key[column]))) visible.add(item.id);
-      continue;
+      return;
     }
-    for (const item of exact) {
-      const found = await reader.query({
-        table: resource,
-        columns: pk,
-        limit: 1,
-        offset: 0,
-        filter: {
-          groups: [
-            pk.map((column) => ({
-              column,
-              op: '=' as const,
-              value: item.key[column],
-            })),
-          ],
-        },
-      });
-      if (found.rows.length === 1) visible.add(item.id);
-    }
-  }
+    await Promise.all(
+      exact.map(async (item) => {
+        const found = await reader.query({
+          table: resource,
+          columns: pk,
+          limit: 1,
+          offset: 0,
+          filter: {
+            groups: [
+              pk.map((column) => ({
+                column,
+                op: '=' as const,
+                value: item.key[column],
+              })),
+            ],
+          },
+        });
+        if (found.rows.length === 1) visible.add(item.id);
+      }),
+    );
+  });
+  await Promise.all(asked);
   return visible;
 }
 
@@ -425,13 +432,16 @@ async function storeFor(options: InboxOptions): Promise<{
 /** How many unread notices count at most; past it the bell says "99+". */
 const UNREAD_CAP = 100;
 
-async function unreadCount(options: InboxOptions, store: InboxStore, recipient: string, namespace: string): Promise<number> {
-  const unread = await store.readInbox({
+const unreadOf = (store: InboxStore, recipient: string, namespace: string) =>
+  store.readInbox({
     app: namespace,
     recipient,
     limit: UNREAD_CAP,
     unread: true,
   });
+
+async function unreadCount(options: InboxOptions, store: InboxStore, recipient: string, namespace: string): Promise<number> {
+  const unread = await unreadOf(store, recipient, namespace);
   const visible = await visibleTo(options.reader, options.schema, unread);
   return unread.filter((notice) => visible.has(notice.id)).length;
 }
@@ -452,14 +462,25 @@ export async function readInboxFor(
   }
   if (options.unread !== undefined && typeof options.unread !== 'boolean') throw new HttpError(400, 'Invalid notification filter.');
   const { store, recipient, namespace } = await storeFor(options);
-  const rows = await store.readInbox({
-    app: namespace,
-    recipient,
-    limit,
-    ...(options.before === undefined ? {} : { before: options.before as number }),
-    ...(options.unread ? { unread: true } : {}),
-  });
-  const visible = await visibleTo(options.reader, options.schema, rows);
+  /* The page, the unread notices the bell counts and the email choice are three reads of the store that wait on
+     nothing of each other, and whether each notice is still the reader's is asked once for both lists. */
+  const [rows, unread, emailed] = await Promise.all([
+    store.readInbox({
+      app: namespace,
+      recipient,
+      limit,
+      ...(options.before === undefined ? {} : { before: options.before as number }),
+      ...(options.unread ? { unread: true } : {}),
+    }),
+    unreadOf(store, recipient, namespace),
+    appRulesEmail(options.app) && holdsMail(store)
+      ? store
+          .inboxMail()
+          .emailOff(namespace, recipient)
+          .then((off) => ({ email: !off }))
+      : {},
+  ]);
+  const visible = await visibleTo(options.reader, options.schema, [...new Map([...rows, ...unread].map((row) => [row.id, row])).values()]);
   const notices = rows
     .filter((row) => visible.has(row.id))
     .map((row): InboxNotice => {
@@ -475,11 +496,9 @@ export async function readInboxFor(
         read: row.readAt !== null,
       };
     });
-  const emailed =
-    appRulesEmail(options.app) && holdsMail(store) ? { email: !(await store.inboxMail().emailOff(namespace, recipient)) } : {};
   return {
     notices,
-    unread: await unreadCount(options, store, recipient, namespace),
+    unread: unread.filter((notice) => visible.has(notice.id)).length,
     ...(rows.length === limit ? { more: rows[rows.length - 1].id } : {}),
     ...emailed,
   };

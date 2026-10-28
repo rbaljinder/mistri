@@ -117,17 +117,20 @@ export interface Audience {
 }
 
 /** The theme an App's page is guessed to wear: its audience's (themeResolve.ts) without a reader's pick, which the
-    server cannot see, else the App's own look, else Lumen's. */
+    server cannot see, else the App's own look, else Workshop's. */
 function wornTheme(ui: LookChoice | undefined, audience: Audience = {}) {
   if (!ui) return undefined;
   const offered = (id: string) => Boolean(ui.customThemes?.some((item) => item.id === id) ?? false) || Boolean(themePreset(id));
   const { id } = resolveTheme({ ...audience, for: ui.theme?.for, preset: ui.theme?.preset, offered });
-  return ui.customThemes?.find((item) => item.id === id) ?? themePreset(id) ?? themePreset('lumen');
+  return ui.customThemes?.find((item) => item.id === id) ?? themePreset(id) ?? themePreset('workshop');
 }
 
-/** The face each look sheet declares, by the family a stack begins with to be set in it (lumenLook.css). */
-const SHEET_FACES: Readonly<Record<string, { family: string; file: RegExp }>> = {
-  lumen: { family: 'Inter', file: /^assets\/inter-latin-[\w-]+\.woff2$/ },
+/** The faces each look sheet declares, by the families a stack begins with to be set in them (lumenLook.css,
+    workshopLook.css), and the files preloaded: Workshop's regular and its condensed bold, which every page draws;
+    its semibold comes when a line asks for it. */
+const SHEET_FACES: Readonly<Record<string, { families: readonly string[]; file: RegExp }>> = {
+  workshop: { families: ['Barlow', 'Barlow Semi Condensed'], file: /^assets\/barlow-(?:400|semi-condensed-700)-[\w-]+\.woff2$/ },
+  lumen: { families: ['Inter'], file: /^assets\/inter-latin-[\w-]+\.woff2$/ },
 };
 
 /**
@@ -146,7 +149,7 @@ export function lookFacesFor(ui: LookChoice | undefined, audience?: Audience): r
       ?.trim()
       .replace(/^["']|["']$/g, '');
   const leads = new Set([first(theme.fonts?.ui), first(theme.fonts?.heading)]);
-  return recipeAttributes(theme).sheets.filter((sheet) => SHEET_FACES[sheet] && leads.has(SHEET_FACES[sheet].family));
+  return recipeAttributes(theme).sheets.filter((sheet) => SHEET_FACES[sheet]?.families.some((family) => leads.has(family)));
 }
 
 /**
@@ -191,6 +194,25 @@ export function localePreloads(locale: string | undefined, files: Iterable<strin
   for (const file of files)
     if (WORDS_FILE.exec(file)?.[1] === language) return `    <link rel="modulepreload" crossorigin href="/${file}">\n`;
   return '';
+}
+
+/** The tenant's flows (vite.config.ts `surfaces`, `tenant`): `assets/tenant-<hash>.js` and its sheet. */
+const TENANT_FILE = /^assets\/tenant-[\w-]+\.(js|css)$/;
+
+/**
+ * A tenant host's shell page asks for the tenant's flows beside the entry. The shell imports them once who-am-I
+ * has said the session is a tenant's (appChrome.js `loadTenancy`), which left their fetch a round trip behind
+ * who-am-I and in front of entering; on a tenant host a signed-in session is always one. A visitor sent on to sign
+ * in costs the fetch and nothing else. The sheet says `crossorigin`, as the loader's own stylesheet link does.
+ */
+export function tenantPreloads(files: Iterable<string>): string {
+  let links = '';
+  for (const file of files) {
+    const kind = TENANT_FILE.exec(file)?.[1];
+    if (kind === 'js') links += `    <link rel="modulepreload" crossorigin href="/${file}">\n`;
+    else if (kind === 'css') links += `    <link rel="preload" as="style" crossorigin href="/${file}">\n`;
+  }
+  return links;
 }
 
 const LOOK_FILE = /^assets\/([a-z]+)Look-[\w-]+\.css$/;

@@ -85,9 +85,11 @@ function personOf(ctx: Base, host: AppHost): AssistantOwner {
   return { app: app.id, tenant: '', account: identity.id ?? (identity.who?.trim() || 'local') };
 }
 
-function stream(res: ServerResponse): Emit {
-  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-accel-buffering': 'no' });
-  res.flushHeaders();
+function stream(res: ServerResponse, open = true): Emit {
+  if (open) {
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-accel-buffering': 'no' });
+    res.flushHeaders();
+  }
   return (event, data) => {
     if (!res.writableEnded && !res.destroyed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
@@ -329,6 +331,11 @@ export async function answerAssistant(
     return;
   } catch (error) {
     if (res.headersSent) {
+      /* The stream is open, so the refusal rides on it: a stream that closes without `done` reads to the panel as a
+         dropped connection, which this was not. */
+      const emit = stream(res, false);
+      emit('error', { message: 'The assistant could not answer just now.' });
+      emit('done', { state: 'idle' });
       res.end();
       return;
     }

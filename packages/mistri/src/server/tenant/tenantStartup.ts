@@ -51,6 +51,14 @@ import { appIndexWarnings } from '../../shared/appIndexWarnings.js';
 import { tenantDeleteWarnings } from './tenantAdvice.js';
 import { unofferedCommandWarnings } from '../app/appCommandOfferChecks.js';
 import { sayTenantAuthoringProblems, tenantAuthoringProblems, type TenantAuthoringProblem } from './tenantAuthoring.js';
+import {
+  planValidation,
+  validationOutcome,
+  ValidationRecordFallback,
+  type BuildFingerprints,
+  type ValidationOutcome,
+} from './tenantValidationRecord.js';
+import { readPostgresCatalogDigest, readPostgresValidationRecord } from '../../adapters/validation/postgresValidationRecord.js';
 
 export { TenantStartupError };
 type Enrollment = Omit<TenantEnrollmentOptions<IncomingMessage>, 'app' | 'pages' | 'verifySession'>;
@@ -77,6 +85,8 @@ const AUTHORING_STAGE = 'the authored resource and page definitions';
 export async function prepareTenantStartup(
   input: TenantStartupOptions,
   environment: NodeJS.ProcessEnv = process.env,
+  /** A production build's fingerprints (tenantValidationRecord.ts): read its validation record and check what it does not vouch for. */
+  options: { readonly record?: BuildFingerprints } = {},
 ): Promise<{
   /** Present for a SQLite source: the file native auth must never alias. */
   readonly enrollment: Enrollment;
@@ -89,6 +99,8 @@ export async function prepareTenantStartup(
   readonly linkSurfaces: readonly SuiteLinkSurface[];
   /** What a clone of a tenant copies, where the App marks resources clone (tenantClonePlan.ts): `mistri tenant`'s. */
   readonly clone?: TenantClonePlan;
+  /** Present where `record` was given and the record could be asked: what this start checked, and what it keeps once it serves. */
+  readonly validation?: ValidationOutcome;
 }> {
   // Capture before any acquisition yields; suite Apps never install their secrets globally.
   const capturedEnvironment = Object.freeze({ ...environment });
@@ -262,9 +274,30 @@ export async function prepareTenantStartup(
     };
     // Refuse invalid source/catalog grants before importing trusted policy code.
     // Form requirements need the policy's attested managed-column declaration.
+    /* A production build's start reads its validation record before anything else (tenantValidationRecord.ts): one
+       statement, the record beside the catalog digest it is compared with, and each platform-only source's digest at
+       once. Only where every source is PostgreSQL: a SQLite file has no digest to vouch for it. */
+    const plan =
+      options.record && postgres && platform.every((where) => where.url !== undefined)
+        ? await planValidation(options.record, async () => {
+            const [own, others] = await Promise.all([
+              readPostgresValidationRecord(resolved.url, { app: app.id, source }),
+              Promise.all(platform.map((where) => readPostgresCatalogDigest(where.url!))),
+            ]);
+            const schema = [own.digest, ...platform.map((where, index) => `${where.id}=${others[index]}`)].join(';');
+            return { schema, ...(own.stored ? { stored: own.stored } : {}) };
+          })
+        : undefined;
+    const skip = plan?.mode === 'skip';
+    let first: { physical: DatabaseSchema; outside: DatabaseSchema[] } | undefined;
     stage = GRANTS_STAGE;
-    const { schema } = appResourceCatalog(await describe(), physicalBindings(app, source), declaredReferences(app, source));
-    resolveAppAccess(app, withPlatformSources(schema, await describeOutside(GRANTS_STAGE)), []);
+    if (!skip) {
+      const physical = await describe();
+      const { schema } = appResourceCatalog(physical, physicalBindings(app, source), declaredReferences(app, source));
+      const outsideSchemas = await describeOutside(GRANTS_STAGE);
+      resolveAppAccess(app, withPlatformSources(schema, outsideSchemas), []);
+      if (plan?.mode === 'selective') first = { physical, outside: outsideSchemas };
+    }
     stage = 'the server-only tenant policy';
     const policy = await loadAppTenantPolicy(policyFile);
     // Each feature's declaration checks, in tenantFeatures.ts's order: the
@@ -283,62 +316,76 @@ export async function prepareTenantStartup(
       if (check.stage !== undefined) stage = check.stage;
       await check.run(declared);
     }
-    stage = OWNERSHIP_STAGE;
-    const physical = await describe();
-    const outsideSchemas = await describeOutside(OWNERSHIP_STAGE);
-    const catalog = appResourceCatalog(physical, physicalBindings(app, source), declaredReferences(app, source));
-    /* Every table is owned, so one the database has and the policy does not — a migration applied ahead of the code —
-       stops startup. Named, it is a minute's fix; refused as evidence, it was found by dropping tables one at a time. Table names only: they are the App's own words, never where the deployment's files live. */
-    const unowned = catalog.schema.tables.map((table) => table.id).filter((id) => !Object.hasOwn(policy.ownership, id));
-    const missing = Object.keys(policy.ownership).filter((id) => !catalog.schema.tables.some((table) => table.id === id));
-    if (unowned.length || missing.length) {
-      const names = (ids: string[]) => ids.map((id) => `"${id}"`).join(', ');
-      throw new TenantAuthoringStartupError(
-        `Tenant startup could not validate ${OWNERSHIP_STAGE}:` +
-          (unowned.length
-            ? `\n  the database has ${unowned.length === 1 ? 'a table' : 'tables'} the tenant policy's ownership does not name: ${names(unowned)}. ` +
-              "Give each an owner in the policy's ownership (tenant with its column, global or platform) and declare it in the App, " +
-              'or run the code the database was migrated for.'
-            : '') +
-          (missing.length
-            ? `\n  the tenant policy's ownership names ${missing.length === 1 ? 'a table' : 'tables'} the database does not have: ${names(missing)}. ` +
-              'Migrate the database, or take them out of the ownership.'
-            : ''),
+    /* The catalog checks, which a matching validation record lets a production start skip: every one is a function of
+       the build and the catalog the record vouches for, and enrollment attests what the host serves from again. */
+    let validated:
+      | {
+          catalog: ReturnType<typeof appResourceCatalog>;
+          owned: ReturnType<typeof captureTenantOwnership>;
+          outsideSchemas: DatabaseSchema[];
+          indexLines: readonly string[];
+        }
+      | undefined;
+    if (!skip) {
+      stage = OWNERSHIP_STAGE;
+      // A build whose declarations changed on a catalog the record vouches for reads it once: the grants read it a moment ago.
+      const physical = first?.physical ?? (await describe());
+      const outsideSchemas = first?.outside ?? (await describeOutside(OWNERSHIP_STAGE));
+      const catalog = appResourceCatalog(physical, physicalBindings(app, source), declaredReferences(app, source));
+      /* Every table is owned, so one the database has and the policy does not — a migration applied ahead of the code —
+         stops startup. Named, it is a minute's fix; refused as evidence, it was found by dropping tables one at a time. Table names only: they are the App's own words, never where the deployment's files live. */
+      const unowned = catalog.schema.tables.map((table) => table.id).filter((id) => !Object.hasOwn(policy.ownership, id));
+      const missing = Object.keys(policy.ownership).filter((id) => !catalog.schema.tables.some((table) => table.id === id));
+      if (unowned.length || missing.length) {
+        const names = (ids: string[]) => ids.map((id) => `"${id}"`).join(', ');
+        throw new TenantAuthoringStartupError(
+          `Tenant startup could not validate ${OWNERSHIP_STAGE}:` +
+            (unowned.length
+              ? `\n  the database has ${unowned.length === 1 ? 'a table' : 'tables'} the tenant policy's ownership does not name: ${names(unowned)}. ` +
+                "Give each an owner in the policy's ownership (tenant with its column, global or platform) and declare it in the App, " +
+                'or run the code the database was migrated for.'
+              : '') +
+            (missing.length
+              ? `\n  the tenant policy's ownership names ${missing.length === 1 ? 'a table' : 'tables'} the database does not have: ${names(missing)}. ` +
+                'Migrate the database, or take them out of the ownership.'
+              : ''),
+        );
+      }
+      resolveAppAccess(app, withPlatformSources(catalog.schema, outsideSchemas), []);
+      const owned = captureTenantOwnership({
+        appId: app.id,
+        source: { id: source, connection: configured },
+        physicalSchema: physical,
+        schema: catalog.schema,
+        resources: Object.fromEntries(catalog.schema.tables.map((table) => [table.id, catalog.toPhysical(table.id)])),
+        ownership: policy.ownership,
+        ...(app.auth?.tenancy?.profile === undefined ? {} : { profile: app.auth.tenancy.profile }),
+      });
+      /* Every tenant read is `ownership column = ?`: the one index a tenant App cannot do without. */
+      const indexLines = Object.freeze(
+        appIndexWarnings(business, loaded.pages, catalog.schema, {
+          owners: Object.fromEntries(
+            Object.entries(policy.ownership).flatMap(([id, owner]) => (owner.kind === 'tenant' ? [[id, owner.column]] : [])),
+          ),
+        }),
       );
-    }
-    resolveAppAccess(app, withPlatformSources(catalog.schema, outsideSchemas), []);
-    const owned = captureTenantOwnership({
-      appId: app.id,
-      source: { id: source, connection: configured },
-      physicalSchema: physical,
-      schema: catalog.schema,
-      resources: Object.fromEntries(catalog.schema.tables.map((table) => [table.id, catalog.toPhysical(table.id)])),
-      ownership: policy.ownership,
-      ...(app.auth?.tenancy?.profile === undefined ? {} : { profile: app.auth.tenancy.profile }),
-    });
-    /* Every tenant read is `ownership column = ?`: the one index a tenant App cannot do without. */
-    const indexLines = Object.freeze(
-      appIndexWarnings(business, loaded.pages, catalog.schema, {
-        owners: Object.fromEntries(
-          Object.entries(policy.ownership).flatMap(([id, owner]) => (owner.kind === 'tenant' ? [[id, owner.column]] : [])),
-        ),
-      }),
-    );
-    // Each declaration against its own realm's catalog: a tenant App with a
-    // platform realm is two authored surfaces, and neither is judged by the
-    // other's catalog (tenantAuthoring.ts).
-    stage = AUTHORING_STAGE;
-    const authoring: readonly TenantAuthoringProblem[] = tenantAuthoringProblems(loaded, owned, { platformSources: outsideSchemas });
-    // Name them. The operator running mistri check asked what is wrong, and the
-    // lines say which realm's catalog judged each one; the HTTP boundary never
-    // sees a startup refusal, so nothing here reaches an untrusted caller.
-    if (authoring.length) {
-      throw new TenantAuthoringStartupError(
-        `Tenant startup could not validate ${AUTHORING_STAGE}:\n` +
-          sayTenantAuthoringProblems(authoring)
-            .map((line) => `  ${line}`)
-            .join('\n'),
-      );
+      // Each declaration against its own realm's catalog: a tenant App with a
+      // platform realm is two authored surfaces, and neither is judged by the
+      // other's catalog (tenantAuthoring.ts).
+      stage = AUTHORING_STAGE;
+      const authoring: readonly TenantAuthoringProblem[] = tenantAuthoringProblems(loaded, owned, { platformSources: outsideSchemas });
+      // Name them. The operator running mistri check asked what is wrong, and the
+      // lines say which realm's catalog judged each one; the HTTP boundary never
+      // sees a startup refusal, so nothing here reaches an untrusted caller.
+      if (authoring.length) {
+        throw new TenantAuthoringStartupError(
+          `Tenant startup could not validate ${AUTHORING_STAGE}:\n` +
+            sayTenantAuthoringProblems(authoring)
+              .map((line) => `  ${line}`)
+              .join('\n'),
+        );
+      }
+      validated = { catalog, owned, outsideSchemas, indexLines };
     }
     stage = 'the server-only command registry';
     const commandDeclarations = commandsFile === undefined ? discovered : await loadBusinessCommands(commandsFile);
@@ -349,10 +396,23 @@ export async function prepareTenantStartup(
        (tenantJobs.ts); without --commands the jobs check below refuses the module whole. */
     const jobs = loadedJobs && registry ? withTenantMachineTimers(loadedJobs, app, registry) : loadedJobs;
     // The registry-bound checks, in the same order and under the same rule.
-    const commands: TenantStartupCommands = Object.freeze({ ...declared, configured, owned, registry, jobs });
+    /* Where the record let this start skip the catalog, a check that reads it anyway (one not marked `catalog`) starts
+       the validation again in full: an unmarked check is a slower start, never an unchecked one. */
+    let current = 'a commands check';
+    const commands: TenantStartupCommands = validated
+      ? Object.freeze({ ...declared, configured, owned: validated.owned, registry, jobs })
+      : Object.freeze(
+          Object.defineProperty({ ...declared, configured, registry, jobs }, 'owned', {
+            enumerable: true,
+            get: () => {
+              throw new ValidationRecordFallback(current);
+            },
+          }) as TenantStartupCommands,
+        );
     for (const check of TENANT_STARTUP_CHECKS) {
       if (check.phase !== 'commands') continue;
-      if (check.stage !== undefined) stage = check.stage;
+      if (skip && check.catalog) continue;
+      if (check.stage !== undefined) stage = current = check.stage;
       await check.run(commands);
     }
     const enrollment: Enrollment = Object.freeze({
@@ -372,20 +432,38 @@ export async function prepareTenantStartup(
        a refusal here may be either; naming only the stores sent a reader after
        a database that was never touched. */
     stage = 'the host declarations, and the existing tenant store, ownership and command/administration journals';
-    let checked: Awaited<ReturnType<typeof createTenantEnrollment>>;
-    try {
-      checked = await createTenantEnrollment({ ...enrollment, app, pages: loaded.pages, verifySession: async () => null });
-    } catch (error) {
-      /* Startup never creates a store, and enrollment's refusal names a stage: the stores the database holds none of
-         are said with the error, so the operator is given the command that makes them. */
-      const [{ tenantStoresNeeded, storesAbsentAt }, { historyRules }] = await Promise.all([
+    const storesNeeded = async () => {
+      const [{ tenantStoresNeeded }, { historyRules }] = await Promise.all([
         import('../stores/storesCli.js'),
         import('../recordHistory.js'),
       ]);
-      absentStores = await storesAbsentAt(resolved.url, tenantStoresNeeded(loaded, policy, registry, historyRules));
-      throw error;
+      return tenantStoresNeeded(loaded, policy, registry, historyRules);
+    };
+    /* The stores this deployment attests, as the record keeps them. The same set on a catalog the record vouches for is
+       the same stores in the same layouts (the digest covers the runtime schema), so the dry run would attest what the
+       record says was attested; the host's own enrollment still attests every one before it serves. */
+    const stores = plan ? await storesNeeded() : undefined;
+    const attested = plan?.stored?.stores;
+    const sameStores =
+      plan !== undefined &&
+      plan.mode !== 'full' &&
+      stores !== undefined &&
+      attested !== undefined &&
+      stores.length === attested.length &&
+      stores.every((id) => attested.includes(id));
+    if (!sameStores) {
+      let checked: Awaited<ReturnType<typeof createTenantEnrollment>>;
+      try {
+        checked = await createTenantEnrollment({ ...enrollment, app, pages: loaded.pages, verifySession: async () => null });
+      } catch (error) {
+        /* Startup never creates a store, and enrollment's refusal names a stage: the stores the database holds none of
+           are said with the error, so the operator is given the command that makes them. */
+        const { storesAbsentAt } = await import('../stores/storesCli.js');
+        absentStores = await storesAbsentAt(resolved.url, stores ?? (await storesNeeded()));
+        throw error;
+      }
+      await checked.retire();
     }
-    await checked.retire();
     if (!isPostgresAuthStore(appAuthStore(loaded, capturedEnvironment))) {
       if (authStoreExclusion) assertAuthStoreSeparation(appAuthStore(loaded, capturedEnvironment), authStoreExclusion);
       for (const where of platform)
@@ -393,27 +471,49 @@ export async function prepareTenantStartup(
           assertAuthStoreSeparation(appAuthStore(loaded, capturedEnvironment), captureAuthStoreExclusion(where.existingPath));
     }
     const realms = app.auth?.tenancy?.platform ? (['tenant', 'platform'] as const) : (['tenant'] as const);
-    const linkSurfaces = realms.map((realm) => {
-      const schema =
-        realm === 'platform' ? withPlatformSources(tenantAuthoringSchema(owned, realm), outsideSchemas) : tenantAuthoringSchema(owned);
-      return { realm, schema, book: appRoutes(loaded, schema, realm) };
-    });
+    /* A start that skipped the catalog has no surfaces or clone plan to give: only the one tenant App's own serving
+       asks for a record, and it reads neither (cli/tenant.ts). The suite and `mistri tenant` always check in full. */
+    const linkSurfaces = validated
+      ? realms.map((realm) => {
+          const schema =
+            realm === 'platform'
+              ? withPlatformSources(tenantAuthoringSchema(validated!.owned, realm), validated!.outsideSchemas)
+              : tenantAuthoringSchema(validated!.owned);
+          return { realm, schema, book: appRoutes(loaded, schema, realm) };
+        })
+      : [];
     // Judged by the clone check above, so this cannot refuse here.
-    const clone = tenantClonePlan(app, owned, policy);
+    const clone = validated && tenantClonePlan(app, validated.owned, policy);
     return Object.freeze({
       enrollment,
       ...(clone ? { clone } : {}),
       linkSurfaces: Object.freeze(linkSurfaces),
       ...(authStoreExclusion ? { authStoreExclusion } : {}),
       jobLines: Object.freeze(jobs ? describeJobs(jobs) : []),
+      ...(plan
+        ? {
+            validation: validationOutcome(plan, {
+              loaded,
+              ownership: policy.ownership,
+              stores: stores!,
+              attestedAgain: !sameStores,
+              writable: connection.writable === true,
+              url: resolved.url,
+              key: { app: app.id, source },
+            }),
+          }
+        : {}),
+      // The catalog's advice was said by the start that checked it; a start that skipped the catalog says only the rest.
       adviceLines: Object.freeze([
-        ...indexLines,
-        ...tenantDeleteWarnings(business, catalog.schema, policy),
+        ...(validated?.indexLines ?? []),
+        ...(validated ? tenantDeleteWarnings(business, validated.catalog.schema, policy) : []),
         // A jobs module's workflows and endpoints run commands no button offers; a tenant check cannot tell which, so it says nothing then.
         ...(jobs ? [] : unofferedCommandWarnings(app, registry)),
       ]),
     });
   } catch (error) {
+    // Not a refusal: the caller starts again without the record.
+    if (error instanceof ValidationRecordFallback) throw error;
     // A jobs module's own refusals name only ids, like the command checks', and
     // the authoring check names the problems it found: those messages stand.
     // Every other failure says the stage, and the cause travels with it for the

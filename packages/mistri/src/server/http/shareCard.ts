@@ -62,7 +62,7 @@ const DRAWING_REVISION = 1;
 const TITLE_MOST = 110;
 const SUMMARY_MOST = 180;
 
-/* A colour satori and resvg both read. A look may say `color-mix(…)`, which neither does: that role is Lumen's then. */
+/* A colour satori and resvg both read. A look may say `color-mix(…)`, which neither does: that role is the default look's (Workshop's) then. */
 const PLAIN_COLOUR = /^(?:#[0-9a-f]{3,8}|(?:rgb|rgba|hsl|hsla)\(\s*[0-9.,%\s/]+\))$/i;
 
 const words = (text: string | undefined, most: number) => {
@@ -70,11 +70,11 @@ const words = (text: string | undefined, most: number) => {
   return flat.length <= most ? flat : `${flat.slice(0, most - 1).trimEnd()}…`;
 };
 
-/** The look a page is drawn in: the request's branding where it has one, else the App's own look, else Lumen. */
+/** The look a page is drawn in: the request's branding where it has one, else the App's own look, else Workshop. */
 function palette(ui: AppUi, branding: BrandingPresentation | undefined): ThemePalette {
   if (branding) return inheritThemePreset(branding.value.theme as ThemeDefinition).light;
   const theme = (ui.theme ?? {}) as { preset?: string; palette?: string; accent?: string | { light: string; dark: string } };
-  const worn = ui.customThemes?.find((item) => item.id === theme.preset) ?? themePreset(theme.preset) ?? themePreset('lumen')!;
+  const worn = ui.customThemes?.find((item) => item.id === theme.preset) ?? themePreset(theme.preset) ?? themePreset('workshop')!;
   const effective = effectiveThemeDefinition(worn as ThemeDefinition, theme.palette);
   return effectiveThemePalette(effective.light, false, { ...(theme.accent ? { accent: theme.accent } : {}) });
 }
@@ -96,18 +96,18 @@ export function shareCard(input: {
   const site = words(input.site, 80);
   const summary = words(input.summary, SUMMARY_MOST);
   const own = palette(input.ui, input.branding);
-  const lumen = themePreset('lumen')!.light;
-  const colour = (value: string | undefined, fallback: string) => (value && PLAIN_COLOUR.test(value.trim()) ? value.trim() : fallback);
+  const fallback = themePreset('workshop')!.light;
+  const colour = (value: string | undefined, otherwise: string) => (value && PLAIN_COLOUR.test(value.trim()) ? value.trim() : otherwise);
   const logo = input.ui.logo;
   const branded = input.branding && (input.branding.value.mark || input.branding.value.images.logo);
   return {
     site,
     title,
     ...(summary && summary !== title ? { summary } : {}),
-    ground: colour(own.ground ?? own.surface, lumen.ground!),
-    ink: colour(own.ink, lumen.ink),
-    muted: colour(own.inkMuted ?? own.ink, lumen.inkMuted!),
-    accent: colour(own.accent, lumen.accent),
+    ground: colour(own.ground ?? own.surface, fallback.ground!),
+    ink: colour(own.ink, fallback.ink),
+    muted: colour(own.inkMuted ?? own.ink, fallback.inkMuted!),
+    accent: colour(own.accent, fallback.accent),
     ...(logo && isAppIcon(logo) && !branded ? { mark: APP_ICON_GLYPHS[logo][1] } : {}),
   };
 }

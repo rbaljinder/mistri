@@ -312,8 +312,8 @@ function surfacePages(product: Product): Plugin {
 
 /**
  * The license of every face the build ships (src/client/fonts/), written
- * beside the client as `fonts/<name>`: Lumen's Inter is under the SIL Open
- * Font License, which asks that its text travel with the font, and dist is
+ * beside the client as `fonts/<name>`: Lumen's Inter and Workshop's Barlow are
+ * under the SIL Open Font License, which asks that its text travel with the font, and dist is
  * what the package's `files` allowlist ships.
  */
 function fontLicenses(): Plugin {

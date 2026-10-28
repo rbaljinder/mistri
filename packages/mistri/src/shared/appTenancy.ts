@@ -13,8 +13,13 @@
 import type { AppAction, AppDef, AppHomeRule, AppNavNode, AppRealm, AppRoleGrant, ResourceDef } from './appModel.js';
 import { checkedGrants } from './appAuthGrants.js';
 import type { PageDef } from '@mistriwork/engine/shared/pageModel.js';
+import { ASSISTANT_ROOM } from '@mistriwork/engine/shared/servedApp.js';
 
-const realmOf = (value: unknown): AppRealm | undefined => (value as { realm?: AppRealm }).realm;
+const realmOf = (value: unknown): AppRealm | undefined => (value as { realm?: AppRealm } | undefined)?.realm;
+/* The assistant's page (placement 'page') is a nav word with no view behind it, and it is the tenant's: the assistant
+   answers inside one customer only (tenant/tenantAssistant.ts). Read as a view, its missing `realm` threw a TypeError
+   out of `mistri check` (a field report). */
+const assistantRoom = (app: AppDef, key: string): boolean => key === ASSISTANT_ROOM && !Object.hasOwn(app.views, key);
 const NEEDS_PLATFORM = 'needs the platform realm: auth.tenancy.platform';
 /* What a platform-only source's resource never takes: each would write it,
    act on it or read it through something other than the platform realm's reads. */
@@ -55,6 +60,14 @@ function navRealms(app: AppDef, at: string, report?: (message: string) => never)
       }
       // Destination intent never classifies a local view or changes the source realm.
       if ('to' in node) return;
+      if (assistantRoom(app, node.view)) {
+        if (inherited === 'platform')
+          report?.(
+            `${here} places the assistant's page in a "platform" group; the assistant answers inside one tenant, so place it in a "tenant" group.`,
+          );
+        placed.set(node.view, 'tenant');
+        return;
+      }
       const own = realmOf(app.views[node.view]);
       if (inherited && own && own !== inherited) {
         report?.(`${here}: the view "${node.view}" is "realm": "${own}" inside a "${inherited}" group; a group's children keep its realm.`);
@@ -137,6 +150,7 @@ export function appSurfaceForRealm(app: AppDef, pages: readonly PageDef[], realm
       }
       // Root checked targets are realm-neutral; grouped ones follow the source group.
       if ('to' in node) return [node];
+      if (assistantRoom(app, node.view)) return realm === 'tenant' ? [node] : [];
       return Object.hasOwn(views, node.view) ? [node] : [];
     });
   /* The platform realm reads its staff as `me` (auth.tenancy.platform.me), so its surface says so too: served with

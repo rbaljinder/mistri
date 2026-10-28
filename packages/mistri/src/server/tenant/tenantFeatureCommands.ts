@@ -30,6 +30,7 @@ export const commandLookupCheck = Object.freeze<TenantStartupCheck>({
 // These captured definitions contain no session, provider error or business row.
 export const commandReferencesCheck = Object.freeze<TenantStartupCheck>({
   phase: 'commands',
+  catalog: true,
   run: ({ app, policy, registry, owned, configured, connection }) => {
     /* What the App asks of a registry, said before enrollment's opaque
        boundary: an action or a form that references a command, and a role that

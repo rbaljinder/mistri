@@ -82,6 +82,8 @@ test('flag list searches names locally, reports counts and recovers from no resu
   expect(screen.getByRole('row', { name: /checkout/ })).toHaveTextContent('Can turn off only');
   expect(screen.queryByText(/Revision/)).toBeNull();
   // Searching is local: it asks for nothing new. A slow runner may still refetch what the list already read, so compare the paths, not the count.
+  // The other scope's states are asked in an effect that can run after the search box paints; take what was read once that read is out too.
+  await waitFor(() => expect(request).toHaveBeenCalledWith('/scopes/other/flags', undefined, expect.any(AbortSignal)));
   const read = new Set(request.mock.calls.map(([path]) => path));
   fireEvent.change(search, { target: { value: ' FIND ' } });
   expect(screen.getByText('1 of 2')).toBeInTheDocument();
@@ -94,7 +96,7 @@ test('flag list searches names locally, reports counts and recovers from no resu
   fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
   expect(search).toHaveValue('');
   expect(screen.getByText('2 of 2')).toBeInTheDocument();
-  expect(request.mock.calls.every(([path]) => read.has(path) && !path.startsWith('/flags/'))).toBe(true);
+  expect(request.mock.calls.map(([path]) => path).filter((path) => !read.has(path) || path.startsWith('/flags/'))).toEqual([]);
 });
 
 test('flag buttons support keyboard selection using opaque handles and preserve the list refresh model', async () => {

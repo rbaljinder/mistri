@@ -110,7 +110,8 @@ for (const stored of ['override', 'malformed'] as const) {
     // These are authored account-page sections; an empty saved layout cannot pass.
     await expect(page.locator('#content')).not.toContainText('HIJACKED BROWSER PAGE');
     await expect(page.locator('#content .page-head .ref-jump').first()).toBeVisible();
-    const name = (await title(page).innerText()).trim();
+    // Its words, not its drawing: a look that sets titles in capitals draws them so (innerText), and the text is the same.
+    const name = ((await title(page).textContent()) ?? '').trim();
     await page.reload();
     await expect(title(page)).toHaveText(name);
     await appOnly(page);

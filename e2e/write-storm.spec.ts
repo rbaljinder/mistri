@@ -25,6 +25,8 @@ interface Asked {
   path: string;
   start: number;
   end?: number;
+  /** A batch's reads (tenantTransport.ts `batched`): asked in one moment, sent as one request. */
+  reads?: string[];
 }
 
 /** Every API request from now on but the live stream, with when it went out and when it was answered. */
@@ -34,9 +36,13 @@ function record(page: Page): Asked[] {
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (!url.pathname.includes('/api/') || url.pathname.endsWith('/api/live') || url.pathname.includes('/api/tenant/context/')) return;
-    const entry = {
+    const batch = url.pathname.endsWith('/api/boot')
+      ? (request.postDataJSON() as { reads?: Array<{ path: string }> } | null)?.reads
+      : undefined;
+    const entry: Asked = {
       path: url.pathname.replace(/^.*\/api\//, '/api/') + (url.search ? '?' + url.searchParams.get('app') : ''),
       start: Date.now(),
+      ...(batch ? { reads: batch.map((read) => read.path.split('?')[0]) } : {}),
     };
     asked.push(entry);
     open.set(request, entry);
@@ -183,7 +189,10 @@ test.describe('a write on a tenant record page, 25 ms from its database', () => 
           after: after.length,
           wavesAfter: waves(after),
           settleMs: last - clicked,
-          paths: asked.map((entry) => `${entry.start - clicked}..${entry.end! - clicked} ${entry.path}`),
+          paths: asked.map(
+            (entry) =>
+              `${entry.start - clicked}..${entry.end! - clicked} ${entry.path}${entry.reads ? ` [${entry.reads.join(', ')}]` : ''}`,
+          ),
           statements: sent.length,
           catalog: sent.filter((statement) => CATALOG.test(statement.text)).length,
           digests,
@@ -222,7 +231,7 @@ test.describe('a write on a tenant record page, 25 ms from its database', () => 
        compose's answers so each section asked on its own, and every list and count on the page was asked again for
        every change: 11 requests in 4 waves after the write, and the catalog digest in each of their 53 snapshots. */
     expect(
-      after.filter((entry) => entry.path.startsWith('/api/pages/compose')),
+      after.flatMap((entry) => entry.reads ?? [entry.path]).filter((path) => path.startsWith('/api/pages/compose')),
       'the record page composed once',
     ).toHaveLength(1);
     expect(after.length, after.map((entry) => entry.path).join(', ')).toBeLessThanOrEqual(3);

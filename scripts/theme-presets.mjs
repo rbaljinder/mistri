@@ -36,6 +36,8 @@ const ROLES = [
   'accentSoft',
   'link',
   'focus',
+  'onAccent',
+  'accentInk',
   'statusGood',
   'statusWarning',
   'statusCritical',
@@ -45,6 +47,8 @@ const ROLES = [
   'navMuted',
   'navLine',
   'navAccent',
+  'navCurrent',
+  'navOnCurrent',
   'chart1',
   'chart2',
   'chart3',
@@ -60,6 +64,10 @@ const ROLES = [
   /* Last, so a palette that leaves a form's primary action to its accent packs no "-" for it. */
   'primary',
   'onPrimary',
+  /* Roles only a look with a paper of its own says (Workshop's): last, so the others pack none of them. */
+  'shadow',
+  'band',
+  'field',
 ];
 
 /* A palette written as its values in ROLES order, one space apart, "-" where it sets none. Spelled out, the
@@ -78,6 +86,19 @@ function pack(palette) {
   )})`;
 }
 
+/* The roles worn with the accent: a palette that moves the accent says them even where they match the look's own, since
+   a palette laid over a look drops the inks and the ring it does not say (themePresets.ts overlayPalette). */
+const WITH_ACCENT = ['accent', 'onAccent', 'accentInk', 'focus'];
+
+/* A palette as what it changes from the look's own colors: every look wears all of them (lookPalettes.ts), and the
+   built file is in every App's first paint, so a role the palette leaves as the look has it is not written twice. */
+export function changes(variant, base) {
+  const moves = variant.accent !== base.accent;
+  return Object.fromEntries(
+    Object.entries(variant).filter(([role, value]) => value !== base[role] || (moves && WITH_ACCENT.includes(role))),
+  );
+}
+
 /** The file's text: the looks built, as data. */
 export async function render() {
   const { LOOKS } = await import('../packages/engine/src/shared/themeLooks.ts');
@@ -90,7 +111,13 @@ export async function render() {
     light: mark(preset.light),
     dark: mark(preset.dark),
     ...(preset.palettes
-      ? { palettes: preset.palettes.map((variant) => ({ ...variant, light: mark(variant.light), dark: mark(variant.dark) })) }
+      ? {
+          palettes: preset.palettes.map((variant) => ({
+            ...variant,
+            light: mark(changes(variant.light, preset.light)),
+            dark: mark(changes(variant.dark, preset.dark)),
+          })),
+        }
       : {}),
   }));
   const data = JSON.stringify(marked, null, 2).replace(/"\\u0000(\d+)"/g, (_, index) => packed[Number(index)]);

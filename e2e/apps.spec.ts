@@ -40,7 +40,7 @@ async function open(page: Page, query = ''): Promise<void> {
 
 /** Into the Work orders list the way the app offers it: its own menu. Wide
     enough that its five tabs, its search and its three filters share one row;
-    at 1280 the filters give way to one "+ Filter" (the test below). */
+    at 1100 the filters give way to one "+ Filter" (the test below). */
 async function openWorkOrders(page: Page): Promise<void> {
   await page.setViewportSize({ width: 1680, height: 900 });
   await open(page);
@@ -108,7 +108,9 @@ test('a nav entry opens its list page: the app’s words over the real table vie
 
 test('a row too narrow for every filter keeps one line: the filters give way to one "+ Filter"', async ({ page }) => {
   await openWorkOrders(page);
-  await page.setViewportSize({ width: 1280, height: 900 });
+  /* Narrower than the row needs in any look: Workshop's condensed face kept all three filters in a 1280 window, which
+     Lumen's did not. */
+  await page.setViewportSize({ width: 1100, height: 900 });
   const more = page.getByRole('button', { name: /^More filters: / });
   await expect(more).toBeVisible();
   // The row does not run past the window; what gave way is named, from the end.

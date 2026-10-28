@@ -12,6 +12,8 @@
  * `Error` still says all of them; `problems` is the list for the ones that
  * print them their own way.
  */
+import { faultFrames } from '@mistriwork/engine/shared/refusal.js';
+
 export class AppProblems extends Error {
   readonly problems: string[];
   constructor(
@@ -28,7 +30,12 @@ export class AppProblems extends Error {
 /** The problems an error carries: its list, or its one message. */
 export function problemsOf(err: unknown): string[] {
   if (err instanceof AppProblems) return err.problems;
-  return [(err as Error)?.message ?? String(err)];
+  const message = (err as Error)?.message ?? String(err);
+  /* A TypeError gathered here is a fault in the code that read the App, and its sentence alone ("Cannot read
+     properties of undefined (reading 'realm')") names nothing to fix; its stack was lost with it (a field report).
+     The frame it happened at rides with it, so `mistri check` says where. */
+  const [frame] = faultFrames(err);
+  return [frame ? `${message} (an internal error, ${frame})` : message];
 }
 
 /** Run one independent part, gathering what it refuses instead of stopping at it. */

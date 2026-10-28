@@ -208,16 +208,49 @@ export function textsMentionMe(texts: readonly unknown[], schema: DatabaseSchema
 }
 
 function segmentsNamed(texts: readonly unknown[], schema: DatabaseSchema): string[] {
-  const books = schema.tables.flatMap((table) => (table.segments ? Object.entries(table.segments) : []));
+  const books = segmentBooks(schema);
   if (!books.length) return [];
   const found: string[] = [];
+  const seen = new Set<string>();
   let pending = texts.filter((text): text is string => typeof text === 'string');
   for (let depth = 0; pending.length && depth < 8; depth++) {
+    const words = wordsIn(pending);
     const next = books
-      .filter(([name, query]) => !found.includes(query) && pending.some((text) => new RegExp(`(?<![\\w.])${name}(?![\\w.])`).test(text)))
+      .filter(
+        ([name, query]) =>
+          !seen.has(query) &&
+          (WORD.test(name) ? words.has(name) : pending.some((text) => new RegExp(`(?<![\\w.])${name}(?![\\w.])`).test(text))),
+      )
       .map(([, query]) => query);
+    for (const query of next) seen.add(query);
     found.push(...next);
     pending = next;
   }
   return found;
+}
+
+/* Every read asks this of its texts, and each segment of every resource was a regular expression compiled and run
+   over each text: on a large App most of what a list's read cost. A name that is a word is matched where the
+   expression would match it — a whole run of word characters with no `.` on either side — by looking the text's
+   words up; any other name is matched by the expression, as before. The catalog's segments are listed once per
+   catalog, which is the same object for every request of a lease's roles (tenantServedSchema.ts) — kept only for a
+   catalog that cannot change after. */
+const WORD = /^\w+$/;
+const booksOf = new WeakMap<DatabaseSchema, ReadonlyArray<readonly [string, string]>>();
+function segmentBooks(schema: DatabaseSchema): ReadonlyArray<readonly [string, string]> {
+  let books = booksOf.get(schema);
+  if (books) return books;
+  books = schema.tables.flatMap((table) => (table.segments ? Object.entries(table.segments) : []));
+  if (Object.isFrozen(schema) && Object.isFrozen(schema.tables) && schema.tables.every((table) => Object.isFrozen(table.segments ?? table)))
+    booksOf.set(schema, books);
+  return books;
+}
+function wordsIn(texts: readonly string[]): Set<string> {
+  const words = new Set<string>();
+  for (const text of texts)
+    for (const match of text.matchAll(/\w+/g)) {
+      const end = match.index + match[0].length;
+      if (text[match.index - 1] !== '.' && text[end] !== '.') words.add(match[0]);
+    }
+  return words;
 }

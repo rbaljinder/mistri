@@ -25,7 +25,7 @@ export const VISUAL_THEME_EVENT = 'mistri:visual-theme-change';
 export const VISUAL_THEME_REGISTRY_EVENT = 'mistri:visual-theme-registry-change';
 /** The look inside an App when neither the reader nor the App names one.
     Workbench instead defaults to its native tokens in style.css. */
-export const DEFAULT_VISUAL_THEME = 'lumen';
+export const DEFAULT_VISUAL_THEME = 'workshop';
 const SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 /** The reader's own pick, kept only while it names a theme this screen offers. */
 let preferred: unknown = null;
@@ -59,7 +59,7 @@ export function visualThemeOptions(): Array<{ value: string; label: string; swat
 const offered = (value: unknown): value is string =>
   typeof value === 'string' && visualThemeOptions().some((theme) => theme.value === value);
 
-/** The look in force: the reader's pick, else the App's preset, else Lumen. */
+/** The look in force: the reader's pick, else the App's preset, else Workshop. */
 export function visualThemeChoice(): string {
   if (!inApp) return workbenchPreferred ?? 'default';
   if (locked && offered(authoredPreset)) return authoredPreset;
@@ -109,12 +109,17 @@ export function resetVisualTheme() {
   }
 }
 
+/** A built-in look's own colors are one of its palettes (its `defaultPalette`, lookPalettes.ts), so it offers no
+    "Default" beside them: the same palette twice under two names. A theme of the App's own keeps its Default. */
+const ownColorsArePalette = (theme: ThemeDefinition) =>
+  themePreset(theme.id) === theme && Boolean(theme.palettes?.some((palette) => palette.id === theme.defaultPalette));
+
 /** Palette choices belong to their theme, not to an unrelated App using the same slug. */
 export function visualPaletteOptions(): Array<{ value: string; label: string; swatches: readonly string[] }> {
   if (!inApp && !workbenchPreferred) return [];
   const theme = selectedThemeBase();
   return [
-    { value: 'default', label: say('default'), swatches: swatches(theme) },
+    ...(ownColorsArePalette(theme) ? [] : [{ value: 'default', label: say('default'), swatches: swatches(theme) }]),
     ...(theme.palettes ?? []).map((palette) => ({
       value: palette.id,
       label: palette.label,
@@ -124,11 +129,14 @@ export function visualPaletteOptions(): Array<{ value: string; label: string; sw
 }
 
 function paletteChoiceFor(theme: ThemeDefinition): string {
+  /* A built-in's "default" is its own palette by name, so a pick or an App's `palette: 'default'` marks that one. */
+  const named = (value: string | undefined) => (value === 'default' && ownColorsArePalette(theme) ? theme.defaultPalette : value);
   const offered = (value: string | undefined): value is string =>
     value === 'default' || Boolean(theme.palettes?.some((palette) => palette.id === value));
-  const preferred = palettePreferences.get(paletteScope(theme.id));
+  const preferred = named(palettePreferences.get(paletteScope(theme.id)));
   if (!locked && offered(preferred)) return preferred;
-  if (theme.id === authoredPreset && offered(authoredPalette)) return authoredPalette;
+  const authored = named(authoredPalette);
+  if (theme.id === authoredPreset && offered(authored)) return authored;
   const fallback = theme.defaultPalette;
   return offered(fallback) ? fallback : 'default';
 }
@@ -209,6 +217,7 @@ export function validVisualTheme(value: unknown): string {
    answers which recipe is the menu's (themeRecipes.ts RECIPE_MENU). */
 /* A stylesheet is a module to Vite, which splits it into a file of its own; its type is packages/mistri/schema/css.d.ts's. */
 const LOOK_SHEETS: Readonly<Record<string, () => Promise<unknown>>> = {
+  workshop: () => import('./workshopLook.css'),
   lumen: () => import('./lumenLook.css'),
   sage: () => import('./sageLook.css'),
   brand: () => import('./brandLook.css'),

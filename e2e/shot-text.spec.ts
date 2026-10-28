@@ -95,7 +95,7 @@ test('--as <email> signs in as an account already there, over a copy of its stor
     process.execPath,
     ['--import', 'tsx', resolve('packages/mistri/src/server/index.ts'), '--app', app, '--config', `${db}.json`, '--port', String(port)],
     {
-      stdio: 'ignore',
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
         XDG_CONFIG_HOME: join(directory, 'config'),
@@ -105,6 +105,10 @@ test('--as <email> signs in as an account already there, over a copy of its stor
       },
     },
   );
+  /* What the first start said, for a failure to name: it is the only witness to a start that made no account. */
+  let said = '';
+  first.stdout?.on('data', (chunk) => (said += chunk));
+  first.stderr?.on('data', (chunk) => (said += chunk));
   const sessions = () => {
     // The server is writing this store while the test reads it: wait out its write rather than fail the read.
     const file = new DatabaseSync(store, { readOnly: true, timeout: 5_000 });
@@ -126,7 +130,14 @@ test('--as <email> signs in as an account already there, over a copy of its stor
         return 0;
       }
     };
-    await expect.poll(people, { timeout: 60_000 }).toBe(1);
+    try {
+      await expect.poll(people, { timeout: 60_000 }).toBe(1);
+    } catch (error) {
+      const how = first.exitCode !== null || first.signalCode !== null ? `exited (${first.exitCode ?? first.signalCode})` : 'still running';
+      throw new Error(`the first start made no account in 60 s; it is ${how} and said:\n${said.replaceAll(password, '<password>')}`, {
+        cause: error,
+      });
+    }
   } finally {
     first.kill('SIGTERM');
   }

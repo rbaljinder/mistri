@@ -71,7 +71,7 @@ function look(): UiLook {
   const attribute = root().dataset.theme;
   const dark = attribute === 'dark' || (!attribute && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
   const density = densityChoice() as UiLook['density'];
-  return { look: root().dataset.visualTheme ?? 'lumen', mode: dark ? 'dark' : 'light', density };
+  return { look: root().dataset.visualTheme ?? 'workshop', mode: dark ? 'dark' : 'light', density };
 }
 
 let flags: ReturnType<typeof createPageAppFlags> | undefined;

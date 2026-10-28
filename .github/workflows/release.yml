@@ -182,7 +182,7 @@ jobs:
       # and ui; create-mistri on mistri), so publishing one alone installs
       # nothing.
       #
-      # A prerelease (1.0.0-rc.1) goes out under `next`, never `latest`: npm refuses one without a --tag.
+      # A prerelease (1.0.0-rc.2) goes out under `next`, never `latest`: npm refuses one without a --tag.
       - run: |
           tag="$(node -p "require('./package.json').version.includes('-') ? 'next' : 'latest'")"
           npm publish --workspaces --access public --tag "$tag"

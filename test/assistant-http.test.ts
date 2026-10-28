@@ -14,7 +14,12 @@ import { ASSISTANT_RETENTION_DAYS, DEFAULT_TOKENS_PER_PERSON_PER_DAY } from '../
 import { ASSISTANT_TABLES } from '../packages/mistri/src/adapters/assistant/assistantStore.js';
 import { purgeAppAssistants } from '../packages/mistri/src/server/assistant/assistantRetention.js';
 import { provisionSqliteAssistant } from '../packages/mistri/src/adapters/assistant/sqliteAssistant.js';
-import { setAssistantModel, type AssistantModel, type ModelRequest } from '../packages/mistri/src/server/assistant/assistantModel.js';
+import {
+  setAssistantModel,
+  type AssistantModel,
+  type ModelRequest,
+  type ModelUsage,
+} from '../packages/mistri/src/server/assistant/assistantModel.js';
 import { scriptedModel, type AssistantScript } from '../packages/mistri/src/server/assistant/assistantScripted.js';
 
 /**
@@ -57,20 +62,21 @@ interface Fixture {
 after(() => setAssistantModel(undefined));
 
 /** The model double: a script, every request it was sent kept to read. */
-function recording(script: AssistantScript, requests: ModelRequest[], usage?: number): AssistantModel {
+function recording(script: AssistantScript, requests: ModelRequest[], usage?: number | ModelUsage): AssistantModel {
   const model = scriptedModel(script);
   return {
     async stream(request, onText, signal) {
       requests.push(request);
       const reply = await model.stream(request, onText, signal);
-      return usage === undefined ? reply : { ...reply, usage: { input: usage, output: 0, cacheRead: 0, cacheWrite: 0 } };
+      if (usage === undefined) return reply;
+      return { ...reply, usage: typeof usage === 'number' ? { input: usage, output: 0, cacheRead: 0, cacheWrite: 0 } : usage };
     },
   };
 }
 
 async function fixture(
   run: (f: Fixture) => Promise<void>,
-  options: { script?: AssistantScript; assistant?: Record<string, unknown>; usage?: number; model?: false } = {},
+  options: { script?: AssistantScript; assistant?: Record<string, unknown>; usage?: number | ModelUsage; model?: false } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'tablewalk-assistant-http-'));
   const file = join(directory, 'fixture.db');
@@ -845,5 +851,99 @@ test('a reply is kept with the model that made it, and its thinking goes back to
       }
     },
     { script: { turns: [], otherwise: 'Hi.' }, assistant: { model: MODEL } },
+  );
+});
+
+/* A field report: "Which tickets are mine?" drew "No rows match." under its title, took five steps and stopped at a
+   60,000-token turn. A table is read as the panel's table reads it, drawn only when something matched, and told back
+   in a few short rows, because every later step reads every earlier result again. */
+const MINE: AssistantScript = {
+  turns: [
+    {
+      when: 'which leads are mine',
+      steps: [
+        { tools: [{ name: 'query', input: { q: 'lead show id, name, status, notes', limit: 50 } }] },
+        {
+          tools: [
+            {
+              name: 'show',
+              input: { kind: 'table', resource: 'lead', title: 'My open leads', query: 'name contains Nobody', show: ['name', 'status'] },
+            },
+          ],
+        },
+        {
+          tools: [
+            {
+              name: 'show',
+              input: {
+                kind: 'table',
+                resource: 'lead',
+                title: 'Open leads',
+                query: 'status = working',
+                show: ['name', 'status'],
+                limit: 50,
+              },
+            },
+          ],
+        },
+        { text: 'These are the working leads.' },
+      ],
+    },
+  ],
+};
+const manyLeads = (db: DatabaseSync) => {
+  const insert = db.prepare('INSERT INTO lead (name, status, notes) VALUES (?, ?, ?)');
+  for (let n = 0; n < 40; n++)
+    insert.run(`Lead ${n} of a long list`, 'working', `Called twice; ${'wants a quote for the spring order, '.repeat(6)}`);
+};
+const results = (request: ModelRequest) =>
+  request.messages
+    .flatMap((message) => (Array.isArray(message.content) ? message.content : []))
+    .filter((block) => block.type === 'tool_result')
+    .map((block) => JSON.parse(String(block.content)));
+
+test('a table block is the read its table will ask; one that matches nothing is not drawn, and what the model is told is short', async () => {
+  await fixture(
+    async ({ db, turn, requests }) => {
+      manyLeads(db);
+      const { events } = await turn({ text: 'Which leads are mine?' });
+      const blocks = of(events, 'block');
+      assert.equal(blocks.length, 1, 'only the table that matched is drawn');
+      assert.equal(blocks[0].block.section.title, 'Open leads');
+      const [, nothing, table] = results(requests.at(-1)!);
+      assert.equal(nothing.shown, 'nothing');
+      assert.match(nothing.note, /No rows match, so no table was drawn/);
+      assert.equal(table.total, 41);
+      assert.equal(table.first.length, 5);
+      // The shown columns, the key and the address: never the whole wide row.
+      assert.deepEqual(Object.keys(table.first[0]).sort(), ['address', 'id', 'name', 'status']);
+      for (const request of requests)
+        for (const result of results(request)) assert.ok(JSON.stringify(result).length <= 6_000, 'every result is cut to fit');
+      assert.deepEqual(
+        of(events, 'running').map((each) => each.label),
+        ['Reading lead…', 'Drawing My open leads…', 'Drawing Open leads…'],
+      );
+      assert.ok(of(events, 'done').at(-1).tokens < 16_000, `the turn spent ${of(events, 'done').at(-1).tokens}`);
+    },
+    { script: MINE },
+  );
+});
+
+test("a turn's cached input counts at a tenth against its limit; the day's spend counts it whole", async () => {
+  await fixture(
+    async ({ db, turn, requests }) => {
+      const { events } = await turn({ text: 'Which leads are mine?' });
+      // Four steps of 2,000 new tokens and 20,000 read from the cache: 4 × 4,000 against the turn, not 4 × 22,000.
+      assert.deepEqual(of(events, 'note'), []);
+      assert.equal(requests.length, 4);
+      assert.equal(of(events, 'done').at(-1).tokens, 16_000);
+      const spent = db.prepare(`SELECT SUM(tokens) AS tokens FROM "${ASSISTANT_TABLES.usage}"`).get() as { tokens: number };
+      assert.equal(spent.tokens, 88_000);
+    },
+    {
+      script: MINE,
+      usage: { input: 2_000, output: 0, cacheRead: 20_000, cacheWrite: 0 },
+      assistant: { limits: { tokensPerTurn: 60_000 } },
+    },
   );
 });

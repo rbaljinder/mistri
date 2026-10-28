@@ -9,7 +9,17 @@ import {
   sessionIdentity,
   subscribeSessionIdentity,
 } from '@mistriwork/kit/client/sessionIdentity.js';
-import { chooseTenant, discoverTenants, recoverTenant, releaseTenant, resumeTenant } from './tenantTransport.js';
+import {
+  chooseTenant,
+  discoverTenants,
+  enterTenant,
+  recoverTenant,
+  releaseTenant,
+  resumeTenant,
+  type TenantEntry,
+} from './tenantTransport.js';
+import { adoptTenantBoot } from './tenantBootLoad.js';
+import { soleTenant } from '../shared/tenantBoot.js';
 import { checkSessionIdentity, invalidateSession } from '@mistriwork/kit/client/sessionLifecycle.js';
 import { startTenantRenewal, type TenantRenewalOptions } from './tenantRenewal.js';
 import { tenantSuspensionOverlay } from './tenantSuspension.js';
@@ -88,6 +98,23 @@ function kept(owner: ReturnType<typeof captureSessionIdentity>, tenantId: string
     return undefined;
   }
 }
+/* The context this tab kept, whichever tenant it was for: an enter request names it for the host to resume where
+   it is the tenant the person is entered in. */
+function keptHere(owner: ReturnType<typeof captureSessionIdentity>): { tenantId: string; tabId: string } | undefined {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(KEPT) ?? 'null') as { tenantId?: unknown } | null;
+    const tenantId = value?.tenantId;
+    if (typeof tenantId !== 'string' || tenantId === PLATFORM_TENANT_ID) return undefined;
+    const tabId = kept(owner, tenantId);
+    return tabId ? { tenantId, tabId } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+/* Leases entered with their page's boot already held (`/api/tenant/enter`): the shell asks no boot of its own. */
+const bootedLeases = new WeakSet<TenantContextReply>();
+/** Whether the page's boot came with `reply`, entered in the same request as discovery. */
+export const enteredWithBoot = (reply: TenantContextReply): boolean => bootedLeases.has(reply);
 let departing = false;
 /* A page that is going (not into the back-forward cache, from which it
    would return holding its lease) lets its context go. */
@@ -146,6 +173,8 @@ export async function initialTenantSelection(
   requestedTenant?: string,
   label?: string,
   tenantWord?: string,
+  /** The page's inside address, where it is known: the first look then asks to enter as well as discover. */
+  page?: { readonly path: string; readonly search: string },
 ): Promise<TenantContextReply> {
   appName = name;
   platformLabel = label;
@@ -178,11 +207,12 @@ export async function initialTenantSelection(
   let answered = false,
     shown = false;
   const sole = (): string | undefined =>
-    error === undefined &&
-    tenantIds.length === 1 &&
-    tenantIds[0] !== PLATFORM_TENANT_ID &&
-    (requestedTenant === undefined || requestedTenant === tenantIds[0])
-      ? tenantIds[0]
+    error === undefined
+      ? soleTenant(
+          tenantIds.filter((tenantId) => tenantId !== PLATFORM_TENANT_ID),
+          tenantIds.includes(PLATFORM_TENANT_ID),
+          requestedTenant,
+        )
       : undefined;
   const draw = () => {
     if (!current() || held) return;
@@ -215,8 +245,19 @@ export async function initialTenantSelection(
     error = undefined;
     // A retry says it is checking in the chooser already drawn; the first look draws nothing until it is answered.
     if (shown) draw();
+    /* The first look, where the page's address is known, asks the host to enter the person's one tenant in the
+       same request (tenantTransport.ts `enterTenant`); an answer that enters nothing is discovery's, read as ever. */
+    const entering = !answered && page !== undefined && requestedTenant !== PLATFORM_TENANT_ID;
+    let entry: TenantEntry | undefined;
     try {
-      const found = await discoverTenants();
+      if (entering) {
+        try {
+          entry = await enterTenant(page, requestedTenant, keptHere(owner));
+        } catch {
+          /* Discovery alone, as the chooser always asked it. */
+        }
+      }
+      const found = entry?.tenants ?? (await discoverTenants());
       if (current() && ticket === generation) tenantIds = found;
     } catch {
       if (current() && ticket === generation) error = say('tenantAccessCouldNotBeChecked');
@@ -225,8 +266,35 @@ export async function initialTenantSelection(
         busy = false;
         const only = answered ? undefined : sole();
         if (error === undefined) answered = true;
-        if (only === undefined) draw();
-        else void select(only);
+        if (only !== undefined && entry?.lease?.tenantId === only) enter(entry.lease, entry.boot);
+        else {
+          /* A lease this page will not take is let go, as a page leaving lets its own go. */
+          if (entry?.lease) releaseTenant(entry.lease);
+          if (only === undefined) draw();
+          else void select(only);
+        }
+      }
+    }
+  };
+  /* Entered by the host with discovery's answer: as a choice that succeeded, its boot held before the shell asks. */
+  const enter = (reply: TenantContextReply, boot: Record<string, unknown> | undefined) => {
+    selecting = true;
+    busy = true;
+    try {
+      const chosen = remember(reply, owner);
+      /* Held on the lease as the session holds it, the one each read is asked on (tenantTransport.ts `carriedOn`). */
+      const held = captureTenantLease(chosen);
+      if (boot && held) {
+        adoptTenantBoot(boot, held);
+        bootedLeases.add(reply);
+      }
+      finish(reply);
+    } catch {
+      if (current()) {
+        selecting = false;
+        busy = false;
+        error = say('theSelectionWasNotConfirmed');
+        draw();
       }
     }
   };

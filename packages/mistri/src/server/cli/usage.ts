@@ -353,8 +353,8 @@ Looking at an App — its pages as PNG files, for the agent that built it:
   yours is read or written), opens each route in Chromium once it has settled
   and prints the path of each PNG. A route is /{app}/leads/12 or leads/12;
   with none, every view and page the App declares, a page on its first record.
-      --theme <id|all>  with shot or grade: a built-in look (lumen, mono,
-                      sage) or one of the App's own themes instead of the
+      --theme <id|all>  with shot or grade: a built-in look (workshop, lumen,
+                      mono, sage) or one of the App's own themes instead of the
                       one it wears; with shot, all shoots every built-in
                       look, then the App's. The menu stands where that
                       theme suggests (shell.placement) unless the App's
@@ -481,7 +481,7 @@ A theme as it is worn — every color, recipe, type and shape after extends:
 
   mistri theme show <look|theme-id|.> [--app <dir>] [--diff <look|theme-id>] [--json]
 
-  A built-in look (lumen, mono, sage), or a theme of the App in --app (else
+  A built-in look (workshop, lumen, mono, sage), or a theme of the App in --app (else
   the current directory); . is the one the App wears. Every color in light
   and dark and each palette's changes, every recipe, the type and the shape,
   each value it inherits marked with where from: the look it extends, its

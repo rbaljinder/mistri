@@ -236,6 +236,29 @@ export interface JobInspection {
   readonly createdAt: number;
   readonly updatedAt: number;
 }
+/** Where a namespace stands, read without any row's history (JobStore `standing`). */
+export interface JobStanding {
+  /** Some job has failed, or ended unknown. */
+  readonly failed: boolean;
+  /** When the longest-waiting scheduled or retrying job was due, or null with none waiting. */
+  readonly waitingSince: number | null;
+  /** The next moment after `at` a job falls due or a lease runs out, or null with none ahead. */
+  readonly next: number | null;
+  /** The store's clock when it looked: the database's on PostgreSQL, so `next - at` is a wait free of skew. */
+  readonly at: number;
+}
+/** A standing row as either store reads it: PostgreSQL's `next` already the earlier of its two, SQLite's `due` and `lease` apart. */
+export function jobStanding(row: Readonly<Record<string, unknown>> | undefined): JobStanding {
+  const time = (value: unknown): number | null => (value === null || value === undefined ? null : Number(value));
+  const ahead = [time(row?.next), time(row?.due), time(row?.lease)].filter((value): value is number => value !== null);
+  return Object.freeze({
+    failed: row?.failed === true || Number(row?.failed) === 1,
+    waitingSince: time(row?.waiting),
+    next: ahead.length ? Math.min(...ahead) : null,
+    at: Number(row?.at),
+  });
+}
+
 export interface JobAttemptInspection {
   readonly attempt: number;
   readonly startedAt: number;

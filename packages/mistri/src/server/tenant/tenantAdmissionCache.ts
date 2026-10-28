@@ -26,7 +26,10 @@
  *   request runtimes say where).
  * - A context's open, switch and renewal always admit afresh
  *   (`requireFreshAdmission`): the lease window they set is bounded by the
- *   evidence, and kept evidence would never lengthen it.
+ *   evidence, and kept evidence would never lengthen it. Only while they
+ *   admit: a read the same request makes on the lease once it is open (an
+ *   entry's boot, tenantHttp.ts) is admitted as its own request would be a
+ *   moment later, on the evidence the open has just kept.
  */
 import { TenantContextError, TenantUnavailableError } from '@mistriwork/engine/server/evidence.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
@@ -41,7 +44,8 @@ const MAXIMUM = 4096;
 /* The native session instance a request's login was verified as, noted by
    the host verifier that resolved it (tenantAuthenticatedHttp.ts). */
 const sessions = new WeakMap<object, string>();
-const fresh = new WeakSet<object>();
+/* How many admissions in each request must be fresh at once: an entry may open a second lease after letting a first go. */
+const fresh = new WeakMap<object, number>();
 const live = new Set<Map<string, { session: string; evidence: Evidence }>>();
 
 export function noteAdmissionSession(request: unknown, sessionId: string | null): void {
@@ -49,9 +53,18 @@ export function noteAdmissionSession(request: unknown, sessionId: string | null)
   if (sessionId === null) sessions.delete(request);
   else sessions.set(request, sessionId);
 }
-/** This request is a context's open, switch or renewal: never served kept evidence. */
-export function requireFreshAdmission(request: unknown): void {
-  if (request && typeof request === 'object') fresh.add(request);
+/** This request is opening, switching or renewing a context: never served kept evidence until the returned call says it is done. */
+export function requireFreshAdmission(request: unknown): () => void {
+  if (!request || typeof request !== 'object') return () => {};
+  fresh.set(request, (fresh.get(request) ?? 0) + 1);
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    const left = (fresh.get(request) ?? 1) - 1;
+    if (left > 0) fresh.set(request, left);
+    else fresh.delete(request);
+  };
 }
 /** A refusal kept evidence met, not a database that could not answer: only
  * the first is worth admitting afresh for. */

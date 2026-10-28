@@ -284,8 +284,8 @@ describe('scaffoldApp', () => {
     assert.deepEqual(draft.nav.slice(0, 2), ['overview', 'orders'], 'the Overview, then the busiest table');
   });
 
-  test('the draft starts in Lumen, its Overview a flow of steps and a trend by month, its lookups folded', () => {
-    assert.deepEqual((app as unknown as { ui: { theme: unknown } }).ui.theme, { preset: 'lumen' });
+  test('the draft starts in Workshop, its Overview a flow of steps and a trend by month, its lookups folded', () => {
+    assert.deepEqual((app as unknown as { ui: { theme: unknown } }).ui.theme, { preset: 'workshop' });
     const sections = (draft.views.overview as { sections: Array<Record<string, unknown>> }).sections;
     assert.ok(sections.some((s) => s.kind === 'breakdown' && s.by === 'status' && s.shape === 'steps'));
     assert.ok(sections.some((s) => s.kind === 'chart' && s.by === 'month created_on' && s.curve === 'smooth'));

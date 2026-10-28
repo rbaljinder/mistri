@@ -27,7 +27,13 @@ type TenantBootstrapResult =
       platform?: true;
     }>;
 export interface TenantBootstrap<Request> {
-  read(request: Request, guard?: () => void | Promise<void>): Promise<TenantBootstrapResult>;
+  /**
+   * The account's tenants. `seen`, where given, is told the tenant ids the first snapshot found, as soon as it has
+   * passed its checks, so a caller may start what it would ask of them next (their names, a lease) beside the rest of
+   * discovery. It is told nothing to act on: what discovery answers is only its final result, and a caller releases
+   * nothing it started until that result agrees.
+   */
+  read(request: Request, guard?: () => void | Promise<void>, seen?: (tenantIds: readonly string[]) => void): Promise<TenantBootstrapResult>;
   retire(): Promise<void>;
 }
 
@@ -125,9 +131,14 @@ export function createTenantBootstrap<Request>(options: TenantBootstrapOptions<R
       void retirement.catch(() => {});
       return retirement;
     },
-    async read(request: Request, guard?: () => void | Promise<void>): Promise<TenantBootstrapResult> {
+    async read(
+      request: Request,
+      guard?: () => void | Promise<void>,
+      seen?: (tenantIds: readonly string[]) => void,
+    ): Promise<TenantBootstrapResult> {
       active();
       if (guard !== undefined && (typeof guard !== 'function' || isProxy(guard))) return denyTenant();
+      if (seen !== undefined && (typeof seen !== 'function' || isProxy(seen))) return denyTenant();
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
         finish = resolve;
@@ -184,22 +195,36 @@ export function createTenantBootstrap<Request>(options: TenantBootstrapOptions<R
         };
         const initial = await reader.readMemberships(lookup);
         validate(initial, check());
+        if (seen) {
+          const ids = Object.freeze(initial.map((record) => record.tenantId));
+          try {
+            seen(ids);
+          } catch {
+            /* The caller's own: discovery goes on as if it had not been told. */
+          }
+        }
         const secondResult = delivered(verify(request));
         const second = isPromise(secondResult) ? await secondResult : secondResult;
         check();
         session(second);
         if (second === null || second.id !== first.id || second.who !== first.who || second.role !== first.role) return denyTenant();
         if (guard) await guarded();
-        const final = await reader.readMemberships(lookup);
+        // Whether a platform context is open to the account: advisory, as the
+        // tenant list is; opening one is its own admission. Asked beside the
+        // second snapshot, under the same two verifications either way: one
+        // after the other they were one more round trip before a chooser.
+        const [final, held] = await Promise.all([
+          reader.readMemberships(lookup),
+          platformRoles === undefined
+            ? undefined
+            : reader.readPlatformMembership(
+                captureTenantData({ realm: 'platform' as const, appId, accountId: first.id, source, deployment }),
+              ),
+        ]);
         validate(final, check());
         if (!sameMemberships(initial, final)) return denyTenant();
-        // Whether a platform context is open to the account: advisory, as the
-        // tenant list is; opening one is its own admission.
         let platform = false;
-        if (platformRoles !== undefined) {
-          const held = await reader.readPlatformMembership(
-            captureTenantData({ realm: 'platform' as const, appId, accountId: first.id, source, deployment }),
-          );
+        if (held !== undefined) {
           const instant = check();
           platform =
             held !== null &&

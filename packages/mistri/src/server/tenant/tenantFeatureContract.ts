@@ -49,7 +49,13 @@ export interface TenantStartupCommands extends TenantStartupPolicy {
  * reaches the operator in its own words. */
 export type TenantStartupCheck = { readonly stage?: string } & (
   | { readonly phase: 'policy'; run(startup: TenantStartupPolicy): void | Promise<void> }
-  | { readonly phase: 'commands'; run(startup: TenantStartupCommands): void | Promise<void> }
+  | {
+      readonly phase: 'commands';
+      /** It reads `owned`, the catalog: a production start whose validation record vouches for this build on this
+       * catalog skips it (tenantValidationRecord.ts). A check that reads no catalog runs at every start. */
+      readonly catalog?: true;
+      run(startup: TenantStartupCommands): void | Promise<void>;
+    }
 );
 
 /** What enrollment has captured before it opens any source. */

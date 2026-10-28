@@ -13,7 +13,7 @@ import { lookDensityFor, lookSheetsFor } from '../packages/engine/src/server/cli
 import { validationCode } from '../packages/mistri/src/server/build/checkProblems.js';
 
 const cadence = { kind: 'theme', id: 'cadence', label: 'Cadence', extends: 'sage', density: 'spacious' };
-const workshop = { kind: 'theme', id: 'workshop', label: 'Workshop', extends: 'mono' };
+const garage = { kind: 'theme', id: 'garage', label: 'Garage', extends: 'mono' };
 const app = (theme: Record<string, unknown>) =>
   parseAppConfig(
     {
@@ -22,18 +22,18 @@ const app = (theme: Record<string, unknown>) =>
       views: { rides: { kind: 'list', from: 'ride' } },
       home: 'rides',
       auth: { roles: { rider: { read: true }, mechanic: { read: true }, manager: { read: true } } },
-      ui: { customThemes: [cadence, workshop], theme },
+      ui: { customThemes: [cadence, garage], theme },
     },
     'app',
   );
-const FOR = { public: 'cadence', roles: { rider: 'cadence', mechanic: 'workshop' } };
+const FOR = { public: 'cadence', roles: { rider: 'cadence', mechanic: 'garage' } };
 
 test('each role wears its theme, the first entry it holds in written order, and the rest the App preset', () => {
   const parsed = app({ preset: 'lumen', palette: 'violet', accent: '#0e7490', for: FOR });
   assert.deepEqual(parsed.ui.theme?.for, FOR);
   const worn = (roles: string[]) => appForRoles(parsed, roles).ui!.theme;
   assert.equal(worn(['rider'])!.preset, 'cadence');
-  assert.equal(worn(['mechanic'])!.preset, 'workshop');
+  assert.equal(worn(['mechanic'])!.preset, 'garage');
   assert.equal(worn(['mechanic', 'rider'])!.preset, 'cadence');
   // A palette is its preset's: under another theme it goes; the App's accent stays over whichever is worn.
   assert.equal(worn(['rider'])!.palette, undefined);

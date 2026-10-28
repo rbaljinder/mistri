@@ -35,6 +35,7 @@ function sinkOf(source: CaptureSource): RecordHistorySink {
       return {
         read,
         rows,
+        ...(source.behind ? { behind: source.behind } : {}),
         append: (row) => appendPostgresRecordChange(writer.client, row),
         notify: (row) => appendPostgresNotice(writer.client, row),
         message: (row) => queuePostgresChannelNotice(writer.client, row),

@@ -6539,7 +6539,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["preset"],
-          "properties": { "preset": { "enum": ["lumen", "mono", "sage"] } }
+          "properties": { "preset": { "enum": ["workshop", "lumen", "mono", "sage"] } }
         },
         "fields": {
           "type": "object",

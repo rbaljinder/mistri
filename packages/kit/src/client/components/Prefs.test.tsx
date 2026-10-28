@@ -85,7 +85,7 @@ test('color mode applies each explicit choice once without changing other prefer
     expect(control).toHaveTextContent(label);
   }
   expect(set.colorMode.mock.calls).toEqual([['dark'], ['light'], ['system']]);
-  expect(screen.getByRole('button', { name: 'Visual theme' })).toHaveTextContent('Lumen');
+  expect(screen.getByRole('button', { name: 'Visual theme' })).toHaveTextContent('Workshop');
   expect(localStorage.getItem(VISUAL_THEME_KEY)).toBeNull();
   expect(set.density).not.toHaveBeenCalled();
   expect(set.typography).not.toHaveBeenCalled();
@@ -96,7 +96,7 @@ test('visual presets show swatches, persist immediately, and leave the other pre
   inApp();
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
-  expect(screen.getByRole('button', { name: 'Visual theme' })).toHaveTextContent('Lumen');
+  expect(screen.getByRole('button', { name: 'Visual theme' })).toHaveTextContent('Workshop');
   await user.click(screen.getByRole('button', { name: 'Visual theme' }));
   const option = screen.getByRole('option', { name: 'Mono' });
   expect(option.querySelectorAll('.dd-swatches > span')).toHaveLength(3);
@@ -208,7 +208,8 @@ test('Palette appears only for themes with variants and does not change color mo
   expect(screen.getByRole('button', { name: 'Color mode' })).toHaveTextContent('System');
   await user.click(screen.getByRole('button', { name: 'Visual theme' }));
   await user.click(screen.getByRole('option', { name: 'Mono' }));
-  expect(screen.queryByRole('button', { name: 'Palette' })).toBeNull();
+  // Every built-in look offers the twelve palettes, its own colors under the one it names.
+  expect(screen.getByRole('button', { name: 'Palette' })).toHaveTextContent('Ink');
   expect(set.colorMode).not.toHaveBeenCalled();
 });
 

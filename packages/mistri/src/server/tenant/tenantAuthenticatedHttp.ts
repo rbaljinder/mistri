@@ -131,6 +131,7 @@ import { isPublicReadRequest } from '../../shared/tenantPublicReads.js';
 import { publicAddress } from './tenantPublicRead.js';
 import type { TenantAddresses } from './tenantIntakeModel.js';
 import { emailConfigOf, emailOf, webhookConfigOf } from '../serviceConnections.js';
+import { timeRequests } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
 
 type EnrollmentOptions = Omit<TenantEnrollmentOptions<IncomingMessage>, 'app' | 'pages' | 'verifySession'>;
 interface TenantAuthenticatedHttpOptions {
@@ -300,12 +301,15 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
        dozen times and more. The cookie cannot change within a request, so
        the token's resolution to a session (Better Auth's getSession, which
        skips its cookie cache here) is looked up once per request object and
-       kept only as long as that object lives. What is never kept is whether
-       the session is still live: every call, first or not, observes the
-       session row and its account in the store (`assertSessionCurrent`, and
+       kept only as long as that object lives. Every call, first or not,
+       observes the session row and its account (`assertSessionCurrent`, and
        `observeSession` on PostgreSQL), which refuses one that ended, was
-       shortened or impersonated, or whose account is banned. Only a proof is
-       kept, never a signed-out answer. */
+       shortened or impersonated, or whose account is banned. The file store
+       is read in place each time; a PostgreSQL store's answer may be one
+       read a few seconds ago, kept until anything in this process writes the
+       store (authStoreReads.ts): a sign-out here is seen by the next
+       observation, one elsewhere within MISTRI_AUTH_SESSION_CACHE. Only a
+       proof is kept, never a signed-out answer. */
     const resolved = new WeakMap<IncomingMessage, VerifiedSessionInstance>();
     // Both adapters derive from the same captured strong method.
     const verify = async (request: IncomingMessage) => {
@@ -923,6 +927,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       branding: hosted ?? baseRecordBranding(loaded.app, null, true),
       mount: { base: mount.base, json: mountJson(mount) },
       path,
+      tenant: true as const,
       looks: lookSheetsFor(worn().ui),
       faces: lookFacesFor(worn().ui),
       appFaces: appFaceHead(worn().ui, (href) => outward(mount, href)),
@@ -1443,6 +1448,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         observerRoute(req, res, url, mount)
       );
     });
+    /* Outermost, so a request's timing covers every listener above (serverTiming.ts); nothing when off. */
+    timeRequests(server);
     applyServerTimeouts(server);
     const close = server.close.bind(server);
     // The API first: nothing may answer a bearer once the deployment begins to drain.

@@ -48,12 +48,15 @@ export function deriveOnAccent(palette: Colors): string | undefined {
   return contrast('#ffffff', fill) >= contrast('#000000', fill) ? '#ffffff' : '#000000';
 }
 
-/** The accent as text and links when it would not read on the grounds a word stands on: the accent drawn toward the ink until it does, so the hue stays the brand's. Undefined where it reads already. */
-export function deriveAccentInk(palette: Colors): string | undefined {
+/** The accent as text and links when it would not read on the grounds a word stands on: the accent drawn toward the ink until it does, so the hue stays the brand's. Undefined where it reads already.
+    `soft`: the accent's own 14% tint is a ground too (a selected item, where an App's accent draws accentSoft as that
+    tint): on a ground darker than white, Workshop's paper, a blue that reads on the page fell to 4.4:1 on its tint. */
+export function deriveAccentInk(palette: Colors, soft = false): string | undefined {
   const accent = palette.accent;
   if (!HEX.test(accent) || !HEX.test(palette.ink)) return undefined;
-  const grounds = [palette.surface, palette.ground, palette.raised].filter((color): color is string => Boolean(color && HEX.test(color)));
-  if (!grounds.length) return undefined;
+  const pages = [palette.surface, palette.ground, palette.raised].filter((color): color is string => Boolean(color && HEX.test(color)));
+  if (!pages.length) return undefined;
+  const grounds = soft ? [...pages, ...pages.map((page) => mix(accent, page, 0.14))] : pages;
   const reads = (color: string) => grounds.every((ground) => contrast(color, ground) >= TEXT);
   if (reads(accent)) return undefined;
   for (let step = 1; step <= 20; step++) {

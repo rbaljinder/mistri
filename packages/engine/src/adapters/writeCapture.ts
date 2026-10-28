@@ -35,6 +35,14 @@ export interface CaptureSource {
   ): Promise<Record<string, unknown> | undefined>;
   /** Up to `limit` rows whose columns equal these values. */
   rows(table: string, where: Record<string, string | number>, columns: string[], limit: number): Promise<Record<string, unknown>[]>;
+  /**
+   * Where the writer sends together: `ride` runs the moment this table's
+   * UPDATE is sent, so a read it asks leaves in the update's own round trip,
+   * behind it, and reads what it wrote (postgresTransactionHandle.ts
+   * behindWrite). Answers a withdraw, true when `ride` never ran; absent, or
+   * undefined, where nothing rides.
+   */
+  behind?(table: string, ride: () => void): (() => boolean) | undefined;
 }
 
 /** One transaction's capture: each write runs through it. */

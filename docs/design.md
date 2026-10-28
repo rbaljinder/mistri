@@ -23,8 +23,8 @@ a pointer into it.
    exception (Lumen's exceptions).
 3. **Tokens only.** Every colour, radius, face, duration, space and text
    size is a custom property; a literal outside the tokens (`tokens.css`) and the looks'
-   presets is a bug (Tokens; Space and text). Three looks dress Apps; the database browser wears none. Lumen is the
-   default.
+   presets is a bug (Tokens; Space and text). Four looks dress Apps; the database browser wears none. Workshop is
+   the default, and twelve palettes are the same twelve in every look (Palettes).
 4. **The cascade is layered.** A later layer wins by order, never by
    specificity; layout no look may move lives in `structure.css` (The cascade).
 5. **One action is primary.** A record's first verb and a list's New are
@@ -77,10 +77,10 @@ primitive's class.) A
 theme's rules stand over its look's so a part it dresses is dressed whatever
 the look said, and under `structure` so nothing it says moves a box.
 What every look shares, and Mono's rules, are in `themeFamilies.css`;
-Lumen's and Sage's own rules stand in `look` from a sheet of their own
-(`lumenLook.css`, `sageLook.css`), as do the few recipes only an App's own
-theme picks (`brandLook.css`: a dark bar, a washed or underlined menu, a
-ruled stat, a tinted table, small capitals and book figures), fetched when
+Workshop's, Lumen's and Sage's own rules stand in `look` from a sheet of their own
+(`workshopLook.css`, `lumenLook.css`, `sageLook.css`), as do the few recipes no
+built-in but Workshop picks (`brandLook.css`: a dark bar, a washed or underlined
+menu, a ruled stat, a tinted table, small capitals and book figures), fetched when
 worn and waited for before the page is revealed, so a look's own rules add
 nothing to the first stylesheet
 (the move was proven by the same computed-style snapshot: no difference in
@@ -118,8 +118,8 @@ is a bug.
 **Two dresses, one rule each.** The database browser — `npx tablewalk
 <db>`, and an App's Workbench — wears these tokens and nothing else: warm
 paper, the green accent, the code face in its chrome and its data, flat
-dense rows. The three looks (Lumen, the default an App wears when neither it nor
-its reader names one, then Mono and Sage, which an App opts into; an App
+dense rows. The four looks (Workshop, the default an App wears when neither it nor
+its reader names one, then Lumen, Mono and Sage, which an App opts into; an App
 may also define its own with `defineTheme`; `visualThemes.css`,
 `themeFamilies.css`) dress Apps only: every one of
 their rules keys on `data-visual-theme`, which the browser never carries,
@@ -171,7 +171,13 @@ ink darker than its hairlines and still quieter than its text.
   is read character by character — code, the query language, and in
   Mono a grid's short values (ids, dates, codes) — keeps `--code`. A column may ask for a face (`display: { vin: { face: 'code' } }`); unasked, an App sets only keys, references and codes in the data face.
   A look's sans is the system's own, and its identity comes from scale,
-  weight and tracking — except Lumen's: Lumen is set in Inter, which ships
+  weight and tracking — except Workshop's and Lumen's. Workshop is set in
+  Barlow, its titles, section heads and labels in Barlow Semi Condensed's
+  bold capitals: the regular, the semibold and the condensed bold ship with
+  Workshop's sheet (`workshopLook.css`, about 65 KB together, SIL Open Font
+  License) and the regular and the condensed bold are preloaded beside it,
+  so only a page wearing Workshop fetches them; until they arrive Workshop
+  draws Arial cut to each face's measure, as Lumen does. Lumen is set in Inter, which ships
   with Lumen's sheet (`lumenLook.css`, the variable face's Latin subset, 48
   KB) and is preloaded beside it, so only a page wearing Lumen fetches it and
   no first-paint bundle carries it. Named and not shipped, Inter drew only
@@ -301,8 +307,8 @@ title scale, a starting density, and one treatment per part from a closed
 recipe menu (`packages/mistri/src/shared/themeSpec.ts`). Every recipe is one a built-in look
 already wears — the built-ins are written in `defineTheme` themselves — so an
 App theme can only ask for what this system already draws; a look the menu
-cannot say extends the menu, it is never special-cased. Apps write no CSS. Lumen, Mono and
-Sage all start an App compact; comfortable zooms the page by 1.12 and spacious
+cannot say extends the menu, it is never special-cased. Apps write no CSS. Every look
+starts an App compact; comfortable zooms the page by 1.12 and spacious
 by 1.24, which a 1280px desk cannot hold a wide list in (Lintel's rent roll
 scrolled 213px sideways in Mono at comfortable). A person's own saved density
 choice wins over any look's start. A
@@ -510,6 +516,29 @@ never a bar down its side (Lumen's board-card stripe says a card's
 meaning, not that it is current: Lumen's exceptions; so does the 2px edge
 in its tone on a conversation's tinted message, an internal note).
 
+**Workshop's exceptions.** Workshop is the desk as a workbench, ported as
+it is from a field report's theme the maintainer chose as the default:
+warm paper, ink-black type and one hue that means "act on this". It takes
+three departures from this list for itself alone: a warm paper ground
+(where the list refuses beige palettes), a faint grain behind the menu (the
+`grain` pattern, the one built-in pattern), and titles, section heads and
+labels in a condensed bold set in capitals. Everything else holds: fills,
+rules and selection are the ink, on paper, and nothing is tinted. The hue
+is one restrained accent that reaches only the marks a reader takes for the
+brand color: the primary verb's fill (its words the ink, as a hazard tag
+prints them, edged in the ink, `buttons: 'keyed'`), links and the current
+tab's rule, a 3px marker beside the menu's current entry (`nav: 'slot'`:
+the entry is an ink block, like a tool's slot on a pegboard, and the
+marker stands beside it on the menu's ground, never as a fill), the focus
+ring, a checked box and a chart's first series. Sections and table heads
+stand under the 2px ink rule; corners are 2px; nothing floats. Its
+palettes keep this rule: a palette's hue takes the orange's place on those
+marks and nothing else. (Workshop first drew links, the current tab and
+the menu's mark in the ink too, so that the primary verb was a page's
+only color; on most screens that hid the palette altogether, and twelve
+palettes a reader could not see were not a choice. The maintainer chose to
+let the palette show, 2026-10-27.)
+
 **Sage's exceptions.** Sage recreates, as it is, a reference the
 maintainer chose, and takes three departures from this list for itself
 alone: a warm cream ground under white panels (where the list refuses
@@ -556,11 +585,11 @@ its one larger step, as Sage's. Everything else holds: one primary action
 filled in the ink, Lumen's primary-action color, on every surface that draws one
 (Standing layout rules), the accent (a confident blue) kept for tabs underlined in it, the
 current room a soft pill of its tint, Inter shipped with
-the look's own sheet (Faces), no motion beyond the house's. Lumen's palettes — **Violet**,
-**Teal**, **Emerald**, **Rose** and **Amber** — change only the accent's
-family (the tab underline, the link and current room,
-the soft tint, the focus ring and the lead chart hue), each checked for
-contrast and chart separation light and dark like the default. Nothing
+the look's own sheet (Faces), no motion beyond the house's. Lumen's blue is
+the **Cobalt** palette; every other palette (Palettes) changes only the
+accent's family (the tab underline, the link and current room, the soft
+tint, the focus ring and the lead chart hue), each checked for contrast and
+chart separation light and dark like Cobalt. Nothing
 here is open to another look or to an App's tokens. The references'
 other markup is now the App's to ask for, each a block of its own that
 every look draws plainly, and Lumen dresses only through its recipes.
@@ -1673,6 +1702,29 @@ than the text, crisper hairlines, and each look's tightened corners (Mono
 square). A look sets a border's colour and width, never whether it is
 there: a room that draws no rule still draws none, and a lane keeps its
 border's width, so the drop mark (its edge in the accent) moves nothing.
+
+**Palettes.** A palette is a colour identity, apart from the look: one
+registry (`packages/engine/src/shared/lookPalettes.ts`) of twelve —
+Crimson, Safety orange, Amber, Moss, Emerald, Teal, Cobalt, Violet, Plum,
+Rose, Slate and Ink — each its hue at the depths a look draws it (the
+accent as text and fill, a brighter link by night, the pale tint, the
+focus ring, a signal fill and the words on it, the lead chart series),
+light and dark. Every look offers all twelve and wears one by default
+(Workshop Safety orange, Lumen Cobalt, Mono and Sage Ink, which is each
+look's own ink); the look keeps its grounds, neutrals, type, shape and
+recipes, and decides which roles the hue reaches: Workshop the primary
+verb, links, the current tab's rule, the menu's marker, the ring and the
+first series, with no tint; Lumen the accent, its tint, links, the ring, the menu's
+mark and the first series; Mono and Sage the same on their own neutral
+tint for what is chosen. Where a look needs a palette at another depth
+(Workshop's own deeper orange ring, each look's own ink for Ink) the
+palette says so for that look rather than forking. A palette's lead
+series takes the place of the look's nearest hue and the rest are ordered
+so every neighbour stays apart for a colour-blind reader.
+`test/contrast.test.ts` measures every palette in every look, light and
+dark: text and links at 4.5:1, the words on a fill at 4.5:1, the ring at
+3:1, adjacent series apart. A reader picks one under Palette in
+Preferences; an App with `ui.theme.palette`.
 
 ## Composition
 

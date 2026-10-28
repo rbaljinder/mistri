@@ -473,10 +473,12 @@ export const pickList = defineCommand({
     const when = stamp(now);
     let units = 0;
     for (const line of lines) {
-      const product = await db.product.get({ id: line.product_id });
-      const levels = (await db.stock_level.where({ product_id: product.id, warehouse_id: record.warehouse_id }).limit(100)).filter(
-        (level) => Number(level.qty) > 0,
-      );
+      // Asked together, they leave in one round trip: neither depends on the other's answer.
+      const [product, stocked] = await Promise.all([
+        db.product.get({ id: line.product_id }),
+        db.stock_level.where({ product_id: line.product_id, warehouse_id: record.warehouse_id }).limit(100),
+      ]);
+      const levels = stocked.filter((level) => Number(level.qty) > 0);
       const rank = (level: Rows['stock_level']) => (level.bin_id === line.bin_id ? 0 : level.bin_id === product.home_bin_id ? 1 : 2);
       levels.sort((a, b) => rank(a) - rank(b) || Number(b.qty) - Number(a.qty));
       const available = levels.reduce((sum, level) => sum + Number(level.qty), 0);

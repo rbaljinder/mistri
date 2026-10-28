@@ -15,7 +15,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { assistantApi, assistantTenant } from './assistantRequest.js';
+import { assistantApi, assistantOwner } from './assistantRequest.js';
 import { formatLocale, formatTimezone } from '@mistriwork/kit/client/locale.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
@@ -190,7 +190,7 @@ export function ConversationList({ app, conversations, current, working, onOpen,
     return () => window.clearTimeout(wait);
   }, [term]);
   const searched = useQuery({
-    queryKey: ['assistant-search', app, assistantTenant(), asked],
+    queryKey: ['assistant-search', app, assistantOwner(), asked],
     enabled: asked.length > 0,
     staleTime: 10_000,
     queryFn: async () =>

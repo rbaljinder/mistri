@@ -2,15 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { audienceThemes, resolveTheme, roleTheme, type ThemeAsk } from '../packages/engine/src/shared/themeResolve.js';
 
-const OFFERED = new Set(['lumen', 'mono', 'sage', 'cadence', 'workshop']);
+const OFFERED = new Set(['lumen', 'mono', 'sage', 'cadence', 'garage']);
 const ask = (more: Partial<ThemeAsk>): ThemeAsk => ({
   offered: (id) => OFFERED.has(id),
   preset: 'sage',
-  for: { public: 'cadence', roles: { rider: 'cadence', mechanic: 'workshop' } },
+  for: { public: 'cadence', roles: { rider: 'cadence', mechanic: 'garage' } },
   ...more,
 });
 
-test('resolveTheme ranks public, then the reader, then the role, the tenant, the App and Lumen', () => {
+test('resolveTheme ranks public, then the reader, then the role, the tenant, the App and Workshop', () => {
   const rows: Array<[string, Partial<ThemeAsk>, string, string]> = [
     // A public surface wears for.public, a reader's pick included: the page is the same for everyone.
     ['public page, reader picked mono', { public: true, pick: 'mono' }, 'cadence', 'public'],
@@ -20,7 +20,7 @@ test('resolveTheme ranks public, then the reader, then the role, the tenant, the
     // A signed-in reader's own pick wins over the role map.
     ['rider who picked mono', { roles: ['rider'], pick: 'mono' }, 'mono', 'reader'],
     ['rider', { roles: ['rider'] }, 'cadence', 'role'],
-    ['mechanic', { roles: ['mechanic'] }, 'workshop', 'role'],
+    ['mechanic', { roles: ['mechanic'] }, 'garage', 'role'],
     // The first entry in written order the account holds, not the order of its roles.
     ['mechanic who rides', { roles: ['mechanic', 'rider'] }, 'cadence', 'role'],
     // The role map ranks above the tenant's saved theme.
@@ -29,7 +29,7 @@ test('resolveTheme ranks public, then the reader, then the role, the tenant, the
     ['manager', { roles: ['manager'] }, 'sage', 'app'],
     // An id the App no longer offers falls through to the next rank.
     ['a retired pick', { roles: ['manager'], pick: 'harbor' }, 'sage', 'app'],
-    ['nothing at all', { preset: undefined, for: undefined }, 'lumen', 'default'],
+    ['nothing at all', { preset: undefined, for: undefined }, 'workshop', 'default'],
   ];
   for (const [name, more, id, source] of rows) {
     const worn = resolveTheme(ask(more));
@@ -40,14 +40,14 @@ test('resolveTheme ranks public, then the reader, then the role, the tenant, the
 });
 
 test('a role mapped to a theme the App does not offer falls through to the next entry', () => {
-  const worn = resolveTheme(ask({ roles: ['rider', 'mechanic'], for: { roles: { rider: 'harbor', mechanic: 'workshop' } } }));
-  assert.deepEqual(worn, { id: 'workshop', source: 'role', role: 'mechanic' });
+  const worn = resolveTheme(ask({ roles: ['rider', 'mechanic'], for: { roles: { rider: 'harbor', mechanic: 'garage' } } }));
+  assert.deepEqual(worn, { id: 'garage', source: 'role', role: 'mechanic' });
 });
 
 test('roleTheme and audienceThemes read the mapping in written order', () => {
-  const audiences = { public: 'cadence', roles: { rider: 'cadence', mechanic: 'workshop' } };
+  const audiences = { public: 'cadence', roles: { rider: 'cadence', mechanic: 'garage' } };
   assert.equal(roleTheme(audiences, ['mechanic', 'rider']), 'cadence');
   assert.equal(roleTheme(audiences, ['manager']), undefined);
-  assert.deepEqual(audienceThemes(audiences), ['cadence', 'workshop']);
+  assert.deepEqual(audienceThemes(audiences), ['cadence', 'garage']);
   assert.deepEqual(audienceThemes(undefined), []);
 });

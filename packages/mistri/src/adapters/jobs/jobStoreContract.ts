@@ -13,6 +13,7 @@ import type {
   JobOutcomeCode,
   JobPolicy,
   JobPruneResult,
+  JobStanding,
   JobState,
 } from './jobStoreTypes.js';
 
@@ -55,6 +56,10 @@ export interface JobStore {
   /** Private bounded diagnostics: no input, result, provenance or error text. */
   inspect(filter?: Readonly<{ state?: JobState; job?: string; afterId?: string }>, limit?: number): Promise<readonly JobInspection[]>;
   attempts(id: string): Promise<readonly JobAttemptInspection[]>;
+  /** Where the namespace stands, in one read and without any row's history: the host's readiness, and how long
+   * it may wait before something falls due (jobHost.ts). Inspecting every waiting row to learn this verified each
+   * against its attempts, a history read per row every few seconds while pages were loading (a field report). */
+  standing(now: number): Promise<JobStanding>;
   /** Operator maintenance: a failed job, or an unknown one whose lease has
    * run out, goes back to retry with a fresh attempt budget, recorded as a
    * history row naming the operator. Succeeded and cancelled jobs refuse. */

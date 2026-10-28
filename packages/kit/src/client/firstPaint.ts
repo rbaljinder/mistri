@@ -84,6 +84,19 @@ export function firstPaintItem(kind: FirstPaintItemKind, connection: string | nu
   return answer.body;
 }
 
+/**
+ * Answers that arrived after the page did, taken as the page's own: a tenant
+ * App's, read on its lease once the lease is open (mistri shared/tenantBoot.ts),
+ * which the page itself could not carry. Each is the page's once, for the same
+ * lifetime, and only under the session identity it was adopted in.
+ */
+export function adoptFirstPaint(adopted: FirstPaintData): void {
+  const kept = held();
+  data = { reads: { ...kept?.reads, ...adopted.reads }, items: { ...kept?.items, ...adopted.items } };
+  until = Date.now() + LIFETIME;
+  owner = sessionIdentity();
+}
+
 /** Every answer forgotten: after a write, what the page was sent is not the data any more. */
 export function forgetFirstPaint(): void {
   data = null;

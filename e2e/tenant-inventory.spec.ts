@@ -6,6 +6,7 @@ import { rows } from './support/db.js';
 import { sqliteAuditRows } from '../test/support/commandTargets.js';
 import { startTenantInventory, type TenantInventoryFixture } from './support/tenantProofServer.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
+import { isSelection, leaseOfSelection } from './support/tenantSelection.js';
 
 type Fixture = TenantInventoryFixture;
 type Row = Record<string, unknown>;
@@ -84,9 +85,7 @@ async function enter(page: Page, app: Fixture, role: keyof Fixture['accounts'] =
       ).status(),
     ).toBe(200);
   // The selection: a click on the chooser, or for the viewer's one membership, made as the page loads.
-  const selected = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/api/tenant/context/open' && response.request().method() === 'POST',
-  );
+  const selected = page.waitForResponse(isSelection);
   await page.goto(`${app.origin}/${app.appId}/${app.inventory.vehicle}?tenant=northstar`);
   if (nativeForm) {
     await expect(page.getByRole('heading', { name: `Sign in to ${app.appName}`, exact: true })).toBeVisible();
@@ -106,7 +105,7 @@ async function enter(page: Page, app: Fixture, role: keyof Fixture['accounts'] =
   }
   const response = await selected;
   expect(response.status()).toBe(200);
-  const owner = (await response.json()) as TenantContextReply;
+  const owner = await leaseOfSelection(response);
   expect(owner).toMatchObject({ appId: app.appId, accountId: account.id, tenantId: 'northstar' });
   // The bar's control on a desk, the account menu's first item on a phone: its words are the same either way.
   await expect(page.locator('.tenant-control-host')).toContainText('Tenant: northstar');

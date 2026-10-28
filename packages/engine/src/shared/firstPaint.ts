@@ -30,6 +30,8 @@ export const FIRST_PAINT_ELEMENT = 'mistri-first-paint';
 export interface FirstPaintRead {
   body: unknown;
   account?: string;
+  /** The tables it answered from (`mistri-reads`), where a reply's header would have said: live sync asks it again only when one changes. */
+  reads?: string;
 }
 
 /** What the page carries. `reads` by readKey, `items` by itemKey. */

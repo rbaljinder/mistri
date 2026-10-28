@@ -10,7 +10,7 @@ page. Every recipe shares a spine:
 
 - **Data**: SQLite text dates declared, `types: { due_on: 'date' }`, before
   any trend, calendar or `relative` ([choices.md](choices.md)).
-- **Look**: `ui.theme` written out (Lumen unless [design-language.md](design-language.md)
+- **Look**: `ui.theme` written out (Workshop unless [design-language.md](design-language.md)
   says otherwise), `ui.logo`, `locale`, `timezone`, `currency` —
   [lintel/app.ts:169](../../../examples/apps/lintel/app.ts#L169).
 - **Home**: a dashboard, first in the menu, as the day's starting page: three

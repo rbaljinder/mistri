@@ -5,7 +5,8 @@
  * both wear; the builder and the checks are elsewhere, so they stay out of a
  * first paint that needs only the looks.
  */
-import type { ThemeSpec } from '../../schema/theme.js';
+import type { ThemeBase, ThemeColorsOver, ThemeSpec } from '../../schema/theme.js';
+import { LOOK_PALETTES, paletteColors } from './lookPalettes.js';
 
 /** The system's own interface face on every machine; nothing is fetched and
     nothing is bundled. A look's identity is its type roles: size, weight and tracking. */
@@ -15,8 +16,58 @@ const HELVETICA = '"Helvetica Neue", Helvetica, Arial, ui-sans-serif, sans-serif
     fetched only by a page wearing it, never in the first paint; then Arial
     cut to Inter's measure while it arrives (docs/design.md, Faces). */
 const INTER = `Inter, "Inter Fallback", ${SANS}`;
+/** Workshop's faces: Barlow for the interface and data, its semi-condensed bold for titles and labels, shipped with
+    Workshop's sheet (workshopLook.css) and fetched only by a page wearing it; each with Arial cut to its measure
+    while it arrives. */
+const BARLOW = `Barlow, "Barlow Fallback", "Helvetica Neue", Arial, sans-serif`;
+const BARLOW_CONDENSED = `"Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Barlow, "Arial Narrow", sans-serif`;
 
-/** The built-in looks: Lumen, the default an App wears, then Mono and Sage.
+/** A look as written here: its own grounds, neutrals and meaning colors, and the palette (lookPalettes.ts) it wears
+    until a reader or the App picks another. The hue's roles are the palette's, so a look never names them. */
+type HouseLook = Omit<Extract<ThemeSpec, { extends?: undefined; colors: { light: unknown } }>, 'colors' | 'id' | 'palettes'> & {
+  id: ThemeBase;
+  colors: { light: ThemeColorsOver; dark: ThemeColorsOver };
+  defaultPalette: string;
+};
+
+/** Spec colors over spec colors: a group (`nav`, `status`, `rules`) role by role, a series whole. */
+function overColors(base: ThemeColorsOver, top: ThemeColorsOver): ThemeColorsOver {
+  return {
+    ...base,
+    ...top,
+    ...(base.nav || top.nav ? { nav: { ...base.nav, ...top.nav } } : {}),
+    ...(base.status || top.status ? { status: { ...base.status, ...top.status } } : {}),
+    ...(base.rules || top.rules ? { rules: { ...base.rules, ...top.rules } } : {}),
+  };
+}
+
+/** A look with every palette: its own colors are its default palette's, and each palette is the same hue as it is in
+    every other look (scripts/theme-presets.mjs keeps only what a palette changes). */
+function withPalettes(look: HouseLook): ThemeSpec {
+  const series = (mode: 'light' | 'dark') => (look.colors[mode].chart ?? []).filter((color): color is string => typeof color === 'string');
+  const worn = (id: string, mode: 'light' | 'dark') =>
+    overColors(
+      look.colors[mode],
+      paletteColors(
+        look.id,
+        LOOK_PALETTES.find((palette) => palette.id === id)!,
+        mode,
+        series(mode),
+      ),
+    );
+  return {
+    ...look,
+    colors: { light: worn(look.defaultPalette, 'light'), dark: worn(look.defaultPalette, 'dark') },
+    palettes: LOOK_PALETTES.map((palette) => ({
+      id: palette.id,
+      label: palette.label,
+      light: worn(palette.id, 'light'),
+      dark: worn(palette.id, 'dark'),
+    })),
+  } as ThemeSpec;
+}
+
+/** The built-in looks: Workshop, the default an App wears, then Lumen, Mono and Sage.
     Each is written as an App would write its own (`defineTheme`,
     packages/engine/schema/theme.d.ts): colours by purpose, a shape, a type and a pick from the
     recipe menu (themeBuild.ts), and built by the same `buildTheme` an App's
@@ -34,8 +85,126 @@ const INTER = `Inter, "Inter Fallback", ${SANS}`;
     The title weight (`type.roles.title.weight`) is never past 700: a heavier
     ask resolved a book face to its Black cut, a masthead where a title was
     meant, and broke the record's head. Mono titles at 700; Lumen's and Sage's
-    softer titles at 600. */
-export const LOOKS: readonly ThemeSpec[] = [
+    softer titles at 600; Workshop's condensed capitals at 700.
+
+    Each wears every palette in lookPalettes.ts; its own colors are its
+    default palette's (Workshop's Safety orange, Lumen's Cobalt, Mono's and
+    Sage's Ink, which is each one's own ink). */
+const HOUSE: readonly HouseLook[] = [
+  {
+    // The desk as a workbench, ported from a field report's theme: warm paper,
+    // ink-black type and fills, and one restrained hue — Safety orange unless
+    // a palette says another. The hue reaches only the marks a reader takes
+    // for the brand color: the primary verb (the ink's words on it, as a
+    // hazard tag prints them), links and the current tab's rule, a 3px marker
+    // beside the menu's ink block (like a tool's slot on a pegboard), the
+    // focus ring, a checked box and the first chart series. Fills, rules and
+    // selection stay the ink, and nothing is tinted. Titles, section heads
+    // and labels are Barlow's semi-condensed bold in capitals, the rest
+    // Barlow; heavy 2px ink rules part the sections and stand under a
+    // table's heads, corners are near-square and nothing floats; the menu
+    // sits on a faint grain (workshopLook.css; docs/design.md, Workshop).
+    id: 'workshop',
+    label: 'Workshop',
+    defaultPalette: 'safety',
+    colors: {
+      light: {
+        ground: '#f2ede3',
+        surface: '#faf8f3',
+        raised: '#ece6da',
+        ink: '#1b1813',
+        inkMuted: '#4f483d',
+        inkSubtle: '#5f574b',
+        line: '#ddd5c6',
+        lineStrong: '#8b8274',
+        lineControl: '#7d7466',
+        accentInk: '#1b1813',
+        accentSoft: '#e7dfd0',
+        primary: '#1b1813',
+        link: '#1b1813',
+        shadow: '#3a3020',
+        status: { good: '#106b38', warning: '#934a06', critical: '#c52a2a', info: '#2f5578' },
+        nav: {
+          ground: '#ebe5d9',
+          ink: '#1b1813',
+          muted: '#4f483d',
+          line: '#d8cfbe',
+          accent: '#1b1813',
+        },
+        rules: { section: '#1b1813', head: '#1b1813' },
+        chart: ['#2b2620', '#9a6cf7', '#0e9a6c', '#d97706', '#e0428a', '#0e8fb0', '#a3510b', '#94a3b8'],
+      },
+      dark: {
+        ground: '#15130f',
+        surface: '#1d1a15',
+        raised: '#26221c',
+        ink: '#efe9de',
+        inkMuted: '#c2b9aa',
+        inkSubtle: '#a59c8d',
+        line: '#2f2a22',
+        lineStrong: '#6d6555',
+        lineControl: '#7a7262',
+        accentInk: '#efe9de',
+        accentSoft: '#2c261e',
+        primary: '#efe9de',
+        link: '#efe9de',
+        status: { good: '#4ade80', warning: '#fbbf24', critical: '#f87171', info: '#91a8ff' },
+        nav: {
+          ground: '#110f0c',
+          ink: '#efe9de',
+          muted: '#b3aa9b',
+          line: '#26221c',
+          accent: '#efe9de',
+        },
+        rules: { section: '#8a8170', head: '#8a8170' },
+        chart: ['#d9d0c0', '#9a78ec', '#12a678', '#c88317', '#e0559b', '#1597b9', '#d26b3b', '#6b7694'],
+      },
+    },
+    shape: {
+      radius: { control: '2px', field: '2px', pill: '2px', panel: '2px' },
+      elevation: 'flat',
+      border: { panel: '1px', rule: '2px' },
+    },
+    type: {
+      font: { ui: BARLOW, data: BARLOW, heading: BARLOW_CONDENSED },
+      base: '14px',
+      roles: {
+        title: { face: 'heading', size: '30px', weight: 700, case: 'upper', tracking: '0.01em', leading: 1.1 },
+        heading: { face: 'heading', size: '22px', weight: 700, case: 'upper', tracking: '0.01em' },
+        section: { face: 'heading', size: '15px', weight: 700, case: 'upper', tracking: '0.04em' },
+        label: { face: 'heading', weight: 700, case: 'upper', tracking: '0.06em' },
+        data: { features: ['tnum'] },
+        figure: { face: 'heading', size: '38px', weight: 700, features: ['tnum'] },
+        nav: { weight: 500 },
+      },
+    },
+    surface: { nav: { kind: 'grain' } },
+    // Compact, as the other looks: see Mono's density.
+    density: 'compact',
+    rhythm: 'house',
+    recipes: {
+      nav: 'slot',
+      bar: 'ruled',
+      tabs: 'rule',
+      windows: 'segmented',
+      stat: 'ruled',
+      section: 'open',
+      fields: 'open',
+      table: 'open',
+      status: 'dot',
+      board: 'ruled',
+      chart: 'plain',
+      buttons: 'keyed',
+      links: 'plain',
+      rules: 'ink',
+      avatar: 'plain',
+      workflow: 'markers',
+      banner: 'plain',
+      steps: 'strip',
+      lanes: 'tag',
+      header: 'plain',
+    },
+  },
   {
     // Flat, calm and modern, with character in its details: a warm, faintly
     // tinted shell around white working surfaces, elevation only on what
@@ -46,11 +215,12 @@ export const LOOKS: readonly ThemeSpec[] = [
     // workflow as a track of segments, charts as a line in one hue's steps
     // (lumenLook.css; docs/design.md, Lumen, for its exceptions). The chart
     // palette keeps blue, violet, green, amber and pink at steps the dataviz
-    // checks pass, light and dark. Inter, shipped with the look. Violet,
-    // Teal, Emerald, Rose and Amber change the accent family only — grounds,
-    // ink and structure stay Default's.
+    // checks pass, light and dark. Inter, shipped with the look. Its own
+    // blue is Cobalt; every other palette changes the accent family only —
+    // grounds, ink and structure stay Lumen's.
     id: 'lumen',
     label: 'Lumen',
+    defaultPalette: 'cobalt',
     colors: {
       light: {
         ground: '#ffffff',
@@ -62,12 +232,8 @@ export const LOOKS: readonly ThemeSpec[] = [
         line: '#ebe8e4',
         lineStrong: '#8f8a83',
         lineControl: '#8f8a83',
-        accent: '#2d4fd6',
-        accentSoft: '#eef1fd',
         primary: '#1c1a17',
         onPrimary: '#ffffff',
-        link: '#2d4fd6',
-        focus: '#6880e0',
         status: {
           good: '#127a40',
           warning: '#a65308',
@@ -79,7 +245,6 @@ export const LOOKS: readonly ThemeSpec[] = [
           ink: '#1c1a17',
           muted: '#5c5852',
           line: '#ebe8e4',
-          accent: '#2d4fd6',
         },
         rules: {
           section: '#ebe8e4',
@@ -97,12 +262,8 @@ export const LOOKS: readonly ThemeSpec[] = [
         line: '#2d2b27',
         lineStrong: '#726d65',
         lineControl: '#726d65',
-        accent: '#8aa1ff',
-        accentSoft: '#1d2547',
         primary: '#eeece8',
         onPrimary: '#121110',
-        link: '#91a8ff',
-        focus: '#5a73d6',
         status: {
           good: '#4ade80',
           warning: '#fbbf24',
@@ -114,7 +275,6 @@ export const LOOKS: readonly ThemeSpec[] = [
           ink: '#eeece8',
           muted: '#aaa59d',
           line: '#262422',
-          accent: '#91a8ff',
         },
         rules: {
           section: '#2d2b27',
@@ -123,128 +283,6 @@ export const LOOKS: readonly ThemeSpec[] = [
         chart: ['#3559e6', '#9a78ec', '#12a678', '#c88317', '#e0559b', '#1597b9', '#d26b3b', '#6b7694'],
       },
     },
-    palettes: [
-      {
-        id: 'violet',
-        label: 'Violet',
-        light: {
-          accent: '#6534d8',
-          accentSoft: '#f1ecff',
-          link: '#6534d8',
-          focus: '#8a6ee6',
-          nav: {
-            accent: '#6534d8',
-          },
-          chart: ['#9a6cf7', '#2557e0'],
-        },
-        dark: {
-          accent: '#ad91ff',
-          accentSoft: '#2a2154',
-          link: '#bea8ff',
-          focus: '#7c63cf',
-          nav: {
-            accent: '#bea8ff',
-          },
-          chart: ['#9a78ec', '#3559e6'],
-        },
-      },
-      {
-        id: 'teal',
-        label: 'Teal',
-        light: {
-          accent: '#0b6f86',
-          accentSoft: '#e3f5f8',
-          link: '#0b6f86',
-          focus: '#3c90a4',
-          nav: {
-            accent: '#0b6f86',
-          },
-          chart: ['#0e8fb0', null, null, null, null, '#2557e0'],
-        },
-        dark: {
-          accent: '#4cc6db',
-          accentSoft: '#0f3540',
-          link: '#79d6e6',
-          focus: '#2a8a9c',
-          nav: {
-            accent: '#79d6e6',
-          },
-          chart: ['#0c8ab0', null, null, null, null, '#3559e6'],
-        },
-      },
-      {
-        id: 'emerald',
-        label: 'Emerald',
-        light: {
-          accent: '#08734f',
-          accentSoft: '#e4f6ed',
-          link: '#08734f',
-          focus: '#36966f',
-          nav: {
-            accent: '#08734f',
-          },
-          chart: ['#0e9a6c', null, '#2557e0'],
-        },
-        dark: {
-          accent: '#4ad6a0',
-          accentSoft: '#0f3529',
-          link: '#7ee6bd',
-          focus: '#279771',
-          nav: {
-            accent: '#7ee6bd',
-          },
-          chart: ['#12a678', null, '#3559e6'],
-        },
-      },
-      {
-        id: 'rose',
-        label: 'Rose',
-        light: {
-          accent: '#b4185a',
-          accentSoft: '#fdebf2',
-          link: '#b4185a',
-          focus: '#d0608f',
-          nav: {
-            accent: '#b4185a',
-          },
-          chart: ['#e0428a', null, null, null, '#2557e0'],
-        },
-        dark: {
-          accent: '#f57ab9',
-          accentSoft: '#3e1631',
-          link: '#f9a6cf',
-          focus: '#bd5a8f',
-          nav: {
-            accent: '#f9a6cf',
-          },
-          chart: ['#e0559b', null, null, null, '#3559e6'],
-        },
-      },
-      {
-        id: 'amber',
-        label: 'Amber',
-        light: {
-          accent: '#9c4c06',
-          accentSoft: '#fdf1df',
-          link: '#9c4c06',
-          focus: '#b57a33',
-          nav: {
-            accent: '#9c4c06',
-          },
-          chart: ['#d97706', null, null, '#2557e0'],
-        },
-        dark: {
-          accent: '#f4b24a',
-          accentSoft: '#3a2a10',
-          link: '#fbcf86',
-          focus: '#b07d2d',
-          nav: {
-            accent: '#fbcf86',
-          },
-          chart: ['#c88317', null, null, '#3559e6'],
-        },
-      },
-    ],
     shape: { radius: { control: '8px', field: '8px' }, elevation: 'raised', border: { rule: '1px' } },
     /* The page's name anchors it: 28px, tight; a list's name a step under, and a section's heading 16px, so the
        page reads title, section, row at a glance. On a flat page the type is the hierarchy the boxes used to be. */
@@ -284,6 +322,7 @@ export const LOOKS: readonly ThemeSpec[] = [
     // Data stays in the sans, as in every look.
     id: 'mono',
     label: 'Mono',
+    defaultPalette: 'ink',
     colors: {
       light: {
         ground: '#ffffff',
@@ -295,10 +334,7 @@ export const LOOKS: readonly ThemeSpec[] = [
         line: '#d4d4d4',
         lineStrong: '#000000',
         lineControl: '#000000',
-        accent: '#000000',
         accentSoft: '#ebebeb',
-        link: '#000000',
-        focus: '#000000',
         status: {
           good: '#0a6b3a',
           warning: '#7a5200',
@@ -310,7 +346,6 @@ export const LOOKS: readonly ThemeSpec[] = [
           ink: '#000000',
           muted: '#333333',
           line: '#000000',
-          accent: '#000000',
         },
         chart: ['#000000', '#6b6b6b', '#333333', '#8e8e8e', '#505050', '#a8a8a8', '#1c1c1c', '#c8c8c8'],
       },
@@ -324,10 +359,7 @@ export const LOOKS: readonly ThemeSpec[] = [
         line: '#3a3a3a',
         lineStrong: '#ffffff',
         lineControl: '#ffffff',
-        accent: '#ffffff',
         accentSoft: '#262626',
-        link: '#ffffff',
-        focus: '#ffffff',
         status: {
           good: '#6fdc9c',
           warning: '#f2c94c',
@@ -339,7 +371,6 @@ export const LOOKS: readonly ThemeSpec[] = [
           ink: '#ffffff',
           muted: '#bdbdbd',
           line: '#ffffff',
-          accent: '#ffffff',
         },
         chart: ['#ffffff', '#8a8a8a', '#cccccc', '#6a6a6a', '#a8a8a8', '#4a4a4a', '#e6e6e6', '#333333'],
       },
@@ -370,6 +401,7 @@ export const LOOKS: readonly ThemeSpec[] = [
     // Sage, for its exceptions). The one look whose content ground is warm.
     id: 'sage',
     label: 'Sage',
+    defaultPalette: 'ink',
     colors: {
       light: {
         ground: '#f4f2ec',
@@ -381,10 +413,7 @@ export const LOOKS: readonly ThemeSpec[] = [
         line: '#e6e2d8',
         lineStrong: '#837e72',
         lineControl: '#837e72',
-        accent: '#1f2320',
         accentSoft: '#ebe8df',
-        link: '#256b43',
-        focus: '#256b43',
         status: {
           good: '#23784a',
           warning: '#8f5800',
@@ -398,7 +427,6 @@ export const LOOKS: readonly ThemeSpec[] = [
           ink: '#1f2320',
           muted: '#565b55',
           line: '#e6e2d8',
-          accent: '#1f2320',
         },
         // Ordered so neighbors differ for a red-green reader too (themeCheck.ts), and with one green among the
         // first four: a second green and a teal there made a five-way breakdown read as three. The dark series
@@ -415,10 +443,7 @@ export const LOOKS: readonly ThemeSpec[] = [
         line: '#323630',
         lineStrong: '#7d8277',
         lineControl: '#7d8277',
-        accent: '#f1f0ea',
         accentSoft: '#2a2d27',
-        link: '#8fd9ad',
-        focus: '#8fd9ad',
         status: {
           good: '#72d59c',
           warning: '#efc26a',
@@ -430,7 +455,6 @@ export const LOOKS: readonly ThemeSpec[] = [
           ink: '#f1f0ea',
           muted: '#aaa89f',
           line: '#2a2e28',
-          accent: '#8fd9ad',
         },
         chart: ['#7fd1a0', '#c4b1f2', '#f2a08a', '#f08cc4', '#ecc36e', '#6fd1c8', '#92b8f2', '#8c887f'],
       },
@@ -458,3 +482,5 @@ export const LOOKS: readonly ThemeSpec[] = [
     },
   },
 ];
+
+export const LOOKS: readonly ThemeSpec[] = HOUSE.map(withPalettes);

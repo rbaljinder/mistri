@@ -6,6 +6,7 @@ import { queryClient } from './components/mount.js';
 import { composedEpoch } from './composedReads.js';
 import { canonicalText } from '@mistriwork/engine/shared/recordReadKeys.js';
 import { setOwnWriteMarker } from './ownWrites.js';
+import { gatherReads } from './readGathering.js';
 
 type KeyTest = (value: unknown, key: Readonly<Record<string, unknown>>) => boolean;
 
@@ -136,6 +137,11 @@ export function captureRecordWriteRefresh(table: string, inputKey: Readonly<Reco
  * later. With no write sent or answered between them (composedReads.ts
  * composedEpoch), the second has nothing new to read, and asking it cancelled
  * the first's reads mid-flight and composed the page a second time (G173).
+ * A second ask for the same record in the same moment of the writes from
+ * another surface — its own scope, its connection spelled its own way — joins
+ * what the first began instead: it never cancels it, and asks only what the
+ * first did not (a field report: a save on a record page set off its compose,
+ * lists and counts twice, the first set cancelled mid-flight).
  */
 export function refreshRecordInPlace(
   client: QueryClient,
@@ -154,9 +160,18 @@ export function refreshRecordInPlace(
   since?: number,
 ): Promise<void> {
   const asked = canonicalText([record.connection, record.table, record.key, record.queryScope ?? null, fields]);
-  const epoch = composedEpoch();
-  if (!again && refreshed.get(client)?.asked === asked && refreshed.get(client)?.epoch === epoch) return Promise.resolve();
-  refreshed.set(client, { asked, epoch });
+  const epoch = composedEpoch(),
+    id = canonicalText([record.table, record.key]);
+  const last = refreshed.get(client);
+  if (!again && last?.epoch === epoch && last.record === id) {
+    if (last.asked.has(asked)) return Promise.resolve();
+    last.asked.add(asked);
+    /* Measured from the first ask: what it began since is joined, what has landed since is left. */
+    again = true;
+    since = last.mark;
+  } else refreshed.set(client, { record: id, epoch, asked: new Set([asked]), mark: since ?? liveMark(client) });
+  /* The page, its lists, its counts and its verbs are asked in this moment: a transport that can, sends them as one. */
+  gatherReads();
   /* A write of this page's asks its table's lists and counts again here. A change pushed by someone else does not:
      live sync has already asked each read that change touches, by the tables it names (liveInvalidate.ts), and this
      asked every list and count on the connection once more on top, cancelling those it had just begun. */
@@ -196,6 +211,7 @@ export function refreshRecordInPlace(
     planned
       .catch(() => {})
       .then(() => {
+        gatherReads();
         const stale = (query: Query) => section(query) && query.state.isInvalidated;
         return since === undefined ? client.refetchQueries({ type: 'active', predicate: stale }) : askAgain(client, stale, since);
       }),
@@ -264,7 +280,7 @@ export async function askAgain(
   if (asking.length) await client.refetchQueries({ predicate: (query) => asking.includes(query) }, { cancelRefetch: false });
 }
 /* Per cache, the record last asked again and where the writes stood then. */
-const refreshed = new WeakMap<QueryClient, { asked: string; epoch: number }>();
+const refreshed = new WeakMap<QueryClient, { record: string; epoch: number; asked: Set<string>; mark: number }>();
 
 /**
  * A command applied to the record on screen. What it changed is that record —
