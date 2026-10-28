@@ -9,6 +9,7 @@ import { isPromise } from 'node:util/types';
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 import {
   captureTenantData,
+  databaseUnanswered,
   denyTenant,
   denyTenantFor,
   refusalCause,
@@ -64,6 +65,8 @@ export const denyLayout = (message: string | undefined): never =>
 export const denyAgain = (error: unknown): never => {
   for (let cause = refusalCause(error), depth = 0; cause !== undefined && depth < 4; cause = refusalCause(cause), depth++)
     if (cause instanceof TenantStoreOfAnotherApp || cause instanceof TenantStoreLayoutDiffers) return denyTenantFor(cause);
+  // A store the database did not answer (busy, locked, gone) is unavailable, never a denial.
+  if (databaseUnanswered(error)) return denyTenantFor(error);
   return denyTenant();
 };
 

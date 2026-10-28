@@ -171,7 +171,8 @@ function delivered<T>(value: T | Promise<T>): T | Promise<T> {
     ? (Promise.prototype.then.call(
         value,
         (value: T) => captureTenantData(value),
-        () => denyTenant(),
+        // A verifier whose store did not answer refuses as unavailable (503); this kept only that it refused (403).
+        (error: unknown) => denyTenantFor(error),
       ) as Promise<T>)
     : captureTenantData(value);
 }
@@ -312,7 +313,8 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
     tracked(run).catch((error) => {
       if (error instanceof TenantLeaseError || error instanceof TenantSupportUnavailable || error instanceof TenantContextsBusy)
         throw error;
-      return denyTenant();
+      // An open, switch or renewal the database did not answer decided nothing: unavailable, not a denial.
+      return denyTenantFor(error);
     });
   /** A request naming this tab's support lease, by its own tab and context. */
   const onSupport = (tab: Tab | undefined, expectedContext: string) =>

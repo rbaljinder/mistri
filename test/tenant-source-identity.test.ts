@@ -103,6 +103,7 @@ test('genuine same-file read/write pair returns captured immutable namespace wit
     'readBranding',
     'readBrandingLogo',
     'readDueTimers',
+    'readEmailOff',
     'readInbox',
     'readMembership',
     'readMemberships',

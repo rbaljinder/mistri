@@ -589,7 +589,11 @@ export const BUDGET = {
        after who-am-I. The entry is how the page starts, so it cannot wait behind onDemand.tsx. Measured: public script
        663,536 / 185,964 (+962 / +304). Its raw ceiling keeps about 250 bytes of room; its brotli, at 96 bytes, moves
        to the 400 the content names alone can move it (see the App's below). */
-    public: { script: { raw: 663_800, br: 186_360 }, style: { raw: 389_300, br: 52_275 } },
+    /* The phone drawer kept from the desktop sidebar's fold (style.css, features.css): five sidebar rules leave out
+       `.mobile-nav-sidebar`, the class the drawer's nav carries. Measured: public style 389,182 / 52,291, App style
+       389,063 / 52,262. The drawer is the first paint's own nav on a phone, so it cannot wait behind onDemand.tsx; the
+       brotli style ceilings move by 75 and keep about 60 bytes of room. */
+    public: { script: { raw: 663_800, br: 186_360 }, style: { raw: 389_300, br: 52_350 } },
     /* A one-click command's revision asked as the pointer or focus reaches its button (commandSend.ts readyCommand,
        Actions.tsx), so the click sends only the execute: about 500 raw bytes, 1335.1 KiB measured. The App script's
        raw ceiling moves to 1_367_400 and keeps about 250 bytes of room; its brotli did not move past its ceiling. */
@@ -614,7 +618,8 @@ export const BUDGET = {
        185,660, App script 1,384,282 / 380,275. The same room. */
     /* The one-request tenant entry, as on the public first paint: App script 1,385,478 / 380,575 (+1,196 / +300). Its
        raw ceiling keeps about 250 bytes of room, its brotli about 400. */
-    app: { script: { raw: 1_385_725, br: 380_975 }, style: { raw: 389_175, br: 52_250 } },
+    /* The phone drawer kept from the desktop fold, as on the public first paint. */
+    app: { script: { raw: 1_385_725, br: 380_975 }, style: { raw: 389_175, br: 52_325 } },
   },
   tablewalk: {
     workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 375_300, br: 51_125 } },

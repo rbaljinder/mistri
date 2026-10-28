@@ -528,8 +528,8 @@ export async function readPostgresTenantMemberships(
     await attest(client, owner);
     const rows = (await client.query(membershipsSql('$1', '$2'), [query.accountId, instant])).rows;
     return membershipsOf(owner, query.accountId, rows, instant, now);
-  } catch {
-    return denyTenant();
+  } catch (error) {
+    return denyTenantFor(error);
   }
 }
 
@@ -738,8 +738,8 @@ async function readPostgresPlatformMembership(
     wellFormed(query.accountId);
     await attest(client, owner);
     return await platformRead(client, owner, query, false);
-  } catch {
-    return denyTenant();
+  } catch (error) {
+    return denyTenantFor(error);
   }
 }
 
@@ -786,8 +786,8 @@ export async function assertPostgresPlatformMembershipSnapshot(
     wellFormed(query.accountId, value.membershipId, ...value.roles);
     const instant = clock(now);
     assertCurrentPlatformRecord(value, await readPostgresPlatformMembership(client, owner, query), instant);
-  } catch {
-    denyTenant();
+  } catch (error) {
+    denyTenantFor(error);
   }
 }
 
@@ -813,8 +813,8 @@ export async function assertPostgresPlatformMembershipFence(
     await attest(client, owner);
     const instant = clock(now);
     assertCurrentPlatformRecord(value, await platformRead(client, owner, query, true), instant);
-  } catch {
-    denyTenant();
+  } catch (error) {
+    denyTenantFor(error);
   }
 }
 
@@ -848,8 +848,8 @@ export async function readPostgresActiveTenants(client: PgQuery, input: TenantSt
       await client.query(`SELECT id FROM ${q(tables.tenant)} WHERE kind = 'tenant' AND status = 'active' ORDER BY id COLLATE "C"`)
     ).rows;
     return Object.freeze(rows.map((row) => parseTenantSelector([row.id as string])));
-  } catch {
-    return denyTenant();
+  } catch (error) {
+    return denyTenantFor(error);
   }
 }
 
@@ -860,8 +860,8 @@ export async function readPostgresIntakeAnchor(client: PgQuery, input: TenantSto
     const owner = binding(input);
     await attest(client, owner);
     return await intakeAnchor(client, tenantId, false);
-  } catch {
-    return denyTenant();
+  } catch (error) {
+    return denyTenantFor(error);
   }
 }
 

@@ -9,20 +9,9 @@
  * a fault (evidence.ts databaseFault): positively, and a denial anywhere on
  * the way down stays a denial.
  */
-import { databaseFault, TenantContextError } from '@mistriwork/engine/server/evidence.js';
-import { refusalCause } from '@mistriwork/engine/shared/refusal.js';
-
-/** Whether the database not answering is what failed this write, under however many refusals it was recorded. */
-export function databaseUnanswered(error: unknown): boolean {
-  let at: unknown = error;
-  for (let depth = 0; at !== null && typeof at === 'object' && depth < 16; depth++) {
-    if (databaseFault(at)) return true;
-    // A denial decided something: whatever lies beneath it, it is said as one.
-    if (at instanceof TenantContextError) return false;
-    at = refusalCause(at) ?? (at instanceof Error ? at.cause : undefined);
-  }
-  return false;
-}
+/* The walk lives beside `databaseFault` (evidence.ts), since the read path's
+   `denyTenantFor` reads a fault the same way. */
+export { databaseUnanswered } from '@mistriwork/engine/server/evidence.js';
 
 /** What a write route answers when the database did not: nothing was applied, and asking again may work. */
 export function unansweredWrite(path: string): { status: 503; body: Record<string, unknown> } {

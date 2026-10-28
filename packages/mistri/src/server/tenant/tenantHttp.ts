@@ -59,8 +59,8 @@ import { APP_READS } from '../app/appReads.js';
 import { createTenantContexts, TenantContextsBusy, tenantLeaseFailureCode } from './tenantContexts.js';
 import {
   captureTenantData,
-  databaseFault,
   denyTenant,
+  denyTenantFor,
   TenantContextError,
   TenantRequestFault,
   TenantUnavailableError,
@@ -69,6 +69,7 @@ import {
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
 import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
+import { POOL_BUSY_RETRY_AFTER_SECONDS } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { databaseUnanswered, unansweredWrite } from './tenantWriteFault.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
@@ -143,6 +144,7 @@ import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { appKeepsInbox } from '../../shared/appNotify.js';
 import { endLiveStreams } from '../live/liveStream.js';
 import { tenantLiveHub } from './tenantLive.js';
+import { tenantWriterPaused } from './tenantWriterHealth.js';
 import { openTenantLiveStream, tenantLiveAuthority, tenantLiveGrants, tenantProbe } from './tenantLiveRoute.js';
 import { brandingTenant, scopedRecordBranding, withRecordBranding, closeRecordBranding } from '../http/recordBranding.js';
 import { flagHttpRequest } from '../flags/httpRuntime.js';
@@ -335,6 +337,10 @@ function send(req: IncomingMessage, res: ServerResponse, status: number, value: 
     'content-type': 'application/json; charset=utf-8',
     'x-content-type-options': 'nosniff',
     'content-length': Buffer.byteLength(json),
+    /* Every 503 here is the database or the writer not answering for a
+       moment (a busy pool, a writer reopening): said with when to come back,
+       which is what an HTTP client and a load balancer retry on. */
+    ...(status === 503 ? { 'retry-after': String(POOL_BUSY_RETRY_AFTER_SECONDS) } : {}),
     ...ownership,
   });
   res.end(req.method === 'HEAD' ? undefined : json);
@@ -472,7 +478,10 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     assertActive();
     const returned = verify(req);
     const value = isPromise(returned)
-      ? ((await Promise.prototype.then.call(returned, captureTenantData, () => denyTenant())) as VerifiedSessionInstance | null)
+      ? // A session store that did not answer stays unavailable (503), never a lost context (403).
+        ((await Promise.prototype.then.call(returned, captureTenantData, (error: unknown) =>
+          denyTenantFor(error),
+        )) as VerifiedSessionInstance | null)
       : captureTenantData(returned);
     assertActive();
     if (!expectedAccounts.has(req)) return denyTenant();
@@ -987,6 +996,13 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         if (platform || onSupport) return invalid(404);
         const hub = tenantLiveHub(ownership);
         if (req.method !== 'GET') return send(req, res, 404, { error: 'Live sync is read with GET.' });
+        /* A writer an uncertain write closed takes its hub with it until it
+           reopens. Off (204) told each browser live sync was off for the rest
+           of the page load, so every stream the reopen ended came back as a
+           page that no longer heard anything (a field report: 729 of them in
+           four minutes). It is back in a moment: 503, and when to ask again. */
+        if (!hub && liveSyncOn() && app.live && tenantWriterPaused(`${ownership.appId}/${ownership.source.id}`))
+          return send(req, res, 503, { error: 'Live sync is reopening; try again in a moment.', code: 'tenant_temporarily_unavailable' });
         if (!hub || !liveSyncOn() || !app.live) return answerLiveOff(res);
         const session = await verified(req);
         if (!session) return denyTenant();
@@ -2173,7 +2189,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           reportRefusal(req, error.status, error.code, error.message, error);
           return send(req, res, error.status, { error: error.message, code: error.code });
         }
-        const unavailable = error instanceof TenantUnavailableError || (!(error instanceof TenantContextError) && databaseFault(error));
+        const unavailable = databaseUnanswered(error);
         const failure = unavailable ? new TenantUnavailableError() : new TenantContextError();
         const status = error instanceof InvalidRequest ? error.status : unavailable ? 503 : 403;
         reportRefusal(req, status, failure.code, failure.message, error, !(error instanceof TenantContextError));

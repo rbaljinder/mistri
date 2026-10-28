@@ -5,7 +5,10 @@
  * revocation fail as locked, PostgreSQL's row-lock fence makes it wait for
  * the business commit; and each attests uniqueness from its own catalog.
  */
-import { refusalCause } from '../packages/engine/src/server/evidence.js';
+import { databaseUnanswered, denyTenantFor, refusalCause, TenantUnavailableError } from '../packages/engine/src/server/evidence.js';
+import { PoolBusy } from '../packages/engine/src/adapters/poolMetrics.js';
+import { PgConnectionManager } from '../packages/engine/src/adapters/postgresPool.js';
+import { pausedTenantWriters } from '../packages/mistri/src/server/tenant/tenantWriterHealth.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -878,6 +881,111 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       );
       assert.equal(entries, 0);
       assert.equal(await f.name(), 'Original');
+    });
+
+    /* A field report: at twelve users on half a core the write pool's queue ran past
+       two seconds, the checkout was refused as busy, and that pre-entry failure
+       closed the writer like a lost COMMIT. Every write, inbox and live stream of
+       the deployment then failed until it reopened, and again at the next busy
+       moment. A refused checkout leased nothing: it is busy, and the writer stays. */
+    test('a write the pool refused a connection for is busy, and the writer stays open', { skip: !postgres }, async (t) => {
+      const f = await fixture(t, dialect),
+        source = await f.open(),
+        evidence = await f.evidence();
+      const proto = PgConnectionManager.prototype as unknown as {
+        withClient(write: boolean, ...rest: unknown[]): Promise<unknown>;
+      };
+      const original = proto.withClient;
+      let refused = 0;
+      const busy = t.mock.method(proto, 'withClient', function (this: unknown, write: boolean, ...rest: unknown[]) {
+        if (write && refused === 0) {
+          refused++;
+          return Promise.reject(new PoolBusy('write', 'queue_timeout'));
+        }
+        return original.call(this, write, ...rest);
+      });
+      await assert.rejects(
+        source.transaction(evidence, allow, (tx) => tx.update(changed)),
+        (error) => {
+          safe('not_applied')(error);
+          assert.ok(databaseUnanswered(error), 'said as the database not answering, not as a refusal');
+          return true;
+        },
+      );
+      busy.mock.restore();
+      assert.equal(refused, 1);
+      assert.deepEqual(pausedTenantWriters(), [], 'the writer stays open');
+      await source.transaction(evidence, allow, (tx) => tx.update(changed));
+      assert.equal(await f.name(), 'Changed');
+    });
+
+    /* A field report: pools sized past what the database role allows (53300, "too many connections for role"). The
+       write pool's next connection was refused at open, before the verifier, and the writer closed as if the write's
+       outcome were unknown, reopened into the same refusal and closed again: two commands in three failed at three
+       users while its one connection sat idle. Refused at open, nothing was leased: the write goes on the connection
+       the pool holds, and the writer stays open. */
+    test(
+      'a write the database refuses a new connection for runs on the one held, and the writer stays open',
+      { skip: !postgres },
+      async (t) => {
+        const f = await fixture(t, dialect),
+          source = await f.open(),
+          evidence = await f.evidence();
+        // The write pool holds a connection.
+        await source.transaction(evidence, allow, (tx) => tx.update(changed));
+        const lines: string[] = [];
+        t.mock.method(console, 'error', (line: unknown) => {
+          lines.push(String(line));
+        });
+        // The driver the pools load (postgresPool.ts), by a name the type checker does not resolve: pg ships no types.
+        const driver = 'pg';
+        const { default: pg } = (await import(driver)) as {
+          default: {
+            Pool: {
+              prototype: {
+                connect(this: { options: { min?: number } }): Promise<unknown>;
+              };
+            };
+          };
+        };
+        const connect = pg.Pool.prototype.connect;
+        let refused = 0;
+        // The writer's pools keep no idle minimum (postgresPool.ts); the readers keep two.
+        t.mock.method(pg.Pool.prototype, 'connect', function (this: { options: { min?: number } }) {
+          if (this.options.min === 0 && refused === 0) {
+            refused++;
+            return Promise.reject(Object.assign(new Error('too many connections for role "app"'), { code: '53300', severity: 'FATAL' }));
+          }
+          return connect.call(this);
+        });
+        await source.transaction(evidence, allow, (tx) => tx.update(changed));
+        assert.equal(refused, 1);
+        assert.deepEqual(pausedTenantWriters(), [], 'the writer stays open');
+        assert.match(lines.join('\n'), /connection limit reached: the app write pool holds 1 of \d+ connections/);
+        await source.transaction(evidence, allow, (tx) => tx.update(changed));
+        assert.equal(await f.name(), 'Changed');
+      },
+    );
+
+    /* While a writer is closed, an inbox read still asks its outbox for the reader's
+       email switch. That refusal carried a plain error beneath it and was answered
+       403 "The tenant context could not be verified" (a field report: a third of
+       inbox reads under load). It is the writer not answering: 503. */
+    test("a closed writer's outbox refuses as unavailable, never as a denial", async (t) => {
+      const f = await fixture(t, dialect),
+        source = await f.open();
+      await source.close();
+      for (const ask of [
+        () => source.inboxMail.emailOff('write-app/north', 'alice'),
+        () => source.inboxMail.dueInboxes('write-app', new Date().toISOString()),
+      ]) {
+        await assert.rejects(ask(), (error) => {
+          safe('not_applied')(error);
+          assert.ok(databaseUnanswered(error));
+          assert.throws(() => denyTenantFor(error), TenantUnavailableError);
+          return true;
+        });
+      }
     });
 
     test('different private callback failures project the same constant value-free failure', async (t) => {

@@ -1233,9 +1233,9 @@ body.app-mode :is(#table-list, .mobile-nav-list)::after {
   }
 }
 @keyframes nav-fade { from { opacity: 1; } }
-body.app-mode.app-nav-rail.sidebar-hidden .sidebar[data-density] { width: 56px; }
-body.app-mode.app-nav-rail.sidebar-hidden .sidebar[data-density] #table-list { padding-inline: var(--space-2h); }
-body.app-mode.app-nav-rail.sidebar-hidden .sidebar[data-density] #table-list button { padding-inline: 0; }
+body.app-mode.app-nav-rail.sidebar-hidden .sidebar:not(.mobile-nav-sidebar)[data-density] { width: 56px; }
+body.app-mode.app-nav-rail.sidebar-hidden .sidebar:not(.mobile-nav-sidebar)[data-density] #table-list { padding-inline: var(--space-2h); }
+body.app-mode.app-nav-rail.sidebar-hidden .sidebar:not(.mobile-nav-sidebar)[data-density] #table-list button { padding-inline: 0; }
 body.app-nav-rail.sidebar-hidden #sidebar-app-footer { padding-inline: var(--space-2h); }
 body.app-nav-rail.sidebar-hidden .sidebar-identity-copy { position: absolute; width: 1px; height: 1px;
   padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

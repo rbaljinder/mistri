@@ -7,7 +7,7 @@
  * ownership column types and other sessions' temporary tables.
  */
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -48,6 +48,10 @@ import {
   type TenantDialect,
 } from './support/tenantDialects.js';
 import { runtimeName } from '../packages/engine/src/shared/runtimeTables.js';
+import { runtimeTable } from '../packages/engine/src/shared/runtimeTables.js';
+import { INBOX_TABLES } from '../packages/mistri/src/adapters/inbox/inboxTables.js';
+import { provisionPostgresInbox } from '../packages/mistri/src/adapters/inbox/postgresInbox.js';
+import { provisionSqliteInbox } from '../packages/mistri/src/adapters/inbox/sqliteInbox.js';
 
 const owner = () => ({ appId: 'app', source: { id: 'business', connection: 'owned-source' }, storeId: 'store-1' });
 const lookup = (): TenantMembershipLookup => ({
@@ -189,8 +193,10 @@ after(async () => {
   if (process.env.TABLEWALK_TEST_PG) await dropDedicatedPostgresDatabase(DATABASE);
 });
 
-async function fixture(t: TestContext, dialect: TenantDialect) {
+async function fixture(t: TestContext, dialect: TenantDialect, inbox = false) {
   const engine = await openTenantEngine(dialect, { ...SCHEMA, database: DATABASE });
+  if (inbox && dialect === 'postgres') await provisionPostgresInbox(engine.url);
+  else if (inbox) provisionSqliteInbox(engine.path);
   const sources: TenantReadSource[] = [];
   t.after(async () => {
     await Promise.allSettled(sources.map((source) => source.close()));
@@ -251,6 +257,30 @@ for (const { dialect, skip } of TENANT_DIALECTS)
   describe(`tenant read source on ${dialect}`, { skip }, () => {
     const postgres = dialect === 'postgres';
 
+    /* An inbox read shows the reader's email switch. Asked through the outbox,
+       it took a write connection behind the writer's transactions — four in ten
+       of a loaded server's write checkouts, in a field report — so the reader
+       answers it on its own connection. */
+    test("the reader answers a person's email switch on its own connection", async (t) => {
+      const f = await fixture(t, dialect, true),
+        source = await f.open();
+      const app = 'app/t.north',
+        holder = createHash('sha256').update(`${app}\u0000alice@example.test`, 'utf8').digest('hex');
+      assert.equal(await source.readEmailOff({ app, recipient: 'Alice@example.test' }), false);
+      await f.engine.exec(
+        `INSERT INTO ${postgres ? runtimeTable('postgres', INBOX_TABLES.optout) : `main."${INBOX_TABLES.optout}"`} (holder, at) VALUES (${postgres ? '$1, $2' : '?, ?'})`,
+        [holder, new Date(0).toISOString()],
+      );
+      assert.equal(await source.readEmailOff({ app, recipient: 'alice@example.test' }), true);
+      assert.equal(await source.readEmailOff({ app: 'app/t.south', recipient: 'alice@example.test' }), false);
+      for (const query of [
+        { app, recipient: '' },
+        { app: 1, recipient: 'alice' },
+        { app, recipient: 'alice', extra: true },
+      ])
+        await assert.rejects(source.readEmailOff(query as never));
+    });
+
     test('genuine source is frozen, pinned and exposes only ownership, admission checks, scoped reads and close', async (t) => {
       const f = await fixture(t, dialect),
         source = await f.open();
@@ -278,6 +308,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         'readBranding',
         'readBrandingLogo',
         'readDueTimers',
+        'readEmailOff',
         'readInbox',
         'readMembership',
         'readMemberships',

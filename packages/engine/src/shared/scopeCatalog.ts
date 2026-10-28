@@ -382,7 +382,38 @@ export function scopeCatalogDifference(expected: DatabaseSchema, actual: Databas
 }
 
 /** Project exact known identities without dropping a relationship across the boundary. */
+/* A mapping of a catalog nothing can change, by the mapping: a write
+   transaction's evidence catalog is the same mapping of the same cached
+   catalog every time (postgres.ts, sqlite.ts), and making it afresh copied and
+   checked the whole catalog twice per write (a field report: a tenth of a
+   loaded server's CPU). The result is captured and frozen, so it is shared. */
+const mappings = new WeakMap<object, Map<string, DatabaseSchema>>();
+/** Test-only: how many mappings were made rather than reused. */
+export const mapScopeCounters = { mapped: 0 };
+
 export function mapScopeCatalog(actual: DatabaseSchema, ids: ReadonlyMap<string, string>): DatabaseSchema {
+  let key: string | undefined;
+  let kept: Map<string, DatabaseSchema> | undefined;
+  try {
+    if (isFixedScopeCatalog(actual) && Object.getPrototypeOf(ids) === Map.prototype) {
+      key = JSON.stringify([...Map.prototype.entries.call(ids)]);
+      kept = mappings.get(actual);
+      const known = kept?.get(key);
+      if (known) return known;
+    }
+  } catch {
+    return refuse();
+  }
+  const made = mapScopeCatalogAfresh(actual, ids);
+  if (key !== undefined) {
+    if (!kept) mappings.set(actual, (kept = new Map()));
+    kept.set(key, made);
+  }
+  return made;
+}
+
+function mapScopeCatalogAfresh(actual: DatabaseSchema, ids: ReadonlyMap<string, string>): DatabaseSchema {
+  mapScopeCounters.mapped++;
   try {
     const whole = captureScopeCatalog(actual);
     /* A stitched reference joins two connections, and a scoped catalog is

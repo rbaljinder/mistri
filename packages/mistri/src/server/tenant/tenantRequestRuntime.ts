@@ -17,6 +17,7 @@ import {
 } from '@mistriwork/engine/server/evidence.js';
 import { createTenantMembershipIssuer, type TenantMembershipEvidence } from './tenantMembership.js';
 import { composeTenantReadScope } from './tenantReadScope.js';
+import { tenantAppAccess } from './tenantAccess.js';
 import { advisoryRecords, captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 import { assertTenantSourcePair } from './tenantSourceIdentity.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
@@ -269,7 +270,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
                 policy = isPromise(authored) ? await authored : authored;
               active();
               rows = composeTenantReadScope(ownership, principal, member, policy);
-              const resolvedGrants = resolveAppAccess(app, ownership.schema, [...acting.roles]);
+              const resolvedGrants = tenantAppAccess(app, ownership.schema, acting.roles);
               grants = validation ? { ...resolvedGrants, validation } : resolvedGrants;
               await session();
               active();

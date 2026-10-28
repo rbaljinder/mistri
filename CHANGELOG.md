@@ -22,6 +22,20 @@ field report measured against a remote database.
   about 0.7 s, opens a record in about 0.8 s and settles a save in about 0.55 s; a new build starts in about 59 s and
   restarts unchanged in about 21 s. Time was in round trips and in work repeated per request, not in the database. The
   entries below are how it was done, and `MISTRI_SERVER_TIMING=1` is how to see it.
+- **A busy server says it is busy, and a burst waits.** A field report put 25 people on a tenant App at half a vCPU
+  and saw refusals from about twelve: a database pool that would not lend a connection in time answered reads 403
+  "The tenant context could not be verified", and a write refused at checkout closed the tenant writer, so every
+  write, inbox and live stream answered 503 or "live off" until it reopened. A database that did not answer is now
+  503 with `Retry-After` everywhere it was a denial (reads, counts, records, the inbox, discovery, the session
+  store), a refused checkout leaves the writer open, the live route answers 503 rather than off while a writer
+  reopens, and a pool queues 64 checkouts per connection rather than 8, so a page's burst of reads waits inside the
+  two-second bound instead of being turned away. A set of roles' access and a captured catalog's mapping are worked
+  out once rather than per request, and the inbox reads its email switch on the reader. Locally at half a CPU and
+  20 ms to the database, 25 and 50 people ran with no errors. A database that refuses another connection (53300,
+  "too many connections for role") is a limit, not a fault: the pool goes on with the connections it holds, a
+  checkout waits for one of them, the log says `connection limit reached: the app write pool holds N of M`, and the
+  tenant writer stays open. It used to close the writer and reopen it into the same refusal, which failed two
+  commands in three at three users on pools sized past the role's limit.
 - **A tenant App's first page is who-am-I and one request.** Someone in a single tenant is entered by
   `POST /api/tenant/enter`, which answers discovery, opens or resumes the lease and reads the page's boot on it, where
   the page asked who-am-I, the person's tenants, a lease and then the boot, each a round trip of its own. The route

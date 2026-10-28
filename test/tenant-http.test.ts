@@ -2923,6 +2923,8 @@ test('a read the database refuses is unavailable, not a lost tenant context, and
       denied(reply);
       assert.equal(reply.status, 503, reply.text + said.join('\n'));
       assert.equal(reply.body.code, 'tenant_temporarily_unavailable');
+      // When to come back, which is what an HTTP client and a load balancer retry on.
+      assert.equal(reply.headers.get('retry-after'), '1');
     }
   } finally {
     console.error = error;
