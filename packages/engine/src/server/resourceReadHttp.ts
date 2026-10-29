@@ -1,4 +1,4 @@
-import { ANSI_STYLE, MYSQL_STYLE, POSTGRES_STYLE, type Adapter, type Filter, type SqlStyle } from '../adapters/adapter.js';
+import { ANSI_STYLE, POSTGRES_STYLE, type Adapter, type Filter, type SqlStyle } from '../adapters/adapter.js';
 import { findTable, type DatabaseSchema, type Order } from '../shared/schema.js';
 import type { Condition } from '../shared/filter.js';
 import { parseQuery, explain, type QueryPerson } from '../shared/query.js';
@@ -385,7 +385,7 @@ export async function dispatchResourceReadHttp(
    * Each item is answered by the single-breakdown route below, through this
    * request's own adapter, so it reads exactly what that route would have —
    * the same grant, the same row scope, the same errors — and a failing item
-   * fails alone. They run a few at a time: a PostgreSQL or MySQL connection
+   * fails alone. They run a few at a time: a PostgreSQL connection
    * reads through a pool of several, so a filter rail's facets and a
    * dashboard's cards cost the slowest of them rather than their sum; SQLite
    * reads in process, where running them together costs nothing more. The
@@ -715,7 +715,6 @@ async function runViewForBar(
  */
 export function styleFor(schema: DatabaseSchema): SqlStyle {
   if (schema.dialect === 'postgres') return POSTGRES_STYLE;
-  if (schema.dialect === 'mysql') return MYSQL_STYLE;
   return ANSI_STYLE;
 }
 

@@ -148,9 +148,7 @@ test('keyedLane is empty for a request the adapter would refuse, and one lane fo
 
 test('a lock wait that ran out is recognized through its causes, and never inside an unknown outcome', () => {
   const pg = Object.assign(new Error('canceling statement due to lock timeout'), { code: '55P03' });
-  const mysql = Object.assign(new Error('Lock wait timeout exceeded'), { errno: 1205, code: 'ER_LOCK_WAIT_TIMEOUT' });
   assert.equal(lockTimedOut(pg), true);
-  assert.equal(lockTimedOut(mysql), true);
   assert.equal(lockTimedOut(Object.assign(new Error('rolled back'), { outcome: 'not_applied', cause: pg })), true);
   assert.equal(lockTimedOut(Object.assign(new Error('unknown'), { name: 'TransactionOutcomeUnknown', cause: pg })), false);
   assert.equal(lockTimedOut(Object.assign(new Error('unknown'), { outcome: 'unknown', cause: pg })), false);

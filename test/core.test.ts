@@ -775,7 +775,7 @@ describe('writing', () => {
     await assert.rejects(() => adapter.update({ table: 'customer', key: { id: 1 }, values: { id: 999 } }), /part of the primary key/);
   });
 
-  test('refuses a view as a view, as the Postgres and MySQL adapters do, not as a table with no primary key', async () => {
+  test('refuses a view as a view, as the Postgres adapter does, not as a table with no primary key', async () => {
     await assert.rejects(
       () => adapter.update({ table: 'customer_totals', key: { id: 1 }, values: { name: 'x' } }),
       /customer_totals is a view, so no single row can be identified/,
@@ -3767,12 +3767,7 @@ describe('a connection string and its parts', () => {
   });
 
   test('an ordinary URL survives being taken apart and put back', () => {
-    for (const url of [
-      'postgres://app@db.internal/appdb',
-      'postgres://app:secret@db.internal:6543/appdb',
-      'mysql://root@127.0.0.1/shop',
-      'mariadb://root:pw@127.0.0.1:3307/shop',
-    ]) {
+    for (const url of ['postgres://app@db.internal/appdb', 'postgres://app:secret@db.internal:6543/appdb']) {
       assert.equal(roundTrip(url), url, url);
     }
   });

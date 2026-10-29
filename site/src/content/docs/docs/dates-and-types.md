@@ -50,11 +50,11 @@ The declared type is matched as text, first rule first:
 | number | `int`, `serial`, `numeric`, `decimal`, `real`, `double`, `float`, `money` | `bigint`, `numeric(12,2)`, `tinyint(1)` |
 | date | `date` or `time` | `DATE`, `TIMESTAMP`, `timestamptz`, `DATETIME` |
 | text | `char`, `text`, `uuid`, `json`, `enum`, `clob` | `varchar(80)`, `uuid`, `jsonb` |
-| other | anything else, or nothing | `bytea`, `interval`, MySQL `YEAR`, a PostgreSQL enum (its labels are a [vocabulary](/docs/vocabularies/)) |
+| other | anything else, or nothing | `bytea`, `interval`, a PostgreSQL enum (its labels are a [vocabulary](/docs/vocabularies/)) |
 
-On SQLite, `resources: { work_order: { types: { due_on: 'date', closed_at: 'datetime' } } }` makes the App read the column as a date. Its values must be ISO (`2026-09-24`, `2026-09-24 14:30:00`); anything else matches no window and groups as empty. MySQL stores `BOOLEAN` as `tinyint(1)`, which reads as a number.
+On SQLite, `resources: { work_order: { types: { due_on: 'date', closed_at: 'datetime' } } }` makes the App read the column as a date. Its values must be ISO (`2026-09-24`, `2026-09-24 14:30:00`); anything else matches no window and groups as empty.
 
-**Large numbers:** PostgreSQL `bigint`, `numeric` and `money`, MySQL `decimal`, and any integer past 2^53 arrive as strings, shown as written and never rounded. The generated `Rows` type says `string` (or `number | string`) for them, so a command handler converts on purpose. Every key: [resources reference](/docs/dsl-resources/).
+**Large numbers:** PostgreSQL `bigint`, `numeric` and `money`, and any integer past 2^53 arrive as strings, shown as written and never rounded. The generated `Rows` type says `string` (or `number | string`) for them, so a command handler converts on purpose. Every key: [resources reference](/docs/dsl-resources/).
 
 **`now` and `today`, or `ctx.now()`:** in a declaration (an action's `set`, a field's or a machine's `default`, a New form's `auto`) write the words `now` and `today`. They are stamps, not values: the server works them out inside the write, in `ui.timezone`, so a request cannot choose them. In a command handler write `ctx.now()` and `ctx.today()` (`handle({ db, now, today })` takes them off the context): the same clock as a `Date` and a `YYYY-MM-DD` day, for code that computes with them, such as a due date `n` days on.
 

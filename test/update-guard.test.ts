@@ -5,14 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
-import {
-  ANSI_STYLE,
-  MYSQL_STYLE,
-  POSTGRES_STYLE,
-  Refusal,
-  WriteConflict,
-  type UpdateRequest,
-} from '../packages/engine/src/adapters/adapter.js';
+import { ANSI_STYLE, POSTGRES_STYLE, Refusal, WriteConflict, type UpdateRequest } from '../packages/engine/src/adapters/adapter.js';
 import { buildUpdateGuard } from '../packages/engine/src/adapters/scoped/updateGuard.js';
 import { clearJournal, recordWrite, revert } from '../packages/engine/src/server/journal.js';
 
@@ -136,7 +129,6 @@ test('guard compilation binds values, preserves numeric strings and continues Po
   for (const [dialect, style] of [
     ['sqlite', ANSI_STYLE],
     ['postgres', POSTGRES_STYLE],
-    ['mysql', MYSQL_STYLE],
   ] as const) {
     const guard = buildUpdateGuard(request, types, style, dialect, 6);
     assert.deepEqual(guard.params, ["O'Brien", '9007199254740993']);
@@ -146,7 +138,6 @@ test('guard compilation binds values, preserves numeric strings and continues Po
       assert.match(guard.text, /COLLATE "C" = \$6/);
       assert.match(guard.text, /"score" = \$7/);
     }
-    if (dialect === 'mysql') assert.match(guard.text, /CAST\(`name` AS BINARY\) = CAST\(\? AS BINARY\)/);
   }
 });
 

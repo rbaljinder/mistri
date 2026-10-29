@@ -22,8 +22,7 @@ test('"listen" is a PostgreSQL URL on a PostgreSQL connection, and anything else
   assert.equal(check({ url: '${DATABASE_URL}', listen: '${DIRECT_URL}' }), '${DIRECT_URL}');
   assert.throws(() => check({ url: 'postgres://p/app', listen: '' }), /must be a PostgreSQL URL/);
   assert.throws(() => check({ url: 'postgres://p/app', listen: 5 }), /must be a PostgreSQL URL/);
-  assert.throws(() => check({ url: 'postgres://p/app', listen: 'mysql://d/app' }), /not a PostgreSQL URL/);
-  assert.throws(() => check({ url: 'mysql://p/app', listen: 'postgres://d/app' }), /nothing to listen on/);
+  assert.throws(() => check({ url: 'postgres://p/app', listen: 'mongodb://d/app' }), /not a PostgreSQL URL/);
   assert.throws(() => check({ url: './shop.db', listen: 'postgres://d/app' }), /nothing to listen on/);
   assert.throws(() => check({ url: 'https://api.example.com', listen: 'postgres://d/app' }, true), /HTTP connection/);
 });

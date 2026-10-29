@@ -83,8 +83,8 @@ export function sizeOf(value: object): number {
 }
 
 /**
- * The document a value holds, when it holds one. Postgres json/jsonb and
- * MySQL JSON arrive already parsed (and a Postgres array arrives as an
+ * The document a value holds, when it holds one. Postgres json/jsonb
+ * arrives already parsed (and a Postgres array arrives as an
  * array); a column declared JSON that keeps text — SQLite's — arrives as the
  * text, and is read here. A string that does not open like a document stays
  * a string: in a jsonb column it *is* the JSON string, already decoded, and

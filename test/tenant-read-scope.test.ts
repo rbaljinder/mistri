@@ -3,7 +3,6 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import {
   ANSI_STYLE,
-  MYSQL_STYLE,
   POSTGRES_STYLE,
   Refusal,
   type Condition,
@@ -369,7 +368,7 @@ test('catalog, ownership, source and dialect substitutions refuse rather than pr
       input.schema.dialect = 'postgres';
     },
     (input: TenantOwnershipInput) => {
-      input.physicalSchema.dialect = 'mysql';
+      input.physicalSchema.dialect = 'postgres';
     },
     (input: TenantOwnershipInput) => {
       input.schema.tables.find((table) => table.id === 'items')!.columns.pop();
@@ -531,10 +530,7 @@ test('binary metadata validates exact columns, duplicates, dialect and all neste
   ]) {
     assert.throws(() => snapshotRowScope(f.schema, { items: { ...eq('id', 1), binary } } as RowScope), Refusal);
   }
-  for (const [dialect, style] of [
-    ['postgres', POSTGRES_STYLE],
-    ['mysql', MYSQL_STYLE],
-  ] as const) {
+  for (const [dialect, style] of [['postgres', POSTGRES_STYLE]] as const) {
     const schema = { ...f.schema, dialect };
     assert.throws(() => snapshotRowScope(schema, valid), Refusal);
     assert.throws(() => compileView(schema, view(), style, 0, valid), Refusal);
@@ -667,11 +663,26 @@ test('a kept composition is shared only by the same layers and the same tenant',
   const tenantOf = (scope: RowScope) => (scope.items as RowScopeFilter).groups[0].find((c) => c.column === 'tenant_id')?.value;
   assert.equal(tenantOf(north), 'north');
   assert.equal(tenantOf(south), 'south');
-  // Other layers compose their own, and a layer that is not a snapshot is composed every time.
+  // Other layers compose their own.
   assert.notEqual(composeTenantReadScope(owned, member(), all, all), north);
-  const plain = { ...f.allow, items: eq('status', 'open') };
+  /* A layer a policy builds afresh on every request (one naming its reader) is found by its words: the same words
+     are the same snapshot and so the same composition, and other words compose their own. */
   const counted = composeCounters.composed;
-  composeTenantReadScope(owned, member(), plain, all);
-  composeTenantReadScope(owned, member(), plain, all);
+  const fresh = (status: string) => ({ ...f.allow, items: eq('status', status) });
+  const first = composeTenantReadScope(owned, member(), fresh('closed'), all);
+  assert.equal(composeTenantReadScope(owned, member(), fresh('closed'), all), first);
+  assert.equal(composeCounters.composed - counted, 1);
+  const other = composeTenantReadScope(owned, member(), fresh('held'), all);
+  assert.notEqual(other, first);
   assert.equal(composeCounters.composed - counted, 2);
+  assert.ok(
+    JSON.stringify(other.items).includes('"held"') && !JSON.stringify(other.items).includes('"closed"'),
+    'the words composed are the ones given',
+  );
+  // A layer changed after it was composed changes nothing kept: it was captured first.
+  const held = fresh('closed');
+  const kept = composeTenantReadScope(owned, member(), held, all);
+  (held.items as { groups: Array<Array<{ value: unknown }>> }).groups[0][0].value = 'open';
+  assert.equal(kept, first);
+  assert.ok(JSON.stringify(kept.items).includes('"closed"'));
 });

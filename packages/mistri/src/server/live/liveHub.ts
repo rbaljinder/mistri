@@ -7,8 +7,8 @@
  * connection (the connection's `listen` URL behind a transaction pooler,
  * else its own), which carries every process's commits; the in-process
  * nudge a commit here sends on every engine; and a poll where neither
- * reaches — SQLite's `data_version` and MySQL's newest id every 500 ms, which
- * is what hears another process on the same file or server, and the change
+ * reaches — SQLite's `data_version` every 500 ms, which
+ * is what hears another process on the same file, and the change
  * table every second on PostgreSQL where no LISTEN can be held.
  *
  * Its passes are serial. A new subscriber joins inside a pass: placed at the
@@ -441,7 +441,7 @@ const hubs = new WeakMap<object, LiveHub>();
 export async function liveHubOf(adapter: Adapter, options: LiveHubOptions = {}): Promise<LiveHub | undefined> {
   const known = hubs.get(adapter);
   if (known) return known;
-  const store = liveStoreOf(adapter, options.now);
+  const store = liveStoreOf(adapter);
   if (!store || !(await store.ready().catch(() => false))) return undefined;
   const raced = hubs.get(adapter);
   if (raced) return raced;

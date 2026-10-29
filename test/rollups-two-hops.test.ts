@@ -18,7 +18,7 @@ import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
 import { appRollupRules, parseAppConfig, withRollups } from '../packages/mistri/src/shared/app.js';
-import { ANSI_STYLE, MYSQL_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { ANSI_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import { rollupReads } from '../packages/engine/src/shared/rollups.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { compileView, withViewComputed } from '../packages/engine/src/shared/view.js';
@@ -166,7 +166,6 @@ test("a two-hop rollup is the rows' subquery inside the middle table's, and a co
   for (const [style, q] of [
     [ANSI_STYLE, '"'],
     [POSTGRES_STYLE, '"'],
-    [MYSQL_STYLE, '`'],
   ] as const) {
     const { text } = compileView(schema, view, style);
     const inner = `\\(SELECT COALESCE\\(SUM\\(${q}time_entry_\\d+${q}\\.${q}hours${q}\\), 0\\) FROM ${q}time_entry${q} ${q}time_entry_\\d+${q} WHERE ${q}time_entry_\\d+${q}\\.${q}task_id${q} = ${q}task_\\d+${q}\\.${q}id${q}\\)`;

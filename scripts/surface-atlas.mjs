@@ -8,7 +8,7 @@
  * order, a heading step, an empty sentence — is only seen when the kinds stand next to each other. This page is that.
  *
  *   node scripts/surface-atlas.mjs                                  Lumen, light, at a desk (1280)
- *   node scripts/surface-atlas.mjs --look mono                      another look (lumen, mono, sage, or default: the App's own)
+ *   node scripts/surface-atlas.mjs --look mono                      another look (lumen, mono, sage, ledger, or default: the App's own)
  *   node scripts/surface-atlas.mjs --look lumen,mono,sage           the looks as columns, kind by kind
  *   node scripts/surface-atlas.mjs --mode dark --device phone       dark, on a phone (390)
  *   node scripts/surface-atlas.mjs --width 1920                     a desk of another width (the wide-view pass)

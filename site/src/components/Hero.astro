@@ -10,8 +10,14 @@ import { Image } from 'astro:assets';
 import { Code, LinkButton } from '@astrojs/starlight/components';
 import light from '../assets/home/hero.webp';
 import dark from '../assets/home/hero-dark.webp';
+import { version } from '../../../packages/mistri/package.json';
 
 const { data } = Astro.locals.starlightRoute.entry;
+/* Starlight draws its 404 through the splash template, so it reaches this override: say the page is not found, plainly,
+   not the home's promise with a 404 over it. */
+const notFound = Astro.locals.starlightRoute.id === '404';
+/* Read from the package at build time, never typed: the release the docs describe. A pre-release says so. */
+const release = /-(?:rc|beta|alpha)/.test(version) ? `${version} · release candidate` : version;
 const { title = data.title, tagline, actions = [] } = data.hero || {};
 /* Two sentences, two lines: the promise, then what it gets you. */
 const heading = title.replace(/\.\s+/, '.<br />');
@@ -37,6 +43,16 @@ const page = `page('lease', [
 ]),`;
 ---
 
+{
+  notFound && (
+    <div class="tw-notfound">
+      <h1 id="_top" data-page-title>404</h1>
+      <p>This page does not exist, or has moved.</p>
+      <p><a href="/">Home</a> · <a href="/docs/getting-started/">Docs</a></p>
+    </div>
+  )
+}
+{!notFound && (
 <div class="tw-hero">
   <div class="tw-hero-copy">
     <h1 id="_top" data-page-title set:html={heading} />
@@ -63,6 +79,7 @@ const page = `page('lease', [
         </div>
       )
     }
+    <p class="tw-hero-version"><a href="/docs/status/">{release}</a></p>
   </div>
   <div class="tw-hero-proof not-content">
     <div class="tw-hero-code">
@@ -78,3 +95,4 @@ const page = `page('lease', [
     </figure>
   </div>
 </div>
+)}

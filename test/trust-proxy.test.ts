@@ -4,8 +4,8 @@
  * addresses and CIDR ranges the operator named, IPv4, IPv6 and IPv4-mapped
  * alike. The header is walked from the right past every trusted hop to the
  * first that is not; from an untrusted peer it is not read at all, and a
- * malformed one is ignored whole. Sign-in trust (`--auth-proxy-header`)
- * does not read the list. Startup refuses an entry that is not an address.
+ * malformed one is ignored whole. The same list says whose
+ * `--auth-proxy-header` value is believed. Startup refuses an entry that is not an address.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,6 +17,7 @@ import {
   trustedProxyPeer,
   type ProxyRange,
 } from '../packages/engine/src/server/http/trust.js';
+import { proxyIdentityLines } from '../packages/engine/src/server/cli/startupOptions.js';
 
 const ranges = (...values: string[]): ProxyRange[] => {
   const parsed = parseTrustedProxies(values);
@@ -24,7 +25,13 @@ const ranges = (...values: string[]): ProxyRange[] => {
   return parsed.ranges;
 };
 const via = (peer: string, forwarded: string | string[] | undefined, trusted: readonly ProxyRange[] = []) =>
-  forwardedClient({ socket: { remoteAddress: peer }, headers: forwarded === undefined ? {} : { 'x-forwarded-for': forwarded } }, trusted);
+  forwardedClient(
+    {
+      socket: { remoteAddress: peer },
+      headers: forwarded === undefined ? {} : { 'x-forwarded-for': forwarded },
+    },
+    trusted,
+  );
 
 describe('parseTrustedProxies', () => {
   test('reads addresses and CIDR ranges, v4 and v6, several to a value by commas or spaces', () => {
@@ -158,10 +165,21 @@ describe('forwardedClient with --trust-proxy', () => {
     }
   });
 
-  test('sign-in trust does not read the list: a listed proxy is not exempt from the identity header', () => {
-    const bound = { host: '0.0.0.0', port: 4111, identityHeader: 'X-Forwarded-User', trustedProxies: list };
-    const from = (peer: string) => identityFor({ headers: {}, socket: { remoteAddress: peer } }, bound);
-    assert.ok(from('10.0.0.5').refusal, 'a rate-limit proxy is not a sign-in exemption');
+  test('sign-in trust reads the list: a forged identity header is believed only from loopback or a listed proxy', () => {
+    const bound = {
+      host: '0.0.0.0',
+      port: 4111,
+      identityHeader: 'X-Forwarded-User',
+      trustedProxies: list,
+    };
+    const from = (peer: string, headers: Record<string, string> = {}) => identityFor({ headers, socket: { remoteAddress: peer } }, bound);
+    const forged = { 'x-forwarded-user': 'admin@example.org' };
+    assert.deepEqual(from('10.0.0.5', forged), { who: 'admin@example.org' });
+    assert.deepEqual(from('127.0.0.1', forged), { who: 'admin@example.org' });
+    assert.match(from('203.0.113.9', forged).refusal ?? '', /X-Forwarded-User only from its proxy.*not come from the trusted proxy/);
+    assert.ok(from('203.0.113.9', forged).who === undefined, 'a forgery names no one');
+    assert.match(from('203.0.113.9').refusal ?? '', /carried none/);
+    assert.ok(from('10.0.0.5').refusal, 'a listed proxy that sent no header is still refused');
     assert.deepEqual(from('127.0.0.1'), { who: 'local' });
   });
 });
@@ -171,7 +189,12 @@ describe('the --trust-proxy flag at startup', () => {
     spawnSync(process.execPath, ['--import', 'tsx', 'packages/tablewalk/src/server/index.ts', '--no-config', ...args], {
       encoding: 'utf8',
       timeout: 30_000,
-      env: { ...process.env, TABLEWALK_TRUST_PROXY: '', DATABASE_URL: '', ...env },
+      env: {
+        ...process.env,
+        TABLEWALK_TRUST_PROXY: '',
+        DATABASE_URL: '',
+        ...env,
+      },
     });
 
   test('an entry that is not an address or range stops startup, named', () => {
@@ -196,7 +219,13 @@ describe('the retired --trust-proxy-header at startup', () => {
     spawnSync(process.execPath, ['--import', 'tsx', 'packages/tablewalk/src/server/index.ts', '--no-config', ...args], {
       encoding: 'utf8',
       timeout: 30_000,
-      env: { ...process.env, TABLEWALK_TRUST_PROXY_HEADER: '', TABLEWALK_AUTH_PROXY_HEADER: '', DATABASE_URL: '', ...env },
+      env: {
+        ...process.env,
+        TABLEWALK_TRUST_PROXY_HEADER: '',
+        TABLEWALK_AUTH_PROXY_HEADER: '',
+        DATABASE_URL: '',
+        ...env,
+      },
     });
 
   test('the old flag stops startup and names --auth-proxy-header', () => {
@@ -206,7 +235,9 @@ describe('the retired --trust-proxy-header at startup', () => {
   });
 
   test('the old variable stops startup and names TABLEWALK_AUTH_PROXY_HEADER', () => {
-    const run = start([':memory:'], { TABLEWALK_TRUST_PROXY_HEADER: 'X-Forwarded-User' });
+    const run = start([':memory:'], {
+      TABLEWALK_TRUST_PROXY_HEADER: 'X-Forwarded-User',
+    });
     assert.equal(run.status, 1, run.stderr);
     assert.match(run.stderr, /TABLEWALK_TRUST_PROXY_HEADER is now TABLEWALK_AUTH_PROXY_HEADER/);
   });
@@ -251,12 +282,22 @@ describe('client address behind a managed front end', async () => {
       assert.equal(request(googleFrontEnd, { 'x-forwarded-for': '6.6.6.6, 203.0.113.9' }), '203.0.113.9');
       assert.equal(request(googleFrontEnd, { 'x-forwarded-for': '203.0.113.9' }), '203.0.113.9');
       setClientAddressPolicy({ hops: 2 });
-      assert.equal(request(googleFrontEnd, { 'x-forwarded-for': '6.6.6.6, 203.0.113.9, 130.211.0.5' }), '203.0.113.9');
+      assert.equal(
+        request(googleFrontEnd, {
+          'x-forwarded-for': '6.6.6.6, 203.0.113.9, 130.211.0.5',
+        }),
+        '203.0.113.9',
+      );
       // Fewer entries than hops: the furthest, never an invented address.
       assert.equal(request(googleFrontEnd, { 'x-forwarded-for': '203.0.113.9' }), '203.0.113.9');
       // No header, or a malformed one, is the peer.
       assert.equal(request(googleFrontEnd, {}), googleFrontEnd);
-      assert.equal(request(googleFrontEnd, { 'x-forwarded-for': 'not-an-ip, 203.0.113.9' }), googleFrontEnd);
+      assert.equal(
+        request(googleFrontEnd, {
+          'x-forwarded-for': 'not-an-ip, 203.0.113.9',
+        }),
+        googleFrontEnd,
+      );
       // Hops do not make the Cloudflare header believable.
       assert.equal(request(googleFrontEnd, { 'cf-connecting-ip': '1.2.3.4' }), googleFrontEnd);
     } finally {
@@ -265,7 +306,10 @@ describe('client address behind a managed front end', async () => {
   });
 
   test('two servers in one process each key by their own front end, however their requests interleave', async () => {
-    const behindOneHop = { ...defaultServerSettings(), clientAddress: { hops: 1 } };
+    const behindOneHop = {
+      ...defaultServerSettings(),
+      clientAddress: { hops: 1 },
+    };
     const direct = defaultServerSettings();
     const forwarded = { 'x-forwarded-for': '203.0.113.9' };
     const seen: string[] = [];
@@ -284,7 +328,13 @@ describe('client address behind a managed front end', async () => {
   test('--trust-proxy-cloudflare reads CF-Connecting-IP, and only a real address', () => {
     try {
       setClientAddressPolicy({ cloudflare: true });
-      assert.equal(request('172.67.1.1', { 'cf-connecting-ip': '203.0.113.9', 'x-forwarded-for': '6.6.6.6' }), '203.0.113.9');
+      assert.equal(
+        request('172.67.1.1', {
+          'cf-connecting-ip': '203.0.113.9',
+          'x-forwarded-for': '6.6.6.6',
+        }),
+        '203.0.113.9',
+      );
       assert.equal(request('172.67.1.1', { 'cf-connecting-ip': '2001:DB8::1' }), '2001:db8::1');
       assert.equal(request('172.67.1.1', { 'cf-connecting-ip': 'garbage' }), '172.67.1.1');
       assert.equal(request('172.67.1.1', {}), '172.67.1.1');
@@ -295,8 +345,12 @@ describe('client address behind a managed front end', async () => {
 
   test('the flags are read and a bad hop count is named', () => {
     assert.deepEqual(parseClientAddressPolicy({}), { policy: {} });
-    assert.deepEqual(parseClientAddressPolicy({ hops: '2' }), { policy: { hops: 2 } });
-    assert.deepEqual(parseClientAddressPolicy({ cloudflare: true }), { policy: { cloudflare: true } });
+    assert.deepEqual(parseClientAddressPolicy({ hops: '2' }), {
+      policy: { hops: 2 },
+    });
+    assert.deepEqual(parseClientAddressPolicy({ cloudflare: true }), {
+      policy: { cloudflare: true },
+    });
     // Both at once is two rules for one question, so it is refused rather than one quietly winning.
     const both = parseClientAddressPolicy({ hops: '2', cloudflare: true });
     assert.ok('error' in both && /--trust-proxy-hops and --trust-proxy-cloudflare are two ways to find the client/.test(both.error));
@@ -319,8 +373,31 @@ describe('client address behind a managed front end', async () => {
     const fromEnv = run([':memory:'], { TABLEWALK_TRUST_PROXY_HOPS: '0' });
     assert.notEqual(fromEnv.status, 0);
     assert.match(fromEnv.stderr, /TABLEWALK_TRUST_PROXY_HOPS/);
-    const both = run([':memory:', '--trust-proxy-hops', '1'], { TABLEWALK_TRUST_PROXY_CLOUDFLARE: '1' });
+    const both = run([':memory:', '--trust-proxy-hops', '1'], {
+      TABLEWALK_TRUST_PROXY_CLOUDFLARE: '1',
+    });
     assert.notEqual(both.status, 0);
     assert.match(both.stderr, /two ways to find the client: name one/);
+  });
+});
+
+describe('the startup lines name who may set --auth-proxy-header', () => {
+  test('loopback alone, said as such, and nothing without the flag', () => {
+    assert.deepEqual(proxyIdentityLines('127.0.0.1', undefined), []);
+    const lines = proxyIdentityLines('127.0.0.1', 'X-Forwarded-User');
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /X-Forwarded-User .*from loopback only/);
+  });
+
+  test('beyond loopback with no --trust-proxy warns that an off-box proxy is refused', () => {
+    const lines = proxyIdentityLines('0.0.0.0', 'X-Forwarded-User');
+    assert.equal(lines.length, 2);
+    assert.match(lines[1], /^Warning: .*no --trust-proxy.*Name its address with --trust-proxy/);
+  });
+
+  test('the listed ranges are named, and the warning goes', () => {
+    const lines = proxyIdentityLines('0.0.0.0', 'X-Forwarded-User', ranges('10.0.0.0/8'));
+    assert.deepEqual(lines.length, 1);
+    assert.match(lines[0], /from loopback and 10\.0\.0\.0\/8/);
   });
 });

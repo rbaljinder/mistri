@@ -43,7 +43,7 @@ test('DATE refuses zero/BC/infinity/noncanonical/instant values in each SQL dial
     0,
     null,
   ];
-  for (const dialect of ['sqlite', 'postgres', 'mysql'] as const) {
+  for (const dialect of ['sqlite', 'postgres'] as const) {
     const codec = apiValueCodec({ type: 'DATE' }, dialect, 'decimal-string');
     const valid = new Ajv2020({ strict: true }).compile(codec.schema);
     assert.equal(codec.kind, 'date');

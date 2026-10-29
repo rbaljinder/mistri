@@ -367,7 +367,7 @@ const invalid: Array<[string, (given: Input) => void]> = [
   [
     'physical dialect',
     (given) => {
-      given.physicalSchema.dialect = 'mysql';
+      given.physicalSchema.dialect = 'postgres';
     },
   ],
   [

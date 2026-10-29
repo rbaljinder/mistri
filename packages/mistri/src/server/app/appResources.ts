@@ -110,19 +110,55 @@ const impliedEdgesOf = (schema: DatabaseSchema): ForeignKey[] => {
  * whose catalog has no such key. Always the catalog's own: whatever a
  * request carried under `references` is replaced, never forwarded.
  */
-function carriedReferences<T extends { references?: ForeignKey[] }>(def: T, { schema, toPhysical }: AppResourceCatalog): T {
+function carriedReferences<T extends { references?: ForeignKey[] }>(def: T, catalog: AppResourceCatalog): T {
   const { references: _requested, ...rest } = def;
-  // With the legs its composite keys imply: a tenant's reader follows `group_id` where it cannot read `tenant_id`.
-  const declared = [...schema.foreignKeys.filter((fk) => fk.declared), ...impliedEdgesOf(schema)];
-  if (!declared.length) return rest as T;
-  return {
-    ...rest,
-    references: declared.map((fk) => ({
-      ...fk,
-      from: { ...fk.from, table: toPhysical(fk.from.table) },
-      to: { ...fk.to, table: toPhysical(fk.to.table) },
-    })),
-  } as T;
+  const references = physicalReferencesOf(catalog);
+  return (references.length ? { ...rest, references } : rest) as T;
+}
+
+/* The same array for the same catalog and naming, every time, rather than the catalog's edges renamed again for
+   every read: the compiler keeps the catalog a view's references widen by that array's identity, and by its text
+   where a scoped reader has copied it (declaredReferences.ts withViewReferences) — a field report's large tenant
+   App rebuilt that catalog for every list, count and breakdown of an enter, about a tenth of its CPU. Keyed by the
+   naming function as well as the catalog, because a reader may be handed a catalog literal that pairs the two
+   afresh. */
+const physicalReferences = new WeakMap<DatabaseSchema, WeakMap<(table: string) => string, readonly ForeignKey[]>>();
+function physicalReferencesOf({ schema, toPhysical }: AppResourceCatalog): ForeignKey[] {
+  let byNaming = physicalReferences.get(schema);
+  if (!byNaming) physicalReferences.set(schema, (byNaming = new WeakMap()));
+  let kept = byNaming.get(toPhysical);
+  if (!kept) {
+    // With the legs its composite keys imply: a tenant's reader follows `group_id` where it cannot read `tenant_id`.
+    const declared = [...schema.foreignKeys.filter((fk) => fk.declared), ...impliedEdgesOf(schema)];
+    kept = Object.freeze(
+      declared.map((fk) => ({
+        ...fk,
+        from: { ...fk.from, table: toPhysical(fk.from.table) },
+        to: { ...fk.to, table: toPhysical(fk.to.table) },
+      })),
+    );
+    byNaming.set(toPhysical, kept);
+  }
+  return kept as ForeignKey[];
+}
+
+/* The text columns the App declares dates, in the database's names: the same for the same catalog and naming, and
+   a scan of every column of every table — on a large App, a breakdown's largest cost after its compile — when
+   made afresh for each of an enter's breakdowns. Kept as the references are (physicalReferencesOf). */
+const datedColumns = new WeakMap<DatabaseSchema, WeakMap<(table: string) => string, readonly string[]>>();
+function datedColumnsOf({ schema, toPhysical }: AppResourceCatalog): string[] {
+  let byNaming = datedColumns.get(schema);
+  if (!byNaming) datedColumns.set(schema, (byNaming = new WeakMap()));
+  let kept = byNaming.get(toPhysical);
+  if (!kept) {
+    kept = Object.freeze(
+      schema.tables.flatMap((table) =>
+        table.columns.filter((column) => / as date(time)?$/.test(column.type)).map((column) => `${toPhysical(table.id)}.${column.name}`),
+      ),
+    );
+    byNaming.set(toPhysical, kept);
+  }
+  return kept as string[];
 }
 
 /** A breakdown in the database's names: its base, its rollups' children, the soft keys it may walk and the
@@ -130,11 +166,7 @@ function carriedReferences<T extends { references?: ForeignKey[] }>(def: T, { sc
     Always the catalog's own, as the references are. */
 function resourceBreakdown(breakdown: BreakdownDef, catalog: AppResourceCatalog): BreakdownDef {
   const { dateColumns: _requested, ...rest } = breakdown;
-  const dated = catalog.schema.tables.flatMap((table) =>
-    table.columns
-      .filter((column) => / as date(time)?$/.test(column.type))
-      .map((column) => `${catalog.toPhysical(table.id)}.${column.name}`),
-  );
+  const dated = datedColumnsOf(catalog);
   const physical = carriedReferences(
     renamedComputed(
       {

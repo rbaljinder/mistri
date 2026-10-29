@@ -130,11 +130,10 @@ export const handlers = {
 
 /* How each engine says "there is no such table", and where the name sits in
    what it said. Recognising the message rather than an error code because
-   that is what the three drivers agree on having. */
+   that is what the drivers agree on having. */
 const NO_SUCH_TABLE = [
   /no such table:\s*([^\s;]+)/i, // sqlite
   /relation "([^"]+)" does not exist/i, // postgres
-  /Table '(?:[^.']*\.)?([^']+)' doesn't exist/i, // mysql
 ];
 
 /**

@@ -99,7 +99,7 @@ test('integer representation is explicit, safe-number mode refuses large integer
 });
 
 test('known textual and signed integer adapter values encode across SQL dialects without coercion', () => {
-  for (const dialect of ['sqlite', 'postgres', 'mysql'] as const) {
+  for (const dialect of ['sqlite', 'postgres'] as const) {
     const f = fixture(dialect),
       codec = createApiReadRowCodec(f.operation, f.schema, { integers: 'decimal-string' });
     const valid = ajv.compile(codec.schema);
@@ -160,7 +160,6 @@ test('numeric is exact decimal text and timestamptz is an RFC 3339 instant, each
   formats.addFormat('date-time', true);
   for (const [dialect, type] of [
     ['postgres', 'numeric(20,2)'],
-    ['mysql', 'decimal(10,2)'],
     ['postgres', 'numeric'],
   ] as const) {
     const f = fixture(dialect, type),
@@ -183,12 +182,10 @@ test('numeric is exact decimal text and timestamptz is an RFC 3339 instant, each
   assert.equal(formats.compile(codec.schema)(codec.encodeRow({ ...row(), name: '2026-10-04 07:21:00+00' })), true);
   for (const bad of ['infinity', '2026-10-04', '2026-02-30 00:00:00+00', '2026-10-04 07:21:00', 5, new Date(NaN)])
     assert.throws(() => at(bad), String(bad));
-  // The same type is refused where the dialect has no such promise.
-  assert.throws(() => fixture('mysql', 'timestamptz'));
 });
 
 test('unsupported database representations refuse construction instead of guessing', () => {
-  for (const dialect of ['sqlite', 'postgres', 'mysql'] as const) {
+  for (const dialect of ['sqlite', 'postgres'] as const) {
     for (const type of [
       ...(dialect === 'sqlite' ? ['numeric', 'decimal(20,2)'] : []),
       'money',
@@ -203,11 +200,7 @@ test('unsupported database representations refuse construction instead of guessi
       assert.throws(() => fixture(dialect, type), `${dialect} ${type}`);
     }
   }
-  for (const [dialect, type] of [
-    ['sqlite', 'BOOLEAN'],
-    ['mysql', 'tinyint(1)'],
-    ['mysql', 'bit(1)'],
-  ] as const) {
+  for (const [dialect, type] of [['sqlite', 'BOOLEAN']] as const) {
     assert.throws(() => fixture(dialect, type));
   }
   for (const type of ['clob', 'nvarchar', 'nchar']) assert.throws(() => fixture('postgres', type));

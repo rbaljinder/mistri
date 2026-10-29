@@ -36,8 +36,7 @@ jobs:
     # The engines the adapters are written against, so the tests written
     # against them actually run. Without these the live blocks skipped, exited
     # zero and reported green — and the tests that skipped were the
-    # load-bearing ones: the MySQL two-step read-only escape and the Postgres
-    # BEGIN READ ONLY wrapper. A pass meant "SQLite works".
+    # load-bearing ones: the Postgres BEGIN READ ONLY wrapper. A pass meant "SQLite works".
     services:
       postgres:
         image: postgres:16
@@ -50,8 +49,6 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
-      # MySQL is not started: its live tests are paused (test/live.ts PAUSED) and
-      # skip, by name, until the dialect is tested again.
       # The cache and search services' live tests (test/services-live.test.ts)
       # are held to the same rule as the engines: they run here or the job fails.
       valkey:

@@ -381,6 +381,30 @@ describe('served, and built', () => {
   });
 });
 
+describe('the lint is held where a component is served', () => {
+  const appWith = (name: string, jsx: string) =>
+    dir(name, {
+      'widgets/Raw.jsx': jsx,
+      'app.mjs': [
+        "import { component, custom, dashboard, defineApp } from '@mistriwork/mistri/app';",
+        "const raw = component('raw', { module: './widgets/Raw.jsx' });",
+        "export default defineApp({ id: 'raw', name: 'Raw', connection: 'tick', resources: { task: {} },",
+        "  views: { home: dashboard('Home', [custom('Raw', raw, { rows: { tasks: { from: 'task', show: ['id', 'name'] } } })]) },",
+        "  home: 'home', nav: ['home'] });",
+      ].join('\n'),
+    });
+
+  test('a load refuses a component that sets raw HTML, with the text check gives, and accepts one that does not', async () => {
+    const refused = appWith(
+      'raw-html',
+      'export default function Raw({ rows }) { return <div dangerouslySetInnerHTML={{ __html: rows }} />; }\n',
+    );
+    await assert.rejects(loadApp(refused), /widgets\/Raw\.jsx:1 {2}dangerouslySetInnerHTML turns text into markup/);
+    const fine = appWith('raw-fine', 'export default function Raw({ rows }) { return <div>{String(rows)}</div>; }\n');
+    assert.deepEqual(Object.keys((await loadApp(fine)).components!.entries), ['raw']);
+  });
+});
+
 describe("mistri check's lints, spelled another way", () => {
   test('markup and code from text are found in their bracket, frame, parser and timer spellings too', async () => {
     const at = dir('linted-spellings', {

@@ -131,7 +131,7 @@ export async function runMigrate<A extends MigrateApp>(
     write(
       `${migrateUsage()}\n\n` +
         "Versioned SQL files in Flyway's format (V3__add_payoff_quote.sql, R__views.sql), in migrations/ inside the App\n" +
-        'by default, run forward only, each in its own transaction (MySQL: none, and a failure stops the run).\n' +
+        'by default, run forward only, each in its own transaction.\n' +
         '  new <name>  write the next V file (--repeatable: an R__ file)\n' +
         '  diff <name> write the next V file from schema.sql: what the migrations still lack to build it (Atlas;\n' +
         '              the first is schema.sql itself, with no download)\n' +
@@ -438,12 +438,7 @@ export async function runMigrate<A extends MigrateApp>(
         return EXIT.ok;
       }
       for (const file of result.wouldRun) {
-        const how =
-          dialect === 'mysql'
-            ? 'as it is: MySQL commits DDL as it runs'
-            : file.transactional
-              ? 'in one transaction'
-              : 'statement by statement, outside a transaction';
+        const how = file.transactional ? 'in one transaction' : 'statement by statement, outside a transaction';
         write(`-- ${file.script}, ${how}`);
         write(file.sql.trimEnd());
         write(

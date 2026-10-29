@@ -139,7 +139,7 @@ function refusal(rule: ConsumesRule, parent: Record<string, unknown>, readable: 
 /* ---------- decimals ----------
 
    An amount as digits and a scale (12.50 is 1250 at scale 2): a NUMERIC
-   balance arrives as text on PostgreSQL and MySQL, and adding it as a float
+   balance arrives as text on PostgreSQL, and adding it as a float
    would round what the database keeps exactly. */
 
 interface Decimal {

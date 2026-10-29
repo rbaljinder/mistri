@@ -1,13 +1,11 @@
 {
   "name": "tablewalk",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Follow the data. A database browser built around the walk: a foreign key is a place you can go.",
   "keywords": [
     "browser",
     "cli",
     "database",
-    "mariadb",
-    "mysql",
     "openapi",
     "postgres",
     "rest",
@@ -36,10 +34,7 @@
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
-    "./*": {
-      "mistri-built": "./dist/*",
-      "default": "./src/*"
-    }
+    "./client/workbenchShell.js": "./src/client/workbenchShell.js"
   },
   "scripts": {
     "build": "node ../../scripts/build-packages.mjs",
@@ -47,9 +42,9 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.2",
-    "@mistriwork/kit": "1.0.0-rc.2",
-    "@mistriwork/ui": "1.0.0-rc.2"
+    "@mistriwork/engine": "1.0.0-rc.3",
+    "@mistriwork/kit": "1.0.0-rc.3",
+    "@mistriwork/ui": "1.0.0-rc.3"
   },
   "engines": {
     "node": ">=24.22.1"

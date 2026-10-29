@@ -26,7 +26,7 @@ const theme = (id: string, placement?: 'side' | 'top') => ({
 const ui = (shell?: Record<string, unknown>, worn = 'harbor') =>
   parseUi(
     {
-      customThemes: [theme('harbor', 'top'), theme('ledger', 'side'), theme('plain')],
+      customThemes: [theme('harbor', 'top'), theme('daybook', 'side'), theme('plain')],
       theme: { preset: worn },
       ...(shell ? { shell } : {}),
     },
@@ -47,11 +47,11 @@ test("the App's own word is told from its theme's suggestion, even where the two
 });
 
 test('a theme worn by name stands the menu where it suggests, unless the App says where', () => {
-  const [harbor, ledger, plain] = ui().customThemes!;
+  const [harbor, daybook, plain] = ui().customThemes!;
   // Worn as the App wears it: where it is drawn now, nothing moves.
   assert.deepEqual(placementIn(ui(), harbor), { placement: 'top' });
   // Another theme: its suggestion, or the side where it suggests none.
-  assert.deepEqual(placementIn(ui(), ledger), { placement: 'side', moved: 'side' });
+  assert.deepEqual(placementIn(ui(), daybook), { placement: 'side', moved: 'side' });
   assert.deepEqual(placementIn(ui(), plain), { placement: 'side', moved: 'side' });
   assert.deepEqual(placementIn(ui(undefined, 'plain'), harbor), { placement: 'top', moved: 'top' });
   // The App's own word wins, and says so in one line.
@@ -60,15 +60,15 @@ test('a theme worn by name stands the menu where it suggests, unless the App say
     overridden: "Harbor suggests the menu on top; the App's ui.shell.placement puts it at the side, which wins.",
   });
   assert.match(placementIn(ui({ rail: true }), harbor).overridden!, /the App's ui\.shell\.rail puts it at the side, which wins\.$/);
-  assert.match(placementIn(ui({ placement: { top: ['clerk'] } }), ledger).overridden!, /puts it on top for clerk, which wins\.$/);
+  assert.match(placementIn(ui({ placement: { top: ['clerk'] } }), daybook).overridden!, /puts it on top for clerk, which wins\.$/);
   // Agreeing is not overriding.
   assert.equal(placementIn(ui({ placement: 'top' }), harbor).overridden, undefined);
 });
 
 test('shot and grade tell the page where the look shot by name stands the menu, or say the App overrides it', () => {
-  const [harbor, ledger] = shotLooks(loaded(ui(undefined, 'plain')), ['harbor', 'ledger']);
+  const [harbor, daybook] = shotLooks(loaded(ui(undefined, 'plain')), ['harbor', 'daybook']);
   assert.equal(harbor!.placement, 'top');
-  assert.equal(ledger!.placement, undefined, 'the side, where the App already draws it: nothing to tell');
+  assert.equal(daybook!.placement, undefined, 'the side, where the App already draws it: nothing to tell');
   const [overridden] = shotLooks(loaded(ui({ placement: 'side' })), ['harbor']);
   assert.equal(overridden!.placement, undefined);
   assert.match(overridden!.overridden!, /^Harbor suggests the menu on top; .* which wins\.$/);

@@ -501,7 +501,7 @@ test('identity.store and identity.grants are both PostgreSQL or both SQLite, and
   await assert.rejects(read({ store: 'postgres://suite@db.internal/identity', grants: './grants.db' }), mixed);
   await assert.rejects(read({ store: '${MISSING_URL}', grants: '${GRANTS_URL}' }), /identity\.store: .*MISSING_URL/);
   await assert.rejects(
-    read({ store: 'mysql://db.internal/identity', grants: './grants.db' }),
+    read({ store: 'mongodb://db.internal/identity', grants: './grants.db' }),
     /must be a SQLite file path or a postgres:\/\/ URL/,
   );
   await assert.rejects(read({ store: '${GRANTS_URL}', grants: '${GRANTS_URL}' }), /separate PostgreSQL databases/);

@@ -60,13 +60,14 @@ The server's flags: where the data is, how it is served, and what an App adds.
 | `-p, --port <n>` | Port to listen on (default 4111) |
 | `--host <addr>` | Interface to bind (default 127.0.0.1, loopback only) |
 | `--allowed-host <name>` | Also answer for this Host header; repeatable. Needed behind a proxy or in a container reached by name. Or set MISTRI_ALLOWED_HOSTS=a.example,b.example |
-| `--trust-proxy <address|CIDR>` | A proxy whose X-Forwarded-For the public forms' rate limit may believe: 10.0.0.0/8, 172.17.0.1, fd00::/8. Repeatable or comma-separated; loopback is always trusted. Rate limiting only, never sign-in. Or set MISTRI_TRUST_PROXY=10.0.0.0/8,fd00::/8 |
+| `--trust-proxy <address|CIDR>` | A proxy whose X-Forwarded-For the public forms' rate limit may believe: 10.0.0.0/8, 172.17.0.1, fd00::/8. Repeatable or comma-separated; loopback is always trusted. Also who may set --auth-proxy-header. Or set MISTRI_TRUST_PROXY=10.0.0.0/8,fd00::/8 |
 | `--trust-proxy-hops <n>` | Behind a managed front end with no address to name (Cloud Run, a cloud load balancer): how many proxies append to X-Forwarded-For. The client is the address n places from the right; anything the visitor wrote left of it is ignored. Rate limiting only. Or set MISTRI_TRUST_PROXY_HOPS=1 |
 | `--trust-proxy-cloudflare` | Read CF-Connecting-IP as the client. Only when the server is reachable through Cloudflare alone (a tunnel or its address ranges): anyone else can write the header. Not with --trust-proxy-hops. Or set MISTRI_TRUST_PROXY_CLOUDFLARE=1 |
-| `--auth-proxy-header <name>` | Behind a proxy that signs people in: the header it sets with the user (X-Forwarded-User). Requests from beyond loopback must carry it, and every write is journaled with it. Or set MISTRI_AUTH_PROXY_HEADER. |
+| `--insecure-http-sign-in` | Serve sign-in at an http address beyond this machine, which is otherwise refused: passwords would cross the network in the clear. Prefer MISTRI_PUBLIC_URL set to the https address of a TLS proxy. Or set MISTRI_INSECURE_HTTP_SIGN_IN=1 |
+| `--auth-proxy-header <name>` | Behind a proxy that signs people in: the header it sets with the user (X-Forwarded-User). Requests from beyond loopback must carry it and come from a --trust-proxy address; every write is journaled with it. Or set MISTRI_AUTH_PROXY_HEADER. |
 | `--schema <name>` | Postgres only; repeatable. Defaults to all user schemas. |
 | `--read-pool <n>` | PostgreSQL connections that may read at once, per database (default 4; an App's follows its writers, at most 64). A connection's "pool": { "read": n } in mistri.json wins. Or set MISTRI_READ_POOL. |
-| `--write-pool <n>` | Connections an App may write through at once, per PostgreSQL or MySQL database (default twice the cores, 4 to 16; at most 64). A connection's "pool": { "write": n } wins. Or set MISTRI_WRITE_POOL. |
+| `--write-pool <n>` | Connections an App may write through at once, per PostgreSQL database (default twice the cores, 4 to 16; at most 64). A connection's "pool": { "write": n } wins. Or set MISTRI_WRITE_POOL. |
 | `--lock-timeout <s>` | Seconds a write waits for a row or table another transaction holds before it is refused (default 5, 0.1 to 30). Or set MISTRI_LOCK_TIMEOUT. |
 | `--pooler <mode>` | session (the default): PostgreSQL is reached directly, or through a pooler that keeps a client on one server connection. transaction: through PgBouncer in transaction mode or RDS Proxy; the read-only guard and the statement cap are then set per transaction. Or set MISTRI_POOLER. |
 | `--drain-delay <s>` | Seconds /readyz answers 503 before the listener closes on SIGTERM, so a balancer that probes takes this instance out first (default 0, up to 120). Or set MISTRI_DRAIN_DELAY. |
@@ -85,7 +86,7 @@ The server's flags: where the data is, how it is served, and what an App adds.
 | `--openapi <spec.json|url>` | Serve the API a spec describes, with no config: the description is drafted in memory and the base URL is the spec's server. Plain http only to this machine. |
 | `--api-url <url>` | With --openapi: the API's base URL, when the spec's servers do not give a usable one. |
 | `--api-token-env <name>` | With --openapi: send $name as a bearer token. |
-| `--scaffold-app <dir>` | Draft an App project for the active connection, in TypeScript built from the @mistriwork/mistri/app helpers: list views, display rules, an Overview dashboard, record pages, mistri-schema.d.ts, tsconfig.json, an .oxfmtrc.json and (outside a mistri checkout) package.json with format scripts. A SQLite file is named by a mistri.json beside the App, by a path from there. It passes mistri check as written; a start to curate. With --config naming several connections, one App with a source per connection; a PostgreSQL or MySQL one holding several schemas is a source per schema on that one connection. |
+| `--scaffold-app <dir>` | Draft an App project for the active connection, in TypeScript built from the @mistriwork/mistri/app helpers: list views, display rules, an Overview dashboard, record pages, mistri-schema.d.ts, tsconfig.json, an .oxfmtrc.json and (outside a mistri checkout) package.json with format scripts. A SQLite file is named by a mistri.json beside the App, by a path from there. It passes mistri check as written; a start to curate. With --config naming several connections, one App with a source per connection; a PostgreSQL one holding several schemas is a source per schema on that one connection. |
 | `--name <name>` | With --scaffold-app: the App's name, instead of one read off the database file's. |
 | `--write-authority` | With mistri check: write each app's authority.lock — what it grants, one fact per line, and each command's contract — to commit beside it. The server refuses to start an app whose authority differs from its lock, and a reload that changes it. |
 | `--bump <command>` | With mistri check: move the command's contract to its next version in authority.lock, when it changed and the App API, a job or kept receipts depend on it. |
@@ -112,7 +113,7 @@ mistri check --app <dir> [--app-entry <file>]
                 [--routes [--mount <app>=<path>] [--base-path <path>]]
                 [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
-                [--deploy [--replicas <n>]] [--json | --brief]
+                [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>]] [--json | --brief]
 
 Three or four steps, each with its own verdict line. Schema types: regenerates
 the App's mistri-schema.d.ts from the database when it has drifted (a
@@ -155,7 +156,15 @@ source or auth.store on a SQLite file, the default auth.store, a missing
 BETTER_AUTH_SECRET and a \${NAME} the environment lacks (run it with the
 deployment's environment), and with --replicas <n> above one it warns that
 rate limits are per process without a cache service and refuses a public
-page's door without MISTRI_FORM_KEY. --json prints one JSON
+page's door without MISTRI_FORM_KEY. It also prints, per database, the
+connections one process may hold (read and write pools, the background
+writer, LISTEN, each read replica, the sign-in store's pool, and the
+hosts the App serves with: jobs, effects, integrations, decisions, the
+API event feed, the assistant; given --jobs, its module is read for them)
+times --replicas, and with --connection-limit <n> (the connections the
+database allows this role) refuses a total above it. Pool defaults follow
+the cores: --cpus <n> says the deployment's (this machine's otherwise,
+and the line says which it assumed). --json prints one JSON
 document instead of the lines (schema/check.schema.json): every finding
 of every step with its code, file, line, column, definition path and fix,
 for an agent; the exit code is the same. --brief prints one line per
@@ -185,7 +194,7 @@ yours is read or written), opens each route in Chromium once it has settled
 and prints the path of each PNG. A route is /{app}/leads/12 or leads/12;
 with none, every view and page the App declares, a page on its first record.
     --theme <id|all>  with shot or grade: a built-in look (workshop, lumen,
-                    mono, sage) or one of the App's own themes instead of the
+                    mono, sage, ledger) or one of the App's own themes instead of the
                     one it wears; with shot, all shoots every built-in
                     look, then the App's. The menu stands where that
                     theme suggests (shell.placement) unless the App's
@@ -252,8 +261,9 @@ with none, every view and page the App declares, a page on its first record.
                     variable, else Playwright's own, the machine's Chrome,
                     then any Chromium another Playwright version installed)
 Needs Playwright's Chromium: install the playwright package where you run it,
-then npx playwright install chromium; the machine's Chrome serves when
-Playwright's browser is missing. Exit codes: 1 could not shoot, 2 a page threw or a
+then install its headless Chromium (shot prints the exact command when it is
+missing); the machine's Chrome serves when Playwright's browser is missing.
+Exit codes: 1 could not shoot, 2 a page threw or a
 section could not be drawn.
 ```
 
@@ -296,7 +306,7 @@ mistri grade [<app-dir>] [<db> | --db <target> | --config <path>]
 Serves the App as shot does and opens every view and a record of each page
 at 1280, 390 and 320 wide, and at 390 in the dark scheme. Each is measured:
 sideways scroll, figures and words cut off, controls drawn over each other,
-targets under 40px on a phone, text and field edges below the contrast
+targets under 44px on a phone, text and field edges below the contrast
 rule, layout shift after the first paint, page errors and failed requests,
 empty sections, two number formats in one surface, chart axes that are not
 round, a record's name past two lines on a phone. One line per finding,
@@ -324,7 +334,7 @@ Every color, recipe, type and shape after extends.
 ```text
 mistri theme show <look|theme-id|.> [--app <dir>] [--diff <look|theme-id>] [--json]
 
-A built-in look (workshop, lumen, mono, sage), or a theme of the App in --app (else
+A built-in look (workshop, lumen, mono, sage, ledger), or a theme of the App in --app (else
 the current directory); . is the one the App wears. Every color in light
 and dark and each palette's changes, every recipe, the type and the shape,
 each value it inherits marked with where from: the look it extends, its
@@ -348,8 +358,7 @@ mistri migrate diff <name> | check | squash
                 [--schema-file <path>] [--dev-url <url>]
 
 V3__add_payoff_quote.sql runs once, in version order, in its own
-transaction (MySQL commits DDL as it goes: a failure there stops the run
-and is recorded as failed); R__views.sql runs again whenever it changes.
+transaction (a failure is recorded as failed); R__views.sql runs again whenever it changes.
 up applies what is pending; with --app it then regenerates the App's schema
 types and runs check, which names the view, page or command a dropped or
 renamed column breaks. status lists what is applied and pending, the changes
@@ -394,7 +403,7 @@ serving never fetches it. PostgreSQL and SQLite.
                     where two scratch databases are made and dropped
                     (default: the connection's; needs CREATEDB)
 A run holds a lock — PostgreSQL: the advisory lock Flyway takes for the same
-table; MySQL: GET_LOCK; SQLite: its write lock — so two deploys never migrate
+table; SQLite: its write lock — so two deploys never migrate
 at once. Scoped to the App's schemas (or the connection's, or --schema).
 Exit codes: 1 could not run, 2 files and history disagree, 3 a migration
 failed, 4 applied but the App no longer checks.
@@ -713,6 +722,8 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--compare` | [Looking at an App](#looking-at-an-app) |
 | `--config` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
 | `--connection` | [Rows to look at](#rows-to-look-at), [Changing the schema](#changing-the-schema) |
+| `--connection-limit` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
+| `--cpus` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--dark` | [Looking at an App](#looking-at-an-app) |
 | `--days` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--db` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
@@ -739,6 +750,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--help` | [Options](#options), [Commands](#commands) |
 | `--history-table` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Changing the schema](#changing-the-schema) |
 | `--host` | [Options](#options) |
+| `--insecure-http-sign-in` | [Options](#options) |
 | `--jobs` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Building an App for production](#building-an-app-for-production) |
 | `--json` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Watching what a --dev server did](#watching-what-a---dev-server-did) |
 | `--light` | [Looking at an App](#looking-at-an-app) |

@@ -8,8 +8,8 @@
  * collapsing a composite foreign key into one edge, estimating a row count
  * from `reltuples`, and the read-only transaction that makes raw SQL safe.
  *
- * The live half is opt-in through `TABLEWALK_TEST_PG`, the same trade the
- * MySQL file makes — requiring a server to test a SQLite feature would make
+ * The live half is opt-in through `TABLEWALK_TEST_PG` — requiring a server
+ * to test a SQLite feature would make
  * the suite something people stop running. CI sets it, and
  * `TABLEWALK_REQUIRE_LIVE=1` there turns a missing server into a failure
  * rather than a silent skip.
@@ -1166,7 +1166,7 @@ describe('the Postgres adapter, against a real server', { skip: liveSkip('postgr
 
       /* The one part of a breakdown no two engines spell alike. Postgres uses
          `to_char`, and the point of putting it in the style is that the label
-         it produces is the same string SQLite and MySQL produce. */
+         it produces is the same string SQLite produces. */
       const byMonth = await adapter.runBreakdown!({
         base: at('customer'),
         by: [{ path: 'updated_at', bucket: 'month' }],

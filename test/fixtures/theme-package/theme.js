@@ -7,17 +7,17 @@
 import { defineTheme } from '@mistriwork/mistri/app';
 
 export default defineTheme({
-  id: 'ledger',
-  label: 'Ledger',
+  id: 'daybook',
+  label: 'Daybook',
   extends: 'lumen',
   contract: 1,
   from: import.meta.url,
   colors: { light: { band: '#f3efe4' } },
   recipes: { table: 'banded' },
   type: {
-    faces: [{ family: 'Ledger Sans', src: './fonts/ledger.woff2', weight: '100 900', subset: false }],
-    font: { ui: "'Ledger Sans', system-ui, sans-serif" },
+    faces: [{ family: 'Daybook Sans', src: './fonts/daybook.woff2', weight: '100 900', subset: false }],
+    font: { ui: "'Daybook Sans', system-ui, sans-serif" },
   },
   parts: { stat: { edge: 'lineStrong', radius: 'square' } },
-  stylesheet: './ledger.css',
+  stylesheet: './daybook.css',
 });

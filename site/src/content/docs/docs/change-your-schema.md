@@ -38,7 +38,7 @@ npx @mistriwork/mistri migrate up --app .                     # apply, regenerat
 | `repair` | Removes failed entries, accepts changed files, marks missing ones deleted. |
 | `stores status`, `stores up` | mistri's own stores, each step in its own transaction, safe to run twice (`--suite suite.json`). |
 
-Files live in `migrations/` in the App, the connection's `"migrations"`, or `--migrations`. A run holds a lock (a PostgreSQL advisory lock, MySQL `GET_LOCK`, SQLite's write lock), so two deploys never migrate at once, and it owns only the schemas the App's sources use. On PostgreSQL, `--pending` copies the database with `CREATE DATABASE … TEMPLATE`, which needs `CREATEDB`; a `V3__index.sql.conf` saying `executeInTransaction=false` runs a file outside a transaction (`CREATE INDEX CONCURRENTLY`).
+Files live in `migrations/` in the App, the connection's `"migrations"`, or `--migrations`. A run holds a lock (a PostgreSQL advisory lock, SQLite's write lock), so two deploys never migrate at once, and it owns only the schemas the App's sources use. On PostgreSQL, `--pending` copies the database with `CREATE DATABASE … TEMPLATE`, which needs `CREATEDB`; a `V3__index.sql.conf` saying `executeInTransaction=false` runs a file outside a transaction (`CREATE INDEX CONCURRENTLY`).
 
 Names, checksums and the history layout are Flyway's. To take over from Flyway, name its table (`--history-table flyway_schema_history`); `--tool flyway` runs a command through an installed Flyway (on the `PATH`, or `MISTRI_FLYWAY`).
 
@@ -47,7 +47,6 @@ Names, checksums and the history layout are Flyway's. To take over from Flyway, 
 - `up` refuses a database that has tables and no history → run `migrate baseline` once; nothing in it is changed.
 - `[pending-migration]` → a pending file failed on the scratch copy, or the files and their history disagree; fix the file, or `repair` after an edit you meant.
 - `[schema-types-stale]` → someone changed the database outside migrations; `mistri check` rewrites the types, and `status` lists the drift until a migration settles it (`ADD COLUMN IF NOT EXISTS note`).
-- A MySQL migration failed halfway → MySQL commits DDL as it runs; finish or undo it by hand, then `repair`.
 
 ## Related
 

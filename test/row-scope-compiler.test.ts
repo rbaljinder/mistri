@@ -1,14 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
-import {
-  ANSI_STYLE,
-  MYSQL_STYLE,
-  POSTGRES_STYLE,
-  type Filter,
-  type SqlFragment,
-  type SqlStyle,
-} from '../packages/engine/src/adapters/adapter.js';
+import { ANSI_STYLE, POSTGRES_STYLE, type Filter, type SqlFragment, type SqlStyle } from '../packages/engine/src/adapters/adapter.js';
 import { compileView, compileViewCount, type ViewDef } from '../packages/engine/src/shared/view.js';
 import { compileBreakdown, compileBreakdownCount, type BreakdownDef } from '../packages/engine/src/shared/breakdown.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
@@ -408,10 +401,7 @@ test('date buckets count scoped groups independently of paging; denied ungrouped
   }
 });
 
-for (const [dialect, style] of [
-  ['postgres', POSTGRES_STYLE],
-  ['mysql', MYSQL_STYLE],
-] as const) {
+for (const [dialect, style] of [['postgres', POSTGRES_STYLE]] as const) {
   test(`${dialect}: CTE policy bindings precede user bindings, with late joins and reverse aggregates`, (t) => {
     const { schema } = fixture(t);
     const scope: RowScope = {
@@ -479,7 +469,7 @@ test('CTE names avoid the entire case-folded catalog and CTEs preserve explicit 
   const scope: RowScope = { tickets: eq('private value', 'match'), people: true };
   const def = view({ columns: [{ path: 'id' }, { path: 'owner_id.name' }] });
   const reserved = new Set(schema.tables.map((table) => table.name.toLowerCase()));
-  for (const style of [ANSI_STYLE, POSTGRES_STYLE, MYSQL_STYLE]) {
+  for (const style of [ANSI_STYLE, POSTGRES_STYLE]) {
     const compiled = compileView(schema, def, style, 0, scope);
     const names = cteNames(compiled.text);
     assert.equal(names.length, 2);
@@ -518,8 +508,6 @@ test('a binary collation is said by each style on column orders and comparisons,
   }
   // Executed where the engine can: SQLite's own BINARY is a real collation.
   assert.ok(Array.isArray(rows(compileView(schema, def, ANSI_STYLE, 0))));
-  // MySQL names a binary collation per character set: refused, not guessed.
-  assert.throws(() => compileView(schema, def, MYSQL_STYLE, 0), /bytes/);
   const refused = [
     view({ filter: { groups: [[{ path: 'scope_code', op: 'contains', value: 'A', collation: 'binary' }]] } }),
     view({ filter: { groups: [[{ path: 'scope_code', op: '=', value: 'A', collation: 'nocase' as never }]] } }),
@@ -601,7 +589,7 @@ test('scope compilation leaves definitions, metadata and later unscoped compilat
   const breakdown: BreakdownDef = { base: 'tickets', by: [{ path: 'title' }], measures: [{ fn: 'count', alias: 'n' }] };
   const scope = scopeA();
   const before = structuredClone({ schema, def, breakdown, scope });
-  for (const style of [ANSI_STYLE, POSTGRES_STYLE, MYSQL_STYLE]) {
+  for (const style of [ANSI_STYLE, POSTGRES_STYLE]) {
     const ordinary = compileView(schema, def, style, 2);
     const ordinaryCount = compileViewCount(schema, def, style);
     const ordinaryBreakdown = compileBreakdown(schema, breakdown, style, 2);

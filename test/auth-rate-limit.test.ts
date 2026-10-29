@@ -110,7 +110,13 @@ describe("Better Auth's per-address limits", () => {
     const error = console.error;
     console.error = (...args: unknown[]) => void said.push(args.join(' '));
     try {
-      host.auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin], listenHost: '0.0.0.0' });
+      // Listening beyond loopback at an http address is the case the override exists for; the seam is what this proves.
+      host.auth = await createAppAuth(loaded, {
+        baseURL: origin,
+        trustedOrigins: [origin],
+        listenHost: '0.0.0.0',
+        environment: { ...process.env, MISTRI_INSECURE_HTTP_SIGN_IN: '1' },
+      });
     } finally {
       console.error = error;
     }

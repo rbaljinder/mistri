@@ -246,6 +246,25 @@ describe('Thread, built against its database and served from the build', () => {
     assert.equal(page.status, 200);
     assert.match(await page.text(), /<title>/);
   });
+
+  test('the dev observer and the theme bench answer 404 from the build and from a plain source start', async () => {
+    const built = await serve(['--config', `${db}.json`, '--app', out]);
+    servers.push(built.child);
+    const source = await serve(['--config', `${db}.json`, '--app', 'test/fixtures/apps/thread']);
+    servers.push(source.child);
+    for (const server of [built, source])
+      for (const path of [
+        '/_mistri/observe',
+        '/_mistri/observe/',
+        '/_mistri/observe/api/traces',
+        '/_mistri/theme/',
+        '/_mistri/theme/state',
+        '/_theme',
+      ]) {
+        const response = await fetch(`${server.origin}${path}`, { redirect: 'manual' });
+        assert.equal(response.status, 404, `${path} on ${server.origin}`);
+      }
+  });
 });
 
 describe('a build is started with what it was built with', () => {

@@ -161,11 +161,27 @@ export function withViewReferences(schema: DatabaseSchema, references: readonly 
   let byCatalog = viewCatalogs.get(references);
   if (!byCatalog) viewCatalogs.set(references, (byCatalog = new WeakMap()));
   let kept = byCatalog.get(schema);
-  if (!kept) byCatalog.set(schema, (kept = withViewReferencesFresh(schema, references)));
+  if (kept) return kept;
+  /* And by their text: a scoped reader copies every view it is handed before compiling it (scopedReads.ts
+     snapshotScopedData), so the same references arrive as a new array on every read and the identity above never
+     holds there — a field report's large tenant App built this catalog afresh for every list, count and breakdown
+     of an enter. The widened catalog depends on nothing but the edges' words and the catalog, so equal text is the
+     same answer. Bounded per catalog: one App carries one set; past the bound a set is built as before. */
+  const text = JSON.stringify(references);
+  let byText = viewCatalogsByText.get(schema);
+  if (!byText) viewCatalogsByText.set(schema, (byText = new Map()));
+  kept = byText.get(text);
+  if (!kept) {
+    kept = withViewReferencesFresh(schema, references);
+    if (byText.size < VIEW_CATALOGS_BY_TEXT) byText.set(text, kept);
+  }
+  byCatalog.set(schema, kept);
   return kept;
 }
 
 const viewCatalogs = new WeakMap<readonly ForeignKey[], WeakMap<DatabaseSchema, DatabaseSchema>>();
+const viewCatalogsByText = new WeakMap<DatabaseSchema, Map<string, DatabaseSchema>>();
+const VIEW_CATALOGS_BY_TEXT = 64;
 
 function withViewReferencesFresh(schema: DatabaseSchema, references: readonly ForeignKey[]): DatabaseSchema {
   let implied: ForeignKey[] | undefined;

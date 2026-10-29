@@ -12,8 +12,7 @@
  * what is left to collide over is outside the process, and for this suite that
  * is the shared live databases.
  *
- * So: a file that still works in the database `TABLEWALK_TEST_PG` or
- * `TABLEWALK_TEST_MYSQL` names, or flushes the shared Valkey or Typesense,
+ * So: a file that still works in the database `TABLEWALK_TEST_PG` names, or flushes the shared Valkey or Typesense,
  * runs in the serial lane. Everything else runs in the parallel lane. The rule
  * is read off the source rather than kept as a list, so a new file that
  * touches a shared engine lands in the serial lane by default rather than by
@@ -58,7 +57,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
    inferred from `process.env`, because the partition must not change with the
    environment: a suite that shards differently with and without live engines
    would put different files in different shards on CI and locally. */
-const SHARED_ENGINES = ['TABLEWALK_TEST_PG', 'TABLEWALK_TEST_MYSQL', 'TABLEWALK_TEST_VALKEY', 'TABLEWALK_TEST_TYPESENSE'];
+const SHARED_ENGINES = ['TABLEWALK_TEST_PG', 'TABLEWALK_TEST_VALKEY', 'TABLEWALK_TEST_TYPESENSE'];
 /* The helpers that hand a file a database no other file opens. A file that
    reaches one of these — directly or through a fixture it imports — is not
    sharing, whatever it says about the environment variable. */

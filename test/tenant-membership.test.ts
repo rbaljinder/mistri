@@ -141,6 +141,9 @@ test('selectors require one canonical opaque value; duplicates never pick a winn
     ['a'.repeat(129)],
     [1],
     { 0: 'north', length: 1 },
+    // Read without a copy now: a proxy or a getter is still refused, never asked.
+    new Proxy(['north'], {}),
+    Object.defineProperty([''], '0', { get: () => 'north', enumerable: true }),
   ]) {
     assert.throws(() => parseTenantSelector(value as string[]), TenantContextError);
   }

@@ -231,7 +231,7 @@ test('a missing lock capability refuses before any whole-row read or removal', a
   assert.ok(f.row());
 });
 
-for (const dialect of ['postgres', 'mysql'] as const) {
+for (const dialect of ['postgres'] as const) {
   test(`${dialect} scalar image comparison still requires a fence (driver seam)`, async (t) => {
     const f = fake(t);
     const entry = f.entry();
@@ -400,7 +400,7 @@ test('the image read follows a lock wait and catches the edit that won the race'
   assert.equal(f.calls.includes('remove'), false);
 });
 
-for (const dialect of ['postgres', 'mysql'] as const) {
+for (const dialect of ['postgres'] as const) {
   test(`${dialect} scalar inverse orders fence, SQL predicates and strict image comparison (driver seam)`, async (t) => {
     const f = fake(t);
     Object.assign(f.adapter, { dialect });

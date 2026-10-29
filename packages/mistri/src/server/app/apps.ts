@@ -102,6 +102,7 @@ import { tabSlug } from '@mistriwork/engine/shared/addressParams.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { appNotifyRules, notifyAdvisories } from '../../shared/appNotify.js';
 import { compileComponents, componentHrefs, type CompiledComponents } from './appComponents.js';
+import { lintComponents, pageManifestsOf } from './componentLint.js';
 import { pageFiles, placePages, readPageFiles } from './appPages.js';
 import { valueLabelFindings, valueLabelHolder } from './valueLabels.js';
 import { embeddedOnlyViews } from '@mistriwork/engine/shared/appEmbeds.js';
@@ -347,6 +348,37 @@ async function loadAppCommands(
 }
 
 /**
+ * A world-writable app directory is code execution for every account on
+ * the machine: hot reload evaluates whatever lands in it. Refused with
+ * the fix, since the fix is one chmod. The App directory and every directory
+ * under it (node_modules and .git apart: a package manager's, not the App's)
+ * are asked, since a loose subdirectory is as loose as the root. Windows
+ * reports no such bit, so the guard does not run there: its ACLs are the
+ * operator's to set.
+ */
+async function assertNotWorldWritable(root: string, rootMode: number): Promise<void> {
+  if (process.platform === 'win32') return;
+  const refuse = (at: string, mode: number): never => {
+    throw new Error(
+      `${at} is writable by everyone (mode ${(mode & 0o777).toString(8)}). An app directory is ` +
+        'evaluated as code on every reload, so it must not be: chmod o-w it first.',
+    );
+  };
+  if ((rootMode & 0o002) !== 0) refuse(root, rootMode);
+  const walk = async (dir: string): Promise<void> => {
+    for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      if (!entry.isDirectory() || entry.name === 'node_modules' || entry.name === '.git') continue;
+      const at = join(dir, entry.name);
+      const info = await stat(at).catch(() => undefined);
+      if (info && (info.mode & 0o002) !== 0) refuse(at, info.mode);
+      await walk(at);
+    }
+  };
+  // A target that is a file (a lone manifest) has no directory under it.
+  if ((await stat(root).catch(() => undefined))?.isDirectory()) await walk(root);
+}
+
+/**
  * Read an app: a directory holding an app.json, or the file itself. Throws
  * on anything wrong, with the path named — an app that silently did not
  * load is a bug report that starts "I definitely wrote it".
@@ -372,6 +404,8 @@ export async function loadApp(
   options: {
     lock?: 'enforce' | 'report';
     module?: string;
+    /** `false`: do not refuse a component the lint fails (`mistri check`, whose components step reports each finding). */
+    componentLint?: boolean;
     /** The manifest, when it is not the directory's one app.ts / app.mjs / app.json (--app-entry). */
     entry?: string;
     /** What the definition may read of the environment (mistri.json's `apps[].env`). */
@@ -388,15 +422,8 @@ export async function loadApp(
   let built = false;
   try {
     const info = await stat(target);
-    /* A world-writable app directory is code execution for every account on
-       the machine: hot reload evaluates whatever lands in it. Refused with
-       the fix, since the fix is one chmod. Windows reports no such bit. */
-    if (process.platform !== 'win32' && (info.mode & 0o002) !== 0) {
-      throw new Error(
-        `${target} is writable by everyone (mode ${(info.mode & 0o777).toString(8)}). An app directory is ` +
-          'evaluated as code on every reload, so it must not be: chmod o-w it first.',
-      );
-    }
+    // Every load, so a hot reload asks again: a directory made writable since the last good one is refused.
+    await assertNotWorldWritable(target, info.mode);
     if (
       info.isDirectory() &&
       (await stat(join(target, BUILD_MANIFEST)).then(
@@ -557,6 +584,14 @@ export async function loadApp(
       );
     try {
       components = await compileComponents(dir, declared);
+      /* What `mistri check` fails a component for (componentLint.ts), held here too: serving and `dev` compile through
+         a bundler that would otherwise take dangerouslySetInnerHTML or eval as it takes any other text. */
+      const lint = components && options.componentLint !== false ? await lintComponents(dir, components, pageManifestsOf(app)) : undefined;
+      if (lint?.problems.length)
+        throw new Error(
+          `${lint.problems.length === 1 ? 'a component has a problem' : `${lint.problems.length} component problems`}:\n` +
+            lint.problems.map((finding) => `    ${finding.file}:${finding.line}  ${finding.text}`).join('\n'),
+        );
     } catch (err) {
       throw new Error(`${path}: ${(err as Error).message}`);
     }

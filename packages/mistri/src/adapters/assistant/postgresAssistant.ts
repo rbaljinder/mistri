@@ -7,6 +7,7 @@
  * The runtime runs on a small pool of its own, one writer: a conversation is
  * never written inside a business write, and the App's pools stay the App's.
  */
+import { SMALL_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
 import { PgConnectionManager, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
@@ -212,10 +213,7 @@ const numbered = (sql: string) => {
 
 /** The store over a pool of its own; opening attests, and a store that cannot be is not returned. */
 export async function openPostgresAssistant(url: string): Promise<AssistantStore> {
-  const connections = new PgConnectionManager(url, undefined, undefined, {
-    readers: 1,
-    writers: 1,
-  });
+  const connections = new PgConnectionManager(url, undefined, undefined, SMALL_STORE_POOL);
   const ready = await connections.withWriteClient((client) => postgresAssistantReady(client)).catch(() => false);
   if (!ready) {
     const message = await connections

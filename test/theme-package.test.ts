@@ -28,18 +28,18 @@ spawnSync(process.execPath, [join(ROOT, 'examples/databases/tick/seed.mjs'), db]
 /** An App with the package installed beside tablewalk, its definition saying `theme`. */
 function app(name: string, head: string, ui: string): string {
   const dir = join(scratch, name);
-  const installed = join(dir, 'node_modules', 'tablewalk-theme-ledger');
+  const installed = join(dir, 'node_modules', 'tablewalk-theme-daybook');
   mkdirSync(join(dir, 'node_modules'), { recursive: true });
   mkdirSync(join(dir, 'node_modules', '@mistriwork'), { recursive: true });
   symlinkSync(join(ROOT, 'packages', 'mistri'), join(dir, 'node_modules', '@mistriwork', 'mistri'), 'dir');
   cpSync(PACKAGE, installed, { recursive: true });
   mkdirSync(join(installed, 'fonts'), { recursive: true });
-  copyFileSync(join(ROOT, 'packages/kit/src/client/fonts/inter-latin.woff2'), join(installed, 'fonts', 'ledger.woff2'));
+  copyFileSync(join(ROOT, 'packages/kit/src/client/fonts/inter-latin.woff2'), join(installed, 'fonts', 'daybook.woff2'));
   writeFileSync(join(dir, 'package.json'), '{ "type": "module" }\n');
   writeFileSync(
     join(dir, 'app.ts'),
     `import { defineApp, defineTheme, listView } from '@mistriwork/mistri/app';
-import ledger from 'tablewalk-theme-ledger';
+import daybook from 'tablewalk-theme-daybook';
 ${head}
 export default defineApp({
   id: '${name}',
@@ -55,11 +55,11 @@ export default defineApp({
   return dir;
 }
 
-const plain = app('plain', '', `{ customThemes: [ledger], theme: { preset: 'ledger' } }`);
+const plain = app('plain', '', `{ customThemes: [daybook], theme: { preset: 'daybook' } }`);
 const extended = app(
   'extended',
-  `const blue = defineTheme({ id: 'ledger-blue', label: 'Ledger Blue', extends: ledger, colors: { light: { accent: '#1d4ed8' } } });`,
-  `{ customThemes: [blue], theme: { preset: 'ledger-blue' } }`,
+  `const blue = defineTheme({ id: 'daybook-blue', label: 'Daybook Blue', extends: daybook, colors: { light: { accent: '#1d4ed8' } } });`,
+  `{ customThemes: [blue], theme: { preset: 'daybook-blue' } }`,
 );
 
 const run = (args: string[]) =>
@@ -74,8 +74,8 @@ const run = (args: string[]) =>
 
 test('one published look in two Apps: its sheet, picture and face read from the package, scoped to the theme worn', async () => {
   for (const [dir, id] of [
-    [plain, 'ledger'],
-    [extended, 'ledger-blue'],
+    [plain, 'daybook'],
+    [extended, 'daybook-blue'],
   ] as const) {
     const loaded = await loadApp(dir);
     const theme = loaded.app.ui.customThemes!.find((each) => each.id === id)!;
@@ -85,10 +85,10 @@ test('one published look in two Apps: its sheet, picture and face read from the 
     assert.ok(sheet.includes(`:root[data-visual-theme="${id}"] :is(`), sheet);
     // The picture beside the sheet, by its served name, so the sheet resolves it wherever the App is mounted.
     assert.match(sheet, /url\("paper-[0-9a-f]{12}\.png"\)/);
-    assert.deepEqual(loaded.brand!.sources[theme.stylesheet!.href!.split('/').pop()!], 'ledger.css');
+    assert.deepEqual(loaded.brand!.sources[theme.stylesheet!.href!.split('/').pop()!], 'daybook.css');
     // The face is the package's, inherited by the theme that extends it.
-    assert.equal(theme.faces?.[0]?.family, 'Ledger Sans');
-    assert.deepEqual(Object.values(loaded.fonts!.sources), ['fonts/ledger.woff2']);
+    assert.equal(theme.faces?.[0]?.family, 'Daybook Sans');
+    assert.deepEqual(Object.values(loaded.fonts!.sources), ['fonts/daybook.woff2']);
     // The definition the browser is sent carries no path on this machine.
     assert.ok(!JSON.stringify(loaded.app.ui.customThemes).includes(scratch), 'no package directory in the definition');
   }
@@ -124,7 +124,7 @@ test('both Apps pass check, and a build serves the scoped sheet and its picture 
   );
   assert.equal(sent.status, 200);
   assert.equal(sent.headers!['content-type'], 'text/css; charset=utf-8');
-  assert.match(sent.body!, /:root\[data-visual-theme="ledger"\]/);
+  assert.match(sent.body!, /:root\[data-visual-theme="daybook"\]/);
   for (const picture of loaded.app.ui.customThemes![0]!.stylesheet!.files!)
     assert.deepEqual(loaded.brand!.files[picture], readFileSync(join(PACKAGE, 'paper.png')));
 });
@@ -157,21 +157,21 @@ test('what a package may not say is theme-contract (C13); a sheet the allowlist 
   assert.throws(() => compileAppTheme({ ...base, stylesheet: './theme.css' }, 'theme'), /has none to read it from/);
 
   // A sheet that hides a part is refused when the App loads, naming its line, and nothing of it is served.
-  const hiding = app('hiding', '', `{ customThemes: [ledger], theme: { preset: 'ledger' } }`);
-  writeFileSync(join(hiding, 'node_modules', 'tablewalk-theme-ledger', 'ledger.css'), '[data-part="stat"] {\n  display: none;\n}\n');
+  const hiding = app('hiding', '', `{ customThemes: [daybook], theme: { preset: 'daybook' } }`);
+  writeFileSync(join(hiding, 'node_modules', 'tablewalk-theme-daybook', 'daybook.css'), '[data-part="stat"] {\n  display: none;\n}\n');
   await assert.rejects(loadApp(hiding), (error: Error) => {
-    assert.match(error.message, /\("ledger"\) stylesheet \.\/ledger\.css line 2: display: none: .*C13/);
+    assert.match(error.message, /\("daybook"\) stylesheet \.\/daybook\.css line 2: display: none: .*C13/);
     assert.equal(validationCode(error.message), 'theme-css');
     return true;
   });
   // A sheet that leads out of its package is the package's fault, not the sheet's.
-  const leaking = app('leaking', '', `{ customThemes: [ledger], theme: { preset: 'ledger' } }`);
-  const sheet = join(leaking, 'node_modules', 'tablewalk-theme-ledger', 'ledger.css');
+  const leaking = app('leaking', '', `{ customThemes: [daybook], theme: { preset: 'daybook' } }`);
+  const sheet = join(leaking, 'node_modules', 'tablewalk-theme-daybook', 'daybook.css');
   rmSync(sheet);
   writeFileSync(join(leaking, 'outside.css'), '[data-part="stat"] { color: var(--ink); }\n');
   symlinkSync(join(leaking, 'outside.css'), sheet);
   await assert.rejects(loadApp(leaking), (error: Error) => {
-    assert.match(error.message, /ledger\.css leads outside its package/);
+    assert.match(error.message, /daybook\.css leads outside its package/);
     assert.equal(validationCode(error.message), 'theme-contract');
     return true;
   });

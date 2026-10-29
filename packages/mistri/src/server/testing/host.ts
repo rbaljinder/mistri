@@ -292,7 +292,7 @@ export async function startTestApp(options: TestAppOptions) {
       if (unloaded) throw new Error(`The App did not start: ${unloaded}\n${log}`, { cause: error });
       const wanted = /names connection "([^"]+)", which this server does not have/.exec(log)?.[1];
       if (!wanted) throw error;
-      const served = [...log.matchAll(/^mistri: (.+) \((?:sqlite|postgres|mysql|http)\) — /gm)].map((m) => m[1]);
+      const served = [...log.matchAll(/^mistri: (.+) \((?:sqlite|postgres|http)\) — /gm)].map((m) => m[1]);
       throw new Error(
         `The App binds connection "${wanted}", which the test host does not serve` +
           (served.length

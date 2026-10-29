@@ -24,6 +24,7 @@ import {
 } from '../../adapters/auth/postgresAuthStore.js';
 import { SQLITE_AUTH_META_DDL, SQLITE_AUTH_META_TABLE, SQLITE_AUTH_STORE_VERSION } from '../../adapters/auth/sqliteAuthStoreLayout.js';
 import { layoutRefusal, sqliteLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
+import { holdConnections } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { postgresPoolDefaults, type PgPool, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { transactionScoped } from '@mistriwork/engine/adapters/postgresPooler.js';
 import { probeRoundTrips, timeClient, timePoolCheckouts, type ProbeClient } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
@@ -274,6 +275,8 @@ export async function openPostgresAuthStore(url: string): Promise<AuthStoreHandl
     },
   });
   pool.on('error', () => {});
+  /* Counted against its database's limit for as long as the pool lives (connectionBudget.ts). */
+  const releaseBudget = holdConnections(url, size, async () => pool);
   /* Server timing (serverTiming.ts), when on: the store's checkouts and round trips, as `auth`. */
   timePoolCheckouts(pool, 'auth');
   (pool as unknown as { on(event: 'connect', listener: (client: object) => void): void }).on('connect', (client) =>
@@ -283,6 +286,7 @@ export async function openPostgresAuthStore(url: string): Promise<AuthStoreHandl
   const close = () => {
     if (closed) return;
     closed = true;
+    releaseBudget();
     void pool.end().catch(() => {});
   };
   try {

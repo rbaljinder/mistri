@@ -260,13 +260,13 @@ function requested(body: Record<string, unknown>): string[] | undefined {
   return Array.isArray(body.columns) && body.columns.length ? (body.columns as string[]) : undefined;
 }
 
-/* Types whose values come back exactly as stored on Postgres and MySQL. */
+/* Types whose values come back exactly as stored on Postgres. */
 const EXACT_TYPE = /^(tiny|small|medium|big)?int(eger)?\d*\b|^(big|small)?serial|char|text|uuid/i;
 
 /**
  * The order a keyset can resume, or undefined. Only the key, and only
  * columns whose value comes back exactly as it is stored: an integer or text
- * on Postgres and MySQL — a timestamp comes back to the millisecond and a
+ * on Postgres — a timestamp comes back to the millisecond and a
  * float rounded, and resuming "after" a rounded value repeats or skips rows —
  * and anything on SQLite, which hands back what it holds.
  */

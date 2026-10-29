@@ -180,7 +180,7 @@ describe('a run: merged, scored and said', () => {
       sayFinding({ ...sideways!, file: 'app.ts', line: 48 }),
       /^sideways-scroll app\.ts:48 \/tasks\/1@1280 the page scrolls 40px sideways — fix: .+/,
     );
-    assert.match(sayFinding(small!), /^small-target \(warning\) \/tasks@390,320 1 control under 40px: button 30×30 — fix: /);
+    assert.match(sayFinding(small!), /^small-target \(warning\) \/tasks@390,320 1 control under 44px: button 30×30 — fix: /);
   });
   test('every code grade says is documented, so mistri explain says it', () => {
     const documented = new Set(codeRows().map((row) => row.code));

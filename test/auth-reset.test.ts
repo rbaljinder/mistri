@@ -57,7 +57,7 @@ describe('a password reset by a logged link', () => {
     origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
     process.env.MISTRI_AUTH_RESET = 'log';
     try {
-      host.auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin] });
+      host.auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin], development: true });
     } finally {
       delete process.env.MISTRI_AUTH_RESET;
     }

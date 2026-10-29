@@ -59,11 +59,12 @@ import { DEFAULT_SHUTDOWN_TIMINGS, shutdownTimings, type Options } from '@mistri
 import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import { readinessOf, type CommandHost } from './commandHost.js';
 import { assertApiReadStartupComposition } from './api-read-startup-options.js';
-import { apiReadStartupOptions, apiServingLine, exposureLines } from '@mistriwork/engine/server/cli/startupOptions.js';
+import { apiReadStartupOptions, apiServingLine, exposureLines, proxyIdentityLines } from '@mistriwork/engine/server/cli/startupOptions.js';
 import { closeDevClientHmr, retireDevClient } from '@mistriwork/engine/server/devclient.js';
 import { refusalReasons } from '@mistriwork/engine/server/evidence.js';
 import { authoringApp } from '@mistriwork/engine/server/http/refusalReport.js';
 import { appHome, outward, publicRoot, settingsMount, type AddressMount } from '@mistriwork/engine/shared/mount.js';
+import { adviseConnectionLimits } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { startTelemetry } from '@mistriwork/engine/adapters/telemetry/start.js';
 import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
 import { withTenantApiRequests } from '../tenant/tenantApiRequest.js';
@@ -499,6 +500,7 @@ export async function startServing(
             scim: scimDirectoriesOf(registry),
             ...(opts.trustedProxies ? { trustedProxies: opts.trustedProxies } : {}),
             listenHost: opts.host,
+            ...(opts.dev ? { development: true } : {}),
             ...(mail ? { mail } : {}),
             ...(oauth ? { oauth: { config: oauth, home: appHome(mount, host.app.app.id).replace(/\/$/, '') } } : {}),
           }).then((auth) => {
@@ -1057,6 +1059,9 @@ export async function startServing(
         serving.bound.port = address.port;
       }
       if (!startBackground()) return;
+      /* One question per database, once the pools are open and serving has not waited for it: whether this process's
+         pools fit what the server allows. A warning only; a failed question says nothing. */
+      void adviseConnectionLimits((line) => console.log(`mistri: warning: ${line}`));
       const shown = opts.host === '127.0.0.1' ? 'localhost' : opts.host;
       listening = true;
       console.log(`Listening on http://${shown}:${opts.port}${mount.base}`);
@@ -1089,9 +1094,7 @@ export async function startServing(
         // nobody can see in the log is one nobody remembers turning on.
         console.log(`mistri: also answering writes for host ${opts.allowedHosts.join(', ')}`);
       }
-      if (opts.authProxyHeader) {
-        console.log(`mistri: trusting ${opts.authProxyHeader} for who is asking; requests from beyond loopback must carry it`);
-      }
+      for (const line of proxyIdentityLines(opts.host, opts.authProxyHeader, opts.trustedProxies)) console.log(line);
       if (opts.trustProxyHops !== undefined) {
         console.log(
           `mistri: the client address is ${opts.trustProxyHops} place(s) from the right of X-Forwarded-For, for rate limits and sign-in lockout`,

@@ -34,7 +34,7 @@ const key = (name: string) => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : 
 
 /* The value a command's `db` hands out for a column, which is what the
    driver returns: PostgreSQL's bigint and numeric arrive as text (they do
-   not fit a double), MySQL's decimal too. A column declared to hold 64-bit
+   not fit a double). A column declared to hold 64-bit
    or arbitrary-precision numbers — BIGINT, INT8, NUMERIC, DECIMAL — can read
    as a number or, past 2^53, as a lossless string, and is typed so. An
    INTEGER is typed a number: every handler narrowed `qty` before arithmetic
@@ -51,11 +51,10 @@ function valueType(column: ColumnMeta, dialect: Dialect): string {
     : kind === 'boolean'
       ? 'boolean'
       : kind === 'number'
-        ? (dialect === 'postgres' && /int8|bigint|bigserial|numeric|decimal|money/.test(type)) ||
-          (dialect === 'mysql' && /decimal|numeric/.test(type))
+        ? dialect === 'postgres' && /int8|bigint|bigserial|numeric|decimal|money/.test(type)
           ? 'string'
           : (dialect === 'sqlite' && (WIDE_INTEGER.test(type) || (!/int/.test(type) && !/real|floa|doub/.test(type)))) ||
-              ((dialect === 'mysql' || dialect === 'http') && /bigint/.test(type))
+              (dialect === 'http' && /bigint/.test(type))
             ? 'number | string'
             : 'number'
         : kind === 'date' || kind === 'text'

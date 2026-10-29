@@ -28,9 +28,8 @@ export const FLYWAY_COMMANDS: Readonly<Record<string, string>> = {
 export function flywaySettings(url: string, dialect: Dialect): Record<string, string> {
   if (dialect === 'sqlite') return { FLYWAY_URL: `jdbc:sqlite:${resolve(sqlitePath(url))}` };
   const parsed = new URL(url);
-  const scheme = dialect === 'postgres' ? 'postgresql' : parsed.protocol === 'mariadb:' ? 'mariadb' : 'mysql';
   return {
-    FLYWAY_URL: `jdbc:${scheme}://${parsed.host}${parsed.pathname}${parsed.search}`,
+    FLYWAY_URL: `jdbc:postgresql://${parsed.host}${parsed.pathname}${parsed.search}`,
     ...(parsed.username ? { FLYWAY_USER: decodeURIComponent(parsed.username) } : {}),
     ...(parsed.password ? { FLYWAY_PASSWORD: decodeURIComponent(parsed.password) } : {}),
   };

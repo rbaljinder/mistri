@@ -1,6 +1,6 @@
 /**
  * A span for every statement the process runs, whichever of the three
- * drivers runs it: node:sqlite, pg and mysql2.
+ * drivers runs it: node:sqlite and pg.
  *
  * At the driver, not in each adapter, because statements reach the database
  * from dozens of places — the adapters, the command journal, the auth store,
@@ -25,7 +25,7 @@ import { DatabaseSync, StatementSync } from 'node:sqlite';
 import { startSpan, observing, currentSpan, type Span } from './trace.js';
 import { summarizeStatement } from './statement.js';
 
-type Dialect = 'sqlite' | 'postgresql' | 'mysql';
+type Dialect = 'sqlite' | 'postgresql';
 
 /** How to EXPLAIN a statement the observer shows, by its span. Bounded, and filled only while observing. */
 const explainers = new Map<string, () => Promise<string[]>>();
@@ -123,11 +123,6 @@ export function instrumentDrivers(): void {
     instrumentPg(require('pg'));
   } catch {
     /* pg is optional */
-  }
-  try {
-    instrumentMysql(require('mysql2'));
-  } catch {
-    /* so is mysql2 */
   }
 }
 
@@ -325,41 +320,6 @@ function pgExplainer(Client: PgClientClass, settings: Record<string, unknown>, t
       await probe.end().catch(() => {});
     }
   };
-}
-
-/* ---------- mysql2 ---------- */
-
-function instrumentMysql(mysql: { Connection?: { prototype: Record<string, unknown> }; Pool?: { prototype: Record<string, unknown> } }) {
-  bindCheckouts(mysql?.Pool?.prototype, 'getConnection');
-  const proto = mysql?.Connection?.prototype;
-  if (!proto) return;
-  for (const method of ['query', 'execute'] as const) {
-    const original = proto[method] as ((...args: unknown[]) => unknown) | undefined;
-    if (typeof original !== 'function') continue;
-    proto[method] = function (this: unknown, ...args: unknown[]) {
-      const callbackAt = args.findIndex((arg) => typeof arg === 'function');
-      // Without a callback the caller streams the rows as events; that is not a call this can time.
-      if (!currentSpan() || callbackAt < 0) return original.apply(this, args);
-      const [sql, values] = args;
-      const text = typeof sql === 'string' ? sql : String((sql as { sql?: unknown })?.sql ?? '');
-      const params = typeof values === 'function' ? (sql as { values?: unknown })?.values : values;
-      const span = beginStatement('mysql', text, params);
-      const done = args[callbackAt] as (...answer: unknown[]) => void;
-      args[callbackAt] = (error: unknown, ...rest: unknown[]) => {
-        if (error) span.fail(errorKind(error), error);
-        else noteRows(span, rest[0]);
-        span.end();
-        done(error, ...rest);
-      };
-      try {
-        return original.apply(this, args);
-      } catch (error) {
-        span.fail(errorKind(error), error);
-        span.end();
-        throw error;
-      }
-    };
-  }
 }
 
 /** A driver error's travelling name: its SQLSTATE or errno name when it has one (never its message). */

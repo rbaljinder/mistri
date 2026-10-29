@@ -1,6 +1,7 @@
 /** Private PG read response composition. Holds native business snapshot and
  * native token handoff through a trusted synchronous send. No HTTP activation,
  * cookie fallback, caller principal or promise of remote delivery/atomicity. */
+import { SMALL_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { isAsyncFunction, isGeneratorFunction, isPromise, isProxy } from 'node:util/types';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Registry } from '@mistriwork/engine/server/connections.js';
@@ -214,7 +215,7 @@ export async function createPostgresApiReadOwner(
     const feedSource = eventFeedSource(initial.app, commands, discovery, connection);
     const store = app.api.events.length ? storeTargetOf(configs.get(feedSource.connection)?.url) : undefined;
     const events =
-      store && 'postgres' in store ? new PgConnectionManager(store.postgres, undefined, undefined, { readers: 1, writers: 1 }) : undefined;
+      store && 'postgres' in store ? new PgConnectionManager(store.postgres, undefined, undefined, SMALL_STORE_POOL) : undefined;
     const run = (
       credential: unknown,
       operationId: string,

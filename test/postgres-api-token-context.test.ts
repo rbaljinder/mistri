@@ -45,12 +45,7 @@ test('PG context freezes every resolved exclusion without API, module execution 
       'unselected',
       'postgresql://other:synthetic@other.invalid:5433/other?sslmode=verify-full&options=-c%20search_path%3Dpublic',
     );
-  const result = await f.resolve([
-    f.first,
-    other,
-    f.connection('sqlite', join(f.dir, 'does-not-exist.db')),
-    f.connection('mysql', 'mysql://user:synthetic@mysql.invalid/business'),
-  ]);
+  const result = await f.resolve([f.first, other, f.connection('sqlite', join(f.dir, 'does-not-exist.db'))]);
   assert.deepEqual(Object.keys(result), ['url', 'appId', 'excludeConnections']);
   assert.equal(result.url, f.loaded.app.auth!.store);
   assert.equal(result.appId, 'app');

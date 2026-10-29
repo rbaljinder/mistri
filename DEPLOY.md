@@ -1,6 +1,11 @@
-# Running tablewalk somewhere other than your terminal
+# Running the tablewalk database browser somewhere other than your terminal
 
-Two ways to ship it: a Docker image, and a desktop app. They share the same
+This page is about the database browser (`tablewalk`). To deploy an App built
+with mistri (a container, a load balancer, PostgreSQL stores, the connection
+arithmetic), read [Build and deploy an App](site/src/content/docs/docs/build-and-deploy.md)
+and [the deploy targets](docs/deploy-targets.md).
+
+Two ways to ship the browser: a Docker image, and a desktop app. They share the same
 server and the same client — nothing below is a second implementation of
 anything.
 

@@ -1545,7 +1545,7 @@ function sinceValue(catalog: Catalog, table: string, column: string, now: Date, 
 /**
  * A `Date` a handler writes into a zone-less timestamp column becomes the wall
  * clock of the App's zone, the digits a `now` stamp writes there, not the
- * driver's: `pg` and `mysql2` format a Date in the server process's zone, which
+ * driver's: `pg` formats a Date in the server process's zone, which
  * is where it happens to run. A zoned column keeps the instant, as it always did.
  */
 function bindMoments<T extends { table: string; values: Record<string, unknown> }>(

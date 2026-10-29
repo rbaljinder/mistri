@@ -43,10 +43,10 @@ Without `--config`, mistri reads `mistri.json` in the working directory, then `~
 
 | Key | Does | Default |
 | --- | --- | --- |
-| `name`, `url` | What the browser and Apps call it; `postgres://`, `mysql://` or `sqlite:<path>`, usually `${DATABASE_URL}` | required |
+| `name`, `url` | What the browser and Apps call it; `postgres://` or `sqlite:<path>`, usually `${DATABASE_URL}` | required |
 | `writable` | Allows writes, checked in every route and tool that writes. Connect as a database role that may write | `false` |
-| `pool` | `{ "read": n, "write": m }`, 1 to 64, PostgreSQL and MySQL ([pools](/docs/performance/#postgresql-pools)) | 4 and 4 |
-| `replicas` | Read replicas' URLs, PostgreSQL and MySQL, up to 8: lists, dashboards and exports read them ([replicas](/docs/performance/#read-replicas)) | none |
+| `pool` | `{ "read": n, "write": m }`, 1 to 64, PostgreSQL ([pools](/docs/performance/#postgresql-pools)) | 4 and 4 |
+| `replicas` | Read replicas' URLs, PostgreSQL, up to 8: lists, dashboards and exports read them ([replicas](/docs/performance/#read-replicas)) | none |
 | `schemas` | PostgreSQL schemas to read | every user schema |
 | `hidden` | Columns never served: `{ "staff": ["password_hash"], "*": ["*_token"] }` ([secrets](/docs/secrets/)) | none |
 | `rows` | `false` serves the shape only, never a row | `true` |

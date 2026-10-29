@@ -487,8 +487,6 @@ export function consoleCommandAudit(
     for (const { name, url } of databases()) {
       if (url === undefined) continue;
       const dialect = dialectOf(url);
-      // The journal is kept on SQLite and PostgreSQL only.
-      if (dialect === 'mysql') continue;
       const table = (each: string) => runtimeTable(dialect, each);
       const db = await openMigrationDb(url, [], false);
       try {

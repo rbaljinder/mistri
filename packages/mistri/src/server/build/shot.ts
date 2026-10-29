@@ -302,9 +302,7 @@ function lookStorage(look: ShotLook | undefined): Array<{ name: string; value: s
 }
 
 const looksLikeDatabase = (arg: string) =>
-  /^(postgres|postgresql|mysql|mariadb|sqlite):/i.test(arg) ||
-  /\.(db|db3|sqlite|sqlite3)$/i.test(arg) ||
-  (existsSync(arg) && statSync(arg).isFile());
+  /^(postgres|postgresql|sqlite):/i.test(arg) || /\.(db|db3|sqlite|sqlite3)$/i.test(arg) || (existsSync(arg) && statSync(arg).isFile());
 
 /** Playwright's Chromium, from beside mistri or from the project it is run in, with the line that installs
  * its browser; undefined when neither has it. */

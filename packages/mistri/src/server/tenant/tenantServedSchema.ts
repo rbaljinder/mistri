@@ -6,7 +6,8 @@
  */
 import { appCatalog, servedSegments, withLabelTemplates, type AppDef } from '../../shared/app.js';
 import { computedConstants } from '../../shared/appComputed.js';
-import { foldConstants, type ComputedNode } from '@mistriwork/engine/shared/computed.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { foldConstants, readStatementInstantFrom, type ComputedNode } from '@mistriwork/engine/shared/computed.js';
 import { readsOf } from '@mistriwork/engine/shared/query.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { captureTenantData, denyTenant } from '@mistriwork/engine/server/evidence.js';
@@ -30,6 +31,7 @@ interface ServedContext {
  * `now` is the request's instant, not a zoned clock: the catalog zones it once
  * for a date phrase, and a computed `today` zoned twice was the wrong day. */
 export function tenantServedSchema(context: ServedContext, app: AppDef, now: Date, me: string | null = null): DatabaseSchema {
+  now = new Date(servedInstant(now));
   const held = heldFor(context, app);
   /* A catalog whose building reads the instant (a rollup's `now`) is never kept: it is built for its request with
      the constants folded as it goes, as it always was, rather than kept-shaped and then copied. */
@@ -63,17 +65,20 @@ function servedBase(held: Held, context: ServedContext, app: AppDef, now: Date, 
   return built.value;
 }
 
-/* A computed column's `today`, `now` and `me` are this request's (computed.ts), and a statement is written from the
-   catalog with them folded in. The kept catalog leaves them as written, and each request is served a copy with them
-   folded in the tables that say one — sharing every other table, column and segment with the kept one, so the copy
-   costs a table's worth, not a catalog's. A copy that reads neither the instant nor anything else is the kept
-   catalog itself; one that reads only the day or the reader is kept by those, as the catalog is; one that reads
-   the instant is made for its request, never another's. What the copy is of is remembered (servedBaseOf), so what
-   is the same for every instant — the metadata projection (tenantMetadata.ts) — is found by the kept catalog. */
+/* A computed column's `today`, `now` and `me` are this request's (computed.ts). The kept catalog leaves them as
+   written, and each request is served a copy with the day and the reader folded in the tables that say one —
+   sharing every other table, column and segment with the kept one, so the copy costs a table's worth, not a
+   catalog's — kept by those two, as the catalog is. A copy that reads neither is the kept catalog itself. The
+   instant is never folded: it changes on every request, so a catalog it was folded into was a new object every
+   time, and every cache keyed by the catalog — a list's parse, a path, the projections — missed on every request
+   (a field report: a large tenant App whose deadlines say `now` copied and captured its catalog for each one). A
+   statement writes it as its request's instant instead (servedInstant, below). What the copy is of is remembered
+   (servedBaseOf), so what is the same for every day and reader — the metadata projection (tenantMetadata.ts) — is
+   found by the kept catalog. */
 interface Constants {
-  /** The tables whose computed columns say a constant. */
+  /** The tables whose computed columns say the day or the reader. */
   readonly tables: ReadonlySet<string>;
-  readonly clock: 0 | 1 | 2;
+  readonly day: boolean;
   readonly reader: boolean;
 }
 const constantsOf = new WeakMap<DatabaseSchema, Constants>();
@@ -84,7 +89,7 @@ function constantsIn(base: DatabaseSchema): Constants {
   let found = constantsOf.get(base);
   if (found) return found;
   const tables = new Set<string>();
-  let clock: 0 | 1 | 2 = 0,
+  let day = false,
     reader = false;
   const walk = (node: unknown): boolean => {
     if (!node || typeof node !== 'object') return false;
@@ -92,10 +97,7 @@ function constantsIn(base: DatabaseSchema): Constants {
     const kind = (node as { k?: unknown }).k;
     if (kind === 'today') {
       says = true;
-      if (clock < 1) clock = 1;
-    } else if (kind === 'now') {
-      says = true;
-      clock = 2;
+      day = true;
     } else if (kind === 'me') {
       says = true;
       reader = true;
@@ -105,20 +107,19 @@ function constantsIn(base: DatabaseSchema): Constants {
   };
   for (const table of base.tables)
     if (table.computed && Object.values(table.computed).some((computed) => walk(computed.expr))) tables.add(table.id);
-  constantsOf.set(base, (found = { tables, clock, reader }));
+  constantsOf.set(base, (found = { tables, day, reader }));
   return found;
 }
 function bound(base: DatabaseSchema, app: AppDef, now: Date, me: string | null, zone: string | undefined): DatabaseSchema {
   const constants = constantsIn(base);
   if (!constants.tables.size) return base;
   const values = computedConstants(app, now, me, zone);
-  const key =
-    constants.clock === 2 ? undefined : `${constants.clock === 1 ? values.today : ''}\0${constants.reader ? (me ?? '\u0001') : ''}`;
+  const key = `${constants.day ? values.today : ''}\0${constants.reader ? (me ?? '\u0001') : ''}`;
   let held = boundHeld.get(base);
-  const found = key === undefined ? undefined : held?.get(key);
+  const found = held?.get(key);
   if (found) {
-    held!.delete(key!);
-    held!.set(key!, found);
+    held!.delete(key);
+    held!.set(key, found);
     return found;
   }
   const copy = captureTenantData({
@@ -130,7 +131,7 @@ function bound(base: DatabaseSchema, app: AppDef, now: Date, me: string | null, 
             computed: Object.fromEntries(
               Object.entries(table.computed!).map(([name, computed]) => [
                 name,
-                { ...computed, expr: foldConstants(computed.expr as ComputedNode, values) },
+                { ...computed, expr: foldConstants(computed.expr as ComputedNode, values, true) },
               ]),
             ),
           }
@@ -139,14 +140,39 @@ function bound(base: DatabaseSchema, app: AppDef, now: Date, me: string | null, 
   });
   boundMade++;
   basesOf.set(copy, base);
-  if (key !== undefined) {
-    if (!held) boundHeld.set(base, (held = new Map()));
-    held.set(key, copy);
-    while (held.size > BOUND_HELD) held.delete(held.keys().next().value!);
-  }
+  if (!held) boundHeld.set(base, (held = new Map()));
+  held.set(key, copy);
+  while (held.size > BOUND_HELD) held.delete(held.keys().next().value!);
   return copy;
 }
 let boundMade = 0;
+
+/* The instant a request's statements write for `now` (computed.ts statementInstant): one per request, the same for
+   every statement in it. A tenant HTTP request fixes it as it starts (withRequestInstant, tenantHttp.ts), so a
+   catalog served anywhere in that request, and every statement written after, reads the one instant. Elsewhere —
+   a notice's mail, a public page's read — serving a catalog says it for what follows from there, as folding it
+   into that catalog did; never kept past the work it was said in, so no request reads another's. */
+interface RequestInstant {
+  readonly at: string;
+  /** Said for the whole request, not by one serving of the catalog. */
+  readonly fixed: boolean;
+}
+const requestInstant = new AsyncLocalStorage<RequestInstant>();
+readStatementInstantFrom(() => requestInstant.getStore()?.at);
+
+/** Run one request's work at one instant: every catalog it is served and every statement it writes read it. */
+export function withRequestInstant<T>(at: Date, work: () => T): T {
+  return requestInstant.run({ at: at.toISOString(), fixed: true }, work);
+}
+
+/** The instant this serving reads: its request's where one is fixed, else the one given, said for what follows. */
+function servedInstant(now: Date): string {
+  const held = requestInstant.getStore();
+  if (held?.fixed) return held.at;
+  const at = now.toISOString();
+  requestInstant.enterWith({ at, fixed: false });
+  return at;
+}
 
 /** The kept catalog a served one is a request's copy of (bound), or the catalog itself. */
 export function servedBaseOf(schema: DatabaseSchema): DatabaseSchema {

@@ -54,7 +54,7 @@ export async function contactMailPlaces(
       const target = storeTargetOf(url);
       return {
         id,
-        dialect: target ? ('sqlite' in target ? 'sqlite' : 'postgres') : /^mysql:/i.test(url ?? '') ? 'MySQL' : 'not a database',
+        dialect: target ? ('sqlite' in target ? 'sqlite' : 'postgres') : 'not a database',
       };
     };
     const first = Object.entries(app.resources ?? {}).find(([, resource]) =>

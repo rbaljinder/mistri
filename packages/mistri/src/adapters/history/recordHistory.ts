@@ -63,7 +63,7 @@ registerPrune({
   window: 'history',
   table: RECORD_HISTORY_TABLES.change,
   time: 'at',
-  clock: { sqlite: 'iso-text', postgres: 'timestamp', mysql: 'timestamp' },
+  clock: { sqlite: 'iso-text', postgres: 'timestamp' },
 });
 
 /** Bounds, the same on every engine. A value past TEXT_LIMIT is kept cut. */

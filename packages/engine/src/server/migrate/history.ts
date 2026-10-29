@@ -53,9 +53,8 @@ export function historyDdl(db: MigrationDb, table: string): string[] {
       `CREATE INDEX ${index} ON ${name} ("success")`,
     ];
   }
-  if (db.dialect === 'postgres') {
-    return [
-      `CREATE TABLE ${name} (
+  return [
+    `CREATE TABLE ${name} (
     "installed_rank" INT NOT NULL,
     "version" VARCHAR(50),
     "description" VARCHAR(200) NOT NULL,
@@ -67,25 +66,8 @@ export function historyDdl(db: MigrationDb, table: string): string[] {
     "execution_time" INTEGER NOT NULL,
     "success" BOOLEAN NOT NULL
 )`,
-      `ALTER TABLE ${name} ADD CONSTRAINT ${quoteIdent('postgres', `${table}_pk`)} PRIMARY KEY ("installed_rank")`,
-      `CREATE INDEX ${index} ON ${name} ("success")`,
-    ];
-  }
-  return [
-    `CREATE TABLE ${name} (
-    \`installed_rank\` INT NOT NULL,
-    \`version\` VARCHAR(50),
-    \`description\` VARCHAR(200) NOT NULL,
-    \`type\` VARCHAR(20) NOT NULL,
-    \`script\` VARCHAR(1000) NOT NULL,
-    \`checksum\` INT,
-    \`installed_by\` VARCHAR(100) NOT NULL,
-    \`installed_on\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    \`execution_time\` INT NOT NULL,
-    \`success\` BOOL NOT NULL,
-    CONSTRAINT ${quoteIdent('mysql', `${table}_pk`)} PRIMARY KEY (\`installed_rank\`)
-) ENGINE=InnoDB`,
-    `CREATE INDEX ${index} ON ${name} (\`success\`)`,
+    `ALTER TABLE ${name} ADD CONSTRAINT ${quoteIdent('postgres', `${table}_pk`)} PRIMARY KEY ("installed_rank")`,
+    `CREATE INDEX ${index} ON ${name} ("success")`,
   ];
 }
 
@@ -95,7 +77,7 @@ export async function historyExists(db: MigrationDb, table: string): Promise<boo
       ? await db.all("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [table])
       : db.dialect === 'postgres'
         ? await db.all('SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = ? AND tablename = ?', [db.home, table])
-        : await db.all('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?', [db.home, table]);
+        : [];
   return rows.length > 0;
 }
 
@@ -105,12 +87,7 @@ export async function readHistory(db: MigrationDb, table: string): Promise<Histo
   let rows: Array<Record<string, unknown>>;
   try {
     // The time as text to the second, as each engine keeps it: a Date would be read in this machine's zone.
-    const on =
-      db.dialect === 'postgres'
-        ? "to_char(installed_on, 'YYYY-MM-DD HH24:MI:SS')"
-        : db.dialect === 'mysql'
-          ? "DATE_FORMAT(installed_on, '%Y-%m-%d %H:%i:%s')"
-          : 'substr(installed_on, 1, 19)';
+    const on = db.dialect === 'postgres' ? "to_char(installed_on, 'YYYY-MM-DD HH24:MI:SS')" : 'substr(installed_on, 1, 19)';
     rows =
       await db.all(`SELECT installed_rank, version, description, type, script, checksum, installed_by, ${on} AS installed_on, execution_time, success
       FROM ${qualified(db, table)} ORDER BY installed_rank`);

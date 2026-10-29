@@ -1,5 +1,5 @@
 /**
- * A column that holds no zone (Postgres `timestamp`, MySQL `DATETIME`, SQLite's
+ * A column that holds no zone (Postgres `timestamp`, SQLite's
  * text datetimes) holds the wall clock of the App's `ui.timezone`, UTC when the
  * App names none. An action's `now`, a machine's `since`, a `Date` a command
  * writes and a New form's `now` all say the same digits for one moment; a

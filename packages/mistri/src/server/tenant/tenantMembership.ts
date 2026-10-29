@@ -1,4 +1,4 @@
-import { isPromise } from 'node:util/types';
+import { isPromise, isProxy } from 'node:util/types';
 import type { Identity } from '../auth/auth.js';
 import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import {
@@ -73,15 +73,14 @@ export interface TenantMembershipOptions<Request> {
 /** Canonical opaque IDs avoid whitespace/case aliases in the initial strategy.
  * Callers must supply all URL selector values; duplicates never pick a winner. */
 export function parseTenantSelector(values: readonly string[]): string {
-  const captured = captureTenantData(values);
-  if (
-    !Array.isArray(captured) ||
-    captured.length !== 1 ||
-    typeof captured[0] !== 'string' ||
-    !/^[a-z0-9][a-z0-9_-]{0,127}$/.test(captured[0])
-  )
-    return denyTenant();
-  return captured[0];
+  /* Read as plain data without copying the list: a request checks a tenant
+     id here many times over, and all it keeps is a string, which nothing can
+     change afterwards. A proxy or a getter is refused as captureTenantData
+     would refuse it. */
+  const only = Array.isArray(values) && !isProxy(values) && values.length === 1 ? Object.getOwnPropertyDescriptor(values, '0') : undefined;
+  const value: unknown = only && 'value' in only ? only.value : undefined;
+  if (typeof value !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,127}$/.test(value)) return denyTenant();
+  return value;
 }
 
 /** Capture sync results before yielding; custom thenables are not provider data. */

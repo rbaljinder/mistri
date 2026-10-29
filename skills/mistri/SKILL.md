@@ -1,6 +1,6 @@
 ---
 name: mistri
-description: Decision guide for building or changing a mistri App, the TypeScript DSL from @mistriwork/mistri/app over a SQLite, PostgreSQL or MySQL database. Load it before scaffolding an App; adding or reshaping its lists, record pages, forms, dashboards, navigation or look; choosing between a resource form, a fixed action and a command; or deciding sign-in, roles, row policies, tenancy, public pages and forms, hidden columns, secrets and sources; or writing its tests. Not needed for browsing a database with the standalone tablewalk browser.
+description: Decision guide for building or changing a mistri App, the TypeScript DSL from @mistriwork/mistri/app over a SQLite or PostgreSQL database. Load it before scaffolding an App; adding or reshaping its lists, record pages, forms, dashboards, navigation or look; choosing between a resource form, a fixed action and a command; or deciding sign-in, roles, row policies, tenancy, public pages and forms, hidden columns, secrets and sources; or writing its tests. Not needed for browsing a database with the standalone tablewalk browser.
 license: MIT
 compatibility: the mistri that installed it (mistri agent init) on Node 24, run as npx @mistriwork/mistri in the App's project; mistri shot needs Playwright's Chromium or a local Chrome (--browser <path> names one).
 ---

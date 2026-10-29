@@ -30,7 +30,7 @@ type PruneClock =
   | 'epoch-ms'
   /** Text in `toISOString()` form, which orders as time does (SQLite's record history). */
   | 'iso-text'
-  /** A native timestamp: `timestamptz` on PostgreSQL, `datetime(3)` in UTC on MySQL. */
+  /** A native timestamp: `timestamptz` on PostgreSQL. */
   | 'timestamp';
 
 export interface PruneRule {
@@ -90,7 +90,7 @@ export const prunes = (): readonly PruneRule[] => [...rules.values()];
 
 /** One database a rule runs against: a statement, and how many rows it deleted. */
 interface PruneDb {
-  readonly dialect: 'sqlite' | 'postgres' | 'mysql';
+  readonly dialect: 'sqlite' | 'postgres';
   /** `?` placeholders, the statement committed on its own. */
   delete(sql: string, params: unknown[]): Promise<number>;
   /** Whether this database holds the table: a store not provisioned here has nothing to prune. */
@@ -100,17 +100,13 @@ interface PruneDb {
 /** Retention in milliseconds per window; null keeps for ever. */
 type RetentionMs = Readonly<Record<PruneWindow, number | null>>;
 
-const quote = (dialect: PruneDb['dialect'], name: string) => (dialect === 'mysql' ? `\`${name}\`` : `"${name}"`);
-const mysqlTime = (ms: number) => new Date(ms).toISOString().replace('T', ' ').replace('Z', '');
+const quote = (name: string) => `"${name}"`;
 
 /** The cutoff as the rule's column holds a time. */
 const clockOn = (db: Pick<PruneDb, 'dialect'>, rule: PruneRule): PruneClock =>
   typeof rule.clock === 'string' ? rule.clock : rule.clock[db.dialect];
 function cutoff(db: PruneDb, rule: PruneRule, at: number): number | string {
-  const clock = clockOn(db, rule);
-  if (clock === 'epoch-ms') return at;
-  if (clock === 'iso-text') return new Date(at).toISOString();
-  return db.dialect === 'mysql' ? mysqlTime(at) : new Date(at).toISOString();
+  return clockOn(db, rule) === 'epoch-ms' ? at : new Date(at).toISOString();
 }
 
 /** The statement that deletes one batch of a rule's old rows; `referenced` is the part of `referencedBy` this database holds. */
@@ -118,26 +114,22 @@ export function pruneStatement(
   db: Pick<PruneDb, 'dialect'>,
   rule: PruneRule,
   batch = PRUNE_BATCH,
-  database?: string,
   referenced: PruneRule['referencedBy'] = rule.referencedBy,
 ): string {
-  const named = (name: string) => runtimeTable(db.dialect, name, database);
+  const named = (name: string) => runtimeTable(db.dialect, name);
   const table = named(rule.table);
-  const time = quote(db.dialect, rule.time);
+  const time = quote(rule.time);
   const stamp = clockOn(db, rule) === 'timestamp' && db.dialect === 'postgres' ? '?::timestamptz' : '?';
   // A column is qualified by the relation's own name where it sits, which on PostgreSQL drops the prefix.
-  const column = (name: string) =>
-    `${quote(db.dialect, runtimeRelation(db.dialect, rule.table, database).relname)}.${quote(db.dialect, name)}`;
+  const column = (name: string) => `${quote(runtimeRelation(db.dialect, rule.table).relname)}.${quote(name)}`;
   const whole = rule.group
-    ? ` AND NOT EXISTS (SELECT 1 FROM ${table} g WHERE ${rule.group.map((name) => `g.${quote(db.dialect, name)} = ${column(name)}`).join(' AND ')}` +
+    ? ` AND NOT EXISTS (SELECT 1 FROM ${table} g WHERE ${rule.group.map((name) => `g.${quote(name)} = ${column(name)}`).join(' AND ')}` +
       ` AND (g.${time} IS NULL OR g.${time} >= ${stamp}))`
     : '';
   const kept = (referenced ?? [])
-    .map((ref) => ` AND NOT EXISTS (SELECT 1 FROM ${named(ref.table)} r WHERE r.${quote(db.dialect, ref.column)} = ${column('id')})`)
+    .map((ref) => ` AND NOT EXISTS (SELECT 1 FROM ${named(ref.table)} r WHERE r.${quote(ref.column)} = ${column('id')})`)
     .join('');
   const old = `${column(rule.time)} < ${stamp}${whole}${kept}${rule.where ? ` AND (${rule.where(named)})` : ''}`;
-  // MySQL bounds a DELETE itself; the ORDER BY makes the oldest rows go first, so a half-finished run leaves a clean edge.
-  if (db.dialect === 'mysql') return `DELETE FROM ${table} WHERE ${old} ORDER BY ${column(rule.time)} LIMIT ${batch}`;
   // A row is named by where it is, so a rule needs no key: ctid and rowid exist on every ordinary table.
   if (db.dialect === 'sqlite') return `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE ${old} LIMIT ${batch})`;
   // A row another transaction holds is left for the next day rather than waited for.
@@ -152,8 +144,6 @@ export interface PruneOptions {
   readonly sleep?: (ms: number) => Promise<void>;
   /** Ends the run between batches. */
   readonly signal?: AbortSignal;
-  /** The MySQL database the tables are in, where the connection does not select it. */
-  readonly database?: string;
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -166,7 +156,7 @@ export async function prune(db: PruneDb, rule: PruneRule, windowMs: number | nul
   const before = cutoff(db, rule, (options.now ?? Date.now)() - windowMs);
   const referenced = [];
   for (const ref of rule.referencedBy ?? []) if (await db.has(ref.table)) referenced.push(ref);
-  const sql = pruneStatement(db, rule, batch, options.database, referenced);
+  const sql = pruneStatement(db, rule, batch, referenced);
   let total = 0;
   for (;;) {
     if (options.signal?.aborted) return total;
@@ -226,33 +216,6 @@ export function postgresPruneDb(source: PgWriteClientSource): PruneDb {
           (await client.query(`SELECT to_regclass($1) IS NOT NULL AS present`, [runtimeTable('postgres', table)])).rows[0]?.present ===
           true,
       );
-    },
-  };
-}
-
-/** The part of a mysql2 connection a prune speaks through. */
-interface MysqlPruneConnection {
-  query(sql: string, params?: unknown[]): Promise<[unknown, unknown]>;
-}
-
-/**
- * A MySQL connection's statements, in autocommit so each batch is its own transaction. The connection
- * selects the database (a URL that names none has no runtime tables to prune: `has` is false everywhere).
- * Text `query`, not `execute`: a prepared DELETE ... LIMIT is refused on some servers.
- */
-export function mysqlPruneDb(db: MysqlPruneConnection): PruneDb {
-  return {
-    dialect: 'mysql',
-    async delete(sql, params) {
-      const [result] = await db.query(sql, params);
-      return Number((result as { affectedRows?: number } | undefined)?.affectedRows ?? 0);
-    },
-    async has(table) {
-      const [rows] = await db.query(
-        'SELECT 1 AS present FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? LIMIT 1',
-        [table],
-      );
-      return Array.isArray(rows) && rows.length > 0;
     },
   };
 }

@@ -364,8 +364,15 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
   };
   const retainUntil = (tab: Tab, window: LeaseWindow) =>
     Math.min(Number.MAX_SAFE_INTEGER, window.expiresAt + dormant, tab.sessionExpiresAt);
-  const reply = (tab: Tab, lease: Lease, window = lease.window): TenantContextReply =>
-    captureTenantData({
+  /* Every answer on a lease carries the same reply until its window moves:
+     a tab, a lease and a window are all fixed once made (a renewal makes a
+     new window), so the reply is built once per window and answered again
+     only to the tab and lease it was built for. */
+  const replies = new WeakMap<LeaseWindow, { readonly tab: Tab; readonly lease: Lease; readonly value: TenantContextReply }>();
+  const reply = (tab: Tab, lease: Lease, window = lease.window): TenantContextReply => {
+    const held = replies.get(window);
+    if (held && held.tab === tab && held.lease === lease) return held.value;
+    const value = captureTenantData({
       tabId: tab.id,
       context: lease.token,
       appId: lease.principal.appId,
@@ -375,6 +382,9 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       ...(lease.realm === 'support' ? { supportId: (lease.principal as SupportMembershipEvidence).supportId } : {}),
       ...window,
     });
+    replies.set(window, { tab, lease, value });
+    return value;
+  };
   const candidate = async (request: Request, target: Target, initial?: { started: number; proof: VerifiedSessionInstance }) => {
     // The window set here is bounded by the evidence: never evidence kept from an earlier request.
     const admitted = requireFreshAdmission(request);

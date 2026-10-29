@@ -111,11 +111,6 @@ export async function resolvePostgresTokenRevokeContext(loadedApps: readonly Loa
       }
       if (/^postgres(?:ql)?:\/\//i.test(target))
         return [Object.freeze({ url: postgres(target), name: connection.name, source: 'session' as const })];
-      if (/^(?:mysql|mariadb):\/\//i.test(target)) {
-        const parsed = new URL(target);
-        if (!parsed.hostname) return refuse();
-        return [];
-      }
       // A resolved plain SQLite filename cannot alias a PostgreSQL database.
       // Unknown schemes, URI SQLite and tilde expansion remain unsupported.
       if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('~') || target.startsWith(':')) return refuse();

@@ -11,7 +11,7 @@ see ([jump to setup](#for-coding-agents-mcp)).
 
 ```bash
 npx tablewalk --demo          # build a sample database and open it — an instant try
-npx tablewalk mydata.sqlite   # or your own: SQLite, Postgres, MySQL
+npx tablewalk mydata.sqlite   # or your own: SQLite or Postgres
 npx tablewalk                 # or nothing, and the page asks for a connection
 ```
 
@@ -109,7 +109,7 @@ customer count distinct country_code as countries by active
 | Sorting | `sort <name>` names a column of the *answer*, key or measure |
 
 A period comes back as a label — `2026-08`, `2026-Q3` — spelled identically on
-SQLite, Postgres and MySQL, so it sorts correctly as text and means the same
+SQLite and Postgres, so it sorts correctly as text and means the same
 thing wherever you point the tool. Agents get this as the `breakdown` tool,
 which is the one to reach for before `sql`: every value is bound and every
 path is checked against the catalog.
@@ -288,12 +288,11 @@ role without `SELECT` on them is stronger still.
 
 A call is bounded in time and in what it counts. Statements run under a
 30-second cap, and `sql` takes `timeout_ms` to lower it for one statement:
-Postgres sets it inside the statement's transaction and MySQL on the
-statement's session, and SQLite, which cannot interrupt a statement
+Postgres sets it inside the statement's transaction, and SQLite, which cannot interrupt a statement
 in-process, runs `sql` in a separate process that the cap stops — the reads
 tablewalk compiles for SQLite are bounded by their limits instead. A client
 that cancels a call (`notifications/cancelled`) stops the statement it is
-running — the Postgres backend is cancelled, the MySQL query killed, the SQLite
+running — the Postgres backend is cancelled, the SQLite
 process ended — and the call answers as cancelled; a write that has already
 started runs to its end, so its outcome is known. The totals `query` and
 `breakdown` report, and the counts on `record`, stop at 10,000 and say so
@@ -352,15 +351,13 @@ database browser to 4 readers, or `--read-pool` and `--write-pool`). An App
 writes through its writer pool, saves of one record in the order they
 arrived and saves of different records side by side; the database browser
 writes through one connection, one write at a time, which its Undo needs.
-A MySQL entry can set `"pool": { "write": 8 }` with the same bounds; its
-read pool stays at four and background work has one separate writer.
 A write waits at most `--lock-timeout` (5 s) for a row another transaction
 holds, and is then refused with a retry.
 [Performance & PostgreSQL pools](https://tablewalk.dev/docs/performance/) has
 the capacity arithmetic, and `--pooler transaction` for a deployment behind
 PgBouncer or RDS Proxy.
 
-A PostgreSQL or MySQL entry can also name read replicas,
+A PostgreSQL entry can also name read replicas,
 `"replicas": ["${REPLICA_URL}"]`. Lists, counts, dashboards, search, exports
 and the Workbench grid read them in turn, a tenant App's under the same
 membership and row scope; a record's own row, writes, commands, the catalog
@@ -485,8 +482,7 @@ thinking about it.
 - The SQLite handle is opened `readOnly`. Reaching past the query API entirely
   still fails.
 - Postgres connections `SET default_transaction_read_only = on` and a 30s
-  statement timeout; MySQL read sessions carry the same cap as
-  `max_execution_time` (`max_statement_time` on MariaDB).
+  statement timeout.
 - Writes exist only behind a per-connection `"writable": true` opt-in;
   adding a row is a form the schema writes, and deleting one leads with its
   impact. A write opens a *second* connection, so the one every read uses
@@ -507,8 +503,7 @@ thinking about it.
 - Connection strings never reach the client, in any response.
 - "Read-only" is enforced at the session and transaction level, not the
   role level. A superuser can still `COPY … TO PROGRAM` inside a Postgres
-  `READ ONLY` transaction, and a MySQL account with `SUPER` can step around
-  a read-only session. Connect as a role that can only read and the database
+  `READ ONLY` transaction. Connect as a role that can only read and the database
   enforces what tablewalk promises. A connection that is not writable but
   opens over a role that could do more (a superuser, a write grant, `CREATE`)
   gets one line on stderr saying what that role can do.
@@ -536,7 +531,6 @@ zero rows *and leaves the table standing*.
 |---|---|---|
 | SQLite | Built in | Uses Node's own `node:sqlite`. No native module to compile. Reads and writes. |
 | Postgres | Supported | Needs `pg` (`npm install pg`). Reads `pg_catalog` for keys and row estimates. Reads and writes. Business commands with durable receipts after `migratePostgresCommandJournal`; an App's sign-in store in its own `tablewalk_auth` schema after `migratePostgresAuthStore` (an older one moves forward with `mistri migrate stores up`). Pools and the pooler mode: [performance](https://tablewalk.dev/docs/performance/#postgresql-pools); the command journal and the authentication store: `docs/postgresql.md`. |
-| MySQL / MariaDB | Supported for browsing | Needs `mysql2` (`npm install mysql2`). Reads `information_schema`. The database browser and its MCP server read it, and write to it where a connection is writable; Apps run on PostgreSQL and SQLite: an App whose connection is MySQL or MariaDB is refused at `check` and at startup. |
 | HTTP API | Built in | An API with an OpenAPI 3 spec: `--from-openapi` drafts a description of its lists and items, and a `"kind": "http"` connection reads through it. Filters, sort and paging only as the API documents them; no totals. Read-only. `docs/http-sources.md`. |
 
 Adding another is one file implementing `Adapter` — `introspect`, `query`,
@@ -584,7 +578,7 @@ mistri --app <dir>            an App, served: the App framework's, npx @mistriwo
                               rate limit may believe (10.0.0.0/8, 172.17.0.1,
                               fd00::/8); repeatable or comma-separated, or set
                               TABLEWALK_TRUST_PROXY. Loopback is always trusted.
-                              Rate limiting only, never sign-in
+                              Also who may set --auth-proxy-header
       --trust-proxy-hops <n>  behind a managed front end with no address to name
                               (Cloud Run, a cloud load balancer): how many
                               proxies append to X-Forwarded-For; the client is
@@ -598,8 +592,9 @@ mistri --app <dir>            an App, served: the App framework's, npx @mistriwo
       --auth-proxy-header <name>
                               behind a proxy that signs people in: the header
                               it sets with the user (X-Forwarded-User). Requests
-                              from beyond loopback must carry it, and every
-                              write is journaled with it
+                              from beyond loopback must carry it and come from
+                              a --trust-proxy address; every write is journaled
+                              with it
       --config <path>         read connections from this file, and the
                               cache, search, webhook, email (smtps://,
                               smtp:// or log:) and OAuth services beside
@@ -639,8 +634,8 @@ tablewalk migrate diff <name> | check | squash
                 [--schema-file <path>] [--dev-url <url>]
                               versioned SQL files in Flyway's format, forward
                               only: V3__add_payoff_quote.sql once, in its own
-                              transaction (MySQL: none; a failure stops the
-                              run); R__views.sql again when it changes. up
+                              transaction (a failure is recorded as failed);
+                              R__views.sql again when it changes. up
                               applies what is pending; status shows applied, pending, drift made
                               outside migrations and types older than the
                               database; validate fails on any of those;

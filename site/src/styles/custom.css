@@ -219,6 +219,13 @@ site-search button[data-open-modal] { border-radius: 8px; border-color: var(--sl
 .tw-hero-steps { display: flex; gap: 0.5rem; margin: 0; padding: 0; list-style: none; font-family: var(--sl-font-mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--sl-color-gray-3); }
 .tw-hero-steps li { margin: 0; }
 .tw-hero-steps li + li::before { content: '→'; margin-inline-end: 0.5rem; color: var(--sl-color-gray-4); }
+.tw-hero-version { margin: 0; font-family: var(--sl-font-mono); font-size: 0.75rem; letter-spacing: 0.04em; }
+.tw-hero-version a { color: var(--sl-color-gray-3); text-decoration: none; }
+.tw-hero-version a:hover { color: var(--sl-color-white); }
+/* The 404: a plain page, a heading and the two ways out. */
+.tw-notfound { display: grid; gap: 0.75rem; justify-items: center; padding-block: 4rem; text-align: center; color: var(--sl-color-gray-2); }
+.tw-notfound h1 { margin: 0; }
+.tw-notfound p { margin: 0; }
 .tw-hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 0.5rem; }
 @media (min-width: 50rem) { .tw-hero { padding-block: 2.75rem 1.5rem; gap: 2.75rem; } }
 

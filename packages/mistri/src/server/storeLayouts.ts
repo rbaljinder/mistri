@@ -29,7 +29,6 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { quoteIdent, type Dialect, type MigrationDb } from '@mistriwork/engine/server/migrate/database.js';
 import { runtimeRelation } from '@mistriwork/engine/shared/runtimeTables.js';
-import type { MysqlConnection } from '@mistriwork/engine/adapters/mysqlDriver.js';
 import { postgresPoolDefaults, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import type { TenantStoreBinding } from './tenant/tenantStoreContract.js';
 
@@ -73,7 +72,7 @@ export interface StoreDef {
   readonly upgrades: Readonly<Partial<Record<Dialect, Readonly<Record<number, StoreStep>>>>>;
   /**
    * Per dialect, provisioning it where it needs no binding: given the database's
-   * address (a SQLite path, a PostgreSQL or MySQL URL). A store bound to an
+   * address (a SQLite path, a PostgreSQL URL). A store bound to an
    * App, a tenant or a job module has none here: provisionStores derives it
    * from that binding, as the server does.
    */
@@ -91,7 +90,6 @@ export interface StoreDef {
   readonly attest?: Readonly<{
     sqlite?: (db: DatabaseSync) => Promise<boolean>;
     postgres?: (client: PgQuery) => Promise<boolean>;
-    mysql?: (db: MysqlConnection, database: string) => Promise<boolean>;
   }>;
 }
 
@@ -108,7 +106,7 @@ class StoreRefused extends Error {
 
 /* ---------- reading ---------- */
 
-/* The table that holds the version, as SQLite and MySQL name it; PostgreSQL reads it in the runtime schema. */
+/* The table that holds the version, as SQLite names it; PostgreSQL reads it in the runtime schema. */
 interface Marker {
   readonly table: string;
   readonly column?: string;
@@ -120,20 +118,14 @@ async function tableExists(db: MigrationDb, marker: Marker): Promise<boolean> {
   /* The catalog rows, not to_regclass: that resolves a name through a cache
      that can still say "no such table" for a table another session created
      and committed while this one waited for its lock. */
-  if (db.dialect === 'postgres') {
-    return (
-      (
-        await db.all(
-          `SELECT 1 AS found FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = ? AND c.relname = ? AND c.relkind IN ('r', 'p')`,
-          [runtimeRelation('postgres', marker.table).schema, runtimeRelation('postgres', marker.table).relname],
-        )
-      ).length > 0
-    );
-  }
   return (
-    (await db.all('SELECT 1 AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', [marker.table]))
-      .length > 0
+    (
+      await db.all(
+        `SELECT 1 AS found FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = ? AND c.relname = ? AND c.relkind IN ('r', 'p')`,
+        [runtimeRelation('postgres', marker.table).schema, runtimeRelation('postgres', marker.table).relname],
+      )
+    ).length > 0
   );
 }
 
@@ -162,7 +154,6 @@ const marked =
 const everywhere = (table: string, column = 'version'): Readonly<Record<Dialect, Marker>> => ({
   sqlite: { table, column },
   postgres: { table, column },
-  mysql: { table, column },
 });
 const both = (version: number): Readonly<Partial<Record<Dialect, number>>> => ({ sqlite: version, postgres: version });
 const sqliteOnly = (table: string, column = 'version'): Readonly<Partial<Record<Dialect, Marker>>> => ({ sqlite: { table, column } });
@@ -190,54 +181,48 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'record-history',
     title: 'record history',
     tables: { prefix: '__mistri_history_' },
-    current: { sqlite: 1, postgres: 1, mysql: 1 },
+    current: both(1),
     read: marked(everywhere('__mistri_history_meta')),
     upgrades: {},
     provision: {
       sqlite: async (path) => (await import('../adapters/history/sqliteRecordHistory.js')).provisionSqliteRecordHistory(path),
       postgres: async (url) => (await import('../adapters/history/postgresRecordHistory.js')).provisionPostgresRecordHistory(url),
-      mysql: async (url) => (await import('../adapters/history/mysqlRecordHistory.js')).provisionMysqlRecordHistory(url),
     },
     attest: {
       sqlite: async (db) => (await import('../adapters/history/sqliteRecordHistory.js')).sqliteRecordHistoryReady(db),
       postgres: async (client) => (await import('../adapters/history/postgresRecordHistory.js')).postgresRecordHistoryReady(client),
-      mysql: async (db, database) => (await import('../adapters/history/mysqlRecordHistory.js')).mysqlRecordHistoryReady(db, database),
     },
   },
   {
     id: 'live-change',
     title: 'live sync: what each write transaction changed, kept fifteen minutes',
     tables: { prefix: '__mistri_live_' },
-    current: { sqlite: 1, postgres: 1, mysql: 1 },
+    current: both(1),
     read: marked(everywhere('__mistri_live_meta')),
     upgrades: {},
     provision: {
       sqlite: async (path) => (await import('../adapters/live/sqliteLiveChange.js')).provisionSqliteLiveChange(path),
       postgres: async (url) => (await import('../adapters/live/postgresLiveChange.js')).provisionPostgresLiveChange(url),
-      mysql: async (url) => (await import('../adapters/live/mysqlLiveChange.js')).provisionMysqlLiveChange(url),
     },
     attest: {
       sqlite: async (db) => (await import('../adapters/live/sqliteLiveChange.js')).sqliteLiveChangeReady(db),
       postgres: async (client) => (await import('../adapters/live/postgresLiveChange.js')).postgresLiveChangeReady(client),
-      mysql: async (db, database) => (await import('../adapters/live/mysqlLiveChange.js')).mysqlLiveChangeReady(db, database),
     },
   },
   {
     id: 'inbox',
     title: 'notices, mail and opt-outs',
     tables: { prefix: '__mistri_inbox_' },
-    current: { sqlite: 1, postgres: 1, mysql: 1 },
+    current: both(1),
     read: marked(everywhere('__mistri_inbox_meta')),
     upgrades: {},
     provision: {
       sqlite: async (path) => (await import('../adapters/inbox/sqliteInbox.js')).provisionSqliteInbox(path),
       postgres: async (url) => (await import('../adapters/inbox/postgresInbox.js')).provisionPostgresInbox(url),
-      mysql: async (url) => (await import('../adapters/inbox/mysqlInbox.js')).provisionMysqlInbox(url),
     },
     attest: {
       sqlite: async (db) => (await import('../adapters/inbox/sqliteInbox.js')).sqliteInboxReady(db),
       postgres: async (client) => (await import('../adapters/inbox/postgresInbox.js')).postgresInboxReady(client),
-      mysql: async (db, database) => (await import('../adapters/inbox/mysqlInbox.js')).mysqlInboxReady(db, database),
     },
   },
   {

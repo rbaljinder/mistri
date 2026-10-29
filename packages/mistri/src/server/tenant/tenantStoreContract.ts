@@ -12,6 +12,7 @@ import {
   databaseUnanswered,
   denyTenant,
   denyTenantFor,
+  isCapturedTenantData,
   refusalCause,
   tenantIdentifier,
   tenantRecord,
@@ -160,7 +161,19 @@ export function membershipRecord(
     validUntil: row.valid_until,
   });
 }
+/* The lookup each captured evidence was checked into, by the binding it was checked against. A membership is read
+   back at the fences of every request on one evidence; that evidence and the binding are captures (frozen, plain
+   data, evidence.ts), and nothing here reads the clock, so checking the pair again could only pass and build an
+   equal lookup. Anything that is not a capture is checked every time, as before. */
+const queries = new WeakMap<TenantMembershipEvidence, { readonly owner: TenantStoreBinding; readonly query: TenantMembershipLookup }>();
 export function evidenceQuery(value: TenantMembershipEvidence, owner: TenantStoreBinding): TenantMembershipLookup {
+  const held = queries.get(value);
+  if (held && held.owner === owner) return held.query;
+  const query = checkedQuery(value, owner);
+  if (isCapturedTenantData(value) && isCapturedTenantData(owner)) queries.set(value, { owner, query });
+  return query;
+}
+function checkedQuery(value: TenantMembershipEvidence, owner: TenantStoreBinding): TenantMembershipLookup {
   tenantRecord(value, [
     'appId',
     'accountId',

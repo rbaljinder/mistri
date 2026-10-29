@@ -23,7 +23,7 @@ a pointer into it.
    exception (Lumen's exceptions).
 3. **Tokens only.** Every colour, radius, face, duration, space and text
    size is a custom property; a literal outside the tokens (`tokens.css`) and the looks'
-   presets is a bug (Tokens; Space and text). Four looks dress Apps; the database browser wears none. Workshop is
+   presets is a bug (Tokens; Space and text). Five looks dress Apps; the database browser wears none. Workshop is
    the default, and twelve palettes are the same twelve in every look (Palettes).
 4. **The cascade is layered.** A later layer wins by order, never by
    specificity; layout no look may move lives in `structure.css` (The cascade).
@@ -77,8 +77,8 @@ primitive's class.) A
 theme's rules stand over its look's so a part it dresses is dressed whatever
 the look said, and under `structure` so nothing it says moves a box.
 What every look shares, and Mono's rules, are in `themeFamilies.css`;
-Workshop's, Lumen's and Sage's own rules stand in `look` from a sheet of their own
-(`workshopLook.css`, `lumenLook.css`, `sageLook.css`), as do the few recipes no
+Workshop's, Lumen's, Sage's and Ledger's own rules stand in `look` from a sheet of their own
+(`workshopLook.css`, `lumenLook.css`, `sageLook.css`, `ledgerLook.css`), as do the few recipes no
 built-in but Workshop picks (`brandLook.css`: a dark bar, a washed or underlined
 menu, a ruled stat, a tinted table, small capitals and book figures), fetched when
 worn and waited for before the page is revealed, so a look's own rules add
@@ -118,8 +118,8 @@ is a bug.
 **Two dresses, one rule each.** The database browser — `npx tablewalk
 <db>`, and an App's Workbench — wears these tokens and nothing else: warm
 paper, the green accent, the code face in its chrome and its data, flat
-dense rows. The four looks (Workshop, the default an App wears when neither it nor
-its reader names one, then Lumen, Mono and Sage, which an App opts into; an App
+dense rows. The five looks (Workshop, the default an App wears when neither it nor
+its reader names one, then Lumen, Mono, Sage and Ledger, which an App opts into; an App
 may also define its own with `defineTheme`; `visualThemes.css`,
 `themeFamilies.css`) dress Apps only: every one of
 their rules keys on `data-visual-theme`, which the browser never carries,
@@ -225,7 +225,7 @@ ink darker than its hairlines and still quieter than its text.
 
   | Token | What wears it | Database browser | Every look |
   | --- | --- | --- | --- |
-  | `--radius` | a control: an input, a button, a chip that is not a pill, a day in the calendar | 6px | the look's control radius (Mono 0, Sage and Lumen 8; an App theme's own, 0 to 8), or the App's |
+  | `--radius` | a control: an input, a button, a chip that is not a pill, a day in the calendar | 6px | the look's control radius (Mono 0, Ledger 2, Sage and Lumen 8; an App theme's own, 0 to 8), or the App's |
   | `--radius-item` | a row inside a popup (a menu item, an option), a small button in a bar | 5px | `min(--radius, 5px)` |
   | `--radius-pop` | a menu, a listbox, a typeahead's list, a popover, a hover card, the date picker | 8px | `--radius` |
   | `--radius-panel` | a box on the page: a card, a code or result panel | 8px | `--radius-lg`; a board's card keeps `--radius` unless the theme names its panel corner (`shape.radius.panel`, worn as `--panel-radius`) |
@@ -556,6 +556,27 @@ are rows on their ground under a hairline, never a white box of their own
 (boxed, a record page was a stack of cards). Sage record tabs use ordinary sentence
 case with the active group marked by the accent underline. Nothing here is
 open to another look or to an App's tokens.
+
+**Ledger's exceptions.** Ledger is a bookkeeper's desk, ported as it is
+from a field report's theme (it began as a Lumen with a stylesheet): green-tinted
+paper under a faint graph-paper ground (the `grid` pattern, where the list
+refuses beige palettes and the other looks leave the ground plain), every
+figure, id, date and label in a monospace (IBM Plex Mono, shipped with the
+look's own sheet; titles and prose stay in Inter, so only what is counted or
+filed is set in it), and a dark green cover for the menu and the bar with a
+gilt mark for the current entry. Its structure is the menu's, one value
+apiece: field groups, dashboard sections and stat cards are square boxes
+ruled in the strong line (`fields: 'panel'`, `section: 'panel'`), a table's
+heads close with a double rule, as a ledger closes a total (`rules:
+'double'`, the one recipe Ledger adds: the head's rule color at 3px, and
+the boxes' edge, in `ledgerLook.css`), statuses are a dot and their word,
+corners are 0 and 2px, and nothing floats. One hue — a deep ledger green,
+the **Emerald** palette as the book draws it — is the accent's fill and its
+words, links, the ring, the rules and the first series; by night the cover
+goes near-black green and the hue a mint that reads on it. A palette moves
+that hue and leaves the paper and the cover the book's own. A form's one
+primary action is Lumen's, the ink. Nothing here is open to another look
+or to an App's tokens.
 
 **Lumen's exceptions.** Lumen is flat, calm and modern, with its
 character in details: a faintly warm shell around white working surfaces,
@@ -1711,12 +1732,13 @@ accent as text and fill, a brighter link by night, the pale tint, the
 focus ring, a signal fill and the words on it, the lead chart series),
 light and dark. Every look offers all twelve and wears one by default
 (Workshop Safety orange, Lumen Cobalt, Mono and Sage Ink, which is each
-look's own ink); the look keeps its grounds, neutrals, type, shape and
+look's own ink, Ledger Emerald, in the book's own deeper green); the look keeps its grounds, neutrals, type, shape and
 recipes, and decides which roles the hue reaches: Workshop the primary
 verb, links, the current tab's rule, the menu's marker, the ring and the
 first series, with no tint; Lumen the accent, its tint, links, the ring, the menu's
 mark and the first series; Mono and Sage the same on their own neutral
-tint for what is chosen. Where a look needs a palette at another depth
+tint for what is chosen; Ledger Lumen's reach, and the rules (the double
+rule under a table's heads) in the hue, the cover staying the book's green. Where a look needs a palette at another depth
 (Workshop's own deeper orange ring, each look's own ink for Ink) the
 palette says so for that look rather than forking. A palette's lead
 series takes the place of the look's nearest hue and the rest are ordered

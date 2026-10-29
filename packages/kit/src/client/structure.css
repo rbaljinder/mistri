@@ -1199,11 +1199,12 @@
   }
 }
 
-/* A footer group (nav placement: 'footer'): the sidebar's list is a column only when it holds one, and the gap takes what the rows leave. */
+/* A footer group (nav placement: 'footer'): the sidebar's list is a column only when it holds one, and the gap takes what the rows leave.
+   The list already fills the sidebar (`flex: 1`, style.css); a `min-height: 100%` here stopped it shrinking for the App's footer
+   and the collapse button, which stood below the window with the identity block (Depot at 720px high). */
 #table-list:has(> .nav-foot-gap) {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
 }
 #table-list > .nav-foot-gap {
   flex: 1 1 0;

@@ -1,6 +1,6 @@
 /**
  * Wall-clock digits: how the server writes a moment into a column that holds
- * no zone (Postgres `timestamp`, MySQL `DATETIME`, SQLite's text datetimes).
+ * no zone (Postgres `timestamp`, SQLite's text datetimes).
  * Such a column holds the clock on the wall of the App's `ui.timezone` — UTC
  * when the App names none — whatever wrote it: an action's `now`, a machine's
  * `since`, a command's `Date`. The browser shows the digits as written, so they

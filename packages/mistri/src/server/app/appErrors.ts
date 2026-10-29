@@ -57,8 +57,7 @@ export function appError(
       ...(error instanceof Refusal && error.columns ? { columns: error.columns } : {}),
     };
   }
-  const { code, errno, errcode } =
-    error && typeof error === 'object' ? (error as { code?: unknown; errno?: unknown; errcode?: unknown }) : {};
+  const { code, errcode } = error && typeof error === 'object' ? (error as { code?: unknown; errcode?: unknown }) : {};
   /* A rule the database enforced on a write, with the column it names when the engine names one: said beside that
      field in plain words, and by its caption in the sentence above the form (constraints.ts reads names, never values). */
   const broke = operation === 'write' ? constraintColumns(error) : undefined;
@@ -66,12 +65,12 @@ export function appError(
   const named = broke && !broke.parent ? broke.columns.map((column) => caption?.(column) ?? column).join(' and ') : undefined;
   const said = named && named.charAt(0).toUpperCase() + named.slice(1);
   const within = named && (/^[A-Z][a-z]/.test(named) ? named.charAt(0).toLowerCase() + named.slice(1) : named);
-  if (code === '23502' || errno === 1048 || errcode === 1299) {
+  if (code === '23502' || errcode === 1299) {
     return said
       ? { code: 'required_value', message: `${said} is required. Fill it in and try again.`, ...fieldsOf('This is required.') }
       : { code: 'required_value', message: 'A required value is missing. Complete the required fields and try again.' };
   }
-  if (code === '23505' || errno === 1062 || errcode === 1555 || errcode === 2067) {
+  if (code === '23505' || errcode === 1555 || errcode === 2067) {
     return said
       ? {
           code: 'duplicate_value',
@@ -80,7 +79,7 @@ export function appError(
         }
       : { code: 'duplicate_value', message: 'A record with these unique values already exists. Use different values and try again.' };
   }
-  if (code === '23503' || errno === 1451 || errno === 1452 || errcode === 787) {
+  if (code === '23503' || errcode === 787) {
     if (broke?.parent)
       return { code: 'reference_conflict', message: 'Other records still point at this one. Change or remove them first, then try again.' };
     return said
@@ -91,7 +90,7 @@ export function appError(
         }
       : { code: 'reference_conflict', message: 'A related record is missing or still in use. Check the relationships and try again.' };
   }
-  if (code === '23514' || code === '23P01' || errno === 3819 || errno === 4025 || errcode === 275) {
+  if (code === '23514' || code === '23P01' || errcode === 275) {
     return said
       ? {
           code: 'constraint_failed',

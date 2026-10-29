@@ -33,8 +33,8 @@ import each other's sources under tsx and Vite; under `--conditions=mistri-built
 they answer from `dist/`, which is how anything here runs a build. A pack
 (`scripts/pack-manifest.mjs`) rewrites each manifest so `dist/` is the only
 form, and a release publishes all six at one version, the packages naming
-each other at exactly it. The engine, the kit and ui name every module they
-export by its path, with no `./*` pattern, and `check-boundary` refuses an
+each other at exactly it. Every package names each module it
+exports by its path, with no `./*` pattern (but `mistri`'s shipped schemas), and `check-boundary` refuses an
 import of one they do not export (docs/boundary.md, Entries); the engine and
 the kit are plumbing for the two products, ui's exports its public API.
 
@@ -95,7 +95,7 @@ console's call, view compile, page plans, references), then the resource
 reads, then `http/dataWriteRoutes.ts` (update, insert, SQL, revert, delete).
 
 - **Adapters** (`src/adapters/`): one file per dialect — SQLite (built in,
-  `node:sqlite`), PostgreSQL (`pg`), MySQL/MariaDB (`mysql2`) — plus
+  `node:sqlite`) and PostgreSQL (`pg`) — plus
   `connect.ts`, which picks one. Reads run on a read-only handle for the
   life of the process; a write opens a second handle, only for a connection
   marked `"writable": true`. Read-only is enforced here, not in the UI.
@@ -155,8 +155,7 @@ reads, then `http/dataWriteRoutes.ts` (update, insert, SQL, revert, delete).
   held by one runner through the job host's slot lease, runs them in batches of 5,000 rows, each its own
   transaction, with a pause between. A try that is pending, leased or waiting for a redrive is never forgotten.
   Record history also keeps no row for a write that moved only the table's version column. A tenant App runs the same job
-  once a day on the platform, sweeping its job store's database and the tenant source one after the other, and MySQL
-  record history is pruned by the same job through its own connection (`DELETE ... ORDER BY ... LIMIT`). History in one
+  once a day on the platform, sweeping its job store's database and the tenant source one after the other. History in one
   database shared by several Apps is not scoped by App, so the shortest window among them applies to the shared rows.
 - **A save is a fixed number of database round trips.** A PostgreSQL writer pipelines (`pipeline: true`), so statements
   asked together leave in one flight, and the count does not grow with the statements a save runs. Flight 1 is the

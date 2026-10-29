@@ -244,8 +244,7 @@ function bindHttpBusinessCommandsNow(
   for (const [id, command] of Object.entries(commands)) {
     const resource = logicalResource(app, command.source, command.target);
     const source = resources.forConnection(resources.connectionFor(resource));
-    // MySQL has ordinary transactions and no journal; the capability, not the
-    // dialect, is the fact — but naming the engines keeps the refusal honest.
+    // The capability, not the dialect, is the fact — but naming the engines keeps the refusal honest.
     if (!['sqlite', 'postgres'].includes(source.dialect) || !commandsOf(source).commandTransaction) {
       throw new BusinessCommandDefinitionError(
         `Command "${id}" requires the durable command capability; SQLite and PostgreSQL provide it.`,

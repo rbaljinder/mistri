@@ -6,7 +6,7 @@ export function buildUpdateGuard(
   request: UpdateRequest,
   types: Record<string, string>,
   style: SqlStyle,
-  dialect: 'sqlite' | 'postgres' | 'mysql',
+  dialect: 'sqlite' | 'postgres',
   startIndex: number,
 ): SqlFragment {
   if (request.expected === undefined) return { text: '', params: [] };
@@ -36,10 +36,7 @@ export function buildUpdateGuard(
     params.push(dialect === 'sqlite' && typeof value === 'boolean' ? Number(value) : value);
     // SQLite can store text even without a declared type; its collation still applies.
     if (dialect === 'sqlite') return `${quoted} COLLATE BINARY = ${placeholder}`;
-    if (/char|text|clob|citext|enum|set\(/i.test(type)) {
-      if (dialect === 'mysql') return `CAST(${quoted} AS BINARY) = CAST(${placeholder} AS BINARY)`;
-      if (dialect === 'postgres' && /char|text|clob|citext/i.test(type)) return `${quoted}::text COLLATE "C" = ${placeholder}`;
-    }
+    if (/char|text|clob|citext/i.test(type)) return `${quoted}::text COLLATE "C" = ${placeholder}`;
     return `${quoted} = ${placeholder}`;
   });
   return checks.length ? { text: ` AND (${checks.join(' AND ')})`, params } : { text: '', params: [] };

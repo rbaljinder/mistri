@@ -1,7 +1,7 @@
 # Working in this repo
 
 This repository builds two products. tablewalk is a read-only-by-default
-database browser (SQLite, Postgres, MySQL) that serves a web UI and speaks MCP
+database browser (SQLite, Postgres) that serves a web UI and speaks MCP
 to coding agents. `npx tablewalk <db>` is the whole deployment of the database
 browser — there is no build step for it. mistri is the App framework: an App
 runs from its source directory the same way (`npx @mistriwork/mistri --app <dir>`,
@@ -16,7 +16,7 @@ before 1.0: a database from an earlier build is wiped and reseeded).
 The browser keeps `tablewalk.json`, `~/.config/tablewalk` and `TABLEWALK_*`. A
 variable both binaries read is read in the running one's name
 (`packages/engine/src/server/product.ts`). The repository's own harness
-variables (`TABLEWALK_TEST_PG`, `TABLEWALK_TEST_MYSQL`, `TABLEWALK_REQUIRE_LIVE`,
+variables (`TABLEWALK_TEST_PG`, `TABLEWALK_REQUIRE_LIVE`,
 `MISTRI_BUILT_CLIENT`, …) keep their names.
 
 ## Active app-platform work: next-session reading order
@@ -42,8 +42,7 @@ never stage/reseed `.demo/` or print its credentials. Run `npm test` and browser
 suites sequentially because they share disposable `e2e/.tmp` fixtures.
 The Node gate runs in two lanes (`scripts/test-node.mjs`): a parallel lane for
 every file that owns whatever database it touches, and a serial lane for the
-files that still work in the one database `TABLEWALK_TEST_PG` or
-`TABLEWALK_TEST_MYSQL` names. The lane is read off the source, so a new file
+files that still work in the one database `TABLEWALK_TEST_PG` names. The lane is read off the source, so a new file
 reaching a shared engine runs serially by default; `node scripts/test-node.mjs
 --lanes` prints the partition. Every test belongs to one package
 (`scripts/test-owners.mjs`, read off what it reaches; one that holds both
@@ -210,8 +209,8 @@ commands below remain the way to *see* the live values.
   spelling that applies is the only one. The standalone database browser
   mounts nothing; a tenant App is mounted by the same rule.
 
-- **Supported dialects.** SQLite (built in), Postgres (`pg`), MySQL/MariaDB
-  (`mysql2`). Listed in the `README.md` Databases table, the site, and the
+- **Supported dialects.** SQLite (built in) and Postgres (`pg`); MySQL and
+  MariaDB are not supported. Listed in the Databases table of `packages/tablewalk/README.md`, the site, and the
   `tablewalk` package's keywords (`packages/tablewalk/package.json`). Adding
   one is a new file under `packages/engine/src/adapters/` plus
   a case in `packages/engine/src/adapters/connect.ts`.
@@ -258,9 +257,7 @@ range widens.
 ## Before a release
 
 - `npm test` (add live Postgres via `TABLEWALK_TEST_PG` +
-  `TABLEWALK_REQUIRE_LIVE=1`, seeded by `npm run seed:live`; MySQL's live
-  tests are paused — `PAUSED` in `test/live.ts` — and skip unless
-  `TABLEWALK_TEST_MYSQL` is set) and `npm run e2e` must both be green. CI enforces both;
+  `TABLEWALK_REQUIRE_LIVE=1`, seeded by `npm run seed:live`) and `npm run e2e` must both be green. CI enforces both;
   the release workflow re-runs them on the tag.
 - `npm run test:ci-parity` (seconds; after `npm run build` for the bundle
   margins) — what only CI used to catch: Dockerfile COPY sources and build

@@ -55,7 +55,7 @@ All keys: [the generated reference](/docs/dsl-auth/). Changing `auth` needs a re
 - The address people reach it at, when that is not loopback: `--allowed-host` ([build and deploy](/docs/build-and-deploy/)).
 - A first account: `MISTRI_AUTH_ADMIN_EMAIL` and `MISTRI_AUTH_ADMIN_PASSWORD` make it, with `admin`, at the first start; or `signUp: 'open'`. Each example's README shows its seed step.
 - With a `postgres://` store, sessions are read once every few seconds rather than on every request ([the sign-in store](/docs/performance/#the-sign-in-store)): a sign-out elsewhere, such as on another instance, is honored here for up to `MISTRI_AUTH_SESSION_CACHE` seconds (default 5; `0` reads the store on every check). One made through this server takes effect at once.
-- For password resets and verified addresses, an [email service](/docs/email/). Without one, `MISTRI_AUTH_RESET=log` writes each reset link to the server's log for an operator to pass on; set it only where the log is as private as the secret.
+- For password resets and verified addresses, an [email service](/docs/email/). Without one, `MISTRI_AUTH_RESET=log` writes each reset link to the log under `mistri dev` only; a served App logs one line, with no link, saying a reset was requested and nothing was sent, and warns at startup.
 - With `signUp: 'open'`, an [email service](/docs/email/) too. A self-made account is matched to `me` (and to the rows a row policy finds by its email) and given notifications only once its address is verified; until then it is signed in as nobody in particular. An account an administrator makes is verified when made. `mistri check` fails on open sign-up with no email service ([`open-sign-up-unproven`](/docs/check-codes/#open-sign-up-unproven)).
 
 ### Managing accounts

@@ -104,8 +104,9 @@ npx @mistriwork/mistri dev                         # serves it, and reloads on e
 You read the first migration before it runs; the next comes the same way when
 you change `schema.sql`. No front end to write, no API to wire, no build step
 to serve. Starting with nothing, `npm create mistri billing` makes a starter App
-with a SQLite database of its own; with a database you have, mistri drafts the
-App from it. [Get started](/docs/getting-started/)
+with a SQLite database of its own, and a SQLite starter needs nothing else
+running; with a database you have, mistri drafts the App from it.
+[Get started](/docs/getting-started/)
 
 ## The DSL: a few lines is a screen
 
@@ -175,7 +176,7 @@ system made for work people do all day.
   <li><strong>Edit in place.</strong> Name the columns a list may change in its cells, and a record's side panel edits where it reads. <a href="/docs/lists/">Lists</a></li>
   <li><strong>Forms from the schema.</strong> Required fields marked, references searched by name, a switch for a yes or no. <a href="/docs/forms/">Forms</a></li>
   <li><strong>Phone layouts.</strong> On a phone the menu folds into the bar, dialogs fill the screen and a record's side panel follows the page. <a href="/docs/nav-and-shell/">Navigation</a></li>
-  <li><strong>Light and dark, four looks, twelve palettes.</strong> Workshop, Lumen, Mono and Sage, each in the same twelve palettes; each reader picks a look, a palette and System, Light or Dark under Preferences. <a href="/docs/looks/">Looks</a></li>
+  <li><strong>Light and dark, five looks, twelve palettes.</strong> Workshop, Lumen, Mono, Sage and Ledger, each in the same twelve palettes; each reader picks a look, a palette and System, Light or Dark under Preferences. <a href="/docs/looks/">Looks</a></li>
 </ul>
 
 <div class="tw-trio not-content">
@@ -282,6 +283,6 @@ What is stable and what comes next:
 
 <div class="tw-lines not-content">
   <p><strong>Three sample Apps</strong> to run and read, and not only for the back office: Tick, a to-do list in one file; Lintel, a staff desk and a resident portal in one App, with its own tests; and Ladle, a cooking school's own React site with the App inside it. A CRM, a service desk, a warehouse and the like are patterns in the agent skill's recipes, not samples. <a href="/docs/examples/">Sample Apps</a></p>
-  <p><strong>And tablewalk, a database browser.</strong> <code>npx tablewalk postgres://…</code> opens any PostgreSQL, MySQL/MariaDB or SQLite database read-only, its foreign keys links to follow: a package of its own, with no App in it. <a href="/docs/database-browser/">The database browser</a></p>
+  <p><strong>And tablewalk, a database browser.</strong> <code>npx tablewalk postgres://…</code> opens any PostgreSQL or SQLite database read-only, its foreign keys links to follow: a package of its own, with no App in it. <a href="/docs/database-browser/">The database browser</a></p>
   <p class="tw-foot">MIT license (the <code>LICENSE</code> file in the npm package)</p>
 </div>

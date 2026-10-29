@@ -2,6 +2,7 @@ import type { Condition } from '@mistriwork/engine/adapters/adapter.js';
 import {
   isRowScopeSnapshot,
   ROW_SCOPE_LIMITS,
+  rowScopeText,
   snapshotRowScope,
   type RowScope,
   type RowScopeFilter,
@@ -46,11 +47,31 @@ interface Plan {
    snapshotRowScope again, which takes it as it is against a catalog it was checked against and checks it afresh
    against any other. Anything else is snapshotted every time, as before. */
 const layerSnapshots = new WeakMap<object, RowScope>();
+/* And by its text. A policy that names its reader builds its layer afresh on every request — a new object, equal to
+   the last — so the capture of it is new too, and was copied and checked again, and composed again (a field
+   report's tenant App: a sixth of its server's CPU). A capture is plain frozen data nothing can intercept, so its
+   text is safe to take and says all of it (rowScopeText); an equal layer already snapshotted against this catalog is
+   the one handed on, and the compositions keyed by it are found. Per catalog, bounded: one entry per distinct
+   reader's scope. */
+const layersByText = new WeakMap<object, Map<string, RowScope>>();
+const LAYERS_BY_TEXT = 256;
 function snapshotLayer(schema: TenantOwnershipSnapshot['schema'], layer: RowScope): RowScope {
   const kept = layerSnapshots.get(layer);
   if (kept) return snapshotRowScope(schema, kept);
+  const text = isCapturedTenantData(layer) ? rowScopeText(layer) : undefined;
+  const byText = text === undefined ? undefined : layersByText.get(schema);
+  const known = text === undefined ? undefined : byText?.get(text);
+  if (known) return snapshotRowScope(schema, known);
   const made = snapshotRowScope(schema, layer);
-  if (made !== layer && isCapturedTenantData(layer) && isRowScopeSnapshot(made)) layerSnapshots.set(layer, made);
+  if (made !== layer && isCapturedTenantData(layer) && isRowScopeSnapshot(made)) {
+    layerSnapshots.set(layer, made);
+    if (text !== undefined) {
+      let held = byText;
+      if (!held) layersByText.set(schema, (held = new Map()));
+      if (held.size >= LAYERS_BY_TEXT) held.delete(held.keys().next().value!);
+      held.set(text, made);
+    }
+  }
   return made;
 }
 

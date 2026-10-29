@@ -23,11 +23,10 @@ import { BusinessCommandDefinitionError, getCommandEvents, type BusinessCommandR
 /** Where a source's runtime stores live: its SQLite file or its PostgreSQL database. */
 export type StoreTarget = Readonly<{ sqlite: string }> | Readonly<{ postgres: string }>;
 
-/** The database a connection URL names. MySQL keeps no command journal, so it names none. */
+/** The database a connection URL names. */
 export function storeTargetOf(url: string | undefined): StoreTarget | undefined {
   if (typeof url !== 'string' || !url.trim()) return undefined;
   if (/^postgres(ql)?:\/\//i.test(url)) return Object.freeze({ postgres: url });
-  if (/^mysql:\/\//i.test(url)) return undefined;
   return Object.freeze({ sqlite: url.replace(/^sqlite:(\/\/)?/i, '') });
 }
 

@@ -1,14 +1,13 @@
 ---
 title: "tablewalk, the database browser"
-description: Open a PostgreSQL, MySQL or SQLite database in the browser, follow its foreign keys both ways, and keep it read-only.
-keywords: [database browser, tablewalk, browse, walk, foreign key, read-only, sqlite, postgres, mysql, workbench]
+description: Open a PostgreSQL or SQLite database in the browser, follow its foreign keys both ways, and keep it read-only.
+keywords: [database browser, tablewalk, browse, walk, foreign key, read-only, sqlite, postgres, workbench]
 ---
 
-Open a PostgreSQL, MySQL or SQLite database in the browser, follow its foreign keys both ways, and keep it read-only.
+Open a PostgreSQL or SQLite database in the browser, follow its foreign keys both ways, and keep it read-only.
 
 ```sh
 npx tablewalk postgres://reader@localhost/crm   # PostgreSQL
-npx tablewalk mysql://reader@localhost/crm      # MySQL or MariaDB
 npx tablewalk ./crm.sqlite                      # a SQLite file
 npx tablewalk --demo                            # no database yet: a throwaway sample
 ```
@@ -20,7 +19,7 @@ foreign key is a place you can go. It needs Node 24 or newer, no build step
 and no config; `npx tablewalk --version` says which one you have. It serves no
 App: `npx tablewalk --app …` is refused and names the `npx @mistriwork/mistri` command
 that runs it, and mistri, in turn, serves no database browser. Apps run on
-PostgreSQL and SQLite; MySQL and MariaDB are for browsing.
+PostgreSQL and SQLite, like the browser; MySQL and MariaDB are not supported.
 
 ## What you'll see
 
@@ -97,7 +96,7 @@ for a writable connection. Every answer carries a link to the same rows in the b
 
 ## Common mistakes
 
-- `Cannot find module 'pg'` (or `'mysql2'`) → install the driver beside
+- `Cannot find module 'pg'` → install the driver beside
   tablewalk: `npm install pg`.
 - A reference shows as a plain value and leads nowhere → the database has no
   foreign key for it, and the walk follows only declared ones; add the

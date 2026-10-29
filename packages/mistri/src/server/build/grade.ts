@@ -115,7 +115,7 @@ function readFlags(argv: string[]): {
     else if (arg.startsWith('-')) options.rest.push(arg);
     // The first bare word that is a directory is the App; a database file or URL is the start's; the rest are routes.
     else if (!options.app && !options.routes.length && isDirectory(arg)) options.app = arg;
-    else if (/^(postgres|postgresql|mysql|mariadb|sqlite):/i.test(arg) || /\.(db|db3|sqlite|sqlite3)$/i.test(arg)) options.rest.push(arg);
+    else if (/^(postgres|postgresql|sqlite):/i.test(arg) || /\.(db|db3|sqlite|sqlite3)$/i.test(arg)) options.rest.push(arg);
     else options.routes.push(arg);
   }
   options.app ??= '.';

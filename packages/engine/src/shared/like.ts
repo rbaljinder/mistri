@@ -8,9 +8,9 @@
  * like a failure. `a_c` matching `abc` is the same bug, quieter.
  *
  * So the value is escaped and the statement declares an escape character.
- * `#` rather than the conventional backslash: MySQL parses backslash escapes
- * inside string literals unless NO_BACKSLASH_ESCAPES is set, which would make
- * the `ESCAPE` clause itself dialect-specific text.
+ * `#` rather than the conventional backslash: engines differ on backslash escapes
+ * inside string literals, which would make the `ESCAPE` clause itself
+ * dialect-specific text.
  *
  * Lives in shared/ because the SQL the adapters compile and the SQL the query
  * bar *shows* you have to agree — a preview that promises a wildcard the

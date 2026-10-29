@@ -18,7 +18,7 @@ import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
 import { startupReport } from '@mistriwork/engine/shared/refusal.js';
 import { settingsMount } from '@mistriwork/engine/shared/mount.js';
 import { openBrowser } from '@mistriwork/engine/server/cli/browser.js';
-import { exposureLines } from '@mistriwork/engine/server/cli/startupOptions.js';
+import { exposureLines, proxyIdentityLines } from '@mistriwork/engine/server/cli/startupOptions.js';
 import { DEFAULT_SHUTDOWN_TIMINGS, shutdownTimings, type Options } from '@mistriwork/engine/server/cli/args.js';
 import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 
@@ -161,9 +161,7 @@ export async function serveBrowser(opts: Options, registry: Registry, config: St
     for (const line of exposureLines(opts.host, [], opts.authProxyHeader)) console.log(line);
     // Each relaxes a check, and a relaxed check nobody can see in the log is one nobody remembers turning on.
     if (opts.allowedHosts.length) console.log(`tablewalk: also answering writes for host ${opts.allowedHosts.join(', ')}`);
-    if (opts.authProxyHeader) {
-      console.log(`tablewalk: trusting ${opts.authProxyHeader} for who is asking; requests from beyond loopback must carry it`);
-    }
+    for (const line of proxyIdentityLines(opts.host, opts.authProxyHeader, opts.trustedProxies)) console.log(line);
     if (opts.trustProxyHops !== undefined) {
       console.log(
         `tablewalk: the client address is ${opts.trustProxyHops} place(s) from the right of X-Forwarded-For, for rate limits and sign-in lockout`,

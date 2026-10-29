@@ -1,7 +1,7 @@
 /**
  * A connection's `"pool"` and `"replicas"` in tablewalk.json, checked where the file is read:
  * `{ "read": n, "write": m }`, each a whole number from 1 to 64 and either
- * one optional, on a PostgreSQL connection; MySQL accepts "write". Apart from the loader because
+ * one optional, on a PostgreSQL connection. Apart from the loader because
  * the rule is the pool's (postgresPool.ts holds the bounds); the loader only
  * asks it, as it asks httpConnection.ts about an API's fields.
  */
@@ -52,11 +52,7 @@ export function poolOf(entry: Record<string, unknown>, http: boolean, path: stri
   }
   const url = String(entry.url);
   if (!url.includes('$')) {
-    if (/^(mysql|mariadb):\/\//i.test(url)) {
-      if (pool.read !== undefined) throw new Error(`${where}: MySQL accepts "pool.write"; its reader pool is fixed at four connections.`);
-    } else if (!/^postgres(ql)?:\/\//i.test(url)) {
-      throw new Error(`${where} is not a PostgreSQL or MySQL connection; SQLite has no pool. Remove "pool".`);
-    }
+    if (!/^postgres(ql)?:\/\//i.test(url)) throw new Error(`${where} is not a PostgreSQL connection; SQLite has no pool. Remove "pool".`);
   }
   return { ...(pool.read !== undefined ? { read: pool.read } : {}), ...(pool.write !== undefined ? { write: pool.write as number } : {}) };
 }
@@ -86,7 +82,7 @@ export function replicasOf(entry: Record<string, unknown>, http: boolean, path: 
   const url = String(entry.url);
   if (!url.includes('$')) {
     const engine = replicaEngine(url);
-    if (!engine) throw new Error(`${where} is not a PostgreSQL or MySQL connection; SQLite has no replicas. Remove "replicas".`);
+    if (!engine) throw new Error(`${where} is not a PostgreSQL connection; SQLite has no replicas. Remove "replicas".`);
     const stray = replicas.find((replica) => !replica.includes('$') && replicaEngine(replica) !== engine);
     if (stray !== undefined) throw new Error(`${where} has a replica that is not a ${engine} URL; a replica is the same engine as "url".`);
   }
@@ -119,8 +115,7 @@ export function listenOf(entry: Record<string, unknown>, http: boolean, path: st
 }
 
 /** Which engine a URL names, for a replica's agreement with its primary; undefined for anything else. */
-export function replicaEngine(url: string): 'PostgreSQL' | 'MySQL' | undefined {
+export function replicaEngine(url: string): 'PostgreSQL' | undefined {
   if (/^postgres(ql)?:\/\//i.test(url)) return 'PostgreSQL';
-  if (/^(mysql|mariadb):\/\//i.test(url)) return 'MySQL';
   return undefined;
 }

@@ -21,7 +21,7 @@ import { assertStructuredReadFilter } from '../packages/engine/src/server/resour
 import { listFilterProblems, parseAppConfig, resolveViews } from '../packages/mistri/src/shared/app.js';
 import { compileBreakdown } from '../packages/engine/src/shared/breakdown.js';
 import { breakdownToText, textToBreakdown } from '../packages/engine/src/shared/breakdowntext.js';
-import { ANSI_STYLE, MYSQL_STYLE, POSTGRES_STYLE, type SqlStyle } from '../packages/engine/src/shared/filter.js';
+import { ANSI_STYLE, POSTGRES_STYLE, type SqlStyle } from '../packages/engine/src/shared/filter.js';
 import { filterAddressWord, filterLabel, hasFilterOf, listFilterKey } from '../packages/engine/src/shared/listFilters.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { compileView, compileViewCount, parseViewQuery, PathError, type ViewDef } from '../packages/engine/src/shared/view.js';
@@ -156,7 +156,6 @@ test('any is an EXISTS over the rows that point at the record, no is NOT EXISTS,
   for (const [style, q] of [
     [ANSI_STYLE, '"'],
     [POSTGRES_STYLE, '"'],
-    [MYSQL_STYLE, '`'],
   ] as Array<[SqlStyle, string]>) {
     const { text } = compileViewCount(schema, asked('any opportunity via account_id where stage = won'), style);
     const child = `${q}opportunity_\\d+${q}`;

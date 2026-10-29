@@ -209,8 +209,7 @@ The store is provisioned like every other, once, by the operator
 `only: ['assistant']` names it alone and is refused for an App with no `assistant`), attested when an App that declares an assistant
 starts with a model to reach, and never created by serving. A server with no
 model (no `ANTHROPIC_API_KEY`) neither offers the assistant nor asks for its
-store, so an App that declares one still starts everywhere else. MySQL is
-refused with a sentence.
+store, so an App that declares one still starts everywhere else.
 
 ## The panel
 
@@ -347,5 +346,4 @@ owner holds that key and its bill, never a tenant.
 - Per-role instructions; `gallery` and `timeline` blocks; rich-text blocks.
 - Writes without confirmation for named low-risk commands.
 - Other providers behind the same interface.
-- A store for MySQL, and a CLI command that provisions the store (today it is
-  the maintenance call).
+- A CLI command that provisions the store (today it is the maintenance call).

@@ -71,11 +71,15 @@ page](../site/src/content/docs/docs/status.md), which are the list; the
 entries in the inventory (and an `@preview` tag on the root keys and exports in
 the types).
 
-At 1.0 nothing is preview: the release promoted the last ones (mounting in a
-host's server, sign-in from a host app, embedding in a React app, free-form
-pages and read replicas). Everything the status page lists is covered, as is
-the database browser and its MCP server. A feature added in a 1.x release may
-ship as preview, and is then outside the promise until a release promotes it.
+At 1.0 some features are still preview, and the status page names them: feature
+flags, audiences and `@mistriwork/mistri/openfeature`, experiments, the Suite
+Console, behavior analytics, SCIM, the Gantt presentation, and a resource's
+`search` (its packs ship after 1.0). The release did promote the ones that had
+been preview before it: mounting in a host's server, sign-in from a host app,
+embedding in a React app, free-form pages and read replicas. Everything else the
+status page lists is covered, as is the database browser and its MCP server.
+The preview features stay outside the promise until a release promotes them, and
+so does any feature added in a 1.x release that ships as preview.
 
 ## Outside the promise
 

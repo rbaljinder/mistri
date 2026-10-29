@@ -1,4 +1,4 @@
-/* Ledger's own dress, read against the theme allowlist and scoped to the theme where it is worn. */
+/* Daybook's own dress, read against the theme allowlist and scoped to the theme where it is worn. */
 [data-part="stat"] {
   background-image: url(./paper.png);
   background-repeat: repeat;

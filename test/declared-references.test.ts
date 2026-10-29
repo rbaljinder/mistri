@@ -20,6 +20,8 @@ import { createApp } from './support/createApp.js';
 import { clearJournal } from '../packages/engine/src/server/journal.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
+import { withViewReferences } from '../packages/engine/src/shared/declaredReferences.js';
+import type { DatabaseSchema, ForeignKey } from '../packages/engine/src/shared/schema.js';
 
 const SCHEMA = `CREATE TABLE product (id INTEGER PRIMARY KEY, sku TEXT NOT NULL UNIQUE, name TEXT NOT NULL, cost INTEGER, bin TEXT);
   CREATE TABLE stock_move (id INTEGER PRIMARY KEY, product_sku TEXT, qty INTEGER NOT NULL, bin_code TEXT, product_id INTEGER);
@@ -339,4 +341,39 @@ test('a reference the catalog cannot prove is refused when the App loads', async
       'x',
     ),
   );
+});
+
+test("a view's references widen its catalog once for their words, though a scoped reader hands them over as a copy", () => {
+  const column = (name: string, primaryKey = false) => ({ name, type: primaryKey ? 'INTEGER' : 'TEXT', nullable: !primaryKey, primaryKey });
+  const catalog: DatabaseSchema = {
+    label: 'refs',
+    dialect: 'sqlite',
+    readAt: '',
+    tables: [
+      {
+        id: 'product',
+        name: 'product',
+        schema: '',
+        isView: false,
+        columns: [column('id', true), { ...column('sku'), nullable: false }],
+        unique: ['sku'],
+      },
+      { id: 'stock_move', name: 'stock_move', schema: '', isView: false, columns: [column('id', true), column('product_sku')] },
+    ],
+    foreignKeys: [],
+  } as DatabaseSchema;
+  const edge = (to: string): ForeignKey => ({
+    name: 'stock_move.product_sku',
+    from: { table: 'stock_move', columns: ['product_sku'] },
+    to: { table: 'product', columns: [to] },
+  });
+  const widened = withViewReferences(catalog, [edge('sku')]);
+  assert.notEqual(widened, catalog);
+  assert.equal(widened.foreignKeys.length, 1);
+  // A copy of the same words (what snapshotScopedData hands the compiler on every read) finds the same catalog.
+  assert.equal(withViewReferences(catalog, structuredClone([edge('sku')])), widened);
+  // Other words are their own catalog: here the same edge under another name.
+  const other = withViewReferences(catalog, [{ ...edge('sku'), name: 'stock_move.sku' }]);
+  assert.notEqual(other, widened);
+  assert.equal(other.foreignKeys[0].name, 'stock_move.sku');
 });

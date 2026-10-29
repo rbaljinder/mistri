@@ -53,7 +53,7 @@ interface BriefCommand {
 
 export interface Brief {
   name: string;
-  theme: 'workshop' | 'lumen' | 'mono' | 'sage';
+  theme: 'workshop' | 'lumen' | 'mono' | 'sage' | 'ledger';
   /** An icon name for the App's mark; absent means the scaffold picks one. */
   logo?: string;
   entities: BriefEntity[];
@@ -65,7 +65,7 @@ export interface Brief {
 export class BriefRefusal extends Error {}
 
 const NAME = /^[a-z][a-z0-9_]*$/;
-const THEMES = ['workshop', 'lumen', 'mono', 'sage'] as const;
+const THEMES = ['workshop', 'lumen', 'mono', 'sage', 'ledger'] as const;
 /** The words that begin a SQL statement's name or are reserved in the three engines: a table so named needs quoting nobody wrote. */
 const RESERVED = new Set(['order', 'group', 'user', 'table', 'select', 'index', 'transaction', 'check', 'default', 'column', 'references']);
 

@@ -6,7 +6,7 @@
 
 The App framework: navigation, record pages, forms, dashboards, commands,
 policies, jobs and workflows declared in a typed DSL over a database you
-already have — SQLite, PostgreSQL or MySQL — and served from it.
+already have — SQLite or PostgreSQL — and served from it.
 
 ```bash
 npm create mistri                               # a starter App, in a directory of its own
@@ -27,7 +27,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.2; the
+These App features ship in mistri 1.0.0-rc.3; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the authoring guide (`docs/authoring.md`).
@@ -55,7 +55,7 @@ What 0.8.1 builds, each shown once on the site:
 | | |
 |---|---|
 | **The DSL** | Resources, views, actions, commands and a look, typed against your own schema: [the DSL in one App](https://mistriwork.dev/docs/dsl-tour/), then [the reference](https://mistriwork.dev/docs/app-dsl/) |
-| **Four looks, twelve palettes** | Workshop (the default, in Safety orange), Lumen, Mono and Sage, each offering the same twelve palettes, one structure and type scale, or a look of the App's own: [looks](https://mistriwork.dev/docs/looks/) |
+| **Five looks, twelve palettes** | Workshop (the default, in Safety orange), Lumen, Mono, Sage and Ledger, each offering the same twelve palettes, one structure and type scale, or a look of the App's own: [looks](https://mistriwork.dev/docs/looks/) |
 | **Building blocks** | Cards, galleries, facts and sheets, a property rail, a record's sections as tabs, similar lists, a filter bar or a filter rail, boards and calendars you drag in, lists kept in your order: [choose a building block](https://mistriwork.dev/docs/choose/) and the [component tour](https://mistriwork.dev/docs/components/) |
 | **Your own components** | Where no built-in fits, a React module of the App's own as a section, a value renderer, a form's input, a list's rows or a whole room, fed by declared, authorized reads, changing data only through the App's commands and drawn with `@mistriwork/mistri/ui` in every look: [custom components](https://mistriwork.dev/docs/custom-components/) |
 | **An assistant** | People ask the App about their records, see answers drawn as its own tables and records, and confirm the changes it proposes, under their own grants; Claude via `ANTHROPIC_API_KEY`: [add an assistant](https://mistriwork.dev/docs/assistant/) |
@@ -210,7 +210,7 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
                               "pool": { "read": n } wins. Or set
                               MISTRI_READ_POOL
       --write-pool <n>        connections an App may write through at once,
-                              per PostgreSQL or MySQL database (default twice the cores, 4 to 16; at most 64; the database browser always writes
+                              per PostgreSQL database (default twice the cores, 4 to 16; at most 64; the database browser always writes
                               through one); a connection's "pool": { "write":
                               n } wins. Or set MISTRI_WRITE_POOL
       --lock-timeout <s>      seconds a write waits for a row or table another
@@ -237,7 +237,7 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
                               rate limit may believe (10.0.0.0/8, 172.17.0.1,
                               fd00::/8); repeatable or comma-separated, or set
                               MISTRI_TRUST_PROXY. Loopback is always trusted.
-                              Rate limiting only, never sign-in
+                              Also who may set --auth-proxy-header
       --trust-proxy-hops <n>  behind a managed front end with no address to name
                               (Cloud Run, a cloud load balancer): how many
                               proxies append to X-Forwarded-For; the client is
@@ -248,11 +248,17 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
                               server is reachable through Cloudflare alone; not
                               with --trust-proxy-hops. Or set
                               MISTRI_TRUST_PROXY_CLOUDFLARE=1
+      --insecure-http-sign-in
+                              serve sign-in at an http address beyond this
+                              machine, which is otherwise refused; prefer
+                              MISTRI_PUBLIC_URL set to a TLS proxy's https
+                              address. Or set MISTRI_INSECURE_HTTP_SIGN_IN=1
       --auth-proxy-header <name>
                               behind a proxy that signs people in: the header
                               it sets with the user (X-Forwarded-User). Requests
-                              from beyond loopback must carry it, and every
-                              write is journaled with it
+                              from beyond loopback must carry it and come from
+                              a --trust-proxy address; every write is journaled
+                              with it
       --config <path>         read connections from this file, and the
                               cache, search, webhook, email (smtps://,
                               smtp:// or log:) and OAuth services beside
@@ -327,7 +333,7 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
                               check as written, and exit. A start to curate.
                               With --config naming several connections, one
                               App with a source per connection; a PostgreSQL
-                              or MySQL one holding several schemas is a source
+                              one holding several schemas is a source
                               per schema on that one connection.
       --name <name>           with --scaffold-app: the App's name, instead of
                               one read off the database file's
@@ -406,7 +412,7 @@ mistri check --app <dir> [--app-entry <file>]
                 [--routes [--mount <app>=<path>] [--base-path <path>]]
                 [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
-                [--deploy [--replicas <n>]] [--json | --brief]
+                [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>]] [--json | --brief]
                               the authoring loop in one command: regenerate the
                               App's mistri-schema.d.ts when the database
                               has changed, its mistri-commands.d.ts from
@@ -436,7 +442,11 @@ mistri check --app <dir> [--app-entry <file>]
                               survives a replaced container (no SQLite
                               source or auth.store, BETTER_AUTH_SECRET set;
                               --replicas <n> warns of per-process rate
-                              limits); --json prints one JSON document of
+                              limits and, with --connection-limit <n>,
+                              refuses pools that sum past it, counting the
+                              hosts the App serves with; --cpus <n> sizes
+                              the pool defaults for the deployment's cores,
+                              not this machine's); --json prints one JSON document of
                               every finding (code, file, line, path, fix) for
                               an agent, or --brief one line per problem
                               (code file:line message — fix: …). Exit 1 could not check, 2 schema
@@ -462,8 +472,8 @@ mistri migrate diff <name> | check | squash
                 [--schema-file <path>] [--dev-url <url>]
                               versioned SQL files in Flyway's format, forward
                               only: V3__add_payoff_quote.sql once, in its own
-                              transaction (MySQL: none; a failure stops the
-                              run); R__views.sql again when it changes. up
+                              transaction (a failure is recorded as failed);
+                              R__views.sql again when it changes. up
                               applies what is pending, then with --app
                               regenerates the App's types and runs check;
                               status shows applied, pending, drift made
@@ -618,7 +628,7 @@ mistri shot --app <dir> [<route>…] [<db> | --db <target> | --config <path>]
                               prints each file's path. Needs Playwright's
                               Chromium. Exit 1 could not shoot, 2 a page threw
       --theme <id|all>        with shot or grade: a built-in look (workshop,
-                              lumen, mono, sage) or one of the App's own themes instead of
+                              lumen, mono, sage, ledger) or one of the App's own themes instead of
                               the one it wears; with shot, all: every look,
                               then the App's. The menu stands where that
                               theme suggests (shell.placement) unless the
@@ -699,7 +709,7 @@ mistri grade [<app-dir>] [<db> | --db <target> | --config <path>] [<route>…]
                               and a record of each page at 1280, 390 and 320
                               wide and at 390 dark: sideways scroll, cut
                               figures and words, overlapping controls, targets
-                              under 40px on a phone, contrast, layout shift,
+                              under 44px on a phone, contrast, layout shift,
                               page errors and failed requests, empty sections,
                               mixed number formats, unround chart ticks, a
                               record's name past two lines. One line per

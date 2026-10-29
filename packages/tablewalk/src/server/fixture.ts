@@ -258,7 +258,6 @@ function literal(value: unknown): string {
   if (typeof value === 'number') return String(value);
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   /* Doubling the quote is the standard escape and the only one every dialect
-     here agrees on — a backslash is an escape in MySQL and a character in
-     Postgres. */
+     here agrees on. */
   return `'${String(value).replace(/'/g, "''")}'`;
 }

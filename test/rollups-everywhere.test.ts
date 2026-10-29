@@ -23,7 +23,7 @@ import { appRollupRules, parseAppConfig, resolveViews, withLabelTemplates, withR
 import { compileBreakdown, withBreakdownComputed, type BreakdownDef } from '../packages/engine/src/shared/breakdown.js';
 import { textToBreakdown } from '../packages/engine/src/shared/breakdowntext.js';
 import { commandInputProblem } from '../packages/mistri/src/shared/command.js';
-import { ANSI_STYLE, MYSQL_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { ANSI_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import { breakdownPlan, validatePage } from '../packages/engine/src/shared/page.js';
 import { parsePageBody } from '../packages/engine/src/shared/pageConfig.js';
 import type { PageBreakdown } from '../packages/engine/src/shared/pageModel.js';
@@ -167,7 +167,6 @@ test("a rollup of a rollup is the inner subquery inside the outer aggregate, on 
   for (const [style, q, p] of [
     [ANSI_STYLE, '"', /\?/],
     [POSTGRES_STYLE, '"', /\$\d/],
-    [MYSQL_STYLE, '`', /\?/],
   ] as const) {
     const { text } = compileView(schema, view, style);
     const inner = `\\(SELECT COUNT\\(\\*\\) FROM ${q}po_line${q} ${q}po_line_\\d+${q} WHERE ${q}po_line_\\d+${q}\\.${q}po_id${q} = ${q}po_\\d+${q}\\.${q}id${q}\\)`;
@@ -193,7 +192,7 @@ test("a breakdown measures, groups and narrows by a rollup — the base's or thr
   };
   const measured = def('po lines > 0 sum total by status');
   assert.deepEqual(Object.keys(measured.computed!).sort(), ['lines', 'total']);
-  for (const style of [ANSI_STYLE, POSTGRES_STYLE, MYSQL_STYLE]) {
+  for (const style of [ANSI_STYLE, POSTGRES_STYLE]) {
     // Compiled where the adapter's own catalog knows nothing of rollups.
     const { text, columns } = compileBreakdown(schema, measured, style);
     assert.match(text, /SUM\(\(SELECT COALESCE\(SUM\(/);
@@ -206,10 +205,9 @@ test("a breakdown measures, groups and narrows by a rollup — the base's or thr
       ],
     );
   }
-  /* Grouped by a rollup: by its place in the SELECT list, where its subquery is written once. MySQL under
-     ONLY_FULL_GROUP_BY does not take a second copy of a correlated subquery as the same expression, and
-     refuses the first as ungrouped (rollups-live.test.ts holds all three engines to one answer). */
-  for (const style of [ANSI_STYLE, POSTGRES_STYLE, MYSQL_STYLE]) {
+  /* Grouped by a rollup: by its place in the SELECT list, where its subquery is written once
+     (rollups-live.test.ts holds both engines to one answer). */
+  for (const style of [ANSI_STYLE, POSTGRES_STYLE]) {
     const keyed = compileBreakdown(schema, def('receipt count by po_id.lines, po_id'), style);
     assert.match(keyed.text, /^SELECT \(SELECT COUNT\(\*\) FROM [`"]po_line/m);
     // The reference key's name (the purchase order's) is grouped by its place too, after the measure.

@@ -4,13 +4,15 @@
 import type { AppSignIn } from '../../shared/app.js';
 import type { EmailTransport } from '../email/email.js';
 import { signUpShut } from './identityRoles.js';
+import { resetWithoutMailLog } from '@mistriwork/engine/server/startupWarnings.js';
 
 /**
  * How a reset link for a forgotten password reaches its reader: by email,
  * where the config names an email service (email/email.ts), or the server's
- * own log (`MISTRI_AUTH_RESET=log`), where the link is written for an
- * operator to pass on — an administrator's reset with the typing taken out of
- * it; turn that on only where the log is as private as the session secret.
+ * own log (`MISTRI_AUTH_RESET=log`), where the link is written for a
+ * developer to pass on — and only under `mistri dev`: a live token in a log
+ * that a log pipeline keeps is a sign-in for whoever reads it, so a served
+ * App with no mail writes one line saying a reset was asked, never the link.
  * Either way the link is never in an HTTP answer: whoever asks for a reset
  * learns only that a link is on its way, whether or not the address has an
  * account. Neither, there is no reset route, and the sign-in screen says to
@@ -35,6 +37,8 @@ export function appAuthProviders(
   env: NodeJS.ProcessEnv,
   where: string,
   mail?: { send: EmailTransport['send']; app: string },
+  /** `mistri dev` (`--dev`): the one start where a reset link may be written to the log. */
+  development = false,
 ) {
   const socialProviders: Record<string, { clientId: string; clientSecret: string; disableSignUp: boolean }> = {};
   for (const provider of spec.providers) {
@@ -56,11 +60,11 @@ export function appAuthProviders(
       ...(reset
         ? {
             /* Better Auth mints the one-time token (an hour) and its link; the link
-           goes to the account's address or the log and nowhere else. A reset
+           goes to the account's address, or under `mistri dev` the log, and nowhere else. A reset
            ends the account's other sessions, since whoever held the old
            password may hold one. A send that fails is the log's to say. */
             sendResetPassword: async ({ user, url }: { user: { email?: string }; url: string }) => {
-              if (reset === 'email' && mail && user.email) {
+              if (mail && user.email) {
                 await mail
                   .send({
                     to: user.email,
@@ -72,7 +76,12 @@ export function appAuthProviders(
                   .catch(() => console.error(`mistri: a password reset link could not be emailed.`));
                 return;
               }
-              console.log(`mistri: password reset link for ${user.email ?? 'an account'} (works once, for an hour): ${url}`);
+              if (development) {
+                console.log(`mistri: password reset link for ${user.email ?? 'an account'} (works once, for an hour): ${url}`);
+                return;
+              }
+              // The caller's answer is the same either way; the operator learns why no mail went, without the token.
+              console.warn(resetWithoutMailLog());
             },
             resetPasswordTokenExpiresIn: 3600,
             revokeSessionsOnPasswordReset: true,

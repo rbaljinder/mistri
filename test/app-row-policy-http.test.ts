@@ -25,7 +25,7 @@ const failure = 'postgres://private-user:private-password@private-host/physical_
 const account: Identity = { id: 'desk-one', who: 'reader@example.test', role: 'reader' };
 const equal = (column: string, value: string | number) => ({ groups: [[{ column, op: '=', value }]] });
 const confidential =
-  /HIDDEN_HTTP_ROW_SENTINEL|PRIVATE_HTTP_FIELD_SENTINEL|private-http-|private-password|private-host|(?:postgres(?:ql)?|mysql|sqlite):\/\/|tablewalk-row-policy-http-/;
+  /HIDDEN_HTTP_ROW_SENTINEL|PRIVATE_HTTP_FIELD_SENTINEL|private-http-|private-password|private-host|(?:postgres(?:ql)?|sqlite):\/\/|tablewalk-row-policy-http-/;
 const relationIdentifiers = new Set(['physical_note_fk_0', 'physical_note_fk_1', 'physical_ticket_fk_0']);
 
 function privateFree(value: unknown, location = 'response'): void {

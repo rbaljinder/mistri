@@ -17,7 +17,6 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { Refusal, type Adapter, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
-import type { MysqlAdapter } from '@mistriwork/engine/adapters/mysql.js';
 import type { PostgresAdapter, PostgresTransactionVerifier } from '@mistriwork/engine/adapters/postgres.js';
 import { isRuntimeRelation } from '@mistriwork/engine/adapters/postgresValues.js';
 import type { SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
@@ -272,13 +271,13 @@ function postgresCommands(host: PostgresStoreHost): PostgresCommands {
 
 const made = new WeakMap<object, SqliteCommands | PostgresCommands>();
 
-/** A constructed SQLite or PostgreSQL adapter's journal capabilities; undefined for anything else (MySQL keeps no journal; a facade or a proxy lends no host). */
+/** A constructed SQLite or PostgreSQL adapter's journal capabilities; undefined for anything else (a facade or a proxy lends no host). */
 export function nativeCommandsOf(adapter: SqliteAdapter): SqliteCommands;
 export function nativeCommandsOf(adapter: PostgresAdapter): PostgresCommands;
 export function nativeCommandsOf(adapter: unknown): SqliteCommands | PostgresCommands | undefined;
 export function nativeCommandsOf(adapter: unknown): SqliteCommands | PostgresCommands | undefined {
   const host = storeHostOf(adapter);
-  if (!host || host.dialect === 'mysql') return undefined;
+  if (!host) return undefined;
   let commands = made.get(adapter as object);
   if (!commands) {
     commands = Object.freeze(host.dialect === 'postgres' ? postgresCommands(host) : sqliteCommands(host));
@@ -334,7 +333,7 @@ function viewedCommandsOf(source: object): CommandSource | undefined {
  * Where a source's commands are asked: a dialect adapter's own journal, or
  * the source itself when it is not one — an App's or a tenant's facade
  * answers the same calls, over the adapter it wraps. A source that keeps no
- * journal (MySQL, an HTTP source) answers none of them.
+ * journal (an HTTP source) answers none of them.
  *
  * A member set on the adapter object itself still answers in place of its
  * journal's, read when asked, as a method on the class was: what code that
@@ -343,7 +342,6 @@ function viewedCommandsOf(source: object): CommandSource | undefined {
  */
 export function commandsOf(adapter: SqliteAdapter): SqliteCommands;
 export function commandsOf(adapter: PostgresAdapter): PostgresCommands;
-export function commandsOf(adapter: MysqlAdapter): CommandSource;
 export function commandsOf(source: object): CommandSource;
 export function commandsOf(source: object): CommandSource {
   const native = nativeCommandsOf(source) ?? viewedCommandsOf(source);

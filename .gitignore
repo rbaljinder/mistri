@@ -34,3 +34,6 @@ package.json.pack-original
 /packages/*/LICENSE
 /packages/mistri/skills/
 /packages/mistri/examples/
+
+# scripts/capacity-harness.mjs: reports and CPU/allocation profiles are local.
+.capacity/

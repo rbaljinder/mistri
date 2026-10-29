@@ -224,8 +224,7 @@ test('on PostgreSQL too, where NULL sorts the other way', { skip: liveSkip('post
 });
 
 /* The continuation read in JavaScript, against each engine's own placement
-   of NULL: every row after the boundary, and none before it or at it. MySQL
-   places NULL as SQLite does, and is checked here by that rule. */
+   of NULL: every row after the boundary, and none before it or at it. */
 test("a continuation is exactly the rows past its boundary, under each engine's NULL placement", () => {
   const table = {
     id: 't',
@@ -256,7 +255,7 @@ test("a continuation is exactly the rows past its boundary, under each engine's 
     const w = term.value as number | string;
     return term.op === '=' ? v === w : term.op === '>' ? v > w : term.op === '<' ? v < w : term.op === '>=' ? v >= w : v <= w;
   };
-  for (const dialect of ['sqlite', 'mysql', 'postgres'] as Dialect[]) {
+  for (const dialect of ['sqlite', 'postgres'] as Dialect[]) {
     const high = dialect === 'postgres';
     const compare = (order: Order[]) => (x: Row, y: Row) => {
       for (const o of order) {

@@ -60,8 +60,9 @@
     border-top-width: var(--rules-weight, 2px);
     border-top-color: var(--rules-section, var(--ink));
   }
-  /* `rules: 'hairline'`: a record's sections keep their rules, softened from the ink to the hairline. */
-  :root[data-look-rules='hairline'] .page-section {
+  /* `rules: 'hairline'`: a record's sections keep their rules, softened from the ink to the hairline. `double` keeps
+     that and adds its own (ledgerLook.css). */
+  :root:is([data-look-rules='hairline'], [data-look-rules='double']) .page-section {
     border-top-width: 1px;
     border-top-color: var(--line);
   }

@@ -13,6 +13,9 @@ import { contrastRatio } from '../packages/engine/src/shared/theme.js';
 
 const css = readFileSync(new URL('../packages/kit/src/client/features.css', import.meta.url), 'utf8');
 const rule = /\n\.app-issues \{([^}]*)\}/.exec(css)?.[1] ?? '';
+/** A dark bar (Ledger's) stands on the navigation's ground alone, and leans the badge toward the bar's own ink. */
+const brand = readFileSync(new URL('../packages/kit/src/client/brandLook.css', import.meta.url), 'utf8');
+const darkBarRule = /\.topbar \.app-issues \{([^}]*)\}/.exec(brand)?.[1] ?? '';
 
 const rgb = (hex: string) => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
 const hex = (channels: number[]) => '#' + channels.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
@@ -32,8 +35,8 @@ function resolve(value: string, palette: Record<string, string>, ground: string)
   const other = mixed[3] ? palette[VAR(mixed[3])]! : ground;
   return mix(palette[VAR(mixed[1]!)]!, Number(mixed[2]) / 100, other);
 }
-const declared = (property: string) => {
-  const found = new RegExp(`(?:^|[;\\s])${property}:\\s*([^;]+);`).exec(rule)?.[1];
+const declared = (property: string, from = rule) => {
+  const found = new RegExp(`(?:^|[;\\s])${property}:\\s*([^;]+);`).exec(from)?.[1];
   assert.ok(found, `.app-issues declares ${property}`);
   return found;
 };
@@ -43,10 +46,11 @@ test('the authoring chip reads 4.5:1 in every built-in look, light and dark, on 
   for (const look of THEME_PRESETS)
     for (const mode of ['light', 'dark'] as const) {
       const palette = look[mode] as unknown as Record<string, string>;
-      for (const groundRole of ['ground', 'surface', 'navGround', 'raised']) {
+      const dark = look.recipes?.bar === 'dark';
+      for (const groundRole of dark ? ['navGround'] : ['ground', 'surface', 'navGround', 'raised']) {
         const ground = palette[groundRole]!;
         const background = resolve(declared('background'), palette, ground);
-        const ink = resolve(declared('color'), palette, ground);
+        const ink = resolve(declared('color', dark ? darkBarRule : rule), palette, ground);
         const ratio = contrastRatio(ink, background);
         if (ratio < 4.5) failures.push(`${look.id} ${mode} on ${groundRole}: ${ratio.toFixed(2)}:1`);
       }

@@ -236,6 +236,20 @@
       }
     },
     {
+      "file": "looks/ledger.webp",
+      "app": "lintel",
+      "route": "/leases",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "ledger",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
       "file": "looks/lumen.webp",
       "app": "lintel",
       "route": "/leases",

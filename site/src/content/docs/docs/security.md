@@ -61,7 +61,13 @@ does: connect as one that can do no more than the App needs.
 
 - **The App directory is code.** `app.ts`, `commands.ts` and custom components
   run with the server's privileges; keep the directory writable only by the
-  account that serves it.
+  account that serves it. A load, and every hot reload, refuses the directory or
+  any directory under it (`node_modules` apart) that is writable by everyone,
+  keeping the last good App serving; that guard does not run on Windows, where
+  directory ACLs are yours to set. `mistri check` and every load (serve, `dev`) refuse a
+  component that turns text into markup or code (`dangerouslySetInnerHTML`,
+  `eval`); that lint reads text and is heuristic, an App's author is trusted,
+  and it is not a sandbox.
 - **Loopback is not a login.** A server binds `127.0.0.1`. An App that signs
   people in protects itself; one that does not belongs behind a proxy that
   authenticates (`--auth-proxy-header`).
@@ -73,6 +79,10 @@ does: connect as one that can do no more than the App needs.
   ([file storage](/docs/file-storage/)).
 - **Secrets live in the environment.** Write `${NAME}` in `mistri.json`,
   never the value ([secrets](/docs/secrets/)).
+- **`MISTRI_SERVER_TIMING=1` is for load testing only.** It puts the process's
+  own state (heap, garbage collection, pool use and queues) in the
+  `Server-Timing` header of every response, to any requester, signed in or not.
+  Keep it off in production.
 
 ## Report a vulnerability
 

@@ -62,7 +62,7 @@ engine rather than ignored. A tenant App's job hosts read it too: startup resolv
 
 ## Read replicas
 
-A connection's `"replicas"` (PostgreSQL and MySQL; refused for SQLite and
+A connection's `"replicas"` (PostgreSQL; refused for SQLite and
 HTTP sources) gives each replica a connection manager of its own, sized,
 capped and read-only exactly as the primary's readers are; its writers are
 never opened. Only the reader handle's single statements are routed
@@ -198,6 +198,38 @@ about six. This holds through PgBouncer in transaction mode, which is why a
 small `max_connections` is enough.
 `scripts/write-throughput.mjs` measures it.
 
+**Per database, per process.** What one process may hold against a database
+is summed over everything that points at it. With `R` readers and `W` writers
+(`--read-pool`, `--write-pool`, a connection's `pool`; by default `W` is twice
+the cores, 4 to 16, and `R` is as many as `W`):
+
+| Holder | When a served App builds it | At most |
+| --- | --- | --- |
+| The App's adapter (its record history, inbox, branding and live stores share it) | always, one per connection | `R + W + 1` |
+| Live sync's LISTEN | always | 1 |
+| Jobs host (job, workflow and event-delivery stores) | the jobs module declares a job or workflow | `R + W + 1`, and a LISTEN: 1 |
+| Decisions store | the jobs module declares decisions | 3 |
+| Effects host | a command declares effects | `R + W + 1` |
+| Integrations store | the jobs module lists integrations; inbound endpoints alone open one for their deliveries | `R + W + 1` |
+| API event feed | the App's API exposes events | 3 |
+| Assistant store | the App declares an assistant (opened on its first request) | 3 |
+| A read replica | the connection names it | `R`, on the replica's host |
+| The sign-in store | `auth.store` is a `postgres://` URL | `MISTRI_AUTH_POOL` (default 4), on its own database |
+
+A "3" is a small store: one reader, one writer and the background writer
+(`SMALL_STORE_POOL`). A jobs host, effects host and integrations store each
+build a default manager, so an App with all three holds four
+`R + W + 1` managers and two LISTENs on its database, `4R + 4W + 6`, where a
+bare one holds `R + W + 2`. `mistri check --deploy --replicas <n>
+--connection-limit <n> [--cpus <n>] [--jobs <file>]` prints "N processes × M
+connections = T" per database with the terms, and refuses a total past the
+limit you name; `--cpus` is the deployment's core count (this machine's
+otherwise, and the line says so), and `--jobs` lets it read which hosts the
+jobs module makes. A start asks the server once for the role's `rolconnlimit`
+and `max_connections` less `superuser_reserved_connections`, and prints one
+warning naming both numbers when what it actually built is past the smaller;
+it never refuses to start.
+
 **A tenant App holds several of those per process.** `read + write + 1` is one
 connection manager's. A tenant App on one PostgreSQL source has a request
 reader and a membership reader (`read` each), the tenant writer (`write`, a
@@ -249,7 +281,7 @@ owner-bound journal, the event batch commit in one transaction or not at all.
   (`command_meta`, and `command_receipt`: one row per
   command holding its receipt, its audit and its event batch's manifest,
   dated by a `timestamptz` `completed_at` for retention), in the `mistri`
-  schema, which holds every runtime table on PostgreSQL (SQLite and MySQL keep
+  schema, which holds every runtime table on PostgreSQL (SQLite keeps
   the `__mistri_` prefix beside the records). The App catalog, the browser and
   MCP hide the schema, and raw SQL refuses it. Identity
   columns are `COLLATE "C"` so the uniqueness constraint is byte-exact
@@ -314,11 +346,6 @@ owner-bound journal, the event batch commit in one transaction or not at all.
   and begins again the long way. Without the store, the digest below is read
   instead. Outside the contract, as for the digest: a superuser who sets
   `event_triggers = off` in a session and changes the schema there.
-- **MySQL.** Not cached, and no epoch. MySQL has no event triggers, DDL
-  commits implicitly, and `information_schema` offers no cheap version: a
-  checksum over it costs what the reads it would save cost. MySQL runs no
-  commands, and its writes are the Workbench's single edits, which read the
-  columns they write, as before.
 - **Outcomes.** A failure after `COMMIT` was sent, or a rollback that was not
   acknowledged, is `unknown`; the client is discarded and the next request
   leases a sound one. Everything else is `not_applied`. Status with the same

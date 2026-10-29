@@ -447,7 +447,7 @@ describe('scaffoldApp', () => {
 
   test('with no --name, a URL names the App after its database, never the redacted URL', () => {
     assert.equal(scaffoldApp({ ...SCHEMA, label: 'postgres://app:***@127.0.0.1:55471/help_desk' }).app.name, 'Help desk');
-    assert.equal(scaffoldApp({ ...SCHEMA, label: 'mysql://root@localhost/shop?ssl=true' }).app.name, 'Shop');
+    assert.equal(scaffoldApp({ ...SCHEMA, label: 'postgresql://root@localhost/shop?ssl=true' }).app.name, 'Shop');
     assert.equal(scaffoldApp({ ...SCHEMA, label: '/data/inventory.sqlite' }).app.name, 'Inventory');
   });
   test('a chosen table list narrows the draft, and the hero comes from it', () => {

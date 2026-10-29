@@ -37,6 +37,9 @@ import { liveSkip } from './live.js';
 import { IGNITION_DIR, openIgnitionLending } from './support/ignitionLendingFixture.js';
 import { countStatements, type PgClientClass } from './support/sqlCount.js';
 import { startLatencyProxy, type LatencyProxy } from '../e2e/support/latencyProxy.js';
+import { captureCounters } from '../packages/engine/src/server/evidence.js';
+import { rowScopeCounters } from '../packages/engine/src/shared/rowScope.js';
+import { allocationMeter } from './support/allocationMeter.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 /* A pooled connection's session SETs are the pool's, paid once per physical
@@ -609,6 +612,83 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
         `entering a ${page} is ${trips[`enter (${page})`]} round trips, the three apart ${trips[`apart (${page})`]}`,
       );
       assert.ok(trips[`enter (${page})`] <= entering[page], `entering a ${page} is ${trips[`enter (${page})`]} round trips`);
+    }
+  });
+
+  test('an enter, a list, its counts, a record page and a prepare stay within their CPU, allocation and copy budgets', async (t) => {
+    /* A field load test of a tenant App found the server's own CPU the ceiling: about 20 ms a request, GC a large
+       share of it, an enter up to a second. scripts/capacity-harness.mjs measures that on half a CPU; this holds
+       what it found, per interaction, so a change that copies the request's evidence again, checks a kept scope
+       again or rebuilds what was kept fails here rather than in the next load test. The copies and the scope
+       checks are counted, so exact; CPU and bytes are measured in this process, the test's own fetch included,
+       and their ceilings leave room for a slower machine: they catch a step change, not a few percent. */
+    const f = await deploy(t),
+      north = await f.enter('north');
+    const identity = { cookie: north.cookie, 'x-mistri-account': north.accountId, 'x-mistri-app': 'ignition' };
+    const lead = { id: 'north-motors:lead:0002' };
+    const leases: Record<string, unknown>[] = [];
+    const interactions: Record<string, () => Promise<Answer>> = {
+      enter: async () => {
+        const reply = await f.call('/api/tenant/enter?app=ignition', { path: '/ignition/leads', search: '' }, identity);
+        leases.push(object(object(reply.body.entered).context));
+        return reply;
+      },
+      list: () => north.read('/api/run', list),
+      counts: () => north.read('/api/counts', { items: [list.q, 'lead'] }),
+      record: () => north.read('/api/boot', { path: `/ignition/leads/${encodeURIComponent(lead.id)}`, search: '' }),
+      prepare: () => north.read('/api/commands/prepare', { command: 'qualifyLead', commandVersion: 1, key: lead }),
+    };
+    const letGo = async () => {
+      for (const lease of leases.splice(0))
+        await f.call(
+          '/api/tenant/context/release?app=ignition',
+          { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision },
+          identity,
+        );
+    };
+    const ROUNDS = 12;
+    const measured: Record<string, { cpuMs: number; kb: number; copied: number; checked: number }> = {};
+    for (const [name, ask] of Object.entries(interactions)) {
+      for (let warm = 0; warm < 3; warm++) {
+        const reply = await ask();
+        assert.equal(reply.status, 200, `${name}: ${reply.text}`);
+      }
+      await letGo();
+      const copied = captureCounters.copied,
+        checked = rowScopeCounters.checked,
+        heap = allocationMeter(),
+        cpu = process.cpuUsage();
+      for (let round = 0; round < ROUNDS; round++) assert.equal((await ask()).status, 200, name);
+      const used = process.cpuUsage(cpu);
+      measured[name] = {
+        cpuMs: (used.user + used.system) / 1000 / ROUNDS,
+        kb: heap.allocated() / 1024 / ROUNDS,
+        copied: (captureCounters.copied - copied) / ROUNDS,
+        checked: (rowScopeCounters.checked - checked) / ROUNDS,
+      };
+      await letGo();
+    }
+    for (const [name, cost] of Object.entries(measured))
+      t.diagnostic(
+        `${name}: ${cost.cpuMs.toFixed(1)} ms CPU, ${cost.kb.toFixed(0)} KB allocated, ${cost.copied} objects copied, ${cost.checked} row scopes checked`,
+      );
+    /* Each ceiling is what was measured when it was set (rc.3, an M-series laptop: CPU ms, KB, objects copied, scopes
+       checked — enter 9 / 3,100 / 180 / 0, list 2.9 / 1,220 / 70 / 0, counts 2.5 / 890 / 39 / 0, a record page
+       11.5 / 5,900 / 608 / 3, a prepare 4.6 / 1,560 / 46 / 7), with room: five times the CPU, for a slower runner
+       and for the gate's parallel lane beside it (three times was crossed there), half again the bytes, and a
+       quarter again the copies. A prepare checked eleven scopes before its transaction
+       checked each once. Raise one only with the reason beside it. */
+    const budgets: Record<string, { cpuMs: number; kb: number; copied: number; checked: number }> = {
+      enter: { cpuMs: 45, kb: 4700, copied: 225, checked: 1 },
+      list: { cpuMs: 15, kb: 1850, copied: 90, checked: 1 },
+      counts: { cpuMs: 13, kb: 1350, copied: 50, checked: 1 },
+      record: { cpuMs: 58, kb: 8900, copied: 760, checked: 4 },
+      prepare: { cpuMs: 23, kb: 2350, copied: 60, checked: 8 },
+    };
+    for (const [name, budget] of Object.entries(budgets)) {
+      const cost = measured[name]!;
+      for (const key of ['cpuMs', 'kb', 'copied', 'checked'] as const)
+        assert.ok(cost[key] <= budget[key], `${name}: ${key} ${cost[key].toFixed(1)} over its budget of ${budget[key]}`);
     }
   });
 

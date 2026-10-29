@@ -118,7 +118,7 @@ test('ambiguous name mapping, missing capture and unsupported API scope refuse b
     [target, target],
     [{ ...target, source: 'config' }],
     [{ ...target, name: 'other' }],
-    [{ ...target, url: 'mysql://u:p@host/business' }],
+    [{ ...target, url: 'sqlite:///business.db' }],
   ]) {
     await assert.rejects(loadPostgresTokenSchema(loaded(), [config], targets), unavailable);
   }

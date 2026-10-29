@@ -1,15 +1,14 @@
 /**
  * How long one read statement may run, and how the caller of a read stops it.
  *
- * The cap is one number for every engine: the Postgres pools and the MySQL
- * read sessions open with it, `sql` may lower it for a single statement, and
+ * The cap is one number for every engine: the Postgres pools
+ * open with it, `sql` may lower it for a single statement, and
  * nothing raises it. The stop is a signal the caller owns — an MCP client's
  * cancel — and it reaches the adapters ambiently, through
  * AsyncLocalStorage, because a tool call gets to the driver through shared
  * read services (readRecords, readCount, readView) whose signatures are
  * about rows, not about who may abandon them. Each adapter decides what
- * stopping means for its engine: Postgres cancels the backend, MySQL kills
- * the query, SQLite kills the process a raw statement runs in and checks
+ * stopping means for its engine: Postgres cancels the backend, SQLite kills the process a raw statement runs in and checks
  * between the statements it runs itself.
  *
  * Only reads are stopped. A write that has started runs to its end, so its
@@ -90,8 +89,7 @@ export function onCancel(signal: AbortSignal | undefined, stop: () => void): () 
 /**
  * Whether a failure is a stopped statement, and why: a StatementStopped, or
  * an engine saying its own cap ran out, in the words each one uses —
- * Postgres's statement_timeout, MySQL's max_execution_time, MariaDB's
- * max_statement_time.
+ * Postgres's statement_timeout.
  */
 export function stoppedReason(error: unknown): 'cancelled' | 'timeout' | undefined {
   if (error instanceof StatementStopped) return error.reason;

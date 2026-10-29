@@ -110,7 +110,7 @@ import { postgresCatalogDigestOf, postgresCatalogDigestStatement } from './postg
 import { epochlessEpoch, SCHEMA_EPOCH_TABLE, schemaEpochOf, schemaEpochStatement, schemaMoved } from './postgresSchemaEpoch.js';
 import { EpochCache } from './epochCache.js';
 import { keepDatesAsText } from './postgresDates.js';
-import { captureRowScope, type RowScope } from '../shared/rowScope.js';
+import { captureRowScope, snapshotRowScope, type RowScope } from '../shared/rowScope.js';
 import { createScopedReads } from './scoped/scopedReads.js';
 import { scopedCommandInvoker } from './scoped/scopedCommandOperations.js';
 import { postgresPrivileges } from './rolePrivileges.js';
@@ -1787,10 +1787,21 @@ export class PostgresAdapter implements Adapter {
               sql,
             };
           };
-          const scopedReads = (guard: boolean, within: RowScope = scope) =>
+          /* Each scope this transaction reads under, checked against its catalog once. A command's scope arrives as
+             a copy (captureRowScope), which no check has seen, and every scoped reader and statement checked it
+             again in full: eleven times in one prepare. Checked here, each finds it checked (rowScope.ts). The rows
+             kept by key are kept under the scope as given, the one the statements sent ahead were keyed by
+             (keyRows.ts names a scope by its object), so that is the one they are asked under. */
+          const checkedScopes = new WeakMap<RowScope, RowScope>();
+          const checkedScope = (given: RowScope) => {
+            let checked = checkedScopes.get(given);
+            if (!checked) checkedScopes.set(given, (checked = snapshotRowScope(catalog.schema, given)));
+            return checked;
+          };
+          const scopedReads = (guard: boolean, given: RowScope = scope, within = checkedScope(given)) =>
             keyRows.over(
               createScopedReads(catalog.schema, within, POSTGRES_STYLE, executor(guard)),
-              within,
+              given,
               catalog.schema,
               (request) => scopedStatement(catalog.schema, within, request),
               (row, request) => formatted(guard, request.binary)(row),

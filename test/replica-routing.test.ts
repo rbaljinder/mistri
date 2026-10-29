@@ -240,11 +240,10 @@ test('a connection\'s "replicas" are database URLs of its own engine, and SQLite
     'postgres://app@r1/app',
     'postgresql://app@r2/app',
   ]);
-  assert.deepEqual(check({ url: 'mysql://app@primary/app', replicas: ['mariadb://app@r1/app'] }), ['mariadb://app@r1/app']);
   /* A reference is checked once it resolves (Registry.dial). */
   assert.deepEqual(check({ url: '${DATABASE_URL}', replicas: ['${REPLICA_URL}'] }), ['${REPLICA_URL}']);
   assert.throws(() => check({ url: './shop.db', replicas: ['./copy.db'] }), /SQLite has no replicas/);
-  assert.throws(() => check({ url: 'postgres://app@primary/app', replicas: ['mysql://app@r1/app'] }), /not a PostgreSQL URL/);
+  assert.throws(() => check({ url: 'postgres://app@primary/app', replicas: ['mongodb://app@r1/app'] }), /not a PostgreSQL URL/);
   assert.throws(() => check({ url: 'postgres://p/app', replicas: [] }), /list of database URLs/);
   assert.throws(() => check({ url: 'postgres://p/app', replicas: 'postgres://r/app' }), /list of database URLs/);
   assert.throws(() => check({ url: 'postgres://p/app', replicas: ['postgres://r/app', 'postgres://r/app'] }), /twice/);
@@ -254,5 +253,5 @@ test('a connection\'s "replicas" are database URLs of its own engine, and SQLite
   );
   assert.throws(() => check({ url: 'https://api.example.com', replicas: ['https://b.example.com'] }, true), /HTTP connection/);
   assert.throws(() => connect('./shop.db', { replicas: ['./copy.db'] }), /SQLite has no replicas/);
-  assert.throws(() => connect('postgres://app@primary/app', { replicas: ['mysql://app@r1/app'] }), /postgres:\/\/… URLs/);
+  assert.throws(() => connect('postgres://app@primary/app', { replicas: ['mongodb://app@r1/app'] }), /postgres:\/\/… URLs/);
 });

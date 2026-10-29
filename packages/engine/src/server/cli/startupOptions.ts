@@ -9,6 +9,7 @@
  */
 import type { Options } from './args.js';
 import { product } from '../product.js';
+import type { ProxyRange } from '../http/trust.js';
 
 export const APP_MCP_TOKEN_VARIABLE = 'MISTRI_API_TOKEN';
 
@@ -110,6 +111,22 @@ export function exposureLines(
         ? `${product()}: bound beyond loopback; "${app.name}" signs people in, and a signed-out visitor reads only what auth.public opens (${app.auth.public.read.join(', ')}) and its public forms show.`
         : `${product()}: bound beyond loopback; "${app.name}" signs people in, and a signed-out visitor reads nothing but what its public forms show.`,
   );
+}
+
+/**
+ * Who may set `--auth-proxy-header`, said once it listens: loopback and the `--trust-proxy` ranges, nobody else
+ * (`identityFor`). A server beyond loopback with no range listed believes the header only from this machine, so a proxy
+ * on another one has every request refused; that is said at start rather than learned from the first refusal.
+ */
+export function proxyIdentityLines(host: string, header: string | undefined, trusted: readonly ProxyRange[] = []): string[] {
+  if (!header) return [];
+  const from = trusted.length ? `loopback and ${trusted.map((range) => range.text).join(', ')}` : 'loopback only';
+  const lines = [`${product()}: trusting ${header} for who is asking, from ${from}; a request from anywhere else is refused`];
+  if (!trusted.length && !/^(localhost|127\.0\.0\.1|::1)$/i.test(host))
+    lines.push(
+      `Warning: bound to ${host} with --auth-proxy-header and no --trust-proxy: a proxy on another machine is refused on every request. Name its address with --trust-proxy.`,
+    );
+  return lines;
 }
 
 /** `--app-mcp`'s own flags. */

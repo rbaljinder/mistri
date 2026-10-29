@@ -42,7 +42,7 @@ export function labelPrefix(path: string): string | undefined {
 
 /* Literal text is written into the statement as a quoted string, so it is
    held to what every engine reads the same way inside quotes: no backslash
-   (MySQL's escape), no control characters. A quote is doubled when written. */
+   (some engines' escape), no control characters. A quote is doubled when written. */
 const unsafe = (character: string) => character === '\\' || character.charCodeAt(0) < 0x20 || character.charCodeAt(0) === 0x7f;
 const FIELD = /^[A-Za-z_$][\w$]*(?:\+[A-Za-z_$][\w$]*)*(?:\.[A-Za-z_$][\w$]*(?:\+[A-Za-z_$][\w$]*)*)*$/;
 

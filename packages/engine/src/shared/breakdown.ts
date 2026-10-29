@@ -25,7 +25,7 @@
  *
  *   - **Every selected expression is a key or a measure.** There is nowhere to
  *     put a third thing, so `SELECT status, name, COUNT(*) … GROUP BY status`
- *     — which MySQL will happily answer with an arbitrary `name` — cannot be
+ *     — which a lenient engine would answer with an arbitrary `name` — cannot be
  *     written.
  *   - **The result is bounded like every other read.** A breakdown over a
  *     high-cardinality column is a million-row answer, and `sort count desc
@@ -36,6 +36,8 @@ import { clampLimit, clampOffset, countStatement } from './reads.js';
 import { aggregateInput, columnKind, findTable, labelPath, type DatabaseSchema, type ForeignKey } from './schema.js';
 import { JoinPlan, PathError, sqlLiteral, type ViewFilter } from './view.js';
 import { ScopedRelations, type RowScope } from './rowScope.js';
+import { readsOf } from './query.js';
+import { isFixedScopeCatalog } from './scopeCatalog.js';
 import { viewPaths, withViewComputed } from './viewLabels.js';
 import { tableAtPrefix, tryResolvePath, type ViewDef } from './viewPaths.js';
 import type { ComputedPath } from './rollups.js';
@@ -43,7 +45,7 @@ import { withViewReferences } from './declaredReferences.js';
 import { LABEL_SEGMENT, labelPrefix } from './recordLabel.js';
 
 /** What a measure can do. `count` is the only one that needs no column. `median` is PostgreSQL's
-    `percentile_cont(0.5)`: SQLite and MySQL have no median aggregate, so it is refused on them. */
+    `percentile_cont(0.5)`: SQLite has no median aggregate, so it is refused there. */
 export type MeasureFn = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'median';
 
 export const MEASURE_FUNCTIONS: MeasureFn[] = ['count', 'sum', 'avg', 'min', 'max', 'median'];
@@ -57,8 +59,6 @@ export function measureRefusal(fn: MeasureFn, dialect: string | undefined): stri
   if (fn !== 'median') return undefined;
   if (dialect === 'sqlite')
     return '`median` is not available on SQLite: it has no median aggregate (no percentile_cont). Use `avg`, or a PostgreSQL source.';
-  if (dialect === 'mysql')
-    return '`median` is not available on MySQL: it has no median aggregate (no percentile_cont WITHIN GROUP). Use `avg`, or a PostgreSQL source.';
   return undefined;
 }
 
@@ -240,6 +240,99 @@ export function compileBreakdown(
   offset: number | unknown = 0,
   scope?: RowScope,
 ): CompiledBreakdown {
+  /* A breakdown compiles to the same statement against the same catalog, and an App's enter asks for each of its
+     rail's and dashboard's breakdowns several times — against the reader's pruned catalog and the full one for
+     the access check (columnGrants.ts), under the reader's scope to run it, and again for the SQL pane — each a
+     full compile (a field report: a large tenant App spent a twelfth of an enter's CPU here). Kept only against a catalog nothing can change (fixedCatalog, below), for a definition
+     whose text says all of it (breakdownText), and only where compiling read neither the clock nor the reader
+     (query.ts readsOf): a statement that wrote a request's instant, day or email is that request's, and is never
+     handed to another. */
+  const text = typeof offset === 'number' && fixedCatalog(schema) ? breakdownText(def) : undefined;
+  if (text === undefined) {
+    breakdownsCompiled++;
+    return compileBreakdownFresh(schema, def, style, offset, scope);
+  }
+  let byStyle = breakdownsKept.get(schema);
+  if (!byStyle) breakdownsKept.set(schema, (byStyle = new WeakMap()));
+  let kept = byStyle.get(style);
+  if (!kept) byStyle.set(style, (kept = new Map()));
+  const key = `${scope ? scopeOrdinal(scope) : 0}\0${offset as number}\0${text}`;
+  let found = kept.get(key);
+  if (found) {
+    kept.delete(key);
+    kept.set(key, found);
+  } else {
+    breakdownsCompiled++;
+    const read = readsOf(() => compileBreakdownFresh(schema, def, style, offset, scope));
+    if (read.clock !== 0 || read.reader) return read.value;
+    found = read.value;
+    kept.set(key, found);
+    if (kept.size > BREAKDOWNS_KEPT) kept.delete(kept.keys().next().value!);
+  }
+  // Each caller's own arrays: a driver or a caller may add to what it is handed.
+  return { ...found, params: [...found.params], columns: found.columns.map((column) => ({ ...column })) };
+}
+/* A catalog nothing can change: a captured scope catalog (scopeCatalog.ts), or whatever the server says it froze
+   all the way down (evidence.ts captureTenantData, which registers itself here: a shared module cannot import it). */
+let alsoFixed: (schema: DatabaseSchema) => boolean = () => false;
+/** Who says a catalog cannot change, beside the scope catalog's own captures. */
+export function keepBreakdownsAgainst(fixed: (schema: DatabaseSchema) => boolean): void {
+  alsoFixed = fixed;
+}
+const fixedCatalog = (schema: DatabaseSchema) => isFixedScopeCatalog(schema) || alsoFixed(schema);
+
+/* A definition's text, where the text says all of it: plain records, arrays, strings, booleans and finite numbers.
+   A property left undefined (a key with no `bucket`, a list with no `orderBy` — most of them, as a reader's snapshot
+   carries them) is said as one, never dropped, so the text of a definition that has the key and one that does not
+   still differ; anything else JSON would say alike — an undefined in a list, a non-finite number, an object that is
+   not a plain record, a function, a symbol or a BigInt — is no text, and is compiled afresh. */
+const UNDEFINED = Object.freeze({ '\u0000': 'undefined' });
+function breakdownText(def: BreakdownDef): string | undefined {
+  let plain = true;
+  const text = JSON.stringify(def, function (this: Record<string, unknown>, key, item: unknown) {
+    // The value as held, not as its toJSON says it: a Date is said as text, and is not the text it says.
+    const held = this[key];
+    if (held === undefined) {
+      if (Array.isArray(this)) plain = false;
+      return UNDEFINED;
+    }
+    // JSON drops a function or symbol (two definitions apart only by one would share a text) and throws on a BigInt.
+    if (typeof held === 'function' || typeof held === 'symbol' || typeof held === 'bigint') {
+      plain = false;
+      return null;
+    }
+    if (
+      (typeof held === 'number' && !Number.isFinite(held)) ||
+      (held !== null && typeof held === 'object' && !Array.isArray(held) && ![null, Object.prototype].includes(Object.getPrototypeOf(held)))
+    )
+      plain = false;
+    return item;
+  });
+  return plain ? text : undefined;
+}
+
+const breakdownsKept = new WeakMap<DatabaseSchema, WeakMap<SqlStyle, Map<string, CompiledBreakdown>>>();
+const BREAKDOWNS_KEPT = 256;
+let breakdownsCompiled = 0;
+/** For tests: how many breakdowns were compiled rather than found. */
+export function breakdownsCompiledSoFar(): number {
+  return breakdownsCompiled;
+}
+const scopeOrdinals = new WeakMap<RowScope, number>();
+let scopesSeen = 0;
+const scopeOrdinal = (scope: RowScope): number => {
+  let ordinal = scopeOrdinals.get(scope);
+  if (ordinal === undefined) scopeOrdinals.set(scope, (ordinal = ++scopesSeen));
+  return ordinal;
+};
+
+function compileBreakdownFresh(
+  schema: DatabaseSchema,
+  def: BreakdownDef,
+  style: SqlStyle,
+  offset: number | unknown,
+  scope: RowScope | undefined,
+): CompiledBreakdown {
   // The App's soft keys, where this catalog is the database's own (declaredReferences.ts).
   schema = withViewReferences(schema, def.references);
   const base = findTable(schema, def.base);
@@ -329,14 +422,14 @@ export function compileBreakdown(
 
     const name = nameFor(key.alias?.trim() || (key.bucket ? `${key.bucket}(${resolved.path})` : resolved.path));
     select.push(`${sql} AS ${style.quote(name)}`);
-    /* Grouped by the *expression*, not by the output name. Postgres and MySQL
+    /* Grouped by the *expression*, not by the output name. Postgres
        would take the alias; SQLite would too — but a bucketed key aliased to
        `month(invoice_date)` and grouped by that name is one identifier away
        from grouping by a column that happens to share it. The expression is
        never ambiguous.
 
        A rollup is the exception: its expression is a correlated subquery,
-       and MySQL under ONLY_FULL_GROUP_BY does not see two copies of one as
+       and an engine can fail to see two copies of one as
        the same thing, so it refuses the SELECT list's copy as ungrouped.
        Grouped by its position in the SELECT list instead — the one place it
        is written, which every engine groups by and nothing can shadow. */

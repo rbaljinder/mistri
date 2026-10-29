@@ -224,10 +224,6 @@ test('a tenant store needs its binding, and a refused list makes nothing', async
     provisionStores({ postgres: 'postgres://127.0.0.1:1/x' }, { app: app(binding), only: ['tenant-store', 'record-history', 'jobs'] }),
     /provisionStores: "jobs"/,
   );
-  await assert.rejects(
-    provisionStores({ mysql: 'mysql://db/x' }, { app: app(binding), only: ['tenant-store'] }),
-    /kept in sqlite or postgres/,
-  );
   assert.deepEqual(readFileSync(f.path), before);
   assert.deepEqual(f.tables(), []);
 });

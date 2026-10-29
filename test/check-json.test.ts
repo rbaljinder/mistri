@@ -483,7 +483,6 @@ describe('the codes and the paths', () => {
       'schema-types',
       'mount',
       'route-clash',
-      'app-on-mysql',
       ...['markup', 'code-from-text', 'environment', 'color', 'radius', 'motion', 'shadow', 'class', 'ruler'].map(
         (rule) => `component-${rule}`,
       ),

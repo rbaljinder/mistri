@@ -1,6 +1,6 @@
 {
   "name": "tablewalk-workspace",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "private": true,
   "description": "The workspace root: the packages under packages/ (tablewalk, mistri, create-mistri, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
@@ -85,7 +85,6 @@
     "happy-dom": "^21.0.4",
     "intl-messageformat": "12.1.2",
     "knip": "^6.39.0",
-    "mysql2": "^3.23.4",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.81.0",
     "pg": "^8.23.0",

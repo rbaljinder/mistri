@@ -15,10 +15,10 @@
  */
 
 /** What each driver assumes when a port is not given. */
-export const DEFAULT_PORTS = { postgres: 5432, mysql: 3306, mariadb: 3306 };
+export const DEFAULT_PORTS = { postgres: 5432 };
 
 /** The drivers a connection can name, in the order the picker offers them. */
-export const DRIVERS = ['postgres', 'mysql', 'mariadb', 'sqlite'];
+export const DRIVERS = ['postgres', 'sqlite'];
 
 const EMPTY = {
   driver: 'postgres',

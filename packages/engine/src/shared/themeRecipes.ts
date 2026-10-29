@@ -44,7 +44,7 @@ export const RECIPE_MENU = {
   chart: { plain: null, wash: 'sage', gradient: 'lumen', line: 'lumen' },
   buttons: { accent: null, raised: 'lumen', keyed: 'workshop' },
   links: { plain: null, underline: null },
-  rules: { ink: null, hairline: null },
+  rules: { ink: null, hairline: null, double: 'ledger' },
   avatar: { plain: null, large: 'sage', round: 'lumen' },
   workflow: { markers: null, pills: 'lumen' },
   banner: { tint: null, gradient: 'lumen', plain: 'lumen' },
@@ -113,6 +113,7 @@ export function recipeAttributes(
   attributes['data-look-float'] = theme.lifts?.float ?? (ownShadow ? 'low' : 'look');
   const lifted = ELEVATIONS[elevation];
   if (lifted) sheets.add(lifted);
+
   Object.assign(attributes, typeAttributes(theme.type));
   const side = sideNavWords(theme.type, lookNav);
   if (side.length) attributes['data-type-nav-side'] = side.join(' ');

@@ -24,6 +24,7 @@
  * it is down (`hearing()` false) the host polls again, up to its idle ceiling.
  */
 
+import { holdConnections } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { pgConnectionOptions } from '@mistriwork/engine/adapters/postgresValues.js';
 
 /** The one channel command facts are announced on. */
@@ -144,10 +145,13 @@ export async function listenForWake(
   };
 
   await open();
+  /* One connection held for as long as it listens, counted against the database's limit (connectionBudget.ts). */
+  const release = holdConnections(connectionString, 1);
   return Object.freeze({
     hearing: () => !closed && client !== undefined,
     async close(): Promise<void> {
       closed = true;
+      release();
       if (retry) clearTimeout(retry);
       const current = client;
       client = undefined;

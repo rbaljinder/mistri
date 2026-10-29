@@ -54,6 +54,7 @@ import {
   type JobState,
 } from '../adapters/jobs/jobStoreTypes.js';
 import { migratePostgresJobStore, openPostgresJobStore } from '../adapters/jobs/postgresJobStore.js';
+import { MYSQL_REFUSAL } from '@mistriwork/engine/adapters/connect.js';
 import { PgConnectionManager } from '@mistriwork/engine/adapters/postgresPool.js';
 import { openSqliteWorkflowStore } from '../adapters/workflows/workflowStore.js';
 import type { WorkflowStore } from '../adapters/workflows/workflowStoreContract.js';
@@ -369,8 +370,8 @@ export function effectDeliveryPolicies(
 
 /* ---------- provisioning: one entry over the store list ---------- */
 
-/** A database provisionStores works on: a SQLite file, a PostgreSQL URL, or a MySQL URL for the stores kept there. */
-export type StoreTarget = MaintenanceTarget | Readonly<{ mysql: string }>;
+/** A database provisionStores works on: a SQLite file or a PostgreSQL URL. */
+export type StoreTarget = MaintenanceTarget;
 
 /** The App the bound stores belong to, as the server binds them at startup. */
 export interface StoresApp {
@@ -426,14 +427,8 @@ const storesFail = (why: string): never => {
 };
 
 function storeTarget(value: StoreTarget): Readonly<{ dialect: Dialect; address: string }> {
-  if (value && typeof value === 'object' && Object.keys(value).length === 1 && 'mysql' in value) {
-    if (typeof value.mysql === 'string' && /^mysql:\/\//i.test(value.mysql))
-      return Object.freeze({ dialect: 'mysql', address: value.mysql });
-    return storesFail('a MySQL target is { mysql: <url> }.');
-  }
-  const at = target(value as MaintenanceTarget, () =>
-    storesFail('the target is { sqlite: <path> }, { postgres: <url> } or { mysql: <url> }.'),
-  );
+  if (value && typeof value === 'object' && 'mysql' in value) return storesFail(MYSQL_REFUSAL);
+  const at = target(value, () => storesFail('the target is { sqlite: <path> } or { postgres: <url> }.'));
   return Object.freeze('sqlite' in at ? { dialect: 'sqlite', address: at.sqlite } : { dialect: 'postgres', address: at.postgres });
 }
 
@@ -507,12 +502,10 @@ export async function provisionStores(where: StoreTarget, options: ProvisionStor
     app.commands === undefined &&
     app.source === undefined &&
     app.tenant === undefined;
-  if ((app !== undefined || jobs !== undefined) && !bindsNothing && dialect === 'mysql')
-    storesFail("an App's command stores are kept in SQLite or PostgreSQL.");
   const stores: Record<string, StoreProvisioned> = {};
   let destinations: readonly Readonly<{ id: string; webhook?: string; added: boolean }>[] = [];
   if ((app !== undefined || jobs !== undefined) && !tenantOnly && !bindsNothing) {
-    const bound = await boundStores(dialect as 'sqlite' | 'postgres', address, app!, jobs);
+    const bound = await boundStores(dialect, address, app!, jobs);
     Object.assign(stores, bound.stores);
     destinations = bound.destinations;
   }

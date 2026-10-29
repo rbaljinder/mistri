@@ -129,15 +129,13 @@ describe('the words of diff, check and squash', () => {
     assert.deepEqual(calls(p.log), [], 'nothing reached Atlas');
   });
 
-  test('a missing schema.sql, MySQL and a --dev-url of another kind are refused before Atlas runs', async () => {
+  test('a missing schema.sql and a --dev-url of another kind are refused before Atlas runs', async () => {
     const p = project(V1);
     rmSync(join(p.root, 'db', 'schema.sql'));
     const missing = await migrate(['check', '--db', p.db, '--no-config', '--migrations', p.dir], p);
     assert.equal(missing.code, 1);
     assert.match(missing.err, /there is no .*db\/schema\.sql: write the schema you want there, or name it with --schema-file/);
     const other = project(V1);
-    const mysql = await migrate(['check', '--db', 'mysql://u@127.0.0.1:1/x', '--no-config', '--migrations', other.dir], other);
-    assert.match(mysql.err, /PostgreSQL and SQLite; MySQL is not covered yet/);
     const mixed = await migrate(
       ['check', '--db', other.db, '--no-config', '--migrations', other.dir, '--dev-url', 'postgres://u@h/d'],
       other,

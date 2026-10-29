@@ -79,6 +79,29 @@ describe('reloadApp', () => {
     return { app, pages: mergeAppPages(configPages, app) };
   };
 
+  test(
+    'a subdirectory made world-writable since the load refuses the reload, and the last good App keeps serving',
+    { skip: process.platform === 'win32' },
+    async () => {
+      const dir = writeApp('loose-sub', { name: 'Tight' });
+      mkdirSync(join(dir, 'widgets', 'deep'), { recursive: true });
+      mkdirSync(join(dir, 'node_modules', 'pkg'), { recursive: true });
+      const host = await startup(dir);
+      // A package manager's directory is not the App's: node_modules is left alone.
+      chmodSync(join(dir, 'node_modules', 'pkg'), 0o777);
+      assert.equal(await reloadApp(host, dir, []), true);
+      chmodSync(join(dir, 'widgets', 'deep'), 0o777);
+      try {
+        assert.equal(await reloadApp(host, dir, []), false);
+        assert.match(host.loadError ?? '', /widgets\/deep is writable by everyone.*chmod o-w/);
+        assert.equal(host.app.app.name, 'Tight', 'the previous definition is still the one held');
+      } finally {
+        chmodSync(join(dir, 'widgets', 'deep'), 0o755);
+      }
+      assert.equal(await reloadApp(host, dir, []), true);
+    },
+  );
+
   test('a good save swaps the manifest and the merged pages together', async () => {
     const dir = writeApp('swap', {
       name: 'Field Ops',

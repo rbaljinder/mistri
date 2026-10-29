@@ -122,8 +122,9 @@ test('--help and --version load the flag parser, not the server, from either bin
     const help = loaded(['--help'], '', bin);
     /* Measured at 15 when this was written; the ceiling leaves room for a helper or two. 31 once the two binaries
        shared their entry's preamble (cli/bin.ts) rather than one bin carrying it. 33 once each main said which
-       product it is (server/product.ts), so a shared flag is read in the binary's own name. */
-    assert.ok(help.length <= 33, `${bin} --help loaded ${help.length} modules:\n${help.join('\n')}`);
+       product it is (server/product.ts), so a shared flag is read in the binary's own name. 34 once the pools said
+       what they may hold (adapters/connectionBudget.ts, a leaf postgresPool.ts loads for its manager's constructor). */
+    assert.ok(help.length <= 34, `${bin} --help loaded ${help.length} modules:\n${help.join('\n')}`);
     assert.ok(help.includes('server/cli/args.ts'));
     const version = loaded(['--version'], '', bin);
     assert.ok(version.length <= 70, `${bin} --version loaded ${version.length} modules`);

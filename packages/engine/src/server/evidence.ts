@@ -20,6 +20,7 @@ import { PoolBusy } from '../adapters/poolMetrics.js';
 import { Refusal, recordRefusalCause, refusalCause } from '../shared/refusal.js';
 import type { DatabaseSchema } from '../shared/schema.js';
 import { isCapturedScopeCatalog } from '../shared/scopeCatalog.js';
+import { keepBreakdownsAgainst } from '../shared/breakdown.js';
 import { isRowScopeSnapshot } from '../shared/rowScope.js';
 import { carryServerRequest } from './serverRequests.js';
 
@@ -176,8 +177,16 @@ export function isCapturedTenantData(value: unknown): boolean {
   return value !== null && typeof value === 'object' && (capturedData.has(value) || isCapturedScopeCatalog(value as DatabaseSchema));
 }
 
+/* A breakdown compiled against such a catalog is kept with it (breakdown.ts compileBreakdown): a served tenant
+   catalog is one, and an enter compiles each of its breakdowns against it for the access check and the SQL pane. */
+keepBreakdownsAgainst(isCapturedTenantData);
+
 /** Server evidence is data, never getters, proxies, thenables or inherited grants. */
 export function captureTenantData<T>(input: T): T {
+  /* A capture handed back whole is itself, within every bound by having been
+     made within them: answered before the walk's state is set up, since a
+     request hands the same evidence through dozens of these. */
+  if (input !== null && typeof input === 'object' && capturedData.has(input)) return carryServerRequest(input, input);
   let nodes = 0,
     characters = 0,
     reach = 0,

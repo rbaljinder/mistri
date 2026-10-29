@@ -6,8 +6,8 @@
  * Forward only. Each file runs once, in version order, in its own
  * transaction on SQLite and PostgreSQL, then its history row is written in
  * that same transaction, so a file is either applied and recorded or neither.
- * MySQL commits DDL as it goes: a file there runs outside a transaction, and
- * a failure is recorded as failed and stops the run, as Flyway does, because
+ * A file that must run outside a transaction (CREATE INDEX CONCURRENTLY) has
+ * a failure recorded as failed that stops the run, as Flyway does, because
  * what ran before the failing statement is in the database and only a person
  * can say whether to finish it or undo it.
  */
@@ -205,10 +205,6 @@ function ensureHistory(db: MigrationDb, table: string): Promise<void> {
 }
 
 async function transaction(db: MigrationDb, run: () => Promise<void>): Promise<void> {
-  if (db.dialect === 'mysql') {
-    await run();
-    return;
-  }
   await db.run(db.dialect === 'sqlite' ? 'BEGIN IMMEDIATE' : 'BEGIN');
   try {
     await run();
@@ -260,7 +256,7 @@ async function apply(
       await pause(attempt * 1_000);
     }
   }
-  if (file.transactional && db.dialect !== 'mysql') {
+  if (file.transactional) {
     try {
       await db.script(file.sql);
       if (db.dialect === 'sqlite') {
@@ -290,9 +286,8 @@ async function apply(
     return { ms: row(true).executionTime };
   } catch (error) {
     await insertHistory(db, table, row(false)).catch(() => {});
-    const why = db.dialect === 'mysql' ? 'MySQL commits DDL as it runs' : 'it ran outside a transaction';
     return {
-      message: `${sayError(error)}. ${why}, so the statements before the failing one are applied: finish or undo them by hand, then ${product()} migrate repair.`,
+      message: `${sayError(error)}. It ran outside a transaction, so the statements before the failing one are applied: finish or undo them by hand, then ${product()} migrate repair.`,
       recorded: true,
     };
   }

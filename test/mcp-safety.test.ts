@@ -4,8 +4,8 @@
  * the text never names — every statement runs under a cap, a cancelled call
  * stops what it is running and answers as cancelled, and the counts `query`,
  * `breakdown` and `record` report stop at a bound and say so. SQLite
- * in-process and over stdio; Postgres and MySQL live when their variables
- * are set (test/live.ts).
+ * in-process and over stdio; Postgres live when its variable
+ * is set (test/live.ts).
  */
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -414,52 +414,5 @@ describe('MCP safety on Postgres', { skip: liveSkip('postgres', PG) }, () => {
     assert.ok(ms < 5_000, `answered in ${ms} ms`);
     assert.ok(await until(async () => (await active('mcp_safety_slow')) === 0), 'the backend stopped');
     answered(await call('query', { q: 'mcp_safety_innocent' }));
-  });
-});
-
-const MYSQL = process.env.TABLEWALK_TEST_MYSQL;
-
-describe('MCP safety on MySQL', { skip: liveSkip('mysql', MYSQL) }, () => {
-  const registry = new Registry();
-  type Setup = { query(text: string): Promise<[unknown, unknown]>; end(): Promise<void> };
-  let control: Setup;
-  const call = (name: string, args: Record<string, unknown> = {}, signal?: AbortSignal) =>
-    runTool(registry, name, { connection: 'my', ...args }, { signal });
-  const running = async () => {
-    const [rows] = await control.query(
-      "SELECT COUNT(*) AS n FROM information_schema.PROCESSLIST WHERE INFO LIKE '%mcp_cancel_probe%' AND INFO NOT LIKE '%PROCESSLIST%'",
-    );
-    return Number((rows as Array<{ n: number }>)[0].n);
-  };
-
-  before(async () => {
-    const specifier = 'mysql2/promise';
-    const mysql = (await import(specifier)) as { createConnection(options: Record<string, unknown>): Promise<Setup> };
-    control = await mysql.createConnection({ uri: MYSQL!, multipleStatements: false });
-    registry.add({ id: 'my', name: 'my', url: MYSQL!, source: 'config' });
-    await registry.open('my');
-  });
-
-  after(async () => {
-    await registry.closeAll();
-    await control.end();
-  });
-
-  test('sql and explain refuse the runtime tables before anything runs', async () => {
-    for (const statement of ['select * from __mistri_x', 'select * from `__MISTRI_x`', 'select 1 /*! , (select 1 from __mistri_x) */']) {
-      refusedWith(await call('sql', { statement }), /__mistri_x/i);
-      refusedWith(await call('explain', { statement }), /__mistri_x/i);
-    }
-  });
-
-  test('a cancelled sql call kills its query', async () => {
-    const controller = new AbortController();
-    const pending = timed(() => call('sql', { statement: 'select sleep(10) as mcp_cancel_probe' }, controller.signal));
-    assert.ok(await until(async () => (await running()) === 1), 'the statement is running');
-    controller.abort();
-    const [reply, ms] = await pending;
-    refusedWith(reply, /^Cancelled/);
-    assert.ok(ms < 5_000, `answered in ${ms} ms`);
-    assert.ok(await until(async () => (await running()) === 0), 'the query was killed');
   });
 });

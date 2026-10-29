@@ -355,7 +355,7 @@ async function sampledEmptyColumns(
 /* The schemas a draft makes a source of, in the order a person reads them:
    the engine's default schema first. Only engines with schemas have them. */
 function draftedSchemas(schema: DatabaseSchema): string[] {
-  if (schema.dialect !== 'postgres' && schema.dialect !== 'mysql') return [];
+  if (schema.dialect !== 'postgres') return [];
   const found = [...new Set(schema.tables.filter((table) => !isRuntimeTable(table.name)).map((table) => table.schema))]
     .filter(Boolean)
     .sort();
@@ -394,7 +394,7 @@ export async function scaffoldApp(into: string, opts: Options, registry: Registr
       : { sqlite: resolve(opts.target.replace(/^sqlite:(\/\/)?/i, '')) };
   /* A config naming several connections is drafted as one App over all of
      them: a source per connection, the active one the default whose tables
-     stay bare, the others named `source.table`. A PostgreSQL or MySQL
+     stay bare, the others named `source.table`. A PostgreSQL
      connection holding tables in several schemas is a source per schema on
      that one connection (`schema:`), never the same URL configured again. */
   const configured = registry.list().filter((connection) => connection.source === 'config');

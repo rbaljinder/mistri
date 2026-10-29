@@ -31,6 +31,7 @@ import {
   tenantServedCopiesMade,
   tenantServedSchema,
   tenantServedSchemasBuilt,
+  withRequestInstant,
 } from '../packages/mistri/src/server/tenant/tenantServedSchema.js';
 
 /* Read once: a catalog says when it was read, and each context's is its own capture of the same tables. */
@@ -90,6 +91,11 @@ const built = (run: () => void) => {
   run();
   return tenantServedSchemasBuilt() - before;
 };
+const builtAsync = async (run: () => Promise<void>) => {
+  const before = tenantServedSchemasBuilt();
+  await run();
+  return tenantServedSchemasBuilt() - before;
+};
 
 test("a catalog that reads neither the clock nor the reader is built once for a context's inputs", () => {
   const context = { schema: catalog() },
@@ -128,7 +134,7 @@ test("a catalog that reads neither the clock nor the reader is built once for a 
   );
 });
 
-test("a computed column's day, instant and reader are folded per request into a copy of one kept catalog", () => {
+test("a computed column's day and reader are folded per request into a copy of one kept catalog", () => {
   const context = { schema: catalog() },
     task = (schema: DatabaseSchema) => schema.tables.find((table) => table.id === 'task')!,
     daily = appWith({ due_now: { type: 'boolean', value: 'due_on = today' } });
@@ -154,7 +160,7 @@ test("a computed column's day, instant and reader are folded per request into a 
   );
 });
 
-test('a catalog whose computed columns read the instant is built once, and each request writes its own instant', () => {
+test('a catalog whose computed columns read the instant is one object for every request, and each writes its own instant', async () => {
   const context = { schema: catalog() },
     task = (schema: DatabaseSchema) => schema.tables.find((table) => table.id === 'task')!,
     /* The field report's shapes: a state test and a deadline against the instant. The fixture's rollup over these
@@ -164,24 +170,50 @@ test('a catalog whose computed columns read the instant is built once, and each 
       at_risk: { type: 'boolean', value: "(subject = 'new' or subject = 'open') and updated_at <= now" },
     });
   const instants = [MORNING, EVENING, NEXT_DAY, new Date('2026-03-03T09:00:01Z')];
+  const copies = tenantServedCopiesMade();
+  /* Each request as tenantHttp runs one: its clock fixed as it starts, the catalog served and statements written
+     after an await, and the requests overlapping, so a clock that leaked between them would be read here. */
   let served: DatabaseSchema[] = [];
+  let written: Array<Record<string, string>> = [];
   assert.equal(
-    built(() => {
-      served = instants.map((at) => tenantServedSchema(context, instant, at));
+    await builtAsync(async () => {
+      const requests = instants.map((at, index) =>
+        withRequestInstant(at, async () => {
+          await new Promise((resolve) => setTimeout(resolve, (instants.length - index) * 5));
+          // Served with another clock than the request's: the request's is the one every statement reads.
+          const schema = tenantServedSchema(context, instant, new Date(at.getTime() + 60_000));
+          await Promise.resolve();
+          return { schema, sql: { fresh: sqlOf(task(schema), 'fresh'), at_risk: sqlOf(task(schema), 'at_risk') } };
+        }),
+      );
+      const answers = await Promise.all(requests);
+      served = answers.map((answer) => answer.schema);
+      written = answers.map((answer) => answer.sql);
     }),
     1,
   );
-  assert.equal(new Set(served.map(servedBaseOf)).size, 1);
-  assert.equal(new Set(served).size, instants.length);
-  served.forEach((schema, index) => {
+  // One catalog, the kept one itself: nothing was copied for the instant, so every cache keyed by it is found.
+  assert.equal(new Set(served).size, 1);
+  assert.equal(servedBaseOf(served[0]!), served[0]);
+  assert.equal(tenantServedCopiesMade() - copies, 0);
+  written.forEach((sql, index) => {
     const stamp = instants[index]!.toISOString().slice(0, 19);
-    for (const name of ['fresh', 'at_risk']) assert.ok(sqlOf(task(schema), name).includes(stamp), `${name} at ${stamp}`);
+    for (const name of ['fresh', 'at_risk'] as const) assert.ok(sql[name].includes(stamp), `${name} at ${stamp}: ${sql[name]}`);
     // Never another request's instant.
-    for (const other of instants)
-      if (other !== instants[index]) assert.ok(!sqlOf(task(schema), 'fresh').includes(other.toISOString().slice(0, 19)));
+    for (const other of instants) if (other !== instants[index]) assert.ok(!sql.fresh.includes(other.toISOString().slice(0, 19)));
   });
-  // The kept catalog itself says no instant: it cannot be written as SQL until a request binds it.
-  assert.throws(() => sqlOf(task(servedBaseOf(served[0]!)), 'fresh'));
+  assert.equal(new Set(written.map((sql) => sql.fresh)).size, instants.length);
+});
+
+test('a catalog served outside a request says its instant for the work that follows it', () => {
+  const context = { schema: catalog() },
+    task = (schema: DatabaseSchema) => schema.tables.find((table) => table.id === 'task')!,
+    instant = appWith({ fresh: { type: 'boolean', value: 'updated_at > now - 30 minutes' } });
+  const morning = tenantServedSchema(context, instant, MORNING);
+  assert.ok(sqlOf(task(morning), 'fresh').includes('2026-03-02T09:00:00'));
+  const evening = tenantServedSchema(context, instant, EVENING);
+  assert.equal(evening, morning);
+  assert.ok(sqlOf(task(evening), 'fresh').includes('2026-03-02T17:00:00'));
 });
 
 test('a catalog whose building reads the instant is built for every request, as before', () => {

@@ -78,6 +78,8 @@
     "packages/mistri": {
       "entry": [
         "src/server/{commands,policy,openfeature,maintenance,jobs,workflows,handler,integration}.ts",
+        "src/client/observe/main.tsx",
+        "src/client/devtoolsEventClient.js",
         "src/client/observe/index.html",
         "src/client/components/sdk/{index.ts,testing.tsx,page.tsx}",
         "src/embed/{index.tsx,next.ts,react-router.ts,tanstack-router.ts}",
@@ -90,21 +92,13 @@
         "schema/**"
       ],
       "ignoreDependencies": [
-        "tablewalk",
         "oxfmt"
       ],
       "includeEntryExports": true
     },
     "packages/tablewalk": {
-      "entry": [
-        "*.js"
-      ],
       "project": [
-        "src/**",
-        "*.js"
-      ],
-      "ignoreDependencies": [
-        "@mistriwork/mistri"
+        "src/**"
       ],
       "includeEntryExports": true
     }
@@ -171,6 +165,9 @@
     ],
     "packages/mistri/src/shared/tenantHttp.ts": [
       "types"
+    ],
+    "packages/mistri/src/server/console/components.ts": [
+      "exports"
     ]
   }
 }

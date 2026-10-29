@@ -334,7 +334,9 @@ describe('the changelog page', () => {
     const { rewriteHref } = await import('../site/src/changelog.mjs');
     assert.equal(rewriteHref('site/src/content/docs/docs/build-an-api.md'), '/docs/build-an-api/');
     assert.equal(rewriteHref('site/src/content/docs/docs/themes.md#looks'), '/docs/themes/#looks');
-    assert.equal(rewriteHref('docs/boundary.md'), 'https://github.com/rbaljinder/mistri/blob/main/docs/boundary.md');
+    assert.equal(rewriteHref('docs/boundary.md', true), 'https://github.com/rbaljinder/mistri/blob/main/docs/boundary.md');
+    // A private repository is a 404 for every reader: the path is no link at all until it is public.
+    assert.equal(rewriteHref('docs/boundary.md', false), undefined);
     assert.equal(rewriteHref('https://tablewalk.dev/docs/themes/'), 'https://tablewalk.dev/docs/themes/');
   });
 });

@@ -120,15 +120,6 @@ test('provisionStores makes the stores `only` names, once, and refuses a list it
 
   await assert.rejects(maintenance.provisionStores({ sqlite: path }), /provisionStores: /);
   await assert.rejects(maintenance.provisionStores({ sqlite: path }, { only: [] }), /provisionStores: /);
-  // MySQL keeps only the stores that need no binding; an App's are refused before a connection is opened.
-  await assert.rejects(
-    maintenance.provisionStores({ mysql: 'mysql://nobody@127.0.0.1:1/none' }, { app: { id: 'ledger', source: 'main' } }),
-    /provisionStores: /,
-  );
-  await assert.rejects(
-    maintenance.provisionStores({ mysql: 'mysql://nobody@127.0.0.1:1/none' }, { only: ['branding'] }),
-    /provisionStores: /,
-  );
 });
 
 test('job maintenance inspects, redrives and prunes a SQLite job store', async (t) => {
@@ -159,7 +150,7 @@ test('job maintenance inspects, redrives and prunes a SQLite job store', async (
     (error: unknown) => error instanceof JobRefusal && error.code === 'not_redrivable',
   );
   assert.deepEqual(await maintenance.pruneJobs(target, policy, { olderThanMs: 0 }), { pruned: 1, more: false });
-  for (const bad of [{ sqlite: '' }, { postgres: 'mysql://elsewhere' }, { sqlite: path, postgres: 'postgres://x' }, {}]) {
+  for (const bad of [{ sqlite: '' }, { postgres: 'mongodb://elsewhere' }, { sqlite: path, postgres: 'postgres://x' }, {}]) {
     await assert.rejects(maintenance.inspectJobs(bad as never, policy), JobStoreUnavailable);
   }
   await assert.rejects(maintenance.redriveJobs(target, policy, { ids: [], operator: 'operator-ada' }), JobStoreUnavailable);

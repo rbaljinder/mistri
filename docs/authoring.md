@@ -513,9 +513,9 @@ gives every key.
   cookies and OAuth callbacks are minted for. A forgotten password is reset
   by a one-time link (an hour, once, ending the account's other sessions),
   emailed through the config's email service (`"kind": "email"`), or, with
-  `MISTRI_AUTH_RESET=log`, written to the server's log for an operator to
-  pass on — never into an HTTP answer; set that only where the log is
-  private. With neither, sign-in's "Forgot password?" says an administrator
+  `MISTRI_AUTH_RESET=log`, written to the log under `mistri dev` only —
+  never into an HTTP answer, and a served App with no mail logs one line
+  without the link. With neither, sign-in's "Forgot password?" says an administrator
   resets passwords. `better-auth` is an optional
   dependency — `npm install better-auth` — paid for only by apps that ask.
   Authenticated Apps require a stable nonzero listening port. If that port is
@@ -903,7 +903,7 @@ Creation requires an explicit `values` object; send `{ "table": "ticket", "value
 to request database defaults. Missing, null or array values refuse. The same
 source-local scoped writer checks the actual stored row after defaults
 and coercion, including every foreign-key parent's scope. Neither ordinary reads
-nor ordinary writes provide a fallback; scoped MySQL writes are unsupported.
+nor ordinary writes provide a fallback.
 
 Field-limited creation returns only readable fields. An insertion returns `key`,
 `row` and `applied`. Permitted creation does not enable ordinary DELETE.
@@ -941,7 +941,7 @@ Map business staff IDs explicitly when they differ from auth account IDs. Check
 ownership; a bare `true` is not a production ownership policy. This hook alone grants no generic writes. Deletion requires
 complete whole-row read/write access to a keyed non-view table on an explicitly
 writable SQLite or PostgreSQL source with no incoming foreign keys. Graphs,
-cascades and scoped MySQL writers remain unsupported.
+cascades remain unsupported.
 
 Send `POST /api/delete` with `{ table: 'ticket', key: { id: 1 }, confirm: false }`.
 Omitting `confirm` also previews; any supplied value must be boolean. An authorized

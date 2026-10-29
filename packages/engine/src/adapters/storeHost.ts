@@ -17,7 +17,6 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import type { TransactionOperations, WriteTransaction } from './adapter.js';
-import type { MysqlConnection } from './mysqlDriver.js';
 import type { PostgresReadSnapshot, PostgresTransactionVerifier } from './postgres.js';
 import type { PgQuery } from './postgresPool.js';
 import type { PostgresScopeCatalog } from './scoped/postgresScopeCatalog.js';
@@ -119,16 +118,7 @@ export interface SqliteStoreHost {
   ): Promise<T>;
 }
 
-export interface MysqlStoreHost {
-  readonly dialect: 'mysql';
-  /** The database the connection browses, where the stores live. */
-  database(): string;
-  withReader<T>(work: (db: MysqlConnection) => Promise<T>): Promise<T>;
-  /** `work` in the write queue, on a writer. */
-  withWriter<T>(work: (write: MysqlConnection) => Promise<T>): Promise<T>;
-}
-
-export type StoreHost = PostgresStoreHost | SqliteStoreHost | MysqlStoreHost;
+export type StoreHost = PostgresStoreHost | SqliteStoreHost;
 
 const hosts = new WeakMap<object, StoreHost>();
 

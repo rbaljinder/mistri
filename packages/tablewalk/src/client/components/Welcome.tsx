@@ -15,7 +15,6 @@ import { say } from '../copy/workbench/components/Welcome.js';
 /** The shapes a target can take, kept in the order they are likely to be met. */
 const EXAMPLES = [
   { label: 'PostgreSQL', text: 'postgres://user@localhost:5432/appdb' },
-  { label: say('mysqlOrMariadb'), text: 'mysql://user@localhost:3306/appdb' },
   { label: 'SQLite', text: './data/app.db' },
 ];
 

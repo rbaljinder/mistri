@@ -1,8 +1,8 @@
 # Theming
 
 Visual themes change presentation, not routes, data access, or authored layouts.
-The runtime has four looks for Apps: Workshop, the default, then Lumen, Mono
-and Sage, and twelve palettes that are the same twelve in every look
+The runtime has five looks for Apps: Workshop, the default, then Lumen, Mono,
+Sage and Ledger, and twelve palettes that are the same twelve in every look
 ([Palettes](#palettes)). Readers choose a look, a palette and
 System/Light/Dark independently in More > Preferences. With no choice, an App
 wears its preset, and Workshop in Safety orange where it names none. Any other look is the App's
@@ -23,6 +23,7 @@ this file is the contract.
 | Workshop | The default. The desk as a workbench, ported from a field report's theme: warm paper, ink-black type and one hue — Safety orange unless a palette says another — kept to the few marks a reader takes for the brand color: the primary verb's fill (the ink's words on it, edged in the ink, as a hazard tag prints them), links and the current tab's rule, a 3px marker beside the menu's ink block, the focus ring, a checked box and a chart's first series. Fills, rules and selection stay the ink, and nothing is tinted. Titles, section heads and labels in Barlow Semi Condensed's bold capitals, the rest in Barlow, shipped with the look; 2px ink rules part the sections; 2px corners; nothing floats; the menu's current entry an ink block with the hue's marker beside it, on a faint grain. |
 | Lumen | Flat, calm and modern: a warm, faintly tinted shell around white working surfaces, elevation only on what floats (menus, dialogs, drawers), one confident accent for the primary action, the current room, selection, focus, the main chart series and the current step; a menu whose current room is a soft pill with quiet counts on its lists of work; metrics in a divided strip; record fields in a property rail; tables on hairlines with the record's name as the row's anchor and a head that sticks; statuses as a dot and their word (grey where neutral); a workflow as a track of segments; charts as a 1.5px line in one hue's steps; Inter, shipped with the look. Its blue is the **Cobalt** palette; every other palette changes only the accent's family. |
 | Mono | Black and white: square corners, rules in the ink over grey hairlines, monospace figures and labels, the current tab inverted; colour only for status. |
+| Ledger | A bookkeeper's desk, ported from a field report's theme: green-tinted paper on a faint graph-paper ground, every figure, id, date and label in a monospace (IBM Plex Mono) with titles and prose in Inter, a dark green cover for the menu and the bar with a gilt mark for the current entry, field groups and dashboard sections as square boxes ruled in the strong line, a table's heads closed with a double rule (`rules: 'double'`), and one deep ledger green for the accent. Light and dark. |
 | Sage | A soft workspace: warm cream grounds with a dashboard's sections and stat cards on white panels (a soft shadow, the 8px radius and its 12px larger step) and tables open on the ground, near-black ink for text and calls to action, sage green for charts and good news, a warm tint for what is chosen, and meaning in soft tinted pills. |
 
 Mono stands on the shared structure: rules instead of boxes (a table unboxed
@@ -38,11 +39,14 @@ what floats is lifted. Tabs are underlined, statuses are a dot and their word,
 a workflow is a track of segments, a dashboard's steps are a strip, and board
 lanes are headed by tinted strips (Lumen's exceptions, in
 [design.md](design.md#the-refusal-list-after-impeccablestyle-kept-where-it-applies)).
+Ledger is Lumen's flat structure drawn square and ruled: dashboard sections and
+field groups are boxes in the strong line, a table's heads close with a double
+rule, and the figures are set in a monospace (Ledger's exceptions, in design.md).
 
 Each includes light and dark colors. Selecting one never rewrites the App's
 manifest. An author picks the App's default with
 `ui: { theme: { preset: 'sage' } }`, or builds on one in a custom definition
-with `extends: 'sage'`; the same goes for `workshop`, `lumen` and `mono`. A
+with `extends: 'sage'`; the same goes for `workshop`, `lumen`, `mono` and `ledger`. A
 built-in look's palette is chosen the same way
 (`ui: { theme: { preset: 'lumen', palette: 'teal' } }`). A reader can pick
 another under Palette in Preferences while that look is on.
@@ -56,7 +60,7 @@ A palette is a colour identity apart from the look, from one registry
 (`violet`), **Plum** (`plum`), **Rose** (`rose`), **Slate** (`slate`) and
 **Ink** (`ink`). Every built-in look offers all twelve, in that order, and
 wears one by default: Workshop Safety orange, Lumen Cobalt, Mono and Sage Ink
-(each look's own ink). The look keeps its grounds, neutrals, type, shape and
+(each look's own ink), Ledger Emerald (in the book's own deeper green). The look keeps its grounds, neutrals, type, shape and
 recipes and decides which roles the hue reaches:
 
 | Look | What a palette changes |
@@ -64,6 +68,7 @@ recipes and decides which roles the hue reaches:
 | Workshop | The primary verb's fill and its words, links and the current tab's rule, the menu's marker, the focus ring, a checked box and the first chart series. Selection, the menu's block and the rules stay the ink; no tint. |
 | Lumen | The accent and its pale tint, links, the focus ring, the menu's mark and the first chart series. |
 | Mono, Sage | The same as Lumen, on the look's own neutral tint for what is chosen. |
+| Ledger | The accent and its pale tint, links, the focus ring, the rules (a table's double-ruled heads, a box's top rule) and the first chart series. The paper and the menu's green cover stay the book's own, with the gilt mark. |
 
 A palette's first series takes the place of the look's series nearest its
 hue, and the rest follow in the look's order wherever each neighbour stays
@@ -162,7 +167,7 @@ CSS.
 | `chart`    | `plain` (Workshop), `wash` (Sage), `gradient` (own), `line` (Lumen)                                                     |
 | `buttons`  | `accent`, `raised` (Lumen), `keyed` (Workshop)                                                                          |
 | `links`    | `plain`, `underline` (Mono)                                                                                             |
-| `rules`    | `ink` (Workshop), `hairline` (Lumen, Sage)                                                                              |
+| `rules`    | `ink` (Workshop), `hairline` (Lumen, Sage), `double` (Ledger)                                                           |
 | `avatar`   | `plain`, `large` (Sage), `round` (Lumen)                                                                                |
 | `workflow` | `markers` (Workshop, Lumen), `pills` (own)                                                                              |
 | `banner`   | `tint`, `gradient` (own), `plain` (Workshop, Lumen)                                                                     |
@@ -318,7 +323,7 @@ its faces and stylesheet are read from (not the App that installs it), held
 by real path, so a symlink out of it is refused; `contract` is what a 1.x
 mistri reads, and a theme written to another is refused naming the
 release to install (`theme-contract`). An App wears it as one of its own,
-`customThemes: [ledger]`, or starts from it: `extends` takes a theme that
+`customThemes: [daybook]`, or starts from it: `extends` takes a theme that
 extends a built-in, one level deep, inheriting its faces and stylesheet. A
 tenant's theme has no directory, so it can say neither. The definition the
 browser is sent carries no path; the package's root is held beside the
@@ -540,7 +545,7 @@ The four stacks are also tokens a component reads (`--sans`, `--mono`, `--headin
 `shape.radius` is `{ control, field, pill, panel }`; one bare length is refused. `control` is a button's, an
 input's and a select's corner, `0px` through `16px` or `'round'`; `field` a record's and a form's field,
 `0px` through `12px`; `panel` a card's, a section's and a dialog's, `0px` through `20px` (omitted, one and a
-half controls', at most 20px). Each look has one radius for controls and fields: Lumen and Sage 8px, Mono
+half controls', at most 20px). Each look has one radius for controls and fields: Lumen and Sage 8px, Ledger 2px (its fields square), Mono
 square, and a theme that extends none 4px. A custom theme inherits its base's radii, and an explicit custom
 radius wins. A round control is a pill (`--control-radius`); every other box that follows the control's
 corner — a menu, a card, a row — takes 8px, because a card is not a pill, and a popup never passes 12px.

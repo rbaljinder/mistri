@@ -312,7 +312,7 @@ function surfacePages(product: Product): Plugin {
 
 /**
  * The license of every face the build ships (src/client/fonts/), written
- * beside the client as `fonts/<name>`: Lumen's Inter and Workshop's Barlow are
+ * beside the client as `fonts/<name>`: Lumen's Inter, Workshop's Barlow and Ledger's IBM Plex Mono are
  * under the SIL Open Font License, which asks that its text travel with the font, and dist is
  * what the package's `files` allowlist ships.
  */

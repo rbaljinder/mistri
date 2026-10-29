@@ -52,12 +52,8 @@ export function warnOnce(key: string, line: string, write: (line: string) => voi
 
 const LOOPBACK = /^(localhost|127\.\d+\.\d+\.\d+|::1|\[::1\])$/i;
 
-/**
- * Sign-in served beyond this machine at an `http:` public address: the session cookies are marked Secure only when
- * the address the server answers to is https, so here they never are, and a browser sends them over plain http too.
- * Not a refusal: a TLS proxy in front is the usual shape, and only its public address is missing.
- */
-export function insecureCookieWarning(publicUrl: string, listenHost: string): string | undefined {
+/** The public address when sign-in is served beyond this machine at an `http:` one, else undefined. */
+function insecureOrigin(publicUrl: string, listenHost: string): string | undefined {
   let url: URL;
   try {
     url = new URL(publicUrl);
@@ -65,11 +61,43 @@ export function insecureCookieWarning(publicUrl: string, listenHost: string): st
     return undefined;
   }
   if (url.protocol !== 'http:' || (LOOPBACK.test(listenHost) && LOOPBACK.test(url.hostname))) return undefined;
+  return url.origin;
+}
+
+/**
+ * Sign-in served beyond this machine at an `http:` public address: the session cookies are marked Secure only when
+ * the address the server answers to is https, so here they never are, and a browser sends them over plain http too.
+ * Said when the operator has chosen to serve it anyway (`--insecure-http-sign-in`); otherwise it is refused
+ * (`insecureSignInRefusal`).
+ */
+export function insecureCookieWarning(publicUrl: string, listenHost: string): string | undefined {
+  const origin = insecureOrigin(publicUrl, listenHost);
+  if (!origin) return undefined;
   return (
-    `sign-in is served beyond this machine at ${url.origin}, an http address, so its session cookies are never marked Secure. ` +
+    `sign-in is served beyond this machine at ${origin}, an http address, so its session cookies are never marked Secure. ` +
     `Serve it behind a TLS proxy and set its public address (${envName('PUBLIC_URL')}) to the proxy's https address.`
   );
 }
+
+/** What a start with sign-in on that same condition is refused with: passwords would cross the network in the clear. */
+export function insecureSignInRefusal(publicUrl: string, listenHost: string): string | undefined {
+  const origin = insecureOrigin(publicUrl, listenHost);
+  if (!origin) return undefined;
+  return (
+    `sign-in would be served beyond this machine at ${origin}, an http address: passwords and session cookies would cross the network in the clear. ` +
+    `Set the public address (${envName('PUBLIC_URL')}) to the https address of a TLS proxy in front, or listen on loopback (--host 127.0.0.1) behind it. ` +
+    `To serve it over plain http anyway, pass --insecure-http-sign-in (${envName('INSECURE_HTTP_SIGN_IN')}=1).`
+  );
+}
+
+/** The one line a served App writes when a reset was requested and nothing can send it: no link, no token, no address. */
+export const resetWithoutMailLog = () =>
+  `${product()}: a password reset was requested but no mail transport is configured, so nothing was sent.`;
+
+/** A served App that offers password reset (MISTRI_AUTH_RESET=log) with no email service: the offer cannot be kept. */
+export const RESET_WITHOUT_MAIL_WARNING =
+  'password reset is offered (MISTRI_AUTH_RESET=log) but no email service is configured, so a reset request sends nothing and ' +
+  'the link is never written to the log outside `mistri dev`. Name an email service in the config file, or unset MISTRI_AUTH_RESET.';
 
 /** A fetch-style host that names no client: every visitor is one address to the sign-in and form rate limits. */
 export const SHARED_RATE_LIMIT_WARNING =

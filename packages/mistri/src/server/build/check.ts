@@ -50,7 +50,8 @@ import {
   withRollups,
   type AppDef,
 } from '../../shared/app.js';
-import { parseArgs, type Options } from '@mistriwork/engine/server/cli/args.js';
+import { parseArgs, postgresPoolFlags, type Options } from '@mistriwork/engine/server/cli/args.js';
+import { sayBudget } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { readStartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import { moduleTypeProblem } from '../cli/projectSetup.js';
 import { appTypes } from '../cli/oneShot.js';
@@ -58,8 +59,9 @@ import { commandTypes, sameTypes, typesFileText, typesForSchema } from '../typeg
 import { componentTypes } from '../typegenComponents.js';
 import { checkApp } from './build.js';
 import { documentedFix } from './checkCodes.js';
-import { deployFindings } from './checkDeploy.js';
-import { lintComponents } from '../app/componentLint.js';
+import { connectionBudgets, deployFindings } from './checkDeploy.js';
+import type { ServedFacts } from './servedHosts.js';
+import { lintComponents, pageManifestsOf } from '../app/componentLint.js';
 import { designLint, sayDesignFinding } from '../app/designLint.js';
 import { segmentCost } from '../../shared/appSegments.js';
 import { inferredReport } from '@mistriwork/engine/shared/displayDefaults.js';
@@ -113,7 +115,7 @@ export function warningSummary(kinds: ReadonlyMap<string, number>): string {
 const CHECK_EXIT = { passed: 0, couldNotCheck: 1, types: 2, typecheck: 3, validation: 4, components: 5, pending: 6, deploy: 7 } as const;
 
 const CHECK_USAGE =
-  'mistri check --app <dir> [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--deploy [--replicas <n>]] [--json | --brief]';
+  'mistri check --app <dir> [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>]] [--json | --brief]';
 
 type Status = 'passed' | 'failed' | 'skipped';
 /** A step's verdict, its lines as the text output says them, and its findings as `--json` gives them (checkProblems.ts). */
@@ -430,7 +432,7 @@ export async function schemaTypes(registry: Registry, loaded: LoadedApp | undefi
 /* The lines mistri check sends to stderr that are only its startup narration. */
 /** The App's verdict as `mistri check` prints it (oneShot.ts checkApps): its name, then ok or its count of problems. */
 const VERDICT = /^[^:]+: (?:ok|\d+ problems?)$/;
-const NARRATION = /^mistri: (app ".*" from |\d+ connection\(s\)|.+ \((sqlite|postgres|mysql|http)\) — )/;
+const NARRATION = /^mistri: (app ".*" from |\d+ connection\(s\)|.+ \((sqlite|postgres|http)\) — )/;
 
 /**
  * `mistri check …`, as the command line runs it. Returns the exit code.
@@ -569,6 +571,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
   let pendingOn: string | undefined;
   let deploy = false;
   let replicas: number | undefined;
+  let connectionLimit: number | undefined;
+  let cpus: number | undefined;
   let migrations: string | undefined;
   let historyTable: string | undefined;
   let rest: string[] = [];
@@ -645,6 +649,24 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       replicas = Number(given);
       continue;
     }
+    if (argv[i] === '--connection-limit') {
+      const given = argv[++i];
+      if (given === undefined || !/^[1-9]\d{0,5}$/.test(given)) {
+        console.error(`mistri check: --connection-limit takes the connections the database allows this role, like 100. ${CHECK_USAGE}`);
+        return CHECK_EXIT.couldNotCheck;
+      }
+      connectionLimit = Number(given);
+      continue;
+    }
+    if (argv[i] === '--cpus') {
+      const given = argv[++i];
+      if (given === undefined || !/^[1-9]\d{0,3}$/.test(given)) {
+        console.error(`mistri check: --cpus takes the cores the deployment has, like 1 or 4. ${CHECK_USAGE}`);
+        return CHECK_EXIT.couldNotCheck;
+      }
+      cpus = Number(given);
+      continue;
+    }
     if (argv[i] === '--migrations' || argv[i] === '--history-table') {
       const given = argv[++i];
       if (given === undefined || given.startsWith('-')) {
@@ -675,6 +697,12 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
   }
   if (replicas !== undefined && !deploy) {
     console.error(`mistri check: --replicas says how many instances --deploy judges for. ${CHECK_USAGE}`);
+    return CHECK_EXIT.couldNotCheck;
+  }
+  if ((connectionLimit !== undefined || cpus !== undefined) && !deploy) {
+    console.error(
+      `mistri check: --connection-limit says what --deploy holds the pools to, and --cpus the cores it sizes them for. ${CHECK_USAGE}`,
+    );
     return CHECK_EXIT.couldNotCheck;
   }
   if ((migrations !== undefined || historyTable !== undefined) && !pending) {
@@ -788,6 +816,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       try {
         loaded = await loadApp(appDir, {
           lock: 'report',
+          // Its own components step names each finding, coded and placed; a refused load would say them once, unplaced.
+          componentLint: false,
           ...(opts.appEntry !== undefined ? { entry: opts.appEntry } : {}),
           ...(env ? { env } : {}),
           ...(opts.commands !== undefined ? { commands: opts.commands } : {}),
@@ -1106,13 +1136,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     // 4. Custom components, when it declares any: their sources, as compiled.
     if (loaded?.components) {
       /* A free-form page's sources are held to what it declares: each a dashboard of one component, with its manifest. */
-      const pages = new Map(
-        Object.entries(loaded.app.views).flatMap(([key, view]) =>
-          'sections' in view && view.page && view.sections[0]?.component
-            ? [[view.sections[0].component.id, { key, reads: view.page.reads, commands: view.page.commands }] as const]
-            : [],
-        ),
-      );
+      const pages = pageManifestsOf(loaded.app);
       const lint = await lintComponents(appDir, loaded.components, pages);
       const said = (finding: { file: string; line: number; text: string }) =>
         `${shown(join(appDir, finding.file))}:${finding.line}  ${finding.text}`;
@@ -1317,14 +1341,21 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       if (!loaded)
         steps.push({ name: 'deploy', status: 'skipped', detail: 'the App did not load, so there is nothing to judge', lines: [] });
       else {
-        const findings = deployFindings({
+        const pools = postgresPoolFlags(opts);
+        const deployInput = {
           app: loaded.app,
           connections: registry.configs(),
           activeId: registry.active ?? undefined,
           cache: registry.serviceConfigs().some((service) => service.kind === 'cache'),
           ...(replicas !== undefined ? { replicas } : {}),
+          ...(connectionLimit !== undefined ? { connectionLimit } : {}),
+          ...(cpus !== undefined ? { cpus } : {}),
+          served: await servedFactsOf(loaded.app, loaded.commands?.registry, opts.jobs),
+          ...(typeof pools === 'string' ? {} : { pools: { readers: pools.readers, writers: pools.writers } }),
           env: process.env,
-        });
+        };
+        const budget = connectionBudgets(deployInput);
+        const findings = [...deployFindings(deployInput), ...budget.findings];
         const errors = findings.filter((finding) => finding.severity === 'error');
         steps.push({
           name: 'deploy',
@@ -1332,7 +1363,10 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           detail: errors.length
             ? `${errors.length} thing${errors.length === 1 ? '' : 's'} that would not survive a replaced container`
             : 'every store is a network database and the secrets are set',
-          lines: findings.map((finding) => `${finding.severity === 'warning' ? 'warning: ' : ''}${finding.message} Fix: ${finding.fix}`),
+          lines: [
+            ...budget.rows.map((row) => `connections ${sayBudget(row)}`),
+            ...findings.map((finding) => `${finding.severity === 'warning' ? 'warning: ' : ''}${finding.message} Fix: ${finding.fix}`),
+          ],
           problems: findings.map((finding) =>
             problem('deploy', finding.code, finding.message, { fix: finding.fix, file: shown(loaded!.path) }, finding.severity),
           ),
@@ -1496,4 +1530,34 @@ export function commandElevations(app: AppDef, commands: BusinessCommandRegistry
         (blind.length ? `, for role${blind.length === 1 ? '' : 's'} ${blind.map((role) => `"${role}"`).join(', ')}` : '')
       );
     });
+}
+
+/** What the App and its jobs module declare that makes a served App build more hosts (servedHosts.ts). */
+async function servedFactsOf(
+  app: AppDef,
+  commands: BusinessCommandRegistry | undefined,
+  jobsFile: string | undefined,
+): Promise<ServedFacts> {
+  const { getCommandEffects } = await import('../commands/businessCommands.js');
+  const facts: ServedFacts = {
+    tenant: app.auth?.rows === 'tenant',
+    assistant: app.assistant !== undefined,
+    apiEvents: Boolean(app.api?.events?.length),
+    effects: Object.values(commands ?? {}).some((command) => getCommandEffects(command)),
+  };
+  if (jobsFile === undefined) return facts;
+  try {
+    const { loadJobModule } = await import('../jobs/jobLoader.js');
+    const module = await loadJobModule(jobsFile);
+    return {
+      ...facts,
+      jobs: module.jobs.size + module.workflows.size > 0,
+      decisions: (module.decisions?.size ?? 0) > 0,
+      integrations: module.integrations !== undefined,
+      inbound: module.inbound.size > 0,
+    };
+  } catch {
+    // A jobs module that does not load is the validation step's to say; the sum then counts without it.
+    return facts;
+  }
 }

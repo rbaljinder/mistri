@@ -1,7 +1,7 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.2",
-  "description": "The engine both products stand on: the adapters (SQLite, Postgres, MySQL), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
+  "version": "1.0.0-rc.3",
+  "description": "The engine both products stand on: the adapters (SQLite, Postgres), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
     "url": "https://github.com/rbaljinder/mistri/issues"
@@ -42,6 +42,10 @@
       "mistri-built": "./dist/adapters/connect.js",
       "default": "./src/adapters/connect.ts"
     },
+    "./adapters/connectionBudget.js": {
+      "mistri-built": "./dist/adapters/connectionBudget.js",
+      "default": "./src/adapters/connectionBudget.ts"
+    },
     "./adapters/http/egress.js": {
       "mistri-built": "./dist/adapters/http/egress.js",
       "default": "./src/adapters/http/egress.ts"
@@ -49,14 +53,6 @@
     "./adapters/layoutRefusal.js": {
       "mistri-built": "./dist/adapters/layoutRefusal.js",
       "default": "./src/adapters/layoutRefusal.ts"
-    },
-    "./adapters/mysql.js": {
-      "mistri-built": "./dist/adapters/mysql.js",
-      "default": "./src/adapters/mysql.ts"
-    },
-    "./adapters/mysqlDriver.js": {
-      "mistri-built": "./dist/adapters/mysqlDriver.js",
-      "default": "./src/adapters/mysqlDriver.ts"
     },
     "./adapters/net/networkPolicy.js": {
       "mistri-built": "./dist/adapters/net/networkPolicy.js",
@@ -936,7 +932,6 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "optionalDependencies": {
-    "mysql2": "^3.23.4",
     "pg": "^8.23.0"
   },
   "engines": {

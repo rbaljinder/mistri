@@ -455,6 +455,7 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
               ? { reverted: false }
               : {},
         true,
+        error,
       );
     }
     /* An import's commit is one scoped transaction: refused, it wrote
