@@ -13,15 +13,12 @@ import { installWriteCapture, type CaptureSource } from '@mistriwork/engine/adap
 import { captureRecordHistory, capturesWrites, type RecordHistorySink } from '../../adapters/history/recordHistory.js';
 import { appendPostgresRecordChange } from '../../adapters/history/postgresRecordHistory.js';
 import { appendSqliteRecordChange } from '../../adapters/history/sqliteRecordHistory.js';
-import { appendMysqlRecordChange } from '../../adapters/history/mysqlRecordHistory.js';
 import { appendPostgresNotice } from '../../adapters/inbox/postgresInbox.js';
 import { appendSqliteNotice } from '../../adapters/inbox/sqliteInbox.js';
-import { appendMysqlNotice } from '../../adapters/inbox/mysqlInbox.js';
 import { queuePostgresChannelNotice, queueSqliteChannelNotice } from '../../adapters/integrations/integrationStore.js';
 import { captureLiveChanges, capturesLiveChanges, type LiveChangeCapture, type LiveChangeSink } from '../../adapters/live/liveChange.js';
 import { appendPostgresLiveChange } from '../../adapters/live/postgresLiveChange.js';
 import { appendSqliteLiveChange } from '../../adapters/live/sqliteLiveChange.js';
-import { appendMysqlLiveChange } from '../../adapters/live/mysqlLiveChange.js';
 
 export { bindRecordHistory } from '../../adapters/history/recordHistory.js';
 export { bindNotices } from '../../adapters/inbox/inbox.js';
@@ -48,14 +45,6 @@ function sinkOf(source: CaptureSource): RecordHistorySink {
         notify: async (row) => appendSqliteNotice(writer.db, row),
         message: async (row) => queueSqliteChannelNotice(writer.db, row),
       };
-    case 'mysql':
-      // No channel queue on MySQL: a notice's channel message is not kept there.
-      return {
-        read,
-        rows,
-        append: (row) => appendMysqlRecordChange(writer.connection, writer.database, row),
-        notify: (row) => appendMysqlNotice(writer.connection, writer.database, row),
-      };
   }
 }
 
@@ -67,8 +56,6 @@ function liveSinkOf(source: CaptureSource): LiveChangeSink {
       return { read, append: (row) => appendPostgresLiveChange(writer.client, row) };
     case 'sqlite':
       return { read, append: async (row) => appendSqliteLiveChange(writer.db, row) };
-    case 'mysql':
-      return { read, append: (row) => appendMysqlLiveChange(writer.connection, writer.database, row) };
   }
 }
 

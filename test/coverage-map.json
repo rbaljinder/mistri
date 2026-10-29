@@ -910,6 +910,8 @@
       "tests": [{ "file": "test/config-relative-sqlite.test.ts" }, { "file": "e2e/shot-text.spec.ts" }]
     },
     { "id": "cli-flag-connection", "surface": ["cli: flag --connection"], "tests": [{ "file": "test/migrate-flags.test.ts" }] },
+    { "id": "cli-flag-connection-limit", "surface": ["cli: flag --connection-limit"], "tests": [{ "file": "test/check-deploy.test.ts" }] },
+    { "id": "cli-flag-cpus", "surface": ["cli: flag --cpus"], "tests": [{ "file": "test/connection-budget.test.ts" }, { "file": "test/check-deploy.test.ts" }] },
     { "id": "cli-flag-dark", "surface": ["cli: flag --dark"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
     { "id": "cli-flag-days", "surface": ["cli: flag --days"], "tests": [{ "file": "test/tenant-first-boot-cli.test.ts" }] },
     {
@@ -1144,6 +1146,11 @@
       "id": "cli-flag-trust-proxy-cloudflare",
       "surface": ["cli: flag --trust-proxy-cloudflare"],
       "tests": [{ "file": "test/trust-proxy.test.ts" }]
+    },
+    {
+      "id": "cli-flag-insecure-http-sign-in",
+      "surface": ["cli: flag --insecure-http-sign-in"],
+      "tests": [{ "file": "test/auth-insecure-http.test.ts" }]
     },
     { "id": "cli-flag-trust-proxy-hops", "surface": ["cli: flag --trust-proxy-hops"], "tests": [{ "file": "test/trust-proxy.test.ts" }] },
     {

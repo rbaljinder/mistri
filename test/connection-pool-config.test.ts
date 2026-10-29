@@ -9,7 +9,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import { configureWriteOrder } from '../packages/engine/src/adapters/writeLanes.js';
 import { connect } from '../packages/engine/src/adapters/connect.js';
 import type { PgConnectionManager } from '../packages/engine/src/adapters/postgresPool.js';
 import { loadConfig, Registry, saveConfig } from '../packages/engine/src/server/connections.js';
@@ -69,8 +68,7 @@ test('a pool outside the range, of the wrong shape or on another engine is refus
     [{ read: 4, write: 0 }, {}, /"write": 0 \}\. It must be a whole number from 1 to 64, without quotes/],
     [{ write: '8' }, {}, /"write": "8" \}.*without quotes/],
     [{ read: 4, max: 9 }, {}, /"pool\.max"\. A pool takes "read" and "write"/],
-    [{ read: 4 }, { url: './app.sqlite' }, /is not a PostgreSQL or MySQL connection/],
-    [{ read: 4 }, { url: 'mysql://reader@db/app' }, /MySQL accepts/],
+    [{ read: 4 }, { url: './app.sqlite' }, /is not a PostgreSQL connection/],
     [{ read: 4 }, { kind: 'http', url: 'https://api.example/v1/', description: 'desk.http.json' }, /HTTP connection; "pool" sizes/],
   ];
   for (const [pool, extra, message] of refused) {
@@ -200,7 +198,7 @@ test('a referenced URL that opens as another engine says its pool has no effect'
     assert.equal(adapter.dialect, 'sqlite');
     assert.deepEqual(
       warnings.filter((warning) => warning.includes('"pool"')),
-      ['"shop" has "pool", which sizes PostgreSQL or MySQL connections; it names another engine, so "pool" has no effect.'],
+      ['"shop" has "pool", which sizes PostgreSQL connections; it names another engine, so "pool" has no effect.'],
     );
   } finally {
     await registry.closeAll();
@@ -210,15 +208,9 @@ test('a referenced URL that opens as another engine says its pool has no effect'
   }
 });
 
-test('MySQL and MariaDB accept a per-source writer size', async () => {
-  for (const scheme of ['mysql', 'mariadb']) {
-    const loaded = await withConfig(entry({ write: 7 }, { url: `${scheme}://reader@db/app` }), (path) => loadConfig(path, CONFIG_SECTIONS));
-    assert.deepEqual(loaded?.connections[0].pool, { write: 7 });
-    configureWriteOrder('keyed');
-    const adapter = connect(`${scheme}://reader@db/app`, { mysql: { writers: loaded?.connections[0].pool?.write } });
-    configureWriteOrder('serial');
-    assert.equal(Reflect.get(adapter, 'writerSize'), 7);
-    await adapter.close();
+test('MySQL and MariaDB URLs are refused before any connection is opened', () => {
+  for (const url of ['mysql://u@h/db', 'mariadb://u@h/db']) {
+    assert.throws(() => connect(url), /MySQL is not supported; use PostgreSQL or SQLite/);
   }
 });
 

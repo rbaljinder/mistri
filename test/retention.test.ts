@@ -25,14 +25,14 @@ import {
   pruneAll,
   pruneStatement,
   prunes,
-  mysqlPruneDb,
   registerPrune,
   sqlitePruneDb,
   type PruneRule,
 } from '../packages/mistri/src/adapters/retention/pruner.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { parseAppRetention, retentionMs } from '../packages/mistri/src/shared/appRetention.js';
-import { retentionJob, retentionPrunes, retentionTargetOf, startRetentionTimer } from '../packages/mistri/src/server/retention.js';
+import { retentionJob, retentionPrunes, startRetentionTimer } from '../packages/mistri/src/server/retention.js';
+import { storeTargetOf } from '../packages/mistri/src/server/commands/appCommandEvents.js';
 import { bindRecordHistory } from '../packages/mistri/src/server/stores/writeCaptures.js';
 import { eventDeliveryFixture, eventDeliveryPolicy } from './support/eventDeliveryFixture.js';
 
@@ -123,7 +123,6 @@ describe('the pruner', () => {
       assert.equal(pauses, 2);
       assert.equal(count(db), 3, 'the rows the predicate withholds stay however old');
       assert.match(pruneStatement({ dialect: 'postgres' }, rule(), PRUNE_BATCH), /LIMIT 5000 FOR UPDATE SKIP LOCKED/);
-      assert.match(pruneStatement({ dialect: 'mysql' }, rule(), PRUNE_BATCH), /LIMIT 5000$/);
     });
   });
 
@@ -405,56 +404,10 @@ describe('retention beyond one SQLite file', () => {
     }
   });
 
-  test('a connection URL names its database, MySQL included', () => {
-    assert.deepEqual(retentionTargetOf('mysql://u:p@h/db'), { mysql: 'mysql://u:p@h/db' });
-    assert.deepEqual(retentionTargetOf('mariadb://u@h/db'), { mysql: 'mariadb://u@h/db' });
-    assert.deepEqual(retentionTargetOf('postgres://h/db'), { postgres: 'postgres://h/db' });
-    assert.deepEqual(retentionTargetOf('sqlite:///tmp/a.db'), { sqlite: '/tmp/a.db' });
-    assert.equal(retentionTargetOf(undefined), undefined);
-  });
-
-  test('MySQL deletes in bounded, ordered batches through a connection that selects the database', async () => {
-    const statements: string[] = [];
-    const answers = [5000, 5000, 12];
-    const db = mysqlPruneDb({
-      async query(sql) {
-        statements.push(sql);
-        return sql.startsWith('SELECT') ? [[{ present: 1 }], undefined] : [{ affectedRows: answers.shift() ?? 0 }, undefined];
-      },
-    });
-    assert.equal(await db.has('__mistri_history_change'), true);
-    const history = prunes().find((rule) => rule.id === 'record-history')!;
-    assert.equal(await prune(db, history, 30 * DAY, { now: () => NOW, sleep: async () => {} }), 10_012);
-    const deletes = statements.filter((sql) => sql.startsWith('DELETE'));
-    assert.equal(deletes.length, 3);
-    assert.match(
-      deletes[0]!,
-      /^DELETE FROM `__mistri_history_change` WHERE .*`at` < \? ORDER BY `__mistri_history_change`\.`at` LIMIT 5000$/,
-    );
-  });
-
-  test('live MySQL forgets old history rows and keeps recent ones', { skip: !process.env.TABLEWALK_TEST_MYSQL }, async () => {
-    const specifier = 'mysql2/promise';
-    const mysql = await import(specifier);
-    const connection = await (mysql.createConnection ?? mysql.default.createConnection)({
-      uri: process.env.TABLEWALK_TEST_MYSQL,
-      timezone: 'Z',
-    });
-    const table = '__mistri_retention_proof';
-    try {
-      await connection.query(`DROP TABLE IF EXISTS \`${table}\``);
-      await connection.query(`CREATE TABLE \`${table}\` (id INT AUTO_INCREMENT PRIMARY KEY, at DATETIME(3) NOT NULL)`);
-      for (const days of [90, 80, 1])
-        await connection.query(`INSERT INTO \`${table}\` (at) VALUES (?)`, [
-          new Date(NOW - days * DAY).toISOString().replace('T', ' ').replace('Z', ''),
-        ]);
-      const live: PruneRule = { id: 'mysql-live', window: 'history', table, time: 'at', clock: 'timestamp' };
-      assert.equal(await prune(mysqlPruneDb(connection), live, 30 * DAY, { now: () => NOW, batch: 1, sleep: async () => {} }), 2);
-      assert.equal(((await connection.query(`SELECT count(*) AS n FROM \`${table}\``))[0] as Array<{ n: number }>)[0]!.n, 1);
-    } finally {
-      await connection.query(`DROP TABLE IF EXISTS \`${table}\``).catch(() => {});
-      await connection.end().catch(() => {});
-    }
+  test('a connection URL names its database', () => {
+    assert.deepEqual(storeTargetOf('postgres://h/db'), { postgres: 'postgres://h/db' });
+    assert.deepEqual(storeTargetOf('sqlite:///tmp/a.db'), { sqlite: '/tmp/a.db' });
+    assert.equal(storeTargetOf(undefined), undefined);
   });
 });
 

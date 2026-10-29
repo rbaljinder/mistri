@@ -94,10 +94,41 @@ export function captureRowScope(input: RowScope): RowScope {
    snapshot is frozen all the way down and was made here, never by a caller,
    so checking it again against the same catalog object could only pass and
    copy it to an equal value: it is handed back as it is. A catalog that can
-   still change is checked afresh every time, as before; so is anything a
-   caller built, however frozen. */
+   still change is checked afresh every time, as before; anything a caller
+   built, however frozen, is copied every time and then found by its text
+   (below), never handed back as itself. */
 const snapshots = new WeakMap<object, WeakSet<DatabaseSchema>>();
 const checkedAgainst = (scope: object, schema: DatabaseSchema) => snapshots.get(scope)?.has(schema) === true;
+
+/* And by what they say. A policy that names its reader (`owner_account_id = <the account>`) builds its scope afresh
+   on every request: a new object each time, equal to the last, so every request copied and checked it again, and
+   every cache keyed by a scope's identity downstream (tenantReadScope.ts compositions, the scoped reads' kept
+   statements) missed, composing and compiling afresh too — a field report's tenant App, whose staff scope names
+   two hundred tables and the reader, spent a sixth of a tenant enter there. The copy is still made, so nothing the
+   caller holds can change what is checked; it is then looked up by its text against a catalog nothing can change,
+   and an equal scope already checked against it is handed back. The text is the copy's own — plain strings,
+   booleans, finite numbers, arrays and records, nothing else survives captureRowScope — so equal text is an equal
+   scope. Bounded per catalog; a reader past the bound is checked as before. */
+const byText = new WeakMap<DatabaseSchema, Map<string, RowScope>>();
+const BY_TEXT_HELD = 256;
+
+/** A scope's text, where the text says all of it: undefined for anything JSON would say the same as something else
+ * (an undefined value, which it drops; a non-finite number; an object that is not a plain record). Only for data
+ * nothing can intercept — a copy this module or the tenant capture made — never a caller's live object, whose
+ * accessors JSON.stringify would run. */
+export function rowScopeText(value: unknown): string | undefined {
+  let plain = true;
+  const text = JSON.stringify(value, (_key, item: unknown) => {
+    if (
+      item === undefined ||
+      (typeof item === 'number' && !Number.isFinite(item)) ||
+      (item !== null && typeof item === 'object' && !Array.isArray(item) && ![null, Object.prototype].includes(Object.getPrototypeOf(item)))
+    )
+      plain = false;
+    return item;
+  });
+  return plain ? text : undefined;
+}
 
 /** Test-only: how many row scopes were copied and checked in full rather than handed back. */
 export const rowScopeCounters = { checked: 0 };
@@ -111,8 +142,17 @@ export function isRowScopeSnapshot(value: unknown): boolean {
 export function snapshotRowScope(schema: DatabaseSchema, input: RowScope): RowScope {
   if (input !== null && typeof input === 'object' && checkedAgainst(input, schema)) return input;
   const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+  /* A snapshot checked against another catalog — the same policy's constant scope under a second deployment of the
+     App in this process, after a reload — is already plain frozen data this module made, so it is checked as it is
+     and kept against this catalog too. Copied, its copy was a new object each time, which the caches keyed by a
+     scope (tenantReadScope.ts) never found again: every request after a reload checked and composed afresh. */
+  const scope = isRowScopeSnapshot(input) ? input : captureRowScope(input);
+  const fixed = isFixedScopeCatalog(schema);
+  const text = fixed && scope !== input ? rowScopeText(scope) : undefined;
+  const held = text === undefined ? undefined : byText.get(schema);
+  const known = text === undefined ? undefined : held?.get(text);
+  if (known) return known;
   rowScopeCounters.checked++;
-  const scope = captureRowScope(input);
   let conditions = 0;
   for (const [id, policy] of Object.entries(scope)) {
     const table = findTable(schema, id);
@@ -153,10 +193,16 @@ export function snapshotRowScope(schema: DatabaseSchema, input: RowScope): RowSc
     }
   }
   // Kept only against a catalog nothing can change; checked against one that can, it is checked again next time.
-  if (isFixedScopeCatalog(schema)) {
+  if (fixed) {
     const against = snapshots.get(scope);
     if (against) against.add(schema);
     else snapshots.set(scope, new WeakSet([schema]));
+    if (text !== undefined) {
+      let kept = held;
+      if (!kept) byText.set(schema, (kept = new Map()));
+      if (kept.size >= BY_TEXT_HELD) kept.delete(kept.keys().next().value!);
+      kept.set(text, scope);
+    }
   }
   return scope as RowScope;
 }

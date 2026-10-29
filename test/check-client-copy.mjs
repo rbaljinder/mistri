@@ -122,7 +122,6 @@ const ALLOWED = [
   { file: 'components/AgentConsole.tsx', text: 'isError', reason: "the name of an MCP result's field" },
   { file: 'components/ConnectionDialog.tsx', text: 'PROD_PASSWORD', reason: 'an example environment variable name' },
   { file: 'components/ConnectionDialog.tsx', text: 'postgres://', reason: 'the start of a connection URL, as typed' },
-  { file: 'components/ConnectionDialog.tsx', text: 'mysql://', reason: 'the start of a connection URL, as typed' },
   { file: 'components/QrCode.tsx', text: 'Byte', reason: "the QR encoder's mode name, an argument, never drawn" },
   { file: 'components/builtInInputs.tsx', text: '#1d6a5a', reason: 'an example color code, as typed' },
   {

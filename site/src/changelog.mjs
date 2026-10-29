@@ -12,8 +12,9 @@
  * that file is or to the file on GitHub.
  */
 import { Marked } from 'marked';
+import { REPOSITORY_PUBLIC, REPOSITORY_URL } from './repository.mjs';
 
-const REPOSITORY = 'https://github.com/rbaljinder/mistri/blob/main/';
+const REPOSITORY = `${REPOSITORY_URL}/blob/main/`;
 const SITE_PAGE = /^site\/src\/content\/docs\/(docs\/[^#]+?)\.mdx?(#.*)?$/;
 
 /** @param {string} text */
@@ -24,12 +25,18 @@ const slug = (text) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
-/** @param {string} href */
-export function rewriteHref(href) {
+/**
+ * Where a link the changelog wrote as a repository path goes: a site page to its page, any other file to the repository
+ * — or nowhere while the repository is private, and the link is drawn as its text (a private repository is a 404).
+ * @param {string} href
+ * @param {boolean} [repositoryPublic]
+ * @returns {string | undefined}
+ */
+export function rewriteHref(href, repositoryPublic = REPOSITORY_PUBLIC) {
   if (/^(?:[a-z]+:|#|\/)/i.test(href)) return href;
   const page = SITE_PAGE.exec(href);
   if (page) return `/${page[1]}/${page[2] ?? ''}`;
-  return REPOSITORY + href.replace(/^\.\//, '');
+  return repositoryPublic ? REPOSITORY + href.replace(/^\.\//, '') : undefined;
 }
 
 /**
@@ -45,9 +52,13 @@ export function changelogPage(markdown) {
   const marked = new Marked({
     gfm: true,
     walkTokens(token) {
-      if (token.type === 'link') token.href = rewriteHref(token.href);
+      if (token.type === 'link') token.href = /** @type {string} */ (rewriteHref(token.href) ?? '');
     },
     renderer: {
+      /* A link with nowhere to go is its text; any other is drawn as marked draws it. */
+      link({ href, tokens }) {
+        return href ? false : this.parser.parseInline(tokens);
+      },
       heading({ tokens, depth, text }) {
         if (depth === 1) return '';
         const base = depth === 2 ? (release = `v${slug(text)}`) : `${release}-${slug(text)}`;

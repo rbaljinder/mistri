@@ -292,9 +292,6 @@ export function ConnectionDialog({
                   <button type="button" className="conn-scheme-fix" onClick={() => repair('postgres')}>
                     postgres://
                   </button>
-                  <button type="button" className="conn-scheme-fix" onClick={() => repair('mysql')}>
-                    mysql://
-                  </button>
                 </>
               ) : null}
             </p>

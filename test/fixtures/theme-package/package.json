@@ -1,11 +1,11 @@
 {
-  "name": "tablewalk-theme-ledger",
+  "name": "tablewalk-theme-daybook",
   "version": "1.0.0",
   "description": "A published look for tablewalk Apps: the fixture test/theme-package.test.ts installs into two Apps.",
   "files": [
     "theme.js",
     "theme.d.ts",
-    "ledger.css",
+    "daybook.css",
     "paper.png",
     "fonts"
   ],

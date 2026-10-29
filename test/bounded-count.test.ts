@@ -11,7 +11,7 @@
  * database runs carries the LIMIT — read off the driver, and on PostgreSQL off
  * the planner's own account of how many rows the scan produced.
  *
- * SQLite always; PostgreSQL and MySQL live and opt-in (test/live.ts).
+ * SQLite always; PostgreSQL live and opt-in (test/live.ts).
  */
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -22,7 +22,6 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, before, describe, test } from 'node:test';
 import { countStatement, Refusal, type Adapter, type Filter } from '../packages/engine/src/adapters/adapter.js';
-import { MysqlAdapter } from '../packages/engine/src/adapters/mysql.js';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
 import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
@@ -587,55 +586,5 @@ describe('bounded counts on PostgreSQL, against a real server', { skip: liveSkip
       await registry.closeAll();
       rmSync(directory, { recursive: true, force: true });
     }
-  });
-});
-
-const MY = process.env.TABLEWALK_TEST_MYSQL;
-
-describe('bounded counts on MySQL, against a real server', { skip: liveSkip('mysql', MY) }, () => {
-  const DB = 'tablewalk_bounded_count';
-  type Admin = { query(sql: string): Promise<unknown>; end(): Promise<void> };
-  const admin = async (): Promise<Admin> => {
-    const specifier = 'mysql2/promise';
-    const mysql = (await import(specifier)) as { createConnection: (c: Record<string, unknown>) => Promise<Admin> };
-    return mysql.createConnection({ uri: MY! });
-  };
-  let adapter: MysqlAdapter;
-
-  before(async () => {
-    const db = await admin();
-    try {
-      await db.query(`DROP DATABASE IF EXISTS \`${DB}\``);
-      await db.query(`CREATE DATABASE \`${DB}\``);
-      await db.query(`CREATE TABLE \`${DB}\`.ticket (id INT AUTO_INCREMENT PRIMARY KEY, desk INT NOT NULL, name VARCHAR(40))`);
-      const rows = [...Array.from({ length: DESK_ONE }, () => "(1, 'one')"), ...Array.from({ length: DESK_TWO }, () => "(2, 'two')")];
-      await db.query(`INSERT INTO \`${DB}\`.ticket (desk, name) VALUES ${rows.join(', ')}`);
-    } finally {
-      await db.end();
-    }
-    const url = new URL(MY!);
-    url.pathname = `/${DB}`;
-    adapter = new MysqlAdapter(url.toString(), 'bounded-count');
-  });
-  after(async () => {
-    await adapter?.close();
-    const db = await admin();
-    try {
-      await db.query(`DROP DATABASE IF EXISTS \`${DB}\``);
-    } finally {
-      await db.end();
-    }
-  });
-
-  test('the adapter and a scoped reader: exact below the bound, the bound past it', async () => {
-    const id = (await adapter.introspect()).tables.find((table) => table.name === 'ticket')!.id;
-    assert.equal(await adapter.count(id), ALL);
-    assert.equal(await adapter.count(id, undefined, 11), 11);
-    assert.equal(await adapter.count(id, undefined, ALL + 1), ALL);
-    assert.equal(await adapter.count(id, onDesk('desk', 1), 11), DESK_ONE);
-    const scoped = await adapter.scopeReads({ [id]: onDesk('desk', 2) });
-    assert.equal(await scoped.count(id, undefined, 11), 11);
-    assert.equal(await scoped.count(id, undefined, DESK_TWO + 1), DESK_TWO);
-    assert.equal(await scoped.count(id, onDesk('desk', 1), 11), 0);
   });
 });

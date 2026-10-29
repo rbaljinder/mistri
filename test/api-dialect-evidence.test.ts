@@ -86,7 +86,7 @@ test('a table the catalog does not stamp, beside one it does, is refused rather 
 });
 
 test('an engine owner serves the tables its exposed operations reach, each on its engine', () => {
-  const two = createAppSourceCatalog({ sales: { schema: schema('postgres') }, stock: { schema: schema('mysql') } }, 'sales').schema;
+  const two = createAppSourceCatalog({ sales: { schema: schema('postgres') }, stock: { schema: schema('sqlite') } }, 'sales').schema;
   assert.equal(apiCatalogOn(two, 'postgres', ['item']), true);
   assert.equal(apiCatalogOn(two, 'postgres', ['item', 'stock.item']), false);
   assert.equal(apiCatalogOn(two, 'postgres'), false, 'with no tables named, the whole catalog is judged');

@@ -26,7 +26,7 @@ import type { AppDef } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { PLATFORM_TENANT_ID, TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
 import { assistantModel } from '../assistant/assistantModel.js';
-import { assistantStoreAt } from '../assistant/assistantStores.js';
+import { assistantStoreAt, storeUnavailableReply } from '../assistant/assistantStores.js';
 import { purgeOnSchedule, retentionCutoff } from '../assistant/assistantRetention.js';
 import { answerAssistant, ASSISTANT_PATHS } from '../http/assistantRoutes.js';
 import { CapturedReply } from '@mistriwork/engine/server/http/captured.js';
@@ -216,7 +216,7 @@ export function createTenantAssistant(options: TenantAssistantOptions) {
     try {
       opened = await storeOf();
     } catch (error) {
-      throw new HttpError(503, error instanceof Error ? error.message : 'The assistant store is unavailable.');
+      throw storeUnavailableReply(error);
     }
     const tenantId = lease.tenantId;
     return {

@@ -51,7 +51,7 @@ export interface ReadCatalog {
   readonly stage: 'read-validation-foundation';
   readonly operations: readonly ReadOperation[];
 }
-const SQL: ReadonlySet<string> = new Set(['sqlite', 'postgres', 'mysql']);
+const SQL: ReadonlySet<string> = new Set(['sqlite', 'postgres']);
 function fail(at: string, message: string): never {
   throw new Error(`${at}: ${message}.`);
 }

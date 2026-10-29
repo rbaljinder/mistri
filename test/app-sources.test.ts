@@ -159,7 +159,7 @@ test('source maps, aliases and binding shapes fail with contextual messages', ()
 test('source bindings cannot carry connection URLs or repeat the same configured reference', () => {
   for (const connection of [
     'postgres://admin:secret@private-host/db',
-    ' mysql://admin:secret@private-host/db ',
+    ' postgresql://admin:secret@private-host/db ',
     'sqlite:///private/secret.db',
   ]) {
     assert.throws(

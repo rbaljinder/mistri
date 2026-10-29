@@ -5,6 +5,56 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.3
+
+- **MySQL and MariaDB are not supported.** The adapter, the `mysql2` driver and every MySQL branch of the SQL
+  generation, the stores and the migration runner are removed; PostgreSQL and SQLite are the databases of 1.0. A
+  `mysql://` or `mariadb://` address, or a config that names one, now fails with "MySQL is not supported; use
+  PostgreSQL or SQLite." The `{ mysql: url }` target of `provisionStores` is gone with it.
+- **`--auth-proxy-header` is believed only from a proxy.** A request that carried the header from a peer that was
+  neither loopback nor in `--trust-proxy` was taken at its word, so anyone who could reach the port could name
+  themselves. It is now refused, naming the header. Put your proxy's address in `--trust-proxy`.
+- **`mistri` and `tablewalk` export only what they name.** The `./*` export pattern, which made every file under
+  `src/` importable, is gone.
+- **`Retry-After` says how long a full connection limit will hold.** A request refused because the database's
+  connection limit was reached now answers `Retry-After: 30`, the time the pool holds back before trying again; a full
+  queue still answers 1. The tenant path follows the same rule.
+- **Ledger is a built-in look.** Figures, ids, dates and labels in IBM Plex Mono, ruled boxes on a faint graph-paper
+  ground, column heads closed with a double rule, and one deep green for the menu, the primary button and links, with
+  the twelve shared palettes. A custom theme may no longer take a built-in look's id: an App that declared its own
+  `ledger` is refused at load and should drop it for the built-in, which keeps the same id for anyone who picked it.
+- **Less work per request on a tenant App.** On a large field App served by half a CPU to 25 people with live streams,
+  CPU per request fell from 13.0 to 9.6 ms, memory allocated per request from 3.9 to 1.6 MB, time in garbage
+  collection from 9.6% to 5.2%, and entering a tenant from 114 to 84 ms at the median. A computed column's `now` is
+  written as the request's instant instead of into a copy of the catalog, so caches keyed by the catalog are found
+  again; row scopes, view references and breakdowns are kept by what they say; and after an App reload the
+  composition caches hit again where they had never been found (5 to 11 scope checks a request, now none).
+- **`mistri check --deploy` counts connections.** It prints, per database, the processes times the connections one
+  process may hold, from every pool the App opens (the adapter, live sync, jobs, effects, integrations, decisions,
+  the API event feed, the assistant, replicas and the sign-in store), sized for `--cpus <n>` (default: this
+  machine's). `--connection-limit <n>` turns a total above it into an error. A served PostgreSQL App also says at
+  start, once, when one process could hold more than the role or server allows.
+- **Sign-in over plain http beyond loopback is refused.** Session cookies over http are never marked Secure, and the
+  password crosses the network in the clear. Set the public address (`MISTRI_PUBLIC_URL`) to a TLS proxy's https
+  address, or listen on loopback behind it; `--insecure-http-sign-in` (`MISTRI_INSECURE_HTTP_SIGN_IN=1`) serves it
+  anyway, with the warning.
+- **A password-reset link is written to the log only under `mistri dev`.** A served App without an email service
+  answers a reset request as before, sends nothing, and logs one line without the link; a warning at start says the
+  offer cannot be kept.
+- **A component the check would refuse is not served.** Raw HTML (`dangerouslySetInnerHTML`, `innerHTML`), `eval`,
+  `new Function`, string timers, `javascript:` addresses and a component's reach for the server's environment were
+  findings of `mistri check` only; loading the App now refuses them with the same text. The rule is a heuristic, and
+  an App author is trusted: it is not a sandbox.
+- **Every App subdirectory is checked for world-writability on each load,** not only the App's own directory, and a
+  reload that fails it keeps the last good App. The guard does not run on Windows, where directory ACLs are the
+  operator's.
+- **The theme bench answers 404 unless a dev start mounts it.** Unmounted, its address fell through to the App shell.
+- **A driver's error text stays out of the assistant store's 503.** The reply says the store is unavailable; the
+  detail goes to the server log.
+- **A sidebar with a footer group no longer pushes the App's identity and Collapse below the window.** The nav list
+  shrinks and scrolls instead, in every look.
+- **`mistri grade` holds a phone target to 44px,** as `docs/design.md` says, where it had said 40.
+
 ## 1.0.0-rc.2
 
 The first release candidate, and the first release of mistri: the App framework
@@ -1555,6 +1605,10 @@ ship as packages.
 
 ### Upgrading from 0.9.3
 
+> Since this entry: 0.9.8 moved feature flags, audiences and `@mistriwork/mistri/openfeature`, experiments, the Suite
+> Console, behavior analytics, SCIM, the Gantt presentation and a resource's `search` to Preview at 1.0, outside the
+> compatibility promise. [Status & roadmap](site/src/content/docs/docs/status.md) is the list.
+
 - `--check-app` is gone: use `tablewalk check`. `--look` on `shot` is gone: use `--theme <id|all>`.
   `--preview-features` and the `preview:` line are gone, since nothing is in Preview.
 - A theme's `type.scale` becomes `type.roles.title.size` (or `type.base`), `type.headingWeight` becomes
@@ -2157,6 +2211,10 @@ only restates it.
 0.9.0 is the line 1.0.0 will be cut from. Every rename, removal and store layout below is in effect now: an old
 spelling is refused with the new one named, and a store behind its layout is refused. The compatibility promise
 itself (`docs/compatibility.md`) takes effect at 1.0.0.
+
+> Since this entry: 0.9.8 moved feature flags, audiences and `@mistriwork/mistri/openfeature`, experiments, the Suite
+> Console, behavior analytics, SCIM, the Gantt presentation and a resource's `search` to Preview at 1.0, outside the
+> compatibility promise. [Status & roadmap](site/src/content/docs/docs/status.md) is the list.
 
 - **What 1.0 promises.** An App written against 1.0 keeps working through every 1.x release: its DSL keys and
   values, the `tablewalk/*` exports, the CLI's commands, flags and exit codes, the HTTP and App API, the MCP tools, the

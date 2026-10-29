@@ -37,12 +37,14 @@ import { cancellation, onCancel, STATEMENT_TIMEOUT_MS, StatementStopped, throwIf
 import {
   PoolBusy,
   PoolMeter,
+  POOL_LIMIT_HOLD_MS,
   POOL_QUEUE_PER_CONNECTION,
   POOL_QUEUE_WAIT_MS,
   type PoolerMode,
   type PoolRole,
   type PoolRoleStats,
 } from './poolMetrics.js';
+import { holdConnections, managerConnections } from './connectionBudget.js';
 import { pgConnectionOptions } from './postgresValues.js';
 import { sealedPgOptions } from './net/untrustedDatabase.js';
 import type { NetworkPolicy } from './net/networkPolicy.js';
@@ -140,8 +142,7 @@ const ACQUISITION_TIMEOUT = /timeout exceeded when trying to connect/i;
 /** The server refused this process another connection: too many for its role, or for the server (SQLSTATE 53300). */
 const atConnectionLimit = (error: unknown): boolean =>
   error !== null && typeof error === 'object' && (error as { code?: unknown }).code === '53300';
-/** How long a pool the server refused stays at the connections it holds before it asks for more: its idle timeout. */
-const LIMIT_HOLD_MS = 30_000;
+const LIMIT_HOLD_MS = POOL_LIMIT_HOLD_MS;
 /** How many times one checkout asks again after a refusal, a held connection having gone meanwhile. */
 const LIMIT_ATTEMPTS = 3;
 
@@ -178,6 +179,8 @@ export interface PgConnectionOptions {
   readonly pipelineReads?: boolean;
   /** What server timing calls this database (serverTiming.ts): `app` unless a replica's manager says otherwise. */
   readonly timingLabel?: string;
+  /** False for a replica's manager, whose readers its primary's manager has already counted (connectionBudget.ts). */
+  readonly counted?: boolean;
 }
 
 /* Server timing (telemetry/serverTiming.ts) is loaded with the first pool, not with this module: a print-and-exit
@@ -188,7 +191,13 @@ let timing: typeof ServerTiming | undefined;
 /** What no one chose: an App (keyed writes) reads as widely as it writes, never fewer, because writes without
  * readers to match only moved the queue to the reads; the database browser keeps four. */
 function defaultReaders(writers: number): number {
-  return writeOrder() === 'keyed' ? Math.min(MAX_READERS, Math.max(balancedPoolSize(), writers)) : DEFAULT_READERS;
+  return writeOrder() === 'keyed' ? appReaders(writers) : DEFAULT_READERS;
+}
+
+/** An App's reader pool where none was chosen: as wide as its writers, at least the balanced size for `cores`
+ * (this machine's, unless a deployment check asks for another's). */
+export function appReaders(writers: number, cores?: number): number {
+  return Math.min(MAX_READERS, Math.max(balancedPoolSize(cores), writers));
 }
 
 /**
@@ -253,6 +262,8 @@ export class PgConnectionManager {
   private readonly limitHolds: Partial<Record<OwnRole, ReturnType<typeof setTimeout>>> = {};
   /** When each pool last said it reached the connection limit: once a spell, not once a checkout. */
   private readonly limitSaid: Partial<Record<OwnRole, number>> = {};
+  /** Gives back what this manager told the connection budget it may hold (connectionBudget.ts). */
+  private readonly releaseBudget: () => void;
 
   constructor(
     private readonly connectionString: string,
@@ -284,6 +295,15 @@ export class PgConnectionManager {
     const replicas = options.replicas ?? [];
     if (replicas.length > MAX_REPLICAS)
       throw new RangeError(`A connection names at most ${MAX_REPLICAS} replicas; this one names ${replicas.length}.`);
+    /* A manager may open readers, writers and the background writer; a replica's own are readers only. */
+    const releases =
+      options.counted === false
+        ? []
+        : [
+            holdConnections(connectionString, managerConnections(readers, writers), () => this.read() as never),
+            ...replicas.map((url) => holdConnections(url, readers)),
+          ];
+    this.releaseBudget = () => releases.forEach((release) => release());
     /* Sized as this manager's readers are, the same pooler, cap and queue
        bounds: a replica is where this pool's reads go, so it must hold them. */
     if (replicas.length)
@@ -295,6 +315,7 @@ export class PgConnectionManager {
               readers,
               writers,
               replicas: undefined,
+              counted: false,
               timingLabel: 'app-replica',
             }),
         ),
@@ -401,6 +422,7 @@ export class PgConnectionManager {
 
   close(): Promise<void> {
     this.closed = true;
+    this.releaseBudget();
     for (const timer of Object.values(this.limitHolds)) clearTimeout(timer);
     this.closing ??= Promise.all([this.endPools(), ...(this.replicas?.pools ?? []).map((replica) => replica.close())]).then(() => {});
     return this.closing;

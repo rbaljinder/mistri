@@ -377,10 +377,10 @@ async function provisionAppStores(
   const said = (what: string, outcome: { provisioned: boolean }) => `${what} ${outcome.provisioned ? 'provisioned' : 'present'}`;
   /* The store list's own provisioning (maintenance.ts provisionStores), on the database each store belongs in. */
   const provision = (where: { url: string; dialect: string; target?: Target }, options: ProvisionStoresOptions) =>
-    maintenance.provisionStores(where.dialect === 'mysql' ? { mysql: where.url } : where.target!, options);
-  /* A store the list keeps on every engine, or only where a store target is (SQLite, PostgreSQL). */
-  const unbound = (id: string, what: string, everywhere: boolean) => async (where: { url: string; dialect: string; target?: Target }) => {
-    if (!(everywhere && where.dialect === 'mysql')) kept(where, what);
+    maintenance.provisionStores(where.target!, options);
+  /* A store the list keeps where a store target is (SQLite, PostgreSQL). */
+  const unbound = (id: string, what: string) => async (where: { url: string; dialect: string; target?: Target }) => {
+    kept(where, what);
     const made = (await provision(where, { only: [id] })).stores[id];
     return said(`${what} v${made.version}`, made);
   };
@@ -441,15 +441,13 @@ async function provisionAppStores(
         return `command journal v${journal.version} ${journal.migrated ? 'provisioned' : 'present'}`;
       });
     if (Object.values(app.resources ?? {}).some((resource) => resource.clone !== undefined))
-      add(home, unbound('tenant-sandboxes', 'sandbox store', false));
-    if (historyRules(app, loaded.pages).size) add(home, unbound('record-history', 'record history', true));
+      add(home, unbound('tenant-sandboxes', 'sandbox store'));
+    if (historyRules(app, loaded.pages).size) add(home, unbound('record-history', 'record history'));
     /* Live sync's change store, where every tenant's writes are told to the pages that show them. */
-    add(home, unbound('live-change', 'live sync store', true));
+    add(home, unbound('live-change', 'live sync store'));
     /* What a production build's start last validated (tenantValidationRecord.ts): PostgreSQL's only, and never
        required — a database without it is checked in full at every start, so a SQLite one is passed over unsaid. */
-    add(home, async (where) =>
-      where.dialect === 'postgres' ? await unbound('validation-record', 'validation record', false)(where) : undefined,
-    );
+    add(home, async (where) => (where.dialect === 'postgres' ? await unbound('validation-record', 'validation record')(where) : undefined));
     /* The event store, the effects' destinations and the jobs' stores, each bound to every tenant of the App. */
     if (registryOf && (jobs || commands.some((command) => getCommandEvents(command) || getCommandEffects(command))))
       add(home, async (where) => {
@@ -465,16 +463,16 @@ async function provisionAppStores(
   }
   const notifying = Object.entries(app.resources ?? {}).filter(([, resource]) => resource.notify?.length);
   for (const connection of new Set(notifying.map(([id]) => connectionOf(sourceOfResource(id)))))
-    add(connection, unbound('inbox', 'notification store', true));
+    add(connection, unbound('inbox', 'notification store'));
   /* A rule that emails an address the record holds queues its mail in the integrations store, in the write's transaction. */
   const emailing = notifying.filter(([, resource]) => resource.notify!.some((rule) => rule.send?.channel === 'email'));
   for (const connection of new Set(emailing.map(([id]) => connectionOf(sourceOfResource(id)))))
-    add(connection, unbound('integrations', 'integrations store', false));
+    add(connection, unbound('integrations', 'integrations store'));
   for (const connection of new Set([...historyRules(app, loaded.pages).keys()].map((id) => connectionOf(sourceOfResource(id)))))
-    add(connection, unbound('record-history', 'record history', true));
+    add(connection, unbound('record-history', 'record history'));
   /* Live sync's change store, on every database a resource is read from: a page showing any of them is told of its writes. */
   for (const connection of new Set(Object.keys(app.resources ?? {}).map((id) => connectionOf(sourceOfResource(id)))))
-    add(connection, unbound('live-change', 'live sync store', true));
+    add(connection, unbound('live-change', 'live sync store'));
   for (const connection of new Set(commands.map((command) => connectionOf(command.source))))
     add(connection, async (where) => {
       const target = kept(where, 'the command journal');

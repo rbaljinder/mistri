@@ -19,7 +19,7 @@ const list: Connection[] = [
     tables: 12,
   },
   { id: 'old', name: 'old', detail: '/tmp/old.db', dialect: 'sqlite', source: 'session', error: 'unable to open database file' },
-  { id: 'cat', name: 'catalog', detail: 'cat.example.org/cat', dialect: 'mysql', source: 'config', rows: false },
+  { id: 'cat', name: 'catalog', detail: 'cat.example.org/cat', dialect: 'postgres', source: 'config', rows: false },
 ];
 const api = vi.fn(async (path: string, body?: unknown): Promise<{ connections: typeof list; active: string }> => {
   calls.push([path, body]);

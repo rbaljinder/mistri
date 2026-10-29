@@ -12,7 +12,7 @@ import type { Adapter } from '../packages/engine/src/adapters/adapter.js';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
 import { compileBreakdown, withBreakdownComputed } from '../packages/engine/src/shared/breakdown.js';
 import { breakdownToText, textToBreakdown } from '../packages/engine/src/shared/breakdowntext.js';
-import { MYSQL_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { parseAppConfig, resolveViews, withRollups, type AppDashboardView } from '../packages/mistri/src/shared/app.js';
 import { liveSkip } from './live.js';
@@ -84,18 +84,11 @@ test('an average of a yes-or-no is read as 0 and 1 on PostgreSQL, which has no a
   assert.match(sql, /SUM\(CAST\([^]*? AS INTEGER\)\) AS "won"/);
 });
 
-test("median is PostgreSQL's, and refused on SQLite and MySQL with the reason", () => {
+test("median is PostgreSQL's, and refused on SQLite with the reason", () => {
   assert.deepEqual(textToBreakdown(schemaOf('postgres'), 'deal median amount by stage').errors, []);
-  for (const [dialect, word] of [
-    ['sqlite', 'SQLite'],
-    ['mysql', 'MySQL'],
-  ] as const) {
-    const { errors } = textToBreakdown(schemaOf(dialect), 'deal sum won / median amount');
-    assert.equal(errors.length, 1);
-    assert.match(errors[0].message, new RegExp(`\`median\` is not available on ${word}: it has no median aggregate`));
-  }
-  const def = textToBreakdown(schemaOf('postgres'), 'deal median amount').breakdown!;
-  assert.throws(() => compileBreakdown(schemaOf('mysql'), def, MYSQL_STYLE), /not available on MySQL/);
+  const { errors } = textToBreakdown(schemaOf('sqlite'), 'deal sum won / median amount');
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /`median` is not available on SQLite: it has no median aggregate/);
 });
 
 test('a structured breakdown from a request names its function and period by word: SQL in either is refused, never written', () => {
@@ -106,12 +99,7 @@ test('a structured breakdown from a request names its function and period by wor
     { base: 'deal', by: [], measures: [{ fn: 'count', steps: [{ op: '+', term: { fn: injected, path: 'amount' } }] }] },
     { base: 'deal', by: [{ path: 'stage', bucket: "day', 'x') --" }], measures: [{ fn: 'count' }] },
   ]) {
-    for (const [dialect, style] of [
-      ['postgres', POSTGRES_STYLE],
-      ['mysql', MYSQL_STYLE],
-    ] as const) {
-      assert.throws(() => compileBreakdown(schemaOf(dialect), def as never, style), /is not a measure|is not a period/);
-    }
+    assert.throws(() => compileBreakdown(schemaOf('postgres'), def as never, POSTGRES_STYLE), /is not a measure|is not a period/);
   }
 });
 

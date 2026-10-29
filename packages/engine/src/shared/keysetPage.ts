@@ -15,10 +15,10 @@
  * only ever an additional AND on columns the reader already sorts by. Where a
  * boundary cannot be exact the list pages by offset as before: no primary
  * key (the order is not total), a sort through a reference, or a column whose
- * value does not come back as it is stored (JSON, bytes, money, a MySQL
- * float read back rounded).
+ * value does not come back as it is stored (JSON, bytes, money, a float
+ * read back rounded).
  *
- * NULL sorts last ascending on PostgreSQL and first on SQLite and MySQL, and
+ * NULL sorts last ascending on PostgreSQL and first on SQLite, and
  * no statement here says NULLS FIRST/LAST, so each engine's own placement is
  * the one the continuation follows.
  */
@@ -44,7 +44,7 @@ const UNFAITHFUL = /json|xml|money|bytea|blob|binary|interval|array|\[\]/i;
 
 /** Whether this order pages by key on this engine: total, and every column exact. */
 export function keysetOrder(table: TableMeta, order: readonly Order[], dialect: Dialect): boolean {
-  if (dialect !== 'postgres' && dialect !== 'mysql' && dialect !== 'sqlite') return false;
+  if (dialect !== 'postgres' && dialect !== 'sqlite') return false;
   const key = primaryKey(table);
   if (!key.length || !key.every((column) => order.some((o) => o.column === column))) return false;
   return order.every((o) => {
@@ -52,8 +52,7 @@ export function keysetOrder(table: TableMeta, order: readonly Order[], dialect: 
     if (!column || UNFAITHFUL.test(column.type)) return false;
     const kind = columnKind(column.type);
     if (kind === 'other') return false;
-    // mysql2 reads a FLOAT back through its decimal text, which is not the stored value.
-    return !(dialect === 'mysql' && /float|real|double/i.test(column.type));
+    return true;
   });
 }
 

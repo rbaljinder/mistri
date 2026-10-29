@@ -833,7 +833,7 @@ export interface AppSourceBinding {
   /** `'platform'`: a platform-only source, read by a tenant App's platform
       realm alone, never the default and never written (appTenancy.ts). */
   realm?: 'platform';
-  /** The one engine schema (a PostgreSQL schema, a MySQL database) this source
+  /** The one engine schema (a PostgreSQL schema) this source
       sees of its connection. Several sources may share a connection this way;
       each sees its own schema's tables and nothing else. */
   schema?: string;

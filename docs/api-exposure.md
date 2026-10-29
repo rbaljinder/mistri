@@ -399,7 +399,7 @@ database declares, so a page boundary means the same thing to the ORDER BY and
 to the comparison that resumes it, and `B` sorts before `a`. A cursor carries
 the exact text of its boundary row; the complete primary key breaks ties.
 Date ordering, including a date primary-key tie-breaker, is refused; dates can
-still be projected. So can PostgreSQL and MySQL `numeric`/`decimal` (exact text, `format: decimal`,
+still be projected. So can PostgreSQL `numeric`/`decimal` (exact text, `format: decimal`,
 never a JSON number) and PostgreSQL `timestamptz` (an RFC 3339 instant,
 `format: date-time`); neither can be filtered or sorted by. A column the API cannot say is refused
 when the App is checked, not when the spec is exported. Joined ordering is also refused. Integer

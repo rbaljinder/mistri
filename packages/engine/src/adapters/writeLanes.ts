@@ -34,7 +34,7 @@ import { startSpan } from './telemetry/trace.js';
 import { configureServerSettings, serverSettings, type WriteOrder } from './serverSettings.js';
 
 /** The keys a write names, or `all`: see the file comment. */
-export type LaneKeys = readonly string[] | 'all';
+type LaneKeys = readonly string[] | 'all';
 
 /** How long a writer waits for a row or table lock before it gives up, unless told otherwise. */
 const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
@@ -81,7 +81,7 @@ export function writeOrder(): WriteOrder {
   return serverSettings().writeOrder;
 }
 
-/** `--write-pool`: the writers an App's PostgreSQL or MySQL source holds, unless its connection names a number. */
+/** `--write-pool`: the writers an App's PostgreSQL source holds, unless its connection names a number. */
 export function configureWriterPool(writers: number = balancedPoolSize()): void {
   if (!isWriterCount(writers))
     throw new RangeError(`A write pool holds 1 to ${MAX_WRITERS} connections; ${String(writers)} is not one of them.`);
@@ -227,8 +227,7 @@ export class WriteLanes {
 }
 
 /**
- * A lock wait that ran out: PostgreSQL's `lock_timeout` (55P03), MySQL's
- * `innodb_lock_wait_timeout` (1205), anywhere in the error's causes. The
+ * A lock wait that ran out: PostgreSQL's `lock_timeout` (55P03), anywhere in the error's causes. The
  * statement that waited failed and its transaction was rolled back, so
  * nothing it wrote landed — unless the rollback itself was never
  * acknowledged, which the caller has already said as an unknown outcome
@@ -239,8 +238,8 @@ export function lockTimedOut(error: unknown): boolean {
   for (let depth = 0; depth < 4 && at && typeof at === 'object'; depth++) {
     if ((at as { name?: unknown }).name === 'TransactionOutcomeUnknown' || (at as { outcome?: unknown }).outcome === 'unknown')
       return false;
-    const { code, errno } = at as { code?: unknown; errno?: unknown };
-    if (code === '55P03' || errno === 1205 || code === 'ER_LOCK_WAIT_TIMEOUT') return true;
+    const { code } = at as { code?: unknown };
+    if (code === '55P03') return true;
     at = (at as { cause?: unknown }).cause;
   }
   return false;

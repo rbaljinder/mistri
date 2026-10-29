@@ -3,9 +3,9 @@
  *
  * SQLite says `FOREIGN KEY constraint failed`. That is the whole message: no
  * column, no value, no target — on a table that may have six foreign keys.
- * Postgres names its constraint and MySQL names the columns, so the same
- * mistake is legible on one engine and opaque on another, which is its own
- * problem for anything meant to work the same everywhere.
+ * Postgres names its constraint, so the same mistake is legible on one engine
+ * and opaque on another, which is its own problem for anything meant to work
+ * the same everywhere.
  *
  * tablewalk knows the graph. It knows `invoice.customer_id` points at
  * `customer.id`, it knows what value the caller sent, and on the failure path
@@ -27,19 +27,18 @@ const FOREIGN_KEY = /foreign key|violates foreign key constraint|a foreign key c
 type Values = Record<string, unknown>;
 
 /** Which rule the engine says the write broke, or undefined where its error is
- * not a constraint violation this knows by code. One table for all three
- * engines — SQLite's extended result codes, PostgreSQL's SQLSTATEs,
- * MySQL/MariaDB's errnos — so a caller asking "was this permanent?" and one
+ * not a constraint violation this knows by code. One table for both
+ * engines — SQLite's extended result codes and PostgreSQL's SQLSTATEs — so a caller asking "was this permanent?" and one
  * asking "which rule?" can never disagree. Error text is never consulted. */
 type WriteFailureKind = 'unique' | 'reference' | 'required' | 'check';
 export function writeFailureKind(error: unknown): WriteFailureKind | undefined {
   if (!error || typeof error !== 'object') return undefined;
-  const { code, errcode, errno } = error as { code?: unknown; errcode?: unknown; errno?: unknown };
+  const { code, errcode } = error as { code?: unknown; errcode?: unknown };
   // PRIMARY KEY and UNIQUE; PostgreSQL's unique and exclusion; a duplicate key.
-  if (errcode === 1555 || errcode === 2067 || code === '23505' || code === '23P01' || errno === 1062) return 'unique';
-  if (errcode === 787 || code === '23503' || errno === 1452) return 'reference';
-  if (errcode === 1299 || code === '23502' || errno === 1048) return 'required';
-  if (errcode === 275 || code === '23514' || errno === 3819 || errno === 4025) return 'check';
+  if (errcode === 1555 || errcode === 2067 || code === '23505' || code === '23P01') return 'unique';
+  if (errcode === 787 || code === '23503') return 'reference';
+  if (errcode === 1299 || code === '23502') return 'required';
+  if (errcode === 275 || code === '23514') return 'check';
   return undefined;
 }
 
@@ -53,9 +52,7 @@ const COLUMN_NAME = /^[A-Za-z_][\w$]{0,127}$/;
  * fills with names: PostgreSQL's `column`, the `Key (…)=` head of its detail
  * (the values follow the `=`), and the default `<table>_<column>_check` name of
  * a check; SQLite's `NOT NULL`/`UNIQUE constraint failed: t.c` (names only) and a
- * check whose expression starts with its column; MySQL's `Column '…' cannot be
- * null`, the key a duplicate names (the last quoted word, after the value) and a
- * reference's `FOREIGN KEY (…)`. `parent`: a delete or update of a row others
+ * check whose expression starts with its column. `parent`: a delete or update of a row others
  * still point at, where the column is theirs, not this form's. Undefined where
  * the engine said no column (SQLite's `FOREIGN KEY constraint failed`).
  */
@@ -64,7 +61,6 @@ export function constraintColumns(error: unknown): { kind: WriteFailureKind; col
   if (!kind) return undefined;
   const e = error as {
     code?: unknown;
-    errno?: unknown;
     message?: unknown;
     column?: unknown;
     detail?: unknown;
@@ -92,23 +88,6 @@ export function constraintColumns(error: unknown): { kind: WriteFailureKind; col
       kind === 'reference' && typeof e.detail === 'string' && /is still referenced from table/.test(e.detail) ? true : undefined;
     return named(head[1].split(','), parent);
   }
-  if (typeof e.errno === 'number') {
-    if (e.errno === 1048) return named([/^Column '([^']+)' cannot be null$/.exec(message)?.[1]]);
-    if (e.errno === 1062) {
-      const key = /for key '([^']+)'$/.exec(message)?.[1];
-      return key && key !== 'PRIMARY' && !key.endsWith('.PRIMARY') ? named([key.split('.').pop()]) : undefined;
-    }
-    if (e.errno === 1452 || e.errno === 1451) {
-      const columns = /FOREIGN KEY \(([^()]*)\) REFERENCES/.exec(message)?.[1];
-      return columns
-        ? named(
-            columns.split(',').map((name) => name.trim().replace(/^`|`$/g, '')),
-            e.errno === 1451 ? true : undefined,
-          )
-        : undefined;
-    }
-    return undefined;
-  }
   /* SQLite: the message after the colon is the schema's own words — table.column, or the check's text. */
   const said = /^(NOT NULL|UNIQUE|CHECK) constraint failed: (.+)$/.exec(message);
   if (!said) return undefined;
@@ -121,13 +100,12 @@ export function constraintColumns(error: unknown): { kind: WriteFailureKind; col
  * A value the engine could not read as its column's type — words in a search
  * of a number column, a date that is no date. The caller's to change, so a 400
  * and a sentence, never a 500 that sends them to look at the server. By code
- * only: PostgreSQL's data exceptions for a value's text, MySQL's in strict
- * mode. SQLite takes any value in any column, so it has none.
+ * only: PostgreSQL's data exceptions for a value's text. SQLite takes any value in any column, so it has none.
  */
 export function wrongTypeValue(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  const { code, errno } = error as { code?: unknown; errno?: unknown };
-  return code === '22P02' || code === '22003' || code === '22007' || code === '22008' || errno === 1292 || errno === 1366 || errno === 1367;
+  const { code } = error as { code?: unknown };
+  return code === '22P02' || code === '22003' || code === '22007' || code === '22008';
 }
 
 /** Only recognized constraint codes acknowledge rejection; error text is not proof. */

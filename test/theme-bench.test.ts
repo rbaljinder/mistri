@@ -18,8 +18,8 @@ import { themePreset } from '../packages/engine/src/shared/themePresets.js';
 import { NO_MOUNT } from '../packages/engine/src/shared/mount.js';
 
 const SPEC = {
-  id: 'ledger',
-  label: 'Ledger',
+  id: 'daybook',
+  label: 'Daybook',
   extends: 'mono',
   colors: { light: { accent: '#1f5f8b' } },
   recipes: { bar: 'dark', table: 'tinted' },
@@ -31,7 +31,7 @@ describe('the bench reads a spec', () => {
   test('compiled, with each contrast measured in light and dark, and the line to paste back saying the same spec', () => {
     const reading = benchReading(SPEC);
     assert.equal(reading.error, undefined);
-    assert.equal(reading.theme?.id, 'ledger');
+    assert.equal(reading.theme?.id, 'daybook');
     assert.equal(reading.theme?.recipes?.bar, 'dark');
     const ink = reading.checks.find((row) => row.check === 'ink on surface');
     assert.ok(ink && ink.light! > 4.5 && ink.dark! > 4.5 && ink.needs === 4.5, JSON.stringify(ink));
@@ -58,7 +58,7 @@ describe('the bench reads a spec', () => {
 
   test('an App starts from the theme it wears as written, or a new one over the built-in it names', () => {
     const own = compileAppTheme({ kind: 'theme', ...SPEC }, 'test');
-    assert.deepEqual(startingSpec(host({ theme: { preset: 'ledger' }, customThemes: [own] })), SPEC);
+    assert.deepEqual(startingSpec(host({ theme: { preset: 'daybook' }, customThemes: [own] })), SPEC);
     assert.deepEqual(startingSpec(host({ theme: { preset: 'sage' } })), { id: 'books-theme', label: 'Books', extends: 'sage' });
   });
 });
@@ -95,9 +95,8 @@ describe('the bench address', () => {
     });
   };
 
-  test('is nothing until a dev start mounts the bench: the server answers it as any unknown address', async () => {
-    assert.equal((await ask('/_mistri/theme/')).text, 'app');
-    assert.equal((await ask('/_theme')).text, 'app');
+  test('is nothing until a dev start mounts the bench: both addresses answer 404, not the page the server falls back to', async () => {
+    for (const path of ['/_mistri/theme/', '/_mistri/theme/state', '/_theme']) assert.equal((await ask(path)).status, 404, path);
   });
 
   test('mounted, serves the page under a policy that allows its own script, its state and its compile; this machine only', async () => {
@@ -130,14 +129,14 @@ describe('the bench address', () => {
         icons: ['regular', 'light', 'bold', 'fill'],
       });
       const compiled = JSON.parse((await ask('/_mistri/theme/compile', { method: 'POST', body: { app: 'books', spec: SPEC } })).text);
-      assert.equal(compiled.theme.id, 'ledger');
+      assert.equal(compiled.theme.id, 'daybook');
       assert.ok(compiled.checks.length > 10);
       // A name rebound to this machine reaches the socket, not the bench.
       assert.equal((await ask('/_mistri/theme/state', { host: 'evil.example' })).status, 403);
     } finally {
       bench.stop();
     }
-    assert.equal((await ask('/_mistri/theme/')).text, 'app');
+    assert.equal((await ask('/_mistri/theme/')).status, 404);
   });
 });
 

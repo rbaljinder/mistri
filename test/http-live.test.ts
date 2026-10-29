@@ -1,8 +1,8 @@
 /**
- * The HTTP API against a real PostgreSQL and MySQL, apart from test/http.test.ts.
+ * The HTTP API against a real PostgreSQL, apart from test/http.test.ts.
  *
  * These are the only cases in that suite that read the databases
- * `TABLEWALK_TEST_PG` and `TABLEWALK_TEST_MYSQL` name, and while they lived
+ * `TABLEWALK_TEST_PG` names, and while they lived
  * there they put its two hundred other cases — every one on a SQLite file of
  * its own — in the serial lane with them (scripts/test-node.mjs).
  */
@@ -36,18 +36,17 @@ const postTo = (where: { port: number }, path: string, body: unknown, headers: R
 /**
  * The same API, against a server that is not SQLite.
  *
- * Opt-in, because requiring a Postgres and a MySQL to test an HTTP layer would
+ * Opt-in, because requiring a Postgres to test an HTTP layer would
  * be a bad trade — the whole suite above runs on a file. What these add is the
  * one thing a file cannot show: that the permission gate and the two error
  * vocabularies are properties of the server rather than of the adapter
- * underneath it. Postgres refuses a write with a read-only transaction and
- * MySQL by throwing the connection away, and both have to arrive at the client
- * looking the same.
+ * underneath it. Postgres refuses a write with a read-only transaction, and
+ * that has to arrive at the client in the same words as the SQLite refusal.
  *
  * Every statement here is a read or a no-op. A suite that is opt-in is a suite
  * someone will point at a database that matters.
  */
-const LIVE = [['postgres', process.env.TABLEWALK_TEST_PG] as const, ['mysql', process.env.TABLEWALK_TEST_MYSQL] as const];
+const LIVE = [['postgres', process.env.TABLEWALK_TEST_PG] as const];
 
 for (const [engine, liveUrl] of LIVE) {
   describe(`the API against a real ${engine}`, { skip: liveSkip(engine, liveUrl) }, () => {

@@ -19,7 +19,10 @@ import { readSqliteReadCatalog } from '../packages/engine/src/adapters/scoped/sq
 import { pruneCounters } from '../packages/mistri/src/server/app/appAccess.js';
 import { appResourceCatalog } from '../packages/mistri/src/server/app/appResources.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
-import { captureCounters } from '../packages/engine/src/server/evidence.js';
+import { captureCounters, captureTenantData } from '../packages/engine/src/server/evidence.js';
+import { capturedLocalization } from '../packages/mistri/src/server/tenant/tenantHttp.js';
+import type { AppDef } from '../packages/mistri/src/shared/app.js';
+import type { PageDef } from '../packages/engine/src/shared/pageModel.js';
 import { capabilityCounters } from '../packages/mistri/src/server/tenant/tenantCapabilities.js';
 import { createTenantDeployment, type TenantDeploymentOptions } from '../packages/mistri/src/server/tenant/tenantDeployment.js';
 import { captureTenantOwnership, ownershipCounters } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
@@ -422,4 +425,42 @@ test('a membership role change, a tenant change and an App reload are each seen 
     columns: ['id', 'name', 'owner', 'secret'],
   });
   assert.deepEqual(await seen(deployment, 'bob', 'north'), viewerNorth);
+});
+
+test('a capture is handed back as itself, and nothing a request holds can change it for the next', () => {
+  const given = { tenantId: 'north', roles: ['viewer'] };
+  const captured = captureTenantData(given);
+  assert.notEqual(captured, given);
+  const copied = captureCounters.copied;
+  // Handed back whole: no copy, the same frozen object.
+  assert.equal(captureTenantData(captured), captured);
+  assert.equal(captureCounters.copied, copied);
+  assert.throws(() => {
+    (captured as { tenantId: string }).tenantId = 'south';
+  }, TypeError);
+  assert.throws(() => {
+    (captured.roles as string[]).push('operator');
+  }, TypeError);
+  // What the caller still holds is its own: changing it changes nothing captured.
+  given.roles.push('operator');
+  assert.deepEqual(plain(captured), { tenantId: 'north', roles: ['viewer'] });
+});
+
+test("a localization is captured once, for every request that answers the App's payload in it, and frozen", () => {
+  /* What localizedApp keeps for one (locale, words) pair: the same two objects every time it is asked. */
+  const app = { id: 'demo', name: 'Demo', views: { items: { table: 'item', title: 'Artículos' } } } as unknown as AppDef;
+  const pages = [] as PageDef[];
+  const first = capturedLocalization({ app, pages });
+  const copied = captureCounters.copied;
+  const again = capturedLocalization({ app, pages });
+  assert.equal(again, first);
+  assert.equal(captureCounters.copied, copied, 'the second request copies nothing');
+  assert.ok(Object.isFrozen(first.app) && Object.isFrozen(first.pages));
+  assert.throws(() => {
+    (first.app as { name: string }).name = 'Changed';
+  }, TypeError);
+  // Another localization (its own pages) is captured afresh, never answered with this one.
+  const other = capturedLocalization({ app, pages: [] as PageDef[] });
+  assert.notEqual(other, first);
+  assert.equal(capturedLocalization({ app, pages }), capturedLocalization({ app, pages }));
 });

@@ -3,12 +3,33 @@
 A design note, not a guide. It decides how a built App runs as a container on
 three hosts with PlanetScale Postgres as the database, names what mistri
 must change before 1.0 for that to be clean, and plans the smallest real
-deploy that would prove each. Nothing here has been deployed yet.
+deploy that would prove each. One of the three, Cloudflare Containers on
+PlanetScale Postgres, has run a real deployment (below); Cloud Run and ECS
+Fargate have not been deployed, and what is said of them is design, not proof.
 
 The cloud facts were read on **2026-10-18** from each vendor's own pages
 (linked at the end). These products change month to month; a figure older
 than a few months should be re-read before anyone spends against it. What is
 said about mistri is read from the source and cited by path.
+
+## What has run
+
+A field deployment ran for several days on **Cloudflare Containers**, one
+`standard-1` instance, against **PlanetScale PostgreSQL**. A 75-minute load
+test held 25 heavy users steady for an hour:
+
+| | |
+| --- | --- |
+| Errors | 0.33% |
+| Request latency | p50 189 ms, p95 1.7 s, p99 2.9 s |
+| Heap over the hour | flat: 156.9 MB to 157.3 MB |
+| Garbage collection | 3.5% of CPU |
+
+One `standard-1` instance saturated between 25 and 50 heavy users. At 50 the
+median was 1.95 s, p99 13.3 s, and 1.6% of requests failed. So the
+single-instance limit below is measured, not assumed: past it, add instances
+(which needs the shared stores in G1) or a larger class. Cloud Run and ECS
+Fargate are unproven.
 
 ## The decision in brief
 
@@ -40,7 +61,7 @@ its own tables is `packages/mistri/src/server/storeLayouts.ts`; each store moves
 | --- | --- | --- | --- |
 | Sign-in accounts, sessions (`auth`) and `api-tokens` | `auth.store`; default a SQLite file at `$XDG_CONFIG_HOME/mistri/auth/<app>.db` (`defaultStore`, `packages/mistri/src/server/auth/auth.ts:1146`) | SQLite, PostgreSQL | Yes. Lost, everyone is signed out |
 | Command journal, sequences, events, event delivery, jobs, workflows, public placement | Beside the App's commands, on its source | SQLite, PostgreSQL | Yes |
-| Record history, inbox, branding, assistant, mail, integrations | The App's source | SQLite, PostgreSQL (+ MySQL for history and inbox) | Yes |
+| Record history, inbox, branding, assistant, mail, integrations | The App's source | SQLite, PostgreSQL | Yes |
 | Tenant store, invitations, administration, support audit, sandboxes | The tenant platform's database | SQLite, PostgreSQL | Yes |
 | Flags, experiments | Configured store | **PostgreSQL only** | Yes |
 | Analytics | `analytics.store` in the config | SQLite, PostgreSQL | Yes |
@@ -330,7 +351,8 @@ $0.70; CPU is billed on active use only, ~$1 at a light load. **≈ $13/month**;
   that forwards to the `Container` class by a random pick over a fixed
   `INSTANCES`, a `wrangler.jsonc` with the container, its Durable Object, the
   `ENAM` placement and a `* * * * *` cron, and a `scheduled` handler that
-  touches every instance's `/readyz` so none sleeps. It has not been deployed.
+  touches every instance's `/readyz` so none sleeps. What has actually run is in
+  "What has run" above.
 - Fine today for: one always-on instance of a small App, a demo, a preview
   per branch.
 
@@ -399,7 +421,7 @@ exist and the connection failed at open. mistri now strips
 connection (`pgConnectionOptions`, `packages/engine/src/adapters/postgresValues.ts`): the
 chain and host name are checked against Node's default CA bundle, which is
 verify-full. `sslnegotiation=direct` is understood by `pg` itself. A real path
-still works. Not yet run against PlanetScale.
+still works. A field deployment has since run against PlanetScale PostgreSQL (see "What has run").
 
 **Branching.** A PlanetScale Postgres branch is a separate cluster: empty, or
 restored from a backup with schema and data. There are no deploy requests and
@@ -441,8 +463,8 @@ working days including tests and the prose that states the fact.
 | G6 | **Done in 0.9.7** (health check, `PORT` and the jobs sentence in 0.9.6; `mistri build --dockerfile <file>` writes an App's Dockerfile, and the release image is built for `linux/amd64` and `linux/arm64`). **Container polish**: `Dockerfile` health check on `/healthz`; honour `PORT`; an App base image or `mistri build --dockerfile`; multi-arch publish; fix the "one worker replica" sentence | Each is small; together they are the difference between the docs and the first try | 2 |
 | G7 | **Done in 0.9.7** (`identity.store` and `identity.grants` as `postgres://` URLs, together or not at all; the grants, preferences and authority history are schemas of the grants database; a write fences its grant re-read at the last await before `COMMIT`, as PostgreSQL sessions already do). **Suite stores on PostgreSQL** (grants, preferences, authority were SQLite-only) | Only suites; a suite could not run stateless at all | 3 |
 | G8 | **Done in 0.9.6.** **`sslrootcert=system`**: accept it as "the system CAs" when parsing a connection URL | The first string a PlanetScale user pastes fails | 0.5 |
-| G9 | **Done in 0.9.7** (`examples/deploy/cloudflare/`, a template, not yet deployed). **Cloudflare glue**: a Worker template, `wrangler.jsonc`, keep-awake cron | Only if Cloudflare is pursued | 1–2 |
-| G10 | **Done in 0.9.7** (`--pending-on <url>`, any engine, which also lifts the MySQL refusal). **`check --pending` against a named scratch database** (`--pending-on <url>`) instead of `CREATE DATABASE … TEMPLATE` | Hosted roles often lack `CREATEDB`; a branch is the better copy | 1 |
+| G9 | **Done in 0.9.7** (`examples/deploy/cloudflare/`, a template). **Cloudflare glue**: a Worker template, `wrangler.jsonc`, keep-awake cron | Only if Cloudflare is pursued | 1–2 |
+| G10 | **Done in 0.9.7** (`--pending-on <url>`, any engine). **`check --pending` against a named scratch database** (`--pending-on <url>`) instead of `CREATE DATABASE … TEMPLATE` | Hosted roles often lack `CREATEDB`; a branch is the better copy | 1 |
 
 Not gaps: health endpoints, sessions in PostgreSQL, the command stores on
 PostgreSQL, transaction-pooler safety, uploads to S3/R2, graceful shutdown.

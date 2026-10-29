@@ -14,14 +14,10 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import type { DeleteRequest, DeleteResult, InsertRequest, InsertResult, TellRequest, UpdateRequest, UpdateResult } from './adapter.js';
-import type { MysqlConnection } from './mysqlDriver.js';
 import type { PgQuery } from './postgresPool.js';
 
 /** The transaction's writer, by dialect: a capture's own rows join it. */
-type CaptureWriter =
-  | { readonly dialect: 'postgres'; readonly client: PgQuery }
-  | { readonly dialect: 'sqlite'; readonly db: DatabaseSync }
-  | { readonly dialect: 'mysql'; readonly connection: MysqlConnection; readonly database: string };
+type CaptureWriter = { readonly dialect: 'postgres'; readonly client: PgQuery } | { readonly dialect: 'sqlite'; readonly db: DatabaseSync };
 
 /** What a capture reads on the writer. */
 export interface CaptureSource {

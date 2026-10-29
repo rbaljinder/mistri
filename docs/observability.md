@@ -211,7 +211,7 @@ interval.
   timeout), `failed`, `waitBuckets` (asking to holding, including checkouts
   that failed) and `holdBuckets` (holding to giving back).
 
-A connection not yet opened has no pool to report; SQLite, MySQL and HTTP
+A connection not yet opened has no pool to report; SQLite and HTTP
 connections keep none. Reading the three answers:
 
 | Pools | Event loop | The limit |
@@ -245,7 +245,7 @@ variables (`src/adapters/telemetry/`), and the `--dev` observer
   cause (`shared/refusal.ts`, the same reasons `http/refusalReport.ts` prints).
 - With no sink, `inSpan` calls its function and returns; the exporter, its
   encoders and the driver wrappers are dynamic imports behind the variables.
-- Statements are timed at the drivers (node:sqlite, pg, mysql2) by wrapping
+- Statements are timed at the drivers (node:sqlite, pg) by wrapping
   their `query`, as vendor agents do; the wrappers chain, and the server is
   not bundled, so dd-trace and OneAgent keep hooking the same modules.
 - The encoders are hand-written (`otlpEncode.ts`), protobuf and JSON, for the

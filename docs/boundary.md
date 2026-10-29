@@ -127,8 +127,10 @@ runs) checks, beside everything above:
   is not (`--report` lists what each reaches);
 - every other name a package exports is one of its modules by its path
   (`@mistriwork/engine/shared/schema.js` from `src/shared/schema.ts`, built to
-  `dist/shared/schema.js`), and the engine, the kit and ui export no
-  pattern (`./*`): each names every module another package imports;
+  `dist/shared/schema.js`), and no package exports a
+  pattern (`./*`) but `@mistriwork/mistri/schema/*`'s shipped schemas: each names every module another package imports
+  (the two products' mains, `client/appShell.js` and `client/workbenchShell.js`, are named for the kit's page entry and
+  left out of an install's manifest);
 - the stubs and workspaces are the ones the table generates.
 
 Without `--entries`, the check refuses any import of a workspace package's

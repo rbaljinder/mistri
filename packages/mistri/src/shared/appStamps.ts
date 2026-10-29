@@ -62,8 +62,8 @@ const INSTANT = /timestamp|datetime/i;
 const ZONED = /timestamptz|with time zone/i;
 
 /**
- * A TIMESTAMP or DATETIME that carries no zone (Postgres `timestamp`, MySQL
- * `DATETIME`, SQLite's text datetimes). It holds the wall clock of the App's
+ * A TIMESTAMP or DATETIME that carries no zone (Postgres `timestamp`,
+ * SQLite's text datetimes). It holds the wall clock of the App's
  * `ui.timezone`, UTC when the App names none: the one rule every server write
  * and every form default follows, so a value reads the same wherever it came from.
  */

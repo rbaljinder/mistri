@@ -1,4 +1,4 @@
-/** The prefix every table of the App framework's own runtime state carries on SQLite and MySQL, in
+/** The prefix every table of the App framework's own runtime state carries on SQLite, in
  * the App's own database. On PostgreSQL the runtime has a schema of its own instead (`RUNTIME_SCHEMA`),
  * but an App table named with the prefix is still refused there (adapters/reservedSql.ts), so one
  * rule about names holds on every engine. */
@@ -12,7 +12,7 @@ export const isRuntimeTable = (name: string): boolean => {
   return RUNTIME_TABLE_PREFIXES.some((prefix) => lower.startsWith(prefix));
 };
 
-export type RuntimeDialect = 'postgres' | 'sqlite' | 'mysql';
+export type RuntimeDialect = 'postgres' | 'sqlite';
 
 /** The PostgreSQL schema every runtime table lives in, under its plain name: the command journal,
  * the tenant store, sign-in (Better Auth's tables, renamed `auth_*`), flags (`flag_*`),
@@ -22,14 +22,14 @@ export type RuntimeDialect = 'postgres' | 'sqlite' | 'mysql';
  * schema, never sees it. The database browser and the App catalog hide it by this name. */
 export const RUNTIME_SCHEMA = 'mistri';
 
-/** Where each dialect puts the runtime tables. MySQL's is the App's own database. */
+/** Where each dialect puts the runtime tables. */
 const PLACEMENT = Object.freeze({
   postgres: RUNTIME_SCHEMA,
   sqlite: 'main',
 } as const);
 
 /** A runtime table's logical name, whether the caller holds it bare (`history_change`) or as the
- * physical name its store pins on SQLite and MySQL (`__mistri_history_change`). Anything else is not
+ * physical name its store pins on SQLite (`__mistri_history_change`). Anything else is not
  * a table name, so it is refused here instead of being quoted. */
 const logicalName = (name: string): string => {
   const bare = name.startsWith(RUNTIME_TABLE_PREFIX) ? name.slice(RUNTIME_TABLE_PREFIX.length) : name;
@@ -38,14 +38,9 @@ const logicalName = (name: string): string => {
 };
 
 /** The one placement function: a runtime table's qualified, quoted SQL name. Postgres
- * `mistri."x"`, SQLite `main."__mistri_x"`, MySQL `` `db`.`__mistri_x` `` (the database
- * only when the connection does not already select one). */
-export const runtimeTable = (dialect: RuntimeDialect, name: string, database?: string): string => {
-  const { schema, relname } = runtimeRelation(dialect, name, database);
-  if (dialect === 'mysql') {
-    const quote = (part: string) => `\`${part.replaceAll('`', '``')}\``;
-    return schema === null ? quote(relname) : `${quote(schema)}.${quote(relname)}`;
-  }
+ * `mistri."x"`, SQLite `main."__mistri_x"`. */
+export const runtimeTable = (dialect: RuntimeDialect, name: string): string => {
+  const { schema, relname } = runtimeRelation(dialect, name);
   return `${schema}."${relname}"`;
 };
 
@@ -54,10 +49,9 @@ export const runtimeTable = (dialect: RuntimeDialect, name: string, database?: s
 export const runtimeSchema = (dialect: 'postgres' | 'sqlite'): string => PLACEMENT[dialect];
 
 /** The same placement as catalog coordinates: what `information_schema`, `pg_class` and
- * `sqlite_schema` readers compare against. MySQL's schema is its database, `null` when the
- * connection's own is meant. Postgres names the table plainly; the others keep the prefix. */
-export const runtimeRelation = (dialect: RuntimeDialect, name: string, database?: string): { schema: string | null; relname: string } => ({
-  schema: dialect === 'mysql' ? (database ?? null) : PLACEMENT[dialect],
+ * `sqlite_schema` readers compare against. Postgres names the table plainly; the others keep the prefix. */
+export const runtimeRelation = (dialect: RuntimeDialect, name: string): { schema: string; relname: string } => ({
+  schema: PLACEMENT[dialect],
   relname: dialect === 'postgres' ? logicalName(name) : `${RUNTIME_TABLE_PREFIX}${logicalName(name)}`,
 });
 
@@ -90,7 +84,7 @@ export const RUNTIME_SCHEMA_FUNCTIONS: readonly string[] = Object.freeze([
  * Such a grant is not a foreign one (adapters/postgresRuntimeSchema.ts). */
 export const RUNTIME_CONTROL_PREFIXES: readonly string[] = Object.freeze(['flag_', 'experiment_']);
 
-/** A store's table names (each as its SQLite and MySQL layouts pin it) as PostgreSQL spells them
+/** A store's table names (each as its SQLite layout pins it) as PostgreSQL spells them
  * inside the runtime schema: what its pinned PostgreSQL layout and the names derived from a
  * table's (`<table>_pkey`, `<table>_id_seq`) are built from. */
 export const postgresRuntimeNames = <T extends Readonly<Record<string, string>>>(tables: T): { readonly [K in keyof T]: string } =>

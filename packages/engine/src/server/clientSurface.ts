@@ -128,17 +128,19 @@ function wornTheme(ui: LookChoice | undefined, audience: Audience = {}) {
 /** The faces each look sheet declares, by the families a stack begins with to be set in them (lumenLook.css,
     workshopLook.css), and the files preloaded: Workshop's regular and its condensed bold, which every page draws;
     its semibold comes when a line asks for it. */
-const SHEET_FACES: Readonly<Record<string, { families: readonly string[]; file: RegExp }>> = {
+const SHEET_FACES: Readonly<Record<string, { families: readonly string[]; file: RegExp; data?: true }>> = {
   workshop: { families: ['Barlow', 'Barlow Semi Condensed'], file: /^assets\/barlow-(?:400|semi-condensed-700)-[\w-]+\.woff2$/ },
   lumen: { families: ['Inter'], file: /^assets\/inter-latin-[\w-]+\.woff2$/ },
+  ledger: { families: ['IBM Plex Mono'], data: true, file: /^assets\/ibm-plex-mono-400-[\w-]+\.woff2$/ },
 };
 
 /**
  * The sheets whose face the App's look is set in, so its page can ask for
  * the face beside the sheet. A sheet is worn for its recipes, and a theme on
  * Sage that borrows one of Lumen's wears Lumen's sheet with its own stack:
- * the face is preloaded only where the interface or its headings begin with
- * it, never fetched for a page that would not draw a line in it.
+ * the face is preloaded only where the interface or its headings begin with it
+ * (and, for a sheet whose face is the data's own, as Ledger's monospace figures are, where the data does), never
+ * fetched for a page that would not draw a line in it.
  */
 export function lookFacesFor(ui: LookChoice | undefined, audience?: Audience): readonly string[] {
   const theme = wornTheme(ui, audience);
@@ -149,7 +151,10 @@ export function lookFacesFor(ui: LookChoice | undefined, audience?: Audience): r
       ?.trim()
       .replace(/^["']|["']$/g, '');
   const leads = new Set([first(theme.fonts?.ui), first(theme.fonts?.heading)]);
-  return recipeAttributes(theme).sheets.filter((sheet) => SHEET_FACES[sheet]?.families.some((family) => leads.has(family)));
+  const dataLead = first(theme.fonts?.data);
+  return recipeAttributes(theme).sheets.filter((sheet) =>
+    SHEET_FACES[sheet]?.families.some((family) => leads.has(family) || (SHEET_FACES[sheet]?.data && dataLead === family)),
+  );
 }
 
 /**

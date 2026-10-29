@@ -175,7 +175,7 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
         return true;
       }
       if (!completed && isPoolBusy(err)) {
-        sendBusy(res, {}, true);
+        sendBusy(res, {}, true, err);
         return true;
       }
       if (!completed && rules?.refused(res, path, err)) return true;
@@ -260,7 +260,7 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
         return true;
       }
       if (!completed && isPoolBusy(err)) {
-        sendBusy(res, {}, true);
+        sendBusy(res, {}, true, err);
         return true;
       }
       if (!completed && rules?.refused(res, '/api/insert', err)) return true;
@@ -347,7 +347,7 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
         return true;
       }
       if (!completed && isPoolBusy(err)) {
-        sendBusy(res, { impact, deleted: false }, true);
+        sendBusy(res, { impact, deleted: false }, true, err);
         return true;
       }
       const outcome = completed ? 'unknown' : err instanceof Refusal ? 'rejected' : writeFailureOutcome(err);

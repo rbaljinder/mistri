@@ -97,8 +97,9 @@ for (const theme of THEME_PRESETS)
         };
       });
       expect(bar).toEqual({ inside: true, underline: false });
-      /* A record's tabs are in sentence case, the look's own; Mono and Workshop set
-       them as a label. The Workbench's capitals survived a font shorthand. */
+      /* A record's tabs are in sentence case, the look's own; Mono, Workshop and Ledger set
+       them as a label. Ledger's label role is monospace capitals (its `label` type role, themeLooks.ts), as a
+       ruled book heads its columns. The Workbench's capitals survived a font shorthand. */
       const recordTab = await page.evaluate(() => {
         const tab = document.createElement('button');
         tab.className = 'page-tab';
@@ -108,7 +109,7 @@ for (const theme of THEME_PRESETS)
         tab.remove();
         return transform;
       });
-      expect(recordTab).toBe(theme.id === 'mono' || theme.id === 'workshop' ? 'uppercase' : 'none');
+      expect(recordTab).toBe(theme.id === 'mono' || theme.id === 'workshop' || theme.id === 'ledger' ? 'uppercase' : 'none');
 
       // Room at every width, on the room with the most in it.
       for (const width of [1440, 1024, 390, 320]) {

@@ -22,18 +22,14 @@ export function apiIntegerRepresentation(options: { integers: 'decimal-string' |
   return value === 'decimal-string' || value === 'number' ? value : fail();
 }
 function scalar(type: string, dialect: Dialect, integers: 'number' | 'decimal-string') {
-  if (!['sqlite', 'postgres', 'mysql'].includes(dialect)) return fail();
+  if (!['sqlite', 'postgres'].includes(dialect)) return fail();
   const normalized = type.trim().toLowerCase().replace(/\s+/g, ' ');
   if (normalized === 'date') return apiDateCodec();
   const integer =
     dialect === 'postgres'
       ? /^(?:smallint|integer|bigint|int2|int4|int8|smallserial|serial|bigserial|serial2|serial4|serial8)$/
-      : dialect === 'mysql'
-        ? /^(?:tinyint|smallint|mediumint|int|integer|bigint)(?:\([0-9]{1,3}\))?$/
-        : /^(?:int|integer|tinyint|smallint|mediumint|bigint|int2|int8)$/;
-  // Raw MySQL/SQLite boolean values are numeric; no implicit conversion.
-  if (dialect === 'mysql' && normalized === 'tinyint(1)') return fail();
-  // Postgres and MySQL return exact decimals as text; SQLite's NUMERIC affinity stores doubles and has no such promise.
+      : /^(?:int|integer|tinyint|smallint|mediumint|bigint|int2|int8)$/;
+  // Postgres returns exact decimals as text; SQLite's NUMERIC affinity stores doubles and has no such promise.
   if (dialect !== 'sqlite' && /^(?:numeric|decimal)(?:\([0-9]{1,3}(?:, ?-?[0-9]{1,3})?\))?$/.test(normalized))
     return Object.freeze({
       kind: 'decimal' as const,
@@ -81,11 +77,9 @@ function scalar(type: string, dialect: Dialect, integers: 'number' | 'decimal-st
       },
     });
   const textual =
-    dialect === 'mysql'
-      ? /^(?:tinytext|text|mediumtext|longtext|(?:char|varchar)\([0-9]+\))$/
-      : dialect === 'postgres'
-        ? /^(?:text|(?:character varying|varchar|character|char)(?:\([0-9]+\))?)$/
-        : /^(?:text|clob|(?:character varying|varchar|character|char|nvarchar|nchar)(?:\([0-9]+\))?)$/;
+    dialect === 'postgres'
+      ? /^(?:text|(?:character varying|varchar|character|char)(?:\([0-9]+\))?)$/
+      : /^(?:text|clob|(?:character varying|varchar|character|char|nvarchar|nchar)(?:\([0-9]+\))?)$/;
   if (textual.test(normalized))
     return Object.freeze({
       kind: 'text' as const,
@@ -172,7 +166,7 @@ export function apiValueCodec(column: Pick<ColumnMeta, 'type' | 'allowed'>, dial
 
 /**
  * What a row's field is said as: a scalar (apiValueCodec), or a JSON column's
- * object (row-defined fields, definedFields.ts) — PostgreSQL and MySQL hand
+ * object (row-defined fields, definedFields.ts) — PostgreSQL hands
  * it parsed, SQLite as text. Copied through JSON, so nothing but plain data
  * reaches the wire. Never a filter or a sort (apiReadCatalog.ts).
  */

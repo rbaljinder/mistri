@@ -120,7 +120,7 @@ test('a sealed address reaches no loopback, private or metadata address, by numb
     assert.match(message, /may not reach/, host);
   }
   for (const host of ['169.254.169.254', '10.0.0.1', '192.168.1.1']) {
-    const message = await dial(`mysql://probe@${host}:${port}/db`, { network: UNTRUSTED_NETWORK });
+    const message = await dial(`postgres://probe@${host}:${port}/db`, { network: UNTRUSTED_NETWORK });
     assert.match(message, /may not reach/, host);
   }
   assert.equal(seen.connections, 0, 'no socket reached the server');
@@ -133,7 +133,6 @@ test('an untrusted URL names its host and user and carries no parameter that rea
     'postgres://u@attacker.example/db?host=/var/run/postgresql',
     'postgres://u@attacker.example/db?sslrootcert=/etc/passwd',
     'postgres://u@attacker.example/db?sslmode=bogus',
-    'mysql://u@attacker.example/db?socketPath=/tmp/mysql.sock',
   ]) {
     assert.ok(untrustedTargetRefusal(url), url);
   }
@@ -141,7 +140,6 @@ test('an untrusted URL names its host and user and carries no parameter that rea
     'postgres://u@db.example.com/app',
     'postgres://u:p@db.example.com:5433/app?sslmode=require',
     'postgres://u@db.example.com/app?sslrootcert=system',
-    'mysql://u:p@db.example.com/app',
   ]) {
     assert.equal(untrustedTargetRefusal(url), null, url);
   }

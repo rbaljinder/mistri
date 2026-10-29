@@ -17,9 +17,9 @@ export type Window = (typeof WINDOWS)[number];
 
 /* A phone is what the shell lays out as one (760px and under, structure.css): there a thumb is the pointer. */
 export const PHONE = 760;
-/* The smallest target a thumb is asked to hit. docs/design.md sets 24px for a pointer and 44px where asked; 40 is
-   the rubric's line for a phone, where the report's agent missed the row menus and the steppers. */
-export const TAP = 40;
+/* The smallest target a thumb is asked to hit: docs/design.md's 44px on a coarse pointer (rule 8; a pointer's 24px is
+   the desk's). The rubric once drew its line at 40 for a phone, below the document that sets it. */
+export const TAP = 44;
 /* Core Web Vitals' line between good and needs-improvement. */
 const SHIFT = 0.1;
 /* The theme contract's lines (themeContract.ts): a focus ring 2px at 3:1 (C3), prose at most 80 characters a line

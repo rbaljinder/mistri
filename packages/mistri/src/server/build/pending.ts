@@ -15,10 +15,9 @@
  *   approximating in the real database: a copy of a schema beside the real
  *   one cannot keep the names the App binds, and a migration that names its
  *   schema would reach past the copy into the real one.
- * - MySQL: not yet, and it says so.
  * - `--pending-on <url>`: no copy is made. The migrations run on the database
  *   that URL names — a branch or restore of the real one, or an empty database
- *   the whole history can build — on any of the three engines. It is the way
+ *   the whole history can build — on either engine. It is the way
  *   where the role has no CREATEDB (a hosted database) and the better one
  *   where the host branches databases. It is never dropped or emptied, and a
  *   URL that names the App's own database is refused.
@@ -101,10 +100,6 @@ export async function pendingCopy(
         lines: [],
         cleanup: nothing,
       };
-    if (dialect === 'mysql' && flags.on === undefined)
-      return refuse(
-        '--pending needs a scratch copy of the database, which mistri cannot make on MySQL yet: name a scratch database that already has the schema with --pending-on <url>',
-      );
 
     let scratchUrl: string;
     let how: string;
@@ -204,7 +199,7 @@ function sameDatabase(a: string, b: string): boolean {
     return dialectOf(a) === dialectOf(b) && resolve(sqlitePath(a)) === resolve(sqlitePath(b));
   const where = (url: string) => {
     const address = new URL(url);
-    const port = address.port || (dialectOf(url) === 'postgres' ? '5432' : '3306');
+    const port = address.port || '5432';
     return `${dialectOf(url)}://${address.hostname.toLowerCase()}:${port}${address.pathname}`;
   };
   return where(a) === where(b);

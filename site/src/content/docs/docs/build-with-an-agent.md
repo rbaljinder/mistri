@@ -12,7 +12,9 @@ npx @mistriwork/mistri agent init
 
 Everything here works from the npm package in your App's project; the agent
 needs no mistri checkout. It suits Claude Code, Codex, Cursor and GitHub
-Copilot, and any agent that reads `AGENTS.md`.
+Copilot, and any agent that reads `AGENTS.md`. Screenshots need a headless
+Chromium, installed once with
+`npm install --save-dev playwright && npx playwright install --only-shell chromium`.
 
 <span id="the-agent-skill"></span>
 ## 1. Install the skill
@@ -77,7 +79,8 @@ Build in the skill's loop:
 2. Then page by page (shell, lists, dashboard, each record page, each form):
    read that page type's guide (npx @mistriwork/mistri docs compose-record-page, and so
    on), edit, run npx @mistriwork/mistri check, screenshot the page with
-   npx @mistriwork/mistri shot --both, compare it with the guide's worked example, and
+   npx @mistriwork/mistri shot --both (once, before the first shot:
+   npm install --save-dev playwright && npx playwright install --only-shell chromium), compare it with the guide's worked example, and
    fix what differs before the next page.
 3. Grade every screenshot against the skill's rubric, at a desk and on a
    phone. A page is done when every check passes.
@@ -177,7 +180,7 @@ on its parent. Its README names the nearest first-shot recipe, and why.
    `--type Search lap`, `--press Enter` and `--wait-for Laptop` get the page to
    a record, a filled box or an opened menu first, and `--matrix` shoots every
    look, light and dark, at a desk and on a phone, with an index page. Install the browser once
-   with `npm install --save-dev playwright && npx playwright install chromium`.
+   with `npm install --save-dev playwright && npx playwright install --only-shell chromium`, before the first shot.
 5. **Compare and fix** against the guide's worked example, then go round again.
 6. **Grade it**: `npx @mistriwork/mistri grade . --config ../mistri.json` measures
    every page at a desk, on a phone and in the dark ([below](#grade-before-handing-back)).

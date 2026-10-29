@@ -18,7 +18,7 @@ import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
 import { appRollupRules, parseAppConfig, resolveViews, withRollups } from '../packages/mistri/src/shared/app.js';
-import { ANSI_STYLE, MYSQL_STYLE } from '../packages/engine/src/shared/filter.js';
+import { ANSI_STYLE } from '../packages/engine/src/shared/filter.js';
 import { rollupReads } from '../packages/engine/src/shared/rollups.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { compileView, withViewComputed } from '../packages/engine/src/shared/view.js';
@@ -89,10 +89,7 @@ test("a rollup's query may walk its rows' references; what the walk reads is wha
 
 test('a path in the query is one scalar subquery per walk inside the rows it narrows', () => {
   const served = withRollups(app(), schema);
-  for (const [style, q] of [
-    [ANSI_STYLE, '"'],
-    [MYSQL_STYLE, '`'],
-  ] as const) {
+  for (const [style, q] of [[ANSI_STYLE, '"']] as const) {
     const view = withViewComputed(served, textToView(served, 'task show title, live_hours').view!);
     const { text } = compileView(served, view, style);
     const hop = `${q}_tw_hop\\$\\d+${q}`;

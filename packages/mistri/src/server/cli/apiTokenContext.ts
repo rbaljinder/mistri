@@ -87,7 +87,7 @@ export async function resolveSqliteTokenRevokeContext(loadedApps: readonly Loade
         if (!/^https?:\/\//i.test(target)) return refuse();
         return [];
       }
-      if (/^(?:postgres(?:ql)?|mysql|mariadb):\/\//i.test(target)) return [];
+      if (/^postgres(?:ql)?:\/\//i.test(target)) return [];
       const excluded = captureAuthStoreExclusion(pathOnly(target));
       assertAuthStoreSeparation(path, excluded);
       return [excluded];

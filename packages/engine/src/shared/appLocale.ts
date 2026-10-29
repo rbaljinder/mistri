@@ -7,15 +7,21 @@
  * keeps its choice in the cookie named here, in the database browser as in
  * an App.
  */
+const canonicalTags = new Map<string, string | undefined>();
 /** A language tag as Intl writes it (`es-mx` → `es-MX`); undefined for anything Intl does not take as one. */
 export function canonicalLocale(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value.trim() || value.length > 35) return undefined;
+  /* Asked on every payload of the same few tags; bounded, as a tag can be a person's own. */
+  if (canonicalTags.has(value)) return canonicalTags.get(value);
+  if (canonicalTags.size >= 64) canonicalTags.clear();
+  let tag: string | undefined;
   try {
-    const [tag] = Intl.getCanonicalLocales(value.trim());
-    return tag;
+    [tag] = Intl.getCanonicalLocales(value.trim());
   } catch {
-    return undefined;
+    tag = undefined;
   }
+  canonicalTags.set(value, tag);
+  return tag;
 }
 
 /** The resource and column `ui.locale: { column }` names, where it names one. */

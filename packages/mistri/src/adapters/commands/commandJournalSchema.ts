@@ -58,7 +58,7 @@ registerPrune({
   window: 'commands',
   table: COMMAND_JOURNAL_TABLES.receipt,
   time: 'completed_at',
-  clock: { sqlite: 'iso-text', postgres: 'timestamp', mysql: 'timestamp' },
+  clock: { sqlite: 'iso-text', postgres: 'timestamp' },
   where: () => 'manifest_json IS NULL',
   referencedBy: [
     { table: '__mistri_event_event', column: 'receipt_id' },

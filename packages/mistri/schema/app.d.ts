@@ -816,7 +816,7 @@ export interface AppResource<Column extends string = string, Page extends string
   /** SQLite: what a TEXT column holds where its declared type cannot say — `types: { due_on: 'date' }` for ISO
       dates (`2026-09-24`), `'datetime'` for `2026-09-24 14:30:00`. The App's catalog reads the column as a date, so
       a dashboard's `over`, a timeline's `at`, a calendar, date presets and date filters take it; the database still
-      holds text, compared as a DATE column's is. Refused on PostgreSQL and MySQL, where the column's type says it. */
+      holds text, compared as a DATE column's is. Refused on PostgreSQL, where the column's type says it. */
   types?: Partial<Record<Column, 'date' | 'datetime'>>;
   /** A column's control in the resource's edit and New forms, drawn by the App's own input component
       (`component('color-swatch', { module, kind: 'input' })`). What the value must be is still the form's and the server's to judge. */
@@ -1612,7 +1612,7 @@ export interface MetricTarget {
 export interface MetricDashSection extends DashTableSection, DashFigureWords {
   kind: 'metric';
   readonly [madeBy]: 'metric';
-  /** "count" (default), "sum amount as pipeline", "median amount" (PostgreSQL only: SQLite and MySQL have no median),
+  /** "count" (default), "sum amount as pipeline", "median amount" (PostgreSQL only: SQLite has no median),
       or a computed measure — aggregates and numbers joined by `+ - * /`: "sum won / sum amount as win_rate". */
   measure?: string;
   /** A second query for the same measure; the card shows the delta. The

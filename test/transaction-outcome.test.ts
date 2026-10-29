@@ -188,10 +188,7 @@ test('lost commit acknowledgement quarantines Undo without claiming zero applied
 
 test('a failed rollback cannot relabel a Refusal or constraint as a safely rejected write', async (t) => {
   const { adapter, rows } = fixture(t);
-  const failures = [
-    new Refusal('private rejection'),
-    Object.assign(new Error('private constraint'), { code: '23505', errcode: 2067, errno: 1062 }),
-  ];
+  const failures = [new Refusal('private rejection'), Object.assign(new Error('private constraint'), { code: '23505', errcode: 2067 })];
   for (const failure of failures) {
     await assert.rejects(
       adapter.transaction(async (tx) => {

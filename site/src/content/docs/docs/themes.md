@@ -272,14 +272,14 @@ A look is a package: one `defineTheme` that says the contract it was written to 
 
 ```ts
 export default defineTheme({
-  id: 'ledger', label: 'Ledger', extends: 'lumen',
+  id: 'daybook', label: 'Daybook', extends: 'lumen',
   contract: 1, from: import.meta.url,
-  type: { faces: [{ family: 'Ledger Sans', src: './fonts/ledger.woff2' }] },
-  stylesheet: './ledger.css',
+  type: { faces: [{ family: 'Daybook Sans', src: './fonts/daybook.woff2' }] },
+  stylesheet: './daybook.css',
 });
 ```
 
-An App wears it as its own, `customThemes: [ledger]`, or starts from it: `defineTheme({ id: 'ledger-blue', extends: ledger, ... })`, one level deep. Ship a `.d.ts` beside it and `mistri` as a peer dependency. `mistri check` refuses another contract, a file outside the package and a `from` with no `contract` (`theme-contract`); `mistri build` copies the files in.
+An App wears it as its own, `customThemes: [daybook]`, or starts from it: `defineTheme({ id: 'daybook-blue', extends: daybook, ... })`, one level deep. Ship a `.d.ts` beside it and `mistri` as a peer dependency. `mistri check` refuses another contract, a file outside the package and a `from` with no `contract` (`theme-contract`); `mistri build` copies the files in.
 
 ## Seeing and fixing a theme
 

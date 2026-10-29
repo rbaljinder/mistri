@@ -223,6 +223,7 @@ The lines between things.
 
 - `ink`: A record’s sections are announced by a 2px rule in the ink.
 - `hairline`: A record’s sections are announced by a 1px hairline instead.
+- `double`: A 1px hairline announces a record’s sections as in hairline, a box is ruled in the strong line, and a table’s heads close with a double rule.
 
 <!-- /recipe words -->
 

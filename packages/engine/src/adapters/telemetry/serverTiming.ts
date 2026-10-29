@@ -3,7 +3,9 @@
  * opt-in diagnostics for a deployment whose pages are slower than the same
  * code on a laptop, where guessing at the network, the pools or the CPU had
  * stopped converging. `MISTRI_SERVER_TIMING=1` switches it on; off, every
- * entry point below is one boolean check and the work itself.
+ * entry point below is one boolean check and the work itself. For load tests
+ * only: the `proc` entry hands the process's heap, GC and pool use to any
+ * requester, so it stays off in production (SECURITY.md).
  *
  * What it counts, per request:
  *

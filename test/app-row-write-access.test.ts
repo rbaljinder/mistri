@@ -505,7 +505,7 @@ test('unknown, unreadable and unsupported owner write grants refuse construction
     fallback++;
     throw new Error('Ordinary writer fallback');
   };
-  for (const dialect of ['sqlite', 'postgres', 'mysql'] as const) {
+  for (const dialect of ['sqlite', 'postgres'] as const) {
     const unsupported: RuntimeResources = {
       ...resources,
       forConnection: (owner) => ({

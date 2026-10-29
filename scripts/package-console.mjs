@@ -6,7 +6,7 @@
 import { execFileSync } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { compileConsole } from '@mistriwork/mistri/server/console/components.js';
+import { compileConsole } from '../packages/mistri/dist/server/console/components.js';
 
 /* A fresh production process avoids both the caller's NODE_ENV and any cached
    development React exports (act/captureOwnerStack are absent in the client). */

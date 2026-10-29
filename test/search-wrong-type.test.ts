@@ -16,9 +16,8 @@ import { makeDemoDatabase } from './make-demo-db.js';
 
 const pg = (code: string) => Object.assign(new Error('invalid input syntax for type integer: "stone"'), { code });
 
-test('a value its column cannot hold is told by its code, on PostgreSQL and MySQL', () => {
+test('a value its column cannot hold is told by its code, on PostgreSQL', () => {
   for (const code of ['22P02', '22003', '22007', '22008']) assert.equal(wrongTypeValue(pg(code)), true, code);
-  for (const errno of [1292, 1366, 1367]) assert.equal(wrongTypeValue(Object.assign(new Error('Incorrect value'), { errno })), true);
   assert.equal(wrongTypeValue(pg('23505')), false);
   assert.equal(wrongTypeValue(new Error('invalid input syntax')), false, 'never by its words');
   const said = appError(pg('22P02'));

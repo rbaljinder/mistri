@@ -187,15 +187,6 @@ export function flagsFromDDL(ddl: string, columns: string[]): Set<string> {
 }
 
 /**
- * The vocabulary written into a column's type, as MySQL does it:
- * `enum('draft','open')`, `set('a','b')`.
- */
-export function typeVocabulary(type: string): string[] | undefined {
-  const m = /^\s*(?:enum|set)\s*\((.*)\)\s*$/is.exec(type);
-  return m ? literals(m[1]) : undefined;
-}
-
-/**
  * Every CHECK clause in a `CREATE TABLE` statement, for dialects that keep
  * the statement rather than the constraints — SQLite.
  *

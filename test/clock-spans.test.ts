@@ -10,7 +10,7 @@ import { parseAppConfig, withRollups, type AppDef } from '../packages/mistri/src
 import { appComputedRules } from '../packages/mistri/src/shared/appComputed.js';
 import { parseComputed } from '../packages/engine/src/shared/computedParse.js';
 import { evaluateComputed } from '../packages/engine/src/shared/computedValue.js';
-import { ANSI_STYLE, MYSQL_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { ANSI_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import { dateWindow, parseQuery } from '../packages/engine/src/shared/query.js';
 import { compileView, type ViewDef } from '../packages/engine/src/shared/view.js';
 import { withViewComputed } from '../packages/engine/src/shared/viewLabels.js';
@@ -88,15 +88,14 @@ test('a computed column moves an instant by hours and minutes on each engine, an
     },
   );
   const view: ViewDef = { id: 'v', name: 'v', base: 'ticket', columns: [{ path: 'warn_at' }, { path: 'fresh' }] };
-  const text = (dialect: 'sqlite' | 'postgres' | 'mysql') => {
+  const text = (dialect: 'sqlite' | 'postgres') => {
     const served = withRollups(app(computed), catalog(dialect), NOW, null);
-    const style = { sqlite: ANSI_STYLE, postgres: POSTGRES_STYLE, mysql: MYSQL_STYLE }[dialect];
+    const style = { sqlite: ANSI_STYLE, postgres: POSTGRES_STYLE }[dialect];
     return compileView(served, withViewComputed(served, view), style).text;
   };
   assert.match(text('sqlite'), /datetime\("ticket_0"\."due_at", printf\('%\+d hours', CAST\(\(-\(2\)\) AS INTEGER\)\)\)/);
   assert.match(text('sqlite'), /datetime\('2026-10-09 15:00:00', printf\('%\+d minutes', CAST\(\(-\(30\)\) AS INTEGER\)\)\)/);
   assert.match(text('postgres'), /\("ticket_0"\."due_at" \+ \(-\(2\)\) \* INTERVAL '1 hour'\)/);
-  assert.match(text('mysql'), /DATE_ADD\(`ticket_0`\.`due_at`, INTERVAL \(-\(2\)\) HOUR\)/);
 
   const refused = appComputedRules(app({ evening: { type: 'date', value: 'today + 18 hours' } }), catalog('sqlite')).problems;
   assert.match(refused[0], /today is a day, and hours and minutes move an instant/);

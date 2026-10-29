@@ -101,10 +101,8 @@ function inboxUnavailable(connection: string, dialect: string): string {
       ? "provisionStores({ sqlite: '<the database file>' }, { only: ['inbox'] })"
       : dialect === 'postgres'
         ? "provisionStores({ postgres: '<the connection's URL>' }, { only: ['inbox'] }), as a role that may create tables"
-        : dialect === 'mysql'
-          ? "provisionStores({ mysql: '<the connection's URL>' }, { only: ['inbox'] }), as a user that may create tables"
-          : undefined;
-  if (!call) return `${at}: notifications are kept in SQLite, PostgreSQL or MySQL, and this connection is ${dialect}.`;
+        : undefined;
+  if (!call) return `${at}: notifications are kept in SQLite or PostgreSQL, and this connection is ${dialect}.`;
   return (
     `${at}: it is provisioned once, never on startup. Run \`mistri migrate stores up --app <the App's directory>\` ` +
     `with the server stopped, or ${call} from @mistriwork/mistri/maintenance, then start again.`

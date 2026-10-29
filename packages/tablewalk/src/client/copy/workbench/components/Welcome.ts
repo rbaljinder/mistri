@@ -2,7 +2,6 @@
 import { defineMessages } from '@mistriwork/kit/client/messages.js';
 
 export const say = defineMessages({
-  mysqlOrMariadb: 'MySQL or MariaDB',
   couldNotBuildTheSample: 'Could not build the sample database: {message}',
   followTheData: 'Follow the data.',
   openAnyRowAndYouSee: 'Open any row and you see what points at it. The orders on a customer, the customer on an order.',

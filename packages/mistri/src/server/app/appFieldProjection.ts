@@ -4,6 +4,7 @@ import { assertNever } from '@mistriwork/engine/shared/model.js';
 import { backdropProblem, isFormView, labelTemplateProblem, listProblem, type AppDef, type AppForm } from '../../shared/app.js';
 import { isLabelTemplate } from '@mistriwork/engine/shared/recordLabel.js';
 import { compileBreakdown } from '@mistriwork/engine/shared/breakdown.js';
+import { StatementInstantMissing } from '@mistriwork/engine/shared/computed.js';
 import { cardsReadable } from '@mistriwork/engine/shared/appCards.js';
 import { commandReferenceProblem } from '../../shared/command.js';
 import { autoKey, formShownFields } from '@mistriwork/engine/shared/form.js';
@@ -170,7 +171,9 @@ export function fieldAccessiblePage(schema: DatabaseSchema, page: PageDef): bool
       }
     }
     return true;
-  } catch {
+  } catch (error) {
+    // A missing request instant is the caller's defect, and a "no" here would be kept for every reader with this key.
+    if (error instanceof StatementInstantMissing) throw error;
     // Validation errors may carry forbidden names or literals. Only return the
     // eligibility decision; callers must not serialize those diagnostics.
     return false;

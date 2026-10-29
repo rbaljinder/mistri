@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
-import { MYSQL_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import { parseAppConfig, resolveResources, withLabelTemplates } from '../packages/mistri/src/shared/app.js';
 import { compileView, withViewLabels } from '../packages/engine/src/shared/view.js';
 import { textToView } from '../packages/engine/src/shared/viewtext.js';
@@ -92,7 +92,6 @@ test("a vocabulary and a rule's values reach the computed name as their words", 
   const sql = (style: typeof POSTGRES_STYLE) =>
     compileView(served, { ...view, filter: undefined, orderBy: undefined, columns: [{ path: 'visit_id.$label' }] }, style).text;
   assert.match(sql(POSTGRES_STYLE), /CASE CAST\("visit_1"\."kind" AS TEXT\) WHEN 'annual physical' THEN 'Annual physical'/);
-  assert.match(sql(MYSQL_STYLE), /WHEN 'DR' THEN 'Doctor''s room'/);
 });
 
 test("an authored template does not write words: that is the column's rule to say", async (t) => {

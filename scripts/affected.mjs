@@ -24,9 +24,9 @@
  * The graph is `scripts/importGraph.mjs`: runtime edges only, since tsc
  * already guards a type edge. A fixture, an App under `examples/apps` or a
  * script is read by path, so it selects the suites whose source names it,
- * not every suite. A Postgres or MySQL adapter file selects only the
+ * not every suite. A Postgres adapter file selects only the
  * reaching suites that mention that dialect: every Registry test reaches
- * `connect.ts` and with it all three, but only some use the one that changed.
+ * `connect.ts` and with it both, but only some use the one that changed.
  */
 import { execFileSync } from 'node:child_process';
 import { globSync } from 'node:fs';
@@ -101,10 +101,7 @@ export function needlesFor(file) {
 }
 
 /* A dialect's adapter files, and what a suite says when it uses that dialect. */
-const DIALECTS = [
-  [/^packages\/[^/]+\/src\/adapters\/postgres[^/]*\.ts$/, /postgres|\bpg\b|TABLEWALK_TEST_PG|pglite/i],
-  [/^packages\/[^/]+\/src\/adapters\/mysql[^/]*\.ts$/, /mysql|mariadb|TABLEWALK_TEST_MYSQL/i],
-];
+const DIALECTS = [[/^packages\/[^/]+\/src\/adapters\/postgres[^/]*\.ts$/, /postgres|\bpg\b|TABLEWALK_TEST_PG|pglite/i]];
 
 /** The suites a set of changed files could have broken, and what could not be followed. */
 export function select(changed, reaches = suiteGraph(), read = textOf) {
@@ -191,7 +188,10 @@ function main() {
       process.exit(typeof error.status === 'number' ? error.status : 1);
     }
   };
-  if (node.length) step('npx', ['tsx', '--test', ...node]);
+  /* Through the gate's own runner, in the lanes it puts each file in: `tsx --test` ran every selected file at once,
+     so the files that share the one database TABLEWALK_TEST_PG names raced each other's DDL, and a scoped write
+     whose catalog moved under it (scoped/postgresScopeCatalog.ts) failed a selection the gate passes. */
+  if (node.length) step('node', ['scripts/test-node.mjs', ...node]);
   if (components.length) step('npx', ['vitest', 'run', ...components]);
   if (browser.length) step('npx', ['playwright', 'test', ...browser]);
 }

@@ -11,7 +11,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
-import { MysqlAdapter } from '../packages/engine/src/adapters/mysql.js';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
 import type { Adapter } from '../packages/engine/src/adapters/adapter.js';
 import type { AppDef } from '../packages/mistri/src/shared/appModel.js';
@@ -57,7 +56,7 @@ const app = (po: string, line: string, vendor: string) =>
   }) as unknown as AppDef;
 
 /* Numbers come back as the driver reads them (a bigint count as text on
-   Postgres, a DECIMAL sum as text on MySQL); the proof is about which. */
+   Postgres, a NUMERIC sum as text as well); the proof is about which. */
 const n = (value: unknown) => (value === null ? null : Number(value));
 
 async function proves(adapter: Adapter, raw: DatabaseSchema, po: string, line: string, receipt: string, vendor: string) {
@@ -293,54 +292,7 @@ describe('rollups on PostgreSQL', { skip: liveSkip('postgres', PG) }, () => {
   });
 });
 
-const MY = process.env.TABLEWALK_TEST_MYSQL;
-describe('rollups on MySQL', { skip: liveSkip('mysql', MY) }, () => {
-  const DB = 'tablewalk_rollups';
-  type Admin = { query(sql: string): Promise<unknown>; end(): Promise<void> };
-  const admin = async (): Promise<Admin> => {
-    const specifier = 'mysql2/promise';
-    const mysql = (await import(specifier)) as { createConnection: (c: Record<string, unknown>) => Promise<Admin> };
-    return mysql.createConnection({ uri: MY! });
-  };
-  let adapter: MysqlAdapter;
-  before(async () => {
-    const db = await admin();
-    try {
-      await db.query(`DROP DATABASE IF EXISTS \`${DB}\``);
-      await db.query(`CREATE DATABASE \`${DB}\` CHARACTER SET utf8mb4`);
-      await db.query(`CREATE TABLE \`${DB}\`.vendor (id INT PRIMARY KEY, name VARCHAR(20) NOT NULL)`);
-      await db.query(`CREATE TABLE \`${DB}\`.po (id INT PRIMARY KEY, number VARCHAR(20) NOT NULL, status VARCHAR(20) NOT NULL,
-        vendor_id INT NOT NULL, FOREIGN KEY (vendor_id) REFERENCES \`${DB}\`.vendor(id))`);
-      await db.query(`CREATE TABLE \`${DB}\`.po_line (id INT PRIMARY KEY, po_id INT NOT NULL, qty INT NOT NULL, amount DECIMAL(12,2) NOT NULL,
-        state VARCHAR(20) NOT NULL, tenant VARCHAR(20) NOT NULL, FOREIGN KEY (po_id) REFERENCES \`${DB}\`.po(id))`);
-      await db.query(`CREATE TABLE \`${DB}\`.receipt (id INT PRIMARY KEY, po_id INT, FOREIGN KEY (po_id) REFERENCES \`${DB}\`.po(id))`);
-      for (const sql of seed({ vendor: `\`${DB}\`.vendor`, po: `\`${DB}\`.po`, line: `\`${DB}\`.po_line`, receipt: `\`${DB}\`.receipt` }))
-        await db.query(sql);
-    } finally {
-      await db.end();
-    }
-    const url = new URL(MY!);
-    url.pathname = `/${DB}`;
-    adapter = new MysqlAdapter(url.toString(), 'rollups');
-  });
-  after(async () => {
-    await adapter?.close();
-    const db = await admin();
-    try {
-      await db.query(`DROP DATABASE IF EXISTS \`${DB}\``);
-    } finally {
-      await db.end();
-    }
-  });
-
-  test('the same numbers here', async () => {
-    const schema = await adapter.introspect();
-    const id = (name: string) => schema.tables.find((table) => table.name === name)!.id;
-    await proves(adapter, schema, id('po'), id('po_line'), id('receipt'), id('vendor'));
-  });
-});
-
-/* SQLite runs the same proof without a server, so the three engines are held to one answer. */
+/* SQLite runs the same proof without a server, so the two engines are held to one answer. */
 test('rollups on SQLite: the same numbers', async (t) => {
   const { mkdtempSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');

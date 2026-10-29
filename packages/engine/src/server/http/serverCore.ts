@@ -174,7 +174,7 @@ export function listen(options: Listening, answering: Answering): Server {
          after ten seconds said both. Answered now, with when to come back. */
         if (isPoolBusy(err) && !res.headersSent) {
           reportRefusal(req, 503, 'server_busy', err.message, err);
-          return sendBusy(res);
+          return sendBusy(res, {}, false, err);
         }
         const status = statusOf(err, answering);
         if (answering.said?.(err, req, res, status)) return;

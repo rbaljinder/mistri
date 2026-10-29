@@ -247,8 +247,27 @@ export function computedKind(node: ComputedNode, kindOf: (path: string) => Value
   return kind(node);
 }
 
-/** The expression with its constants as this request's values: the App's day, the instant, the reader. */
-export function foldConstants(node: ComputedNode, values: { today: string; now: string; me: string | null }): ComputedNode {
+/* The instant a statement writes for `now` where the catalog left it as written (foldConstants `keepNow`): the
+   request's own, read when the statement is written, from whoever serves the catalog (tenantServedSchema.ts). A
+   catalog that folded the instant in was a new object for every request, so nothing keyed by the catalog — a
+   parse, a path, a projection — was ever found again; one that leaves it is kept, and the instant travels with the
+   request instead. Nothing here keeps a statement, so no request's instant outlives it. */
+let statementInstant: () => string | undefined = () => undefined;
+/** A statement that writes `now` was compiled where no request says the instant: a missing wrapper, not a bad definition,
+ * so a caller that turns compile errors into "not shown" lets this one through rather than keep the answer it would give. */
+export class StatementInstantMissing extends Error {}
+/** Who says the instant a statement is written at (an ISO string), or undefined where nobody does. */
+export function readStatementInstantFrom(read: () => string | undefined): void {
+  statementInstant = read;
+}
+
+/** The expression with its constants as this request's values: the App's day, the instant, the reader. `keepNow`
+ * leaves the instant as written, for the statement to write as its request's (statementInstant, above). */
+export function foldConstants(
+  node: ComputedNode,
+  values: { today: string; now: string; me: string | null },
+  keepNow = false,
+): ComputedNode {
   /* Each constant folded is told to whatever keeps the catalog it is folded into (query.ts readsOf). */
   const fold = (n: ComputedNode): ComputedNode => {
     switch (n.k) {
@@ -256,6 +275,7 @@ export function foldConstants(node: ComputedNode, values: { today: string; now: 
         noteRead(1);
         return { k: 'date', value: values.today };
       case 'now':
+        if (keepNow) return n;
         noteRead(2);
         return { k: 'instant', value: values.now };
       case 'me':
@@ -279,14 +299,14 @@ export function foldConstants(node: ComputedNode, values: { today: string; now: 
 
 /* ---------- the statement ---------- */
 
-type Dialect = 'sqlite' | 'postgres' | 'mysql';
+type Dialect = 'sqlite' | 'postgres';
 const dialectOf = (style: SqlStyle): Dialect => style.dialect ?? 'sqlite';
 
 /**
  * The expression as SQL on one engine. `column` writes a path the way the
  * view writes every other (qualified against its joins); `kindOf` is the
  * same reading of the catalog that typed it, which says where a yes-or-no
- * column is an integer (SQLite, MySQL, a PostgreSQL 0/1 flag).
+ * column is an integer (SQLite, a PostgreSQL 0/1 flag).
  */
 export function compileComputed(
   computed: Pick<ComputedColumn, 'type' | 'expr'>,
@@ -312,7 +332,6 @@ export function compileComputed(
   const clocked = (date: string, amount: ComputedSpan, sign: 1 | -1): string => {
     const n = sign === 1 ? `(${sql(amount.of)})` : `(-(${sql(amount.of)}))`;
     if (dialect === 'postgres') return `(${date} + ${n} * INTERVAL '1 ${amount.unit}')`;
-    if (dialect === 'mysql') return `DATE_ADD(${date}, INTERVAL ${n} ${amount.unit.toUpperCase()})`;
     return `datetime(${date}, printf('%+d ${amount.unit}s', CAST(${n} AS INTEGER)))`;
   };
   const shifted = (date: string, amount: ComputedNode, sign: 1 | -1): string => {
@@ -323,7 +342,6 @@ export function compileComputed(
       return unit === 'day'
         ? `(CAST(${date} AS DATE) + CAST(${n} AS INTEGER))`
         : `CAST(CAST(${date} AS DATE) + ${n} * INTERVAL '1 ${unit}' AS DATE)`;
-    if (dialect === 'mysql') return `DATE_ADD(CAST(${date} AS DATE), INTERVAL ${n} ${unit.toUpperCase()})`;
     return `date(${date}, printf('%+d ${unit}s', CAST(${n} AS INTEGER)))`;
   };
   const sql = (n: ComputedNode): string => {
@@ -338,8 +356,14 @@ export function compileComputed(
         return 'NULL';
       case 'bool':
         return truthy(n);
+      case 'now': {
+        const at = statementInstant();
+        if (at === undefined)
+          throw new StatementInstantMissing('"now" is read when the catalog is served, or by its request, before a statement is written.');
+        noteRead(2);
+        return sql({ k: 'instant', value: at });
+      }
       case 'today':
-      case 'now':
       case 'me':
         throw new Error(`"${n.k}" is read when the catalog is served, before a statement is written.`);
       case 'date':
@@ -368,16 +392,14 @@ export function compileComputed(
              double cast to one keeps 15 digits); SQLite rounds the double, which is 1.00499…, so the figure is moved
              by its places and said to 15 digits first, as computedValue.ts works it out. */
           if (dialect === 'postgres') return `ROUND(CAST(${args[0]} AS NUMERIC), ${places})`;
-          if (dialect === 'mysql') return `ROUND(${args[0]}, ${places})`;
           const scale = places === '0' ? '' : ` * 1e${places}`;
           const back = places === '0' ? '' : ` / 1e${places}`;
           return `(CASE WHEN (${args[0]}) IS NULL THEN NULL ELSE ROUND(CAST(printf('%.15g', (${args[0]})${scale}) AS REAL))${back} END)`;
         }
-        /* SQLite's min and max of several are what MySQL's LEAST and GREATEST are, nothing where one is nothing;
-           PostgreSQL's skip a null, so it is said there. */
+        /* SQLite's min and max of several give nothing where one is nothing;
+           PostgreSQL's LEAST and GREATEST skip a null, so it is said there. */
         if (dialect === 'sqlite') return `${n.fn.toUpperCase()}(${args.join(', ')})`;
         const pick = `${n.fn === 'min' ? 'LEAST' : 'GREATEST'}(${args.join(', ')})`;
-        if (dialect === 'mysql') return pick;
         return `(CASE WHEN ${args.map((arg) => `(${arg}) IS NULL`).join(' OR ')} THEN NULL ELSE ${pick} END)`;
       }
       case 'op': {
@@ -391,7 +413,6 @@ export function compileComputed(
         }
         if (n.op === '-' && lk === 'date' && rk === 'date') {
           if (dialect === 'postgres') return `(CAST(${sql(n.left)} AS DATE) - CAST(${sql(n.right)} AS DATE))`;
-          if (dialect === 'mysql') return `DATEDIFF(${sql(n.left)}, ${sql(n.right)})`;
           return `CAST(julianday(date(${sql(n.left)})) - julianday(date(${sql(n.right)})) AS INTEGER)`;
         }
         if ((n.op === '+' || n.op === '-') && lk === 'date') return shifted(sql(n.left), n.right, n.op === '+' ? 1 : -1);

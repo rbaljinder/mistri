@@ -1,4 +1,4 @@
-/* The treatments no built-in look wears and an App's own theme may pick
+/* The treatments only some looks wear and an App's own theme may pick
    (docs/theming.md shows the themes that do): a bar in the navigation's own
    colour, a printed page's rules, small capitals and book figures. Fetched
    when a worn theme picks one of them rather than carried in every App's
@@ -35,6 +35,11 @@
   }
   :root[data-look-bar='dark'] .app-mode .topbar :is(.new-menu-trigger, .tenant-control-trigger):hover {
     background: color-mix(in srgb, var(--nav-ink) 14%, transparent);
+  }
+  /* The authoring badge on that bar: the warning leaned toward the bar's ink, not the page's, which is dark on a
+     dark ground (the badge read 1.57:1 in Ledger's light bar). */
+  :root[data-look-bar='dark'] .app-mode .topbar .app-issues {
+    color: color-mix(in srgb, var(--status-warning) 40%, var(--nav-ink));
   }
   /* The current room as a wash of the navigation's accent; its items stay the bar's muted ink. */
   :root[data-look-nav='wash'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) {

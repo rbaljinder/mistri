@@ -5,9 +5,8 @@
  * has no such thing as "without time zone" — so it reads the value in the
  * *process's* offset and prints it back in UTC. A row written 09:00 came out
  * of this adapter as `2026-08-01T13:00:00.000Z`: not a formatting difference,
- * a different time, on a value the column explicitly says has no zone. The
- * MySQL adapter avoids the whole question with `dateStrings: true`; `pg` has
- * no such option, so the parsers are replaced instead.
+ * a different time, on a value the column explicitly says has no zone. `pg` has
+ * no option to return date strings, so the parsers are replaced instead.
  *
  * `timestamptz` is included even though it is a real instant. Its text form
  * carries the offset, which is more information than a `Date` rendered in

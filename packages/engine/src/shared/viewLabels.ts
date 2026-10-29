@@ -442,7 +442,6 @@ function columnRead(column: ColumnMeta | undefined): { kind: ValueKind; native?:
 /* One aggregate of [label, tone] pairs, `[]` over no rows, in each engine's JSON. */
 function tagPairs(style: SqlStyle, label: string, tone: string): string {
   if (style.dialect === 'postgres') return `COALESCE(json_agg(json_build_array(${label}, ${tone})), '[]'::json)`;
-  if (style.dialect === 'mysql') return `COALESCE(JSON_ARRAYAGG(JSON_ARRAY(${label}, ${tone})), JSON_ARRAY())`;
   return `json_group_array(json_array(${label}, ${tone}))`;
 }
 

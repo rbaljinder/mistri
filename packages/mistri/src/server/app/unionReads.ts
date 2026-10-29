@@ -105,7 +105,7 @@ function viewFilterFor(union: string, branch: Branch, filter: ViewFilter | undef
   return groups && { groups };
 }
 
-/* Null first, as SQLite and MySQL sort it; numbers by value, the rest by text. */
+/* Null first, as SQLite sorts it; numbers by value, the rest by text. */
 function compare(a: unknown, b: unknown): number {
   if (a === b) return 0;
   if (a === null || a === undefined) return -1;

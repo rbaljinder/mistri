@@ -18,7 +18,7 @@ import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 import { compileBreakdown, type BreakdownDef } from '../packages/engine/src/shared/breakdown.js';
 import { textToBreakdown } from '../packages/engine/src/shared/breakdowntext.js';
-import { ANSI_STYLE, MYSQL_STYLE, POSTGRES_STYLE, weekStartDay } from '../packages/engine/src/shared/filter.js';
+import { ANSI_STYLE, POSTGRES_STYLE, weekStartDay } from '../packages/engine/src/shared/filter.js';
 import { chartKeys } from '../packages/engine/src/shared/page.js';
 import { localeWeekStart } from '../packages/engine/src/shared/weekStart.js';
 import { dispatchResourceReadHttp } from '../packages/engine/src/server/resourceReadHttp.js';
@@ -74,10 +74,6 @@ test('week is a period of the grammar, a chart key, and compiles in each dialect
     compileBreakdown(schemaOf('postgres'), def, POSTGRES_STYLE).text,
     /to_char\(CAST\("visit_0"\."at" AS date\) - CAST\(\(CAST\(EXTRACT\(ISODOW FROM "visit_0"\."at"\) AS integer\) \+ 6\) % 7 AS integer\), 'YYYY-MM-DD'\)/,
   );
-  assert.match(
-    compileBreakdown(schemaOf('mysql'), { ...def, weekStart: 7 }, MYSQL_STYLE).text,
-    /INTERVAL \(\(WEEKDAY\(`visit_0`\.`at`\) \+ 1\) \+ 0\) % 7 DAY/,
-  );
   // A week start is an ISO weekday and nothing else: it is written into the SQL, so it is checked first.
   for (const bad of [0, 8, 1.5, Number.NaN]) assert.throws(() => weekStartDay(bad), /ISO weekday/);
   assert.throws(() => compileBreakdown(schema, { ...def, weekStart: '1; DROP' as unknown as number }, ANSI_STYLE), /ISO weekday/);
@@ -88,6 +84,13 @@ test('a locale’s first day: Sunday in the US, Monday in Britain, and Monday wh
   assert.equal(localeWeekStart('en-GB'), 1);
   assert.equal(localeWeekStart(undefined), 1);
   assert.equal(localeWeekStart('not a locale'), 1);
+  // Kept answers are the same answers, a second time and after the bounded store fills and empties.
+  for (let round = 0; round < 2; round++) {
+    for (let i = 0; i < 70; i++) localeWeekStart(`en-x-n${i}`);
+    assert.equal(localeWeekStart('en-US'), 7);
+    assert.equal(localeWeekStart('en-GB'), 1);
+    assert.equal(localeWeekStart('not a locale'), 1);
+  }
 });
 
 const counts = (rows: Array<Record<string, unknown>>, key: string) =>

@@ -434,10 +434,6 @@ test('startup validates registry metadata and the durable command capability wit
     const source = { ...resources.forConnection('private-db'), dialect: 'postgres' as const, commandTransaction: undefined };
     resources.forConnection = () => source;
     assert.throws(() => bindHttpBusinessCommands(f.host.app.app, f.commands, resources, () => true), /SQLite and PostgreSQL provide it/);
-    // MySQL has the transaction and not the journal; the dialect alone refuses.
-    const mysql = { ...resources.forConnection('private-db'), dialect: 'mysql' as const, commandTransaction: async () => {} };
-    resources.forConnection = () => mysql as never;
-    assert.throws(() => bindHttpBusinessCommands(f.host.app.app, f.commands, resources, () => true), /SQLite and PostgreSQL provide it/);
   });
   await fixture(async (f) => {
     const resources = await loadAppRuntimeResources(f.registry, f.host.app.app, 'private-db');

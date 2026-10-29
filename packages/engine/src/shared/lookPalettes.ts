@@ -1,10 +1,10 @@
 /**
  * The palettes every built-in look offers: one registry, so Cobalt is the same
- * blue in Workshop, Lumen, Mono and Sage, and a reader who picks it keeps it
+ * blue in Workshop, Lumen, Mono, Sage and Ledger, and a reader who picks it keeps it
  * when they pick another look. A palette is a color identity only — its hue at
  * the depths a look draws it, light and dark, and the chart series that starts
  * from it. Everything else stays the look's: its grounds and neutrals
- * (Workshop's paper, Lumen's stone, Mono's grays, Sage's cream), its type,
+ * (Workshop's paper, Lumen's stone, Mono's grays, Sage's cream, Ledger's green-tinted paper and cover), its type,
  * shape and recipes, and which roles it lets the hue reach (`paletteColors`).
  * Workshop keeps one restrained accent under any palette: the hue reaches the
  * few marks a reader takes for the brand color — the primary verb, links and
@@ -33,6 +33,8 @@ interface PaletteMode {
   onSignal: string;
   /** The first chart series. */
   chart: string;
+  /** Ledger's rules by night, where the ring's mid-tone is not the rung it draws them at; omitted, the ring. */
+  rule?: string;
 }
 
 interface LookPalette {
@@ -122,7 +124,15 @@ export const LOOK_PALETTES: readonly LookPalette[] = [
       onSignal: '#15130f',
       chart: '#12a678',
     },
-    looks: { workshop: { light: { link: '#006d4a' } } },
+    /* Ledger's own green is Emerald as the book draws it: a deeper, greyer hue than the shared one, so its marks read
+       on its tinted paper and the cover's green sits beside them. */
+    looks: {
+      workshop: { light: { link: '#006d4a' } },
+      ledger: {
+        light: { accent: '#0f4d36', link: '#0f5a3f', soft: '#e0ece4', focus: '#3f8a6c', chart: '#0f6b4a' },
+        dark: { accent: '#7cc4a0', link: '#8fd1ae', soft: '#183026', focus: '#5fa585', chart: '#5fbf92', rule: '#6fb592' },
+      },
+    },
   },
   {
     id: 'teal',
@@ -283,6 +293,8 @@ function ledSeries(series: readonly string[], lead: string): string[] {
  *   ink, on paper, with no tint.
  * - Lumen: the accent and its pale tint, links, the ring, the menu's mark and the first chart series.
  * - Mono and Sage: the same, on their own neutral tint for what is chosen (Mono's gray, Sage's warm cream).
+ * - Ledger: Lumen's reach and the primary verb's fill, and the hue's ink and the rules (a table's double-ruled heads, a box's top rule) in it;
+ *   the paper and the cover stay the book's own green, with the gilt mark for the current entry.
  */
 export function paletteColors(look: ThemeBase, palette: LookPalette, mode: 'light' | 'dark', series: readonly string[]): ThemeColorsOver {
   const tone: PaletteMode = { ...palette[mode], ...palette.looks?.[look]?.[mode] };
@@ -322,5 +334,22 @@ export function paletteColors(look: ThemeBase, palette: LookPalette, mode: 'ligh
         nav: { accent: mode === 'light' ? tone.accent : link },
         chart: ledSeries(series, tone.chart),
       };
+    case 'ledger': {
+      /* The rules stand in the hue by day, and by night in its mid-tone, a rung under the link so a 3px double rule
+         is a line and not a glare on the dark paper. */
+      const rule = mode === 'light' ? tone.accent : (tone.rule ?? tone.focus);
+      /* The book has one green for its cover's marks, its primary button and its links: a form's primary verb fills
+         in the hue like a record's, never in the ink. */
+      return {
+        accent: tone.accent,
+        primary: tone.accent,
+        accentSoft: tone.soft,
+        accentInk: mode === 'light' ? tone.accent : link,
+        link,
+        focus: tone.focus,
+        rules: { section: rule, head: rule },
+        chart: ledSeries(series, tone.chart),
+      };
+    }
   }
 }

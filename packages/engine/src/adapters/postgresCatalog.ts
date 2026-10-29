@@ -126,9 +126,7 @@ export async function describePostgresCatalog(db: PgQuery, source: CatalogSource
     /* `col_description` joined on rather than left out.
 
        A column comment is the table's own documentation — the one place a
-       schema explains itself — and the MySQL adapter has always read them
-       while this one did not, so the same database described in two engines
-       gave a different amount of help. It lives in `pg_description` rather
+       schema explains itself — and SQLite has none to read. It lives in `pg_description` rather
        than `information_schema`, which is why it needs the join. */
     `SELECT c.table_schema, c.table_name, c.column_name, c.data_type,
             c.is_nullable, c.column_default, c.ordinal_position, c.is_identity, c.identity_generation, c.is_generated,

@@ -165,7 +165,7 @@ describe('tablewalk migrate on PostgreSQL', { skip: liveSkip('postgres', LIVE) }
       ['V1__a.sql'],
     );
     assert.equal(second.failure!.recorded, true);
-    assert.match(second.failure!.message, /it ran outside a transaction, so the statements before the failing one are applied/);
+    assert.match(second.failure!.message, /It ran outside a transaction, so the statements before the failing one are applied/);
     const stuck = await migrationStatus(target);
     assert.match(stuck.plan.problems.join('\n'), /V2__index\.sql failed on .* `mistri migrate repair` removes the failed entry/);
     assert.deepEqual((await migrateUp(target)).applied, []);

@@ -2,7 +2,7 @@
 
 # @mistriwork/engine
 
-The engine both products stand on: the adapters (SQLite, Postgres, MySQL), the
+The engine both products stand on: the adapters (SQLite, Postgres), the
 catalog, the query language, keyset pages, the HTTP kit and the shared rules.
 No React.
 

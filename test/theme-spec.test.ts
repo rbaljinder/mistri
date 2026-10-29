@@ -67,12 +67,32 @@ const WORN: Record<string, Record<string, string>> = {
     avatar: 'large',
     header: 'band',
   },
+  ledger: {
+    nav: 'wash',
+    bar: 'dark',
+    tabs: 'rule',
+    windows: 'segmented',
+    stat: 'divided',
+    section: 'panel',
+    fields: 'panel',
+    table: 'hairline',
+    status: 'quiet',
+    board: 'ruled',
+    chart: 'plain',
+    rules: 'double',
+    avatar: 'plain',
+    banner: 'plain',
+    steps: 'strip',
+    lanes: 'plain',
+    header: 'plain',
+  },
 };
 const SHAPE: Record<string, { elevation: string; title?: string }> = {
   workshop: { elevation: 'flat', title: '30px' },
   lumen: { elevation: 'raised', title: '28px' },
   mono: { elevation: 'flat', title: '30px' },
   sage: { elevation: 'soft' },
+  ledger: { elevation: 'flat', title: '26px' },
 };
 
 const spec = (extra: Record<string, unknown> = {}) => ({

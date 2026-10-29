@@ -364,7 +364,7 @@ addresses. A natural key may be unique within the tenant,
 ordinary not-found.
 
 Refused in a tenant App: email and mentions, webhook effects, inbound
-endpoints, the API's event feed and generic writes, MySQL, and the database
+endpoints, the API's event feed and generic writes, and the database
 browser's `--mcp`.
 
 ### Sandboxes

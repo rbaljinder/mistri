@@ -33,7 +33,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from './support/createApp.js';
-import { hostRefusal, identityFor, parseHostList } from '../packages/engine/src/server/http/trust.js';
+import { hostRefusal, identityFor, parseHostList, parseTrustedProxies } from '../packages/engine/src/server/http/trust.js';
 import { Registry, loadConfig } from '../packages/engine/src/server/connections.js';
 import { parseViewsConfig } from '../packages/engine/src/shared/view.js';
 import { parseQueriesConfig } from '../packages/engine/src/shared/sqlsaved.js';
@@ -181,16 +181,25 @@ const CONFIG = {
     { name: 'writable', url: RW_DB, writable: true },
     /* Never opened. It is here so the connection list has a credential in it,
        and every response can be searched for the password. */
-    { name: 'remote', url: `postgres://alice:${SECRET}@db.example.com:5432/appdb` },
+    {
+      name: 'remote',
+      url: `postgres://alice:${SECRET}@db.example.com:5432/appdb`,
+    },
   ],
   views: [
-    { name: 'Invoice lines', text: 'invoice_line show invoice_id, sku, quantity' },
+    {
+      name: 'Invoice lines',
+      text: 'invoice_line show invoice_id, sku, quantity',
+    },
     /* A view whose base table does not exist. It must come back *with its
        reason* rather than be dropped from the list. */
     { name: 'Broken', base: 'nonesuch', columns: ['id'] },
   ],
   queries: [
-    { name: 'Active customers', sql: 'select id, name from customer where active = 1' },
+    {
+      name: 'Active customers',
+      sql: 'select id, name from customer where active = 1',
+    },
     { name: 'Writable only', sql: 'select 1', connection: 'writable' },
   ],
 };
@@ -219,7 +228,12 @@ before(async () => {
   const config = await loadConfig(configPath, CONFIG_SECTIONS);
   registry = new Registry();
   for (const c of config!.connections) {
-    registry.add({ name: c.name, url: c.url, writable: c.writable === true, source: 'config' });
+    registry.add({
+      name: c.name,
+      url: c.url,
+      writable: c.writable === true,
+      source: 'config',
+    });
   }
   registry.setActive('readonly');
   await registry.open('readonly');
@@ -229,7 +243,13 @@ before(async () => {
   const queries = parseQueriesConfig(raw, configPath);
 
   server = createApp({ registry, views, configPath, queries, bound });
-  proxyServer = createApp({ registry, views, configPath, queries, bound: proxied });
+  proxyServer = createApp({
+    registry,
+    views,
+    configPath,
+    queries,
+    bound: proxied,
+  });
   for (const [listener, record] of [
     [server, bound],
     [proxyServer, proxied],
@@ -266,7 +286,12 @@ describe('the cross-origin guard, actually wired in', () => {
 
     const res = await post(
       '/api/update',
-      { conn: 'writable', table: 'customer', key: { id: 3 }, values: { credit_limit: 99999 } },
+      {
+        conn: 'writable',
+        table: 'customer',
+        key: { id: 3 },
+        values: { credit_limit: 99999 },
+      },
       { origin: 'http://evil.example' },
     );
     assert.equal(res.status, 403);
@@ -389,7 +414,11 @@ describe('the cross-origin guard, actually wired in', () => {
       proxied,
       'POST',
       '/api/count',
-      { host: 'tablewalk.internal', origin: 'http://evil.example', 'content-type': 'application/json' },
+      {
+        host: 'tablewalk.internal',
+        origin: 'http://evil.example',
+        'content-type': 'application/json',
+      },
       JSON.stringify({ table: 'customer' }),
     );
     assert.equal(refused.status, 403);
@@ -399,7 +428,11 @@ describe('the cross-origin guard, actually wired in', () => {
       proxied,
       'POST',
       '/api/count',
-      { host: 'tablewalk.internal', origin: 'http://tablewalk.internal', 'content-type': 'application/json' },
+      {
+        host: 'tablewalk.internal',
+        origin: 'http://tablewalk.internal',
+        'content-type': 'application/json',
+      },
       JSON.stringify({ table: 'customer' }),
     );
     assert.equal(allowed.status, 200);
@@ -477,19 +510,37 @@ describe('writing needs a connection that says so', () => {
 
   test('save acknowledgements identify their undo entry and stale Undo cannot revert a later write', async () => {
     const original = valueIn(RW_DB, 'SELECT email AS v FROM customer WHERE id=3');
-    const update = (email: unknown) => post('/api/update', { conn: 'writable', table: 'customer', key: { id: 3 }, values: { email } });
+    const update = (email: unknown) =>
+      post('/api/update', {
+        conn: 'writable',
+        table: 'customer',
+        key: { id: 3 },
+        values: { email },
+      });
     try {
       const first = await update('first@example.test');
       const second = await update('second@example.test');
       assert.equal(typeof first.json.undoId, 'number');
       assert.notEqual(first.json.undoId, second.json.undoId);
-      const stale = await post('/api/revert', { conn: 'writable', confirm: true, expectedId: first.json.undoId });
+      const stale = await post('/api/revert', {
+        conn: 'writable',
+        confirm: true,
+        expectedId: first.json.undoId,
+      });
       assert.equal(stale.status, 409);
       assert.equal(valueIn(RW_DB, 'SELECT email AS v FROM customer WHERE id=3'), 'second@example.test');
-      const undo = await post('/api/revert', { conn: 'writable', confirm: true, expectedId: second.json.undoId });
+      const undo = await post('/api/revert', {
+        conn: 'writable',
+        confirm: true,
+        expectedId: second.json.undoId,
+      });
       assert.equal(undo.json.reverted, true);
       assert.equal(valueIn(RW_DB, 'SELECT email AS v FROM customer WHERE id=3'), 'first@example.test');
-      const again = await post('/api/revert', { conn: 'writable', confirm: true, expectedId: second.json.undoId });
+      const again = await post('/api/revert', {
+        conn: 'writable',
+        confirm: true,
+        expectedId: second.json.undoId,
+      });
       assert.equal(again.status, 409);
       assert.equal(valueIn(RW_DB, 'SELECT email AS v FROM customer WHERE id=3'), 'first@example.test');
     } finally {
@@ -499,8 +550,16 @@ describe('writing needs a connection that says so', () => {
 
   test('stale expected fields return 409 without overwriting and malformed guards return 400', async () => {
     const original = valueIn(RW_DB, 'SELECT email AS v FROM customer WHERE id=3');
-    const write = { conn: 'writable', table: 'customer', key: { id: 3 }, values: { email: 'guarded@example.test' } };
-    const conflict = await post('/api/update', { ...write, expected: { email: 'stale@example.test' } });
+    const write = {
+      conn: 'writable',
+      table: 'customer',
+      key: { id: 3 },
+      values: { email: 'guarded@example.test' },
+    };
+    const conflict = await post('/api/update', {
+      ...write,
+      expected: { email: 'stale@example.test' },
+    });
     assert.equal(conflict.status, 409);
     assert.equal(valueIn(RW_DB, 'SELECT email AS v FROM customer WHERE id=3'), original);
     const invalid = await post('/api/update', { ...write, expected: {} });
@@ -540,7 +599,10 @@ describe('writing needs a connection that says so', () => {
   });
 
   test('/api/insert is refused on a read-only connection', async () => {
-    const res = await post('/api/insert', { table: 'customer', values: { name: 'Nope' } });
+    const res = await post('/api/insert', {
+      table: 'customer',
+      values: { name: 'Nope' },
+    });
     assert.equal(res.status, 403);
     assert.match(res.json.error, /read-only/);
   });
@@ -568,16 +630,27 @@ describe('writing needs a connection that says so', () => {
   });
 
   test('an insert refusal the adapter words is a 400', async () => {
-    const res = await post('/api/insert', { conn: 'writable', table: 'customer', values: { nonesuch: 'x' } });
+    const res = await post('/api/insert', {
+      conn: 'writable',
+      table: 'customer',
+      values: { nonesuch: 'x' },
+    });
     assert.equal(res.status, 400);
     assert.match(res.json.error, /no column called/);
   });
 
   test('default-only inserts must be explicit, and missing required values are still rejected', async () => {
-    const missing = await post('/api/insert', { conn: 'writable', table: 'customer' });
+    const missing = await post('/api/insert', {
+      conn: 'writable',
+      table: 'customer',
+    });
     assert.equal(missing.status, 400);
     assert.match(missing.json.error, /values must be an object/);
-    const defaults = await post('/api/insert', { conn: 'writable', table: 'customer', values: {} });
+    const defaults = await post('/api/insert', {
+      conn: 'writable',
+      table: 'customer',
+      values: {},
+    });
     assert.equal(defaults.json.outcome, 'rejected');
     assert.match(defaults.json.errors[0].message, /NOT NULL/);
   });
@@ -586,7 +659,11 @@ describe('writing needs a connection that says so', () => {
     const before = rowsIn(RO_DB, 'SELECT COUNT(*) AS n FROM shipment');
     assert.equal(before, 5);
 
-    const res = await post('/api/delete', { table: 'shipment', key: { id: 5 }, confirm: true });
+    const res = await post('/api/delete', {
+      table: 'shipment',
+      key: { id: 5 },
+      confirm: true,
+    });
     assert.equal(res.status, 403);
     assert.match(res.json.error, REFUSAL);
     assert.equal(rowsIn(RO_DB, 'SELECT COUNT(*) AS n FROM shipment'), 5);
@@ -595,7 +672,11 @@ describe('writing needs a connection that says so', () => {
   test('/api/delete without confirm reports and does not delete', async () => {
     /* Two calls, deliberately. A destructive endpoint that is also the way you
        ask about the damage is one typo away from doing it. */
-    const res = await post('/api/delete', { conn: 'writable', table: 'shipment', key: { id: 5 } });
+    const res = await post('/api/delete', {
+      conn: 'writable',
+      table: 'shipment',
+      key: { id: 5 },
+    });
     assert.equal(res.status, 200);
     assert.equal(res.json.deleted, false);
     // Nothing points at shipment, so there is nothing to report.
@@ -618,7 +699,11 @@ describe('writing needs a connection that says so', () => {
   });
 
   test('the impact report names the constraint before anything is removed', async () => {
-    const res = await post('/api/delete', { conn: 'writable', table: 'invoice', key: { id: 1001 } });
+    const res = await post('/api/delete', {
+      conn: 'writable',
+      table: 'invoice',
+      key: { id: 1001 },
+    });
     assert.equal(res.status, 200);
     assert.equal(res.json.deleted, false);
     const line = res.json.impact.find((i: { table: string }) => i.table === 'invoice_line');
@@ -646,7 +731,11 @@ describe('writing needs a connection that says so', () => {
   });
 
   test('an unknown table is a 404 before the impact report is built', async () => {
-    const res = await post('/api/delete', { conn: 'writable', table: 'nonesuch', key: { id: 1 } });
+    const res = await post('/api/delete', {
+      conn: 'writable',
+      table: 'nonesuch',
+      key: { id: 1 },
+    });
     assert.equal(res.status, 404);
     assert.match(res.json.error, /Unknown table "nonesuch"/);
   });
@@ -695,14 +784,19 @@ describe('/api/sql', () => {
   });
 
   test('two columns of the same name both survive the trip', async () => {
-    const res = await post('/api/sql', { text: 'select id, id from customer limit 1' });
+    const res = await post('/api/sql', {
+      text: 'select id, id from customer limit 1',
+    });
     assert.equal(res.status, 200);
     assert.equal(res.json.columns.length, 2);
     assert.equal(res.json.rows[0].length, 2);
   });
 
   test('a statement short of the limit is not reported as truncated', async () => {
-    const res = await post('/api/sql', { text: 'select code from country', limit: 100 });
+    const res = await post('/api/sql', {
+      text: 'select code from country',
+      limit: 100,
+    });
     assert.equal(res.json.rows.length, 3);
     assert.equal(res.json.truncated, false);
   });
@@ -712,7 +806,9 @@ describe('/api/sql', () => {
        would be worse than refusing both, and the refusal belongs beside the
        editor rather than as a failed request. */
     const before = rowsIn(RO_DB, 'SELECT COUNT(*) AS n FROM customer');
-    const res = await post('/api/sql', { text: 'select 1; drop table customer' });
+    const res = await post('/api/sql', {
+      text: 'select 1; drop table customer',
+    });
     assert.equal(res.status, 200);
     assert.match(res.json.errors[0].message, /One statement at a time/);
     assert.equal(res.json.rows, undefined);
@@ -760,9 +856,14 @@ describe('/api/sql', () => {
        from at all. */
     const listed = await post('/api/revert', { conn: 'writable' });
     assert.equal(listed.status, 200);
-    const sql = (listed.json.writes as Array<{ kind: string; revertible: boolean; summary: string; reason?: string }>).find(
-      (w) => w.kind === 'sql',
-    );
+    const sql = (
+      listed.json.writes as Array<{
+        kind: string;
+        revertible: boolean;
+        summary: string;
+        reason?: string;
+      }>
+    ).find((w) => w.kind === 'sql');
     assert.ok(sql, 'the raw write is in the history');
     assert.equal(sql!.revertible, false);
     assert.match(sql!.summary, /Ran SQL: update country set name/);
@@ -825,17 +926,26 @@ describe('reading', () => {
     for (const body of [
       { table: 'customer', columns: ['name', 'nope'] },
       { table: 'customer', orderBy: [{ column: 'nope', direction: 'asc' }] },
-      { table: 'customer', filter: { groups: [[{ column: 'nope', op: '=', value: 1 }]] } },
+      {
+        table: 'customer',
+        filter: { groups: [[{ column: 'nope', op: '=', value: 1 }]] },
+      },
     ]) {
       const res = await post('/api/query', body);
       assert.equal(res.status, 400, JSON.stringify(body));
       assert.match(res.json.error, /"customer" has no column "nope"/);
     }
-    const counted = await post('/api/count', { table: 'customer', filter: { groups: [[{ column: 'nope', op: '=', value: 1 }]] } });
+    const counted = await post('/api/count', {
+      table: 'customer',
+      filter: { groups: [[{ column: 'nope', op: '=', value: 1 }]] },
+    });
     assert.equal(counted.status, 400);
     assert.match(counted.json.error, /has no column "nope"/);
     // A dotted path is not a column either, and is reported as the table lacking it.
-    const dotted = await post('/api/query', { table: 'customer', columns: ['country_code.name'] });
+    const dotted = await post('/api/query', {
+      table: 'customer',
+      columns: ['country_code.name'],
+    });
     assert.equal(dotted.status, 400);
   });
 
@@ -882,7 +992,10 @@ describe('reading', () => {
        these endpoints report a list. But a client that branches on the status
        and then reads `.error` showed nothing at all, so both are sent: the
        list keeps its shape and `error` is the first of them. */
-    const res = await post('/api/run', { q: 'customer', columns: ['id', 'nonesuch'] });
+    const res = await post('/api/run', {
+      q: 'customer',
+      columns: ['id', 'nonesuch'],
+    });
     assert.equal(res.status, 400);
     assert.match(res.json.errors[0].message, /No column called "nonesuch" on customer/);
     assert.equal(res.json.error, res.json.errors[0].message);
@@ -905,7 +1018,10 @@ describe('reading', () => {
   });
 
   test('exactCount forces the true count', async () => {
-    const res = await post('/api/count', { table: 'customer', exactCount: true });
+    const res = await post('/api/count', {
+      table: 'customer',
+      exactCount: true,
+    });
     assert.deepEqual(res.json, { count: 5, exact: true });
   });
 
@@ -925,7 +1041,10 @@ describe('reading', () => {
   });
 
   test('/api/references counts every row pointing at this one', async () => {
-    const res = await post('/api/references', { table: 'customer', key: { id: 1 } });
+    const res = await post('/api/references', {
+      table: 'customer',
+      key: { id: 1 },
+    });
     assert.equal(res.status, 200);
     assert.equal(res.json.table, 'customer');
     assert.deepEqual(res.json.primaryKey, ['id']);
@@ -1049,7 +1168,10 @@ describe('layouts', () => {
   test('null removes a layout rather than storing an empty one', async () => {
     // "Reset to default" means no layout, so the derived one takes over again
     // — not an empty layout, which would render an empty record.
-    const removed = await post('/api/layouts', { table: 'customer', layout: null });
+    const removed = await post('/api/layouts', {
+      table: 'customer',
+      layout: null,
+    });
     assert.equal(removed.status, 200);
     assert.deepEqual((await get('/api/layouts')).json.layouts, {});
   });
@@ -1059,7 +1181,10 @@ describe('layouts', () => {
     assert.equal(noTable.status, 400);
     assert.equal(noTable.json.error, 'A layout needs a table.');
 
-    const notAnObject = await post('/api/layouts', { table: 'customer', layout: 7 });
+    const notAnObject = await post('/api/layouts', {
+      table: 'customer',
+      layout: 7,
+    });
     assert.equal(notAnObject.status, 400);
     assert.match(notAnObject.json.error, /must be an object, or null to remove it/);
   });
@@ -1088,7 +1213,10 @@ describe('saved filters', () => {
     const other = await get('/api/filters?conn=writable');
     assert.deepEqual(other.json.filters, {});
 
-    const removed = await post('/api/filters/save', { list: 'customer', filters: null });
+    const removed = await post('/api/filters/save', {
+      list: 'customer',
+      filters: null,
+    });
     assert.equal(removed.status, 200);
     assert.deepEqual((await get('/api/filters')).json.filters, {});
   });
@@ -1098,7 +1226,10 @@ describe('saved filters', () => {
     assert.equal(noTable.status, 400);
     assert.equal(noTable.json.error, 'Saved filters belong to a list.');
 
-    const notAList = await post('/api/filters/save', { list: 'customer', filters: { name: 'x' } });
+    const notAList = await post('/api/filters/save', {
+      list: 'customer',
+      filters: { name: 'x' },
+    });
     assert.equal(notAList.status, 400);
     assert.match(notAList.json.error, /must be a list, or null to remove them/);
   });
@@ -1106,7 +1237,9 @@ describe('saved filters', () => {
 
 describe('grouping over HTTP', () => {
   test('text in, groups out, with the columns named either way', async () => {
-    const res = await post('/api/breakdown', { text: 'invoice count, sum total as billed by status' });
+    const res = await post('/api/breakdown', {
+      text: 'invoice count, sum total as billed by status',
+    });
     assert.equal(res.status, 200);
     assert.deepEqual(res.json.columns, ['status', 'count', 'billed']);
     assert.equal(res.json.total, res.json.rows.length, 'the total is groups, not rows');
@@ -1122,14 +1255,19 @@ describe('grouping over HTTP', () => {
     /* An input box is half-typed most of the time it is being used. A 4xx
        here has the client rendering "request failed" over a message that
        says which column was misspelled. */
-    const res = await post('/api/breakdown', { text: 'invoice count by nosuchcolumn' });
+    const res = await post('/api/breakdown', {
+      text: 'invoice count by nosuchcolumn',
+    });
     assert.equal(res.status, 200);
     assert.ok(res.json.errors.length);
     assert.equal(res.json.rows, undefined);
   });
 
   test('the limit is the ordinary limit policy, breakdowns included', async () => {
-    const res = await post('/api/breakdown', { text: 'invoice count by id', limit: 2 });
+    const res = await post('/api/breakdown', {
+      text: 'invoice count by id',
+      limit: 2,
+    });
     assert.equal(res.json.rows.length, 2);
     // And the total counts every group, not the page.
     assert.ok(res.json.total > 2);
@@ -1153,7 +1291,10 @@ describe('the agent endpoints, which are the MCP by another door', () => {
   });
 
   test('a call answers the MCP shape: structured content, stats, isError', async () => {
-    const res = await post('/api/agent/call', { name: 'query', arguments: { q: 'customer limit 2' } });
+    const res = await post('/api/agent/call', {
+      name: 'query',
+      arguments: { q: 'customer limit 2' },
+    });
     assert.equal(res.status, 200);
     assert.equal(res.json.isError, false);
     assert.equal(res.json.structuredContent.rows.length, 2);
@@ -1163,7 +1304,10 @@ describe('the agent endpoints, which are the MCP by another door', () => {
   });
 
   test('a tool error is a result, exactly as it is over stdio', async () => {
-    const res = await post('/api/agent/call', { name: 'table', arguments: { table: 'nonesuch' } });
+    const res = await post('/api/agent/call', {
+      name: 'table',
+      arguments: { table: 'nonesuch' },
+    });
     assert.equal(res.status, 200);
     assert.equal(res.json.isError, true);
     assert.match(res.json.content[0].text, /Unknown table/);
@@ -1179,7 +1323,13 @@ describe('saved pages, persisted like layouts', () => {
 
     const saved = await post('/api/pages/save', {
       id: 'saved:customer:1',
-      page: { id: 'saved:customer:1', name: 'Overview', base: 'customer', source: 'saved', sections: [{ kind: 'fields' }] },
+      page: {
+        id: 'saved:customer:1',
+        name: 'Overview',
+        base: 'customer',
+        source: 'saved',
+        sections: [{ kind: 'fields' }],
+      },
     });
     assert.deepEqual(saved.json, { ok: true });
 
@@ -1206,7 +1356,10 @@ describe('saved pages, persisted like layouts', () => {
     process.env.XDG_CONFIG_HOME = blocked;
     try {
       for (const page of [{ name: 'Unsaved' }, null]) {
-        const response = await post('/api/pages/save', { id: 'saved:failure', page });
+        const response = await post('/api/pages/save', {
+          id: 'saved:failure',
+          page,
+        });
         assert.equal(response.status, 500);
         assert.match(response.json.error, /pages file could not be written/);
         assert.doesNotMatch(response.json.error, /Saved in this browser/);
@@ -1277,7 +1430,10 @@ describe('connections, over HTTP', () => {
 
   test('renaming a connection changes the session and not the file', async () => {
     const before = readFileSync(configPath, 'utf8');
-    const res = await post('/api/connections/update', { id: 'remote', name: 'remote renamed' });
+    const res = await post('/api/connections/update', {
+      id: 'remote',
+      name: 'remote renamed',
+    });
     assert.equal(res.status, 200);
     assert.equal(res.json.connections.find((c: { id: string }) => c.id === 'remote').name, 'remote renamed');
     /* A browser page silently editing a file on disk is a surprise nobody
@@ -1343,7 +1499,9 @@ describe('connections, over HTTP', () => {
        working connection. */
     assert.ok(good.json.tables > 0);
 
-    const bad = await post('/api/connections/test', { url: '/nowhere/does/not/exist.db' });
+    const bad = await post('/api/connections/test', {
+      url: '/nowhere/does/not/exist.db',
+    });
     assert.equal(bad.status, 200, 'a target that does not work is an answer, not a failed request');
     assert.equal(bad.json.ok, false);
     assert.ok(String(bad.json.error).length);
@@ -1437,7 +1595,9 @@ describe('connections, over HTTP', () => {
   });
 
   test('a save that cannot be written is a 500 that names the path', async () => {
-    const res = await post('/api/connections/save', { path: join(tmp, 'saved.json', 'nope.json') });
+    const res = await post('/api/connections/save', {
+      path: join(tmp, 'saved.json', 'nope.json'),
+    });
     assert.equal(res.status, 500);
     assert.match(res.json.error, /Could not write/);
   });
@@ -1454,12 +1614,18 @@ describe('the connection manager trusts the browser only on loopback', () => {
      any SQLite file the server user could, a save wrote JSON wherever the
      body pointed, and an update redirected a config connection for every
      reader. The same body through the loopback listener still works. */
-  const host = { host: 'tablewalk.internal', 'content-type': 'application/json' };
+  const host = {
+    host: 'tablewalk.internal',
+    'content-type': 'application/json',
+  };
   const exposed = (path: string, body: unknown) => raw(proxied, 'POST', path, host, JSON.stringify(body));
 
   test('a URL referencing the environment is refused, on add and on test', async () => {
     for (const path of ['/api/connections', '/api/connections/test']) {
-      const res = await exposed(path, { name: 'leak', url: 'postgres://u:${HOME}@attacker.example/db' });
+      const res = await exposed(path, {
+        name: 'leak',
+        url: 'postgres://u:${HOME}@attacker.example/db',
+      });
       assert.equal(res.status, 403, path);
       assert.match(res.json.error, /cannot reference environment variables/);
     }
@@ -1481,14 +1647,19 @@ describe('the connection manager trusts the browser only on loopback', () => {
        is added, fails to open, and is listed with its reason like any other —
        and the reason is the driver's, not a missing password: nothing was
        looked up by name. */
-    const res = await exposed('/api/connections', { name: 'plain', url: 'postgres://u@127.0.0.1:1/db' });
+    const res = await exposed('/api/connections', {
+      name: 'plain',
+      url: 'postgres://u@127.0.0.1:1/db',
+    });
     assert.equal(res.status, 400, res.text);
     const listed = res.json.connections.find((c: { id: string }) => c.id === 'plain');
     assert.ok(listed, 'added, with its error');
     assert.doesNotMatch(listed.error ?? '', /keychain|credentials file/);
     // And it is dialled sealed: a loopback address is not this browser's to probe (untrustedDatabase.ts).
     assert.match(listed.error ?? '', /may not reach/);
-    const probe = await exposed('/api/connections/test', { url: 'postgres://u@127.0.0.1:1/db' });
+    const probe = await exposed('/api/connections/test', {
+      url: 'postgres://u@127.0.0.1:1/db',
+    });
     assert.equal(probe.json.ok, false);
     assert.match(probe.json.error, /may not reach/);
     await post('/api/connections/remove', { id: 'plain' });
@@ -1496,18 +1667,26 @@ describe('the connection manager trusts the browser only on loopback', () => {
 
   test('a config connection cannot be redirected, and saving is refused', async () => {
     const before = readFileSync(configPath, 'utf8');
-    const moved = await exposed('/api/connections/update', { id: 'remote', url: 'postgres://u@attacker.example/db' });
+    const moved = await exposed('/api/connections/update', {
+      id: 'remote',
+      url: 'postgres://u@attacker.example/db',
+    });
     assert.equal(moved.status, 403);
     assert.match(moved.json.error, /comes from the config file/);
 
-    const saved = await exposed('/api/connections/save', { path: join(tmp, 'stolen.json') });
+    const saved = await exposed('/api/connections/save', {
+      path: join(tmp, 'stolen.json'),
+    });
     assert.equal(saved.status, 403);
     assert.match(saved.json.error, /saved from the machine running tablewalk/);
     assert.equal(readFileSync(configPath, 'utf8'), before);
     assert.throws(() => readFileSync(join(tmp, 'stolen.json')), 'nothing was written where the body pointed');
 
     // A rename is still the client's to make; it redirects nothing.
-    const renamed = await exposed('/api/connections/update', { id: 'remote', name: 'remote (proxied)' });
+    const renamed = await exposed('/api/connections/update', {
+      id: 'remote',
+      name: 'remote (proxied)',
+    });
     assert.equal(renamed.status, 200);
     await post('/api/connections/update', { id: 'remote', name: 'remote' });
   });
@@ -1525,11 +1704,31 @@ describe('a proxy that signs people in', () => {
      in. From beyond loopback the header is required — a request without it
      skipped the proxy — and every write is journaled with who made it. */
   test('identityFor: the header names the person; loopback without it is local; anyone else is refused', () => {
-    const bound = { host: '0.0.0.0', port: 4111, identityHeader: 'X-Forwarded-User' };
-    const req = (headers: Record<string, string>, from: string) => ({ headers, socket: { remoteAddress: from } });
-    assert.deepEqual(identityFor(req({ 'x-forwarded-user': 'ada@example.org' }, '10.0.0.9'), bound), { who: 'ada@example.org' });
-    assert.deepEqual(identityFor(req({}, '127.0.0.1'), bound), { who: 'local' });
-    assert.deepEqual(identityFor(req({}, '::ffff:127.0.0.1'), bound), { who: 'local' });
+    const bound = {
+      host: '0.0.0.0',
+      port: 4111,
+      identityHeader: 'X-Forwarded-User',
+    };
+    const req = (headers: Record<string, string>, from: string) => ({
+      headers,
+      socket: { remoteAddress: from },
+    });
+    const trusted = {
+      ...bound,
+      trustedProxies: parseTrustedProxies(['10.0.0.0/8']).ranges,
+    };
+    assert.deepEqual(identityFor(req({ 'x-forwarded-user': 'ada@example.org' }, '10.0.0.9'), trusted), { who: 'ada@example.org' });
+    assert.deepEqual(identityFor(req({ 'x-forwarded-user': 'ada@example.org' }, '127.0.0.1'), bound), { who: 'ada@example.org' });
+    assert.match(
+      identityFor(req({ 'x-forwarded-user': 'ada@example.org' }, '10.0.0.9'), bound).refusal ?? '',
+      /X-Forwarded-User only from its proxy/,
+    );
+    assert.deepEqual(identityFor(req({}, '127.0.0.1'), bound), {
+      who: 'local',
+    });
+    assert.deepEqual(identityFor(req({}, '::ffff:127.0.0.1'), bound), {
+      who: 'local',
+    });
     assert.match(identityFor(req({}, '10.0.0.9'), bound).refusal ?? '', /expects X-Forwarded-User from its proxy/);
     assert.deepEqual(identityFor(req({}, '10.0.0.9'), { host: '0.0.0.0', port: 4111 }), {}, 'no header configured: nothing asked');
   });
@@ -1539,13 +1738,23 @@ describe('a proxy that signs people in', () => {
     own.add({ name: 'rw', url: RW_DB, writable: true, source: 'config' });
     own.setActive('rw');
     await own.open('rw');
-    const where = { host: '127.0.0.1', port: 0, identityHeader: 'X-Forwarded-User' };
+    const where = {
+      host: '127.0.0.1',
+      port: 0,
+      identityHeader: 'X-Forwarded-User',
+    };
     const srv = createApp({ registry: own, bound: where });
     await new Promise<void>((resolve) => srv.listen(0, '127.0.0.1', resolve));
     where.port = (srv.address() as { port: number }).port;
     try {
-      const who = await getFrom(where, '/api/whoami', { 'x-forwarded-user': 'ada@example.org' });
-      assert.deepEqual(who.json, { who: 'ada@example.org', header: 'X-Forwarded-User', signedIn: false });
+      const who = await getFrom(where, '/api/whoami', {
+        'x-forwarded-user': 'ada@example.org',
+      });
+      assert.deepEqual(who.json, {
+        who: 'ada@example.org',
+        header: 'X-Forwarded-User',
+        signedIn: false,
+      });
       // Loopback without the header is the operator's own machine.
       assert.equal((await getFrom(where, '/api/whoami')).json.who, 'local');
       const wrote = await postTo(
@@ -1574,7 +1783,13 @@ describe('the writable flag does not follow a URL', () => {
      has write tests behind it that need `writable` to stay writable. */
   test('retargeting a writable connection makes it read-only', async () => {
     const own = new Registry();
-    const entry = own.add({ name: 'w', url: RW_DB, writable: true, rows: false, source: 'config' });
+    const entry = own.add({
+      name: 'w',
+      url: RW_DB,
+      writable: true,
+      rows: false,
+      source: 'config',
+    });
     assert.equal(entry.writable, true);
     const after = await own.update(entry.id, { url: RO_DB });
     assert.equal(after.writable, false, 'the flag stayed with the old database');
@@ -1591,7 +1806,12 @@ describe('the writable flag does not follow a URL', () => {
        another database is refused rather than becoming a retarget with the
        guards off. */
     const own = new Registry();
-    const entry = own.add({ name: 'p', url: 'postgres://u:s3cret@h/db', writable: true, source: 'config' });
+    const entry = own.add({
+      name: 'p',
+      url: 'postgres://u:s3cret@h/db',
+      writable: true,
+      source: 'config',
+    });
     const kept = own.rewriteUrl(entry.id, 'postgres://u@h/db');
     assert.equal(kept.url, 'postgres://u@h/db');
     assert.equal(kept.writable, true);
@@ -1664,13 +1884,21 @@ describe('which connection a request runs against', () => {
     const work: Promise<unknown>[] = [];
     for (let i = 0; i < 12; i += 1) {
       work.push(post('/api/count', { table: 'country' }));
-      work.push(post('/api/connections/select', { id: i % 2 ? 'readonly' : 'writable' }));
+      work.push(
+        post('/api/connections/select', {
+          id: i % 2 ? 'readonly' : 'writable',
+        }),
+      );
     }
     const settled = await Promise.all(work);
 
     let checked = 0;
     for (const res of settled) {
-      const answer = res as { status: number; json: { count?: number }; headers: Headers };
+      const answer = res as {
+        status: number;
+        json: { count?: number };
+        headers: Headers;
+      };
       if (answer.json.count === undefined) continue; // the selects
       const said = answer.headers.get('x-mistri-connection');
       assert.ok(said && said in COUNTS, `no connection named on the answer: ${said}`);
@@ -1751,7 +1979,10 @@ describe('which connection a request runs against', () => {
     /* Without this the guarantee is a claim. A reply carrying rows from the
        wrong database looks exactly like a reply carrying rows from the right
        one, which is why the bug survived: nothing on the wire disagreed. */
-    const res = await post('/api/count', { table: 'customer', conn: 'writable' });
+    const res = await post('/api/count', {
+      table: 'customer',
+      conn: 'writable',
+    });
     assert.equal(res.headers.get('x-mistri-connection'), 'writable');
 
     const read = await get('/api/schema?conn=readonly');
@@ -1763,7 +1994,10 @@ describe('which connection a request runs against', () => {
        has to answer "no one said" for the first request of a session. What it
        must no longer do is answer for a request that did say. */
     await post('/api/connections/select', { id: 'writable' });
-    const named = await post('/api/count', { table: 'customer', conn: 'readonly' });
+    const named = await post('/api/count', {
+      table: 'customer',
+      conn: 'readonly',
+    });
     assert.equal(named.json.count, 5, 'a named request followed the active connection instead of its own');
     assert.equal(named.headers.get('x-mistri-connection'), 'readonly');
     await post('/api/connections/select', { id: 'readonly' });
@@ -1773,13 +2007,19 @@ describe('which connection a request runs against', () => {
     /* Precedence would be the easy answer and the wrong one: either choice
        runs somebody's request against a database they did not mean, and the
        request has already said it is confused about which. */
-    const res = await post('/api/count?conn=writable', { table: 'country', conn: 'readonly' });
+    const res = await post('/api/count?conn=writable', {
+      table: 'country',
+      conn: 'readonly',
+    });
     assert.equal(res.status, 400);
     assert.match(res.json.error, /names two connections/);
   });
 
   test('a POST that names the same connection twice is fine', async () => {
-    const res = await post('/api/count?conn=writable', { table: 'country', conn: 'writable' });
+    const res = await post('/api/count?conn=writable', {
+      table: 'country',
+      conn: 'writable',
+    });
     assert.equal(res.status, 200);
   });
 
@@ -1791,7 +2031,10 @@ describe('which connection a request runs against', () => {
     assert.equal(stale.status, 404);
     assert.match(stale.json.error, /No connection called "nonesuch"/);
 
-    const post404 = await post('/api/count', { table: 'country', conn: 'nonesuch' });
+    const post404 = await post('/api/count', {
+      table: 'country',
+      conn: 'nonesuch',
+    });
     assert.equal(post404.status, 404);
   });
 
@@ -1912,7 +2155,10 @@ describe('the view endpoints', () => {
 
   test('an offset moves the window and `more` tracks it', async () => {
     const first = await post('/api/view/run', { view: view({ limit: 2 }) });
-    const second = await post('/api/view/run', { view: view({ limit: 2 }), offset: 2 });
+    const second = await post('/api/view/run', {
+      view: view({ limit: 2 }),
+      offset: 2,
+    });
     assert.equal(first.json.more, true);
     assert.notDeepEqual(first.json.rows[0], second.json.rows[0]);
     assert.equal(second.json.offset, 2);
@@ -1934,14 +2180,18 @@ describe('the view endpoints', () => {
     /* Not a keystroke: a view naming a column the table does not have is
        wrong rather than unfinished, and the composer cannot fix it by waiting
        for the next letter. */
-    const res = await post('/api/view/run', { view: view({ columns: [{ path: 'nonesuch' }] }) });
+    const res = await post('/api/view/run', {
+      view: view({ columns: [{ path: 'nonesuch' }] }),
+    });
     assert.equal(res.status, 400);
     assert.match(res.json.error, /nonesuch/);
   });
 
   test('a path that leads nowhere is a 400, and says so both ways', async () => {
     const res = await post('/api/view/run', {
-      view: view({ filter: { groups: [[{ path: 'no.such.path', op: '=', value: 1 }]] } }),
+      view: view({
+        filter: { groups: [[{ path: 'no.such.path', op: '=', value: 1 }]] },
+      }),
     });
     assert.equal(res.status, 400);
     // Both vocabularies, so a client that branches on status and reads
@@ -1951,7 +2201,9 @@ describe('the view endpoints', () => {
   });
 
   test('a view with no base is refused rather than guessed at', async () => {
-    const res = await post('/api/view/run', { view: { id: 'x', name: 'x', columns: [] } });
+    const res = await post('/api/view/run', {
+      view: { id: 'x', name: 'x', columns: [] },
+    });
     assert.equal(res.status, 400);
     assert.match(res.json.error, /base table/);
   });
@@ -1983,7 +2235,9 @@ describe('the view endpoints', () => {
   });
 
   test('the limit is clamped here too', async () => {
-    const res = await post('/api/view/run', { view: view({ limit: 10_000_000 }) });
+    const res = await post('/api/view/run', {
+      view: view({ limit: 10_000_000 }),
+    });
     assert.equal(res.status, 200);
     assert.ok(res.json.limit <= 100_000, `limit came back as ${res.json.limit}`);
   });
@@ -2002,7 +2256,15 @@ describe('planning a page section about a referenced record', () => {
         name: 'Invoice',
         base: 'invoice',
         source: 'saved',
-        sections: [{ kind: 'list', from: 'invoice', path: 'customer_id', of: 'customer_id', title: 'Siblings' }],
+        sections: [
+          {
+            kind: 'list',
+            from: 'invoice',
+            path: 'customer_id',
+            of: 'customer_id',
+            title: 'Siblings',
+          },
+        ],
       },
       key: { id: invoice.id },
     });
@@ -2032,7 +2294,15 @@ describe('planning a page section about a referenced record', () => {
         name: 'Employee',
         base: 'employee',
         source: 'saved',
-        sections: [{ kind: 'list', from: 'invoice', path: 'sold_by', of: 'manager_id', title: 'Their manager\u2019s sales' }],
+        sections: [
+          {
+            kind: 'list',
+            from: 'invoice',
+            path: 'sold_by',
+            of: 'manager_id',
+            title: 'Their manager\u2019s sales',
+          },
+        ],
       },
       key: { id: orphan.id },
     });
@@ -2088,14 +2358,21 @@ describe('the limit and offset clamps, over HTTP', () => {
 
   test('an offset actually moves the window', async () => {
     const first = await post('/api/run', { q: 'customer', limit: 1 });
-    const second = await post('/api/run', { q: 'customer', limit: 1, offset: 1 });
+    const second = await post('/api/run', {
+      q: 'customer',
+      limit: 1,
+      offset: 1,
+    });
     // Newest first, so the second page is the row below rather than above.
     assert.equal(first.json.rows[0].id, 5);
     assert.equal(second.json.rows[0].id, 4);
   });
 
   test('/api/sql is capped by the same ceiling', async () => {
-    const res = await post('/api/sql', { text: 'select id from customer', limit: 1 });
+    const res = await post('/api/sql', {
+      text: 'select id from customer',
+      limit: 1,
+    });
     assert.equal(res.json.rows.length, 1);
     assert.equal(res.json.truncated, true);
   });
@@ -2112,7 +2389,10 @@ describe('reading a request body', () => {
        A very large body can also have the socket torn down mid-upload, in
        which case `fetch` rejects. Either outcome is a refusal; what must never
        happen is a 200. */
-    const body = JSON.stringify({ table: 'customer', pad: 'x'.repeat(300 * 1024) });
+    const body = JSON.stringify({
+      table: 'customer',
+      pad: 'x'.repeat(300 * 1024),
+    });
     try {
       const res = await post('/api/count', JSON.parse(body) as unknown);
       assert.equal(res.status, 413);
@@ -2125,7 +2405,10 @@ describe('reading a request body', () => {
   test('a body just under the cap is read normally', async () => {
     // The other half of the boundary: the cap has to be big enough for a real
     // request, or it is a bug rather than a guard.
-    const res = await post('/api/count', { table: 'customer', pad: 'x'.repeat(200 * 1024) });
+    const res = await post('/api/count', {
+      table: 'customer',
+      pad: 'x'.repeat(200 * 1024),
+    });
     assert.equal(res.status, 200);
     assert.equal(res.json.count, 5);
   });
@@ -2141,7 +2424,9 @@ describe('reading a request body', () => {
     /* Sent to an endpoint that validates what it was given, so the answer
        distinguishes the two: "a layout needs a table" means the body parsed
        and was empty, where "not valid JSON" would mean it never parsed. */
-    const res = await raw(bound, 'POST', '/api/layouts', { 'content-type': 'application/json' });
+    const res = await raw(bound, 'POST', '/api/layouts', {
+      'content-type': 'application/json',
+    });
     assert.equal(res.status, 400);
     assert.equal(res.json.error, 'A layout needs a table.');
   });
@@ -2194,7 +2479,11 @@ describe('reading a request body', () => {
        restart. */
     const { Registry } = await import('../packages/engine/src/server/connections.js');
     const registry = new Registry();
-    registry.add({ name: 'broken', url: join(tmp, 'not-a-database.db'), source: 'config' });
+    registry.add({
+      name: 'broken',
+      url: join(tmp, 'not-a-database.db'),
+      source: 'config',
+    });
 
     await assert.rejects(() => registry.open('broken'));
     // Fails the same way the second time, rather than differently or not at all.
@@ -2391,7 +2680,9 @@ describe('the host check, on reads as well as writes', () => {
   });
 
   test('an allowed host is answered, on read as on write', async () => {
-    const res = await raw(proxied, 'GET', '/api/schema', { host: 'tablewalk.internal' });
+    const res = await raw(proxied, 'GET', '/api/schema', {
+      host: 'tablewalk.internal',
+    });
     assert.equal(res.status, 200);
   });
 
@@ -2450,7 +2741,10 @@ describe('with no connections at all', () => {
   });
 
   test('adding one makes it active, and the schema arrives', async () => {
-    const added = await postTo(where, '/api/connections', { name: 'fresh', url: RO_DB });
+    const added = await postTo(where, '/api/connections', {
+      name: 'fresh',
+      url: RO_DB,
+    });
     assert.equal(added.status, 200);
     assert.equal(added.json.active, 'fresh');
 
@@ -2488,7 +2782,10 @@ describe('with no connections at all', () => {
     assert.equal((await getFrom(where, '/api/schema')).status, 409);
 
     /* And the one added after it works, rather than inheriting the wreck. */
-    const good = await postTo(where, '/api/connections', { name: 'works', url: RO_DB });
+    const good = await postTo(where, '/api/connections', {
+      name: 'works',
+      url: RO_DB,
+    });
     assert.equal(good.status, 200);
     assert.equal(good.json.active, 'works');
     assert.equal((await getFrom(where, '/api/schema')).status, 200);

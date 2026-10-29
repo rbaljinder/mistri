@@ -28,11 +28,9 @@ export const UNTRUSTED_NETWORK: NetworkPolicy = Object.freeze({ allowPrivate: fa
 
 /* The parameters that change nothing on this machine. Everything else is
    refused rather than dropped: `host=/var/run/postgresql` is a local socket,
-   `sslcert=/path` and `sslrootcert=/path` read files, and mysql2 reads any
-   option it knows (`socketPath`, `localAddress`) out of the query string. */
+   and `sslcert=/path` and `sslrootcert=/path` read files. */
 const PG_PARAMETERS = new Set(['sslmode', 'application_name']);
 const PG_SSLMODES = new Set(['disable', 'prefer', 'require', 'verify-ca', 'verify-full', 'no-verify']);
-const MYSQL_PARAMETERS = new Set<string>();
 
 const MOVE_IT =
   'This server is reachable beyond this machine, so a connection added from the browser ' +
@@ -40,12 +38,11 @@ const MOVE_IT =
 
 /**
  * Why a database URL from an untrusted client is refused before anything is
- * dialled, or null. Only PostgreSQL and MySQL URLs are read; the caller has
+ * dialled, or null. Only PostgreSQL URLs are read; the caller has
  * already refused the forms that are not network URLs.
  */
 export function untrustedDatabaseRefusal(target: string): string | null {
-  const postgres = /^postgres(ql)?:\/\//i.test(target);
-  if (!postgres && !/^(mysql|mariadb):\/\//i.test(target)) return null;
+  if (!/^postgres(ql)?:\/\//i.test(target)) return null;
   let url: URL;
   try {
     url = new URL(target);
@@ -54,9 +51,9 @@ export function untrustedDatabaseRefusal(target: string): string | null {
   }
   if (!url.hostname) return `${MOVE_IT}Name the host in the URL.`;
   if (!url.username) return `${MOVE_IT}Name the user in the URL (user@host).`;
-  const allowed = postgres ? PG_PARAMETERS : MYSQL_PARAMETERS;
+  const allowed = PG_PARAMETERS;
   for (const [key, value] of url.searchParams) {
-    const ok = allowed.has(key) || (postgres && key === 'sslrootcert' && value === 'system');
+    const ok = allowed.has(key) || (key === 'sslrootcert' && value === 'system');
     if (!ok) return `${MOVE_IT}"${key}" cannot be set from the browser; put this connection in the config file on the server.`;
     if (key === 'sslmode' && !PG_SSLMODES.has(value)) return `${MOVE_IT}"sslmode=${value}" is not one this connection can use.`;
   }
@@ -126,16 +123,4 @@ export function sealedPgOptions(target: string, policy: NetworkPolicy): Record<s
     ...(url.searchParams.get('application_name') ? { application_name: url.searchParams.get('application_name') } : {}),
     stream: () => guardedSocket(policy),
   };
-}
-
-/**
- * The mysql2 options for a sealed address: the URL as written (mysql2 fills
- * nothing from the environment), its socket resolved through `policy`. mysql2
- * uses a stream it is given as it stands, so this one dials itself.
- */
-export function sealedMysqlOptions(target: string, policy: NetworkPolicy): { stream: () => Socket } {
-  const url = new URL(target);
-  const host = url.hostname.replace(/^\[|\]$/g, '');
-  const port = url.port ? Number(url.port) : 3306;
-  return { stream: () => guardedSocket(policy).connect(port, host) };
 }

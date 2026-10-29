@@ -55,14 +55,16 @@ export function builtTarget(target) {
   return typeof built === 'string' ? { ...rest, default: built } : { ...rest, ...built };
 }
 
-/* A package whose modules only this checkout imports by path: the kit's page entry starts the database browser's
-   shell as `tablewalk/client/…`, and Vite bundles that. An install of it answers its names, not its files. */
-const NAMES_ONLY = new Set(['tablewalk']);
-
 /* Exports only a product's client build reads, in this checkout: the kit's client modules (`@mistriwork/kit`,
    `@mistriwork/kit/client/…`) are bundled into each product's dist/client by Vite from the kit's sources, and the
    kit's own dist holds none of them, so an install of the kit names only what it ships. */
-const CLIENT_SOURCES = { '@mistriwork/kit': (subpath) => subpath === '.' || subpath.startsWith('./client/') };
+const CLIENT_SOURCES = {
+  '@mistriwork/kit': (subpath) => subpath === '.' || subpath.startsWith('./client/'),
+  /* Each product's main, which the kit's page entry starts by name (`tablewalk/client/workbenchShell.js`,
+     `@mistriwork/mistri/client/appShell.js`, shellStart.js) and Vite bundles into that product's dist/client. */
+  '@mistriwork/mistri': (subpath) => subpath.startsWith('./client/'),
+  tablewalk: (subpath) => subpath.startsWith('./client/'),
+};
 
 /**
  * @param {Record<string, any>} manifest
@@ -72,7 +74,6 @@ export function published(manifest) {
   const kept = Object.fromEntries(Object.entries(manifest).filter(([key]) => !CHECKOUT_ONLY.includes(key)));
   if (kept.exports) {
     kept.exports = builtTarget(kept.exports);
-    if (NAMES_ONLY.has(manifest.name)) delete kept.exports['./*'];
     const sourceOnly = CLIENT_SOURCES[manifest.name];
     if (sourceOnly) kept.exports = Object.fromEntries(Object.entries(kept.exports).filter(([subpath]) => !sourceOnly(subpath)));
   }

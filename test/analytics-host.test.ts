@@ -38,7 +38,7 @@ test('configuration: a store, an App, sinks and nothing else, with a relative pa
   assert.equal(parseAnalyticsConfiguration({ store: 'postgres://h/db' }, 'cfg').store, 'postgres://h/db');
   for (const bad of [
     {},
-    { store: 'mysql://h/db' },
+    { store: 'mongodb://h/db' },
     { store: 'x', extra: 1 },
     { store: 'x', sinks: [{ id: 'a', kind: 'kafka', connection: 'c' }] },
     { store: 'x', sinks: [{ id: 'a', kind: 'http', connection: 'c', batch: 0 }] },

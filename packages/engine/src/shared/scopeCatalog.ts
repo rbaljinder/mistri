@@ -112,7 +112,7 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
     const data = copyData(schema);
     record(data, ['label', 'dialect', 'readAt', 'tables', 'foreignKeys']);
     if (
-      !['sqlite', 'postgres', 'mysql', 'mssql'].includes(data.dialect as string) ||
+      !['sqlite', 'postgres', 'mssql'].includes(data.dialect as string) ||
       typeof data.label !== 'string' ||
       typeof data.readAt !== 'string' ||
       !Array.isArray(data.tables) ||
@@ -141,7 +141,7 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
         /* A catalog of several connections says which engine reads each table
            (appSourceCatalog.ts). It is the connection's, so it is carried and
            left out of the fingerprint: one source's own catalog does not say it. */
-        (table.sourceDialect !== undefined && !['sqlite', 'postgres', 'mysql', 'mssql', 'http'].includes(table.sourceDialect as string)) ||
+        (table.sourceDialect !== undefined && !['sqlite', 'postgres', 'mssql', 'http'].includes(table.sourceDialect as string)) ||
         typeof table.name !== 'string' ||
         typeof table.schema !== 'string' ||
         typeof table.isView !== 'boolean' ||

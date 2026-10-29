@@ -21,6 +21,7 @@ import type { Adapter, CountItem } from '@mistriwork/engine/adapters/adapter.js'
 import type { DatabaseSchema, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { rollupReads } from '@mistriwork/engine/shared/rollups.js';
 import { tryResolvePath } from '@mistriwork/engine/shared/viewPaths.js';
+import { isCapturedTenantData } from '@mistriwork/engine/server/evidence.js';
 
 export const READS_HEADER = 'mistri-reads';
 
@@ -51,12 +52,31 @@ function pathTables(schema: DatabaseSchema, from: string, path: string, into: Se
   if (resolved.rollup) for (const read of rollupReads(resolved.rollup)) into.add(read.table);
 }
 
+const tablesRead = new WeakMap<DatabaseSchema, Map<string, readonly string[]>>();
 /** The tables a read of `base` asked as `request` answers from; undefined where that cannot be told. */
 export function readTables(schema: DatabaseSchema, base: string, request: unknown): string[] | undefined {
-  const tables = new Map<string, TableMeta>(schema.tables.map((table) => [table.id, table]));
-  if (!tables.has(base)) return undefined;
   const asked = new Set<string>();
   if (!strings(request, asked)) return undefined;
+  /* The answer is the catalog's and the request's names alone. Over a catalog nothing can change (a tenant's served
+     catalog is a capture) it is kept by those names: a request tells the tables of every read it makes, each a walk
+     of every reference in the catalog, and a page asks the same few reads again and again. */
+  const fixed = isCapturedTenantData(schema);
+  const key = fixed ? `${base}\0${[...asked].join('\0')}` : '';
+  let kept = fixed ? tablesRead.get(schema) : undefined;
+  if (kept?.has(key)) return [...kept.get(key)!];
+  const found = walkTables(schema, base, asked);
+  if (fixed && found) {
+    if (!kept) tablesRead.set(schema, (kept = new Map()));
+    if (kept.size >= 256) kept.delete(kept.keys().next().value!);
+    kept.set(key, found);
+    return [...found];
+  }
+  return found;
+}
+
+function walkTables(schema: DatabaseSchema, base: string, asked: ReadonlySet<string>): string[] | undefined {
+  const tables = new Map<string, TableMeta>(schema.tables.map((table) => [table.id, table]));
+  if (!tables.has(base)) return undefined;
   const reached = new Set<string>([base]);
   for (const text of asked) {
     pathTables(schema, base, text, reached);

@@ -7,7 +7,7 @@ import { applicationFixture } from '../mocks/core.js';
 /* A tenant's own Branding form beside the live preview of what their people will see: the bar, a record's head, a
    figure and an email. The preview is drawn in the tenant's theme (the App's themes, here Lumen, Mono and Sage), not in
    the look the toolbar picks, so a reader sees the brand they are building in either mode. */
-const themes = ['workshop', 'lumen', 'mono', 'sage'].map((id) => themePreset(id)!);
+const themes = ['workshop', 'lumen', 'mono', 'sage', 'ledger'].map((id) => themePreset(id)!);
 const ALL = ['logo', 'name', 'accent', 'palette', 'radius', 'density', 'theme'];
 
 const reply = (editor: boolean, branding: Record<string, unknown> = {}, allow = ALL) => ({

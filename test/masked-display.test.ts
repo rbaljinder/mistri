@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
-import { MYSQL_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import { parseAppConfig, resolveResources, withLabelTemplates } from '../packages/mistri/src/shared/app.js';
 import { MASK } from '../packages/engine/src/shared/model.js';
 import { compileView, withViewLabels } from '../packages/engine/src/shared/view.js';
@@ -107,7 +107,6 @@ test('a record named by a masked column says the mask, computed in the statement
     sql(POSTGRES_STYLE),
     /CASE WHEN SUBSTR\(CAST\("secret_1"\."sealed" AS TEXT\), 1, 4\) = 'ENC:' THEN 'ENC:••••••' ELSE COALESCE\(/,
   );
-  assert.match(sql(MYSQL_STYLE), /CASE WHEN SUBSTR\(CAST\(`secret_1`\.`sealed` AS CHAR\), 1, 4\) = 'ENC:'/);
 });
 
 test('a template naming a column masked whole keeps its words and says the placeholder where the value was', async (t) => {

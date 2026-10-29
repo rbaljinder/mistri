@@ -158,7 +158,6 @@ interface Scratch {
 /** Two throwaway databases beside the connection's (or `devUrl`'s) server, never the connection's own. */
 async function scratch(url: string, devUrl?: string): Promise<Scratch> {
   const dialect = dialectOf(url);
-  if (dialect === 'mysql') throw new Error('migrate diff, check and squash run on PostgreSQL and SQLite; MySQL is not covered yet.');
   if (devUrl !== undefined && dialectOf(devUrl) !== dialect)
     throw new Error(`--dev-url must be the same kind of database as the connection (${dialect}).`);
   if (dialect === 'sqlite') {

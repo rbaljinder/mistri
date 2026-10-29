@@ -399,7 +399,7 @@ async function revertOwned(
      half an undo is the state neither the write nor the revert intended.
      Legacy preflight stays on the read handle. Bounded single-row images are
      checked inside the writer, after a fence: a shared handle alone does not
-     exclude concurrent PG/MySQL writers. No nontransactional fallback. */
+     exclude concurrent PG writers. No nontransactional fallback. */
   const undo = async (tx: WriteTransaction) => {
     for (const step of steps) {
       if (

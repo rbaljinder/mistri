@@ -43,6 +43,8 @@ const LOOKS: Array<{ look?: string; mode: 'light' | 'dark' }> = [
   { look: 'mono', mode: 'dark' },
   { look: 'sage', mode: 'light' },
   { look: 'sage', mode: 'dark' },
+  { look: 'ledger', mode: 'light' },
+  { look: 'ledger', mode: 'dark' },
 ];
 const reads = (pageIndex: number, lookIndex: number) => lookIndex === 0 || (pageIndex + lookIndex) % 2 === 0;
 

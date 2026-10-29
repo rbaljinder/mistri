@@ -1,0 +1,32 @@
+/* Ledger, the look of a bookkeeper's desk (themeLooks.ts): fetched when a worn theme picks `rules: 'double'`, as
+   Workshop's sheet is for its keyed buttons (visualTheme.ts, LOOK_SHEETS), so not in the first stylesheet every other
+   look shares. Its recipes are in Lumen's, the brand sheet, Sage's and the surfaces' (a faint graph-paper ground). */
+/* IBM Plex Mono, Latin subset (SIL Open Font License; its text in fonts/IBMPlexMono-OFL.txt and dist/client/fonts/): the
+   regular and medium for every figure, id, date and label. Declared here so only a page wearing Ledger asks for it. The
+   stack falls back to the platform's monospace, which is what a monospace line is set in until the face arrives; `swap`,
+   as Lumen's Inter, because the page is held until this sheet is in. */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/ibm-plex-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/ibm-plex-mono-500.woff2') format('woff2');
+}
+@layer look {
+  /* `rules: 'double'`. A column head closes with a double rule, as a ledger closes a total: the head's rule color (`rules.head`, the hue
+     or its mid-tone by night) at 3px, so the two lines and the gap between them are 1px each. */
+  :root[data-look-rules='double'] .app-mode .table-wrap thead th {
+    border-bottom: 3px double var(--rules-head);
+  }
+  /* A field group, a dashboard section and a stat card are ruled boxes in the strong line, not the hairline. */
+  :root[data-look-rules='double'] .app-mode :is(.page-fields, .page-section, .home-card) {
+    border-color: var(--line-strong);
+  }
+}

@@ -31,7 +31,7 @@ way, a SQLite url among them; a value from the environment
 ("\${DATABASE_URL}") is read as given, from the current directory.
 
 Options:
-  -d, --db <target>   SQLite file path, or a postgres:// or mysql:// URL (or set DATABASE_URL,
+  -d, --db <target>   SQLite file path, or a postgres:// URL (or set DATABASE_URL,
                       used when no config names connections)
   -p, --port <n>      Port to listen on (default 4111)
       --host <addr>   Interface to bind (default 127.0.0.1, loopback only)
@@ -43,7 +43,7 @@ Options:
                       A proxy whose X-Forwarded-For the rate limit may
                       believe: 10.0.0.0/8, 172.17.0.1, fd00::/8.
                       Repeatable or comma-separated; loopback is always
-                      trusted. Rate limiting only, never sign-in. Or set
+                      trusted. Also who may set --auth-proxy-header. Or set
                       TABLEWALK_TRUST_PROXY=10.0.0.0/8,fd00::/8
       --trust-proxy-hops <n>
                       Behind a managed front end with no address to name
@@ -61,8 +61,9 @@ Options:
       --auth-proxy-header <name>
                       Behind a proxy that signs people in: the header it sets
                       with the user (X-Forwarded-User). Requests from beyond
-                      loopback must carry it, and every write is journaled
-                      with it. Or set TABLEWALK_AUTH_PROXY_HEADER.
+                      loopback must carry it and come from a --trust-proxy
+                      address; every write is journaled with it. Or set
+                      TABLEWALK_AUTH_PROXY_HEADER.
       --schema <name> Postgres only; repeatable. Defaults to all user schemas.
       --read-pool <n> PostgreSQL connections that may read at once, per
                       database (default 4, at most 64). A connection's
@@ -139,8 +140,7 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
                   [--schema-file <path>] [--dev-url <url>]
 
   V3__add_payoff_quote.sql runs once, in version order, in its own
-  transaction (MySQL commits DDL as it goes: a failure there stops the run
-  and is recorded as failed); R__views.sql runs again whenever it changes.
+  transaction (a failure is recorded as failed); R__views.sql runs again whenever it changes.
   up applies what is pending. status lists what is applied and pending, and
   the changes made outside migrations (drift). validate fails on a changed, missing or failed file, a pending
   one, or drift. baseline records a database that already has tables as
@@ -182,7 +182,7 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
                       where two scratch databases are made and dropped
                       (default: the connection's; needs CREATEDB)
   A run holds a lock — PostgreSQL: the advisory lock Flyway takes for the same
-  table; MySQL: GET_LOCK; SQLite: its write lock — so two deploys never migrate
+  table; SQLite: its write lock — so two deploys never migrate
   at once. Scoped to the connection's schemas, or --schema.
   Exit codes: 1 could not run, 2 files and history disagree, 3 a migration
   failed. An App's migrate (its types regenerated and checked after up, its

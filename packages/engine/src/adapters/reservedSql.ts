@@ -7,8 +7,7 @@
  * This file is the lexical half, and it is conservative on purpose. It reads
  * every identifier, quoted or not, every string and every comment, and
  * refuses when one of them spells a reserved name — a string can become a
- * relation through a cast, and MySQL runs what is inside a `/*! … *\/`
- * comment. It refuses the constructs that reach a relation whose name is
+ * relation through a cast. It refuses the constructs that reach a relation whose name is
  * only computed when the statement runs (regclass casts, the functions that
  * run SQL text they are handed), and escapes it will not decode, because a
  * guard that cannot read a statement should not wave it through. The engine
@@ -66,9 +65,9 @@ function tokenize(sql: string, dialect: Dialect): Token[] | string {
   const tokens: Token[] = [];
   const n = sql.length;
   let i = 0;
-  /* A quoted run with its closing character doubled as the escape. MySQL
-     also escapes with a backslash inside strings; reading one as an escape
-     there can only make the run longer, which the text check still reads. */
+  /* A quoted run with its closing character doubled as the escape. A
+     backslash escape (Postgres's E'…') can only make the run longer when read
+     as one, which the text check still reads. */
   const quoted = (close: string, backslash: boolean): string => {
     let value = '';
     i += 1;
@@ -100,7 +99,7 @@ function tokenize(sql: string, dialect: Dialect): Token[] | string {
       i += 1;
       continue;
     }
-    if ((ch === '-' && next === '-') || (ch === '#' && dialect === 'mysql')) {
+    if (ch === '-' && next === '-') {
       const end = sql.indexOf('\n', i);
       tokens.push({ kind: 'text', value: sql.slice(i, end < 0 ? n : end) });
       i = end < 0 ? n : end + 1;
@@ -152,15 +151,13 @@ function tokenize(sql: string, dialect: Dialect): Token[] | string {
       continue;
     }
     if (ch === "'") {
-      /* E'…' is Postgres's backslash-escaped string; MySQL escapes in every string. */
-      const escaped = dialect === 'mysql' || (dialect === 'postgres' && /[eE]$/.test(sql.slice(Math.max(0, i - 1), i)));
+      /* E'…' is Postgres's backslash-escaped string. */
+      const escaped = dialect === 'postgres' && /[eE]$/.test(sql.slice(Math.max(0, i - 1), i));
       tokens.push({ kind: 'text', value: quoted("'", escaped) });
       continue;
     }
     if (ch === '"') {
-      /* An identifier, except in MySQL without ANSI_QUOTES, where it is a
-         string. Read as both there: the text check covers the identifier. */
-      tokens.push({ kind: dialect === 'mysql' ? 'text' : 'quoted', value: quoted('"', dialect === 'mysql') });
+      tokens.push({ kind: 'quoted', value: quoted('"', false) });
       continue;
     }
     if (ch === '`' && dialect !== 'postgres') {
@@ -182,7 +179,7 @@ function tokenize(sql: string, dialect: Dialect): Token[] | string {
   return tokens;
 }
 
-// A match in text (a comment, a string, MySQL's executable versioned comment)
+// A match in text (a comment, a string)
 // takes the rest of the name, so the refusal names the table, not the prefix.
 const RESERVED_TEXT = new RegExp(`(?:${RUNTIME_TABLE_PREFIXES.join('|')})[\\w$]*|\\b(?:${RESERVED_SCHEMAS.join('|')})\\b`, 'i');
 

@@ -612,7 +612,7 @@ for (const writable of [undefined, false])
     });
   }
 
-for (const reason of ['missing', 'directory', 'not SQLite', 'memory', 'file URI', 'postgres', 'mysql']) {
+for (const reason of ['missing', 'directory', 'not SQLite', 'memory', 'file URI', 'postgres']) {
   test(`startup refuses ${reason} SQLite source without creating storage`, async (t) => {
     const f = fixture(t),
       absent = join(f.dir, 'missing.db'),
@@ -625,7 +625,6 @@ for (const reason of ['missing', 'directory', 'not SQLite', 'memory', 'file URI'
       memory: ':memory:',
       'file URI': `file:${f.path}`,
       postgres: 'postgres://test:PRIVATE_PASSWORD@127.0.0.1:1/db',
-      mysql: 'mysql://test:PRIVATE_PASSWORD@127.0.0.1:1/db',
     };
     await f.reject({ connections: [{ ...f.connection, url: urls[reason] }] });
     assert.equal(existsSync(absent), false);

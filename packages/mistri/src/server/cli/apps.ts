@@ -13,7 +13,6 @@ import { faultFrames, refusalHeadline, refusalReasonsBelow } from '@mistriwork/e
 import { assertAppScopes, loadApp, mergeAppPages, type LoadedApp } from '../app/apps.js';
 import { BUILD_ENTRY_KINDS, type BuildEntryKind } from '../app/appBuild.js';
 import { assertAppSearch } from '../app/appSearchRuntime.js';
-import { assertAppDialects } from '../app/appDialect.js';
 import { configurePublicFormLimits } from '@mistriwork/engine/server/http/rateLimit.js';
 import { configureSignInState } from '../auth/signInState.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
@@ -110,7 +109,11 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
   const pagesBeforeApp = config.pages;
   let pages = config.pages;
   /* mistri check loads an App whose authority differs from its lock, to name the difference; nothing else does. */
-  const loadOptions = { lock: opts.checkApp ? ('report' as const) : ('enforce' as const) };
+  const loadOptions = {
+    lock: opts.checkApp ? ('report' as const) : ('enforce' as const),
+    // Its components step says each finding, placed; a refused load would say them once, unplaced.
+    componentLint: !opts.checkApp,
+  };
   if (appTargets.length) {
     try {
       for (const { target, ...more } of appTargets) {
@@ -127,11 +130,6 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
       }
       assertBuildEntries(opts, loadedApps);
       assertAppScopes(loadedApps, (scope) => registry.list().find((c) => c.id === scope || c.name === scope)?.id ?? scope);
-      // An App runs on PostgreSQL or SQLite; MySQL/MariaDB is for browsing (appDialect.ts).
-      assertAppDialects(
-        loadedApps.map((loaded) => loaded.app),
-        registry,
-      );
       // A search names a search connection the config has; said here, not at the first keystroke.
       assertAppSearch(
         loadedApps.map((loaded) => loaded.app),

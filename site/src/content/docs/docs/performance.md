@@ -37,7 +37,7 @@ Size PostgreSQL pools for a deployment, read the meters when it is slow, and run
 
 Writes exist only on a `"writable": true` connection. An App's writer pool commits two saves of one record in arrival order and saves of different records side by side; a save over a row someone changed since is refused. A job's command writes through the background writer. The database browser keeps one writer.
 
-`--read-pool`, `--write-pool` and `--lock-timeout` (or `MISTRI_READ_POOL`, `MISTRI_WRITE_POOL`, `MISTRI_LOCK_TIMEOUT`) are the defaults for every pool whose connection names none. MySQL keeps up to four readers and its own writers; SQLite and HTTP sources take no `pool`.
+`--read-pool`, `--write-pool` and `--lock-timeout` (or `MISTRI_READ_POOL`, `MISTRI_WRITE_POOL`, `MISTRI_LOCK_TIMEOUT`) are the defaults for every pool whose connection names none. SQLite and HTTP sources take no `pool`.
 
 ### The sign-in store
 
@@ -64,7 +64,7 @@ A writer makes about `1000 / transaction_ms` saves a second (at 20 ms and a thre
 
 ### One request's time
 
-`MISTRI_SERVER_TIMING=1` answers every request with a `Server-Timing` header, and logs it as one JSON line: `total`, `cpu`, `auth` (resolving the session), and per database (`db-app`, `db-auth`) the round trips sent and the time spent awaiting them, and per pool the wait for a connection. At startup it logs ten `SELECT 1` round trips to each database, measured from where the server runs. It names no statement, row or key; it is off by default.
+`MISTRI_SERVER_TIMING=1` answers every request with a `Server-Timing` header, and logs it as one JSON line: `total`, `cpu`, `auth` (resolving the session), and per database (`db-app`, `db-auth`) the round trips sent and the time spent awaiting them, and per pool the wait for a connection. At startup it logs ten `SELECT 1` round trips to each database, measured from where the server runs. It names no statement, row or key; it is off by default. **It exposes process internals (heap, garbage collection, pools) to any requester, so it is for load testing only: keep it off in production.**
 
 ## Read replicas
 
@@ -76,7 +76,7 @@ A writer makes about `1000 / transaction_ms` saves a second (at 20 ms and a thre
 }
 ```
 
-A connection's `replicas` are copies of its database, PostgreSQL or MySQL (SQLite is refused), resolved like `url`. Each gets a reader pool the size of the primary's, opened on first use.
+A connection's `replicas` are copies of its database, PostgreSQL (SQLite is refused), resolved like `url`. Each gets a reader pool the size of the primary's, opened on first use.
 
 | Read                                                                                                 | Where                                              |
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------- |

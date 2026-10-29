@@ -12,7 +12,7 @@ import { pipeline } from 'node:stream/promises';
 import { ResourceReadError } from '../resourceReadOperations.js';
 import type { ResourceHttpPath, ResourceHttpReply } from '../../shared/resourceHttp.js';
 import { ROW_LOCKED_MESSAGE, ROW_LOCKED_RETRY_AFTER_SECONDS } from '../../adapters/writeLanes.js';
-import { POOL_BUSY_MESSAGE, POOL_BUSY_RETRY_AFTER_SECONDS } from '../../adapters/poolMetrics.js';
+import { POOL_BUSY_MESSAGE, poolBusyRetryAfterSeconds } from '../../adapters/poolMetrics.js';
 
 // Policy callbacks may catch an operation failure, but the context still owns
 // its outcome. Do not publish a partial success before that context settles.
@@ -53,11 +53,11 @@ export function sendRowLocked(res: ServerResponse, extra: Record<string, unknown
  * Nothing was leased, so nothing ran: 503 with Retry-After, which is what an
  * HTTP client retries, and for a write `outcome: 'not_applied'`, since it
  * never began and the same request may be sent again. `extra` is the route's
- * own fields (`deleted: false`); `write` is for a route that writes.
+ * own fields (`deleted: false`); `write` is for a route that writes; `refusal` is the PoolBusy, which says how long to wait.
  */
-export function sendBusy(res: ServerResponse, extra: Record<string, unknown> = {}, write = false): void {
+export function sendBusy(res: ServerResponse, extra: Record<string, unknown> = {}, write = false, refusal?: unknown): void {
   currentSpan()?.event('pool busy', { 'mistri.refusal': 'server_busy' });
-  if (!res.headersSent) res.setHeader('retry-after', String(POOL_BUSY_RETRY_AFTER_SECONDS));
+  if (!res.headersSent) res.setHeader('retry-after', String(poolBusyRetryAfterSeconds(refusal)));
   send(res, 503, {
     ...extra,
     error: POOL_BUSY_MESSAGE,

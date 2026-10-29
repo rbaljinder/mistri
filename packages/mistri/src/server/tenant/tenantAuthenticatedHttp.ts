@@ -316,11 +316,17 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       // Presentation-only storefront routing never resolves a native proof,
       // including whoami and any static component's private-code check.
       if (getTenantHostIntent(request)) return null;
-      auth.assertCurrent();
       const kept = resolved.get(request);
-      const proof = kept ?? (await auth.sessionInstance(request));
-      auth.assertCurrent();
-      if (proof && !kept) resolved.set(request, proof);
+      let proof: VerifiedSessionInstance | null = kept ?? null;
+      /* A kept proof crosses no await before `assertSessionCurrent`, which
+         asserts the runtime current on both sides of its own check, so only
+         a fresh resolution needs fencing here. */
+      if (!kept) {
+        auth.assertCurrent();
+        proof = await auth.sessionInstance(request);
+        auth.assertCurrent();
+        if (proof) resolved.set(request, proof);
+      }
       if (proof) auth.assertSessionCurrent(proof);
       // A PostgreSQL auth store is read here, at the verifier's last await:
       // on admission, and again after a write's callback, before its COMMIT.
@@ -408,8 +414,9 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     filesSwept = Boolean(jobHost && builtIn.length);
     /* An App with no jobs opens no job host, so nothing would schedule its retention: the same job runs on its own timer. */
     if (!jobHost) {
-      const { retentionJob, retentionTargetOf, retentionPrunes, startRetentionTimer } = await import('../retention.js');
-      const target = retentionTargetOf('path' in captured.source ? captured.source.path : captured.source.url);
+      const { retentionJob, retentionPrunes, startRetentionTimer } = await import('../retention.js');
+      const { storeTargetOf } = await import('../commands/appCommandEvents.js');
+      const target = storeTargetOf('path' in captured.source ? captured.source.path : captured.source.url);
       if (target && retentionPrunes(loaded.app.retention)) {
         retentionTimer = startRetentionTimer(
           retentionJob({ ...(loaded.app.retention ? { retention: loaded.app.retention } : {}), targets: [target] }),

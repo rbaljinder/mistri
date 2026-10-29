@@ -29,8 +29,8 @@ import { StatementStopped } from '@mistriwork/engine/adapters/statementControl.j
 import { createScopedReads } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { sqliteParams, toJsonSafe, withBytes } from '@mistriwork/engine/adapters/sqlite.js';
 import { readSqliteReadCatalog } from '@mistriwork/engine/adapters/scoped/sqliteScopeCatalog.js';
-import { assertScopeCatalog, captureScopeCatalog, mapScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
-import { snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import { assertScopeCatalog, captureScopeCatalog, isFixedScopeCatalog, mapScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
+import { isRowScopeSnapshot, snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { mapAppScopedReads } from '../app/appResources.js';
 import { captureTenantData, denyTenant, denyTenantFor, TenantContextError, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import {
@@ -1278,13 +1278,22 @@ export async function openPostgresTenantReadSource(
     // One compiled reader per admitted scope, tenant or platform. Each call
     // executes on the snapshot its own invocation leased, after revalidating
     // there the principal it was bound for.
+    /* The physical scope each composed scope maps to. A composition is a snapshot, kept by the scope and the
+       evidence it was composed from (tenantReadScope.ts), so the same request shape hands the same object back;
+       a snapshot cannot change, and the mapping reads nothing else that can, so its mapped twin is kept with it.
+       Anything else is mapped and checked afresh, as before. */
+    const physicalScopes = new WeakMap<RowScope, RowScope>();
     const scoped = (scope: RowScope) => {
       /* Checked once here against the physical catalog, so the reader bound for each operation, and each of its
          statements, finds it checked (rowScope.ts) rather than copying it again. */
-      const physicalScope = snapshotRowScope(
-        physicalSchema,
-        Object.fromEntries(Object.entries(scope).map(([id, rule]) => [toPhysical(id), rule])),
-      );
+      let physicalScope = physicalScopes.get(scope);
+      if (!physicalScope) {
+        physicalScope = snapshotRowScope(
+          physicalSchema,
+          Object.fromEntries(Object.entries(scope).map(([id, rule]) => [toPhysical(id), rule])),
+        );
+        if (isRowScopeSnapshot(scope) && isFixedScopeCatalog(physicalSchema)) physicalScopes.set(scope, physicalScope);
+      }
       return (lease: PostgresReadSnapshot) =>
         mapAppScopedReads(
           createScopedReads(physicalSchema, physicalScope, style, async (sql, hint) => lease.execute(sql, hint)),

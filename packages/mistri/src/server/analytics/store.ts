@@ -87,12 +87,6 @@ const quoted = (dialect: Dialect, name: 'meta' | 'events' | 'sink_cursors' | 'pr
     ? `${quoteIdent('postgres', RUNTIME_SCHEMA)}.${quoteIdent('postgres', `${POSTGRES_ANALYTICS_PREFIX}${name}`)}`
     : quoteIdent('sqlite', `${SQLITE_ANALYTICS_PREFIX}${name}`);
 
-function engineOf(url: string): 'sqlite' | 'postgres' {
-  const dialect = dialectOf(url);
-  if (dialect === 'mysql') throw new Error('The analytics store runs on SQLite or PostgreSQL.');
-  return dialect;
-}
-
 const safe = (value: unknown): number => {
   const number = Number(value);
   if (!Number.isSafeInteger(number)) throw new AnalyticsStoreUnavailable('a stored number is out of range');
@@ -124,7 +118,7 @@ async function inTransaction<T>(db: MigrationDb, work: () => Promise<T>): Promis
 /** Provision on a database that holds nothing of ours yet, and attest. Safe to repeat for the same binding. */
 export async function provisionAnalyticsStore(options: { url: string; binding: AnalyticsBinding }): Promise<void> {
   const binding = normalizeBinding(options.binding);
-  const dialect = engineOf(options.url);
+  const dialect = dialectOf(options.url);
   const db = await openMigrationDb(options.url, [], dialect === 'sqlite');
   try {
     const held = await db.all(
@@ -220,7 +214,7 @@ async function attest(db: MigrationDb, binding: AnalyticsBinding): Promise<void>
 /** Open a provisioned store. Attests; never changes a layout. */
 export async function openAnalyticsStore(options: { url: string; binding: AnalyticsBinding }): Promise<AnalyticsStore> {
   const binding = normalizeBinding(options.binding);
-  const dialect = engineOf(options.url);
+  const dialect = dialectOf(options.url);
   const db = await openMigrationDb(options.url, [], false).catch(() => {
     throw new AnalyticsStoreUnavailable('the database could not be opened');
   });

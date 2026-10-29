@@ -12,21 +12,19 @@
  * - PostgreSQL: `pg`, a session advisory lock held for the run, on the number
  *   Flyway derives from the same history table, so tablewalk and Flyway
  *   exclude each other as well as themselves.
- * - MySQL: `mysql2` with multiple statements, since a file is sent whole and
- *   the server, not a splitter, reads its triggers; `GET_LOCK` for the run.
  */
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import { MYSQL_REFUSAL } from '../../adapters/connect.js';
 import { postgresPoolDefaults } from '../../adapters/postgresPool.js';
 import { pgConnectionOptions } from '../../adapters/postgresValues.js';
 import { product } from '../product.js';
 
-export type Dialect = 'sqlite' | 'postgres' | 'mysql';
+export type Dialect = 'sqlite' | 'postgres';
 
 export interface MigrationDb {
   readonly dialect: Dialect;
-  /** Where the history lives: a PostgreSQL schema or MySQL database; none on SQLite. */
+  /** Where the history lives: a PostgreSQL schema; none on SQLite. */
   readonly home: string | undefined;
   /** The account the history says installed a migration. */
   readonly user: string;
@@ -40,8 +38,7 @@ export interface MigrationDb {
   close(): Promise<void>;
 }
 
-export const quoteIdent = (dialect: Dialect, name: string) =>
-  dialect === 'mysql' ? `\`${name.replace(/`/g, '``')}\`` : `"${name.replace(/"/g, '""')}"`;
+export const quoteIdent = (_dialect: Dialect, name: string) => `"${name.replace(/"/g, '""')}"`;
 
 /** Java's String.hashCode, which Flyway's advisory lock number is built on. */
 function javaHash(text: string): number {
@@ -66,9 +63,8 @@ const SESSION_NEEDED =
 
 export function dialectOf(url: string): Dialect {
   if (/^postgres(ql)?:\/\//i.test(url)) return 'postgres';
-  if (/^(mysql|mariadb):\/\//i.test(url)) return 'mysql';
-  if (/^[a-z][\w+.-]*:\/\//i.test(url))
-    throw new Error(product() + ' migrate runs on SQLite, PostgreSQL and MySQL; this connection is none of them.');
+  if (/^(mysql|mariadb):\/\//i.test(url)) throw new Error(MYSQL_REFUSAL);
+  if (/^[a-z][\w+.-]*:\/\//i.test(url)) throw new Error(product() + ' migrate runs on SQLite and PostgreSQL; this connection is neither.');
   return 'sqlite';
 }
 
@@ -108,155 +104,87 @@ export async function openMigrationDb(url: string, schemas: readonly string[], c
       },
     };
   }
-  if (dialect === 'postgres') {
-    const specifier = 'pg';
-    const pg = (await import(specifier).catch(() => {
-      throw new Error('PostgreSQL support needs the "pg" package. Install it with: npm install pg');
-    })) as {
-      Client?: PgClientClass;
-      default?: { Client?: PgClientClass };
-    };
-    const Client = pg.Client ?? pg.default?.Client;
-    if (!Client) throw new Error('Could not find a Client export in the "pg" package.');
-    const client = new Client({ ...pgConnectionOptions(url), connectionTimeoutMillis: 15_000 });
-    await client.connect().catch(() => {
-      throw new Error('the PostgreSQL database could not be opened');
-    });
-    try {
-      const [{ current, user }] = (await client.query('SELECT current_schema() AS current, current_user AS user')).rows as Array<{
-        current: string | null;
-        user: string;
-      }>;
-      const home = schemas[0] ?? current;
-      if (!home) throw new Error('the connection has no current schema (an empty search_path): name one with --schema');
-      /* Behind a transaction-mode pooler (`--pooler transaction`) a session
-         setting stays on whichever server connection the pooler lent and
-         follows it to the pooler's next client: the lock wait below would
-         reach the App's own statements. The serve-time readers of the
-         migration tables (the Console, governance, analytics provisioning)
-         set nothing there; what needs the session refuses. */
-      const pooled = postgresPoolDefaults().pooler === 'transaction';
-      if (schemas.length) {
-        if (pooled) throw new Error(SESSION_NEEDED);
-        await client.query(`SET search_path TO ${schemas.map((schema) => quoteIdent('postgres', schema)).join(', ')}`);
-      }
-      /* A migration's DDL waits for the tables it changes, and while it waits
-         every App statement on those tables queues behind it: an ALTER TABLE
-         stuck behind one long transaction stops the App. So it gives up after
-         MIGRATION_LOCK_TIMEOUT_MS and tries again (runner.ts apply). */
-      if (!pooled) await client.query(`SET lock_timeout = '${MIGRATION_LOCK_TIMEOUT_MS}ms'`);
-      let held: bigint | undefined;
-      const numbered = (sql: string) => {
-        let n = 0;
-        return sql.replace(/\?/g, () => `$${++n}`);
-      };
-      return {
-        dialect,
-        home,
-        user,
-        async all<Row>(sql: string, params: unknown[] = []) {
-          return (await client.query(numbered(sql), params)).rows as Row[];
-        },
-        async run(sql, params = []) {
-          await client.query(numbered(sql), params);
-        },
-        // The simple protocol: a script of many statements in one round trip.
-        async script(sql) {
-          await client.query(sql);
-        },
-        async lock(table, waitMs, waiting) {
-          if (pooled) throw new Error(SESSION_NEEDED);
-          const key = flywayLockNumber(home, table);
-          const started = Date.now();
-          let said = false;
-          for (;;) {
-            const [{ locked }] = (await client.query('SELECT pg_try_advisory_lock($1::bigint) AS locked', [String(key)])).rows as Array<{
-              locked: boolean;
-            }>;
-            if (locked) {
-              held = key;
-              return;
-            }
-            if (Date.now() - started > waitMs)
-              throw new Error(
-                `another migration of ${home}.${table} has held its lock for ${Math.round(waitMs / 1000)}s; try again when it has finished`,
-              );
-            if (!said) {
-              waiting();
-              said = true;
-            }
-            await sleep(250);
-          }
-        },
-        async close() {
-          if (held !== undefined) await client.query('SELECT pg_advisory_unlock($1::bigint)', [String(held)]).catch(() => {});
-          await client.end().catch(() => {});
-        },
-      };
-    } catch (error) {
-      await client.end().catch(() => {});
-      throw error;
-    }
-  }
-  const specifier = 'mysql2/promise';
-  const mysql = (await import(specifier).catch(() => {
-    throw new Error('MySQL support needs the "mysql2" package. Install it with: npm install mysql2');
+  const specifier = 'pg';
+  const pg = (await import(specifier).catch(() => {
+    throw new Error('PostgreSQL support needs the "pg" package. Install it with: npm install pg');
   })) as {
-    createConnection?: MysqlCreate;
-    default?: { createConnection?: MysqlCreate };
+    Client?: PgClientClass;
+    default?: { Client?: PgClientClass };
   };
-  const createConnection = mysql.createConnection ?? mysql.default?.createConnection;
-  if (!createConnection) throw new Error('Could not find a createConnection export in the "mysql2" package.');
-  /* Several statements a call, on this connection alone: a migration file is
-     SQL its author wrote to run, and the server reads a trigger's BEGIN … END
-     where a splitter would guess. The adapters keep it off. */
-  const client = await createConnection({
-    uri: url,
-    multipleStatements: true,
-    dateStrings: true,
-    supportBigNumbers: true,
-    connectTimeout: 15_000,
-  }).catch(() => {
-    throw new Error('the MySQL database could not be opened');
+  const Client = pg.Client ?? pg.default?.Client;
+  if (!Client) throw new Error('Could not find a Client export in the "pg" package.');
+  const client = new Client({ ...pgConnectionOptions(url), connectionTimeoutMillis: 15_000 });
+  await client.connect().catch(() => {
+    throw new Error('the PostgreSQL database could not be opened');
   });
   try {
-    const [rows] = (await client.query("SELECT DATABASE() AS home, SUBSTRING_INDEX(USER(), '@', 1) AS user")) as [
-      Array<{ home: string | null; user: string }>,
-      unknown,
-    ];
-    const home = rows[0].home ?? schemas[0];
-    if (!home) throw new Error('the MySQL URL names no database');
-    let lockName: string | undefined;
+    const [{ current, user }] = (await client.query('SELECT current_schema() AS current, current_user AS user')).rows as Array<{
+      current: string | null;
+      user: string;
+    }>;
+    const home = schemas[0] ?? current;
+    if (!home) throw new Error('the connection has no current schema (an empty search_path): name one with --schema');
+    /* Behind a transaction-mode pooler (`--pooler transaction`) a session
+       setting stays on whichever server connection the pooler lent and
+       follows it to the pooler's next client: the lock wait below would
+       reach the App's own statements. The serve-time readers of the
+       migration tables (the Console, governance, analytics provisioning)
+       set nothing there; what needs the session refuses. */
+    const pooled = postgresPoolDefaults().pooler === 'transaction';
+    if (schemas.length) {
+      if (pooled) throw new Error(SESSION_NEEDED);
+      await client.query(`SET search_path TO ${schemas.map((schema) => quoteIdent('postgres', schema)).join(', ')}`);
+    }
+    /* A migration's DDL waits for the tables it changes, and while it waits
+       every App statement on those tables queues behind it: an ALTER TABLE
+       stuck behind one long transaction stops the App. So it gives up after
+       MIGRATION_LOCK_TIMEOUT_MS and tries again (runner.ts apply). */
+    if (!pooled) await client.query(`SET lock_timeout = '${MIGRATION_LOCK_TIMEOUT_MS}ms'`);
+    let held: bigint | undefined;
+    const numbered = (sql: string) => {
+      let n = 0;
+      return sql.replace(/\?/g, () => `$${++n}`);
+    };
     return {
       dialect,
       home,
-      user: rows[0].user,
+      user,
       async all<Row>(sql: string, params: unknown[] = []) {
-        return (await client.query(sql, params))[0] as Row[];
+        return (await client.query(numbered(sql), params)).rows as Row[];
       },
       async run(sql, params = []) {
-        await client.query(sql, params);
+        await client.query(numbered(sql), params);
       },
+      // The simple protocol: a script of many statements in one round trip.
       async script(sql) {
         await client.query(sql);
       },
       async lock(table, waitMs, waiting) {
-        // At most 64 characters, the server's limit for a lock's name.
-        const name = `mistri-migrate:${createHash('sha256').update(`${home}.${table}`).digest('hex').slice(0, 40)}`;
-        const [free] = (await client.query('SELECT IS_FREE_LOCK(?) AS free', [name])) as [Array<{ free: number }>, unknown];
-        if (!free[0].free) waiting();
-        const [got] = (await client.query('SELECT GET_LOCK(?, ?) AS got', [name, Math.ceil(waitMs / 1000)])) as [
-          Array<{ got: number | null }>,
-          unknown,
-        ];
-        if (got[0].got !== 1)
-          throw new Error(
-            `another migration of ${home}.${table} has held its lock for ${Math.round(waitMs / 1000)}s; try again when it has finished`,
-          );
-        lockName = name;
+        if (pooled) throw new Error(SESSION_NEEDED);
+        const key = flywayLockNumber(home, table);
+        const started = Date.now();
+        let said = false;
+        for (;;) {
+          const [{ locked }] = (await client.query('SELECT pg_try_advisory_lock($1::bigint) AS locked', [String(key)])).rows as Array<{
+            locked: boolean;
+          }>;
+          if (locked) {
+            held = key;
+            return;
+          }
+          if (Date.now() - started > waitMs)
+            throw new Error(
+              `another migration of ${home}.${table} has held its lock for ${Math.round(waitMs / 1000)}s; try again when it has finished`,
+            );
+          if (!said) {
+            waiting();
+            said = true;
+          }
+          await sleep(250);
+        }
       },
       async close() {
-        if (lockName) await client.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
+        if (held !== undefined) await client.query('SELECT pg_advisory_unlock($1::bigint)', [String(held)]).catch(() => {});
         await client.end().catch(() => {});
       },
     };
@@ -271,10 +199,6 @@ type PgClientClass = new (options: unknown) => {
   query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }>;
   end(): Promise<void>;
 };
-type MysqlCreate = (config: Record<string, unknown>) => Promise<{
-  query(sql: string, params?: unknown[]): Promise<[unknown, unknown]>;
-  end(): Promise<void>;
-}>;
 
 /**
  * A PostgreSQL script as its statements, for a file that must run outside a

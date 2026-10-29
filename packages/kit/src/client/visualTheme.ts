@@ -220,6 +220,7 @@ const LOOK_SHEETS: Readonly<Record<string, () => Promise<unknown>>> = {
   workshop: () => import('./workshopLook.css'),
   lumen: () => import('./lumenLook.css'),
   sage: () => import('./sageLook.css'),
+  ledger: () => import('./ledgerLook.css'),
   brand: () => import('./brandLook.css'),
   /* What a theme says beyond the menu: its parts' own styles and its patterns (themeParts.ts). */
   parts: () => import('./partsLook.css'),

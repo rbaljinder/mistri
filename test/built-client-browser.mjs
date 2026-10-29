@@ -141,7 +141,11 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
 // faces where Lumen's Inter was 47.1), and every built-in look's twelve palettes in the entry (about 1.4 KB in brotli
 // on every first paint, scripts/bundle-budget.mjs). Measured: 246.5 KB the staff sign-in, 448 KB Forecourt's list and
 // 562 KB Tick's list; each ceiling passed moves to about 0.5% above.
-const FIRST_PAINT_WIRE_KB = { public: 247.8, app: 450.3, workshop: 565, workbench: 425 };
+// rc.3 adds Ledger to the built-in looks and its palettes to the entry, the request-instant and kept-breakdown seams, and
+// the security branch's client strings (scripts/bundle-budget.mjs, its newest paragraphs). Measured: 248.6 KB the staff
+// sign-in, 447 KB Forecourt's landing, 450.3 KB its list, 562.8 KB Tick's list and 395.1 KB the Workbench; the
+// sign-in passed its ceiling and the list met it, so both move to about 0.5% above.
+const FIRST_PAINT_WIRE_KB = { public: 249.9, app: 452.6, workshop: 565, workbench: 425 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/workbench', '/assets/tenant'],
   app: ['/assets/workbench', '/assets/tenant', '/assets/public'],

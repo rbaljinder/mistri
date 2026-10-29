@@ -21,6 +21,9 @@ const INTER = `Inter, "Inter Fallback", ${SANS}`;
     while it arrives. */
 const BARLOW = `Barlow, "Barlow Fallback", "Helvetica Neue", Arial, sans-serif`;
 const BARLOW_CONDENSED = `"Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Barlow, "Arial Narrow", sans-serif`;
+/** Ledger's figures and labels: IBM Plex Mono, shipped with Ledger's sheet (ledgerLook.css) and fetched only by a page
+    wearing it; the platform's monospace stands in until it arrives. */
+const PLEX_MONO = `'IBM Plex Mono', ui-monospace, Menlo, monospace`;
 
 /** A look as written here: its own grounds, neutrals and meaning colors, and the palette (lookPalettes.ts) it wears
     until a reader or the App picks another. The hue's roles are the palette's, so a look never names them. */
@@ -67,7 +70,7 @@ function withPalettes(look: HouseLook): ThemeSpec {
   } as ThemeSpec;
 }
 
-/** The built-in looks: Workshop, the default an App wears, then Lumen, Mono and Sage.
+/** The built-in looks: Workshop, the default an App wears, then Lumen, Mono, Sage and Ledger.
     Each is written as an App would write its own (`defineTheme`,
     packages/engine/schema/theme.d.ts): colours by purpose, a shape, a type and a pick from the
     recipe menu (themeBuild.ts), and built by the same `buildTheme` an App's
@@ -89,7 +92,8 @@ function withPalettes(look: HouseLook): ThemeSpec {
 
     Each wears every palette in lookPalettes.ts; its own colors are its
     default palette's (Workshop's Safety orange, Lumen's Cobalt, Mono's and
-    Sage's Ink, which is each one's own ink). */
+    Sage's Ink, which is each one's own ink, Ledger's Emerald, drawn in the
+    book's own deep green). */
 const HOUSE: readonly HouseLook[] = [
   {
     // The desk as a workbench, ported from a field report's theme: warm paper,
@@ -479,6 +483,118 @@ const HOUSE: readonly HouseLook[] = [
       avatar: 'large',
       // The head stands on one band of the surface, as its cards do on the warm ground.
       header: 'band',
+    },
+  },
+  {
+    // A bookkeeper's desk, ported from a field report's theme (it extended
+    // Lumen; here it stands alone): every figure, id, date and label in a
+    // monospace (IBM Plex Mono) so numbers line up down a page, with prose and
+    // titles left in Inter. Green-tinted paper under a faint graph-paper
+    // ground, field groups and dashboard sections as square ruled boxes in the
+    // strong line, a table's column heads closed with a double rule as a
+    // ledger closes a total (ledgerLook.css), and one deep ledger green for
+    // the book's cover (the menu), the primary verb and links, with a gilt
+    // mark for the current entry. By night the cover goes near-black green and
+    // the same green is lifted to a mint that reads on it. A palette moves the
+    // hue the reader's marks are drawn in (accent, links, the ring, the rules,
+    // the first series) and leaves the paper and the cover the book's own.
+    id: 'ledger',
+    label: 'Ledger',
+    defaultPalette: 'emerald',
+    colors: {
+      light: {
+        ground: '#eef2ec',
+        surface: '#fcfdfb',
+        raised: '#eaf0ea',
+        ink: '#0f1a14',
+        inkMuted: '#44524a',
+        inkSubtle: '#52605a',
+        line: '#d3ddd5',
+        lineStrong: '#7f8f85',
+        lineControl: '#748479',
+        onAccent: '#ffffff',
+        accentInk: '#0f4d36',
+        primary: '#0f4d36',
+        status: { good: '#127a40', warning: '#a65308', critical: '#c52a2a', info: '#2d4fd6' },
+        nav: {
+          ground: '#103d2c',
+          ink: '#e6efe9',
+          muted: '#a9c2b4',
+          line: '#1d4d3b',
+          accent: '#e4cf8f',
+          current: '#1c5640',
+          onCurrent: '#ffffff',
+        },
+        rules: { section: '#0f4d36', head: '#0f4d36' },
+        chart: ['#0f6b4a', '#9a6cf7', '#0e9a6c', '#d97706', '#e0428a', '#0e8fb0', '#a3510b', '#94a3b8'],
+      },
+      dark: {
+        ground: '#0b1310',
+        surface: '#111c17',
+        raised: '#18251f',
+        ink: '#e3ece6',
+        inkMuted: '#afc0b6',
+        inkSubtle: '#93a59a',
+        line: '#1c2a23',
+        lineStrong: '#587064',
+        lineControl: '#66806f',
+        onAccent: '#0b1310',
+        accentInk: '#8fd1ae',
+        primary: '#7cc4a0',
+        status: { good: '#4ade80', warning: '#fbbf24', critical: '#f87171', info: '#91a8ff' },
+        nav: {
+          ground: '#08100c',
+          ink: '#dfe9e3',
+          muted: '#9fb3a7',
+          line: '#18261f',
+          accent: '#e0cd94',
+          current: '#163a2b',
+          onCurrent: '#ffffff',
+        },
+        rules: { section: '#6fb592', head: '#6fb592' },
+        chart: ['#5fbf92', '#9a78ec', '#12a678', '#c88317', '#e0559b', '#1597b9', '#d26b3b', '#6b7694'],
+      },
+    },
+    shape: {
+      radius: { control: '2px', field: '0px', pill: '2px', panel: '0px' },
+      elevation: 'flat',
+      border: { panel: '1px', rule: '1px' },
+    },
+    type: {
+      font: { ui: INTER, data: PLEX_MONO, heading: INTER },
+      roles: {
+        title: { size: '26px', weight: 600, tracking: '-0.01em' },
+        heading: { size: '20px', weight: 600, tracking: '-0.018em' },
+        section: { face: 'data', size: '12px', weight: 500, case: 'upper', tracking: '0.08em' },
+        label: { face: 'data', weight: 500, case: 'upper', tracking: '0.04em' },
+        data: { features: ['tnum', 'zero'] },
+        figure: { face: 'data', size: '30px', weight: 500, tracking: '-0.02em', features: ['tnum', 'zero'] },
+        nav: { face: 'ui', weight: 400 },
+      },
+    },
+    surface: { ground: { kind: 'grid' } },
+    density: 'compact',
+    recipes: {
+      nav: 'wash',
+      bar: 'dark',
+      tabs: 'rule',
+      windows: 'segmented',
+      stat: 'divided',
+      section: 'panel',
+      fields: 'panel',
+      table: 'hairline',
+      status: 'quiet',
+      board: 'ruled',
+      chart: 'plain',
+      buttons: 'accent',
+      links: 'plain',
+      rules: 'double',
+      avatar: 'plain',
+      workflow: 'markers',
+      banner: 'plain',
+      steps: 'strip',
+      lanes: 'plain',
+      header: 'plain',
     },
   },
 ];

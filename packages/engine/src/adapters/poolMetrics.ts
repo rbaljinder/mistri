@@ -34,7 +34,10 @@ export const POOL_QUEUE_PER_CONNECTION = 64;
 
 /** What a person is told when the server is busy, and how soon to try again. */
 export const POOL_BUSY_MESSAGE = 'The server is busy; try again in a moment.';
-export const POOL_BUSY_RETRY_AFTER_SECONDS = 1;
+const POOL_BUSY_RETRY_AFTER_SECONDS = 1;
+
+/** How long a pool the server refused stays at the connections it holds before it asks for more: its idle timeout. */
+export const POOL_LIMIT_HOLD_MS = 30_000;
 
 /**
  * A checkout refused because the pool is full and its queue is too long or
@@ -52,6 +55,20 @@ export class PoolBusy extends Error {
     super(POOL_BUSY_MESSAGE, cause === undefined ? undefined : { cause });
     this.name = 'PoolBusy';
   }
+}
+
+/**
+ * When to come back after a refused checkout. A full queue clears in a moment; a pool the database refused another
+ * connection holds at what it has and asks for more only after POOL_LIMIT_HOLD_MS, so a retry in one second lands on
+ * the same refusal. A `connection_limit` refusal says the hold's length instead.
+ */
+export function poolBusyRetryAfterSeconds(error: unknown): number {
+  let at: unknown = error;
+  for (let depth = 0; depth < 4 && at && typeof at === 'object'; depth++) {
+    if (at instanceof PoolBusy) return at.why === 'connection_limit' ? POOL_LIMIT_HOLD_MS / 1000 : POOL_BUSY_RETRY_AFTER_SECONDS;
+    at = (at as { cause?: unknown }).cause;
+  }
+  return POOL_BUSY_RETRY_AFTER_SECONDS;
 }
 
 /**

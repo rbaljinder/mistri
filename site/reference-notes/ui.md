@@ -10,7 +10,7 @@ ui: {
 ```
 
 `logo` is an App icon, never an image URL. `theme.preset` is one of the
-built-in looks (`workshop` by default, `lumen`, `mono`, `sage`) or one registered with
+built-in looks (`workshop` by default, `lumen`, `mono`, `sage`, `ledger`) or one registered with
 `defineTheme`; `accent`, `radius` and `font`
 adjust it. `currency` is US dollars unless the App says otherwise, and a money
 rule names its own only for a column in another. See [Looks](/docs/looks/)

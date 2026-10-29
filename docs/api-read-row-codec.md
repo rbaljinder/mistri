@@ -13,7 +13,7 @@ the full signed-int64 range from exact adapter numbers/decimal strings; `number`
 refuses anything outside JavaScript's safe integer range. Unsafe numbers are
 never repaired by stringifying them. Known floating-point types accept finite
 numbers only, known text types accept strings only, and PostgreSQL booleans
-accept booleans only. SQLite/MySQL numeric boolean representations are not
+accept booleans only. SQLite numeric boolean representations are not
 silently converted by this raw-read codec.
 
 Every exposed field, including the complete nonnullable primary key, is required.
@@ -38,9 +38,9 @@ by the wire schema. Unsupported representations fail rather than guessing.
 Exact SQL `DATE` declarations accept only real Gregorian `YYYY-MM-DD` strings
 from `0001-01-01` through `9999-12-31`. The schema checks leap years and month
 lengths as the encoder does, without a JavaScript Date or timezone conversion.
-PostgreSQL's DATE text parser and MySQL's `dateStrings: true` retain text; SQLite
+PostgreSQL's DATE text parser retains text; SQLite
 stored values must already have this shape. Non-ISO PostgreSQL DateStyle output,
-BC/infinity, MySQL zero dates, timestamps and numeric SQLite values fail closed.
+BC/infinity, timestamps and numeric SQLite values fail closed.
 This is a codec contract, not live-database verification or support for DATE keys.
 
 ## Typed filter foundation

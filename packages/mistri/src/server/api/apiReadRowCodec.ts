@@ -21,7 +21,7 @@ export function createApiReadRowCodec(
 ) {
   const integers = apiIntegerRepresentation(options);
   const table = logicalSchema.tables.find((table) => table.id === operation.resource);
-  if (!table || !['sqlite', 'postgres', 'mysql'].includes(apiDialectOf(logicalSchema, table.id))) return fail();
+  if (!table || !['sqlite', 'postgres'].includes(apiDialectOf(logicalSchema, table.id))) return fail();
   const key = primaryKey(table);
   if (!key.length || key.length !== operation.primaryKey.length || key.some((column) => !operation.primaryKey.includes(column)))
     return fail();

@@ -59,7 +59,6 @@ test('a postgres:// URL selects the PostgreSQL store; anything else is the file'
   assert.equal(isPostgresAuthStore('POSTGRES://auth@db.internal/authdb'), true);
   assert.equal(isPostgresAuthStore('auth.db'), false);
   assert.equal(isPostgresAuthStore('/var/lib/tablewalk/auth.db'), false);
-  assert.equal(isPostgresAuthStore('mysql://auth@db.internal/authdb'), false);
 });
 
 test('an explicit App environment selects its own store without inheriting process references', () => {
@@ -110,10 +109,6 @@ test('the PostgreSQL store may not name the same server and database as a busine
     'another port is another server',
   );
   assert.doesNotThrow(() => assertPostgresAuthStoreSeparation(store, business('postgres://app:pw@other.internal/authdb')));
-  assert.doesNotThrow(
-    () => assertPostgresAuthStoreSeparation(store, business('mysql://app:pw@db.internal/authdb')),
-    'another engine is not this database',
-  );
   assert.doesNotThrow(() => assertPostgresAuthStoreSeparation(store, []));
   assert.throws(
     () => assertPostgresAuthStoreSeparation(store, business('postgres://app:other-pw@db.internal/authdb')),

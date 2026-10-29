@@ -17,7 +17,7 @@ import { applyServerTimeouts } from '@mistriwork/engine/server/serverTimeouts.js
 import { platformRequests } from '@mistriwork/engine/server/http/traceRequest.js';
 import { probe } from '@mistriwork/engine/server/http/probes.js';
 import { observerRoute } from '../observe/mount.js';
-import { createServer, validateHeaderValue, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { isDeepStrictEqual } from 'node:util';
 import { isPromise, isProxy } from 'node:util/types';
 import {
@@ -30,6 +30,7 @@ import {
   type UpdateResult,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { appFileRules, isTenantApp, tenantAppShape, zonedNow, type AppDef } from '../../shared/app.js';
+import type { PageDef } from '@mistriwork/engine/shared/pageModel.js';
 import { wearing, type TenantLook } from './tenantLook.js';
 import { appZone } from '../../shared/appUi.js';
 import { localeWeekStart } from '@mistriwork/engine/shared/weekStart.js';
@@ -48,7 +49,6 @@ import {
 } from '@mistriwork/engine/server/http/reply.js';
 import type { ResourceHttpPath } from '@mistriwork/engine/shared/resourceHttp.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextAssertion, type TenantContextReply } from '../../shared/tenantContext.js';
-import type { TenantHttpResourceReply } from '../../shared/tenantHttp.js';
 import type { VerifiedSessionInstance } from '../auth/auth.js';
 import { businessCommandHttpError } from '../commands/businessCommandHttp.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
@@ -69,7 +69,6 @@ import {
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
 import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
-import { POOL_BUSY_RETRY_AFTER_SECONDS } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { databaseUnanswered, unansweredWrite } from './tenantWriteFault.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
@@ -80,7 +79,6 @@ import { tenantRetirement } from './tenantRetirement.js';
 import { projectTenantMetadata, tenantSuggestedPage } from './tenantMetadata.js';
 import { tenantPagePlan, tenantReferences } from './tenantPageOperations.js';
 import { composeInputValid, composeTenantRecordPage } from './tenantCompose.js';
-import { replyJson } from './tenantReplyJson.js';
 import {
   BRANDING_SAVE_BODY,
   IMPORT_BODY,
@@ -92,7 +90,7 @@ import {
   TENANT_ROUTE_FIELDS as fields,
   TENANT_WRITE_ROUTES as writes,
 } from './tenantHttpRoutes.js';
-import { tenantServedSchema } from './tenantServedSchema.js';
+import { servedBaseOf, tenantServedSchema, withRequestInstant } from './tenantServedSchema.js';
 import { lookupTenantPerson } from '../app/appMe.js';
 import { TenantWriteFailure } from './tenantWriteSource.js';
 import { SUPPORT_HTTP_OPERATIONS, SUPPORT_HTTP_ROOT } from '../../shared/tenantSupport.js';
@@ -150,79 +148,20 @@ import { brandingTenant, scopedRecordBranding, withRecordBranding, closeRecordBr
 import { flagHttpRequest } from '../flags/httpRuntime.js';
 import { APP_FLAG_VALUES_PATH } from '../../shared/appFlagValues.js';
 import { timedPart, timeRequests } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
+import {
+  InvalidRequest,
+  exposed,
+  invalid,
+  revisionHeader,
+  ownerHeaders,
+  body,
+  sendResource,
+  tenantHttpHeader,
+  tenantHttpBinding,
+  send,
+} from './tenantWire.js';
+export { tenantHttpBinding, tenantHttpHeader, send } from './tenantWire.js';
 
-class InvalidRequest extends Error {
-  constructor(readonly status = 400) {
-    super('The tenant request is invalid.');
-  }
-}
-const invalid = (status = 400): never => {
-  throw new InvalidRequest(status);
-};
-
-/** rawHeaders preserves duplicates that Node's convenience map may combine or
- * discard. Ownership has one spelling, without comma-list or legacy fallbacks. */
-export function tenantHttpHeader(req: IncomingMessage, name: string): string | undefined {
-  let result: string | undefined;
-  for (let index = 0; index < req.rawHeaders.length; index += 2) {
-    if (req.rawHeaders[index].toLowerCase() !== name) continue;
-    if (result !== undefined) return invalid();
-    result = req.rawHeaders[index + 1];
-  }
-  if (result !== undefined && (!result || result !== result.trim() || result.includes(','))) return invalid();
-  return result;
-}
-const header = tenantHttpHeader;
-function revisionHeader(req: IncomingMessage): number {
-  const value = header(req, headers.revision);
-  if (!value || !/^[1-9][0-9]*$/.test(value)) return invalid();
-  const revision = Number(value);
-  if (!Number.isSafeInteger(revision)) return invalid();
-  return revision;
-}
-
-/** Shared restart-only host boundary for the data transport and auth host. */
-export function tenantHttpBinding(value: unknown): () => Bound {
-  const capture = (): Bound => {
-    const bound = captureTenantData(tenantOptions(value, ['host', 'port', 'allowedHosts', 'identityHeader']));
-    if (
-      bound.identityHeader !== undefined ||
-      typeof bound.host !== 'string' ||
-      !bound.host ||
-      typeof bound.port !== 'number' ||
-      !Number.isInteger(bound.port) ||
-      bound.port < 0 ||
-      bound.port > 65535 ||
-      (bound.allowedHosts !== undefined &&
-        (!Array.isArray(bound.allowedHosts) || bound.allowedHosts.some((value) => typeof value !== 'string')))
-    )
-      return denyTenant();
-    return bound as unknown as Bound;
-  };
-  const original = capture();
-  return () => {
-    const current = capture();
-    if (current.host !== original.host || !isDeepStrictEqual(current.allowedHosts, original.allowedHosts)) return denyTenant();
-    return current;
-  };
-}
-function exposed(name: string, value: string): string {
-  tenantIdentifier(value, 1024);
-  validateHeaderValue(name, value);
-  return value;
-}
-function ownerHeaders(owner: TenantContextReply): Record<string, string> {
-  if (!Number.isSafeInteger(owner.revision) || owner.revision < 1) return denyTenant();
-  return {
-    [headers.app]: exposed(headers.app, owner.appId),
-    [headers.account]: exposed(headers.account, owner.accountId),
-    [headers.tenant]: exposed(headers.tenant, owner.tenantId),
-    [headers.tab]: exposed(headers.tab, owner.tabId),
-    [headers.context]: exposed(headers.context, owner.context),
-    [headers.revision]: String(owner.revision),
-    ...(owner.realm === 'platform' || owner.realm === 'support' ? { [headers.realm]: owner.realm } : {}),
-  };
-}
 /** What a read needs from a context, a tenant's or the platform realm's. Both
  * present their granted commands; only a tenant context presents edits. */
 /* Where one read the page's boot carries says the tables it answered from (live/liveReads.ts), as its own
@@ -269,6 +208,21 @@ type ReadContext = Pick<TenantReadContext, 'schema' | 'data'> & {
 };
 /** `work` with its reads on one snapshot of `context`, where the context can share one; else as it is. */
 const together = <T>(context: ReadContext, work: () => Promise<T>): Promise<T> => (context.together ? context.together(work) : work());
+
+/* The App and pages in another language or a tenant's own words, captured once per localization. localizedApp keeps
+   each (locale, words) localization as the same two objects, built from the App's definition and nobody's request,
+   so they are this process's as the App itself is; their capture was a deep copy of the whole App on every request
+   that answered its payload, and then hashed whole again by the projection (tenantMetadata.ts), since a new copy is
+   a new object: a field report put a tenant's enter at up to a second of CPU. Nothing about the person, tenant or
+   lease is in it: those decide what the projection keeps of it, afterwards, on every request. */
+const localizations = new WeakMap<object, { readonly pages: unknown; readonly said: { app: AppDef; pages: readonly PageDef[] } }>();
+export function capturedLocalization(local: { app: AppDef; pages: readonly PageDef[] }) {
+  const held = localizations.get(local.app);
+  if (held && held.pages === local.pages) return held.said;
+  const said = captureTenantData({ app: local.app, pages: local.pages });
+  localizations.set(local.app, { pages: local.pages, said });
+  return said;
+}
 export function readAdapter(context: ReadContext): Adapter {
   return Object.freeze({
     dialect: context.schema.dialect,
@@ -308,51 +262,6 @@ export async function tenantFileRead(
     status: 200,
     body: { name: stored.name, type: image ?? 'application/octet-stream', data: Buffer.from(stored.bytes).toString('base64') },
   };
-}
-async function body(req: IncomingMessage, maximum: number): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const part of req) {
-    const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part);
-    if ((size += chunk.length) > maximum) return invalid(413);
-    chunks.push(chunk);
-  }
-  try {
-    const value: unknown = captureTenantData(
-      JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks))),
-    );
-    tenantRecord(value);
-    return value;
-  } catch {
-    return invalid();
-  }
-}
-function send(req: IncomingMessage, res: ServerResponse, status: number, value: unknown, ownership: Record<string, string> = {}): void {
-  // Serialize before installing ownership headers: a failed projection must not
-  // release either a partial private body or a success-looking owner assertion.
-  const json = replyJson(value);
-  if (res.destroyed || res.writableEnded) return;
-  res.writeHead(status, {
-    'cache-control': 'no-store',
-    'content-type': 'application/json; charset=utf-8',
-    'x-content-type-options': 'nosniff',
-    'content-length': Buffer.byteLength(json),
-    /* Every 503 here is the database or the writer not answering for a
-       moment (a busy pool, a writer reopening): said with when to come back,
-       which is what an HTTP client and a load balancer retry on. */
-    ...(status === 503 ? { 'retry-after': String(POOL_BUSY_RETRY_AFTER_SECONDS) } : {}),
-    ...ownership,
-  });
-  res.end(req.method === 'HEAD' ? undefined : json);
-}
-function sendResource<Path extends ResourceHttpPath>(
-  req: IncomingMessage,
-  res: ServerResponse,
-  _path: Path,
-  value: TenantHttpResourceReply<NoInfer<Path>>,
-  owner: TenantContextReply,
-): void {
-  send(req, res, 200, value, ownerHeaders(owner));
 }
 
 interface TenantHttpOptions {
@@ -711,8 +620,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       const bound = binding();
       if (doorRefusal(req, bound, { writing: changesSomething(req) })) return invalid(403);
       // Reject duplicate ownership headers even on bootstrap/control requests.
-      for (const name of Object.values(headers)) header(req, name);
-      expectedAccounts.set(req, header(req, headers.account));
+      for (const name of Object.values(headers)) tenantHttpHeader(req, name);
+      expectedAccounts.set(req, tenantHttpHeader(req, headers.account));
       // The two views are under the same root but are not the login's own
       // operations: each is read on a lease — the dealer's log on that dealer's
       // tenant lease, the lender's audit view on a platform one — so they go
@@ -731,11 +640,13 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           return invalid();
         // The native login's own request: it names no tenant, realm, tab or lease.
         if (
-          [headers.tenant, headers.realm, headers.tab, headers.context, headers.revision].some((name) => header(req, name) !== undefined) ||
-          (header(req, headers.app) !== undefined && header(req, headers.app) !== app.id)
+          [headers.tenant, headers.realm, headers.tab, headers.context, headers.revision].some(
+            (name) => tenantHttpHeader(req, name) !== undefined,
+          ) ||
+          (tenantHttpHeader(req, headers.app) !== undefined && tenantHttpHeader(req, headers.app) !== app.id)
         )
           return invalid();
-        const account = header(req, headers.account);
+        const account = tenantHttpHeader(req, headers.account);
         if (account === undefined) return invalid();
         exposed(headers.account, account);
         const input = await body(req, 16384);
@@ -840,17 +751,18 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       // app/tenant are URL selectors, never competing request headers. App's
       // response header is accepted only as a matching stale-App precondition.
       if (
-        header(req, headers.tenant) !== undefined ||
-        header(req, headers.realm) !== undefined ||
-        (header(req, headers.app) !== undefined && header(req, headers.app) !== app.id)
+        tenantHttpHeader(req, headers.tenant) !== undefined ||
+        tenantHttpHeader(req, headers.realm) !== undefined ||
+        (tenantHttpHeader(req, headers.app) !== undefined && tenantHttpHeader(req, headers.app) !== app.id)
       )
         return invalid();
-      if (control && [headers.tab, headers.context, headers.revision].some((name) => header(req, name) !== undefined)) return invalid();
+      if (control && [headers.tab, headers.context, headers.revision].some((name) => tenantHttpHeader(req, name) !== undefined))
+        return invalid();
       let assertion: TenantContextAssertion | undefined = control
         ? undefined
         : {
-            tabId: header(req, headers.tab) ?? '',
-            expectedContext: header(req, headers.context) ?? '',
+            tabId: tenantHttpHeader(req, headers.tab) ?? '',
+            expectedContext: tenantHttpHeader(req, headers.context) ?? '',
             expectedRevision: revisionHeader(req),
           };
       if (!control && (!assertion!.tabId || !assertion!.expectedContext)) return invalid();
@@ -1169,7 +1081,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           if (found) return found.value;
           const worn = wearing(app, wearingNow);
           const local = localizedApp({ app: worn, pages: [...pages] }, locale, words);
-          const said = local.app === worn ? { app: worn, pages } : captureTenantData(local);
+          const said = local.app === worn ? { app: worn, pages } : capturedLocalization(local);
           /* The lease's realm, not the schema's shape, decides which
              surface this context is offered. A support session reads as
              the dealer it entered, so it is offered the dealer's realm. */
@@ -1693,7 +1605,13 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           /* And each says which tables it answered from, as an App's own reads do (live/liveReads.ts): a member's
              page asks it again only when one of them changes, where without it every change asked every list,
              count and breakdown on the page. Only a member follows changes (the live route below). */
-          const told = liveSyncOn() && app.live && !platform && !onSupport ? trackingReads(reader, schema, asked.told ?? res) : reader;
+          /* Told from the kept catalog, not this request's copy of it: an App whose computed columns say `now` is
+             served a new copy on every request (tenantServedSchema.ts bound), which differs from the kept one only in
+             those columns' folded constants, and so names the same tables; the tables a read answers from are kept by
+             the catalog (liveReads.ts), and over a new copy every time they were walked afresh for every read (a
+             field report: a fifth of a tenant enter's CPU). */
+          const told =
+            liveSyncOn() && app.live && !platform && !onSupport ? trackingReads(reader, servedBaseOf(schema), asked.told ?? res) : reader;
           const dispatch = () =>
             dispatchResourceReadHttp(path as ResourceHttpPath, input, told, schema, {
               app: APP_READS,
@@ -2084,7 +2002,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       const result = await contexts.preview(req, selectors, expected, input.limit === undefined ? {} : { limit: input.limit as number });
       return sendResource(req, res, '/api/revert', { reverted: false, ...result.value }, result.context);
     };
-    void work()
+    /* One instant for the whole request: every catalog it is served and every statement it writes says the same
+       `now` (tenantServedSchema.ts servedInstant), however long the request takes between them. */
+    void withRequestInstant(new Date(now()), work)
       .catch((error) => {
         // A support refusal: nothing ran, and the reply says which support rule
         // refused — business work not being available on this lease, or the
@@ -2131,14 +2051,14 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             path.endsWith('/status'),
           );
           reportRefusal(req, failure.status, failure.body.code, failure.body.message, error);
-          return send(req, res, failure.status, failure.body);
+          return send(req, res, failure.status, failure.body, {}, error);
         }
         if (writes.has(path)) {
           const unknown = completedWrite || (error instanceof TenantWriteFailure && error.outcome === 'unknown');
           if (!unknown && databaseUnanswered(error)) {
             const failure = unansweredWrite(path);
             reportRefusal(req, failure.status, 'temporarily_unavailable', String(failure.body.error), error, true);
-            return send(req, res, failure.status, failure.body);
+            return send(req, res, failure.status, failure.body, {}, error);
           }
           /* The App's rules refused the record: the same rejected envelope a
              plain App answers (dataWriteRoutes.ts), so the form keeps the
@@ -2193,7 +2113,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         const failure = unavailable ? new TenantUnavailableError() : new TenantContextError();
         const status = error instanceof InvalidRequest ? error.status : unavailable ? 503 : 403;
         reportRefusal(req, status, failure.code, failure.message, error, !(error instanceof TenantContextError));
-        return send(req, res, status, { error: failure.message, code: failure.code });
+        return send(req, res, status, { error: failure.message, code: failure.code }, {}, error);
       })
       .catch(() => {
         if (!res.destroyed) res.destroy();

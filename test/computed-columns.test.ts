@@ -18,7 +18,7 @@ import { appComputedRules } from '../packages/mistri/src/shared/appComputed.js';
 import { ComputedError } from '../packages/engine/src/shared/computed.js';
 import { parseComputed } from '../packages/engine/src/shared/computedParse.js';
 import { evaluateComputed } from '../packages/engine/src/shared/computedValue.js';
-import { ANSI_STYLE, MYSQL_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { ANSI_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import { compileView, type ViewDef } from '../packages/engine/src/shared/view.js';
 import { textToView } from '../packages/engine/src/shared/viewtext.js';
 import { withViewComputed } from '../packages/engine/src/shared/viewLabels.js';
@@ -131,9 +131,9 @@ describe('the words', () => {
     assert.match(judged("estimate in (1, 'two')")[0], /"=" compares a number with a text/);
     const listed = { open_for: { type: 'boolean', value: 'owner in (ada, bo) and estimate not in (1, 2)' } };
     const view: ViewDef = { id: 'v', name: 'v', base: 'task', columns: [{ path: 'open_for' }] };
-    const text = (dialect: 'sqlite' | 'postgres' | 'mysql') => {
+    const text = (dialect: 'sqlite' | 'postgres') => {
       const served = withRollups(app({ computed: listed }), catalog(dialect), NOW, null);
-      const style = { sqlite: ANSI_STYLE, postgres: POSTGRES_STYLE, mysql: MYSQL_STYLE }[dialect];
+      const style = { sqlite: ANSI_STYLE, postgres: POSTGRES_STYLE }[dialect];
       return compileView(served, withViewComputed(served, view), style).text;
     };
     assert.match(
@@ -141,7 +141,6 @@ describe('the words', () => {
       /\(\("task_0"\."owner" = 'ada'\) OR \("task_0"\."owner" = 'bo'\)\) AND \(NOT \(\("task_0"\."estimate" = 1\) OR/,
     );
     assert.match(text('postgres'), /THEN TRUE ELSE FALSE END/);
-    assert.match(text('mysql'), /\(`task_0`\.`owner` = 'ada'\) OR \(`task_0`\.`owner` = 'bo'\)/);
     const tree = parseComputed('owner in (ada, bo) and estimate not in (1, 2)', (path) => path === 'owner' || path === 'estimate');
     const worked = (row: Record<string, string | number | null>) =>
       evaluateComputed(tree, { today: '2026-09-27', now: NOW, me: null }, (path) => row[path] ?? null);
@@ -214,9 +213,9 @@ describe('the statement, on each engine', () => {
     filter: { groups: [[{ path: 'is_overdue', op: '=', value: true }]] },
     orderBy: [{ path: 'days_open', direction: 'desc' }],
   };
-  const compiled = (dialect: 'sqlite' | 'postgres' | 'mysql', flag = 'boolean') => {
+  const compiled = (dialect: 'sqlite' | 'postgres', flag = 'boolean') => {
     const served = withRollups(app(), catalog(dialect, flag), NOW, 'ada@example.test');
-    const style = { sqlite: ANSI_STYLE, postgres: POSTGRES_STYLE, mysql: MYSQL_STYLE }[dialect];
+    const style = { sqlite: ANSI_STYLE, postgres: POSTGRES_STYLE }[dialect];
     return compileView(served, withViewComputed(served, view), style);
   };
 
@@ -239,12 +238,6 @@ describe('the statement, on each engine', () => {
     assert.match(text, /CAST\(CAST\("task_0"\."due_on" AS DATE\) \+ \("task_0"\."term"\) \* INTERVAL '1 month' AS DATE\)/);
     // A 0/1 integer flag on PostgreSQL is compared, never negated as a boolean.
     assert.match(compiled('postgres', 'integer').text, /NOT \("task_0"\."completed" <> 0\)/);
-  });
-
-  test('MySQL: DATEDIFF and DATE_ADD', () => {
-    const { text } = compiled('mysql');
-    assert.match(text, /DATEDIFF\(DATE '2026-09-27', `task_0`\.`opened_on`\)/);
-    assert.match(text, /DATE_ADD\(CAST\(`task_0`\.`due_on` AS DATE\), INTERVAL \(`task_0`\.`term`\) MONTH\)/);
   });
 
   test("`me` is the reader's email, and nobody for a visitor", () => {

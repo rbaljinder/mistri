@@ -3,7 +3,7 @@
  * A TCP proxy that holds every chunk for a fixed time in each direction, to
  * stand a local database a network away.
  *
- *   node scripts/delay-proxy.mjs --listen 55432 --to 127.0.0.1:5432 [--ms 10]
+ *   node scripts/delay-proxy.mjs --listen 55432 --to 127.0.0.1:5432 [--ms 10] [--host 127.0.0.1]
  *
  * 10 ms each way is a 20 ms round trip, a database in the next availability
  * zone. Every chunk is delivered in order, after `--ms` from when it arrived,
@@ -21,6 +21,8 @@ const option = (name, fallback) => {
 const listen = Number(option('--listen'));
 const [host, port] = String(option('--to', '')).split(':');
 const delay = Number(option('--ms', 10));
+/* 0.0.0.0 only where the proxy is its own container (scripts/capacity-harness.mjs): its port is then the network's. */
+const bindHost = option('--host', '127.0.0.1');
 if (!Number.isInteger(listen) || !host || !Number(port) || !(delay >= 0)) {
   console.error('Usage: node scripts/delay-proxy.mjs --listen <port> --to <host:port> [--ms 10]');
   process.exit(2);
@@ -46,4 +48,4 @@ const server = createServer((client) => {
   pipeDelayed(client, upstream);
   pipeDelayed(upstream, client);
 });
-server.listen(listen, '127.0.0.1', () => console.log(`delay-proxy 127.0.0.1:${listen} -> ${host}:${port}, ${delay} ms each way`));
+server.listen(listen, bindHost, () => console.log(`delay-proxy ${bindHost}:${listen} -> ${host}:${port}, ${delay} ms each way`));

@@ -1,16 +1,16 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.2 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.3 scope, stable and preview features, current limitations and planned work.
 ---
 
-The 1.0.0-rc.2 scope, stable and preview features, current limitations and planned work.
+The 1.0.0-rc.3 scope, stable and preview features, current limitations and planned work.
 
 ```sh
 npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.2**, the first release candidate and the first release under the mistri name:
+This site describes **mistri 1.0.0-rc.3**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -24,7 +24,8 @@ enforced on the server as documented, but its shape may change in any 1.x releas
 outside the compatibility promise; `mistri check` lists the Preview features
 an App uses, as information. At 1.0 these stay Preview: feature flags,
 audiences and `@mistriwork/mistri/openfeature`, experiments, the Suite Console, behavior
-analytics, SCIM, and the Gantt presentation. The kernel, tenant Apps, SAML,
+analytics, SCIM, the Gantt presentation, and a resource's `search` (its packs ship
+after 1.0). The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
 flows and machines, the assistant, integrations and durable workflows are
 stable.
 
@@ -69,7 +70,7 @@ stable.
 
 | Feature | Status |
 | --- | --- |
-| The four built-in looks: Workshop (the default, set in Barlow), Lumen (set in Inter), Mono and Sage; `defineTheme`, `ui.theme` and `customThemes`; the twelve palettes every look offers; the theme validator in `mistri check` | Stable |
+| The five built-in looks: Workshop (the default, set in Barlow), Lumen (set in Inter), Mono, Sage and Ledger (figures in IBM Plex Mono); `defineTheme`, `ui.theme` and `customThemes`; the twelve palettes every look offers; the theme validator in `mistri check` | Stable |
 | Tenant branding (`branding`, `brandingForm()`, the `branding` store) | Stable |
 
 ### Access, commands and data
@@ -103,7 +104,7 @@ stable.
 
 ### The packages
 
-<!-- TODO(1.0): @mistriwork/ui is Preview pending the maintainer's decision on whether its primitives are Stable at 1.0. -->
+`@mistriwork/ui` stays Preview at 1.0: the Apps and the browser are drawn with its primitives, but, like every Preview feature, it works as documented and may change in any 1.x release.
 
 | Package | What it is | Status |
 | --- | --- | --- |
@@ -112,10 +113,9 @@ stable.
 | `@mistriwork/ui` | The React primitives both are drawn with, usable [on their own](/docs/mistri-ui/) | Preview |
 | `@mistriwork/engine`, `@mistriwork/kit` | The engine and the shared client both install; internal, with no promise to an App's author | Internal |
 
-The database browser (SQLite, PostgreSQL, MySQL/MariaDB) is read-only by
+The database browser (SQLite, PostgreSQL) is read-only by
 default; writes are opt-in per connection with `"writable": true`, enforced at
-the adapter. Apps run on PostgreSQL and SQLite; MySQL/MariaDB is supported for
-browsing.
+the adapter. Apps run on PostgreSQL and SQLite; MySQL and MariaDB are not supported.
 
 ## Still refused
 
@@ -133,8 +133,7 @@ browsing.
 - A second tenant App on a database that already holds one: a tenant store is
   one App's tenants and memberships. Give each its own database.
 - Apps on MySQL/MariaDB (`app-on-mysql`, at `check` and at startup): an App
-  runs on PostgreSQL or SQLite. MySQL/MariaDB is supported for browsing, in
-  the database browser and its MCP server.
+  runs on PostgreSQL or SQLite.
 - An App over the database browser's MCP server (`--mcp`), and a Workbench
   inside an App: an App serves only its declared resources; the standalone
   browser is the tool for the rest.
@@ -145,12 +144,17 @@ browsing.
 
 ## Roadmap
 
-Planned work, in order. None of it has a date.
+Release candidates are shipping: 1.0.0-rc.3 is the current one, and the compatibility
+promise takes effect at 1.0.0. None of what remains has a date.
 
-1. **Container deploys.** An App deployed and running on container
-   platforms, with a hosted PostgreSQL, before 1.0.
-2. **1.0 release candidate.** The surface frozen and the compatibility
-   promise in force.
+A field deployment has run on Cloudflare Containers against PlanetScale
+PostgreSQL, with a load test (one `standard-1` instance held 25 heavy users
+steady for an hour). What remains before 1.0:
+
+1. **A signed macOS desktop build.**
+2. **Deploy proof on Google Cloud Run and AWS ECS.** Both are designed, not
+   proven.
+3. **1.0.0 itself.**
 
 ### Not planned
 
@@ -166,4 +170,5 @@ Planned work, in order. None of it has a date.
 ## Related
 
 - [Changelog](/docs/changelog/): each release's full list.
+- [Compatibility](/docs/compatibility/): what the 1.0 promise covers and what may change in a 1.x release.
 - [Glossary](/docs/glossary/): what Stable and Preview mean, with the other terms.

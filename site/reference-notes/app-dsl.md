@@ -19,8 +19,8 @@ section, a page and a resource action are written with their helper only; an
 object written by hand in their place is a type error that names the helper.
 Every place takes a fixed set of keys, and an unknown key is refused at load
 with the nearest spelling (`Did you mean "label"?`). The complete types are
-[`schema/app.d.ts`](https://github.com/rbaljinder/mistri/blob/main/packages/mistri/schema/app.d.ts),
-which ships in the package.
+`schema/app.d.ts`, which ships in the package
+(`node_modules/@mistriwork/mistri/schema/app.d.ts`).
 
 [The DSL in one App](/docs/dsl-tour/) builds one step by step, and
 [Choose a building block](/docs/choose/) says which key a task wants.

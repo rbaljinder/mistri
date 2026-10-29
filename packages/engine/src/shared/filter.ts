@@ -133,7 +133,7 @@ export interface SqlFragment {
 /** How each dialect quotes an identifier and writes a placeholder. */
 export interface SqlStyle {
   quote(identifier: string): string;
-  /** Postgres wants $1, $2…; sqlite and mysql want ?. */
+  /** Postgres wants $1, $2…; sqlite wants ?. */
   placeholder(index: number): string;
   /**
    * The operator that matches text without regard to case.
@@ -141,9 +141,8 @@ export interface SqlStyle {
    * `contains` is a browsing operator: someone typing `contains nakamura`
    * means the name however it is capitalised, and the same query returning a
    * row on SQLite and nothing on Postgres is the tool disagreeing with
-   * itself about what it was asked. SQLite's LIKE folds ASCII case already
-   * and MySQL's default collations are case-insensitive; Postgres needs to
-   * be asked.
+   * itself about what it was asked. SQLite's LIKE folds ASCII case already;
+   * Postgres needs to be asked.
    */
   likeOp: string;
   /**
@@ -192,7 +191,7 @@ export interface SqlStyle {
    * The engine, for what a style's hooks cannot say one at a time: a computed
    * column's date arithmetic and its yes-or-no (computed.ts). Absent is SQLite's.
    */
-  dialect?: 'sqlite' | 'postgres' | 'mysql';
+  dialect?: 'sqlite' | 'postgres';
   /**
    * One key of a JSON column (`specs.capacity`, definedFields.ts): as its JSON
    * value (a select or a sort), as text (an equality, a pattern, emptiness;
@@ -292,33 +291,6 @@ export const POSTGRES_STYLE: SqlStyle = {
  * is materialized anyway and the hint would be a syntax error.
  */
 export const POSTGRES_INLINE_STYLE: SqlStyle = { ...POSTGRES_STYLE, cteHint: ' NOT MATERIALIZED' };
-
-export const MYSQL_STYLE: SqlStyle = {
-  dialect: 'mysql',
-  quote: (id) => `\`${id.replace(/`/g, '``')}\``,
-  placeholder: () => '?',
-  /* A column declared with a `_bin` or `_cs` collation compares case
-     sensitively even here. Forcing a collation in the predicate would fix
-     that and break every latin1 column, so this follows the column. */
-  likeOp: 'LIKE',
-  /* `DATE_FORMAT` has no quarter specifier either, and MySQL's `QUARTER()`
-     returns a number — concatenated rather than formatted, to land on the
-     same `2026-Q3` the other two produce. */
-  dateBucket: (e, unit, weekStart) =>
-    unit === 'week'
-      ? `DATE_FORMAT(DATE_SUB(DATE(${e}), INTERVAL ${intoWeek(`(WEEKDAY(${e}) + 1)`, weekStartDay(weekStart))} DAY), '%Y-%m-%d')`
-      : unit === 'quarter'
-        ? `CONCAT(DATE_FORMAT(${e}, '%Y'), '-Q', QUARTER(${e}))`
-        : unit === 'weekday'
-          ? /* WEEKDAY() counts from Monday at 0. */
-            `CAST(WEEKDAY(${e}) + 1 AS CHAR)`
-          : `DATE_FORMAT(${e}, '${{ day: '%Y-%m-%d', month: '%Y-%m', year: '%Y', hour: '%H' }[unit]}')`,
-  /* No binaryText: a binary collation is named per character set here
-     (utf8mb4_bin, latin1_bin), and naming the wrong one is an error. */
-  /* `||` is OR here unless the server mode says otherwise, so the function. */
-  text: (e) => `CAST(${e} AS CHAR)`,
-  concat: (parts) => `CONCAT(${parts.join(', ')})`,
-};
 
 /** One ORDER BY term: an expression and its direction, and the vocabulary it sorts by where it has one. */
 interface OrderTerm {

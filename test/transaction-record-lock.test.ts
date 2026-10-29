@@ -7,7 +7,6 @@ import { test, type TestContext } from 'node:test';
 import { Refusal, TransactionOutcomeUnknown, type DeleteRequest, type WriteTransaction } from '../packages/engine/src/adapters/adapter.js';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
-import { MysqlAdapter } from '../packages/engine/src/adapters/mysql.js';
 import { createAppResources } from '../packages/mistri/src/server/app/appResources.js';
 import { createAppSourceAdapter } from '../packages/mistri/src/server/app/appSourceAdapter.js';
 import { AppAccessDenied, authorizeTransaction } from '../packages/mistri/src/server/app/appAccess.js';
@@ -118,19 +117,17 @@ test('SQLite captures lock inputs before queue waits; an absent key returns no e
 });
 
 type Statement = { text: string; params: unknown[]; writer: boolean };
-/** Recording drivers only: no network or live fixture. Model MySQL's stale
- * consistent-read snapshot to catch accidentally mixing it with current locks. */
-function recording(dialect: 'postgres' | 'mysql') {
+/** Recording drivers only: no network or live fixture. */
+function recording() {
   const statements: Statement[] = [];
   const state = {
     kind: 'r',
-    engine: 'InnoDB',
     primary: true,
     exists: true,
     matches: 1,
     stored: 'STORED',
     snapshot: undefined as string | undefined,
-    readCommitted: dialect === 'postgres',
+    readCommitted: true,
     hook: async (_text: string) => {},
   };
   let active = false;
@@ -141,23 +138,13 @@ function recording(dialect: 'postgres' | 'mysql') {
     try {
       await new Promise<void>((resolve) => setImmediate(resolve));
       await state.hook(text);
-      if (text.startsWith('SET TRANSACTION ISOLATION LEVEL')) state.readCommitted = true;
       if (text.startsWith('BEGIN')) state.snapshot = undefined;
-      if (text === 'SELECT DATABASE() AS db') return [{ db: 'shop' }];
       if (text.includes('SELECT c.relkind')) return state.exists ? [{ kind: state.kind }] : [];
-      if (text.includes('information_schema.TABLES'))
-        return state.exists ? [{ TABLE_TYPE: state.kind === 'v' ? 'VIEW' : 'BASE TABLE', ENGINE: state.engine }] : [];
       if (text.includes('FROM pg_attribute'))
         return [
           { name: 'tenant', type: 'text', is_pk: state.primary },
           { name: 'id', type: 'integer', is_pk: state.primary },
           { name: 'name', type: 'text', is_pk: false },
-        ];
-      if (text.includes('information_schema.COLUMNS'))
-        return [
-          { COLUMN_NAME: 'tenant', COLUMN_KEY: state.primary ? 'PRI' : '' },
-          { COLUMN_NAME: 'id', COLUMN_KEY: state.primary ? 'PRI' : '' },
-          { COLUMN_NAME: 'name', COLUMN_KEY: '' },
         ];
       if (text.endsWith('FOR UPDATE')) return Array.from({ length: state.matches }, () => ({ ...key }));
       if (text.includes('COUNT(*)')) return [{ n: 1 }];
@@ -170,38 +157,27 @@ function recording(dialect: 'postgres' | 'mysql') {
       active = false;
     }
   };
-  let adapter: PostgresAdapter | MysqlAdapter;
-  if (dialect === 'postgres') {
-    adapter = new PostgresAdapter('postgres://unused/shop');
-    const writer = {
-      query: async (text: string, params?: unknown[]) => {
-        const rows = await execute(text, params);
-        return { rows, fields: [{ name: 'name' }], rowCount: rows.length };
-      },
-    };
-    Reflect.set(adapter, 'connections', {
-      withWriteClient: async (run: (write: typeof writer) => Promise<unknown>) => run(writer),
-      read: async () => {
-        assert.fail('reader used inside transaction');
-      },
-      close: async () => {},
-    });
-  } else {
-    adapter = new MysqlAdapter('mysql://unused/shop');
-    Reflect.set(adapter, 'open', async (readonly: boolean) => ({
-      execute: async (text: string, params?: unknown[]) => [await execute(text, params, !readonly), [{ name: 'name' }]],
-      query: async (sql: string | { sql: string }) => [await execute(typeof sql === 'string' ? sql : sql.sql, [], !readonly), []],
-      end: async () => {},
-      destroy: () => {},
-    }));
-  }
-  const table = dialect === 'postgres' ? 'public.item' : 'shop.item';
+  const adapter = new PostgresAdapter('postgres://unused/shop');
+  const writer = {
+    query: async (text: string, params?: unknown[]) => {
+      const rows = await execute(text, params);
+      return { rows, fields: [{ name: 'name' }], rowCount: rows.length };
+    },
+  };
+  Reflect.set(adapter, 'connections', {
+    withWriteClient: async (run: (write: typeof writer) => Promise<unknown>) => run(writer),
+    read: async () => {
+      assert.fail('reader used inside transaction');
+    },
+    close: async () => {},
+  });
+  const table = 'public.item';
   return { adapter, statements, state, table };
 }
 
-for (const dialect of ['postgres', 'mysql'] as const) {
+for (const dialect of ['postgres'] as const) {
   test(`${dialect} locks exact attested table and whole PK with parameters on one serialized writer`, async (t) => {
-    const { adapter, statements, table } = recording(dialect);
+    const { adapter, statements, table } = recording();
     t.after(() => adapter.close());
     let escaped!: WriteTransaction;
     const hostile = "desk' OR 1=1 --";
@@ -216,12 +192,7 @@ for (const dialect of ['postgres', 'mysql'] as const) {
     const locks = statements.filter((statement) => statement.text.endsWith('FOR UPDATE'));
     assert.equal(locks.length, 1);
     assert.deepEqual(locks[0].params, [hostile, 1]);
-    assert.equal(
-      locks[0].text,
-      dialect === 'postgres'
-        ? 'SELECT "tenant", "id" FROM "public"."item" WHERE "tenant" = $1 AND "id" = $2 FOR UPDATE'
-        : 'SELECT `tenant`, `id` FROM `shop`.`item` WHERE `tenant` = ? AND `id` = ? FOR UPDATE',
-    );
+    assert.equal(locks[0].text, 'SELECT "tenant", "id" FROM "public"."item" WHERE "tenant" = $1 AND "id" = $2 FOR UPDATE');
     const inside = statements.slice(statements.findIndex((statement) => statement.text.startsWith('BEGIN')));
     assert.ok(inside.every((statement) => statement.writer));
     assert.ok(
@@ -235,7 +206,7 @@ for (const dialect of ['postgres', 'mysql'] as const) {
   });
 
   test(`${dialect} reads current stored image after a lock wait, including after an earlier plain read`, async (t) => {
-    const { adapter, state, statements, table } = recording(dialect);
+    const { adapter, state, table } = recording();
     t.after(() => adapter.close());
     await adapter.transaction(async (tx) => {
       const query = { table, columns: ['name'], limit: 1, offset: 0 };
@@ -246,16 +217,10 @@ for (const dialect of ['postgres', 'mysql'] as const) {
       await tx.lockRecord!({ table, key });
       assert.equal((await tx.query(query)).rows[0].name, 'stored');
     });
-    if (dialect === 'mysql') {
-      assert.equal(
-        statements.findIndex((s) => s.text === 'SET TRANSACTION ISOLATION LEVEL READ COMMITTED') + 1,
-        statements.findIndex((s) => s.text.startsWith('BEGIN')),
-      );
-    }
   });
 
   test(`${dialect} malformed locks poison caught failures and skip queued reads`, async (t) => {
-    const { adapter, statements, table } = recording(dialect);
+    const { adapter, statements, table } = recording();
     t.after(() => adapter.close());
     for (const badKey of malformed) {
       const start = statements.length;
@@ -273,7 +238,7 @@ for (const dialect of ['postgres', 'mysql'] as const) {
   });
 
   test(`${dialect} refuses views, unkeyed/unknown tables and ambiguous matches; absence has no result`, async (t) => {
-    const { adapter, state, table } = recording(dialect);
+    const { adapter, state, table } = recording();
     t.after(() => adapter.close());
     state.kind = 'v';
     await assert.rejects(
@@ -303,7 +268,7 @@ for (const dialect of ['postgres', 'mysql'] as const) {
   });
 
   test(`${dialect} lost lock rollback acknowledgement remains uncertain`, async (t) => {
-    const { adapter, state, table } = recording(dialect);
+    const { adapter, state, table } = recording();
     t.after(() => adapter.close());
     state.hook = async (text) => {
       if (text.endsWith('FOR UPDATE') || text === 'ROLLBACK') throw new Error('lost connection');
@@ -315,134 +280,8 @@ for (const dialect of ['postgres', 'mysql'] as const) {
   });
 }
 
-test('MySQL refuses nontransactional engines and out-of-scope databases', async (t) => {
-  const { adapter, state, statements, table } = recording('mysql');
-  t.after(() => adapter.close());
-  for (const engine of ['MyISAM', 'MEMORY', '']) {
-    state.engine = engine;
-    await assert.rejects(
-      adapter.transaction((tx) => tx.lockRecord!({ table, key })),
-      /InnoDB/,
-    );
-  }
-  state.engine = 'InnoDB';
-  await assert.rejects(
-    adapter.transaction((tx) => tx.lockRecord!({ table: 'private.item', key })),
-    /No table/,
-  );
-  assert.ok(!statements.some((s) => s.text.endsWith('FOR UPDATE')));
-});
-
-for (const queued of [false, true]) {
-  test(`MySQL rejects transactional inserts before DML and poisons ${queued ? 'already queued' : 'caught-error follow-up'} operations`, async (t) => {
-    const { adapter, state, statements, table } = recording('mysql');
-    t.after(() => adapter.close());
-    for (const engine of ['MyISAM', 'MEMORY', '']) {
-      state.engine = engine;
-      const start = statements.length;
-      let failure: unknown;
-      await assert.rejects(
-        adapter.transaction(async (tx) => {
-          const rejected = tx.insert({ table, values: { ...key, name: 'must not insert' } });
-          const later = queued ? tx.insert({ table, values: { ...key, id: 2, name: 'must not escape' } }) : undefined;
-          await assert.rejects(rejected, (error) => {
-            assert.ok(error instanceof Refusal);
-            assert.match(error.message, /InnoDB/);
-            failure = error;
-            return true;
-          });
-          // Changing catalog answers cannot revive an already failed transaction.
-          state.engine = 'InnoDB';
-          await assert.rejects(
-            later ?? tx.insert({ table, values: { ...key, id: 2, name: 'must not escape' } }),
-            (error) => error === failure,
-          );
-          await assert.rejects(tx.count(table), (error) => error === failure);
-        }),
-        (error) => error === failure,
-      );
-      const current = statements.slice(start);
-      assert.equal(current.at(-1)!.text, 'ROLLBACK');
-      assert.ok(!current.some((s) => /^(INSERT|UPDATE|DELETE|COMMIT)/.test(s.text) || s.text.includes('COUNT(*)')));
-      const engineCheck = current.find((s) => s.text.startsWith('SELECT ENGINE'));
-      assert.ok(engineCheck?.writer, 'engine evidence must come from the transaction writer');
-      assert.deepEqual(engineCheck.params, ['shop', 'item']);
-    }
-    // Confirmed rollback leaves this adapter able to start a fresh transaction.
-    await adapter.transaction((tx) => tx.insert({ table, values: { ...key, name: 'fresh' } }));
-    assert.equal(statements.at(-1)!.text, 'COMMIT');
-  });
-}
-
-test('MySQL transactional insert attests InnoDB on its captured writer before INSERT', async (t) => {
-  const { adapter, state, statements, table } = recording('mysql');
-  t.after(() => adapter.close());
-  state.engine = 'iNnOdB';
-  let writer: unknown;
-  state.hook = async (text) => {
-    if (text.startsWith('SELECT ENGINE')) {
-      writer = Reflect.get(adapter, 'writeClient');
-      Reflect.set(adapter, 'writeClient', null);
-    }
-  };
-  try {
-    await adapter.transaction((tx) => tx.insert({ table, values: { ...key, name: 'created' } }));
-    const engineCheck = statements.findIndex((s) => s.text.startsWith('SELECT ENGINE'));
-    const insert = statements.findIndex((s) => s.text.startsWith('INSERT INTO'));
-    assert.ok(engineCheck >= 0 && engineCheck < insert);
-    assert.ok(statements.slice(engineCheck).every((s) => s.writer));
-    assert.equal(statements.at(-1)!.text, 'COMMIT');
-    assert.equal(Reflect.get(adapter, 'writeClient'), null, 'must not reacquire an autocommit writer');
-  } finally {
-    if (writer) Reflect.set(adapter, 'writeClient', writer);
-  }
-});
-
-for (const rollback of [false, true]) {
-  test(`MySQL raw writes wait for the structured writer to ${rollback ? 'roll back' : 'commit'}`, async (t) => {
-    const { adapter, statements, table } = recording('mysql');
-    t.after(() => adapter.close());
-    let release!: () => void;
-    let entered!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const locked = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    const transaction = adapter.transaction(async (tx) => {
-      await tx.lockRecord!({ table, key });
-      entered();
-      await gate;
-      await tx.count(table);
-      if (rollback) throw new Refusal('requested rollback');
-    });
-    void transaction.catch(() => {});
-    await locked;
-    const text = 'UPDATE shop.item SET name = name';
-    const request = { text, write: true, limit: 1 };
-    const raw = adapter.runSql(request);
-    void raw.catch(() => {});
-    request.text = 'COMMIT';
-    try {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      assert.ok(!statements.some((s) => s.text === text || s.text === 'COMMIT'), 'raw write entered the active transaction');
-      release();
-      if (rollback) await assert.rejects(transaction, /requested rollback/);
-      else await transaction;
-      await raw;
-      const settled = statements.findIndex((s) => s.text === (rollback ? 'ROLLBACK' : 'COMMIT'));
-      assert.ok(settled >= 0 && settled < statements.findIndex((s) => s.text === text));
-      assert.equal(statements.at(-1)!.text, text, 'queued raw input was captured before the wait');
-    } finally {
-      release();
-      await Promise.allSettled([transaction, raw]);
-    }
-  });
-}
-
 test('Postgres refuses foreign tables whose remote lock semantics are not attested', async (t) => {
-  const { adapter, state, table } = recording('postgres');
+  const { adapter, state, table } = recording();
   t.after(() => adapter.close());
   state.kind = 'f';
   await assert.rejects(

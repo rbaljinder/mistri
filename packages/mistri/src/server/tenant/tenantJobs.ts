@@ -1108,9 +1108,10 @@ export async function openTenantJobHost(
        after the other (retention.ts), never in parallel, so a small pooled database is not stormed; the job host's one
        runner per slot is what keeps it to one run however many processes serve the App. */
     {
-      const { retentionJob, retentionTargetOf } = await import('../retention.js');
+      const { retentionJob } = await import('../retention.js');
+      const { storeTargetOf } = await import('../commands/appCommandEvents.js');
       const { source } = options;
-      const sourceTarget = source && retentionTargetOf('path' in source ? source.path : source.url);
+      const sourceTarget = source && storeTargetOf('path' in source ? source.path : source.url);
       builtIn = [
         ...builtIn,
         retentionJob({

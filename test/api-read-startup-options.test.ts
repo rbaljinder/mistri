@@ -117,7 +117,7 @@ test('composition checks select exact literal SQLite inputs without opening or d
   assert.throws(() => assertApiReadStartupComposition([loaded, loaded], [connection]));
   assert.throws(() => assertApiReadStartupComposition([loaded], [{ ...connection, id: 'other', name: 'other' }]));
   assert.throws(() => assertApiReadStartupComposition([loaded], [connection, { ...connection, id: 'other' }]));
-  for (const url of ['postgres://host/db', 'mysql://host/db', '${DB}', '$DB', 'sqlite:/data.db']) {
+  for (const url of ['postgres://host/db', '${DB}', '$DB', 'sqlite:/data.db']) {
     assert.throws(() => assertApiReadStartupComposition([loaded], [{ ...connection, url }]));
   }
   assert.throws(() => assertApiReadStartupComposition([{ ...loaded, app: { ...app, auth: undefined } }], [connection]));
@@ -175,7 +175,7 @@ test('several sources: every connection the API reads is judged, and only those'
   const at = (id: string, url: string) => ({ id, name: id, url, source: 'config' as const });
   const sqlite = [at('sales', '/missing/sales.db'), at('stock', '/missing/stock.db')];
   // The ledger is never read through the API: its engine is not the API's concern.
-  assert.equal(assertApiReadStartupComposition([loaded], [...sqlite, at('ledger', 'mysql://host/ledger')]), 'sqlite');
+  assert.equal(assertApiReadStartupComposition([loaded], [...sqlite, at('ledger', 'postgres://host/ledger')]), 'sqlite');
   // An exposed source on another engine than the auth store's refuses, whichever it is.
   assert.throws(
     () =>

@@ -117,7 +117,7 @@ export interface ConnectionConfig {
    */
   pool?: PoolSize;
   /**
-   * Read replicas of a PostgreSQL or MySQL database, by URL, each resolved
+   * Read replicas of a PostgreSQL database, by URL, each resolved
    * as `url` is. Lists, dashboards, counts and exports read from them in
    * turn; record pages, writes, commands and a person's reads just after
    * their own write stay on the primary (packages/engine/src/adapters/replicas.ts).
@@ -600,18 +600,14 @@ export class Registry {
         /* A literal URL was checked against its "pool" when the file was
            read; one that was a reference is only known now. Said rather than
            refused: the connection still works, on the default pool. */
-        if (entry.config.pool && !/^(postgres(ql)?|mysql|mariadb):\/\//i.test(resolved.url)) {
+        if (entry.config.pool && !/^postgres(ql)?:\/\//i.test(resolved.url)) {
           this.onWarning(
-            `"${entry.config.name}" has "pool", which sizes PostgreSQL or MySQL connections; it names another engine, so "pool" has no effect.`,
+            `"${entry.config.name}" has "pool", which sizes PostgreSQL connections; it names another engine, so "pool" has no effect.`,
           );
-        }
-        if (entry.config.pool?.read !== undefined && /^(mysql|mariadb):\/\//i.test(resolved.url)) {
-          throw new Error('MySQL accepts "pool.write"; its reader pool is fixed at four connections.');
         }
         const replicas = entry.config.replicas?.length ? await this.resolveReplicas(entry, resolved.url) : undefined;
         adapter = connect(resolved.url, {
           ...(replicas ? { replicas } : {}),
-          ...(entry.config.pool?.write !== undefined ? { mysql: { writers: entry.config.pool.write } } : {}),
           schemas: entry.config.schemas ?? [],
           label: entry.config.name,
           // An address a browser beyond this machine typed reaches the public network only, with nothing filled in.
@@ -843,14 +839,12 @@ function publicView(entry: Entry): PublicConnection {
 /* Read off the scheme, with SQLite as the fallback because a SQLite target is
    a bare file path and has no scheme to read.
 
-   This listed only Postgres, so every MySQL connection was labelled "sqlite" in
-   the picker and the connection manager — a wrong answer to the one question
-   those labels exist to answer. Adding an adapter means adding its scheme here;
+   An unlisted scheme was once labelled "sqlite" in the picker and the
+   connection manager — a wrong answer to the one question those labels
+   exist to answer. Adding an adapter means adding its scheme here;
    `connect.ts` is the other half of the same list. */
 function dialectOf(url: string): string {
   if (/^postgres(ql)?:\/\//i.test(url)) return 'postgres';
-  if (/^mysql:\/\//i.test(url)) return 'mysql';
-  if (/^mariadb:\/\//i.test(url)) return 'mariadb';
   return 'sqlite';
 }
 

@@ -16,6 +16,7 @@
  * decisions.lock only when the share it would apply was wrong at most
  * `--max-error` of the time (default 2%).
  */
+import { SMALL_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { StoredRecordChange } from '../../adapters/history/recordHistory.js';
@@ -383,7 +384,7 @@ async function historyOf(
       import('@mistriwork/engine/adapters/postgresPool.js'),
       import('../../adapters/history/postgresRecordHistory.js'),
     ]);
-    const pg = new PgConnectionManager(target.postgres, undefined, undefined, { readers: 1, writers: 1 });
+    const pg = new PgConnectionManager(target.postgres, undefined, undefined, SMALL_STORE_POOL);
     const ready = await pg.withWriteClient((client) => postgresRecordHistoryReady(client)).catch(() => false);
     if (!ready) {
       await pg.close();

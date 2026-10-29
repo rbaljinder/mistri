@@ -35,7 +35,7 @@ export async function readSchema(db: MigrationDb, scope: readonly string[], hist
   const skip = (table: string) => isRuntimeTable(table) || table === history;
   if (db.dialect === 'sqlite') return readSqlite(db, skip);
   const schemas = [...new Set(scope.length ? scope : [db.home!])].filter((schema) => !RESERVED_SCHEMAS.includes(schema.toLowerCase()));
-  return db.dialect === 'postgres' ? readPostgres(db, schemas, skip) : readMysql(db, schemas, skip);
+  return readPostgres(db, schemas, skip);
 }
 
 async function readSqlite(db: MigrationDb, skip: (table: string) => boolean): Promise<Objects> {
@@ -188,82 +188,6 @@ async function readPostgres(db: MigrationDb, schemas: string[], skip: (table: st
   return out;
 }
 
-async function readMysql(db: MigrationDb, schemas: string[], skip: (table: string) => boolean): Promise<Objects> {
-  const out: Objects = {};
-  const name = (schema: string, relation: string) => `${q(schema)}.${q(relation)}`;
-  const views = new Set<string>();
-  for (const row of await db.all<{ s: string; t: string; k: string }>(
-    'SELECT TABLE_SCHEMA AS s, TABLE_NAME AS t, TABLE_TYPE AS k FROM information_schema.TABLES WHERE TABLE_SCHEMA IN (?)',
-    [schemas],
-  )) {
-    if (skip(row.t)) continue;
-    if (row.k === 'VIEW') {
-      views.add(name(row.s, row.t));
-      continue;
-    }
-    out[`table ${name(row.s, row.t)}`] = 'table';
-  }
-  for (const row of await db.all<{ s: string; t: string; c: string; ty: string; nl: string; df: string | null; ex: string }>(
-    `SELECT TABLE_SCHEMA AS s, TABLE_NAME AS t, COLUMN_NAME AS c, COLUMN_TYPE AS ty, IS_NULLABLE AS nl, COLUMN_DEFAULT AS df, EXTRA AS ex
-     FROM information_schema.COLUMNS WHERE TABLE_SCHEMA IN (?)`,
-    [schemas],
-  )) {
-    if (skip(row.t) || views.has(name(row.s, row.t))) continue;
-    out[`column ${name(row.s, row.t)}.${q(row.c)}`] = [
-      row.ty,
-      row.nl === 'NO' ? 'not null' : '',
-      row.df !== null ? `default ${row.df}` : '',
-      row.ex.toLowerCase(),
-    ]
-      .filter(Boolean)
-      .join(' ');
-  }
-  for (const row of await db.all<{ s: string; t: string; i: string; nu: number | string; cols: string }>(
-    `SELECT TABLE_SCHEMA AS s, TABLE_NAME AS t, INDEX_NAME AS i, MAX(NON_UNIQUE) AS nu,
-            GROUP_CONCAT(COALESCE(COLUMN_NAME, '<expression>') ORDER BY SEQ_IN_INDEX SEPARATOR ', ') AS cols
-     FROM information_schema.STATISTICS WHERE TABLE_SCHEMA IN (?) GROUP BY TABLE_SCHEMA, TABLE_NAME, INDEX_NAME`,
-    [schemas],
-  )) {
-    if (!skip(row.t)) out[`index ${name(row.s, row.t)}.${q(row.i)}`] = `${Number(row.nu) ? '' : 'unique '}(${row.cols})`;
-  }
-  for (const row of await db.all<{ s: string; t: string; name: string; cols: string; rs: string; rt: string; rc: string }>(
-    `SELECT TABLE_SCHEMA AS s, TABLE_NAME AS t, CONSTRAINT_NAME AS name, GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION SEPARATOR ', ') AS cols,
-            REFERENCED_TABLE_SCHEMA AS rs, REFERENCED_TABLE_NAME AS rt, GROUP_CONCAT(REFERENCED_COLUMN_NAME ORDER BY ORDINAL_POSITION SEPARATOR ', ') AS rc
-     FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA IN (?) AND REFERENCED_TABLE_NAME IS NOT NULL
-     GROUP BY TABLE_SCHEMA, TABLE_NAME, CONSTRAINT_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME`,
-    [schemas],
-  )) {
-    if (!skip(row.t))
-      out[`constraint ${name(row.s, row.t)}.${q(row.name)}`] = `foreign key (${row.cols}) references ${name(row.rs, row.rt)}(${row.rc})`;
-  }
-  // CHECK constraints are readable from MySQL 8.0.16 and MariaDB 10.2; older servers have none to read.
-  const checks = await db
-    .all<{ s: string; t: string; name: string; def: string }>(
-      `SELECT tc.TABLE_SCHEMA AS s, tc.TABLE_NAME AS t, tc.CONSTRAINT_NAME AS name, cc.CHECK_CLAUSE AS def
-     FROM information_schema.TABLE_CONSTRAINTS tc JOIN information_schema.CHECK_CONSTRAINTS cc
-       ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
-     WHERE tc.TABLE_SCHEMA IN (?) AND tc.CONSTRAINT_TYPE = 'CHECK'`,
-      [schemas],
-    )
-    .catch(() => []);
-  for (const row of checks) if (!skip(row.t)) out[`constraint ${name(row.s, row.t)}.${q(row.name)}`] = `check ${squash(row.def)}`;
-  for (const row of await db.all<{ s: string; v: string; def: string }>(
-    'SELECT TABLE_SCHEMA AS s, TABLE_NAME AS v, VIEW_DEFINITION AS def FROM information_schema.VIEWS WHERE TABLE_SCHEMA IN (?)',
-    [schemas],
-  )) {
-    if (!skip(row.v)) out[`view ${name(row.s, row.v)}`] = squash(row.def);
-  }
-  for (const row of await db.all<{ s: string; t: string; name: string; timing: string; event: string; body: string }>(
-    `SELECT TRIGGER_SCHEMA AS s, EVENT_OBJECT_TABLE AS t, TRIGGER_NAME AS name, ACTION_TIMING AS timing, EVENT_MANIPULATION AS event, ACTION_STATEMENT AS body
-     FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA IN (?)`,
-    [schemas],
-  )) {
-    if (!skip(row.t))
-      out[`trigger ${name(row.s, row.t)}.${q(row.name)}`] = `${row.timing.toLowerCase()} ${row.event.toLowerCase()} ${squash(row.body)}`;
-  }
-  return out;
-}
-
 export interface Change {
   readonly key: string;
   readonly was?: string;
@@ -347,7 +271,7 @@ export async function readSnapshot(db: MigrationDb, history: string): Promise<St
       ? await db.all("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [SNAPSHOT_TABLE])
       : db.dialect === 'postgres'
         ? await db.all('SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = ? AND tablename = ?', [db.home, SNAPSHOT_TABLE])
-        : await db.all('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?', [db.home, SNAPSHOT_TABLE]);
+        : [];
   if (!exists.length) return undefined;
   const [row] = await db.all<{ installed_rank: number; taken_on: string; objects: string }>(
     `SELECT installed_rank, taken_on, objects FROM ${qualified(db, SNAPSHOT_TABLE)} WHERE history_table = ?`,
@@ -358,16 +282,12 @@ export async function readSnapshot(db: MigrationDb, history: string): Promise<St
 
 export async function writeSnapshot(db: MigrationDb, history: string, rank: number, objects: Objects): Promise<void> {
   const table = qualified(db, SNAPSHOT_TABLE);
-  const text = db.dialect === 'mysql' ? 'LONGTEXT' : 'TEXT';
-  const key = db.dialect === 'mysql' ? 'VARCHAR(255)' : 'TEXT';
   await db.run(
-    `CREATE TABLE IF NOT EXISTS ${table} (history_table ${key} NOT NULL PRIMARY KEY, installed_rank INT NOT NULL, taken_on VARCHAR(32) NOT NULL, objects ${text} NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS ${table} (history_table TEXT NOT NULL PRIMARY KEY, installed_rank INT NOT NULL, taken_on VARCHAR(32) NOT NULL, objects TEXT NOT NULL)`,
   );
   // One statement, so two runs finishing together cannot both find the row gone and both insert it.
   const upsert =
-    db.dialect === 'mysql'
-      ? 'ON DUPLICATE KEY UPDATE installed_rank = VALUES(installed_rank), taken_on = VALUES(taken_on), objects = VALUES(objects)'
-      : 'ON CONFLICT (history_table) DO UPDATE SET installed_rank = excluded.installed_rank, taken_on = excluded.taken_on, objects = excluded.objects';
+    'ON CONFLICT (history_table) DO UPDATE SET installed_rank = excluded.installed_rank, taken_on = excluded.taken_on, objects = excluded.objects';
   await db.run(`INSERT INTO ${table} (history_table, installed_rank, taken_on, objects) VALUES (?, ?, ?, ?) ${upsert}`, [
     history,
     rank,

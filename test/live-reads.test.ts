@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 import { READS_HEADER, readTables, trackingReads } from '../packages/mistri/src/server/live/liveReads.js';
 import type { Adapter } from '../packages/engine/src/adapters/adapter.js';
+import { captureTenantData } from '../packages/engine/src/server/evidence.js';
 import type { ServerResponse } from 'node:http';
 
 test('a read names its base, the paths it walks, the records its labels name and the rows that point at it', async () => {
@@ -51,6 +52,16 @@ test('a read names its base, the paths it walks, the records its labels name and
       foreignKeys: schema.foreignKeys.filter((fk) => fk.from.table !== 'customer' && fk.to.table !== 'customer'),
     };
     assert.deepEqual(readTables(narrowed, 'invoice', null), ['invoice', 'invoice_line']);
+    /* Over a captured catalog (a tenant's served one) the answer is kept by its names: the same answer again, each
+       caller its own list, and a narrower capture answered for itself. */
+    const captured = captureTenantData(schema),
+      capturedNarrow = captureTenantData(narrowed),
+      asked = { table: 'invoice', columns: ['customer_id.region_id.name'] };
+    const once = readTables(captured, 'invoice', asked)!;
+    once.push('audit');
+    assert.deepEqual(readTables(captured, 'invoice', asked), ['customer', 'invoice', 'invoice_line', 'region']);
+    assert.deepEqual(readTables(capturedNarrow, 'invoice', null), ['invoice', 'invoice_line']);
+    assert.deepEqual(readTables(captured, 'invoice', null), ['customer', 'invoice', 'invoice_line']);
   } finally {
     await adapter.close();
     rmSync(dir, { recursive: true, force: true });

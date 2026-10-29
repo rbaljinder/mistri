@@ -201,6 +201,7 @@ function agentsBlock(copies: string[]): string {
     '- `npx @mistriwork/mistri schema --brief`: orient; one line per table.',
     '- `npx @mistriwork/mistri check --app . --brief`: after every edit, until it exits 0.',
     '- `npx @mistriwork/mistri explain <code>`: a check code you do not know.',
+    '- `npm i -D playwright && npx playwright install --only-shell chromium`: once, before the first `shot`.',
     '- `npx @mistriwork/mistri shot --app . <route> --text`: verify what a page shows.',
     '- `npx @mistriwork/mistri shot --app . <route> --both`: only for a question of layout.',
     '- `npx @mistriwork/mistri migrate stores up --app .`: once commands exist, server stopped; creates their journal and event store.',

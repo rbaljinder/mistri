@@ -26,7 +26,6 @@ import type { PoolRoleStats } from './poolMetrics.js';
    and server code keep reaching them through this contract. */
 export {
   ANSI_STYLE,
-  MYSQL_STYLE,
   OPS,
   POSTGRES_STYLE,
   buildWhere,
@@ -177,7 +176,7 @@ export interface BreakdownResult extends QueryResult {
  * It is made in three places, none of which involve reading the statement:
  *
  *   1. **The connection cannot write.** A read runs inside a transaction opened
- *      READ ONLY, which neither Postgres nor MySQL will let a statement promote
+ *      READ ONLY, which Postgres will not let a statement promote
  *      from the inside; SQLite's handle is opened read-only at the file level.
  *      A `DELETE` fails with the database's own error, not with our guess about
  *      what a `DELETE` looks like.
@@ -201,8 +200,7 @@ export interface SqlRequest {
    * between a floor and STATEMENT_TIMEOUT_MS (statementControl.ts). Never
    * raises the cap; politeness only lowers.
    *
-   * Postgres sets it inside the statement's transaction and MySQL on the
-   * statement's own session. SQLite has no statement timeout, so it keeps
+   * Postgres sets it inside the statement's transaction. SQLite has no statement timeout, so it keeps
    * this one only for a read a caller can stop — one run inside
    * `withCancellation` — which it runs in a process it can kill; a read on
    * the in-process handle cannot be interrupted.
@@ -226,7 +224,7 @@ export interface SqlResult {
    * by column name can only hold one of them, so the second silently replaces
    * the first and the grid shows a column of values from somewhere else. The
    * adapters disagree about this today — SQLite builds rows with `Object.keys`
-   * and loses the duplicate outright, Postgres and MySQL keep both in the
+   * and loses the duplicate outright, Postgres keeps both in the
    * header and one in the row — and positional rows are the only shape that
    * cannot lose data whatever the driver does.
    */
@@ -360,13 +358,13 @@ export function refuseStacked(text: string): string | null {
       while (i < n) {
         /* A backslash is a character, not an escape. Postgres (standard-
            conforming strings, the default since 9.1) and SQLite both read
-           `'\'` as a one-character string; only MySQL treats `\'` as an
+           `'\'` as a one-character string; some other engines treat `\'` as an
            escaped quote. Reading it as an escape here meant a Postgres
            statement `'\'; drop table x; --'` scanned as one long string and
            the second statement walked past this check — the driver's own
            refusal of multi-statement text caught it, but the first line of
            defence had a hole. Reading it literally errs toward refusing: a
-           MySQL string holding `\'` may now be cut short, and the worst
+           string holding an escaped `\'` may now be cut short, and the worst
            that does is refuse a statement that was fine. */
         // A doubled quote is an escaped quote, not the end of the string.
         if (text[i] === ch && text[i + 1] === ch) {
@@ -431,8 +429,7 @@ export function trimStatement(text: string): string {
  * exception to the rule that nothing is interpolated. It is an integer this
  * process computed from `clampLimit`, never a value that came from outside,
  * and it is asserted to be one before it is used. Binding it would need a
- * dialect-specific placeholder here *and* MySQL's decimal-string workaround
- * for row counts, which is a lot of machinery to parameterise a number we
+ * dialect-specific placeholder here, which is a lot of machinery to parameterise a number we
  * chose ourselves.
  *
  * Not every statement can be wrapped — `EXPLAIN`, `PRAGMA`, a `WITH` that ends
@@ -455,7 +452,7 @@ export function boundStatement(text: string, limit: number): string {
  * Refuse a statement that `EXPLAIN` would *execute* rather than plan.
  *
  * `EXPLAIN` is offered as the planner's account of a statement without
- * running it. `EXPLAIN ANALYZE …` (Postgres, MySQL 8.0.18+) and the option
+ * running it. `EXPLAIN ANALYZE …` (Postgres) and the option
  * form `EXPLAIN (ANALYZE) …` run the statement to measure it, so text that
  * begins with `analyze` or `(` turned a plan-only tool into an execute tool.
  * Both sit inside a read-only transaction, so no row could be written — but
@@ -500,7 +497,7 @@ export interface DeleteResult {
 
 /** Create a new row. Primary-key and other unique conflicts must fail, never
  * silently ignore, update, or replace an existing row through conflict policy.
- * SQLite explicitly uses OR ABORT; PostgreSQL/MySQL use plain INSERT. */
+ * SQLite explicitly uses OR ABORT; PostgreSQL uses plain INSERT. */
 export interface InsertRequest {
   table: string;
   /**
@@ -761,8 +758,7 @@ export interface Adapter {
   /**
    * The connection pools' meters (poolMetrics.ts): checkouts, the wait for a
    * connection, how long each was held, how many are in use and queued now.
-   * Absent where the adapter keeps no pool: SQLite, MySQL's two single
-   * connections, an HTTP source.
+   * Absent where the adapter keeps no pool: SQLite, an HTTP source.
    */
   poolStats?(): readonly PoolRoleStats[];
 

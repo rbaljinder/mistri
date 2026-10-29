@@ -1,7 +1,7 @@
 /**
  * Put something in a live test database.
  *
- * The Postgres and MySQL blocks in this suite read whatever table they find,
+ * The Postgres blocks in this suite read whatever table they find,
  * on purpose: a test that hardcodes `customer` is a test that passes for the
  * wrong reason on a database that happens to have one. The cost is that an
  * empty database — which is what a fresh CI service container is, and what a
@@ -14,17 +14,11 @@
  *
  *   npm run seed:live
  *
- * Reads the same `TABLEWALK_TEST_PG` and `TABLEWALK_TEST_MYSQL` the tests do,
- * and does nothing for an engine that is not configured.
+ * Reads the same `TABLEWALK_TEST_PG` the tests do.
  */
 
 interface PgLike {
   connect(): Promise<void>;
-  query(text: string, params?: unknown[]): Promise<unknown>;
-  end(): Promise<void>;
-}
-
-interface MysqlLike {
   query(text: string, params?: unknown[]): Promise<unknown>;
   end(): Promise<void>;
 }
@@ -38,15 +32,15 @@ const ROWS = [
   [3, 'third', 30],
 ];
 
-/* Both ways an engine pins a vocabulary, because the adapters read them from
-   different places: Postgres from `pg_enum` and `pg_get_constraintdef`, MySQL
-   off the declared type. Without a fixture carrying them, that SQL was only
-   ever exercised against SQLite's very different spelling. */
+/* Both ways Postgres pins a vocabulary, because the adapter reads them from
+   different places: `pg_enum` and `pg_get_constraintdef`. Without a fixture
+   carrying them, that SQL was only ever exercised against SQLite's very
+   different spelling. */
 const ENUM_LABELS = ['draft', 'issued', 'paid'];
 const CHECKED = ['low', 'high'];
 
-/* Imported through a variable, the same way the adapters do it: `pg` and
-   `mysql2` are optional dependencies, and a literal specifier makes the type
+/* Imported through a variable, the same way the adapters do it: `pg` is
+   an optional dependency, and a literal specifier makes the type
    checker demand they be installed to compile a file that may never run. */
 async function seedPostgres(url: string): Promise<void> {
   const specifier = 'pg';
@@ -90,38 +84,10 @@ async function seedPostgres(url: string): Promise<void> {
   }
 }
 
-async function seedMysql(url: string): Promise<void> {
-  const specifier = 'mysql2/promise';
-  const mysql = (await import(specifier)) as {
-    default?: { createConnection: (u: string) => Promise<MysqlLike> };
-    createConnection?: (u: string) => Promise<MysqlLike>;
-  };
-  const createConnection = mysql.createConnection ?? mysql.default?.createConnection;
-  if (!createConnection) throw new Error('Could not find createConnection in "mysql2".');
-  const conn = await createConnection(url);
-  try {
-    await conn.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (
-      id int PRIMARY KEY,
-      name varchar(40) NOT NULL,
-      amount int,
-      status enum(${ENUM_LABELS.map((l) => `'${l}'`).join(', ')}) NOT NULL DEFAULT 'draft'
-    )`);
-    await conn.query(`DELETE FROM ${TABLE}`);
-    for (const [id, name, amount] of ROWS) {
-      await conn.query(`INSERT INTO ${TABLE} (id, name, amount) VALUES (?, ?, ?)`, [id, name, amount]);
-    }
-    console.log(`seeded mysql: ${TABLE} (${ROWS.length} rows)`);
-  } finally {
-    await conn.end();
-  }
-}
-
 const pgUrl = process.env.TABLEWALK_TEST_PG;
-const mysqlUrl = process.env.TABLEWALK_TEST_MYSQL;
 
-if (!pgUrl && !mysqlUrl) {
-  console.error('Nothing to seed: set TABLEWALK_TEST_PG and/or TABLEWALK_TEST_MYSQL.');
+if (!pgUrl) {
+  console.error('Nothing to seed: set TABLEWALK_TEST_PG.');
   process.exit(1);
 }
-if (pgUrl) await seedPostgres(pgUrl);
-if (mysqlUrl) await seedMysql(mysqlUrl);
+await seedPostgres(pgUrl);

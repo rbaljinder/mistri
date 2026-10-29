@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ANSI_STYLE, OPS, Refusal, type Filter } from '../packages/engine/src/adapters/adapter.js';
-import { ScopedRelations, snapshotRowScope, type RowScope } from '../packages/engine/src/shared/rowScope.js';
+import { rowScopeCounters, ScopedRelations, snapshotRowScope, type RowScope } from '../packages/engine/src/shared/rowScope.js';
+import { captureScopeCatalog } from '../packages/engine/src/shared/scopeCatalog.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
 const schema: DatabaseSchema = {
@@ -176,4 +177,50 @@ test('scope validates unused resource policies and prevents late relation regist
   assert.throws(() => relations.table('other'), /must be planned/);
   prefix.params.push('not shared');
   assert.deepEqual(relations.finish().params, []);
+});
+
+test('a snapshot checked against a second fixed catalog is kept as itself, so the next request finds it checked', () => {
+  /* A reloaded App's deployment holds a new catalog while the policy's constant scope is the same object. */
+  const first = captureScopeCatalog(schema),
+    second = captureScopeCatalog(structuredClone(schema));
+  assert.notEqual(first, second);
+  const snapshot = snapshotRowScope(first, scope(filter()));
+  const before = rowScopeCounters.checked;
+  assert.equal(snapshotRowScope(second, snapshot), snapshot, 'checked as it is, not copied');
+  assert.equal(rowScopeCounters.checked - before, 1);
+  assert.equal(snapshotRowScope(second, snapshot), snapshot);
+  assert.equal(snapshotRowScope(first, snapshot), snapshot);
+  assert.equal(rowScopeCounters.checked - before, 1, 'kept against both catalogs');
+  // Still checked against the second: a snapshot that names a resource it lacks is refused there.
+  const narrower = captureScopeCatalog({ ...structuredClone(schema), tables: [] });
+  assert.throws(() => snapshotRowScope(narrower, snapshot), Refusal);
+});
+
+test('a scope built afresh with the same words is found by them against a fixed catalog, and copied first', () => {
+  /* A policy naming its reader returns a new, equal object on every request. */
+  const fixed = captureScopeCatalog(structuredClone(schema));
+  const asked = () => scope({ groups: [[{ column: 'tenant', op: 'in', value: ['north', 'east'] }]] });
+  const first = snapshotRowScope(fixed, asked());
+  const before = rowScopeCounters.checked;
+  assert.equal(snapshotRowScope(fixed, asked()), first, 'the equal scope is the one already checked');
+  assert.equal(rowScopeCounters.checked - before, 0);
+  // Other words are another scope, checked on their own.
+  const other = snapshotRowScope(fixed, scope(filter('south')));
+  assert.notEqual(other, first);
+  assert.equal(JSON.stringify(other), JSON.stringify(scope(filter('south'))));
+  assert.equal(rowScopeCounters.checked - before, 1);
+  // A caller's object is copied before it is looked up: changing it afterwards changes nothing kept.
+  const held = asked();
+  const found = snapshotRowScope(fixed, held);
+  ((held['private.records'] as Filter).groups[0][0] as { value: unknown }).value = ['west'];
+  assert.equal(JSON.stringify(found), JSON.stringify(asked()));
+  assert.notEqual(found, held);
+  // An equal scope that a catalog refuses is still refused there: the words are kept per catalog.
+  const narrower = captureScopeCatalog({ ...structuredClone(schema), tables: [] });
+  assert.throws(() => snapshotRowScope(narrower, asked()), Refusal);
+  // Against a catalog that can still change, nothing is kept: each is checked afresh.
+  const open = structuredClone(schema);
+  const counted = rowScopeCounters.checked;
+  assert.notEqual(snapshotRowScope(open, asked()), snapshotRowScope(open, asked()));
+  assert.equal(rowScopeCounters.checked - counted, 2);
 });

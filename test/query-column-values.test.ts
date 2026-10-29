@@ -2,7 +2,7 @@
  * A condition's right-hand side that names a column, and a record's name as a
  * template — both compiled by the view planner, so both judged here on the
  * statement text for every engine's style and on real rows in SQLite (the
- * live PostgreSQL and MySQL runs are in query-column-values-live.test.ts).
+ * live PostgreSQL run are in query-column-values-live.test.ts).
  *
  * The defect this exists for: `on_hand < product_id.reorder_level` passed the
  * App check and compared each quantity with the *text* "product_id.reorder_level",
@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
-import { ANSI_STYLE, MYSQL_STYLE, POSTGRES_STYLE, buildWhere } from '../packages/engine/src/shared/filter.js';
+import { ANSI_STYLE, POSTGRES_STYLE, buildWhere } from '../packages/engine/src/shared/filter.js';
 import { ANYONE, parseQuery, type QueryPerson } from '../packages/engine/src/shared/query.js';
 import { compileView, parseViewQuery, withViewLabels, type ViewDef } from '../packages/engine/src/shared/view.js';
 import { textToView } from '../packages/engine/src/shared/viewtext.js';
@@ -211,7 +211,6 @@ test('a record label template is computed in the statement, sorted and searched 
     /\(COALESCE\(CAST\("product_1"\."name" AS TEXT\), ''\) \|\| ' \(' \|\| COALESCE\(CAST\("product_1"\."id" AS TEXT\), ''\) \|\| '\) O''Neil'\)/,
   );
   assert.match(sql(POSTGRES_STYLE), /COALESCE\(CAST\("product_1"\."name" AS TEXT\), ''\) \|\|/);
-  assert.match(sql(MYSQL_STYLE), /CONCAT\(COALESCE\(CAST\(`product_1`\.`name` AS CHAR\), ''\), ' \(', /);
   // Without the catalog's template a `$label` names nothing, and the compiler says so rather than guessing.
   assert.throws(
     () => compileView(schema, { id: 'x', name: '', base: 'stock', columns: [{ path: '$label' }] } as ViewDef, ANSI_STYLE),

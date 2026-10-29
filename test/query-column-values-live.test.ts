@@ -2,13 +2,12 @@
  * Column comparisons, `me` and record label templates on the engines an App
  * runs on: the statement text is judged per style in
  * query-column-values.test.ts, and only a real server says whether Postgres
- * and MySQL read it the same way — `CAST(x AS TEXT)` beside `CAST(x AS CHAR)`,
- * `||` beside `CONCAT`, an integer compared with an integer through a join.
+ * reads it the same way — `CAST(x AS TEXT)`, `||`, an integer compared with an
+ * integer through a join.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
-import { MysqlAdapter } from '../packages/engine/src/adapters/mysql.js';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
 import type { Adapter } from '../packages/engine/src/adapters/adapter.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
@@ -106,55 +105,7 @@ describe('column comparisons, me and record labels on PostgreSQL', { skip: liveS
   });
 });
 
-const MY = process.env.TABLEWALK_TEST_MYSQL;
-describe('column comparisons, me and record labels on MySQL', { skip: liveSkip('mysql', MY) }, () => {
-  const DB = 'tablewalk_column_values';
-  type Admin = { query(sql: string): Promise<unknown>; end(): Promise<void> };
-  const admin = async (): Promise<Admin> => {
-    const specifier = 'mysql2/promise';
-    const mysql = (await import(specifier)) as { createConnection: (c: Record<string, unknown>) => Promise<Admin> };
-    return mysql.createConnection({ uri: MY! });
-  };
-  let adapter: MysqlAdapter;
-  before(async () => {
-    const db = await admin();
-    try {
-      await db.query(`DROP DATABASE IF EXISTS \`${DB}\``);
-      await db.query(`CREATE DATABASE \`${DB}\` CHARACTER SET utf8mb4`);
-      await db.query(
-        `CREATE TABLE \`${DB}\`.product (id INT PRIMARY KEY, name VARCHAR(40) NOT NULL, owner VARCHAR(80), reorder_level INT)`,
-      );
-      await db.query(`CREATE TABLE \`${DB}\`.stock (id INT PRIMARY KEY, product_id INT NOT NULL, on_hand INT NOT NULL,
-        FOREIGN KEY (product_id) REFERENCES \`${DB}\`.product(id))`);
-      await db.query(
-        `INSERT INTO \`${DB}\`.product VALUES (1, 'Bolt', 'ada@x.test', 10), (2, 'Nut', 'bo@x.test', 5), (3, 'Washer', NULL, NULL)`,
-      );
-      await db.query(`INSERT INTO \`${DB}\`.stock VALUES (1, 1, 4), (2, 1, 20), (3, 2, 5), (4, 2, 1), (5, 3, 0)`);
-    } finally {
-      await db.end();
-    }
-    const url = new URL(MY!);
-    url.pathname = `/${DB}`;
-    adapter = new MysqlAdapter(url.toString(), 'column values');
-  });
-  after(async () => {
-    await adapter?.close();
-    const db = await admin();
-    try {
-      await db.query(`DROP DATABASE IF EXISTS \`${DB}\``);
-    } finally {
-      await db.end();
-    }
-  });
-
-  test("the planner's statements read the same rows here", async () => {
-    const schema = await adapter.introspect();
-    const id = (name: string) => schema.tables.find((table) => table.name === name)!.id;
-    await proves(adapter, schema, id('product'), id('stock'));
-  });
-});
-
-/* SQLite runs the same proof without a server, so the three engines are held to one answer. */
+/* SQLite runs the same proof without a server, so the two engines are held to one answer. */
 test('and on SQLite, the same rows', async (t) => {
   const { mkdtempSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');

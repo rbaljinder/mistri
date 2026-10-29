@@ -31,7 +31,8 @@ Credit is given in the release notes unless you would rather it were not.
   between "your machine" and "the network", not a login. Anything reachable
   past a private network belongs behind a proxy that authenticates — and
   `--auth-proxy-header` carries that proxy's decision in, refusing requests
-  that skipped it and journaling every write with who made it.
+  that skipped it or carry it from a peer that is neither loopback nor in
+  `--trust-proxy`, and journaling every write with who made it.
 - **Queries compile to structure, never to SQL text.** Every value is a
   bound parameter; table names are checked against the catalog before being
   quoted; raw SQL runs one statement at a time inside a read-only session
@@ -68,7 +69,10 @@ Credit is given in the release notes unless you would rather it were not.
   command; landings, public forms and tenant Apps draw none. In an App that signs people in, a component's
   compiled files are served to a signed-out visitor only where `auth.public`
   opens pages to them, its source map never, and neither is kept by a shared
-  cache. The lint reads text, not a parse; the policy above is the boundary.
+  cache. The lint reads text, not a parse, and is heuristic: `mistri check` fails
+  on it and so does every load, serve or `dev`, which refuses to serve the
+  component. An App's author is trusted, so it is a guard against accidents,
+  not a sandbox; the policy above is the boundary.
 - **Every read an App serves is the reader's own read.** A streamed export
   (`/api/export`), a list's batched tab counts (`/api/counts`), a bounded
   total, a rollup and a record's history are each answered through the same
@@ -281,6 +285,11 @@ Credit is given in the release notes unless you would rather it were not.
   the guard refuses TCP connections (fetch, http, https, tls) that leave the
   host. DNS lookups, UDP and spawned processes are not covered: it keeps tests
   honest, and the App directory is trusted code either way.
+- **`MISTRI_SERVER_TIMING=1` is for load testing only.** It answers every
+  request with a `Server-Timing` header that includes the process's own state
+  (heap, garbage collection, pool use and queues), to any requester, signed in
+  or not. It names no statement, row or key, but it is a free look at how loaded
+  the process is. Keep it off in production.
 - **Credentials** come from the environment, the OS keychain, or a 0600
   file, and never reach the browser in any response.
 

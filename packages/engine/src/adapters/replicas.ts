@@ -25,7 +25,7 @@
  * is passed over for REPLICA_BACKOFF_MS and the read runs again on the
  * primary; a read the primary would refuse as well (a bad filter, a
  * cancel) is not run twice. Replica sessions are read-only the way the
- * primary's readers are (postgresPool.ts, mysql.ts), so a write that
+ * primary's readers are (postgresPool.ts), so a write that
  * reached one by mistake would be refused by the server.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -135,7 +135,7 @@ export function replicaFailure(error: unknown): 'down' | 'retry' | undefined {
   if (error instanceof ReplicaUnavailable) return error.failure;
   if (error instanceof StatementStopped) return undefined;
   if (isPoolBusy(error)) return 'retry';
-  const e = (error ?? {}) as { code?: unknown; errno?: unknown; fatal?: unknown; message?: unknown };
+  const e = (error ?? {}) as { code?: unknown; fatal?: unknown; message?: unknown };
   const code = typeof e.code === 'string' ? e.code : '';
   const message = typeof e.message === 'string' ? e.message : '';
   if (NETWORK.has(code) || e.fatal === true) return 'down';
@@ -147,21 +147,11 @@ export function replicaFailure(error: unknown): 'down' | 'retry' | undefined {
      missing on the replica is a migration that has not reached it yet. */
   if (code === '40001' && /recovery/i.test(message)) return 'retry';
   if (code === '42P01' || code === '42703') return 'retry';
-  if (MYSQL_DOWN.has(code)) return 'down';
-  if (code === 'ER_NO_SUCH_TABLE' || code === 'ER_BAD_FIELD_ERROR') return 'retry';
   if (/Connection terminated|timeout exceeded when trying to connect|connect ECONNREFUSED/i.test(message)) return 'down';
   return undefined;
 }
 
 const NETWORK = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'EPIPE', 'EAI_AGAIN']);
-const MYSQL_DOWN = new Set([
-  'PROTOCOL_CONNECTION_LOST',
-  'ER_CON_COUNT_ERROR',
-  'ER_ACCESS_DENIED_ERROR',
-  'ER_DBACCESS_DENIED_ERROR',
-  'ER_BAD_DB_ERROR',
-  'ER_SERVER_SHUTDOWN',
-]);
 
 /** One connection's replicas, taken in turn, each passed over for a while after it fails. */
 export class ReplicaSet<Pool> {

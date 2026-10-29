@@ -60,7 +60,7 @@ export async function createTestWorkspace() {
     /**
      * A copy of a mistri.json for one test: each SQLite file it names is copied into the workspace (its -wal
      * beside it), so the test's writes never reach the original, and its relative paths are made the original
-     * folder's, as the server reads them. A PostgreSQL or MySQL URL is kept as written: that database is shared.
+     * folder's, as the server reads them. A PostgreSQL URL is kept as written: that database is shared.
      */
     async copyConfig(source: string, name = 'mistri.json') {
       const from = resolve(source);

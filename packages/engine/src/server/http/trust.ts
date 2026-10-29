@@ -172,8 +172,8 @@ function inRange(groups: readonly number[], range: ProxyRange): boolean {
 /**
  * A peer whose `X-Forwarded-For` the limiter may read: on this machine
  * (`loopbackPeer`, always), or inside a range the operator listed with
- * `--trust-proxy`. Rate limiting only — sign-in trust is `identityFor`, and
- * it does not read this list.
+ * `--trust-proxy`. The same list says whose `--auth-proxy-header` value
+ * `identityFor` believes.
  */
 export function trustedProxyPeer(address: string | undefined, trusted: readonly ProxyRange[] = []): boolean {
   if (loopbackPeer(address)) return true;
@@ -284,11 +284,14 @@ function forwardedHops(raw: string | string[] | undefined): string[] | undefined
  *
  * `--auth-proxy-header X-Forwarded-User` means a proxy in front signs
  * people in and writes the result into that header on the way through.
- * A request from beyond loopback without it did not come through the proxy
- * — or came through one that is misconfigured — and is refused with the
- * header named. Loopback is exempt: the container's own health check, a
- * curl on the box, the operator's terminal. Nothing here is authentication;
- * it is the proxy's decision, carried to the journal.
+ * A request without it did not come through the proxy — or came through
+ * one that is misconfigured — and is refused with the header named. So is
+ * a request that carries it from a peer that is not the proxy: the header
+ * is only a name anyone can type, so a value from an address neither on
+ * loopback nor in `--trust-proxy` is a forgery, not a sign-in. Loopback is
+ * exempt: the container's own health check, a curl on the box, the
+ * operator's terminal. Nothing here is authentication; it is the proxy's
+ * decision, carried to the journal.
  */
 export function identityFor(
   req: { headers: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
@@ -297,12 +300,15 @@ export function identityFor(
   if (!bound.identityHeader) return {};
   const raw = req.headers[bound.identityHeader.toLowerCase()];
   const who = (Array.isArray(raw) ? raw[0] : raw)?.trim();
-  if (who) return { who };
-  if (loopbackPeer(req.socket?.remoteAddress)) return { who: 'local' };
+  const peer = req.socket?.remoteAddress;
+  if (who && trustedProxyPeer(peer, bound.trustedProxies)) return { who };
+  if (loopbackPeer(peer)) return { who: 'local' };
   return {
-    refusal:
-      `This server expects ${bound.identityHeader} from its proxy, and this request carried none. ` +
-      'Reach it through the proxy that signs you in.',
+    refusal: who
+      ? `This server expects ${bound.identityHeader} only from its proxy, and this request did not come from the trusted proxy. ` +
+        "Reach it through the proxy that signs you in; the proxy's address belongs in --trust-proxy."
+      : `This server expects ${bound.identityHeader} from its proxy, and this request carried none. ` +
+        'Reach it through the proxy that signs you in.',
   };
 }
 

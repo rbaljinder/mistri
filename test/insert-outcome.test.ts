@@ -26,9 +26,8 @@ test('actual SQLite constraint failures acknowledge rejection', () => {
   }
 });
 
-test('recognized PostgreSQL and MySQL/MariaDB constraint codes acknowledge rejection', () => {
+test('recognized PostgreSQL constraint codes acknowledge rejection', () => {
   for (const code of ['23502', '23503', '23505', '23514', '23P01']) assert.equal(insertFailureOutcome({ code }), 'rejected');
-  for (const errno of [1048, 1062, 1452, 3819, 4025]) assert.equal(insertFailureOutcome({ errno }), 'rejected');
 });
 
 test('transport, generic, trigger and message-only failures remain unknown', () => {
@@ -86,11 +85,6 @@ test('every engine reports the same kinds, and what the codes do not name has no
     [{ code: '23503' }, 'reference'],
     [{ code: '23502' }, 'required'],
     [{ code: '23514' }, 'check'],
-    [{ errno: 1062 }, 'unique'],
-    [{ errno: 1452 }, 'reference'],
-    [{ errno: 1048 }, 'required'],
-    [{ errno: 3819 }, 'check'],
-    [{ errno: 4025 }, 'check'],
   ] as const;
   for (const [error, kind] of named) {
     assert.equal(writeFailureKind(error), kind, JSON.stringify(error));

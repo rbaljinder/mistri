@@ -1,5 +1,6 @@
 /** One explicitly provisioned source destination. Serving opens and attests;
  * the CLI owns provisioning. A serialized worker never overlaps source fences. */
+import { SMALL_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { PgConnectionManager } from '@mistriwork/engine/adapters/postgresPool.js';
 import { openSqliteEventDeliveryStore } from '../../adapters/events/eventDeliveryStore.js';
 import { provisionSqliteEventDeliveryStore } from '../../adapters/events/eventDeliverySchema.js';
@@ -73,7 +74,7 @@ export async function openExperimentProducerHost(options: {
     policy = experimentSourcePolicy(source, epoch, registry);
   const enrollment = { source: policy.source, producerId: policy.serviceId, correlationNamespace: policy.serviceId };
   const pg = /^postgres(ql)?:\/\//.test(source.url)
-    ? new PgConnectionManager(source.url, undefined, undefined, { readers: 1, writers: 1 })
+    ? new PgConnectionManager(source.url, undefined, undefined, SMALL_STORE_POOL)
     : undefined;
   let owner: Awaited<ReturnType<typeof openPostgresExperimentConversionOwner>> | undefined;
   let delivery: Awaited<ReturnType<typeof openPostgresEventDeliveryStore>> | undefined;

@@ -10,8 +10,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { isReservedRelation, reservedInPlan, reservedInText } from '../packages/engine/src/adapters/reservedSql.js';
 
-type Dialect = 'sqlite' | 'postgres' | 'mysql';
-const DIALECTS: Dialect[] = ['sqlite', 'postgres', 'mysql'];
+type Dialect = 'sqlite' | 'postgres';
+const DIALECTS: Dialect[] = ['sqlite', 'postgres'];
 const refused = (sql: string, dialect: Dialect) => assert.ok(reservedInText(sql, dialect), `${dialect} should refuse: ${sql}`);
 const allowed = (sql: string, dialect: Dialect) => assert.equal(reservedInText(sql, dialect), null, `${dialect} should allow: ${sql}`);
 
@@ -33,12 +33,6 @@ describe('reserved relations in raw SQL, read as text', () => {
     refused('select * from "__mistri_x"', 'sqlite');
     refused('select * from [__mistri_x]', 'sqlite');
     refused('select * from `__mistri_x`', 'sqlite');
-    refused('select * from `shop`.`__mistri_x`', 'mysql');
-    // An identifier under ANSI_QUOTES, a string otherwise: refused either way.
-    refused('select * from "__mistri_x"', 'mysql');
-    // MySQL runs what is inside an executable comment.
-    refused('select 1 /*! , (select count(*) from __mistri_x) */', 'mysql');
-    refused('select 1 # __mistri_x', 'mysql');
     refused("select 'it''s __mistri_x'", 'postgres');
   });
 

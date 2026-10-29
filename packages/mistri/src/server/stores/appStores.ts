@@ -7,23 +7,15 @@
  * Made once per adapter, on first ask: what one is depends only on the
  * adapter, which is why asking again hands back the same.
  */
-import type { MysqlAdapter } from '@mistriwork/engine/adapters/mysql.js';
 import type { PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
 import type { SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
-import {
-  storeHostOf,
-  type MysqlStoreHost,
-  type PostgresStoreHost,
-  type SqliteStoreHost,
-  type StoreMeta,
-} from '@mistriwork/engine/adapters/storeHost.js';
+import { storeHostOf, type PostgresStoreHost, type SqliteStoreHost, type StoreMeta } from '@mistriwork/engine/adapters/storeHost.js';
 import { storeDef } from '../storeLayouts.js';
 import { INBOX_TABLES } from '../../adapters/inbox/inboxTables.js';
 import { INBOX_VERSION, type InboxMark, type InboxQuery, type StoredNotice } from '../../adapters/inbox/inbox.js';
 import type { InboxMailStore } from '../../adapters/inbox/inboxMail.js';
 import { markPostgresInboxRead, postgresInboxMail, readPostgresInbox } from '../../adapters/inbox/postgresInbox.js';
 import { markSqliteInboxRead, readSqliteInbox, sqliteInboxMail } from '../../adapters/inbox/sqliteInbox.js';
-import { markMysqlInboxRead, mysqlInboxMail, readMysqlInbox } from '../../adapters/inbox/mysqlInbox.js';
 import { BRANDING_TABLES, BRANDING_VERSION, type BrandingWrite } from '../../adapters/branding/branding.js';
 import { writePostgresBranding } from '../../adapters/branding/postgresBranding.js';
 import { writeSqliteBranding } from '../../adapters/branding/sqliteBranding.js';
@@ -36,7 +28,6 @@ import {
 } from '../../adapters/history/recordHistory.js';
 import { readPostgresRecordActivity, readPostgresRecordHistory } from '../../adapters/history/postgresRecordHistory.js';
 import { readSqliteRecordActivity, readSqliteRecordHistory } from '../../adapters/history/sqliteRecordHistory.js';
-import { readMysqlRecordActivity, readMysqlRecordHistory } from '../../adapters/history/mysqlRecordHistory.js';
 
 /* The meta rows the host's epoch read names; `name` keys the attestation as the adapters always did. */
 const INBOX: StoreMeta = Object.freeze({ name: 'inbox', table: INBOX_TABLES.meta, version: INBOX_VERSION });
@@ -63,9 +54,9 @@ interface AppStores {
   readRecordHistory(query: RecordHistoryQuery): Promise<StoredRecordChange[]>;
   /** The newest stored changes across resources, for a dashboard's activity. */
   readRecordActivity(query: RecordActivityQuery): Promise<StoredRecordChange[]>;
-  /** Whether the database holds the branding store at this version (not on MySQL). */
+  /** Whether the database holds the branding store at this version. */
   brandingReady?(): Promise<boolean>;
-  /** One tenant's branding saved, with its logo, in one transaction on a writer (not on MySQL). */
+  /** One tenant's branding saved, with its logo, in one transaction on a writer. */
   writeBranding?(write: BrandingWrite): Promise<number>;
 }
 
@@ -140,19 +131,6 @@ function sqliteStores(host: SqliteStoreHost): AppStores {
   };
 }
 
-/* MySQL attests on every read: it has no epoch store to attest under. */
-function mysqlStores(host: MysqlStoreHost): AppStores {
-  return {
-    inboxReady: () => host.withReader((db) => INBOX_ATTEST.mysql!(db, host.database())),
-    readInbox: (query) => host.withReader((db) => readMysqlInbox(db, host.database(), query)),
-    markInboxRead: (mark) => host.withWriter((write) => markMysqlInboxRead(write, host.database(), mark)),
-    inboxMail: () => mysqlInboxMail(host.database(), (work) => host.withWriter(work)),
-    recordHistoryReady: () => host.withReader((db) => HISTORY_ATTEST.mysql!(db, host.database())),
-    readRecordHistory: (query) => host.withReader((db) => readMysqlRecordHistory(db, host.database(), query)),
-    readRecordActivity: (query) => host.withReader((db) => readMysqlRecordActivity(db, host.database(), query)),
-  };
-}
-
 const made = new WeakMap<object, AppStores>();
 
 /** Branding is kept on SQLite and PostgreSQL. */
@@ -160,16 +138,13 @@ type BrandedAppStores = AppStores & Required<Pick<AppStores, 'brandingReady' | '
 
 /** The App stores over a constructed dialect adapter, or undefined for anything that lends none. */
 export function appStoresOf(adapter: SqliteAdapter | PostgresAdapter): BrandedAppStores;
-export function appStoresOf(adapter: MysqlAdapter): AppStores;
 export function appStoresOf(adapter: unknown): AppStores | undefined;
 export function appStoresOf(adapter: unknown): AppStores | undefined {
   const host = storeHostOf(adapter);
   if (!host) return undefined;
   let stores = made.get(adapter as object);
   if (!stores) {
-    stores = Object.freeze(
-      host.dialect === 'postgres' ? postgresStores(host) : host.dialect === 'sqlite' ? sqliteStores(host) : mysqlStores(host),
-    );
+    stores = Object.freeze(host.dialect === 'postgres' ? postgresStores(host) : sqliteStores(host));
     made.set(adapter as object, stores);
   }
   return stores;

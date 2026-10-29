@@ -1,5 +1,5 @@
 /** Built-in structural styles. Custom themes inherit one without changing app layout. */
-export type ThemeBase = 'workshop' | 'lumen' | 'mono' | 'sage';
+export type ThemeBase = 'workshop' | 'lumen' | 'mono' | 'sage' | 'ledger';
 
 /**
  * One mode's colors as a compiled theme holds them: `ThemeColors` flattened, each
@@ -316,8 +316,8 @@ export interface ThemeRecipes {
   buttons?: 'accent' | 'raised' | 'keyed';
   /** Links in text. */
   links?: 'plain' | 'underline';
-  /** A page section's rule: in the ink, or a hairline. */
-  rules?: 'ink' | 'hairline';
+  /** A page section's rule: in the ink, a hairline, or a hairline with ruled boxes and double-ruled table heads (Ledger's). */
+  rules?: 'ink' | 'hairline' | 'double';
   /** A record's avatar. */
   avatar?: 'plain' | 'large' | 'round';
   /** A workflow's steps. */

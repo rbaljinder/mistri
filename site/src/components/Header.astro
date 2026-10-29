@@ -2,6 +2,7 @@
 /* Starlight's header, with the home's way into the docs. The home is a splash page: no sidebar, so nothing on it
    led anywhere but its two buttons. Docs pages have the sidebar and keep the header as it was. */
 import config from 'virtual:starlight/user-config';
+import { REPOSITORY_PUBLIC, REPOSITORY_URL } from '../repository.mjs';
 
 import LanguageSelect from 'virtual:starlight/components/LanguageSelect';
 import Search from 'virtual:starlight/components/Search';
@@ -16,7 +17,7 @@ const links = [
   { text: 'Docs', href: '/docs/getting-started/', wide: false },
   { text: 'Sample Apps', href: '/docs/examples/', wide: false },
   { text: 'Status', href: '/docs/status/', wide: true },
-  { text: 'GitHub', href: 'https://github.com/rbaljinder/mistri', wide: true },
+  ...(REPOSITORY_PUBLIC ? [{ text: 'GitHub', href: REPOSITORY_URL, wide: true }] : []),
 ];
 ---
 

@@ -10,14 +10,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  checkFlag,
-  checkVocabulary,
-  checksIn,
-  flagsFromDDL,
-  typeVocabulary,
-  vocabularyFromDDL,
-} from '../packages/engine/src/shared/vocabulary.js';
+import { checkFlag, checkVocabulary, checksIn, flagsFromDDL, vocabularyFromDDL } from '../packages/engine/src/shared/vocabulary.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -78,18 +71,6 @@ describe('checks inside a CREATE TABLE', () => {
         ['kind', ['x', 'y']],
       ],
     );
-  });
-});
-
-describe('a vocabulary written into the type, as MySQL does', () => {
-  test('is read off the declared type', () => {
-    assert.deepEqual(typeVocabulary("enum('draft','open')"), ['draft', 'open']);
-    assert.deepEqual(typeVocabulary("SET('a','b')"), ['a', 'b']);
-  });
-
-  test('and every other type has none', () => {
-    assert.equal(typeVocabulary('varchar(20)'), undefined);
-    assert.equal(typeVocabulary('int'), undefined);
   });
 });
 

@@ -338,15 +338,13 @@ describe('SQL completion', () => {
 });
 
 /**
- * The same statements, against the other two engines.
+ * The same statements, against the other engine.
  *
- * Opt-in, because requiring a Postgres and a MySQL server to test a SQLite
+ * Opt-in, because requiring a Postgres server to test a SQLite
  * feature would be a bad trade — but these are the tests that justify the
- * design, and they only mean anything against a real server. The MySQL block
- * in particular exists because the obvious implementation *passed* review and
- * *failed* here: a two-step escape dropped a table.
+ * design, and they only mean anything against a real server.
  */
-const LIVE = [['postgres', process.env.TABLEWALK_TEST_PG] as const, ['mysql', process.env.TABLEWALK_TEST_MYSQL] as const];
+const LIVE = [['postgres', process.env.TABLEWALK_TEST_PG] as const];
 
 for (const [engine, url] of LIVE) {
   describe(`raw SQL against a real ${engine}`, { skip: liveSkip(engine, url) }, () => {
@@ -413,21 +411,16 @@ for (const [engine, url] of LIVE) {
     });
 
     test('DDL is refused', async () => {
-      /* This is the one MySQL failed. `START TRANSACTION READ ONLY` looked
-           sufficient and was not: DDL performs an implicit commit, ending the
-           read-only transaction before the statement runs. */
       for (const sql of [`drop table ${victim}`, 'create table dw_evil (id int)', `truncate ${victim}`]) {
         await refused(sql);
       }
     });
 
     test('a statement cannot arrange conditions for the next one', async () => {
-      /* The two-step escape. Step one succeeds on both engines — it is a
-           legal statement — and must not survive into step two. On Postgres a
-           plain SET is rolled back with the transaction; on MySQL session
-           variables are not transactional, which is why that adapter throws the
-           whole connection away after every statement. */
-      const flip = engine === 'postgres' ? 'set default_transaction_read_only = off' : 'set session transaction read write';
+      /* The two-step escape. Step one succeeds — it is a legal statement —
+           and must not survive into step two. A plain SET is rolled back with
+           the transaction. */
+      const flip = 'set default_transaction_read_only = off';
       await run(flip).catch(() => {
         /* allowed or not, what matters is step two */
       });
@@ -676,7 +669,7 @@ describe('deciding whether an undo is safe', () => {
   };
 
   test('a number is the same as its stored formatting', () => {
-    /* This is not a nicety. MySQL hands back a DECIMAL as the string
+    /* This is not a nicety. PostgreSQL hands back a NUMERIC as the string
        "7777.00" for a value written as 7777, so a string comparison reported
        every numeric edit as somebody else's change and refused to undo it —
        observed, then fixed. */

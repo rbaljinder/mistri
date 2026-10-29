@@ -222,10 +222,9 @@ export async function resolveConnection(
   const usedEnv = expanded !== storedUrl;
 
   /* Anything with a host has a credential to resolve; a bare file path does
-     not. This tested for Postgres specifically, so a MySQL connection skipped
-     the keychain and the credentials file entirely and never warned about a
-     password written into its URL — the checks were there and simply did not
-     run for it. Asking whether the target *has a host* is the question that
+     not. This tested for Postgres specifically, so any other networked
+     connection skipped the keychain and the credentials file entirely and
+     never warned about a password written into its URL. Asking whether the target *has a host* is the question that
      was always meant, and it does not need editing again for the next
      adapter. */
   if (!/^[a-z][\w+.-]*:\/\//i.test(expanded)) {

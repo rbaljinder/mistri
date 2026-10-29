@@ -222,7 +222,7 @@ describe('the prose agrees with the code it describes', () => {
   });
 
   test('the dialects are stated wherever they are stated', () => {
-    for (const dialect of ['sqlite', 'postgres', 'mysql']) {
+    for (const dialect of ['sqlite', 'postgres']) {
       assert.ok(
         (PKG.keywords as string[]).some((k) => k.includes(dialect)),
         `packages/tablewalk/package.json keywords do not mention ${dialect}`,

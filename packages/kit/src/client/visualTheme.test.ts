@@ -115,9 +115,9 @@ test('inside an App, Workshop is the look when nobody picks one', () => {
 });
 
 test("the picker offers the built-in looks, then the App's own themes", () => {
-  expect(visualThemeOptions().map((theme) => theme.value)).toEqual(['default', 'workshop', 'lumen', 'mono', 'sage']);
+  expect(visualThemeOptions().map((theme) => theme.value)).toEqual(['default', 'workshop', 'lumen', 'mono', 'sage', 'ledger']);
   app([CUSTOM]);
-  expect(visualThemeOptions().map((theme) => theme.value)).toEqual(['workshop', 'lumen', 'mono', 'sage', 'custom']);
+  expect(visualThemeOptions().map((theme) => theme.value)).toEqual(['workshop', 'lumen', 'mono', 'sage', 'ledger', 'custom']);
 });
 
 test("a retired or unknown stored theme falls back to the App's preset, then Workshop", () => {

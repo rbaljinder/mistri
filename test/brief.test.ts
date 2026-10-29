@@ -71,7 +71,7 @@ describe('the brief parser', () => {
     assert.throws(() => parseBrief('# no block here'), /no ```json mistri-brief block/);
     refused(
       edit((b) => ((b.app as { theme: string }).theme = 'neon')),
-      /app\.theme.*workshop, lumen, mono, sage/,
+      /app\.theme.*workshop, lumen, mono, sage, ledger/,
     );
     refused(
       edit((b) => ((b.app as { logo: string }).logo = 'paw-print')),

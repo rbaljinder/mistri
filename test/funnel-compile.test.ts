@@ -13,7 +13,7 @@ import { test } from 'node:test';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 import { compileBreakdown, measureToText } from '../packages/engine/src/shared/breakdown.js';
 import { textToBreakdown } from '../packages/engine/src/shared/breakdowntext.js';
-import { ANSI_STYLE, MYSQL_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { ANSI_STYLE, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import {
   droppedQuery,
   funnelBasis,
@@ -116,7 +116,6 @@ test('one statement on every dialect, the conditions bound in the order the text
   for (const [dialect, style, placeholder] of [
     ['sqlite', ANSI_STYLE, /\?/],
     ['postgres', POSTGRES_STYLE, /\$1/],
-    ['mysql', MYSQL_STYLE, /\?/],
   ] as const) {
     const schema = schemaOf(dialect);
     const parsed = textToBreakdown(schema, line);

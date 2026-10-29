@@ -297,10 +297,7 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
       }
       const posting = Object.values(commands).find((command) => getCommandEffects(command))!;
       const target = storeTargetOf(locate(resources.connectionFor(logicalResource(app, posting.source, posting.target))));
-      if (!target)
-        throw new Error(
-          `Effects keep their deliveries beside source "${deployment.sourceId}", which holds no event store (MySQL keeps none).`,
-        );
+      if (!target) throw new Error(`Effects keep their deliveries beside source "${deployment.sourceId}", which holds no event store.`);
       effects = { deployment, target, webhooks };
       effectLines = Object.entries(commands).flatMap(([id, command]) =>
         (getCommandEffects(command) ?? []).map((effect) => `effects: ${effect.name} (${id}@${command.version}) → ${effect.destination}`),
@@ -430,10 +427,10 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
         let builtIn = await filesSweep(registry, app, options.current, owner);
         for (const job of builtIn)
           jobLines = [...jobLines, `the jobs sweep ${app.id}'s buckets each day at ${job.every.text} (cron, UTC).`];
-        /* The App's `retention`: one daily prune of its runtime tables, on the job store's database and every connection the App uses (MySQL included, which holds record history but no store). */
+        /* The App's `retention`: one daily prune of its runtime tables, on the job store's database and every connection the App uses. */
         {
-          const { retentionJob, retentionTargetOf } = await import('../retention.js');
-          const targets = [prepared.target!, ...appConnections.flatMap((id) => retentionTargetOf(locate(id)) ?? [])];
+          const { retentionJob } = await import('../retention.js');
+          const targets = [prepared.target!, ...appConnections.flatMap((id) => storeTargetOf(locate(id)) ?? [])];
           builtIn = [...builtIn, retentionJob({ ...(app.retention ? { retention: app.retention } : {}), targets })];
         }
         /* Decisions decide with a store of their own beside the job store, and the lock beside authority.lock. */
@@ -514,10 +511,10 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
     /* An App that runs no jobs opens no job host, and the host is what schedules its retention (a job store is what
        it needs): the same daily prune then runs on its own timer, over the connections the App writes to. */
     if (!jobHost && !checkApp) {
-      const { retentionJob, retentionTargetOf, retentionPrunes, startRetentionTimer } = await import('../retention.js');
+      const { retentionJob, retentionPrunes, startRetentionTimer } = await import('../retention.js');
       const targets = appConnections
         .filter((id) => registry.configOf(id)?.writable === true)
-        .flatMap((id) => retentionTargetOf(locate(id)) ?? []);
+        .flatMap((id) => storeTargetOf(locate(id)) ?? []);
       if (targets.length && retentionPrunes(app.retention))
         retentionTimer = startRetentionTimer(retentionJob({ ...(app.retention ? { retention: app.retention } : {}), targets }));
     }

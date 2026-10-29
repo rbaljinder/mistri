@@ -200,7 +200,6 @@ INSERT INTO "odd;name" VALUES ('it''s; fine', E'\\'; still');
       FLYWAY_USER: 'ops',
       FLYWAY_PASSWORD: 's@cret',
     });
-    assert.equal(flywaySettings('mariadb://root@127.0.0.1/shop', 'mysql').FLYWAY_URL, 'jdbc:mariadb://127.0.0.1/shop');
   });
 });
 
@@ -468,7 +467,7 @@ describe('up, validate and repair on SQLite', () => {
     assert.deepEqual(await applyMigrations({ sqlite: db }, dir), []);
     writeFileSync(join(dir, 'V1__a.sql'), 'CREATE TABLE a (id INTEGER, b TEXT);\n');
     await assert.rejects(applyMigrations({ sqlite: db }, dir), /changed after it was applied/);
-    await assert.rejects(applyMigrations({ mysql: 'x' } as never, dir), /needs \{ sqlite/);
+    await assert.rejects(applyMigrations({ oracle: 'x' } as never, dir), /needs \{ sqlite/);
   });
 
   test('a SQLite file may not run outside a transaction', async () => {

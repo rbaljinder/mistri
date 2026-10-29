@@ -11,7 +11,9 @@ import { openSqliteAssistant } from '../../adapters/assistant/sqliteAssistant.js
 import type { AppDef } from '../../shared/appModel.js';
 import { appEntrypoint } from '../app/appEntrypoint.js';
 import type { AppHost } from '../app/apps.js';
+import { MYSQL_REFUSAL } from '@mistriwork/engine/adapters/connect.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
+import { HttpError } from '@mistriwork/engine/server/http/reply.js';
 
 const opened = new WeakMap<AppDef, Promise<AssistantStore>>();
 
@@ -28,6 +30,15 @@ function unavailable(app: AppDef, dialect: string, error?: unknown): AssistantSt
   );
 }
 
+/** What a request that needed the store is told when it did not open: the operator-facing sentence of an
+ * AssistantStoreUnavailable (written to be read), and for anything else a fixed one — a driver's own text can name
+ * a host, a user or a path — with the whole of it on the server's log. */
+export function storeUnavailableReply(error: unknown): HttpError {
+  if (error instanceof AssistantStoreUnavailable) return new HttpError(503, error.message);
+  console.error(`mistri: the assistant store did not open: ${error instanceof Error ? error.message : String(error)}`);
+  return new HttpError(503, 'The assistant store is unavailable.');
+}
+
 /** The App's store, opened and attested once per load. */
 export function assistantStoreFor(registry: Registry, host: AppHost): Promise<AssistantStore> {
   const { app } = host.app;
@@ -40,11 +51,8 @@ export function assistantStoreFor(registry: Registry, host: AppHost): Promise<As
         throw new AssistantStoreUnavailable(
           `${app.name} declares an assistant; it keeps its conversations on one connection, and none is configured.`,
         );
-      const dialect = /^postgres(ql)?:\/\//i.test(url) ? 'postgres' : /^(mysql|mariadb):\/\//i.test(url) ? 'mysql' : 'sqlite';
-      if (dialect === 'mysql')
-        throw new AssistantStoreUnavailable(
-          `${app.name} declares an assistant, which keeps its conversations on SQLite or PostgreSQL; MySQL is not supported yet.`,
-        );
+      if (/^(mysql|mariadb):\/\//i.test(url)) throw new AssistantStoreUnavailable(MYSQL_REFUSAL);
+      const dialect = /^postgres(ql)?:\/\//i.test(url) ? 'postgres' : 'sqlite';
       try {
         return dialect === 'postgres' ? await openPostgresAssistant(url) : openSqliteAssistant(url.replace(/^sqlite:(\/\/)?/i, ''));
       } catch (error) {

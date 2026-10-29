@@ -2,6 +2,7 @@
 /* Starlight's footer, and on the home a small one of its own: the home has no sidebar, so this is where its reader
    finds the rest of the site. */
 import Default from '@astrojs/starlight/components/Footer.astro';
+import { REPOSITORY_PUBLIC, REPOSITORY_URL } from '../repository.mjs';
 
 const home = Astro.locals.starlightRoute.entry.data.template === 'splash';
 ---
@@ -13,8 +14,8 @@ const home = Astro.locals.starlightRoute.entry.data.template === 'splash';
       <li><a href="/docs/getting-started/">Docs</a></li>
       <li><a href="/docs/examples/">Sample Apps</a></li>
       <li><a href="/docs/status/">Status</a></li>
-      <li><a href="https://github.com/rbaljinder/mistri">GitHub</a></li>
-      <li><a href="https://github.com/rbaljinder/mistri/releases">Releases</a></li>
+      {REPOSITORY_PUBLIC && <li><a href={REPOSITORY_URL}>GitHub</a></li>}
+      {REPOSITORY_PUBLIC && <li><a href={`${REPOSITORY_URL}/releases`}>Releases</a></li>}
     </ul>
   </nav>
 )}

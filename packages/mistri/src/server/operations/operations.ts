@@ -56,7 +56,7 @@ const CODES = new Set<ReadinessCode>([
   'unknown',
 ]);
 const MAX_POOLS = 64;
-const DIALECTS = new Set(['postgres', 'mysql', 'sqlite', 'http']);
+const DIALECTS = new Set(['postgres', 'sqlite', 'http']);
 
 export interface ReadinessCheckInput {
   readonly name: string;

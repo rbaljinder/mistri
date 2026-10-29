@@ -16,12 +16,17 @@
  * docs/design.md is the rule each one quotes; a look cannot dress what a
  * component hard-codes.
  *
+ * The problems are held where the component is served as well as here: a load refuses an App whose component has
+ * one (apps.ts), with the text `check` gives. That is a heuristic over text, not a sandbox: the App's author is trusted
+ * with their own browser code, and this stops the accidents.
+ *
  * Text, not a parser: comments are blanked first, so a comment that names a
  * rule does not trip it, and a string that spells one does. A component that
  * needs one of these on purpose is not a component this platform draws yet.
  */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { AppDef } from '../../shared/appModel.js';
 import type { CompiledComponents } from './appComponents.js';
 import { astParser, scanPageSource } from './appPages.js';
 import { nearestToken, UI_TOKENS } from '@mistriwork/kit/shared/uiTokens.js';
@@ -152,6 +157,17 @@ function cssFindings(id: string, text: string, warn: (line: number, message: str
 
 /** What a free-form page declares, by its component's id: what its sources are held to (appPages.ts scanPageSource). */
 type PageManifests = ReadonlyMap<string, { key: string; reads: readonly string[]; commands: readonly string[] }>;
+
+/** Each free-form page's manifest, by its component's id: a page is a dashboard of one component, with what it declares. */
+export function pageManifestsOf(app: { views: AppDef['views'] }): PageManifests {
+  return new Map(
+    Object.entries(app.views).flatMap(([key, view]) =>
+      'sections' in view && view.page && view.sections[0]?.component
+        ? [[view.sections[0].component.id, { key, reads: view.page.reads, commands: view.page.commands }] as const]
+        : [],
+    ),
+  );
+}
 
 /** Every finding in an App's component sources; a free-form page's are also held to the reads and commands it declares. */
 export async function lintComponents(dir: string, compiled: CompiledComponents, pages: PageManifests = new Map()): Promise<ComponentLint> {

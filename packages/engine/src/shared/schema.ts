@@ -41,7 +41,7 @@ export interface ColumnMeta {
   identity?: 'always' | 'by-default';
   /**
    * The values the database will accept, when it says so — an enum type, a
-   * MySQL `enum(...)` column, a `CHECK (status IN (...))`.
+   * native enum, a `CHECK (status IN (...))`.
    *
    * Absent when the column is unconstrained *or* when the adapter could not
    * read the constraint, which are not the same thing; nothing may present
@@ -274,9 +274,9 @@ export interface ForeignKey {
 /**
  * A dialect's spelling of an `ON DELETE` action, normalised.
  *
- * Each engine words these differently — SQLite and MySQL in prose, Postgres as
+ * Each engine words these differently — SQLite in prose, Postgres as
  * a single character — and the difference is not interesting upstream. Shared
- * so the three adapters cannot drift on a value the delete dialog reads
+ * so the adapters cannot drift on a value the delete dialog reads
  * literally.
  *
  * Unrecognised returns undefined rather than a default: "the adapter did not
@@ -322,7 +322,7 @@ export interface DatabaseSchema {
 }
 
 /** `http` is an API read through its description (src/adapters/http), not a database: no SQL reaches it. */
-export type Dialect = 'postgres' | 'mysql' | 'sqlite' | 'mssql' | 'http';
+export type Dialect = 'postgres' | 'sqlite' | 'mssql' | 'http';
 
 /** Diagrams and exports also accept authored shapes without introspection
     metadata: the tables and keys, the rest optional. Named for what it is —
@@ -382,7 +382,7 @@ export function findTable(schema: DatabaseSchema, tableId: string): TableMeta | 
  * A table by its id, or by a bare name when only one table has it.
  *
  * A table's id is qualified where the engine qualifies things — `public.customer`
- * on Postgres, `shop.invoice` on MySQL — and nobody types that when there is
+ * on Postgres — and nobody types that when there is
  * only one `customer`. Ambiguity is left unresolved rather than guessed: two
  * schemas with a `customer` each is exactly when picking one silently writes
  * to the wrong database.
@@ -556,7 +556,7 @@ const TEXT_TYPE = /char|text|string|clob|citext|^name$/i;
  * vocabulary the database declares over a text column (`CHECK (stage IN
  * ('new', 'qualified', 'won', 'lost'))`), in the order it was written. A
  * pipeline sorted A → Z put "Closed lost" before "Qualification"; sorted as
- * declared it reads as the pipeline does. A native enum (Postgres, MySQL) is
+ * declared it reads as the pipeline does. A native enum (Postgres) is
  * left alone, since the engine already orders it so, and free text has none.
  * Every value the column can hold is in the list or NULL, which is what lets
  * a page continue past one by naming the values after it (keysetPage.ts).
@@ -739,7 +739,7 @@ export function columnKind(type: string): ColumnKind {
 /**
  * What an aggregate other than a count reads from a value of this type.
  * PostgreSQL has no sum, average, minimum, maximum or percentile of a boolean
- * ("function avg(boolean) does not exist"), where SQLite and MySQL hold one as
+ * ("function avg(boolean) does not exist"), where SQLite holds one as
  * 0 and 1 and add it up; read as an integer there, a won rate is the same
  * number on every engine, a computed yes-or-no or a stored one.
  */
@@ -827,12 +827,12 @@ export function coerceForColumn(declaredType: string, value: string | number | b
   return value;
 }
 
-/** A column that holds bytes: BLOB (SQLite, and MySQL's sizes of it), bytea (Postgres), (VAR)BINARY. */
+/** A column that holds bytes: BLOB (SQLite), bytea (Postgres), (VAR)BINARY. */
 export function isBinaryType(type: string | undefined): boolean {
   return /^(blob|tinyblob|mediumblob|longblob|bytea|binary|varbinary)\b/i.test((type ?? '').trim());
 }
 
-/** A column that holds a JSON document: json and jsonb (Postgres), JSON (MySQL, and SQLite by declaration). */
+/** A column that holds a JSON document: json and jsonb (Postgres), JSON (SQLite by declaration). */
 export function isJsonType(type: string | undefined): boolean {
   return /^jsonb?\b/i.test((type ?? '').trim());
 }

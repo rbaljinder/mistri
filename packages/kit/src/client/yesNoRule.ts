@@ -4,7 +4,7 @@
  */
 import type { DisplayRule } from './components/valueModel.js';
 
-/* The ways an engine hands back yes and no: SQLite and MySQL as 1 and 0, PostgreSQL as true and false. */
+/* The ways an engine hands back yes and no: SQLite as 1 and 0, PostgreSQL as true and false. */
 const YES_NO: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['true', ['1', 't']],
   ['false', ['0', 'f']],

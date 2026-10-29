@@ -13,7 +13,7 @@ const writableConnection = () => Boolean(state.connections?.find((c) => c.id ===
 /**
  * The two values a boolean column actually holds, or null if it is not one.
  *
- * MySQL has no boolean — BOOL is a spelling of TINYINT(1) — and SQLite keeps
+ * SQLite has no boolean and keeps
  * 0 and 1 in an INTEGER, so the pair depends on the column rather than on a
  * type name. Written back exactly as it was read, which is what stops an
  * edit to a *different* field of the same row from rewriting `1` to `true`

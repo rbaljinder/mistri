@@ -26,7 +26,7 @@ export function sqliteAuthExclusions(registry: Registry): AuthStoreExclusion[] {
   // The URLs are read in one pass with no await: an update between captures could
   // otherwise retarget an already-visited connection without an exclusion.
   for (const url of registry.openableUrls()) {
-    if (/^(postgres(ql)?|mysql|mariadb):\/\//i.test(url)) continue;
+    if (/^postgres(ql)?:\/\//i.test(url)) continue;
     const file = /^sqlite:/i.test(url) ? url.replace(/^sqlite:(\/\/)?/i, '') : url;
     // Unknown remote schemes must not be mistaken for a safe local file.
     if (!file || file.includes('://')) throw new Error('Cannot capture a SQLite business file for authentication separation.');

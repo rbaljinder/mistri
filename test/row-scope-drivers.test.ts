@@ -3,7 +3,6 @@ import { EventEmitter } from 'node:events';
 import { test } from 'node:test';
 import type { Filter, QueryRequest, SqlFragment } from '../packages/engine/src/adapters/adapter.js';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
-import { MysqlAdapter } from '../packages/engine/src/adapters/mysql.js';
 import {
   PgConnectionManager,
   type PgClient,
@@ -32,7 +31,7 @@ const request = (): QueryRequest => ({ table: 'shop.item', columns: ['id'], limi
 
 /** Replace driver creation, not the reader/compiler paths. Catalog setup is
  * injected independently so these tests need neither servers nor credentials. */
-function fixture(dialect: 'postgres' | 'mysql') {
+function fixture(dialect: 'postgres') {
   const schema: DatabaseSchema = {
     dialect,
     label: 'scoped driver fixture',
@@ -67,10 +66,6 @@ function fixture(dialect: 'postgres' | 'mysql') {
       setup.push(text);
       return { rows: [], fields: [], rowCount: 0 };
     }
-    if (text === 'SELECT DATABASE() AS db') return { rows: [{ db: 'shop' }], fields: [{ name: 'db' }], rowCount: 1 };
-    /* The adapter asks the catalog's epoch before serving its kept schema (mysqlSchemaEpoch.ts); answer it as unchanged, outside the statements under test. */
-    if (text.startsWith('SELECT CONCAT_WS') && text.includes(' AS epoch'))
-      return { rows: [{ epoch: 'fixture' }], fields: [{ name: 'epoch' }], rowCount: 1 };
     const statement = { text, params: [...params] };
     statements.push(statement);
     await hook(statement);
@@ -119,34 +114,12 @@ function fixture(dialect: 'postgres' | 'mysql') {
     }
   }
 
-  const adapter =
-    dialect === 'postgres'
-      ? new PostgresAdapter(
-          'postgres://localhost/shop',
-          'fixture',
-          [],
-          new PgConnectionManager('postgres://localhost/shop', undefined, async () => ({ Pool: FakePool })),
-        )
-      : new MysqlAdapter('mysql://localhost/shop');
-  if (adapter instanceof MysqlAdapter)
-    Reflect.set(adapter, 'open', async (readonly: boolean) => {
-      opened.push(readonly);
-      let closed = false;
-      const run = async (text: string, params?: unknown[]): Promise<[unknown, unknown]> => {
-        assert.equal(closed, false, 'query on ended reader');
-        const result = await execute(text, params);
-        return [result.rows, result.fields];
-      };
-      return {
-        query: (input: string | { sql: string }, params?: unknown[]) => run(typeof input === 'string' ? input : input.sql, params),
-        execute: run,
-        end: async () => {
-          assert.equal(closed, false);
-          closed = true;
-          ended++;
-        },
-      };
-    });
+  const adapter = new PostgresAdapter(
+    'postgres://localhost/shop',
+    'fixture',
+    [],
+    new PgConnectionManager('postgres://localhost/shop', undefined, async () => ({ Pool: FakePool })),
+  );
   Reflect.set(adapter, 'cachedSchema', schema);
   Reflect.set(adapter, 'cachedEpoch', 'fixture');
   return {
@@ -167,88 +140,7 @@ function fixture(dialect: 'postgres' | 'mysql') {
   };
 }
 
-test('MySQL close expires every retained scoped read without reconnecting; explicit new bindings may reconnect', async () => {
-  const f = fixture('mysql');
-  try {
-    const reads = await f.adapter.scopeReads(policy('north'));
-    await reads.count('shop.item');
-    const closing = f.adapter.close();
-    for (const operation of [
-      () => reads.query(request()),
-      () => reads.count('shop.item'),
-      () => reads.runView(view()),
-      () => reads.countView(view()),
-      () => reads.runBreakdown(breakdown()),
-      () => reads.countBreakdown(breakdown()),
-    ])
-      await assert.rejects(operation, /no longer active/);
-    await closing;
-    assert.deepEqual(f.opened, [true]);
-    assert.equal(f.ended(), 1);
-    assert.equal(f.statements.length, 1);
-    const rebound = await f.adapter.scopeReads(policy('south'));
-    assert.equal(await rebound.count('shop.item'), 2);
-    assert.deepEqual(f.opened, [true, true], 'only an explicit new binding may reconnect');
-    assert.deepEqual(f.statements.at(-1)!.params, ['south']);
-    await assert.rejects(reads.count('shop.item'), /no longer active/);
-    assert.equal(f.statements.length, 2, 'reconnection does not revive old capabilities');
-  } finally {
-    await f.adapter.close();
-  }
-});
-
-test('MySQL close rejects an in-flight scope binding after its metadata await', async () => {
-  const f = fixture('mysql');
-  const resume = deferred();
-  Reflect.set(f.adapter, 'cachedSchema', null);
-  Reflect.set(f.adapter, 'introspect', async () => {
-    await resume.promise;
-    return f.schema;
-  });
-  try {
-    const binding = f.adapter.scopeReads(policy('north'));
-    const refused = assert.rejects(binding, /no longer active/);
-    await f.adapter.close();
-    resume.resolve();
-    await refused;
-    assert.deepEqual(f.opened, []);
-    assert.deepEqual(f.statements, []);
-  } finally {
-    resume.resolve();
-    await f.adapter.close();
-  }
-});
-
-test('MySQL close during scoped reader acquisition rejects before issuing its compiled SQL', async () => {
-  const f = fixture('mysql');
-  const reached = deferred();
-  const resume = deferred();
-  try {
-    const reads = await f.adapter.scopeReads(policy('north'));
-    await reads.count('shop.item');
-    const connect = (Reflect.get(f.adapter, 'conn') as () => Promise<unknown>).bind(f.adapter);
-    Reflect.set(f.adapter, 'conn', async () => {
-      const reader = await connect();
-      reached.resolve();
-      await resume.promise;
-      return reader;
-    });
-    const pending = reads.query(request());
-    const refused = assert.rejects(pending, /no longer active/);
-    await reached.promise;
-    await f.adapter.close();
-    resume.resolve();
-    await refused;
-    assert.equal(f.statements.length, 1, 'no compiled SQL may run after acquisition crosses close');
-    assert.deepEqual(f.opened, [true]);
-    assert.equal(f.ended(), 1);
-  } finally {
-    resume.resolve();
-    await f.adapter.close();
-  }
-});
-
-for (const dialect of ['postgres', 'mysql'] as const) {
+for (const dialect of ['postgres'] as const) {
   test(`${dialect} scoped capability executes all six reads on existing readers with correct bindings`, async () => {
     const f = fixture(dialect);
     try {
@@ -281,7 +173,7 @@ for (const dialect of ['postgres', 'mysql'] as const) {
       assert.equal(f.statements.length, 6);
       for (const [i, statement] of f.statements.entries()) {
         const paged = i % 2 === 0;
-        const tail = dialect === 'mysql' ? ['7', '3'] : [7, 3];
+        const tail = [7, 3];
         assert.deepEqual(statement.params, [11, 22, ...(paged ? tail : [])]);
         assert.match(statement.text, /WITH /);
         if (dialect === 'postgres') {
@@ -367,10 +259,9 @@ for (const dialect of ['postgres', 'mysql'] as const) {
       assert.deepEqual(result.columns, ['id']);
       assert.deepEqual(
         f.statements.map((statement) => statement.params),
-        [['north', 'original', ...(dialect === 'mysql' ? ['7', '3'] : [7, 3])], ['south']],
+        [['north', 'original', ...[7, 3]], ['south']],
       );
-      // MySQL gives an overlapping read a second read-only connection of its own (MYSQL_READERS).
-      assert.deepEqual(f.opened, dialect === 'mysql' ? [true, true] : [true]);
+      assert.deepEqual(f.opened, [true]);
     } finally {
       resume.resolve();
       await f.adapter.close();
@@ -444,7 +335,7 @@ for (const dialect of ['postgres', 'mysql'] as const) {
       assert.doesNotMatch(f.statements.at(-1)!.text, /WHERE 1 = 0/);
       await f.adapter.runView(view(), 3);
       assert.doesNotMatch(f.statements.at(-1)!.text, /_tw_scope/);
-      assert.deepEqual(f.statements.at(-1)!.params, dialect === 'mysql' ? ['7', '3'] : [7, 3]);
+      assert.deepEqual(f.statements.at(-1)!.params, [7, 3]);
       assert.deepEqual(f.opened, [true]);
     } finally {
       await f.adapter.close();

@@ -60,8 +60,8 @@ export interface CountResult {
  * COUNT(*) it always was.
  *
  * The bound is written as digits, not bound as a parameter: it is an integer
- * checked here, and one statement shape then serves three drivers and the
- * scoped compiler — mysql2 would send a bound number as a DOUBLE, which
+ * checked here, and one statement shape then serves both drivers and the
+ * scoped compiler — a driver may send a bound number as a DOUBLE, which
  * `LIMIT` refuses, and the scoped compiler does not know its driver.
  */
 export function countStatement(relation: string, limit?: number): string {

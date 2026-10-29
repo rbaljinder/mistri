@@ -175,5 +175,14 @@ describe('mistri check --deploy', () => {
     const alone = await run(['check', '--app', dir, '--config', config, '--replicas', '2']);
     assert.equal(alone.code, 1);
     assert.match(alone.err, /--replicas says how many instances --deploy judges for/);
+    const limit = await run(['check', '--app', dir, '--config', config, '--connection-limit', '100']);
+    assert.equal(limit.code, 1);
+    assert.match(limit.err, /--connection-limit says what --deploy holds the pools to/);
+    const cpus = await run(['check', '--app', dir, '--config', config, '--deploy', '--cpus', '0']);
+    assert.equal(cpus.code, 1);
+    assert.match(cpus.err, /--cpus takes the cores the deployment has/);
+    const bad = await run(['check', '--app', dir, '--config', config, '--deploy', '--connection-limit', 'many']);
+    assert.equal(bad.code, 1);
+    assert.match(bad.err, /--connection-limit takes the connections the database allows/);
   });
 });

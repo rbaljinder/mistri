@@ -293,7 +293,7 @@ tenant whose rows they are, on the deployment's own writer:
 - **Custom components.** Their files are served to a verified session only, and
   every read a component declares is an ordinary read in the member's tenant.
 
-Not included: tenant Apps on MySQL; cross-source transactions, invitation delivery,
+Not included: cross-source transactions, invitation delivery,
 durable generic CRUD recovery,
 tenant quotas/support access, or remote erasure of data
 previously released to an authorized browser. A production deployment is

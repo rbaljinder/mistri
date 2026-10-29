@@ -99,7 +99,7 @@ export default defineConfig({
             { label: 'Home', slug: 'index' },
             { label: 'Get started', slug: 'docs/getting-started' },
             { label: 'An App from your database', slug: 'docs/quickstart-app' },
-            { label: 'Build with a coding agent', slug: 'docs/build-with-an-agent' },
+            { label: 'Build an App with a coding agent', slug: 'docs/build-with-an-agent' },
             { label: 'Tick in fifteen minutes', slug: 'docs/tick-tutorial' },
             { label: 'The DSL in one App', slug: 'docs/dsl-tour' },
             { label: 'Sample Apps', slug: 'docs/examples' },
@@ -243,6 +243,7 @@ export default defineConfig({
             { label: 'The theme contract', slug: 'docs/theme-contract' },
             { label: 'App API', slug: 'docs/app-api' },
             { label: 'Glossary', slug: 'docs/glossary' },
+            { label: 'Compatibility', slug: 'docs/compatibility' },
             { label: 'Status & roadmap', slug: 'docs/status' },
             /* Generated from CHANGELOG.md as the site builds (src/pages/docs/changelog.astro), so it is a link, not a slug. */
             { label: 'Changelog', link: '/docs/changelog/' },
@@ -252,7 +253,7 @@ export default defineConfig({
         {
           label: 'Database browser',
           items: [
-            { label: 'tablewalk', slug: 'docs/database-browser' },
+            { label: 'Database browser', slug: 'docs/database-browser' },
             { label: 'MCP for coding agents', slug: 'docs/mcp' },
             { label: 'Keyboard', slug: 'docs/keyboard' },
             { label: 'Command line', slug: 'docs/cli-browser' },

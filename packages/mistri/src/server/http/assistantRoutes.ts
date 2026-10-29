@@ -26,7 +26,7 @@ import type { AppPayloadApp } from '../../shared/appPayload.js';
 import type { AppHost } from '../app/apps.js';
 import { catalogFromPayload, mayRunAction, systemPrompt, toolSpecs } from '../assistant/assistantCatalog.js';
 import { assistantModel } from '../assistant/assistantModel.js';
-import { assistantStoreFor } from '../assistant/assistantStores.js';
+import { assistantStoreFor, storeUnavailableReply } from '../assistant/assistantStores.js';
 import { recordContext, type ToolSession } from '../assistant/assistantTools.js';
 import { actedNote, continueTurn, itemsOf, pendingProposal, type Acted, type Emit } from '../assistant/assistantTurn.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
@@ -136,7 +136,7 @@ export async function assistantRoutes(ctx: Base, loop: () => Loop): Promise<bool
     try {
       store = await assistantStoreFor(registry, host);
     } catch (error) {
-      throw new HttpError(503, error instanceof Error ? error.message : 'The assistant store is unavailable.');
+      throw storeUnavailableReply(error);
     }
     return { app: host.app.app, owner, store, loop };
   });

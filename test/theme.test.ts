@@ -349,17 +349,18 @@ test('contrast warnings also check colors inherited from a new theme base', () =
 test('the four built-in looks read as a sans interface with AA accents, and every one is an inheritable base', () => {
   assert.deepEqual(
     THEME_PRESETS.map((preset) => preset.id),
-    ['workshop', 'lumen', 'mono', 'sage'],
+    ['workshop', 'lumen', 'mono', 'sage', 'ledger'],
   );
-  assert.deepEqual([...THEME_BASES], ['workshop', 'lumen', 'mono', 'sage']);
+  assert.deepEqual([...THEME_BASES], ['workshop', 'lumen', 'mono', 'sage', 'ledger']);
   assert.equal(parseAppConfig({ name: 'Unchanged default', ...HOME }, 'app').ui.theme, undefined);
   for (const preset of THEME_PRESETS) {
-    // The interface and its data are always one sans; a look may set its
-    // titles in a book face or a condensed cut of its own sans (Workshop's), and nothing else.
+    // The interface and its data are one sans, except Ledger's, whose data is a monospace (its figures line up down a
+    // page); a look may set its titles in a book face or a condensed cut of its own sans (Workshop's), and nothing else.
     const ui = preset.fonts?.ui ?? '';
     const heading = preset.fonts?.heading ?? '';
     assert.match(ui, /sans-serif$/, `${preset.id} interface face`);
-    assert.equal(preset.fonts?.data, preset.fonts?.ui, `${preset.id} data face`);
+    if (preset.id === 'ledger') assert.match(preset.fonts?.data ?? '', /^'IBM Plex Mono', .*monospace$/, 'ledger data face');
+    else assert.equal(preset.fonts?.data, preset.fonts?.ui, `${preset.id} data face`);
     assert.ok(
       heading === ui || /(^|, )serif$/.test(heading) || (/Condensed/.test(heading) && heading.includes(ui.split(',')[0]!)),
       `${preset.id} heading face`,
@@ -377,7 +378,10 @@ test('the four built-in looks read as a sans interface with AA accents, and ever
   assert.equal(inherited.radius?.field, sage.radius?.field);
   assert.equal(inherited.dark.navGround, sage.dark.navGround);
   assert.equal(inherited.light.accent, authored.light.accent);
-  assert.throws(() => parseThemes([{ ...sample(), base: 'studio' as never }], 'app'), /base must be one of workshop, lumen, mono, sage/);
+  assert.throws(
+    () => parseThemes([{ ...sample(), base: 'studio' as never }], 'app'),
+    /base must be one of workshop, lumen, mono, sage, ledger/,
+  );
 });
 
 test('Compass loads its theme through a normal imported module', async () => {

@@ -380,7 +380,9 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
           }),
         }
       : followed;
-    if (fixed) comparisons.set(schema, made);
+    /* Frozen where it is kept: a catalog nothing can change, so what is compiled against it — every view and
+       breakdown of an enter is compiled here a second time — is kept with it too (breakdown.ts compileBreakdown). */
+    if (fixed) comparisons.set(schema, freezeDerivedCatalog(made));
     return (compared = made);
   };
   const assertRead = (table: string) => {

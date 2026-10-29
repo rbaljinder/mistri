@@ -85,8 +85,8 @@ export interface Options {
   /**
    * The header a reverse proxy sets with the signed-in user's identity
    * (`X-Forwarded-User`, `Cf-Access-Authenticated-User-Email`). Set, every
-   * request from beyond loopback must carry it, and every write is
-   * journaled with it. Not authentication — the proxy did that — but the
+   * request from beyond loopback must carry it and come from a
+   * `--trust-proxy` address, and every write is journaled with it. Not authentication — the proxy did that — but the
    * line that lets the proxy's decision reach this process.
    */
   authProxyHeader?: string;
@@ -102,6 +102,8 @@ export interface Options {
   trustProxyHops?: string;
   /** `--trust-proxy-cloudflare`: read CF-Connecting-IP. */
   trustProxyCloudflare: boolean;
+  /** `--insecure-http-sign-in`: serve sign-in at an http address beyond this machine, which is otherwise refused. */
+  insecureHttpSignIn?: boolean;
   trustedProxies?: ProxyRange[];
   /** Serve an app: a directory whose app.ts (or app.mjs / app.json) curates the UI. */
   apps?: string[];
@@ -117,7 +119,7 @@ export interface Options {
   policy?: string;
   /** `--read-pool` as written: PostgreSQL readers per database for every pool that names none. Checked in main. */
   readPool?: string;
-  /** `--write-pool` as written: writers per database for an App's PostgreSQL or MySQL source. Checked in main. */
+  /** `--write-pool` as written: writers per database for an App's PostgreSQL source. Checked in main. */
   writePool?: string;
   /** `--lock-timeout` as written: seconds a writer waits for a lock. Checked in main. */
   lockTimeout?: string;
@@ -171,6 +173,7 @@ export function parseArgs(argv: string[]): Options {
     else if (arg === '--trust-proxy') opts.trustProxy.push(argv[++i] ?? '');
     else if (arg === '--trust-proxy-hops') opts.trustProxyHops = argv[++i] ?? '';
     else if (arg === '--trust-proxy-cloudflare') opts.trustProxyCloudflare = true;
+    else if (arg === '--insecure-http-sign-in') opts.insecureHttpSignIn = true;
     else if (arg === '--auth-proxy-header') opts.authProxyHeader = (argv[++i] ?? '').trim() || undefined;
     /* Renamed before 1.0, and refused rather than ignored: beside three flags
        that name the visitor's address it read as one of them, and a server
@@ -280,6 +283,7 @@ export function parseArgs(argv: string[]): Options {
     opts.trustProxyHops = productEnv('TRUST_PROXY_HOPS')!.trim();
   }
   if (/^(1|true)$/i.test(productEnv('TRUST_PROXY_CLOUDFLARE')?.trim() ?? '')) opts.trustProxyCloudflare = true;
+  if (/^(1|true)$/i.test(productEnv('INSECURE_HTTP_SIGN_IN')?.trim() ?? '')) opts.insecureHttpSignIn = true;
   /* Cloud Run, Heroku and most platforms hand the port in as PORT. A flag
      wins; it is the platform's word, so a busy port is not rolled past. */
   if (

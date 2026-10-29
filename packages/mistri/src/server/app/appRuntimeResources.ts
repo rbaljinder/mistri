@@ -52,10 +52,10 @@ export function appSourceConnections(registry: Registry, app: AppDef): Map<strin
 /** What one source sees of its opened connection: the whole of it, or the one schema it names. */
 function sourceSchema(source: string, schema: string | undefined, catalog: DatabaseSchema): string | undefined {
   if (schema === undefined) return undefined;
-  if (catalog.dialect !== 'postgres' && catalog.dialect !== 'mysql') {
+  if (catalog.dialect !== 'postgres') {
     throw new Refusal(
       `Source "${source}" names schema "${schema}", but its connection is ${catalog.dialect === 'sqlite' ? 'SQLite' : `a ${catalog.dialect} source`}, ` +
-        'which has no schemas to choose from. Drop "schema" there; it is for PostgreSQL schemas and MySQL databases.',
+        'which has no schemas to choose from. Drop "schema" there; it is for PostgreSQL schemas.',
     );
   }
   return schema;

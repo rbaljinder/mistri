@@ -58,7 +58,7 @@ interface TagChip {
 
 /**
  * A row's tags as the database answered them: a JSON array of [label, tone]
- * pairs, parsed already (PostgreSQL's json) or as text (SQLite, MySQL).
+ * pairs, parsed already (PostgreSQL's json) or as text (SQLite).
  * Sorted by label, so every engine's answer reads the same; anything else is no tags.
  */
 export function tagChips(value: unknown): TagChip[] {

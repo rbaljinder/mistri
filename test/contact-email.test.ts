@@ -368,15 +368,6 @@ test('what startup and mistri check say about an App that emails an address a re
     ),
     [],
   );
-  assert.deepEqual(
-    codes(
-      contactEmailFindings(app(), {
-        email: { links: true },
-        connectionOf: () => ({ id: 'shop', dialect: 'MySQL' }),
-      }),
-    ),
-    ['notify-send-source'],
-  );
   assert.deepEqual(codes(contactEmailFindings(app({}), { email: { links: true } })), ['notify-send-consent']);
   const commands = {
     book: { public: true, source: 'main', write: ['contact'] },

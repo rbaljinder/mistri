@@ -7,7 +7,7 @@ This repository builds two products, each a package and a command of its own:
 
 | | |
 |---|---|
-| **tablewalk** — the database browser | A foreign key is a place you can go: open a row and see every row that points at it, over SQLite, PostgreSQL or MySQL, read-only until you turn editing on, and the same over MCP for a coding agent. `npx tablewalk mydata.sqlite`. Its README: `packages/tablewalk/README.md`. |
+| **tablewalk** — the database browser | A foreign key is a place you can go: open a row and see every row that points at it, over SQLite or PostgreSQL, read-only until you turn editing on, and the same over MCP for a coding agent. `npx tablewalk mydata.sqlite`. Its README: `packages/tablewalk/README.md`. |
 | **mistri** — the App framework | Pages, commands, policies, jobs and workflows declared in TypeScript over a database you already have, and served from it. `npm create mistri`, `npx @mistriwork/mistri dev`. Its README: `packages/mistri/README.md`. |
 
 ```bash

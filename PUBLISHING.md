@@ -9,7 +9,7 @@ standalone database browser must remain independently installable and usable.
 1. Finish the release changelog and reconcile current-version statements in the
    README, getting-started guide, capabilities page and roadmap. Historical
    release sections keep their original versions.
-2. Run the full local gates: `npm test` with live PostgreSQL/MySQL/cache/search
+2. Run the full local gates: `npm test` with live PostgreSQL/cache/search
    fixtures, then `npm run e2e`. Keep them sequential because they share
    disposable fixtures. Run authored sample typechecks from a clean checkout,
    production/package checks, and site/Storybook checks when those change.
@@ -66,14 +66,19 @@ After the version is visible:
 
 ## Deploy the documentation site
 
-The existing Cloudflare Pages project is `tablewalk`; its production branch is
-`main` and its address is <https://tablewalk.dev>, a custom domain on the
-project (the domain is registered and its DNS held at Cloudflare). The
-project's own `mistri.pages.dev` still answers.
+The Cloudflare Pages project is `mistri` (`--project-name mistri`, as `.github/workflows/site.yml`
+passes it); its production branch is `main`. The workflow is the truth where
+this page and it disagree. The site's address is a custom domain on the project
+(the domain's DNS is held at Cloudflare), and the project's own `mistri.pages.dev`
+answers too.
 
-The `site.yml` workflow builds on relevant main-branch changes. It deploys only
-when both `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets
-are configured. A green workflow may therefore mean **built but not deployed**;
+The `site.yml` workflow runs on relevant pushes to `main` (and by hand). It
+installs both `npm ci` trees (the root and `storybook/`), runs `npm run
+build:site`, refuses a `site/dist` without `components/index.html` and
+`components/iframe.html`, and deploys with `wrangler pages deploy site/dist
+--project-name mistri --branch <the ref's name>` only when both
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets are
+configured. A green workflow may therefore mean **built but not deployed**;
 check the deployment step and public content.
 
 An authenticated local Wrangler session is a supported fallback after deployment
