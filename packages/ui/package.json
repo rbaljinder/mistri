@@ -148,6 +148,10 @@
       "mistri-built": "./dist/primitives.css",
       "default": "./src/primitives.css"
     },
+    "./standalone.css": {
+      "mistri-built": "./dist/standalone.css",
+      "default": "./src/standalone.css"
+    },
     "./ruler.js": {
       "mistri-built": "./dist/ruler.js",
       "default": "./src/ruler.ts"

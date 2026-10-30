@@ -38,7 +38,10 @@ class MemorySearchIndex implements SearchIndex {
   async upsert(collection: string, document: SearchDocument): Promise<void> {
     const target = this.collections.get(collection);
     if (!target) {
-      this.collections.set(collection, { fields: new Set(Object.keys(document).filter((key) => key !== 'id')), docs: new Map([[document.id, document]]) });
+      this.collections.set(collection, {
+        fields: new Set(Object.keys(document).filter((key) => key !== 'id')),
+        docs: new Map([[document.id, document]]),
+      });
       return;
     }
     target.docs.set(document.id, document);

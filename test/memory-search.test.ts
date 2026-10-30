@@ -23,10 +23,7 @@ describe('the memory search provider', () => {
     await index.upsert('memory-test_app_task', { id: '2', name: 'Stone path', note: 'Garden' });
     await index.upsert('memory-test_app_task', { id: '3', name: 'Wooden deck', note: 'Stone steps' });
     assert.deepEqual(await index.search('memory-test_app_task', 'stone', ['name', 'note'], 10), ['1', '2', '3']);
-    assert.deepEqual(
-      await index.search('memory-test_app_task', 'stone', ['name', 'note'], 10, { field: 'note', value: 'Garden' }),
-      ['2'],
-    );
+    assert.deepEqual(await index.search('memory-test_app_task', 'stone', ['name', 'note'], 10, { field: 'note', value: 'Garden' }), ['2']);
     assert.deepEqual(await index.search('memory-test_app_task', 'stone', ['name', 'note'], 2), ['1', '2']);
     await index.remove('memory-test_app_task', '2');
     assert.deepEqual(await index.search('memory-test_app_task', 'stone', ['name', 'note'], 10), ['1', '3']);

@@ -18,7 +18,7 @@
 import type { AssistantModel, ModelBlock, ModelMessage, ModelUsage } from './assistantModel.js';
 
 /** The reply, as AssistantModel's stream returns it. */
-export type ModelReply = Awaited<ReturnType<AssistantModel['stream']>>;
+type ModelReply = Awaited<ReturnType<AssistantModel['stream']>>;
 
 class ModelUnavailable extends Error {
   constructor(message: string) {
@@ -86,17 +86,17 @@ export function openaiBody(request: Parameters<AssistantModel['stream']>[0]): Re
     messages,
     ...(request.tools.length
       ? {
-          tools: request.tools.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.input_schema } })),
+          tools: request.tools.map((tool) => ({
+            type: 'function',
+            function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
+          })),
         }
       : {}),
   };
 }
 
 /** Read one Chat Completions event stream into the reply, handing text deltas on as they arrive. */
-export async function readOpenAIStream(
-  body: ReadableStream<Uint8Array>,
-  onText: (delta: string) => void,
-): Promise<ModelReply> {
+export async function readOpenAIStream(body: ReadableStream<Uint8Array>, onText: (delta: string) => void): Promise<ModelReply> {
   const text: string[] = [];
   const calls = new Map<number, { id: string; name: string; args: string }>();
   const usage: ModelUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };

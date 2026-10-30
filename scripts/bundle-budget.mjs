@@ -602,7 +602,14 @@ export const BUDGET = {
     /* The merge of Ledger with the security and capacity branches, and the few client strings they brought: each passed
        its branch's ceiling by a few bytes only together. Measured: public script 669,706 / 186,872 (6 bytes past its raw
        ceiling; brotli inside). Its raw ceiling moves to 669_950, about 250 bytes of room. */
-    public: { script: { raw: 669_950, br: 187_330 }, style: { raw: 389_300, br: 52_350 } },
+    /* The showcase review's first-paint rules: the sidebar's group
+       headings, counts and icons in nav-muted (not the page's muted),
+       the inverted current entry's accent edge, the board lane heads'
+       one treatment, and a drillable donut slice's focus stroke — about
+       200 raw bytes every first paint draws, none of it deferrable
+       behind onDemand.tsx. The raw style ceilings move by 250 and keep
+       about 250 bytes of room. */
+    public: { script: { raw: 669_950, br: 187_330 }, style: { raw: 389_550, br: 52_350 } },
     /* A one-click command's revision asked as the pointer or focus reaches its button (commandSend.ts readyCommand,
        Actions.tsx), so the click sends only the execute: about 500 raw bytes, 1335.1 KiB measured. The App script's
        raw ceiling moves to 1_367_400 and keeps about 250 bytes of room; its brotli did not move past its ceiling. */
@@ -631,7 +638,7 @@ export const BUDGET = {
     /* Ledger's look, as on the public first paint: App script 1,391,388 / 381,477 (+5,913 / +902). The same room. */
     /* The same merge, as on the public first paint: App script 1,391,686 / 381,512 (36 bytes past its raw ceiling; brotli
        inside). Its raw ceiling moves to 1_391_950, about 250 bytes of room. */
-    app: { script: { raw: 1_391_950, br: 381_880 }, style: { raw: 389_175, br: 52_325 } },
+    app: { script: { raw: 1_391_950, br: 381_880 }, style: { raw: 389_425, br: 52_325 } },
   },
   tablewalk: {
     workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 375_300, br: 51_125 } },

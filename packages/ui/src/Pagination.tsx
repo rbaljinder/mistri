@@ -62,12 +62,7 @@ export function Pagination({ page, pages, onPageChange, label, previousLabel = '
           </button>
         ),
       )}
-      <button
-        type="button"
-        className="ui-page ui-page-step"
-        disabled={current === pages}
-        onClick={() => onPageChange(current + 1)}
-      >
+      <button type="button" className="ui-page ui-page-step" disabled={current === pages} onClick={() => onPageChange(current + 1)}>
         {nextLabel}
       </button>
     </nav>

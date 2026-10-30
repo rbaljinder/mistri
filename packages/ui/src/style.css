@@ -6,13 +6,31 @@
 @layer mistri-ui;
 @import './tokens.css' layer(mistri-ui);
 @import './primitives.css' layer(mistri-ui);
+@import './standalone.css' layer(mistri-ui);
 @import './forms.css' layer(mistri-ui);
 @import './hero.css' layer(mistri-ui);
 @import './preferences.css' layer(mistri-ui);
 
 @layer mistri-ui {
-.btn { border: 1px solid transparent; border-radius: var(--radius); background: var(--accent); color: var(--on-accent); cursor: pointer; }
-.btn.btn-secondary { background: transparent; color: var(--ink-muted); border-color: var(--line-strong); }
-.btn.btn-danger { background: var(--status-critical); color: var(--surface); border-color: var(--status-critical); }
-.btn:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+  .btn {
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--on-accent);
+    cursor: pointer;
+  }
+  .btn.btn-secondary {
+    background: transparent;
+    color: var(--ink-muted);
+    border-color: var(--line-strong);
+  }
+  .btn.btn-danger {
+    background: var(--status-critical);
+    color: var(--surface);
+    border-color: var(--status-critical);
+  }
+  .btn:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: var(--focus-offset);
+  }
 }

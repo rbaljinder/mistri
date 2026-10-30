@@ -1064,16 +1064,35 @@ export function DonutChart({
   const rings = slices.map((p, i) => {
     const share = (100 * p.value) / whole;
     const drawn = share > GAP * 2 ? share - GAP : share;
+    /* A slice is a door where the legend's button is: the same raw value,
+       the same "others" exclusion. A circle is not a button by itself, so
+       a drillable slice carries the button's role, name and keyboard
+       behaviour, and the legend button stays as the second way in. */
+    const drillable = onPick && p.raw != null && !(rest.length && i === slices.length - 1);
     const ring = (
       <circle
         key={i}
-        className="chart-slice"
+        className={`chart-slice${drillable ? ' chart-slice-drill' : ''}`}
         cx={C}
         cy={C}
         r={R}
         strokeDasharray={`${drawn.toFixed(2)} ${(100 - drawn).toFixed(2)}`}
         strokeDashoffset={at.toFixed(2)}
         style={{ ...ramp(i), stroke: color(i), opacity: opacity(i) }}
+        {...(drillable
+          ? {
+              role: 'button',
+              tabIndex: 0,
+              'aria-label': `${p.key}: ${say(p.value)} (${formatPercent(share, { maximumFractionDigits: 0 })})`,
+              onClick: () => onPick!(p.raw),
+              onKeyDown: (event: React.KeyboardEvent) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onPick!(p.raw);
+                }
+              },
+            }
+          : {})}
       >
         <title>{`${p.key}: ${say(p.value)} (${formatPercent(share, { maximumFractionDigits: 0 })})`}</title>
       </circle>
