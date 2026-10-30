@@ -60,7 +60,7 @@ starters: ['Which tickets are mine?', { text: 'Summarize this ticket', records: 
 
 It reads and proposes only what the signed-in person may: their roles, fields and verbs. The server needs
 `ANTHROPIC_API_KEY` in its environment, never in the App, and the database needs its store
-(`provisionStores(<the database>, { app: { definition } })` from `@mistriwork/mistri/maintenance`, which makes every store the App declares; `only: ['assistant']` names it alone and is refused for an App with no `assistant`).
+(`provisionStores(<the database>, { app: { definition } })` from `@mistriwork/mistri/maintenance`, which makes every store the App declares; `only: ['assistant']` names it alone and is refused for an App with no `assistant`; `mistri migrate stores up --app` does not create it, so a script calls `provisionStores` once).
 What it reads to answer (rows, fields, the open record) is sent to the model provider (Anthropic) with each turn;
 offer it (`roles`) only to people whose reads may leave your server. A conversation answers one question at a time,
 and a person has at most two answers under way at once.

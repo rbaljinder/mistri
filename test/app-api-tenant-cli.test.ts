@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import { TransactionOperations } from '../packages/engine/src/adapters/adapter.js';
@@ -21,6 +21,7 @@ import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
 import { migratePostgresAuthStore } from '../packages/mistri/src/adapters/auth/postgresAuthStore.js';
 import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
+import { buildApp } from '../packages/mistri/src/server/build/build.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
 import {
@@ -61,7 +62,7 @@ interface Client extends PgQuery {
 /** The depot deployment on one engine, provisioned as an operator would: its
  * tenant store, journal, native accounts and token store, and a way to change
  * memberships and to make the business database stop answering. */
-async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { tokens?: boolean } = {}) {
+async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { tokens?: boolean; commands?: boolean } = {}) {
   const directory = mkdtempSync(join(tmpdir(), `tw-tenant-cli-${dialect}-`));
   const cleanup: Array<() => unknown> = [() => rmSync(directory, { recursive: true, force: true })];
   t.after(async () => {
@@ -207,7 +208,7 @@ async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { 
       });
     }
   });
-  const written = writeDepotApp(directory, { business, authStore, physical, commands: true });
+  const written = writeDepotApp(directory, { business, authStore, physical, commands: options.commands !== false });
   writeFileSync(join(written.appDir, 'authority.lock'), (await loadApp(written.appDir, { lock: 'report' })).authority!.report);
   if (dialect === 'sqlite') {
     // The native auth store as the tenant host creates it, then the accounts.
@@ -571,4 +572,20 @@ test("a tenant App's API with no token store says to provision one, and does not
     s.output(),
     /(?:Cause|because): This App's API token store could not be read: it is not provisioned, or not reachable\. Provision it first: mistri api-token provision/,
   );
+});
+
+/* A deploy verifies a roll by the build id /readyz reports (build/fingerprint.ts), and the first deployment that
+   needs it is a tenant App: its host answers the probe, so it has to be told the build it serves from. */
+test("a tenant App served from a build reports that build's id on /readyz", { timeout: 300000 }, async (t) => {
+  const f = await depot(t, 'sqlite', { commands: false });
+  const here = process.cwd();
+  const out = join(dirname(f.appDir), 'depot-build');
+  const built = await buildApp({ app: f.appDir, out, policy: f.policy }, { typecheck: false });
+  assert.match(built.manifest.id, /^[0-9a-f]{16}$/);
+  assert.equal(process.cwd(), here);
+  const s = await serveApi(t, { config: f.config, appDir: out }, 'depot', ['--policy', join(out, 'server', 'policy.mjs')]);
+  await s.started;
+  const probe = await fetch(`${new URL(s.base).origin}/readyz`);
+  assert.equal(probe.status, 200);
+  assert.deepEqual(await probe.json(), { status: 'ok', deploy: null, build: built.manifest.id });
 });

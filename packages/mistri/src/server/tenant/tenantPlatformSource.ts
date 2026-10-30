@@ -42,6 +42,7 @@ import {
   tenantIdentifier,
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
+import { tenantAdapter } from './tenantConnections.js';
 import { PLATFORM_EVIDENCE_KEYS, type PlatformMembershipEvidence } from './tenantPlatform.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 import {
@@ -511,7 +512,7 @@ export async function openPostgresPlatformReadSource(
     const declaration = captureDeclaration(input);
     if (typeof url !== 'string' || !/^postgres(ql)?:\/\//i.test(url) || !Number.isSafeInteger(trustFor) || trustFor < 0)
       return denyTenant();
-    let reader = (opened = new PostgresAdapter(url, 'Private platform-only reader'));
+    let reader = (opened = tenantAdapter(url, 'Private platform-only reader'));
     // Found once without a lock, then attested under one: the two must agree.
     const found = await reader.readSnapshot(async (snapshot) => platformSourceCatalog(await snapshot.describe(), declaration));
     // Asked once, at construction: row scopes inline on Postgres 12 and later (rowScope.ts).
@@ -635,10 +636,11 @@ export async function openPostgresPlatformReadSource(
              replaced instead, as the App's own reader does
              (tenantReadSource.ts), and its catalog attested in full again on
              the next read. Reads run one at a time here, so none is on the
-             old pool. */
+             old adapter. The pool is the database's one request pool
+             (tenantConnections.ts), which discarded the lost connection. */
           if (error instanceof TransactionOutcomeUnknown && !closing) {
             const failed = reader;
-            reader = new PostgresAdapter(url, 'Private platform-only reader');
+            reader = tenantAdapter(url, 'Private platform-only reader');
             attested = checked = undefined;
             void failed.close().catch(() => {});
           }

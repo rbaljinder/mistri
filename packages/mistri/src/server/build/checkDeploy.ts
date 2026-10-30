@@ -23,9 +23,9 @@ import { authPoolSize } from '../auth/authStore.js';
 import { servedHosts, type HostConnections, type ServedFacts } from './servedHosts.js';
 import { hasTicketKey } from '../forms/publicTicket.js';
 
-interface DeployFinding {
+export interface DeployFinding {
   code: string;
-  severity: 'error' | 'warning';
+  severity: 'error' | 'warning' | 'info';
   message: string;
   fix: string;
 }
@@ -160,6 +160,17 @@ export function deployFindings(input: DeployInput): DeployFinding[] {
     });
   }
 
+  /* Timing is a load-test tool: its process entry (heap, GC, pools) is public unless a token holds it back. */
+  if (env.MISTRI_SERVER_TIMING?.trim() === '1' && !env.MISTRI_SERVER_TIMING_TOKEN?.trim()) {
+    found.push({
+      code: 'deploy-server-timing-public',
+      severity: 'warning',
+      message:
+        "MISTRI_SERVER_TIMING=1 is set and MISTRI_SERVER_TIMING_TOKEN is not, so every response's Server-Timing header shows the process's heap, garbage collection and pool use to any requester, signed in or not.",
+      fix: 'Unset MISTRI_SERVER_TIMING in production, or set MISTRI_SERVER_TIMING_TOKEN and send it as an x-mistri-timing header from the load driver.',
+    });
+  }
+
   if ((input.replicas ?? 1) > 1 && !input.cache) {
     found.push({
       code: 'deploy-per-process-limits',
@@ -180,8 +191,9 @@ const count = (value: unknown): number | undefined =>
  * readers, its writers and the background writer, one LISTEN connection for live sync, and each read replica
  * another reader pool; the sign-in store holds `MISTRI_AUTH_POOL`. Sizes follow the flags, a connection's `pool`,
  * and else the defaults an App gets (writers: twice the cores, 4 to 16; readers: as many as the writers) — the cores
- * of the machine that runs the check, which are the deployment's only when the two match. Jobs, mail, integration and
- * decision hosts open pools of their own on top (docs/postgresql.md); they are not counted here.
+ * of the machine that runs the check, which are the deployment's only when the two match. The hosts the App builds
+ * from what it declares — a tenant App's shared request manager, the server's own stores — are servedHosts.ts's,
+ * on the home connection (docs/postgresql.md).
  */
 export function connectionBudgets(input: DeployInput): { rows: DatabaseBudget[]; findings: DeployFinding[] } {
   const { app, env } = input;
@@ -214,7 +226,9 @@ export function connectionBudgets(input: DeployInput): { rows: DatabaseBudget[];
     if (given.write === undefined || given.read === undefined) sized = true;
     const writers = given.write ?? balancedPoolSize(cores);
     const readers = given.read ?? appReaders(writers, cores);
-    add(url, primaryConnections({ readers, writers }), 'adapter');
+    /* A tenant App opens no adapter of its own on its home connection: its request paths share one manager there,
+       which servedHosts counts with the LISTEN (tenant/tenantConnections.ts). */
+    if (!(home && input.served?.tenant)) add(url, primaryConnections({ readers, writers }), 'adapter');
     /* The hosts the App serves with sit on its home connection, the one its commands' stores are beside. */
     if (home) for (const host of servedHosts(input.served ?? {}, readers, writers)) add(url, host.connections, host.host);
     home = false;

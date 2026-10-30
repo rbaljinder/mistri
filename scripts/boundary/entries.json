@@ -10,6 +10,7 @@
     "@mistriwork/kit": { "dir": "packages/kit", "layer": "kit" },
     "@mistriwork/mistri": { "dir": "packages/mistri", "layer": "mistri" },
     "create-mistri": { "dir": "packages/create-mistri", "layer": "mistri" },
+    "@mistriwork/cloudflare": { "dir": "packages/cloudflare", "layer": "cloudflare" },
     "tablewalk": { "dir": "packages/tablewalk", "layer": "browser" }
   },
   "entries": {
@@ -105,6 +106,11 @@
       "types": "packages/engine/src/engine.ts"
     },
     "@mistriwork/ui": { "layer": "ui", "source": "packages/ui/src/index.ts", "types": "packages/ui/src/index.ts" },
+    "@mistriwork/cloudflare": {
+      "layer": "cloudflare",
+      "source": "packages/cloudflare/src/index.ts",
+      "types": "packages/cloudflare/src/index.ts"
+    },
     "@mistriwork/kit": {
       "layer": "kit",
       "source": "packages/kit/src/client/kit.ts",

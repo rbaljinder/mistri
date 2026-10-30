@@ -1,0 +1,53 @@
+{
+  "name": "@mistriwork/cloudflare",
+  "version": "1.0.0-rc.4",
+  "description": "A mistri App on Cloudflare Containers: the Container class and Worker handlers `mistri deploy init cloudflare` writes against, so a fix to the glue is a package upgrade.",
+  "keywords": [
+    "cloudflare",
+    "containers",
+    "deploy",
+    "mistri",
+    "workers"
+  ],
+  "homepage": "https://mistriwork.dev",
+  "bugs": {
+    "url": "https://github.com/rbaljinder/mistri/issues"
+  },
+  "license": "MIT",
+  "author": "Baljinder Randhawa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rbaljinder/mistri.git",
+    "directory": "packages/cloudflare"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "mark.svg",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "mistri-built": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-packages.mjs",
+    "prepack": "node ../../scripts/pack-manifest.mjs strip",
+    "postpack": "node ../../scripts/pack-manifest.mjs restore"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "^0.3.7"
+  },
+  "peerDependencies": {
+    "@cloudflare/containers": "^0.3.7"
+  },
+  "engines": {
+    "node": ">=24.22.1"
+  }
+}

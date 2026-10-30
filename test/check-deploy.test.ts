@@ -32,6 +32,14 @@ const withAuth = (store?: string): DeployInput['app'] =>
 const codes = (findings: ReturnType<typeof deployFindings>) => findings.map((finding) => `${finding.severity} ${finding.code}`);
 
 describe('deployFindings', () => {
+  test('server timing left on without a token is a warning; with a token, or off, it is clean', () => {
+    const found = deployFindings(input({ env: { MISTRI_SERVER_TIMING: '1' } }));
+    assert.deepEqual(codes(found), ['warning deploy-server-timing-public']);
+    assert.match(found[0].fix, /MISTRI_SERVER_TIMING_TOKEN/);
+    assert.deepEqual(deployFindings(input({ env: { MISTRI_SERVER_TIMING: '1', MISTRI_SERVER_TIMING_TOKEN: 'abc' } })), []);
+    assert.deepEqual(deployFindings(input({ env: { MISTRI_SERVER_TIMING_TOKEN: 'abc' } })), []);
+  });
+
   test('a network database and no sign-in is clean', () => {
     assert.deepEqual(deployFindings(input()), []);
   });
@@ -141,14 +149,14 @@ describe('mistri check --deploy', () => {
     JSON.parse(readFileSync(join(ROOT, 'packages/mistri/schema/check.schema.json'), 'utf8')),
   );
 
-  const run = (args: string[]) =>
+  const run = (args: string[], env: Record<string, string> = {}) =>
     new Promise<{ code: number; out: string; err: string }>((done) => {
       execFile(
         process.execPath,
         ['--import', 'tsx', join(ROOT, 'packages/mistri/src/server/index.ts'), ...args],
         {
           cwd: ROOT,
-          env: { ...process.env, XDG_CONFIG_HOME: join(work, 'xdg'), BETTER_AUTH_SECRET: '' },
+          env: { ...process.env, XDG_CONFIG_HOME: join(work, 'xdg'), BETTER_AUTH_SECRET: '', ...env },
           timeout: 180_000,
           killSignal: 'SIGKILL',
         },
@@ -167,6 +175,44 @@ describe('mistri check --deploy', () => {
       ['error deploy-sqlite-source', 'warning deploy-per-process-limits'],
     );
     assert.ok(deploy.every((problem) => problem.fix));
+  });
+
+  test('server timing left on without a token is a warning in the report, not a failure of its own', async () => {
+    const ran = await run(['check', '--app', dir, '--config', config, '--deploy', '--json'], { MISTRI_SERVER_TIMING: '1' });
+    const report = JSON.parse(ran.out) as { problems: Array<{ step: string; code: string; severity: string }> };
+    assert.ok(report.problems.some((problem) => problem.code === 'deploy-server-timing-public' && problem.severity === 'warning'));
+    const tokened = await run(['check', '--app', dir, '--config', config, '--deploy', '--json'], {
+      MISTRI_SERVER_TIMING: '1',
+      MISTRI_SERVER_TIMING_TOKEN: 'abc',
+    });
+    assert.ok(!JSON.parse(tokened.out).problems.some((problem: { code: string }) => problem.code === 'deploy-server-timing-public'));
+  });
+
+  test('a pending migration that breaks the running code is a warning, an error with --strict-migrations, a note when marked', async () => {
+    const migrations = join(work, 'migrations');
+    mkdirSync(migrations);
+    writeFileSync(join(migrations, 'V1__shrink.sql'), 'ALTER TABLE task DROP COLUMN note;\n-- mistri: contract\nDROP VIEW old_tasks;\n');
+    type Found = { step: string; code: string; severity: string; message: string };
+    const found = async (...more: string[]) => {
+      const ran = await run(['check', '--app', dir, '--config', config, '--deploy', '--migrations', migrations, '--json', ...more]);
+      const report = JSON.parse(ran.out) as { problems: Found[] };
+      assert.ok(validate(report), JSON.stringify(validate.errors));
+      return report.problems.filter((problem) => problem.code === 'migration-breaks-running-code');
+    };
+    const lax = await found();
+    assert.deepEqual(
+      lax.map((problem) => problem.severity),
+      ['warning', 'info'],
+    );
+    assert.match(lax[0].message, /V1__shrink\.sql:1 DROP COLUMN/);
+    assert.match(lax[1].message, /V1__shrink\.sql:3 DROP VIEW, marked as a contract step/);
+    assert.deepEqual(
+      (await found('--strict-migrations')).map((problem) => problem.severity),
+      ['error', 'info'],
+    );
+    const alone = await run(['check', '--app', dir, '--config', config, '--strict-migrations']);
+    assert.equal(alone.code, 1);
+    assert.match(alone.err, /--strict-migrations makes --deploy fail/);
   });
 
   test('without --deploy nothing about deployment is judged, and --replicas alone is refused', async () => {

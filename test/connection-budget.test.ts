@@ -17,7 +17,15 @@ import {
   managerConnections,
   sayBudget,
 } from '../packages/engine/src/adapters/connectionBudget.js';
-import { PgConnectionManager } from '../packages/engine/src/adapters/postgresPool.js';
+import { PgConnectionManager, sharedPgConnections } from '../packages/engine/src/adapters/postgresPool.js';
+import { configureServerSettings, serverSettings } from '../packages/engine/src/adapters/serverSettings.js';
+import {
+  declareTenantPool,
+  forgetTenantPools,
+  tenantAdapter,
+  tenantRequestReaders,
+} from '../packages/mistri/src/server/tenant/tenantConnections.js';
+import { arrivalWidth } from '../packages/mistri/src/server/tenant/tenantArrivals.js';
 import { servedHosts } from '../packages/mistri/src/server/build/servedHosts.js';
 import { connectionBudgets, type DeployInput } from '../packages/mistri/src/server/build/checkDeploy.js';
 
@@ -81,27 +89,83 @@ describe('the sum check --deploy prints', () => {
     assert.equal(connectionBudgets(input({ cpus: 1 })).rows[0].cpus, undefined);
   });
 
-  test('an App that declares jobs and effects counts their managers, on the home database', () => {
+  test('an App that declares jobs and effects counts the one manager their stores share, on the home database', () => {
     const bare = [{ id: 'main', name: 'main', url: business.url }];
     const one = connectionBudgets(input({ connections: bare, cpus: 1 })).rows[0];
     const served = connectionBudgets(input({ connections: bare, cpus: 1, served: { jobs: true, effects: true } })).rows[0];
-    // R = W = 4: a default manager is 4 + 4 + 1 = 9; jobs is one of them and its LISTEN, effects another.
-    assert.equal(served.perProcess - one.perProcess, 9 + 1 + 9);
+    // The server's stores hold two readers, two writers and the background writer whatever the App's pools; jobs adds its LISTEN.
+    assert.equal(served.perProcess - one.perProcess, 5 + 1);
     assert.deepEqual(
       served.parts!.map((part) => part.host),
-      ['adapter', 'jobs host', 'jobs LISTEN', 'effects host'],
+      ['adapter', 'server stores', 'jobs LISTEN'],
     );
   });
 
-  test('each host is counted by its own rule: small stores are 3, integrations replace the inbound store, a tenant App is 3R + 6W + 5', () => {
-    assert.deepEqual(servedHosts({ decisions: true, assistant: true, apiEvents: true }, 4, 4), [
-      { host: 'decisions store', connections: 3 },
-      { host: 'API event feed', connections: 3 },
-      { host: 'assistant store', connections: 3 },
+  test('every store host joins the one server-stores manager; a tenant App shares one manager for its requests', () => {
+    for (const fact of ['jobs', 'decisions', 'assistant', 'apiEvents', 'effects', 'mail', 'integrations', 'inbound'] as const)
+      assert.deepEqual(servedHosts({ [fact]: true }, 4, 4)[0], { host: 'server stores', connections: 5 }, fact);
+    assert.deepEqual(servedHosts({ decisions: true, assistant: true, apiEvents: true, integrations: true, inbound: true }, 4, 4), [
+      { host: 'server stores', connections: 5 },
     ]);
-    assert.deepEqual(servedHosts({ integrations: true, inbound: true }, 4, 4), [{ host: 'integrations store', connections: 9 }]);
-    assert.deepEqual(servedHosts({ inbound: true }, 4, 4), [{ host: 'inbound deliveries store', connections: 9 }]);
-    assert.equal(servedHosts({ tenant: true, jobs: true }, 4, 4)[0].connections, 3 * 4 + 6 * 4 + 5);
+    assert.deepEqual(servedHosts({ tenant: true }, 4, 4), [
+      { host: 'tenant requests', connections: 9 },
+      { host: 'live LISTEN', connections: 1 },
+    ]);
+    assert.deepEqual(servedHosts({ tenant: true, jobs: true, mail: true }, 6, 5), [
+      { host: 'tenant requests', connections: 12 },
+      { host: 'live LISTEN', connections: 1 },
+      { host: 'server stores', connections: 5 },
+      { host: 'jobs LISTEN', connections: 1 },
+    ]);
+  });
+
+  test('a field deployment, a tenant App with jobs at four readers and four writers, fits a role allowed eighteen', () => {
+    /* It printed `1 × 51 = 51 (limit 18): adapter 10 + tenant 41` while each tenant subsystem kept a manager of its own. */
+    const { rows, findings } = connectionBudgets(
+      input({
+        connections: [{ ...business, pool: { read: 4, write: 4 } }],
+        replicas: 1,
+        cpus: 1,
+        connectionLimit: 18,
+        served: { tenant: true, jobs: true, mail: true },
+      }),
+    );
+    assert.deepEqual(findings, []);
+    assert.match(
+      sayBudget(rows[0]),
+      /: 1 process × 16 connections = 16 \(limit 18\); a process: tenant requests 9 \+ live LISTEN 1 \+ server stores 5 \+ jobs LISTEN 1$/,
+    );
+  });
+
+  test('a sign-in store on the same database counts on top: 16 fits eighteen only with MISTRI_AUTH_POOL=2', () => {
+    const app = {
+      id: 'a',
+      connection: 'main',
+      auth: { providers: ['email'], store: business.url },
+    } as DeployInput['app'];
+    const field = (env: Record<string, string>) =>
+      connectionBudgets(
+        input({
+          app,
+          connections: [{ ...business, pool: { read: 4, write: 4 } }],
+          cpus: 1,
+          connectionLimit: 18,
+          served: { tenant: true, jobs: true, mail: true },
+          env,
+        }),
+      );
+    const stock = field({});
+    assert.deepEqual(
+      stock.findings.map((found) => found.code),
+      ['deploy-connection-limit'],
+    );
+    assert.match(
+      sayBudget(stock.rows[0]),
+      /= 20 \(limit 18\); a process: tenant requests 9 \+ live LISTEN 1 \+ server stores 5 \+ jobs LISTEN 1 \+ sign-in store 4$/,
+    );
+    const fitted = field({ MISTRI_AUTH_POOL: '2' });
+    assert.deepEqual(fitted.findings, []);
+    assert.match(sayBudget(fitted.rows[0]), /= 18 \(limit 18\).*sign-in store 2$/);
   });
 
   test('a total past the limit fails, naming the sum; at the limit or without one it does not', () => {
@@ -136,6 +200,35 @@ describe('what a process holds', () => {
     assert.equal(heldConnections().has('held-ro.example:5432/app'), false);
   });
 
+  test('holders of one database and pool shape share one manager, counted once; the last close ends it', async (t) => {
+    const url = 'postgres://u:p@shared.example/app';
+    const database = 'shared.example:5432/app';
+    const first = sharedPgConnections(url, { readers: 3 });
+    const second = sharedPgConnections(url, { readers: 3 });
+    assert.ok(first instanceof PgConnectionManager);
+    assert.equal(heldConnections().get(database), managerConnections(3, 1));
+    // Another shape is another manager: a holder never borrows pools sized for someone else.
+    const piped = sharedPgConnections(url, { readers: 3, pipelineReads: true });
+    assert.equal(heldConnections().get(database), 2 * managerConnections(3, 1));
+    await piped.close();
+    await first.close();
+    await first.close(); // once per holder, however often it is called
+    assert.equal(heldConnections().get(database), managerConnections(3, 1));
+    assert.equal(second.withWriteClient, second.withWriteClient, 'a method is bound once per handle');
+    // A method replaced on the class after the handle was taken (a test's mock) is the one a handle calls.
+    const before = second.withReadClient;
+    const mocked = t.mock.method(PgConnectionManager.prototype, 'withReadClient', async () => 'mocked');
+    assert.equal(await second.withReadClient(async () => 'real'), 'mocked');
+    mocked.mock.restore();
+    assert.equal(second.withReadClient, before);
+    await second.close();
+    assert.equal(heldConnections().has(database), false);
+    // After the last holder, the next one opens a manager of its own.
+    const again = sharedPgConnections(url, { readers: 3 });
+    assert.equal(heldConnections().get(database), managerConnections(3, 1));
+    await again.close();
+  });
+
   test('a hold is released once, however often it is called', () => {
     const release = holdConnections('postgres://u:p@twice.example/x', 4);
     holdConnections('postgres://u:p@twice.example/x', 2);
@@ -146,6 +239,72 @@ describe('what a process holds', () => {
 
   test('two URLs of one database are one, credentials aside', () => {
     assert.equal(databaseOf('postgres://a:b@h.example:5432/d'), databaseOf('postgresql://c:d@h.example/d?sslmode=require'));
+  });
+});
+
+describe("a tenant App's request pool", () => {
+  const url = 'postgres://u:p@tenant-pool.example/app';
+  const replica = 'postgres://u:p@tenant-pool-ro.example/app';
+  const database = 'tenant-pool.example:5432/app';
+  const keyed = serverSettings().writeOrder;
+  const settings = { ...serverSettings() };
+
+  test("honors the connection's pool, and check --deploy prints the number it opens", async (t) => {
+    configureServerSettings({ writeOrder: 'keyed', readers: 7, writers: 6 });
+    t.after(() => {
+      configureServerSettings({ ...settings, writeOrder: keyed });
+      forgetTenantPools();
+    });
+    declareTenantPool(url, { read: 2, write: 2 });
+    const adapters = [tenantAdapter(url, 'reader'), tenantAdapter(url, 'writer')];
+    // One manager for every holder, of the connection's size and not the process's (--read-pool 7, --write-pool 6).
+    assert.equal(heldConnections().get(database), managerConnections(2, 2));
+    const { rows } = connectionBudgets(
+      input({
+        connections: [{ id: 'main', name: 'main', url, pool: { read: 2, write: 2 } }],
+        served: { tenant: true },
+        pools: { readers: 7, writers: 6 },
+      }),
+    );
+    const [requests] = rows[0].parts!.filter((part) => part.host === 'tenant requests');
+    assert.equal(requests.connections, heldConnections().get(database));
+    await Promise.all(adapters.map((adapter) => adapter.close()));
+    assert.equal(heldConnections().has(database), false);
+    // The arrival gate halves the readers it was given, not the process's.
+    assert.equal(tenantRequestReaders(), 2);
+    assert.equal(arrivalWidth(), 1);
+  });
+
+  test("a pool that names one side takes the other from the process's settings, as an ordinary App's does", async (t) => {
+    configureServerSettings({ writeOrder: 'keyed', readers: 7, writers: 6 });
+    t.after(() => {
+      configureServerSettings({ ...settings, writeOrder: keyed });
+      forgetTenantPools();
+    });
+    declareTenantPool(url, { read: 3 });
+    const adapter = tenantAdapter(url, 'reader');
+    assert.equal(heldConnections().get(database), managerConnections(3, 6));
+    await adapter.close();
+  });
+
+  test('a replica holds its readers and no writer, which is what check --deploy counts', async (t) => {
+    configureServerSettings({ writeOrder: 'keyed' });
+    t.after(() => {
+      configureServerSettings({ ...settings, writeOrder: keyed });
+      forgetTenantPools();
+    });
+    declareTenantPool(url, { read: 3, write: 2 });
+    declareTenantPool(replica, { read: 3 });
+    const adapter = tenantAdapter(replica, 'replica', true);
+    assert.equal(heldConnections().get('tenant-pool-ro.example:5432/app'), 3);
+    await adapter.close();
+    const { rows } = connectionBudgets(
+      input({
+        connections: [{ id: 'main', name: 'main', url, replicas: [replica], pool: { read: 3, write: 2 } }],
+        served: { tenant: true },
+      }),
+    );
+    assert.equal(rows.find((row) => row.database === 'tenant-pool-ro.example:5432/app')!.perProcess, 3);
   });
 });
 

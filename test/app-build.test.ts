@@ -118,6 +118,7 @@ describe('a build', () => {
       mistri: runtimeVersion(),
       node: process.version,
       entries: { commands: join(out, 'server/commands.mjs') },
+      id: manifest.id,
     });
     assert.ok(
       Object.values(loaded.sources).every((file) => file === loaded.path),

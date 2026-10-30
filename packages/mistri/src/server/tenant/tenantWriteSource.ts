@@ -14,7 +14,8 @@ import { isPoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { renamedWriteAhead, withWriteAhead, writeAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 import { commandsOf } from '../stores/commandStores.js';
 import { SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
-import { PostgresAdapter, type PostgresTransactionVerifier } from '@mistriwork/engine/adapters/postgres.js';
+import type { PostgresAdapter, PostgresTransactionVerifier } from '@mistriwork/engine/adapters/postgres.js';
+import { tenantAdapter } from './tenantConnections.js';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import type { PostgresScopeCatalog } from '@mistriwork/engine/adapters/scoped/postgresScopeCatalog.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -656,7 +657,7 @@ export async function openPostgresTenantWriteSource(
     )
       return denyTenant();
     const locator = postgresTenantLocator(url);
-    const first = (adapter = new PostgresAdapter(url, 'Private tenant writer'));
+    const first = (adapter = tenantAdapter(url, 'Private tenant writer'));
     const physical = new Map(Object.entries(owned.resources));
     const ids = new Set(physical.values());
     const toPhysical = (logical: string) => physical.get(logical) ?? denyTenant();
@@ -736,9 +737,11 @@ export async function openPostgresTenantWriteSource(
       /* The URL is the trusted host's and fixed; the attestation is what
          says the database behind it is still the one this source opened. */
       reopen: async (receipt) => {
-        const next = new PostgresAdapter(url, 'Private tenant writer');
-        /* A new pool attests in full: what the old one's attestation proved
-           is not carried to it, even under an epoch that has not moved. */
+        const next = tenantAdapter(url, 'Private tenant writer');
+        /* A new adapter attests in full: what the old one's attestation
+           proved is not carried to it, even under an epoch that has not moved.
+           Its pool is the database's shared one (tenantConnections.ts), whose
+           lost connection was destroyed, not given back. */
         standing = undefined;
         try {
           return { handle: next, committed: await prepare(next, receipt) };

@@ -46,6 +46,7 @@ export const PREVIEW_EXPORTS: readonly string[] = [
   './ui: useAnalytics',
   './ui: useFlags',
   './ui: useVisitor',
+  './testing: roundTrips',
 ];
 
 /** CLI commands and flags that are Preview, as the inventory names them. */
@@ -55,6 +56,7 @@ export const PREVIEW_CLI: readonly string[] = [
   'command experiments',
   'command analytics',
   'command suite',
+  'command deploy', // the Cloudflare roll (`@mistriwork/cloudflare` is Preview with it): one target, proven on one field deployment
 ];
 
 interface PreviewApp {

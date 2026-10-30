@@ -23,6 +23,7 @@ import * as mistriIntegration from '@mistriwork/mistri/integration';
 import * as engine from '@mistriwork/engine';
 import * as kit from '@mistriwork/kit';
 import * as ui from '@mistriwork/ui';
+import * as cloudflare from '@mistriwork/cloudflare';
 
 /** Compiles only when the module exports at least one value. */
 const some = <A>(any: [A] extends [never] ? false : true) => any;
@@ -48,4 +49,5 @@ export const entries = {
   '@mistriwork/engine': some<keyof typeof engine>(true),
   '@mistriwork/kit': some<keyof typeof kit>(true),
   '@mistriwork/ui': some<keyof typeof ui>(true),
+  '@mistriwork/cloudflare': some<keyof typeof cloudflare>(true),
 };

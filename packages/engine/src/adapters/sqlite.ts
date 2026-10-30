@@ -81,6 +81,7 @@ import { runInStatementProcess } from './sqliteStatementProcess.js';
 import { heavyRelations, readInProcess, stalls } from './sqliteCostlyReads.js';
 import { scaleArrays, scaleRows, scalesOf } from './sqliteDecimals.js';
 import { compileView, compileViewCount, type ViewDef } from '../shared/view.js';
+import { roundTrip } from './dbLatency.js';
 import { compileBreakdown, compileBreakdownCount, type BreakdownDef } from '../shared/breakdown.js';
 import { flagsFromDDL, vocabularyFromDDL } from '../shared/vocabulary.js';
 import {
@@ -512,6 +513,7 @@ export class SqliteAdapter implements Adapter {
     const scope = captureRowScope(input);
     const schema = await this.schema();
     return createScopedReads(schema, scope, ANSI_STYLE, async (compiled, hint) => {
+      await roundTrip();
       const started = performance.now();
       const statement = this.db.prepare(compiled.text);
       statement.setReadBigInts(true);
@@ -811,6 +813,7 @@ export class SqliteAdapter implements Adapter {
     aggregate = false,
     db = this.db,
   ): Promise<Array<Record<string, unknown>>> {
+    await roundTrip();
     const bound = sqliteParams(params);
     if (db === this.db && typeof this.writeIdentity === 'string' && stalls(db, text, bound, heavyRelations(this.cachedSchema), aggregate))
       return readInProcess(this.file, text, bound);
@@ -1043,6 +1046,7 @@ export class SqliteAdapter implements Adapter {
   }
 
   private async runSqlNow(request: SqlRequest): Promise<SqlResult> {
+    await roundTrip();
     const stacked = refuseStacked(request.text);
     if (stacked) throw new Error(stacked);
     if (request.refuseReserved) refuseReservedText(request.text, 'sqlite');

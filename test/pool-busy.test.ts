@@ -18,6 +18,7 @@ import {
   type PgResult,
 } from '../packages/engine/src/adapters/postgresPool.js';
 import { isPoolBusy, PoolBusy, POOL_BUSY_MESSAGE } from '../packages/engine/src/adapters/poolMetrics.js';
+import { asBackgroundWork } from '../packages/engine/src/adapters/writeLanes.js';
 import { createApp } from './support/createApp.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { makeDemoDatabase } from './make-demo-db.js';
@@ -243,4 +244,61 @@ test('the server answers a refused checkout 503 with Retry-After; a write says i
     server.closeAllConnections();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/* The background writer is one connection that jobs, effects, deliveries and workflow steps all wait for. It used to
+   take any number of them, for as long as the driver's connect timeout, and a burst failed together as an
+   unavailable store. A line past its bound is answered busy before anything was leased, which a job's command
+   reads as temporarily_unavailable and retries; the ones inside the bound all complete. */
+test('a burst of background checkouts past the writer queue is answered busy, and none of the queued is lost', async () => {
+  const { connections } = manager({ queuePerConnection: 3 });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const done: number[] = [];
+  const work = (n: number, wait?: Promise<void>) =>
+    asBackgroundWork(() =>
+      connections.withWriteClient(async () => {
+        await wait;
+        done.push(n);
+      }),
+    );
+  // One holds the background writer; three more may wait (the queue is 1 x 3); the rest are refused at once.
+  const first = work(0, held);
+  await new Promise((resolve) => setImmediate(resolve));
+  const settling = Promise.allSettled([first, ...Array.from({ length: 8 }, (_, i) => work(i + 1))]);
+  await new Promise((resolve) => setImmediate(resolve));
+  release();
+  const answers = await settling;
+  const refused = answers.filter((answer) => answer.status === 'rejected') as PromiseRejectedResult[];
+  assert.equal(refused.length, 5);
+  for (const answer of refused) assert.ok(isPoolBusy(answer.reason), 'busy, which a caller retries');
+  assert.deepEqual(
+    [...done].sort((a, b) => a - b),
+    [0, 1, 2, 3],
+    'what queued ran',
+  );
+  await connections.close();
+});
+
+test("a background checkout that waits out the driver's connect timeout is answered busy, not as a store fault", async () => {
+  const pg = {
+    Pool: function Pool(o: PgPoolOptions) {
+      const pool = new HoldingPool(o);
+      pool.connect = () => Promise.reject(new Error('timeout exceeded when trying to connect'));
+      return pool;
+    },
+  };
+  const connections = new PgConnectionManager(
+    'postgres://fake',
+    () => {},
+    async () => pg,
+    { readers: 1, writers: 1 },
+  );
+  await assert.rejects(
+    asBackgroundWork(() => connections.withWriteClient(async () => 'never')),
+    (error: unknown) => isPoolBusy(error),
+  );
+  await connections.close();
 });

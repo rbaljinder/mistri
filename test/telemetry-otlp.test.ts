@@ -200,7 +200,7 @@ test(
         assert.equal(refused.status >= 400, true);
         // The probes answer, and are not traced.
         assert.equal((await fetch(`${base}/healthz`)).status, 200);
-        assert.deepEqual(await (await fetch(`${base}/readyz`)).json(), { status: 'ok' });
+        assert.deepEqual(await (await fetch(`${base}/readyz`)).json(), { status: 'ok', deploy: null, build: null });
       });
       await telemetry.flush();
     } finally {

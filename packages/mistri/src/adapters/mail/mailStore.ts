@@ -28,7 +28,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { describePostgresRelations } from '../commands/postgresRelations.js';
 import { withPostgresMaintenanceTransaction } from '../commands/postgresCommandJournalSchema.js';
 import { layoutRefusal, postgresLayoutVersion, sqliteLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
-import { PgConnectionManager, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
+import { RUNTIME_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
+import { sharedPgConnections, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { runtimeName, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 
 const MAIL_PREFIX = '__mistri_mail_';
@@ -334,7 +335,7 @@ export async function migratePostgresMailStore(url: string): Promise<{ provision
 }
 
 async function openPostgresMailStore(url: string): Promise<MailStore> {
-  const pg = new PgConnectionManager(url);
+  const pg = sharedPgConnections(url, RUNTIME_STORE_POOL);
   try {
     await pg.withWriteClient((client) => assertPostgresMailStore(client));
   } catch (error) {

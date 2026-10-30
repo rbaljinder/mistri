@@ -3,7 +3,7 @@ title: Performance and pools
 description: Size PostgreSQL pools for a deployment, read the meters when it is slow, and run behind PgBouncer or RDS Proxy.
 ---
 
-Size PostgreSQL pools for a deployment, read the meters when it is slow, and run behind PgBouncer or RDS Proxy.
+Size PostgreSQL pools for a deployment, read the meters when it is slow, and run behind PgBouncer or RDS Proxy. To keep requests cheap in the first place, see [Performance by default](/docs/performance-by-default/).
 
 ```json title="mistri.json"
 { "connections": [{ "name": "app", "url": "${DATABASE_URL}", "writable": true, "pool": { "read": 16, "write": 4 } }] }
@@ -13,7 +13,8 @@ Size PostgreSQL pools for a deployment, read the meters when it is slow, and run
 
 ## What you'll see
 
-- At most `read + write + 1` connections per process to each PostgreSQL database, opened when first needed; idle ones close after 30 seconds.
+- At most `read + write + 1` connections per process to each PostgreSQL database for the App's requests, five more for its jobs and other server stores, opened when first needed; idle ones close after 30 seconds.
+- People arriving at a tenant App at once (`/api/tenant/enter`, `/api/tenant/bootstrap`) are let in half as many at a time as there are readers, in order; one that has waited 20 seconds is answered 503, `Retry-After: 1`, code `tenant_temporarily_unavailable`.
 - A write that waits more than five seconds for a lock is refused with nothing applied: 503, `Retry-After: 1`, code `row_locked`.
 - A request that finds every reader or writer busy queues for at most two seconds, and at most sixty-four per connection may queue. Past either it is refused at once: 503, `Retry-After: 1`, code `server_busy`, with nothing run (a write says `not_applied`). The page asks a busy read again a few times and shows a write's refusal.
 - Readiness reports `pool_saturated` while a checkout queues; the support bundle's [capacity section](/docs/observe/#the-capacity-section) says why.
@@ -49,7 +50,7 @@ Across a deployment:
 
     pods × databases × (read + write + 1)
 
-plus up to 4 for a `postgres://` sign-in store (`MISTRI_AUTH_POOL`, 1 to 64), 2 for `--jobs` on PostgreSQL, and short-lived ones for startup checks and query cancels. A tenant App keeps several pools per database (its readers, writers, jobs, outbox and integrations), at most `3 × read + 6 × write + 5` per pod, though it holds far fewer: pools open as they are used. A pool the database refuses another connection goes on with the ones it holds, and the log says `connection limit reached`. Ten pods at `"read": 16` is 210 connections, past a stock `max_connections` of 100. Fewer writers per pod (`--write-pool 2`) is the first lever; a pooler is the second.
+plus 1 for live sync's LISTEN, 5 for the server's stores when the App declares jobs, mail, integrations, effects, decisions, API events or an assistant (they share one pool, apart from the people's), 1 for the jobs LISTEN, up to 4 for a `postgres://` sign-in store (`MISTRI_AUTH_POOL`, 1 to 64), and short-lived ones for startup checks and query cancels. A tenant App's readers, writers, administration and support share the one `read + write + 1` pool too, sized by the connection's `pool`. The sign-in store's pool counts on top of the rest when it is on the same database: a role allowed eighteen connections fits a tenant App at `"pool": { "read": 4, "write": 4 }` with jobs only if `MISTRI_AUTH_POOL=2` (16 + 2); the default 4 makes it 20. `mistri check --deploy` prints each term. A pool the database refuses another connection goes on with the ones it holds, and the log says `connection limit reached`. Ten pods at `"read": 16` is 210 connections, past a stock `max_connections` of 100. Fewer writers per pod (`--write-pool 2`) is the first lever; a pooler is the second.
 
 A writer makes about `1000 / transaction_ms` saves a second (at 20 ms and a three-trip save, about sixty for the default four); a reader serves about `1000 / hold_ms` reads. Past a few thousand a second the event loop is the limit: add pods.
 
@@ -64,7 +65,7 @@ A writer makes about `1000 / transaction_ms` saves a second (at 20 ms and a thre
 
 ### One request's time
 
-`MISTRI_SERVER_TIMING=1` answers every request with a `Server-Timing` header, and logs it as one JSON line: `total`, `cpu`, `auth` (resolving the session), and per database (`db-app`, `db-auth`) the round trips sent and the time spent awaiting them, and per pool the wait for a connection. At startup it logs ten `SELECT 1` round trips to each database, measured from where the server runs. It names no statement, row or key; it is off by default. **It exposes process internals (heap, garbage collection, pools) to any requester, so it is for load testing only: keep it off in production.**
+`MISTRI_SERVER_TIMING=1` answers every request with a `Server-Timing` header, and logs it as one JSON line: `total`, `cpu`, `auth` (resolving the session), and per database (`db-app`, `db-auth`) the round trips sent and the time spent awaiting them, and per pool the wait for a connection. At startup it logs ten `SELECT 1` round trips to each database, measured from where the server runs. It names no statement, row or key; it is off by default, except under `mistri dev`, where it is on for the dev log's cost line and leaves out `proc`. **It exposes process internals (heap, garbage collection, pools) to any requester, so it is for load testing only: keep it off in production.** To measure a deployment that is reachable, set `MISTRI_SERVER_TIMING_TOKEN`: the process entry (`proc`) is then added only to a request that sends the token as an `x-mistri-timing` header, and the per-request entries stay as they were. `mistri check --deploy` warns when timing is on without a token.
 
 ## Read replicas
 
@@ -120,7 +121,7 @@ It seeds its own database and loopback server, so it cannot be pointed at a live
 
 ## Common mistakes
 
-- `sorry, too many clients already` after a scale-out → multiply it out: pods × (read + write + 1); lower `--write-pool` or add a pooler.
+- `sorry, too many clients already` after a scale-out → multiply it out: pods × (read + write + 2), plus 6 with jobs (`mistri check --deploy` prints the sum); lower `--write-pool` or add a pooler.
 - Session settings leak, or prepared statements collide, behind PgBouncer → start with `--pooler transaction`.
 - Saves answer 503 `row_locked` during a migration → the migration holds the table; run migrations before the rollout, not during traffic.
 - `pool` on a SQLite connection refuses the start → SQLite has no pool; drop it.

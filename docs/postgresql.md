@@ -184,8 +184,9 @@ transaction rolls back, and the caller hears it as what it is: a save answers
 command refuses `row_locked` the same way. A migration sets its own
 `lock_timeout` and retries its file (`packages/engine/src/server/migrate/runner.ts`).
 
-**Sizing.** A process opens at most `read + write + 1` connections per
-database, the one for background work only when needed: nine by default.
+**Sizing.** A process's request pool opens at most `read + write + 1`
+connections per database, the one for background work only when needed: nine
+by default (the rest of what it holds is below).
 Ten pods at the defaults is ninety, under a stock `max_connections` of 100
 with nothing else connected; the site's capacity table does the rest of the
 sum. A writer serves about `1000 / transaction_ms` saves a second. A save is a
@@ -206,45 +207,50 @@ the cores, 4 to 16, and `R` is as many as `W`):
 | Holder | When a served App builds it | At most |
 | --- | --- | --- |
 | The App's adapter (its record history, inbox, branding and live stores share it) | always, one per connection | `R + W + 1` |
+| A tenant App's request pool, in place of the adapter (its reader, discovery, writer, administration and support share it) | `auth.rows: "tenant"` | `R + W + 1` |
 | Live sync's LISTEN | always | 1 |
-| Jobs host (job, workflow and event-delivery stores) | the jobs module declares a job or workflow | `R + W + 1`, and a LISTEN: 1 |
-| Decisions store | the jobs module declares decisions | 3 |
-| Effects host | a command declares effects | `R + W + 1` |
-| Integrations store | the jobs module lists integrations; inbound endpoints alone open one for their deliveries | `R + W + 1` |
-| API event feed | the App's API exposes events | 3 |
-| Assistant store | the App declares an assistant (opened on its first request) | 3 |
+| The server's stores: jobs, workflows and event deliveries, decisions, effects, the email outbox, integrations and inbound deliveries, the API event feed, the assistant | any of them is declared (the assistant's opens on its first request) | 5 |
+| The jobs host's LISTEN | the jobs module declares a job or workflow | 1 |
 | A read replica | the connection names it | `R`, on the replica's host |
 | The sign-in store | `auth.store` is a `postgres://` URL | `MISTRI_AUTH_POOL` (default 4), on its own database |
 
-A "3" is a small store: one reader, one writer and the background writer
-(`SMALL_STORE_POOL`). A jobs host, effects host and integrations store each
-build a default manager, so an App with all three holds four
-`R + W + 1` managers and two LISTENs on its database, `4R + 4W + 6`, where a
-bare one holds `R + W + 2`. `mistri check --deploy --replicas <n>
---connection-limit <n> [--cpus <n>] [--jobs <file>]` prints "N processes × M
-connections = T" per database with the terms, and refuses a total past the
-limit you name; `--cpus` is the deployment's core count (this machine's
-otherwise, and the line says so), and `--jobs` lets it read which hosts the
-jobs module makes. A start asks the server once for the role's `rolconnlimit`
-and `max_connections` less `superuser_reserved_connections`, and prints one
-warning naming both numbers when what it actually built is past the smaller;
-it never refuses to start.
+So a process holds `R + W + 2` on its database, and `R + W + 8` with jobs and
+any other store: at four and four, ten and sixteen. Every holder of one
+database with one pool shape shares one connection manager
+(`sharedPgConnections` in `postgresPool.ts`), so a reader, writer or store
+added to the server joins a pool instead of opening another. The server's
+stores share one of their own, `RUNTIME_STORE_POOL` (two readers, two writers
+and the background writer), kept apart from the people's pool so a burst of
+job claims or deliveries never takes a connection a person's save is waiting
+for. Work a job, workflow, delivery or the outbox starts runs on a manager's
+one background writer (`asBackgroundWork` in `writeLanes.ts`), never on its
+`W` writers, so it cannot starve interactive writes either; it queues behind
+itself instead. Sharing a manager does not merge write lanes: each holder keeps
+its own, so a record's saves keep their order. `mistri check --deploy
+--replicas <n> --connection-limit <n> [--cpus <n>] [--jobs <file>]` prints "N
+processes × M connections = T" per database with the terms, and refuses a
+total past the limit you name; `--cpus` is the deployment's core count (this
+machine's otherwise, and the line says so), and `--jobs` lets it read which
+hosts the jobs module makes. A start asks the server once for the role's
+`rolconnlimit` and `max_connections` less `superuser_reserved_connections`,
+and prints one warning naming both numbers when what it actually built is past
+the smaller; it never refuses to start.
 
-**A tenant App holds several of those per process.** `read + write + 1` is one
-connection manager's. A tenant App on one PostgreSQL source has a request
-reader and a membership reader (`read` each), the tenant writer (`write`, a
-reader for record history, the background writer), the administration and
-support writers (`write` each), and with them configured the jobs host (`write`
-and a background writer), the email outbox and the integrations store (`write`
-each), the assistant (one) and two `LISTEN` connections, besides
-`MISTRI_AUTH_POOL` for a `postgres://` sign-in store: at most
-`3 × read + 6 × write + 5 + auth`. Pools open as they are used and writers
-close after 30 idle seconds, so far fewer are held: measured at 6/5/3 with
-four people, 16 idle and 22 at the peak, the growth almost all in the two
-readers and the auth store. When the database refuses another connection
-(53300, "too many connections for role"), the pool goes on with the
-connections it holds and a checkout waits for one of them; holding none, it is
-answered busy (503).
+**A tenant App.** Each of its request paths once opened a manager of its own,
+so a process could hold `3 × read + 6 × write + 5` and more: a field
+deployment whose role allowed eighteen connections printed `1 × 51 = 51`
+with four-and-four pools. They share one now, so the same deployment is
+`tenant requests 9 + live LISTEN 1 + server stores 5 + jobs LISTEN 1 = 16`,
+and a `postgres://` sign-in store on the same database adds its own pool
+(`MISTRI_AUTH_POOL`, default 4) to that line as `+ sign-in store 4`, which
+`check --deploy` prints and counts: `... = 20`, past a role's eighteen. Set
+`MISTRI_AUTH_POOL=2` to make it `... + sign-in store 2 = 18`, which fits. A
+connection's `"pool"` sizes a tenant App's request pool as it sizes any App's,
+and the count follows it. Pools open as
+they are used and writers close after 30 idle seconds, so fewer are held than
+the sum. When the database refuses another connection (53300, "too many
+connections for role"), the pool goes on with the connections it holds and a
+checkout waits for one of them; holding none, it is answered busy (503).
 The log says `connection limit reached: the app write pool holds N of M`, once
 in 30 seconds. Size the pools so the peak stays under the role's limit, or put
 a pooler in front.

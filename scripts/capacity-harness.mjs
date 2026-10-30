@@ -434,7 +434,8 @@ class Person {
     const start = performance.now();
     let status = 0,
       json,
-      serverCpu;
+      serverCpu,
+      flights;
     try {
       const res = await fetch(this.base + path, {
         method,
@@ -455,7 +456,11 @@ class Person {
         if (eq > 0) this.cookies.set(pair.slice(0, eq).trim(), pair.slice(eq + 1));
       }
       status = res.status;
-      serverCpu = Number(/(?:^|, )cpu;dur=([\d.]+)/.exec(res.headers.get('server-timing') ?? '')?.[1]);
+      const timing = res.headers.get('server-timing') ?? '';
+      serverCpu = Number(/(?:^|, )cpu;dur=([\d.]+)/.exec(timing)?.[1]);
+      /* The request's round trips, every database it touched (`db-app`, `db-auth`) summed, as a field load test reads them. */
+      const each = [...timing.matchAll(/(?:^|, )db-[a-z-]+;[^,]*?desc="flights=(\d+)/g)].map((m) => Number(m[1]));
+      if (each.length) flights = each.reduce((sum, n) => sum + n, 0);
       const text = await res.text();
       try {
         json = JSON.parse(text);
@@ -472,6 +477,7 @@ class Person {
       ms: performance.now() - start,
       status,
       serverCpu,
+      ...(flights === undefined ? {} : { flights }),
       ...(status >= 400 ? { code: json?.code } : {}),
     });
     return { status, json };
@@ -906,6 +912,8 @@ const latencies = (name) => {
   for (const r of records.filter((r) => r.phase === name && r.ix)) (ixs[r.interaction] ??= []).push(r.ms);
   const cpuBy = {};
   for (const r of rows) if (Number.isFinite(r.serverCpu)) (cpuBy[r.endpoint] ??= []).push(r.serverCpu);
+  const flightsBy = {};
+  for (const r of rows) if (Number.isFinite(r.flights)) (flightsBy[r.endpoint] ??= []).push(r.flights);
   return {
     overall: summary(rows.map((r) => r.ms)),
     errors: rows.filter((r) => r.status < 200 || r.status >= 400).length,
@@ -921,6 +929,7 @@ const latencies = (name) => {
     endpoints: Object.fromEntries(Object.entries(byEndpoint).map(([k, v]) => [k, summary(v)])),
     interactions: Object.fromEntries(Object.entries(ixs).map(([k, v]) => [k, summary(v)])),
     serverCpuByEndpoint: Object.fromEntries(Object.entries(cpuBy).map(([k, v]) => [k, summary(v)])),
+    flightsByEndpoint: Object.fromEntries(Object.entries(flightsBy).map(([k, v]) => [k, summary(v)])),
   };
 };
 

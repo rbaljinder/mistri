@@ -63,6 +63,8 @@ export interface BuildManifest {
    * never has to guess what a build holds.
    */
   outputs: { manifest: string; definition?: string; types?: string; components?: string; fonts?: string; brand?: string };
+  /** The input fingerprint (build/fingerprint.ts): 16 hex over what the build read, the same on any machine that builds the same tree. */
+  id: string;
   /** Every file of the build except this manifest, by relative path. */
   sha256: Record<string, string>;
 }
@@ -74,6 +76,8 @@ export interface AppBuildInfo {
   node: string;
   /** The absolute paths of the bundled server entries, by kind. */
   entries: Partial<Record<BuildEntryKind, string>>;
+  /** The build's input fingerprint (`buildInputId`, stamped in the manifest): what `/readyz` reports as `build`. */
+  id: string;
 }
 
 export const sha256 = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
@@ -388,7 +392,7 @@ export async function loadBuiltApp(dir: string, options: { lock?: 'enforce' | 'r
     sources: Object.fromEntries(pages.map((page) => [page.id, path])),
     authority,
     origins,
-    build: { dir: resolve(dir), mistri: manifest.mistri, node: manifest.node, entries },
+    build: { dir: resolve(dir), mistri: manifest.mistri, node: manifest.node, entries, id: manifest.id },
     ...(manifest.outputs.components ? { components: await readBuiltComponents(dir, manifest.outputs.components) } : {}),
     ...(await builtFonts(app, dir)),
     ...(loaders ? { loaders } : {}),

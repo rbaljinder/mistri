@@ -45,7 +45,7 @@
     }
   },
   "$defs": {
-    "step": { "enum": ["check", "pending", "schema types", "typecheck", "themes", "fonts", "files", "validation", "components", "routes", "design", "elevations", "segments", "defaults", "fix", "deploy"] },
+    "step": { "enum": ["check", "pending", "schema types", "typecheck", "themes", "fonts", "files", "validation", "indexes", "components", "routes", "design", "elevations", "segments", "defaults", "fix", "deploy"] },
     "problem": {
       "type": "object",
       "additionalProperties": false,

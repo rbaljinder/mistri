@@ -12,6 +12,13 @@
  * concurrency. Allocation comes from V8's own GC statistics (what each
  * collection found minus what the one before left).
  *
+ * Memory over a long run: `/memory` says the heap and the resident set now,
+ * cheaply enough to ask every few seconds (the lowest readings in a window are
+ * its floor, what survived the collections in it), and `/snapshot?label=`
+ * writes a heap snapshot, after the full collection V8 makes for one, into the
+ * output directory — two of them, early and late, diffed by constructor, say
+ * what the process kept between them.
+ *
  * Two ways in: `capacityServer.ts` (Ignition, deployed by the fixture) calls
  * `openCapacityControl` itself; any other App is served by the ordinary CLI
  * with `--import test/support/capacityPreload.ts`, so what is measured is the
@@ -26,7 +33,7 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { Session } from 'node:inspector/promises';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { GCProfiler, getHeapStatistics } from 'node:v8';
+import { GCProfiler, getHeapStatistics, writeHeapSnapshot } from 'node:v8';
 
 interface Window {
   started: number;
@@ -209,6 +216,16 @@ export async function openCapacityControl(options: { port: number; out: string; 
         return reply(200, { ok: true });
       }
       if (url.pathname === '/end') return reply(200, await end(url.searchParams.get('label') ?? 'window'));
+      if (url.pathname === '/memory')
+        return reply(200, { heapUsedBytes: getHeapStatistics().used_heap_size, rssBytes: process.memoryUsage().rss });
+      if (url.pathname === '/snapshot') {
+        const label = (url.searchParams.get('label') ?? 'heap').replace(/[^\w.-]/g, '');
+        mkdirSync(options.out, { recursive: true });
+        return reply(200, {
+          file: writeHeapSnapshot(join(options.out, `${label}.heapsnapshot`)),
+          heapUsedBytes: getHeapStatistics().used_heap_size,
+        });
+      }
       if (url.pathname === '/gc') {
         globalThis.gc?.();
         return reply(200, { ok: typeof globalThis.gc === 'function' });

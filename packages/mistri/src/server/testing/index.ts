@@ -26,3 +26,4 @@ export type { DecisionEvaluation, ReliabilityBucket } from '../decide/decisionEv
 export type { WorkflowDriverOptions } from './workflows.js';
 export { settled, watchRequests } from './settled.js';
 export type { SettledOptions, SettledPage } from './settled.js';
+export { roundTrips } from './roundTrips.js';

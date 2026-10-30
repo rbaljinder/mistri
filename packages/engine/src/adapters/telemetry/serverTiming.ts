@@ -5,7 +5,10 @@
  * stopped converging. `MISTRI_SERVER_TIMING=1` switches it on; off, every
  * entry point below is one boolean check and the work itself. For load tests
  * only: the `proc` entry hands the process's heap, GC and pool use to any
- * requester, so it stays off in production (SECURITY.md).
+ * requester, so it stays off in production (SECURITY.md) — or is held back
+ * behind `MISTRI_SERVER_TIMING_TOKEN`: with that set, `proc` is added only to
+ * a request that sends the token as `x-mistri-timing`, and every other entry
+ * (each describes that request's own time) goes to anyone.
  *
  * What it counts, per request:
  *
@@ -28,7 +31,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { constants as perfConstants, monitorEventLoopDelay, performance as perf, PerformanceObserver } from 'node:perf_hooks';
 import { getHeapStatistics } from 'node:v8';
 
@@ -37,6 +40,72 @@ let on = process.env.MISTRI_SERVER_TIMING?.trim() === '1';
 export function setServerTiming(value: boolean): void {
   on = value;
   if (on) startProcessSampler();
+}
+
+/* Development's own timing (`--dev`): on without MISTRI_SERVER_TIMING, so every response says its cost in a
+   Server-Timing header and the terminal gets one line a request that touched the database. It is the request's own
+   time and goes to anyone who can reach the dev server; the process entry never does, so the sampler is not started,
+   and the JSON log line is replaced by the line a person reads. An operator who set the variable keeps theirs. */
+let developing = false;
+/** Time requests as development does (see above). Nothing changes where the environment already switched timing on. */
+export function setServerTimingDev(): void {
+  if (on) return;
+  on = true;
+  developing = true;
+}
+
+/**
+ * The most database round trips a request should make (a flight: one message sent and awaited, a pipelined batch
+ * counted once). The numbers the platform's own tests hold: a read, a command with the reads that settle after it,
+ * and the first page of an App, which composes its reads. Past them the dev log says so.
+ */
+export const ROUND_TRIP_BUDGETS = { read: 3, command: 6, entry: 16 } as const;
+type Budget = keyof typeof ROUND_TRIP_BUDGETS;
+
+/** Which budget a request answers to, or none for one that is not the App's (an asset). */
+export function budgetOf(method: string | undefined, route: string): Budget | undefined {
+  if (route === '/assets') return undefined;
+  const read = method === 'GET' || method === 'HEAD';
+  if (route === 'page') return read ? 'entry' : 'command';
+  return read ? 'read' : 'command';
+}
+
+const PERFORMANCE_PAGE = 'https://mistriwork.dev/docs/performance-by-default/';
+
+/** What a developer is told of one request: its cost, and a warning line when it made more round trips than its budget. */
+export function costLines(cost: {
+  method?: string;
+  route: string;
+  status: unknown;
+  roundTrips: number;
+  dbMs: number;
+  cpuMs: number;
+}): string[] {
+  const what = `${cost.method ?? 'GET'} ${cost.route === 'page' ? 'page' : cost.route}`;
+  const lines = [
+    `mistri: ${what} ${cost.status}: ${cost.roundTrips} round trip${cost.roundTrips === 1 ? '' : 's'}, db ${round(cost.dbMs)} ms, cpu ${round(cost.cpuMs)} ms`,
+  ];
+  const budget = budgetOf(cost.method, cost.route);
+  if (budget && cost.roundTrips > ROUND_TRIP_BUDGETS[budget])
+    lines.push(
+      `mistri: warning: ${what} made ${cost.roundTrips} round trips; ${
+        { read: 'a read', command: 'a command', entry: "an App's first page" }[budget]
+      } should make at most ${ROUND_TRIP_BUDGETS[budget]}. ${PERFORMANCE_PAGE}`,
+    );
+  return lines;
+}
+
+let token = process.env.MISTRI_SERVER_TIMING_TOKEN?.trim() || undefined;
+/** The operator token that gates the `proc` entry: read once from the environment; tests set it. */
+export function setServerTimingToken(value: string | undefined): void {
+  token = value?.trim() || undefined;
+}
+
+/** Whether `header` is the operator token, compared over digests so neither length nor content shows in the time taken. */
+function holdsToken(header: string | string[] | undefined): boolean {
+  if (!token || typeof header !== 'string') return false;
+  const digest = (text: string) => createHash('sha256').update(text).digest();
+  return timingSafeEqual(digest(header), digest(token));
 }
 
 /* The process entry. A load test needs the process's own state beside each
@@ -50,10 +119,16 @@ const bootedAt = Date.now();
 const MB = 1024 * 1024;
 const mb = (bytes: number) => Math.round((bytes / MB) * 10) / 10;
 
-/** A count the process keeps elsewhere (a pool's leases, open streams), read at each sample; same-named gauges add. */
+/** A count the process keeps elsewhere (a pool's leases, open streams), read at each sample; same-named gauges add.
+ * Returns its removal: a gauge's reader keeps what it reads alive, so an owner that closes (a pool) takes it out. */
 const gauges: Array<{ name: string; read: () => number }> = [];
-export function registerGauge(name: string, read: () => number): void {
-  gauges.push({ name, read });
+export function registerGauge(name: string, read: () => number): () => void {
+  const gauge = { name, read };
+  gauges.push(gauge);
+  return () => {
+    const at = gauges.indexOf(gauge);
+    if (at >= 0) gauges.splice(at, 1);
+  };
 }
 /** Whether timing is on, for an owner that registers many gauges (a pool per manager) only when it matters. */
 export const serverTimingOn = (): boolean => on;
@@ -80,6 +155,10 @@ export const sampleProcessNow = (): void => resample();
 
 function startProcessSampler(): void {
   if (sampler) return;
+  if (!token)
+    console.error(
+      'mistri: warning: MISTRI_SERVER_TIMING=1 puts the process entry (heap, garbage collection, pool use) in every response to any requester. Set MISTRI_SERVER_TIMING_TOKEN to require an x-mistri-timing header for it, or turn timing off in production.',
+    );
   try {
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
@@ -175,9 +254,9 @@ class RequestTiming {
     };
   }
 
-  header(fields: Record<string, unknown>): string {
+  header(fields: Record<string, unknown>, withProc: boolean): string {
     const metrics = [`total;dur=${fields.total}`, `cpu;dur=${fields.cpu}`];
-    if (procHeader) metrics.push(procHeader);
+    if (procHeader && withProc) metrics.push(procHeader);
     for (const [name, ms] of this.sums) metrics.push(`${name};dur=${round(ms)}`);
     for (const [label, c] of this.db) metrics.push(`db-${label};dur=${round(c.waitMs)};desc="flights=${c.flights} max=${c.maxBusy}"`);
     for (const [label, p] of this.pools) metrics.push(`pool-${label};dur=${round(p.ms)};desc="n=${p.n}"`);
@@ -208,7 +287,7 @@ function routeOf(url: string | undefined): string {
  */
 export function timedListener<L extends (req: IncomingMessage, res: ServerResponse) => unknown>(listener: L): L {
   if (!on) return listener;
-  startProcessSampler();
+  if (!developing) startProcessSampler();
   return ((req: IncomingMessage, res: ServerResponse) => {
     if (storage.getStore()) return listener(req, res);
     const timing = new RequestTiming();
@@ -219,10 +298,25 @@ export function timedListener<L extends (req: IncomingMessage, res: ServerRespon
       if (!timing.sent) {
         timing.sent = true;
         const fields = timing.fields();
-        if (!this.headersSent) this.setHeader('Server-Timing', timing.header(fields));
-        process.stderr.write(
-          `${JSON.stringify({ msg: 'server-timing', method: req.method, route: routeOf(req.url), status: args[0], ...fields })}\n`,
-        );
+        if (!this.headersSent)
+          this.setHeader('Server-Timing', timing.header(fields, !developing && (!token || holdsToken(req.headers['x-mistri-timing']))));
+        if (developing) {
+          const dbs = [...timing.db.values()];
+          const roundTrips = dbs.reduce((sum, c) => sum + c.flights, 0);
+          if (roundTrips > 0)
+            for (const line of costLines({
+              method: req.method,
+              route: routeOf(req.url),
+              status: args[0],
+              roundTrips,
+              dbMs: dbs.reduce((sum, c) => sum + c.waitMs, 0),
+              cpuMs: Number(fields.cpu),
+            }))
+              console.error(line);
+        } else
+          process.stderr.write(
+            `${JSON.stringify({ msg: 'server-timing', method: req.method, route: routeOf(req.url), status: args[0], ...fields })}\n`,
+          );
       }
       return writeHead.apply(this, args);
     } as ServerResponse['writeHead'];
@@ -407,7 +501,7 @@ export async function probeRoundTrips(
   dial: () => ProbeClient | undefined,
   say: (line: string) => void = (line) => console.error(line),
 ): Promise<void> {
-  if (!on || probed.has(label)) return;
+  if (!on || developing || probed.has(label)) return;
   probed.add(label);
   let client: ProbeClient | undefined;
   try {

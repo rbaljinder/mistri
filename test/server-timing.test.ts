@@ -15,6 +15,7 @@ import {
   registerGauge,
   sampleProcessNow,
   setServerTiming,
+  setServerTimingToken,
   timeClient,
   timedListener,
 } from '../packages/engine/src/adapters/telemetry/serverTiming.js';
@@ -235,7 +236,50 @@ test('the process entry carries the instance, memory, gc, loop, cpu and register
     assert.equal(again.i, first.i);
     sampleProcessNow();
     assert.equal(Number(entry(await ask()).n), Number(first.n) + 1);
+    // A gauge taken out (a pool's, at its manager's close) is read no more, and nothing keeps its owner alive.
+    const off = registerGauge('gone', () => 3);
+    sampleProcessNow();
+    assert.equal(entry(await ask()).gone, '3');
+    off();
+    off();
+    sampleProcessNow();
+    assert.equal(entry(await ask()).gone, undefined);
+    assert.equal(entry(await ask()).probe, '7');
   } finally {
+    setServerTiming(false);
+  }
+});
+
+test("with MISTRI_SERVER_TIMING_TOKEN set, the process entry goes only to a request that sends the token; the request's own entries go to all", async () => {
+  setServerTiming(true);
+  sampleProcessNow();
+  const listener = timedListener((_req: IncomingMessage, res: ServerResponse) => {
+    res.end('ok');
+  });
+  const ask = async (headers: Record<string, string> = {}) => {
+    const server = createServer(listener);
+    const base = await serve(server);
+    try {
+      const response = await fetch(base, { headers });
+      await response.text();
+      return metrics(response.headers.get('server-timing'));
+    } finally {
+      server.close();
+    }
+  };
+  try {
+    setServerTimingToken(undefined);
+    assert.ok((await ask()).has('proc'), "no token set: today's behavior, proc for anyone");
+    setServerTimingToken('s3cret-token');
+    const anonymous = await ask();
+    assert.ok(!anonymous.has('proc'), 'no header: no proc');
+    assert.ok(anonymous.has('total') && anonymous.has('cpu'), "the request's own entries stay");
+    assert.ok(!(await ask({ 'x-mistri-timing': 'wrong' })).has('proc'), 'a wrong token: no proc');
+    assert.ok(!(await ask({ 'x-mistri-timing': 's3cret-token-longer' })).has('proc'), 'a longer token: no proc');
+    const trusted = await ask({ 'x-mistri-timing': 's3cret-token' });
+    assert.ok(trusted.has('proc') && trusted.has('total'), 'the right token: proc added');
+  } finally {
+    setServerTimingToken(undefined);
     setServerTiming(false);
   }
 });

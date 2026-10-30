@@ -82,7 +82,16 @@ does: connect as one that can do no more than the App needs.
 - **`MISTRI_SERVER_TIMING=1` is for load testing only.** It puts the process's
   own state (heap, garbage collection, pool use and queues) in the
   `Server-Timing` header of every response, to any requester, signed in or not.
-  Keep it off in production.
+  Keep it off in production, or set `MISTRI_SERVER_TIMING_TOKEN` so the process
+  entry goes only to a request that sends it as an `x-mistri-timing` header.
+
+## mistri is not a sandbox
+
+An App is trusted server code. Its `app.ts`, `commands.ts`, jobs and custom components run in the server's process with the server's privileges: its environment, its files, its network and every connection in the config. Nothing confines them, and the load-time lint for raw HTML and `eval` is a guard against mistakes, not against a hostile author.
+
+- **Load only Apps you wrote or reviewed.** Never serve code from a customer, a plugin directory or a download you have not read. To run code you do not trust, give it a process, a container and a database role of its own.
+- **A tenant App isolates data by policy, not by process.** Every tenant's requests run in one process and one database, kept apart by the tenant store, the row policy and the checks on every read and write. A flaw in the App's own code, or a database role wider than the App needs, can cross that line, so the role is still the limit that holds ([tenant Apps](/docs/tenant-apps/)). A customer who needs process isolation needs a deployment of their own.
+- **Suite Apps share a server.** Apps mounted in one suite share its process; mount only Apps you trust equally.
 
 ## Report a vulnerability
 

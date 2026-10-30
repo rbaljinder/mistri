@@ -101,6 +101,7 @@ jobs:
               "@mistriwork/kit": [...common, "dist/clientFiles.js"],
               "@mistriwork/mistri": [...common, ...client("mistri"), "dist/server/index.js", "dist/server/app/apps.js", "schema/app.d.ts", "schema/app.mjs", "schema/app.schema.json", "schema/page.schema.json", "skills/mistri/SKILL.md"],
               "create-mistri": [...common, "bin.js"],
+              "@mistriwork/cloudflare": [...common, "dist/index.js", "dist/index.d.ts"],
               tablewalk: [...common, ...client("tablewalk"), "dist/server/index.js", "app.js", "app.d.ts", "schema/app.schema.json"],
             };
             let failed = false;
@@ -173,11 +174,11 @@ jobs:
       # automatically. The one prerequisite is on npm's side — a trusted
       # publisher configured for this package naming this repo and this
       # workflow file (release.yml). Until that exists, this step fails with an
-      # auth error rather than publishing — for each of the six packages (create-mistri
-      # among them: its trusted publisher is configured separately).
+      # auth error rather than publishing — for each of the seven packages (create-mistri
+      # and @mistriwork/cloudflare among them: each trusted publisher is configured separately).
       #
       # Every package, in dependency order (npm walks `workspaces` as listed:
-      # engine, ui, kit, mistri, create-mistri, tablewalk): a package depends
+      # engine, ui, kit, mistri, create-mistri, cloudflare, tablewalk): a package depends
       # on those before it at exactly this version (tablewalk on engine, kit
       # and ui; create-mistri on mistri), so publishing one alone installs
       # nothing.

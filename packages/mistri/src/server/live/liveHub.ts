@@ -150,7 +150,14 @@ export class LiveHub {
   }
 
   detach(tap: LiveTap): void {
-    for (const entry of this.attached) if (entry.tap === tap) this.attached.delete(entry);
+    for (const entry of this.attached)
+      if (entry.tap === tap) {
+        this.attached.delete(entry);
+        /* A subscriber that leaves before its pass is not joined, but its attach settles: whoever awaits it (a
+           choice cache's listening promise) must not wait for a pass that will skip it. */
+        entry.joined?.();
+        entry.joined = undefined;
+      }
     if (!this.attached.size) this.stop();
   }
 
@@ -257,6 +264,13 @@ export class LiveHub {
     if (listener) guard('listen', async () => (await listener)?.close());
     /* With nobody listening the position goes stale; the next subscriber reads the head again. */
     this.position = undefined;
+    /* And nobody is still joining: a subscriber that left before its pass would otherwise keep its stream, and
+       what the stream holds, until the next one arrived. */
+    for (const entry of this.joining) {
+      entry.joined?.();
+      entry.joined = undefined;
+    }
+    this.joining.length = 0;
     this.run += 1;
   }
 
@@ -286,7 +300,11 @@ export class LiveHub {
     if (stopped()) return;
     let from = (this.position = head);
     for (let entry = this.joining.shift(); entry; entry = stopped() ? undefined : this.joining.shift()) {
-      if (!this.attached.has(entry)) continue;
+      if (!this.attached.has(entry)) {
+        entry.joined?.();
+        entry.joined = undefined;
+        continue;
+      }
       try {
         await this.join(entry, from);
         if (entry.at) entry.tap.placed(entry.at);

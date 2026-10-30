@@ -44,6 +44,7 @@ The first line of the help says it: *mistri — the App framework: a few lines o
 | `mistri decide eval <name>` | measure a decision on settled records, and pin its model (see below) |
 | `mistri tenant init|grant` | a tenant App's first boot: its realms, tenants and first operators (see below) |
 | `mistri tenant clone|import|clock` | a tenant App's sandboxes: clone, import plan, dev clock (see below) |
+| `mistri deploy [init cloudflare|status|verify|rollback|logs]` | an App on Cloudflare Containers (see below) |
 | `mistri docs [topic]` | the App reference, offline: access, relationships, dates, dashboards, reload and restart, … |
 | `mistri agent init` | put the agent skill where coding agents read it (see below) |
 | `mistri compare-openapi <previous.json> <current.json>` | compare two exported App API documents; no server |
@@ -75,6 +76,7 @@ The server's flags: where the data is, how it is served, and what an App adds.
 | `--config <path>` | Read connections from this file, and the cache, search, webhook, email (smtps://, smtp:// or log:) and OAuth services beside them; the paths in it are relative to its folder |
 | `--no-config` | Ignore any config file |
 | `--no-live` | Turn live sync off, even for an App that asks for it (live: true): its open pages then refresh on focus and after their own saves. Nothing is written to the change store and /api/live answers 204. |
+| `--db-latency <ms>` | Development only: every database round trip waits this long before it is sent (a pipelined batch pays once), to feel a remote database on this machine; 20 is a typical cloud distance. Or set MISTRI_DEV_DB_LATENCY. Refused under NODE_ENV=production and when serving a build. |
 | `--app <dir>` | Serve an app: a directory whose app.ts (or app.mjs / app.json) declares its resources, views, navigation and pages. Repeatable; with more than one, every app names its connection. A save reloads it; a change to its grants, sources or sign-in needs a restart. mistri docs getting-started is where to begin. One App is served at the root (/leases/12); several each under its id (/lintel/leases/12). |
 | `--mount` | <app>=<path> Where an App is served, over that default: / makes it the main App at the root, /billing puts it there. Repeatable, one per App. Or "mount" in the config. |
 | `--base-path <path>` | The path a reverse proxy serves this server under, like /tools: every address, asset, API call, cookie and link carries it. Or "basePath" in the config, or set MISTRI_BASE_PATH. |
@@ -112,8 +114,9 @@ mistri check --app <dir> [--app-entry <file>]
                 [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>]
                 [--routes [--mount <app>=<path>] [--base-path <path>]]
                 [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
+                [--no-index-check]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
-                [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>]] [--json | --brief]
+                [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
 
 Three or four steps, each with its own verdict line. Schema types: regenerates
 the App's mistri-schema.d.ts from the database when it has drifted (a
@@ -132,7 +135,9 @@ components: each compiled, its sources failed on markup or code from text
 and the server's environment, warned on what a look cannot dress. Every
 step runs; the errors print first, and warnings are advisory (unless
 --fail-on-design-warning is set) and print as one line a kind unless --warnings
-lists them in full.
+lists them in full. On PostgreSQL an indexes step names each foreign key, default
+sort, fixed filter, ownership column and search the App reads by that no index
+leads (index-missing), with the CREATE INDEX that adds it; --no-index-check skips it.
 --routes also prints every address the App answers to (/{app}/leads/{id},
 /{app}/leads/new, ...) and what each one opens. --design reads its pages,
 forms and shell for compositions that come out basic (a list cut beside an
@@ -164,7 +169,13 @@ API event feed, the assistant; given --jobs, its module is read for them)
 times --replicas, and with --connection-limit <n> (the connections the
 database allows this role) refuses a total above it. Pool defaults follow
 the cores: --cpus <n> says the deployment's (this machine's otherwise,
-and the line says which it assumed). --json prints one JSON
+and the line says which it assumed). It also reads the migrations not yet
+applied and warns about each statement that breaks the code still running
+(a dropped or renamed column or table, a type change, SET NOT NULL, a NOT
+NULL column without a default, a dropped view or function), with how to
+stage it as expand, deploy, contract; a comment "-- mistri: contract"
+on the line before a deliberate contract step makes it a note, and
+--strict-migrations makes the rest fail. --json prints one JSON
 document instead of the lines (schema/check.schema.json): every finding
 of every step with its code, file, line, column, definition path and fix,
 for an agent; the exit code is the same. --brief prints one line per
@@ -576,6 +587,53 @@ it and never watched.
 Exit codes: 1 could not build, 2 typecheck, 3 validation, 4 bundle.
 ```
 
+## Deploying an App to Cloudflare Containers
+
+A Worker in front of one always-on container.
+
+```text
+mistri deploy init cloudflare --app <dir> [--config <path>] [--commands <file>] [--jobs <file>]
+                [--policy <file>] [--app-entry <file>] [--out <dir>] [--dir <dir>] [--force]
+mistri deploy [--dry-run] [--yes] [--allow-contract] [--allow-dirty]
+                [--migrate-url <url>] [--migrations <dir>] [--connection-limit <n>] [--verbose]
+                [--backup-check <cmd>] [--smoke <cmd>] [--roll-timeout <minutes>] [--dir <dir>]
+mistri deploy verify [--roll] [--roll-timeout <minutes>] [--smoke <cmd>] [--dir <dir>]
+mistri deploy status | rollback [<deploy-id>] [--dry-run] | logs [--dir <dir>]
+
+init writes deploy/cloudflare/ (wrangler.jsonc, src/index.ts against
+@mistriwork/cloudflare, package.json and the build request) from the App's
+build flags, naming every secret mistri.json reads. It creates nothing on
+Cloudflare and refuses to replace existing files without --force.
+deploy prints a plan and changes nothing until confirmed (--yes in CI;
+--dry-run stops after the plan). It refuses when check --deploy fails, a
+secret is missing from the Worker (compared by name through wrangler
+secret list, never read), a pending migration is a contract step marked
+"-- mistri: contract" (unless --allow-contract), or the working tree is
+dirty (unless --allow-dirty). It then builds, runs --backup-check (a
+non-zero exit refuses), applies the migrations and the App's stores from
+this machine: the versioned migrations over --migrate-url or
+MISTRI_MIGRATE_URL (a direct database address, never the container's), the
+App's stores over the store URLs its config names, read from this
+machine's environment and not from --migrate-url. It runs wrangler deploy with a new
+MISTRI_DEPLOY_ID, and restarts the container with MISTRI_RESTART_TOKEN
+until /readyz reports that deploy id and this build's id, for up to
+--roll-timeout minutes (default 20), failing with what it last saw. --smoke
+runs your command afterwards. Each deploy is a row in __mistri_deploys in
+the migration database. A history problem (a recorded migration missing from
+the directory) refuses the plan; --migrations <dir> overrides the config's
+directory. A failure after wrangler deploy says the new Worker version is
+serving; verify re-checks the newest deploy against /readyz and the smoke
+(--roll restarts the container until it matches) and corrects its record.
+status prints the live /readyz fingerprint and the record it matches, the
+recorded deploys and the newest five Cloudflare deployments (it creates
+nothing); rollback returns to the previous successful deploy (or the
+one named) with wrangler rollback and the same verification, and refuses
+when a contract migration was applied after it; logs is wrangler tail. Run
+from the project root. wrangler reads its login from $XDG_CONFIG_HOME/.wrangler when
+that is set: a shell whose XDG_CONFIG_HOME differs from the one used at
+wrangler login reports "not logged in". Exit codes: 1 could not, declined or failed, 7 refused.
+```
+
 ## Comparing exported App API documents
 
 ```text
@@ -699,6 +757,8 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | Flag | Said in |
 | --- | --- |
 | `--ahead` | [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
+| `--allow-contract` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
+| `--allow-dirty` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--allowed-host` | [Options](#options) |
 | `--api` | [Commands](#commands) |
 | `--api-integers` | [Options](#options) |
@@ -706,52 +766,54 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--api-requests-per-minute` | [Options](#options) |
 | `--api-token-env` | [Options](#options) |
 | `--api-url` | [Options](#options) |
-| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
-| `--app-entry` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Building an App for production](#building-an-app-for-production) |
+| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
+| `--app-entry` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--app-mcp` | [Options](#options) |
 | `--append` | [Rows to look at](#rows-to-look-at) |
 | `--as` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--auth-proxy-header` | [Options](#options) |
+| `--backup-check` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--base-path` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Watching what a --dev server did](#watching-what-a---dev-server-did) |
 | `--both` | [Looking at an App](#looking-at-an-app) |
 | `--brief` | [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Reading the reference offline](#reading-the-reference-offline) |
 | `--browser` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--bump` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--click` | [Looking at an App](#looking-at-an-app) |
-| `--commands` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production) |
+| `--commands` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--compare` | [Looking at an App](#looking-at-an-app) |
-| `--config` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
+| `--config` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
 | `--connection` | [Rows to look at](#rows-to-look-at), [Changing the schema](#changing-the-schema) |
-| `--connection-limit` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
+| `--connection-limit` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--cpus` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--dark` | [Looking at an App](#looking-at-an-app) |
 | `--days` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--db` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
+| `--db-latency` | [Options](#options) |
 | `--defaults` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--demo` | [Options](#options) |
-| `--deploy` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
+| `--deploy` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--design` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--desk` | [Looking at an App](#looking-at-an-app) |
 | `--dev` | [Options](#options), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
 | `--dev-url` | [Changing the schema](#changing-the-schema) |
 | `--diff` | [A theme as it is worn](#a-theme-as-it-is-worn) |
-| `--dir` | [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill) |
+| `--dir` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill) |
 | `--dockerfile` | [Building an App for production](#building-an-app-for-production) |
 | `--drain-delay` | [Options](#options) |
 | `--dry` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
-| `--dry-run` | [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there) |
+| `--dry-run` | [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--export` | [Options](#options) |
 | `--fail-on-design-warning` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--fix` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--flow` | [Starting flows on records already there](#starting-flows-on-records-already-there) |
-| `--force` | [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
+| `--force` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
 | `--from-openapi` | [Options](#options) |
 | `--full` | [Looking at an App](#looking-at-an-app) |
 | `--help` | [Options](#options), [Commands](#commands) |
 | `--history-table` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Changing the schema](#changing-the-schema) |
 | `--host` | [Options](#options) |
 | `--insecure-http-sign-in` | [Options](#options) |
-| `--jobs` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Building an App for production](#building-an-app-for-production) |
+| `--jobs` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--json` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Watching what a --dev server did](#watching-what-a---dev-server-did) |
 | `--light` | [Looking at an App](#looking-at-an-app) |
 | `--limit` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
@@ -761,21 +823,23 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--max-cost` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
 | `--max-error` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
 | `--mcp` | [Watching what a --dev server did](#watching-what-a---dev-server-did) |
-| `--migrations` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Changing the schema](#changing-the-schema) |
+| `--migrate-url` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
+| `--migrations` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Changing the schema](#changing-the-schema), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--mount` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--name` | [Options](#options), [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--no-config` | [Options](#options) |
+| `--no-index-check` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--no-live` | [Options](#options) |
 | `--open` | [Options](#options) |
 | `--openapi` | [Options](#options) |
 | `--operator` | [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
-| `--out` | [Looking at an App](#looking-at-an-app), [Building an App for production](#building-an-app-for-production) |
+| `--out` | [Looking at an App](#looking-at-an-app), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--palette` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--pending` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--pending-on` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--phone` | [Looking at an App](#looking-at-an-app) |
 | `--pin` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
-| `--policy` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
+| `--policy` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
 | `--pooler` | [Options](#options) |
 | `--port` | [Options](#options) |
 | `--press` | [Looking at an App](#looking-at-an-app) |
@@ -787,6 +851,8 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--repeatable` | [Changing the schema](#changing-the-schema) |
 | `--replicas` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--roles` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
+| `--roll` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
+| `--roll-timeout` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--routes` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--rows` | [Rows to look at](#rows-to-look-at) |
 | `--samples` | [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
@@ -797,6 +863,8 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--search` | [Reading the reference offline](#reading-the-reference-offline) |
 | `--seed` | [Rows to look at](#rows-to-look-at) |
 | `--shutdown-grace` | [Options](#options) |
+| `--smoke` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
+| `--strict-migrations` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--suite` | [Changing the schema](#changing-the-schema) |
 | `--template` | [Commands](#commands) |
 | `--tenant` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Starting flows on records already there](#starting-flows-on-records-already-there), [A tenant App's first boot](#a-tenant-apps-first-boot) |
@@ -809,6 +877,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--truth` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
 | `--type` | [Looking at an App](#looking-at-an-app) |
 | `--url` | [Watching what a --dev server did](#watching-what-a---dev-server-did) |
+| `--verbose` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--version` | [Options](#options) |
 | `--wait` | [Running a job now](#running-a-job-now) |
 | `--wait-for` | [Looking at an App](#looking-at-an-app) |
@@ -817,4 +886,4 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--width` | [Looking at an App](#looking-at-an-app) |
 | `--write-authority` | [Options](#options) |
 | `--write-pool` | [Options](#options) |
-| `--yes` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
+| `--yes` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |

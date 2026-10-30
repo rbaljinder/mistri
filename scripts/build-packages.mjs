@@ -66,6 +66,8 @@ const expected = [
   'packages/ui/dist/index.js',
   'packages/ui/dist/index.d.ts',
   'packages/ui/dist/style.css',
+  'packages/cloudflare/dist/index.js',
+  'packages/cloudflare/dist/index.d.ts',
   'packages/tablewalk/dist/client/index.workbench.html',
   'packages/mistri/dist/client/index.html',
   'packages/mistri/dist/client/index.public.html',

@@ -51,7 +51,9 @@ describe('the prose agrees with the code it describes', () => {
     const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
     const notes = /^### Upgrading from [^\n]*\n\n- ([^\n]*)/m.exec(changelog.slice(changelog.indexOf('## 0.9.5')))?.[1] ?? '';
     assert.match(notes, /TypeScript 7 first/);
-    const peer = JSON.parse(readFileSync(new URL('../packages/mistri/package.json', import.meta.url), 'utf8')).peerDependencies.typescript;
+    const peer = JSON.parse(
+      readFileSync(new URL('../packages/mistri/package.json', import.meta.url), 'utf8'),
+    ).peerDependencies.typescript.split(' ')[0]; // the lower bound; the 0.9.5 entry predates the upper one
     assert.match(changelog, new RegExp(`peer is \`${peer.replace(/[>=]/g, (c: string) => `\\${c}`)}\``));
   });
 

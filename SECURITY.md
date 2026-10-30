@@ -289,7 +289,10 @@ Credit is given in the release notes unless you would rather it were not.
   request with a `Server-Timing` header that includes the process's own state
   (heap, garbage collection, pool use and queues), to any requester, signed in
   or not. It names no statement, row or key, but it is a free look at how loaded
-  the process is. Keep it off in production.
+  the process is. Keep it off in production, or set `MISTRI_SERVER_TIMING_TOKEN`:
+  the process entry is then added only to a request that sends the token as an
+  `x-mistri-timing` header. `mistri check --deploy` warns when timing is on
+  without a token.
 - **Credentials** come from the environment, the OS keychain, or a 0600
   file, and never reach the browser in any response.
 

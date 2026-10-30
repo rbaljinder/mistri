@@ -20,6 +20,7 @@ import {
 import { appRoutes, LOADED_APP_KEYS, type LoadedApp } from '../app/apps.js';
 import type { SuiteLinkSurface } from '../app/suiteLinks.js';
 import { tenantAuthoringSchema } from './tenantVisibleFields.js';
+import { declareTenantPool } from './tenantConnections.js';
 import { appResourceCatalog } from '../app/appResources.js';
 import { appAuthStore } from '../auth/auth.js';
 import {
@@ -193,6 +194,11 @@ export async function prepareTenantStartup(
         if (!/^postgres(ql)?:\/\//i.test(found)) throw new TenantStartupError("A PostgreSQL source's replicas must be postgres:// URLs.");
         replicas.push(found);
       }
+      /* The connection's "pool" sizes the App's request pool as it sizes an ordinary App's (tenantConnections.ts); a
+         replica's readers are as wide as the primary's. */
+      declareTenantPool(url, connection.pool);
+      for (const replica of replicas)
+        declareTenantPool(replica, connection.pool?.read === undefined ? undefined : { read: connection.pool.read });
       /* The connection's "listen": where the jobs host holds its LISTEN when `url` is a transaction-mode pooler's. */
       const listen = connection.listen
         ? (await resolveConnection(connection.name, connection.listen, { environment: capturedEnvironment })).url

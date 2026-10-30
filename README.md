@@ -16,7 +16,7 @@ npm create mistri             # a starter App
 ```
 
 Each refuses the other's start and names the command that runs it. Both need
-Node 24 or newer. The layers beneath them (`@mistriwork/engine`, `@mistriwork/ui`,
+Node 24.22.1 or newer. The layers beneath them (`@mistriwork/engine`, `@mistriwork/ui`,
 `@mistriwork/kit`) and how they depend on one another are in `docs/boundary.md`;
 what runs where is `docs/architecture.md`.
 

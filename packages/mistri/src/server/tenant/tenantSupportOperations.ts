@@ -32,7 +32,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { isPromise, isProxy } from 'node:util/types';
 import { TransactionOutcomeUnknown, type TransactionOperations } from '@mistriwork/engine/adapters/adapter.js';
-import { PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
+import { tenantAdapter } from './tenantConnections.js';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
 import type { AppDef } from '../../shared/app.js';
@@ -250,7 +250,7 @@ async function openSqliteStore(
  * precedes the final native observation, which may await the auth store. */
 async function openPostgresStore(url: string, owner: TenantStoreBinding, key: SupportAuditKey, assertAuth: () => void): Promise<Store> {
   assertAuth();
-  const writer = new PostgresAdapter(url, 'Private tenant support');
+  const writer = tenantAdapter(url, 'Private tenant support');
   const attest = async (client: PgQuery) => {
     assertAuth();
     await assertPostgresTenantAdministrationJournal(client, owner);

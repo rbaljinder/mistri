@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { isPromise } from 'node:util/types';
 import type { Adapter, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
@@ -46,6 +47,24 @@ const liveRows = new WeakMap<object, RowScope>();
 export const tenantReadCounters = { grants: 0 };
 const READ_GRANTS = 64;
 export const tenantLiveRowsOf = (context: object): RowScope | undefined => liveRows.get(context);
+
+/* Set by the host around a request whose reads are all its context's own and bounded — a list, its counts, the inbox
+   (tenantHttp.ts) — and claimed by the first context it opens; `live` while that context runs. */
+const boundedRequest = new AsyncLocalStorage<{ claimed: boolean; live: boolean }>();
+/**
+ * `work`, a request whose every read is asked inside its context's callback, bounded, with no wait on anything but
+ * the database between them: its context reads on one snapshot, and the release fence rides the message that ends it
+ * (TenantReadSource.togetherFenced). A list with its count was three snapshots — rows, count, fence — and six round
+ * trips; its tab counts one snapshot per tab and a fence. Now each is two round trips, and every read of the request
+ * sees one state. Not for a request that waits on a search engine, object storage or a write between its reads: the
+ * snapshot would be held open across it. Nothing but the database is awaited while that snapshot is open: the
+ * session is asked before the context's first read and once after its snapshot has ended, never between its reads.
+ * A context opened inside it while it runs is refused: its own fence would wait on a second reader of the pool the
+ * first snapshot holds one of, and a small pool full of such requests would wait on itself.
+ */
+export function withBoundedReads<T>(work: () => T): T {
+  return boundedRequest.run({ claimed: false, live: false }, work);
+}
 
 export interface TenantReadContext {
   readonly principal: TenantMembershipEvidence;
@@ -246,6 +265,12 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
       guard?: TenantInvocationGuard,
     ): Promise<T> {
       if (retired || typeof callback !== 'function') return denyTenant();
+      // Claimed here, once; a context opened inside a bounded one while it runs is refused (withBoundedReads).
+      const slot = boundedRequest.getStore();
+      if (slot?.live) return denyTenant();
+      const bounded = slot !== undefined && !slot.claimed;
+      if (slot) slot.claimed = true;
+      if (bounded) slot.live = true;
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
         finish = resolve;
@@ -325,10 +350,15 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                   // Invalid accepted input poisons the invocation even if caught.
                   const captured = captureTenantData(input);
                   validate(captured);
-                  await revalidateSession();
+                  /* Bounded, the session was asked before the first read and is asked again once the snapshot
+                     has ended (withBoundedReads): asked here, between reads, a store that was slow to answer held
+                     the snapshot open — and a connection of the pool with it — for as long as it took. */
+                  if (bounded) assertActive();
+                  else await revalidateSession();
                   const value = await work(captured);
                   const snapshot = captureTenantData(value);
-                  await revalidateSession();
+                  if (bounded) assertActive();
+                  else await revalidateSession();
                   return snapshot;
                 } catch (error) {
                   /* A question the compiler could not write ran nothing: the
@@ -446,61 +476,106 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                  reads the other's answer, so both are asked at once, and both are settled before either failure
                  is told: no read of this context is left running behind it. */
               const together = <R>(work: () => Promise<R>): Promise<R> => source.together(principal, work);
-              /* On one snapshot between them, as they are asked at once. */
-              const [zoneRead, localeRead] = await together(() =>
-                Promise.allSettled([readZone(app.ui, schema, data.query), readLocale(app.ui, schema, data.query)]),
-              );
-              if (zoneRead.status === 'rejected') throw zoneRead.reason;
-              if (localeRead.status === 'rejected') throw localeRead.reason;
-              const zone = zoneRead.value,
-                locale = localeRead.value;
-              assertActive();
-              const context = Object.freeze({
-                principal,
-                schema,
-                data,
-                together,
-                ...(capabilities === undefined ? {} : { capabilities }),
-                ...(zone === undefined ? {} : { zone }),
-                ...(locale === undefined ? {} : { locale }),
-              });
-              liveRows.set(context, rows);
-              releaseFlags = bindTenantFlagOwner(request, principal, revalidate, assertActive);
               let output: T | undefined,
                 callbackFailed = false,
                 fault: TenantRequestFault | undefined;
-              try {
-                /* A record no read here admits, or a read asked wrongly, is the
+              /* The context's reads and its callback, every accepted read settled; true once the session has been
+               revalidated after them (bounded: once they are settled, the session is the caller's to ask after the
+               snapshot ends), false where the callback or a read failed. */
+              const answer = async (): Promise<boolean> => {
+                /* On one snapshot between them, as they are asked at once. */
+                const [zoneRead, localeRead] = await together(() =>
+                  Promise.allSettled([readZone(app.ui, schema, data.query), readLocale(app.ui, schema, data.query)]),
+                );
+                if (zoneRead.status === 'rejected') throw zoneRead.reason;
+                if (localeRead.status === 'rejected') throw localeRead.reason;
+                const zone = zoneRead.value,
+                  locale = localeRead.value;
+                assertActive();
+                const context = Object.freeze({
+                  principal,
+                  schema,
+                  data,
+                  together,
+                  ...(capabilities === undefined ? {} : { capabilities }),
+                  ...(zone === undefined ? {} : { zone }),
+                  ...(locale === undefined ? {} : { locale }),
+                });
+                liveRows.set(context, rows);
+                /* A flag's own fence would be a second snapshot beside the bounded one, and a session wait inside
+                   it: refused there, as a context opened inside it is (withBoundedReads). No bounded route asks one. */
+                releaseFlags = bindTenantFlagOwner(request, principal, bounded ? async () => denyTenant() : revalidate, assertActive);
+                try {
+                  /* A record no read here admits, or a read asked wrongly, is the
                  request's fault (TenantRequestFault): kept apart from every
                  other failure, which still denies the context. */
-                const kept = (error: unknown): T => {
-                  fault = requestFault(error);
-                  if (fault) return undefined as T;
-                  throw error;
-                };
-                // Called synchronously, as ever: admission closes when it returns.
-                let returned: T | Promise<T>;
-                try {
-                  returned = callback(context);
+                  const kept = (error: unknown): T => {
+                    fault = requestFault(error);
+                    if (fault) return undefined as T;
+                    throw error;
+                  };
+                  // Called synchronously, as ever: admission closes when it returns.
+                  let returned: T | Promise<T>;
+                  try {
+                    returned = callback(context);
+                  } catch (error) {
+                    returned = kept(error);
+                  }
+                  const result = delivered(
+                    isPromise(returned) ? (Promise.prototype.then.call(returned, undefined, kept) as Promise<T>) : returned,
+                  );
+                  output = isPromise(result) ? await result : result;
                 } catch (error) {
-                  returned = kept(error);
+                  callbackFailed = true;
+                  failure ??= error;
                 }
-                const result = delivered(
-                  isPromise(returned) ? (Promise.prototype.then.call(returned, undefined, kept) as Promise<T>) : returned,
-                );
-                output = isPromise(result) ? await result : result;
-              } catch (error) {
-                callbackFailed = true;
-                failure ??= error;
-              }
-              // Reject newly submitted work, but drain everything accepted while
-              // the callback was live before final revalidation/source release.
-              accepting = false;
-              await Promise.allSettled([...pending]);
-              if (callbackFailed || failed) return denyTenantFor(failure);
+                // Reject newly submitted work, but drain everything accepted while
+                // the callback was live before final revalidation/source release.
+                accepting = false;
+                await Promise.allSettled([...pending]);
+                if (callbackFailed || failed) return false;
+                if (!bounded) await revalidateSession();
+                return true;
+              };
               // A first admission its owner makes again (tenantInvocationAdmittedAgain): that one is the fence.
-              if (isAdmittedAgain(guard)) await revalidateSession();
-              else await revalidate();
+              const again = isAdmittedAgain(guard);
+              if (bounded && !again) {
+                /* Every read on one snapshot, and the membership fence in the message that ends it, after the
+                 session's (`withBoundedReads`); where it could not ride, in a snapshot of its own as below. */
+                let answered = false;
+                const ran = await source
+                  .togetherFenced(principal, async () => {
+                    try {
+                      answered = await answer();
+                    } catch (error) {
+                      failure ??= error;
+                    }
+                    // A failure lets the snapshot go unfenced, and is told below.
+                    if (!answered) throw new TenantContextError();
+                    return answered;
+                  })
+                  .catch((error: unknown) => {
+                    if (!answered) return undefined;
+                    throw error;
+                  });
+                if (!ran) return denyTenantFor(failure);
+                /* Both after every read, with the snapshot let go: the session, then the membership where its fence
+                   could not ride the snapshot's end. Neither holds a connection while the other is asked. */
+                try {
+                  await revalidateSession();
+                } catch (error) {
+                  failure ??= error;
+                  return denyTenantFor(failure);
+                }
+                if (!ran.fenced) await source.assertCurrent(principal);
+                assertActive();
+              } else {
+                if (!(await answer())) return denyTenantFor(failure);
+                if (!again) {
+                  await source.assertCurrent(principal);
+                  assertActive();
+                }
+              }
               if (fault) throw fault;
               return output as T;
             } finally {
@@ -517,6 +592,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
         if (error instanceof TenantRequestFault) throw error;
         return denyTenantFor(error);
       } finally {
+        if (bounded) slot.live = false;
         pendingRequests.delete(held);
         finish();
       }
