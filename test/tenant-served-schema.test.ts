@@ -18,7 +18,7 @@ import { captureTenantData } from '../packages/engine/src/server/evidence.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { replyJson } from '../packages/mistri/src/server/tenant/tenantReplyJson.js';
-import { compileComputed } from '../packages/engine/src/shared/computed.js';
+import { compileComputed, StatementInstantMissing } from '../packages/engine/src/shared/computed.js';
 import { POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import type { TableMeta } from '../packages/engine/src/shared/schema.js';
 import {
@@ -205,15 +205,39 @@ test('a catalog whose computed columns read the instant is one object for every 
   assert.equal(new Set(written.map((sql) => sql.fresh)).size, instants.length);
 });
 
-test('a catalog served outside a request says its instant for the work that follows it', () => {
+test('a catalog served outside any unit of work leaves no instant behind it', async () => {
   const context = { schema: catalog() },
     task = (schema: DatabaseSchema) => schema.tables.find((table) => table.id === 'task')!,
     instant = appWith({ fresh: { type: 'boolean', value: 'updated_at > now - 30 minutes' } });
   const morning = tenantServedSchema(context, instant, MORNING);
-  assert.ok(sqlOf(task(morning), 'fresh').includes('2026-03-02T09:00:00'));
-  const evening = tenantServedSchema(context, instant, EVENING);
-  assert.equal(evening, morning);
-  assert.ok(sqlOf(task(evening), 'fresh').includes('2026-03-02T17:00:00'));
+  assert.equal(tenantServedSchema(context, instant, EVENING), morning);
+  /* Serving once said its instant into the async context with `enterWith`, where it stayed after the work it was said
+     for: a statement written here, or by any timer begun after it, wrote that instant however old it was. Nobody
+     scoped one here, so the statement says so instead. */
+  assert.throws(() => sqlOf(task(morning), 'fresh'), StatementInstantMissing);
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.throws(() => sqlOf(task(morning), 'fresh'), StatementInstantMissing);
+  // Scoped, the same catalog writes the work's own instant, and nothing of it is left once the work is done.
+  assert.ok(withRequestInstant(EVENING, () => sqlOf(task(morning), 'fresh')).includes('2026-03-02T17:00:00'));
+  assert.throws(() => sqlOf(task(morning), 'fresh'), StatementInstantMissing);
+});
+
+test('a unit of work inside a long request writes its own instant, and the request keeps its own around it', async () => {
+  const context = { schema: catalog() },
+    task = (schema: DatabaseSchema) => schema.tables.find((table) => table.id === 'task')!,
+    instant = appWith({ fresh: { type: 'boolean', value: 'updated_at > now - 30 minutes' } });
+  /* A live stream or an import, opened in the morning and still working in the evening: each read inside it is
+     scoped at the instant it is asked (tenantHttp.ts), never at the one the request arrived at. */
+  await withRequestInstant(MORNING, async () => {
+    const schema = tenantServedSchema(context, instant, MORNING);
+    assert.ok(sqlOf(task(schema), 'fresh').includes('2026-03-02T09:00:00'));
+    const later = await withRequestInstant(EVENING, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return sqlOf(task(tenantServedSchema(context, instant, EVENING)), 'fresh');
+    });
+    assert.ok(later.includes('2026-03-02T17:00:00') && !later.includes('2026-03-02T09:00:00'), later);
+    assert.ok(sqlOf(task(schema), 'fresh').includes('2026-03-02T09:00:00'));
+  });
 });
 
 test('a catalog whose building reads the instant is built for every request, as before', () => {

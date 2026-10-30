@@ -5,8 +5,11 @@
  *
  * One test per property: an adapter attests each store once, across its
  * transactions; a drift made after that is seen by the next adapter (a
- * restart), not by this one; and a statement that fails the way a moved
- * catalog fails one forgets what the adapter attested.
+ * restart), not by this one; a statement that fails the way a moved
+ * catalog fails one forgets what the adapter attested; and adapters of one
+ * database share an attestation only under the exact catalog version each
+ * read, and each reads the store's meta row again, so any drift is refused by
+ * the next of them.
  *
  * Live and opt-in like postgres-tenant-store.test.ts: `TABLEWALK_TEST_PG`
  * names a server this file creates and drops a database of this run's own
@@ -17,7 +20,14 @@ import { randomUUID } from 'node:crypto';
 import { after, afterEach, before, beforeEach, describe, test } from 'node:test';
 import { TransactionOperations } from '../packages/engine/src/adapters/adapter.js';
 import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
-import { transactionHandle } from '../packages/engine/src/adapters/postgresTransactionHandle.js';
+import {
+  changesCatalog,
+  readsCatalogVersion,
+  suspectsStores,
+  transactionHandle,
+} from '../packages/engine/src/adapters/postgresTransactionHandle.js';
+import { postgresCatalogDigestOf, postgresCatalogDigestStatement } from '../packages/engine/src/adapters/postgresCatalogDigest.js';
+import { SYSTEM_SCHEMAS } from '../packages/engine/src/adapters/postgresCatalog.js';
 import { TenantContextError } from '../packages/engine/src/server/evidence.js';
 import {
   ADMINISTRATION_JOURNAL_PREFIX,
@@ -49,6 +59,7 @@ const FIXTURE_ID = randomUUID().replaceAll('-', '');
 const DATABASE = `tw_store_fence_${FIXTURE_ID}`;
 const OTHER_ROLE = `tablewalk_store_fence_${FIXTURE_ID}`;
 const ITEM = 'public.store_fence_item';
+const REF = 'public.store_fence_ref';
 let url: string;
 const key = supportAuditKey('store-fence-test-secret-of-thirty-two-bytes-or-more');
 const owner = (): TenantStoreBinding => ({ appId: 'app', source: { id: 'business', connection: 'owned-business' }, storeId: 'store-1' });
@@ -106,6 +117,35 @@ const stores = [
   },
 ] as const;
 
+/* A statement that changes the catalog forgets the version the transaction read, so nothing it attests next is filed
+   under it. A comment before the verb, as a migration file or a query tool writes one, hides nothing. */
+test('a catalog write is seen behind comments and after other statements, and a word inside a statement is not one', () => {
+  for (const text of [
+    'ALTER TABLE t ADD COLUMN c text',
+    '/* add a column */ ALTER TABLE t ADD COLUMN c text',
+    '-- add a column\nALTER TABLE t ADD COLUMN c text',
+    '/* one */ /* two */\n  drop index i',
+    'SELECT 1; GRANT SELECT ON t TO r',
+    'DO $$ BEGIN END $$',
+    'create unique index i on t (c)',
+  ])
+    assert.equal(changesCatalog(text), true, text);
+  for (const text of [
+    'SELECT created_at FROM t',
+    "SELECT 'x' AS altered, dropped FROM t",
+    'INSERT INTO t (c) VALUES (1) ON CONFLICT (c) DO UPDATE SET c = 2',
+    'UPDATE t SET grant_id = 1',
+  ])
+    assert.equal(changesCatalog(text), false, text);
+});
+
+/* A broken reference forgets what one adapter attested; only a table, column or privilege that moved forgets what the
+   process shares, so an App's ordinary foreign-key violation does not send every adapter back to a full attestation. */
+test('a broken reference is suspect for one adapter, and a moved catalog for the process', () => {
+  for (const code of ['42P01', '42703', '42501', '23503']) assert.equal(suspectsStores({ code }), true, code);
+  for (const code of ['23505', '40001', undefined]) assert.equal(suspectsStores({ code }), false, String(code));
+});
+
 describe('an adapter attests the journal and the support audit once, against a real server', { skip: liveSkip('postgres', LIVE) }, () => {
   let control: Control;
   const extra: Control[] = [];
@@ -114,20 +154,35 @@ describe('an adapter attests the journal and the support audit once, against a r
     extra.push(created);
     return created;
   };
+  /** An adapter of this database as PostgresAdapter is one: it reads the catalog digest when it has a store to attest. */
+  const adapterOf = () => {
+    const adapter = {};
+    readsCatalogVersion(
+      adapter,
+      url,
+      async (c) => `digest:${postgresCatalogDigestOf(await c.query(postgresCatalogDigestStatement(SYSTEM_SCHEMAS)))}`,
+    );
+    return adapter;
+  };
   /** A transaction on its own handle, as `adapter`'s writer makes one, rolled back at the end. */
-  const within = async (adapter: object, work: (handle: PgQuery) => Promise<void>, sent?: (text: string, values: unknown) => void) => {
+  const within = async (
+    adapter: object,
+    work: (handle: PgQuery) => Promise<void>,
+    sent?: (text: string, values: unknown) => void | Promise<void>,
+    begin = 'BEGIN',
+  ) => {
     const c = await connection();
     const handle = transactionHandle(
       {
-        query: ((...args: unknown[]) => {
+        query: (async (...args: unknown[]) => {
           const request = args[0] as string | { text: string };
-          sent?.(typeof request === 'string' ? request : request.text, args[1]);
+          await sent?.(typeof request === 'string' ? request : request.text, args[1]);
           return (c.query as (...values: unknown[]) => unknown)(...args);
         }) as PgQuery['query'],
       },
       adapter,
     );
-    await handle.query('BEGIN');
+    await handle.query(begin);
     try {
       await work(handle);
     } finally {
@@ -160,9 +215,10 @@ describe('an adapter attests the journal and the support audit once, against a r
   });
   beforeEach(async () => {
     await control.query('DROP SCHEMA IF EXISTS mistri CASCADE');
-    await control.query(`DROP TABLE IF EXISTS ${ITEM}`);
+    await control.query(`DROP TABLE IF EXISTS ${REF}, ${ITEM}`);
     await control.query('DROP FUNCTION IF EXISTS public.store_fence_noop()');
     await control.query(`CREATE TABLE ${ITEM} (id text PRIMARY KEY, receipt text)`);
+    await control.query(`CREATE TABLE ${REF} (item text REFERENCES ${ITEM})`);
     await control.query(`CREATE FUNCTION public.store_fence_noop() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'`);
     await migratePostgresTenantStore(url, owner());
     await migratePostgresTenantAdministrationJournal(url, owner());
@@ -230,6 +286,104 @@ describe('an adapter attests the journal and the support audit once, against a r
         );
         await undo(label);
       }
+    });
+
+    test(`${store.label}: adapters of one database share it under the catalog version they read, and a drift moves it`, async () => {
+      const reads: string[] = [];
+      const sent = (text: string, values: unknown) => {
+        const prefix = Array.isArray(values) ? values[0] : undefined;
+        if (/pg_attrdef/.test(text) && typeof prefix === 'string') reads.push(prefix);
+      };
+      await within(adapterOf(), (handle) => store.attest(handle), sent);
+      assert.deepEqual(reads.sort(), [pgName(store.prefix), pgName(TENANT_STORE_PREFIX)].sort(), 'the first adapter attests in full');
+      reads.length = 0;
+      await within(adapterOf(), (handle) => store.attest(handle), sent);
+      assert.deepEqual(reads, [], 'the next adapter reads the same version and finds both stores attested');
+      /* Each catalog drift moves the version, and the next adapter attests in full. A rebound meta row moves nothing:
+         it is data, and the next adapter reads it again however it finds the catalog. */
+      const everyDrift: [string, (c: Control) => Promise<unknown>][] = [
+        ...drifts,
+        [
+          'a text search configuration beside the store',
+          (c) => c.query('CREATE TEXT SEARCH CONFIGURATION mistri.store_fence_ts (COPY = pg_catalog.simple)'),
+        ],
+        ['the schema granted to another role', (c) => c.query(`GRANT USAGE ON SCHEMA mistri TO "${OTHER_ROLE}"`)],
+      ];
+      for (const [label, drift] of everyDrift) {
+        await within(adapterOf(), (handle) => store.attest(handle));
+        await drift(await connection());
+        await assert.rejects(
+          within(adapterOf(), (handle) => store.attest(handle)),
+          denied,
+          label,
+        );
+        await undo(label);
+      }
+    });
+
+    /* A writer reads committed state statement by statement: it reads the version, and DDL that commits before its
+       attestation's next read is what it attests. That attestation is not filed under the version read before it,
+       where a snapshot that still sees the older catalog would find it. */
+    test(`${store.label}: an attestation that saw DDL committed after its version was read is not filed under it`, async () => {
+      const extra = q(`${store.prefix}extra`);
+      await control.query(`CREATE TABLE ${extra} (id integer)`);
+      let snapshotBegun!: () => void;
+      const begun = new Promise<void>((resolve) => (snapshotBegun = resolve));
+      let writerDone!: () => void;
+      const done = new Promise<void>((resolve) => (writerDone = resolve));
+      // A snapshot taken while the extra table stands, and asked to attest only once the writer has.
+      const snapshot = within(
+        adapterOf(),
+        async (handle) => {
+          await handle.query('SELECT 1');
+          snapshotBegun();
+          await done;
+          await store.attest(handle);
+        },
+        undefined,
+        'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+      );
+      void snapshot.catch(() => {});
+      await begun;
+      let dropped = false;
+      try {
+        await within(
+          adapterOf(),
+          (handle) => store.attest(handle),
+          async (text, values) => {
+            /* describePostgresRelations, the full attestation's first read, asks for its prefix; the digest read before
+               it reads pg_attrdef too, and asks for nothing. */
+            if (!dropped && /pg_attrdef/.test(text) && Array.isArray(values) && typeof values[0] === 'string') {
+              dropped = true;
+              await control.query(`DROP TABLE ${extra}`);
+            }
+          },
+        );
+      } finally {
+        writerDone();
+      }
+      assert.ok(dropped, 'the table was dropped between the version read and the attestation');
+      await assert.rejects(snapshot, denied, 'the snapshot attests the catalog it sees, extra table and all');
+      await undo('an extra table');
+    });
+
+    test(`${store.label}: an App's broken reference leaves what adapters share attested`, async () => {
+      await within(adapterOf(), (handle) => store.attest(handle));
+      await within(adapterOf(), async (handle) => {
+        await store.attest(handle);
+        await handle.query('SAVEPOINT reference');
+        await assert.rejects(handle.query(`INSERT INTO ${REF} VALUES ('missing')`), (error: { code?: string }) => error.code === '23503');
+        await handle.query('ROLLBACK TO SAVEPOINT reference');
+      });
+      const reads: unknown[] = [];
+      await within(
+        adapterOf(),
+        (handle) => store.attest(handle),
+        (text, values) => {
+          if (/pg_attrdef/.test(text) && Array.isArray(values)) reads.push(values[0]);
+        },
+      );
+      assert.deepEqual(reads, [], 'the next adapter finds both stores attested');
     });
 
     test(`${store.label}: a statement that fails on a table that moved forgets the attestation`, async () => {

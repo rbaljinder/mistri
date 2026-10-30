@@ -324,3 +324,34 @@ test('a resource left out with live: false is never told, and writes no change r
   assert.deepEqual(owning.changes()[0].data.tables, { job: { keys: [{ id: 1 }], kinds: ['update'] } });
   assert.equal(rows(), 1);
 });
+
+test(
+  'signed-out visitors behind a proxy each have their own streams, counted by the client the proxy names',
+  { timeout: 90_000 },
+  async (t) => {
+    /* An App that signs no one in: every reader is a visitor. From this machine, a proxy beside the server (trust.ts
+       trustedProxyPeer), each request names its client in X-Forwarded-For, as a load balancer's or Cloudflare's would. */
+    const server = await policyServer(t, {
+      app: { id: 'board', name: 'Board', live: true, resources: { job: {} }, views: { jobs: { kind: 'list', from: 'job' } }, home: 'jobs' },
+      sql: "CREATE TABLE job(id INTEGER PRIMARY KEY, title TEXT NOT NULL); INSERT INTO job VALUES (1, 'Tune');",
+      live: true,
+    });
+    const open = async (client: string) => {
+      const controller = new AbortController();
+      const response = await fetch(`${server.origin}/api/live?app=board`, {
+        headers: { origin: server.origin, 'x-forwarded-for': client },
+        signal: controller.signal,
+      });
+      t.after(() => controller.abort());
+      return response.status;
+    };
+    // Nine visitors, one stream each: nine streams, where the proxy's one address used to hold eight of them.
+    const visitors = [];
+    for (let i = 1; i <= 9; i++) visitors.push(await open(`203.0.113.${i}`));
+    assert.deepEqual(visitors, Array(9).fill(200));
+    // One visitor is still held to eight.
+    const one = [];
+    for (let i = 0; i < 9; i++) one.push(await open('198.51.100.20'));
+    assert.deepEqual(one, [...Array(8).fill(200), 503]);
+  },
+);

@@ -37,6 +37,14 @@ export interface ClientAddressPolicy {
 
 export interface ServerSettings {
   readonly clientAddress: ClientAddressPolicy;
+  /**
+   * The address the server is published at (MISTRI_PUBLIC_URL, or a mounting
+   * host's) is https: a TLS front end stands before every request, so a
+   * request counts as https whatever its own socket says (trust.ts
+   * `arrivedOverHttps`). Cloudflare, Cloud Run and most platforms end TLS
+   * and forward plain http from a peer nobody can name in `--trust-proxy`.
+   */
+  readonly httpsFront?: boolean;
   /** `--read-pool`: a PostgreSQL reader pool's size; unset, it follows the write order (postgresPool.ts). */
   readonly readers?: number;
   /** `--pooler`. */

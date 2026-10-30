@@ -61,6 +61,16 @@ export function postgresCatalogDigestStatement(excludedSchemas: readonly string[
             UNION ALL SELECT 'f' || f.oid || ':' || f.xmin FROM pg_catalog.pg_proc f JOIN ns ON ns.oid = f.pronamespace
             UNION ALL SELECT 'o' || o.oid || ':' || o.xmin FROM pg_catalog.pg_operator o JOIN ns ON ns.oid = o.oprnamespace
             UNION ALL SELECT 'q' || q.oid || ':' || q.xmin FROM pg_catalog.pg_opclass q JOIN ns ON ns.oid = q.opcnamespace
+            /* What else a store attestation counts in the runtime schema (postgresRuntimeSchemaProblems): one more
+               object there refuses the store, so it moves the digest too. */
+            UNION ALL SELECT 'v' || v.oid || ':' || v.xmin FROM pg_catalog.pg_conversion v JOIN ns ON ns.oid = v.connamespace
+            UNION ALL SELECT 'F' || o.oid || ':' || o.xmin FROM pg_catalog.pg_opfamily o JOIN ns ON ns.oid = o.opfnamespace
+            UNION ALL SELECT 'Tc' || t.oid || ':' || t.xmin FROM pg_catalog.pg_ts_config t JOIN ns ON ns.oid = t.cfgnamespace
+            UNION ALL SELECT 'Td' || t.oid || ':' || t.xmin FROM pg_catalog.pg_ts_dict t JOIN ns ON ns.oid = t.dictnamespace
+            UNION ALL SELECT 'Tp' || t.oid || ':' || t.xmin FROM pg_catalog.pg_ts_parser t JOIN ns ON ns.oid = t.prsnamespace
+            UNION ALL SELECT 'Tt' || t.oid || ':' || t.xmin FROM pg_catalog.pg_ts_template t JOIN ns ON ns.oid = t.tmplnamespace
+            UNION ALL SELECT 'x' || x.oid || ':' || x.xmin FROM pg_catalog.pg_statistic_ext x JOIN ns ON ns.oid = x.stxnamespace
+            UNION ALL SELECT 'X' || x.oid || ':' || x.xmin FROM pg_catalog.pg_extension x JOIN ns ON ns.oid = x.extnamespace
             UNION ALL SELECT 'l' || l.oid || ':' || l.xmin FROM pg_catalog.pg_collation l
               WHERE l.collnamespace IN (SELECT oid FROM ns)
                  OR l.oid IN (SELECT a.attcollation FROM pg_catalog.pg_attribute a JOIN rel ON rel.oid = a.attrelid)

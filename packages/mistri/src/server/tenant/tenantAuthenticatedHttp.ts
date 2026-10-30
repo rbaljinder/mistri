@@ -54,7 +54,15 @@ import { doorRefusal, writes, type Bound, type ProxyRange } from '@mistriwork/en
 import { setBaselineHeaders } from '@mistriwork/engine/server/http/baselineHeaders.js';
 import { embedDoor } from '../embed/crossOrigin.js';
 import { TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
-import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
+import {
+  captureTenantData,
+  databaseUnanswered,
+  denyTenant,
+  tenantIdentifier,
+  tenantOptions,
+  tenantRecord,
+} from '@mistriwork/engine/server/evidence.js';
+import { poolBusyRetryAfterSeconds } from '@mistriwork/engine/adapters/poolMetrics.js';
 import {
   captureTenantAdministrationEnrollment,
   captureTenantEnrollment,
@@ -899,7 +907,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     /* What a link preview reads of the landing (clientHttp.ts socialMeta), as the ordinary host says it (handler.ts socialHead). */
     const landingSocial = async (req: IncomingMessage, path: string, hosted: BrandingPresentation | undefined) => {
       const landing = landingCard(path, hosted);
-      const origin = landing && requestOrigin(req, raw.bound as Bound);
+      const origin = landing && requestOrigin(req, publicBound);
       if (!landing || !origin) return {};
       const image = await shareCardImage(origin, mount, path, landing.card).catch(() => undefined);
       const social: SocialHead = {
@@ -951,7 +959,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     const widget = challenge?.widget?.script;
     const egress = shellEgress([{ ui: loaded.app.ui, components: Boolean(loaded.components), ...(widget ? { widget } : {}) }]);
     const server = createServer((req, res) => {
-      setBaselineHeaders(req, res, (raw.bound as Bound).trustedProxies);
+      setBaselineHeaders(req, res, publicBound.trustedProxies);
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
         finish = resolve;
@@ -1409,9 +1417,14 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             return;
           }
           for (const name of Object.values(headers)) res.removeHeader(name);
-          send(req, res, error instanceof AuthRequestRefusal ? error.status : dispatchedMutation ? 503 : 403, {
+          /* Nothing dispatched and the store did not answer (a whoami whose session lookup found the pool busy):
+             nothing was decided, so not the 403 a refusal is but a 503 with when to come back, as the tenant
+             routes answer it (tenantWire.ts send). */
+          const unanswered = !dispatchedMutation && !(error instanceof AuthRequestRefusal) && databaseUnanswered(error);
+          if (unanswered) res.setHeader('retry-after', String(poolBusyRetryAfterSeconds(error)));
+          send(req, res, error instanceof AuthRequestRefusal ? error.status : dispatchedMutation || unanswered ? 503 : 403, {
             error: 'The authentication request could not be confirmed.',
-            code: dispatchedMutation ? 'auth_unknown' : 'auth_unavailable',
+            code: dispatchedMutation ? 'auth_unknown' : unanswered ? 'auth_temporarily_unavailable' : 'auth_unavailable',
             ...(dispatchedMutation ? { outcome: 'unknown' } : {}),
           });
         })

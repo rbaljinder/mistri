@@ -748,6 +748,7 @@ Deploying an App to Cloudflare Containers — a Worker in front of one always-on
   App's stores over the store URLs its config names, read from this
   machine's environment and not from --migrate-url. It runs wrangler deploy with a new
   MISTRI_DEPLOY_ID, and restarts the container with MISTRI_RESTART_TOKEN
+  (sent only to an https MISTRI_PUBLIC_URL, or http on localhost)
   until /readyz reports that deploy id and this build's id, for up to
   --roll-timeout minutes (default 20), failing with what it last saw. --smoke
   runs your command afterwards. Each deploy is a row in __mistri_deploys in

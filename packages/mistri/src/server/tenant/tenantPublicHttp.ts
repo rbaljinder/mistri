@@ -48,7 +48,7 @@ import { attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js
 import { answerLanding, LANDING_PATH } from '../http/landingRoutes.js';
 import { clientAddress } from '@mistriwork/engine/server/http/rateLimit.js';
 import { send } from '@mistriwork/engine/server/http/reply.js';
-import { doorRefusal, trustedProxyPeer, type Bound } from '@mistriwork/engine/server/http/trust.js';
+import { doorRefusal, type Bound } from '@mistriwork/engine/server/http/trust.js';
 import type { TenantIntake } from './tenantIntake.js';
 import {
   baseRecordBranding,
@@ -281,7 +281,7 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
           intake,
           signal: controller.signal,
           address: await placing(),
-          secure: secureRequest(req, trustedProxyPeer(req.socket.remoteAddress, bound.trustedProxies)),
+          secure: secureRequest(req, bound.trustedProxies),
         });
         assertActive();
         if (reply.cookies?.length)

@@ -148,6 +148,7 @@ import { openTenantLiveStream, tenantLiveAuthority, tenantLiveGrants, tenantProb
 import { brandingTenant, scopedRecordBranding, withRecordBranding, closeRecordBranding } from '../http/recordBranding.js';
 import { flagHttpRequest } from '../flags/httpRuntime.js';
 import { APP_FLAG_VALUES_PATH } from '../../shared/appFlagValues.js';
+import { carriesBearer } from '../embed/crossOrigin.js';
 import { timedPart, timeRequests } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
 import {
   InvalidRequest,
@@ -517,8 +518,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       last = answer.context;
       return answer.value;
     };
+    /* An import is many reads and writes over as long as the file takes: each its own unit of work, at the instant it
+       is asked, rather than all at the one the request arrived at. */
+    const fresh = <T>(work: () => Promise<T>): Promise<T> => withRequestInstant(new Date(now()), work);
     const reading = <T>(run: (context: TenantReadContext) => T | Promise<T>) =>
-      contexts.withContext(req, selectors, expected, run).then(owned);
+      fresh(() => contexts.withContext(req, selectors, expected, run)).then(owned);
     try {
       const request = readImportRequest(input);
       const { schema, zone } = await reading((context) => ({
@@ -564,8 +568,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               ...runtime,
               commandLabel: `${commandActionLabel(app, { command: declared.def.command.id }) ?? 'Command'} (import)`,
               commands: {
-                prepare: (body) => contexts.prepare(req, selectors, expected, body).then(owned),
-                execute: (body) => attributed(() => contexts.execute(req, selectors, expected, body).then(owned)),
+                prepare: (body) => fresh(() => contexts.prepare(req, selectors, expected, body)).then(owned),
+                execute: (body) => fresh(() => attributed(() => contexts.execute(req, selectors, expected, body).then(owned))),
               },
             },
             request,
@@ -576,11 +580,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               writer: {
                 trial: (insert) =>
                   unknownAsUnknown(() =>
-                    contexts.importRows(req, selectors, expected, { inserts: [insert], trial: true }).then(owned),
+                    fresh(() => contexts.importRows(req, selectors, expected, { inserts: [insert], trial: true })).then(owned),
                   ).then(() => {}),
                 commit: (inserts) =>
                   unknownAsUnknown(() =>
-                    attributed(() => contexts.importRows(req, selectors, expected, { inserts, trial: false }).then(owned)),
+                    fresh(() => attributed(() => contexts.importRows(req, selectors, expected, { inserts, trial: false }).then(owned))),
                   ).then(() => ({ undo: 'An import is undone record by record here.' })),
               },
             },
@@ -647,8 +651,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         const operation = path.slice(SUPPORT_HTTP_ROOT.length + 1) as (typeof SUPPORT_HTTP_OPERATIONS)[number];
         if (!support || !SUPPORT_HTTP_OPERATIONS.includes(operation)) return invalid(403);
         if (req.method !== 'POST') return invalid(405);
-        // A bearer token belongs to the App API, never to a support session.
-        if (req.headers.authorization !== undefined) return invalid(403);
+        // A bearer belongs to the App API or a host's page, never to a support session. The
+        // embed door takes a host's Authorization header away, so the header alone is not the test.
+        if (carriesBearer(req)) return invalid(403);
         if (
           [...url.searchParams.keys()].some((key) => key !== 'app') ||
           url.searchParams.getAll('app').length !== 1 ||
@@ -941,16 +946,21 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         const session = await verified(req);
         if (!session) return denyTenant();
         const actor = session.identity.who;
-        const resolve = async () => {
-          const admitted = await contexts.withContext(req, selectors, expected, (context: TenantReadContext) =>
-            tenantLiveGrants(context, app, ownership, now()),
-          );
-          return { grants: admitted.value, context: admitted.context };
-        };
+        /* The stream lasts as long as the tab, and each resolution and probe is a read of its own, asked when it is
+           asked: each at its own instant, never the one the stream opened at, nor whatever the hub's change came in on. */
+        const resolve = () =>
+          withRequestInstant(new Date(now()), async () => {
+            const admitted = await contexts.withContext(req, selectors, expected, (context: TenantReadContext) =>
+              tenantLiveGrants(context, app, ownership, now()),
+            );
+            return { grants: admitted.value, context: admitted.context };
+          });
         const probe = (table: string, keys: Parameters<typeof tenantProbe>[2]) =>
-          contexts
-            .withContext(req, selectors, expected, (context: TenantReadContext) => tenantProbe(context, table, keys))
-            .then((answer) => answer.value);
+          withRequestInstant(new Date(now()), () =>
+            contexts
+              .withContext(req, selectors, expected, (context: TenantReadContext) => tenantProbe(context, table, keys))
+              .then((answer) => answer.value),
+          );
         const first = await resolve();
         assertActive();
         if (req.aborted || res.destroyed) return denyTenant();
@@ -2037,8 +2047,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       const result = await contexts.preview(req, selectors, expected, input.limit === undefined ? {} : { limit: input.limit as number });
       return sendResource(req, res, '/api/revert', { reverted: false, ...result.value }, result.context);
     };
-    /* One instant for the whole request: every catalog it is served and every statement it writes says the same
-       `now` (tenantServedSchema.ts servedInstant), however long the request takes between them. */
+    /* One instant for the request: every catalog it is served and every statement it writes says the same `now`
+       (tenantServedSchema.ts servedInstant). A request that lasts — the live stream, an import — gives each read and
+       write inside it an instant of its own (above). */
     void withRequestInstant(new Date(now()), work)
       .catch((error) => {
         // A support refusal: nothing ran, and the reply says which support rule

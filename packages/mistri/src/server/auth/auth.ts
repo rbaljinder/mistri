@@ -71,7 +71,7 @@ import {
   type AuthStoreExclusion,
   type PostgresSeparationConnection,
 } from './authStoreSeparation.js';
-import { isPostgresAuthStore, openPostgresAuthStore, openSqliteAuthStore, type AuthStoreHandle } from './authStore.js';
+import { isPostgresAuthStore, openPostgresAuthStore, openSqliteAuthStore, storeFailureBeneath, type AuthStoreHandle } from './authStore.js';
 import { expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.js';
 import type { PgQuery, PgPool } from '@mistriwork/engine/adapters/postgresPool.js';
 import { withPostgresAuthModels } from '../../adapters/auth/postgresAuthStore.js';
@@ -1424,7 +1424,12 @@ export async function createAppAuth(
     const sessionOf = (req: IncomingMessage, fixed: boolean) => timedSum('auth', () => readSession(req, fixed));
     const readSession = async (req: IncomingMessage, fixed: boolean) => {
       const headers = fromNodeHeaders(req.headers);
-      const ask = () => auth.api.getSession(fixed ? { headers, query: { disableCookieCache: true, disableRefresh: true } } : { headers });
+      /* The store failing beneath it is that failure, not Better Auth's bare 500 over it (storeFailureBeneath): the
+         tenant path answers it as the store not answering, never as the session refused. */
+      const ask = () =>
+        storeFailureBeneath(() =>
+          auth.api.getSession(fixed ? { headers, query: { disableCookieCache: true, disableRefresh: true } } : { headers }),
+        );
       if (!reads) return ask();
       const presented = createHash('sha256')
         .update(JSON.stringify([req.headers.cookie ?? null, req.headers.authorization ?? null]))

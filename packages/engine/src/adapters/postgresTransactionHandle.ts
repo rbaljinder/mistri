@@ -15,6 +15,7 @@
  * included: a false count only costs a repeated check.
  */
 import { pipelines, type PgQuery, type PgResult } from './postgresPool.js';
+import { EpochCache } from './epochCache.js';
 
 /* Each handle's transaction, shared with its views: the one object what is
    true of that transaction may be kept on. */
@@ -121,6 +122,8 @@ export function transactionHandle(client: PgQuery, origin?: object): PgQuery {
       state.tail = [];
       state.riders = [];
     }
+    // A transaction that changes the catalog itself no longer stands on the version it read: it reads one again.
+    if (typeof text === 'string' && changesCatalog(text)) catalogVersions.delete(handle);
     // What waited for the COMMIT leaves in front of whatever leaves next, in its order.
     const tail = state.tail.length ? state.tail.splice(0) : undefined;
     const changes = !!tail || typeof text !== 'string' || !KEEPS.test(text) || CHANGES.test(text);
@@ -151,7 +154,7 @@ export function transactionHandle(client: PgQuery, origin?: object): PgQuery {
     return answer.catch((error: unknown) => {
       state.generation += 1;
       drop(state);
-      if (state.origin && suspectsStores(error)) forgetAttestations(state.origin);
+      if (state.origin && suspectsStores(error)) forgetAttestations(state.origin, handle, error);
       throw error;
     });
   }) as PgQuery['query'];
@@ -393,27 +396,108 @@ const attestations = new WeakMap<object, Set<string>>();
 /** A statement failed for a table, column or privilege that is not what it was, or a reference that broke: a runtime store may have moved. */
 export function suspectsStores(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code;
-  return code === '42P01' || code === '42703' || code === '42501' || code === '23503';
+  return movedCatalog(code) || code === '23503';
 }
+/* A table, column or privilege that is not what it was: the catalog itself moved. A reference that broke (23503)
+   is that too only where a store grew a key it should not have, which the version moves with; it is far more often
+   an App's own row naming one that is not there, and forgets one adapter's attestations, never the process's. */
+const movedCatalog = (code: unknown): boolean => code === '42P01' || code === '42703' || code === '42501';
 export const attestedOn = (origin: object, key: string): boolean => attestations.get(origin)?.has(key) === true;
 export function keepAttestedOn(origin: object, key: string): void {
   let kept = attestations.get(origin);
   if (!kept) attestations.set(origin, (kept = new Set()));
   kept.add(key);
 }
-export const forgetAttestations = (origin: object): void => void attestations.delete(origin);
+export const forgetAttestations = (origin: object, client?: PgQuery, error?: unknown): void => {
+  attestations.delete(origin);
+  /* What `client`'s transaction stood on, shared under the version it read, is dropped with it when the catalog
+     moved under it. Only that: a transaction that read no version (one whose epoch probe failed on a database
+     without the store) stood on none. */
+  const read = client && catalogVersions.get(client);
+  if (read && movedCatalog((error as { code?: unknown } | null)?.code)) sharedAttestations.forget(read.database);
+};
+
+/* A tenant App's start opened a dozen adapters and read snapshots on one database — startup's checks, a trial
+   enrollment and the host's, each read source — and each attested the same stores in full: on Ignition 42 layout
+   descriptions and 32 ownership checks, one round trip each. What a full attestation reads of the catalog — the
+   layout, the owners, grants and objects of the runtime schema, the roles — is what the catalog digest and the
+   schema epoch move with (postgresCatalogDigest.ts, postgresSchemaEpoch.ts), so one that passed stands for any
+   transaction on the same database that read the same exact version before attesting: kept here by the database
+   and that version, and asked of nothing else. The store's meta row — which App, source and store it is bound to —
+   is data the digest does not see, and the next adapter to open must see it changed: an adapter that finds the
+   catalog attested reads it again (`rebound`), one statement, and a row that no longer binds attests in full, which
+   refuses. A store that names no such read is not shared. A transaction that read no exact version — a time-filed
+   one, or none — attests as before.
+
+   Filed only where the attestation saw the version it is filed under. A snapshot's every statement sees the catalog
+   its first one did. A write's (READ COMMITTED) each sees what had committed when it ran, so DDL committing between
+   its version read and its attestation would be filed under a version it never saw, for a snapshot begun before the
+   DDL to find; it reads the version again after attesting (`reread`) and files only if it has not moved. */
+const sharedAttestations = new EpochCache<Set<string>>(32);
+/* DDL, or code that may run it, where a statement may begin: the start of the message, after a `;`, or after a
+   comment, block (nested or not) or line, so a comment before it hides nothing. A word that only looks like one
+   there (a column at the start of a line) costs a transaction its sharing, never its correctness. */
+const CATALOG_WRITE =
+  /(?:^|;|\*\/|\n)\s*(?:(?:CREATE|ALTER|DROP|GRANT|REVOKE|REASSIGN|SECURITY\s+LABEL|IMPORT\s+FOREIGN|CALL)\b|DO\s*(?:\$|'|LANGUAGE\b))/i;
+/** Whether a message may change the catalog: DDL, or code that may run it. */
+export const changesCatalog = (text: string): boolean => CATALOG_WRITE.test(text);
+const catalogVersions = new WeakMap<PgQuery, Readonly<{ database: string; version: string; reread?: () => Promise<string | undefined> }>>();
+/* How a transaction on an adapter's handle that read no exact version — the epoch store absent, so a write's
+   catalog answers are time-filed — reads one when it first has a store to attest: the digest, one statement where
+   each store's attestation is two. */
+const catalogReaders = new WeakMap<object, Readonly<{ database: string; read: (client: PgQuery) => Promise<string> }>>();
+
+/** Say the exact catalog version `client`'s transaction read, before anything it attests: its digest or its epoch.
+ * `reread` reads it again, for a transaction whose statements each see the latest commit (READ COMMITTED); a
+ * snapshot's needs none. Undefined unsays it, for a transaction begun again on the same client that read none. */
+export function noteCatalogVersion(
+  client: PgQuery,
+  database: string,
+  version: string | undefined,
+  reread?: () => Promise<string | undefined>,
+): void {
+  if (version === undefined) catalogVersions.delete(client);
+  else catalogVersions.set(client, Object.freeze({ database, version, ...(reread ? { reread } : {}) }));
+}
+
+/** How a transaction on `origin`'s handles reads an exact catalog version of `database` when it has read none. */
+export function readsCatalogVersion(origin: object, database: string, read: (client: PgQuery) => Promise<string>): void {
+  catalogReaders.set(origin, Object.freeze({ database, read }));
+}
+
 /** The adapter a handle's transaction runs on, as transactionHandle was told; undefined for anything else. */
 const transactionOrigin = (client: PgQuery): object | undefined => transactions.get(client)?.origin;
 
 /**
  * Attest a runtime store in full (`full`, which refuses) unless the adapter
- * this transaction runs on attested it under `key` already. Off a handle, or
- * on one made without an adapter, always in full.
+ * this transaction runs on attested it under `key` already, or any transaction
+ * on the same database did under the exact catalog version this one read
+ * (sharedAttestations) — read now, if it read none and its adapter says how —
+ * and its meta row still binds it (`rebound`, without which nothing is shared).
+ * Otherwise, off a handle or on one made without an adapter, always in full.
  */
-export async function attestOnce(client: PgQuery, key: string, full: () => Promise<void>): Promise<void> {
+export async function attestOnce(client: PgQuery, key: string, full: () => Promise<void>, rebound?: () => Promise<boolean>): Promise<void> {
   const origin = transactionOrigin(client);
   if (origin && attestedOn(origin, key)) return;
-  await full();
+  if (!rebound) {
+    await full();
+    if (origin) keepAttestedOn(origin, key);
+    return;
+  }
+  let read = catalogVersions.get(client);
+  const reader = origin && !read ? catalogReaders.get(origin) : undefined;
+  if (reader) {
+    // An adapter's handle is a write's: READ COMMITTED.
+    noteCatalogVersion(client, reader.database, await reader.read(client), () => reader.read(client));
+    read = catalogVersions.get(client);
+  }
+  if (!read || !sharedAttestations.get(read.version, read.database)?.has(key) || !(await rebound())) {
+    await full();
+    if (read && (!read.reread || (await read.reread()) === read.version)) {
+      const kept = sharedAttestations.get(read.version, read.database) ?? sharedAttestations.set(read.version, read.database, new Set());
+      kept.add(key);
+    }
+  }
   if (origin) keepAttestedOn(origin, key);
 }
 

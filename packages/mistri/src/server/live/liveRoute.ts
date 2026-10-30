@@ -28,6 +28,7 @@ import { sessionRoles } from '../../shared/appViewRoles.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { HttpError, policyResponses, send } from '@mistriwork/engine/server/http/reply.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
+import { forwardedClient } from '@mistriwork/engine/server/http/trust.js';
 import type { AppHost } from '../app/apps.js';
 import { AppAccessDenied, authorizeResources } from '../app/appAccess.js';
 import { accountOf, signedInAs } from '../app/appStamps.js';
@@ -202,7 +203,9 @@ export async function liveRoute(ctx: RequestContext): Promise<boolean> {
     void openLiveStream({
       req,
       res,
-      account: identity.id ?? `visitor:${req.socket.remoteAddress ?? ''}`,
+      /* A signed-out visitor counts as the client the rate limits name, not the socket peer: behind a proxy or
+         Cloudflare every visitor arrives from one peer, and would share one visitor's streams. */
+      account: identity.id ?? `visitor:${forwardedClient(req, ctx.bound.trustedProxies)}`,
       hubs,
       off: liveOffResources(app),
       ...(cursor === undefined ? {} : { cursor }),

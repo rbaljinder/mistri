@@ -11,9 +11,11 @@ import { authHoldsOwnProof, signInInfo } from '../auth/auth.js';
 import { publicHome } from '../../shared/appHome.js';
 import { isPublicForm, type AppFormView } from '../../shared/app.js';
 import { AppAccessDenied } from '@mistriwork/engine/server/columnGrants.js';
+import { PoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
+import { databaseUnanswered } from '@mistriwork/engine/server/evidence.js';
 import { appHostingError } from '../app/appEntrypoint.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
-import { doorRefusal, trustedProxyPeer, writes } from '@mistriwork/engine/server/http/trust.js';
+import { doorRefusal, writes } from '@mistriwork/engine/server/http/trust.js';
 import { door } from '@mistriwork/engine/server/http/door.js';
 import { answerPreflight, embedDoor, embedDoorFor } from '../embed/crossOrigin.js';
 import { EMBED_BOOT_PATH } from '../../shared/embedProtocol.js';
@@ -204,7 +206,12 @@ async function appSession(
       if (publicHost) return null;
       try {
         return snapshotScopedData(await signedIn.auth!.session(req));
-      } catch {
+      } catch (error) {
+        /* A session store that did not answer — a pool that would not lend a connection, a lookup cancelled
+           (auth/authStore.ts storeFailureBeneath) — decided nothing about who is asking. Refused, it was a 403 a
+           client does not retry; it is the server being busy, answered as a pool's busy is (serverCore.ts): 503 with
+           Retry-After. Anything else is still refused. */
+        if (databaseUnanswered(error)) throw new PoolBusy('read', 'queue_timeout', error);
         throw new AppAccessDenied();
       }
     };
@@ -232,12 +239,7 @@ async function appSession(
       }
       // Signing out burns the claims a submit left in this browser (forms/formLink.ts).
       if (path === '/api/auth/sign-out')
-        burnClaimsOnSignOut(
-          res,
-          signedIn.app.app,
-          secureRequest(req, trustedProxyPeer(req.socket.remoteAddress, bound.trustedProxies)),
-          ctx.mount.base,
-        );
+        burnClaimsOnSignOut(res, signedIn.app.app, secureRequest(req, bound.trustedProxies), ctx.mount.base);
       /* Better Auth routes by the whole address, the base path with it
          (auth.ts): given back what the browser sent (server.ts). It is
          answered here, so the door's write check after the session is not

@@ -159,6 +159,10 @@ const canonical = (value: unknown) => canonicalCommandJson(value, 1_048_576);
 
 async function layoutMatches(client: PgQuery, owner: TenantStoreBinding): Promise<boolean> {
   if (canonical(await describePostgresRelations(client, prefix)) !== canonical(postgresInvitationLayout)) return false;
+  return binds(client, owner);
+}
+/** Whether the meta row binds the store to `owner`: read in every attestation, a shared one too (postgresStoreFence.ts). */
+async function binds(client: PgQuery, owner: TenantStoreBinding): Promise<boolean> {
   const rows = (await client.query(`SELECT singleton,version,app_id,source_id,store_id FROM ${q(tables.meta)}`)).rows;
   return (
     rows.length === 1 &&
@@ -172,11 +176,17 @@ async function layoutMatches(client: PgQuery, owner: TenantStoreBinding): Promis
 /* Attested in full when an adapter first uses it, after the administration journal (postgresStoreFence.ts). */
 async function attest(client: PgQuery, owner: TenantStoreBinding): Promise<void> {
   await assertPostgresTenantAdministrationJournal(client, owner);
-  await attestOnce(client, prefix, canonical(owner), async () => {
-    if (!(await layoutMatches(client, owner)))
-      return denyLayout(layoutRefusal('The PostgreSQL tenant invitation store', await postgresLayoutVersion(client, q(tables.meta)), 1));
-    if ((await reservedTableOwnershipProblems(client, prefix)).length) denyTenant();
-  });
+  await attestOnce(
+    client,
+    prefix,
+    canonical(owner),
+    async () => {
+      if (!(await layoutMatches(client, owner)))
+        return denyLayout(layoutRefusal('The PostgreSQL tenant invitation store', await postgresLayoutVersion(client, q(tables.meta)), 1));
+      if ((await reservedTableOwnershipProblems(client, prefix)).length) denyTenant();
+    },
+    () => binds(client, owner),
+  );
 }
 export async function assertPostgresTenantInvitations(client: PgQuery, input: TenantStoreBinding): Promise<void> {
   try {

@@ -75,7 +75,7 @@ const ids = new Map([
 ]);
 
 const RESET = [
-  `DROP TABLE IF EXISTS public.scoped_item, public.scoped_owner CASCADE`,
+  `DROP TABLE IF EXISTS public.scoped_item, public.scoped_owner, public.scoped_interleaved CASCADE`,
   `DROP SCHEMA IF EXISTS mistri CASCADE`,
   `DROP FUNCTION IF EXISTS public.scoped_noop()`,
 ];
@@ -428,6 +428,50 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
         adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Blocked' } })),
         Refusal,
       );
+    });
+  });
+
+  /* A writer reads committed state statement by statement: DDL that commits between its digest read and its describe
+     is in the description. Kept under that digest, it would be served to a snapshot begun before the DDL, which reads
+     the same digest and would be handed a catalog it cannot see. */
+  test('a description that saw DDL committed after its digest was read is not kept under that digest', async (t) => {
+    await withAdapter(async (writer) => {
+      const reader = new PostgresAdapter(LIVE!, 'scoped reader', ['public']);
+      try {
+        const proto = PostgresAdapter.prototype as unknown as { describe(db: PgQuery): Promise<unknown> };
+        const original = proto.describe;
+        let interleaved = false;
+        t.mock.method(proto, 'describe', async function (this: unknown, db: PgQuery) {
+          if (this === writer && !interleaved) {
+            interleaved = true;
+            await control.query('CREATE TABLE public.scoped_interleaved (id integer)');
+          }
+          return original.call(this, db);
+        });
+        const begun = gate(),
+          written = gate();
+        const seen = reader.readSnapshot(async (snapshot) => {
+          await snapshot.client.query('SELECT 1');
+          begun.release();
+          await written.promise;
+          return snapshot.describe();
+        });
+        await begun.promise;
+        try {
+          await writer.scopeTransaction(rowsA(), async () => {});
+        } finally {
+          written.release();
+        }
+        assert.ok(interleaved, 'the table was created between the digest read and the describe');
+        const tables = (await seen).tables.map((table) => table.name);
+        assert.ok(
+          tables.some((name) => name.endsWith('scoped_item')),
+          tables.join(),
+        );
+        assert.ok(!tables.some((name) => name.endsWith('scoped_interleaved')), 'the snapshot is described as it sees the catalog');
+      } finally {
+        await reader.close();
+      }
     });
   });
 

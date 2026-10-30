@@ -37,7 +37,7 @@ import { readAdapter } from './tenantHttp.js';
 import type { TenantNames } from './tenantNames.js';
 import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
 import type { TenantReadContext } from './tenantReadRuntime.js';
-import { tenantServedSchema } from './tenantServedSchema.js';
+import { tenantServedSchema, withRequestInstant } from './tenantServedSchema.js';
 
 /** What of the enrolled deployment the sender uses: its reads as a request, and the outbox beside its inbox. */
 interface NoticeMailDeployment<Request> {
@@ -88,7 +88,9 @@ export function openTenantNoticeMail<Request>(options: TenantNoticeMailOptions<R
           return { id: person.id, who: mail.recipient };
         }, roles) as Request;
         const realm = tenantId === undefined ? 'platform' : 'tenant';
-        const tell = async (context: TenantReadContext | PlatformReadContext) => {
+        /* Each mail is its own unit of work, at its own instant: a statement it writes for a computed `now` reads it. */
+        const tell = (context: TenantReadContext | PlatformReadContext) => withRequestInstant(new Date(now()), () => telling(context));
+        const telling = async (context: TenantReadContext | PlatformReadContext) => {
           const schema = tenantServedSchema(context, app, new Date(now()), mail.recipient);
           const told = await noticeForReader(app, readAdapter(context), schema, {
             id: mail.notice,

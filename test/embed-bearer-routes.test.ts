@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { answerPreflight, embedDoor } from '../packages/mistri/src/server/embed/crossOrigin.js';
+import { answerPreflight, carriesBearer, embedDoor } from '../packages/mistri/src/server/embed/crossOrigin.js';
 
 const HOST = 'https://host.example';
 const SESSION = 'mistri-app.session_token';
@@ -71,6 +71,26 @@ test("a bearer stands for its session on a browser route, and on no member's API
     '/api/tenant/invitations/status',
     '/api/integrations/save',
     '/API/Integrations/Save',
+    // What is a platform operator's, or a tenant's settings: a support session
+    // into a tenant and its trail, a tenant's branding, the Suite console.
+    '/api/tenant/support/open',
+    '/api/tenant/support/exit',
+    '/api/tenant/support/status',
+    '/api/tenant/support/log',
+    '/api/tenant/support/sessions',
+    '/API/Tenant/Support/open',
+    '/api/branding/save',
+    '/api/console',
+    '/api/console/flags',
+    // The rest of the account's and the operator's, held as before.
+    '/api/auth/admin/create-user',
+    '/api/accounts',
+    '/api/v1/leads',
+    '/api/mcp',
+    '/api/operations/workflows/retry',
+    '/api/suite/apps',
+    '/api/connections/save',
+    '/api/sql',
   ]) {
     const asked = request(path);
     const admitted = await embedDoor(asked.req as unknown as IncomingMessage, asked.res as unknown as ServerResponse, path, door);
@@ -84,4 +104,18 @@ test("a bearer stands for its session on a browser route, and on no member's API
       path,
     );
   }
+});
+
+test('a request the door admitted on a bearer still carries one, though its Authorization header is gone', async () => {
+  const admitted = request('/api/query');
+  const req = admitted.req as unknown as IncomingMessage;
+  assert.equal(await embedDoor(req, admitted.res as unknown as ServerResponse, '/api/query', door), 'bearer');
+  assert.equal(admitted.req.headers.authorization, undefined);
+  assert.equal(carriesBearer(req), true);
+  // An API token still in its header carries one; a cookie alone does not.
+  const token = request('/api/query');
+  assert.equal(carriesBearer(token.req as unknown as IncomingMessage), true);
+  const own = request('/api/query');
+  delete own.req.headers.authorization;
+  assert.equal(carriesBearer(own.req as unknown as IncomingMessage), false);
 });
