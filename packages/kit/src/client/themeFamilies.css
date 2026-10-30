@@ -463,6 +463,11 @@
   :root[data-look-nav='inverted'] :is(#table-list, .mobile-nav-list) button[aria-current='true']:hover {
     background: var(--nav-ink);
     color: var(--nav-ground);
+    /* An inverted current block reads as a grey pill on its own; the
+       accent edge and weight anchor it to the theme's accent, so the
+       current room is unmistakable even where nav-ink is a grey. */
+    box-shadow: inset 3px 0 0 var(--nav-accent, var(--accent));
+    font-weight: 600;
   }
   :root[data-look-nav='inverted'] :is(#table-list, .mobile-nav-list) button[aria-current='true'] :is(.rows, svg, .nav-icon) {
     color: var(--nav-ground);

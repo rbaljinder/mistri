@@ -244,7 +244,7 @@ button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-o
 }
 #table-list button:hover { background: var(--raised); }
 #table-list button[aria-current="true"] { background: var(--accent-soft); color: var(--accent-ink); }
-#table-list .rows { color: var(--ink-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+#table-list .rows { color: var(--nav-muted, var(--ink-muted)); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 #table-list .view-tag { color: var(--status-info); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; }
 /* App nav (--app): group headings between runs of entries, entries the
    connection cannot honour, and the row that flips to the full table list. */
@@ -253,7 +253,10 @@ button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-o
    sat too near the row under it for axe's 24px target spacing (WCAG 2.5.8) wherever the menu is compact. */
 #table-list li.nav-group {
   padding: var(--space-3h) var(--space-3) var(--space-1) calc(8px + var(--nav-group-inset, 0px));
-  color: var(--ink-muted);
+  /* The menu's own muted ink, not the page's: the validator measures
+     navMuted against the menu ground at 4.5:1, and the page's muted ink
+     on a dark menu ground was faint and unmeasured. */
+  color: var(--nav-muted, var(--ink-muted));
   font: var(--text-xs) var(--sans);
   line-height: 1;
   text-transform: uppercase; letter-spacing: 0.06em;
@@ -715,7 +718,7 @@ body.sidebar-hidden .sidebar-reveal { display: inline-flex; }
 /* Menu icons (NavGlyph.tsx): an entry's declared icon before its words, in
    the words' ink but quieter, until the entry is the current one. An App
    that declares none draws nothing here. */
-#table-list .nav-icon { flex: none; width: 15px; height: 15px; align-self: center; color: var(--ink-muted); }
+#table-list .nav-icon { flex: none; width: 15px; height: 15px; align-self: center; color: var(--nav-muted, var(--ink-muted)); }
 #table-list button[aria-current="true"] .nav-icon { color: inherit; }
 #table-list :is(.nav-icon, .nav-dot) + .nav-label { flex: 1; min-width: 0; }
 /* Stand-ins for entries without an icon exist for the folded rail alone. */

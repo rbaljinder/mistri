@@ -60,6 +60,12 @@
   font-size: var(--text-sm);
   font-weight: 600;
 }
+/* One treatment for every lane head: a lane's dressed mark may be a pill
+   for one value and plain text for another, which made "Todo" plain and
+   "Doing" a blue pill in the same board. In a head, the mark keeps its
+   word and its dot, never a pill background, so all lanes read alike. */
+.triage-lane-head .tone { background: none; padding: 0; }
+.triage-lane-head .tone-marked { gap: var(--space-2); }
 
 .triage-lane-count { margin-left: auto; color: var(--ink-subtle); font: var(--text-xs) var(--mono); white-space: nowrap; }
 /* Past its limit a lane says so in the warning ink, not in weight: the number is the thing to read. */

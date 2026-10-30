@@ -182,3 +182,60 @@ textarea.field-control { min-height: 72px; resize: vertical; }
 
 /* An icon (Icon.tsx). */
 .tw-icon { display: inline-block; flex: none; vertical-align: middle; }
+
+/* The Switch primitive (Switch.tsx): a 48x28 track, a 24px thumb, the
+   accent when on, the line ink when off; the thumb moves, the track
+   never changes size, so the row beside it never shifts. */
+.ui-switch-row { display: inline-flex; align-items: flex-start; gap: var(--space-3); min-width: 0; }
+.ui-switch { flex: none; width: 48px; height: 28px; padding: 2px; border: 1px solid var(--line-control); border-radius: 999px; background: var(--raised); cursor: pointer; box-sizing: border-box; }
+.ui-switch[data-checked] { background: var(--accent); border-color: var(--accent); }
+.ui-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.ui-switch:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+.ui-switch-thumb { display: block; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / 0.25); transition: transform 150ms ease; }
+.ui-switch[data-checked] .ui-switch-thumb { transform: translateX(20px); }
+.ui-switch-copy { display: grid; gap: var(--space-1); min-width: 0; }
+.ui-switch-label { font: var(--text-base) var(--sans); color: var(--ink); cursor: pointer; }
+.ui-switch-description { font-size: var(--text-sm); line-height: 1.45; color: var(--ink-muted); }
+
+/* The Tabs primitive (Tabs.tsx): a row of tabs on a rule, the chosen
+   one in the accent ink with the accent's underline, the panel below. */
+.ui-tabs-list { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.ui-tab { flex: none; padding: var(--space-2h) var(--space-3h); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--ink-muted); font: inherit; cursor: pointer; white-space: nowrap; }
+.ui-tab:hover { color: var(--ink); }
+.ui-tab[data-selected] { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 600; }
+.ui-tab:disabled { color: var(--ink-subtle); cursor: not-allowed; }
+.ui-tab:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
+.ui-tab-panel { padding-top: var(--space-4); }
+
+/* The Drawer primitive (Drawer.tsx): a sheet from an edge, at most
+   420px, full width on a phone, on the modal's scrim. */
+.ui-drawer-backdrop { background: rgb(0 0 0 / 0.45); }
+.ui-drawer-viewport { position: fixed; inset: 0; display: flex; }
+.ui-drawer-right { justify-content: flex-end; }
+.ui-drawer-left { justify-content: flex-start; }
+.ui-drawer { width: min(420px, 100vw); max-height: 100dvh; overflow-y: auto; padding: var(--space-5); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop); }
+.ui-drawer-title { margin: 0 0 var(--space-4); font-size: var(--text-md); font-weight: 600; }
+
+/* The Popover primitive (Popover.tsx): a layer on the surface, with
+   the popup's edge and shadow, never wider than the viewport. */
+.ui-popover { max-width: min(28rem, calc(100vw - 16px)); padding: var(--space-3h); background: var(--surface); color: var(--ink); border: 1px solid var(--line-control); border-radius: var(--radius-pop); box-shadow: var(--shadow-pop); }
+.ui-popover:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
+
+/* The Avatar primitive (Avatar.tsx): a disc in the accent's tint, the
+   initials in the accent ink, the picture covering it whole. */
+.ui-avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; overflow: hidden; background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.ui-avatar-sm { width: 28px; height: 28px; font-size: var(--text-xs); }
+.ui-avatar-md { width: 36px; height: 36px; font-size: var(--text-sm); }
+.ui-avatar-lg { width: 48px; height: 48px; font-size: var(--text-base); }
+.ui-avatar-image { width: 100%; height: 100%; object-fit: cover; }
+.ui-avatar-fallback { display: grid; place-items: center; width: 100%; height: 100%; }
+
+/* The Pagination primitive (Pagination.tsx): page buttons on one
+   row, the current page in the accent's tint, steps disabled at the ends. */
+.ui-pagination { display: flex; align-items: center; gap: var(--space-1h); flex-wrap: wrap; }
+.ui-page { min-width: 36px; min-height: 36px; padding: 0 var(--space-2h); border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+.ui-page:hover:not(:disabled) { background: var(--raised); }
+.ui-page[aria-current="page"] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.ui-page:disabled { color: var(--ink-subtle); cursor: not-allowed; }
+.ui-page:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
+.ui-page-gap { padding: 0 var(--space-1); color: var(--ink-subtle); }

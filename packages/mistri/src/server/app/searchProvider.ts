@@ -66,4 +66,4 @@ export function searchProviderOf(registry: Registry): SearchProvider | undefined
 /** Said when a `search` block meets a registry with no provider. */
 export const NO_SEARCH_PROVIDER =
   'no search provider is plugged in. Search providers are packs (Typesense is @mistriwork/search-typesense), which ship after 1.0; ' +
-  'until then remove the "search" block, and a text filter runs on the database.';
+  'until then remove the "search" block, name the connection "memory" for the built-in in-memory provider, and a text filter runs on the database.';

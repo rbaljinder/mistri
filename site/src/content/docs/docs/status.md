@@ -1,16 +1,16 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.3 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.4 scope, stable and preview features, current limitations and planned work.
 ---
 
-The 1.0.0-rc.3 scope, stable and preview features, current limitations and planned work.
+The 1.0.0-rc.4 scope, stable and preview features, current limitations and planned work.
 
 ```sh
 npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.3**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.4**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -146,7 +146,7 @@ the adapter. Apps run on PostgreSQL and SQLite; MySQL and MariaDB are not suppor
 
 ## Roadmap
 
-Release candidates are shipping: 1.0.0-rc.3 is the current one, and the compatibility
+Release candidates are shipping: 1.0.0-rc.4 is the current one, and the compatibility
 promise takes effect at 1.0.0. None of what remains has a date.
 
 A field deployment has run on Cloudflare Containers against PlanetScale

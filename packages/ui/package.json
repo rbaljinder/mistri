@@ -1,7 +1,7 @@
 {
   "name": "@mistriwork/ui",
   "version": "1.0.0-rc.4",
-  "description": "The standalone React primitives both shells are drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, the form controls built on them (text, masked, money and sensitive boxes, listboxes, choices, slider, progress and action bar; Preview), the landing hero's blocks (badge, photo tiles, icon rows; Preview), their tokens and stylesheet, and the zoom-aware ruler their popups are placed by.",
+  "description": "The standalone React primitives both shells are drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, Switch, Tabs, Drawer, Popover, Avatar and Pagination, the form controls built on them (text, masked, money and sensitive boxes, listboxes, choices, slider, progress and action bar; Preview), the landing hero's blocks (badge, photo tiles, icon rows; Preview), their tokens and stylesheet, and the zoom-aware ruler their popups are placed by.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
     "url": "https://github.com/rbaljinder/mistri/issues"
@@ -71,6 +71,30 @@
     "./Modal.js": {
       "mistri-built": "./dist/Modal.js",
       "default": "./src/Modal.tsx"
+    },
+    "./Avatar.js": {
+      "mistri-built": "./dist/Avatar.js",
+      "default": "./src/Avatar.tsx"
+    },
+    "./Drawer.js": {
+      "mistri-built": "./dist/Drawer.js",
+      "default": "./src/Drawer.tsx"
+    },
+    "./Pagination.js": {
+      "mistri-built": "./dist/Pagination.js",
+      "default": "./src/Pagination.tsx"
+    },
+    "./Popover.js": {
+      "mistri-built": "./dist/Popover.js",
+      "default": "./src/Popover.tsx"
+    },
+    "./Switch.js": {
+      "mistri-built": "./dist/Switch.js",
+      "default": "./src/Switch.tsx"
+    },
+    "./Tabs.js": {
+      "mistri-built": "./dist/Tabs.js",
+      "default": "./src/Tabs.tsx"
     },
     "./Select.js": {
       "mistri-built": "./dist/Select.js",

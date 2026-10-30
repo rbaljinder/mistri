@@ -1193,6 +1193,40 @@ export function defineCommand<
   return result;
 }
 
+/**
+ * Adopt a command registered by another copy of this module. An App loaded
+ * outside the checkout can resolve @mistriwork/mistri to a second copy, so
+ * its commands are well-formed but unknown to this copy's registry — the
+ * out-of-tree trap, where identical files pass inside the checkout and fail
+ * outside with "must be created with defineCommand". A registered command
+ * spreads back into defineCommand as its definition (its derived `fields`
+ * are non-enumerable and re-derived, its `version` is the registry's, not
+ * the definition's), so re-registering it here adopts it: the captured
+ * rules, events, slots and effects of the fresh registration are copied
+ * onto the foreign object, which is then this copy's registered command.
+ * Adoption failure is not silent: a plain object, or a command whose
+ * captured options do not survive re-registration, still fails with the
+ * original message, plus the adoption reason, instead of running unvetted.
+ */
+function adoptCommand(command: AnyBusinessCommand): void {
+  if (registered.has(command)) return;
+  const { version: _version, ...definition } = command as unknown as Record<string, unknown>;
+  let adopted: AnyBusinessCommand;
+  try {
+    adopted = defineCommand(definition as unknown as Parameters<typeof defineCommand>[0]);
+  } catch (error) {
+    return fail(
+      `Command must be created with defineCommand. (Adopting a command from another copy of the module failed: ${error instanceof Error ? error.message : String(error)})`,
+    );
+  }
+  registered.add(command);
+  for (const map of [commandEvents, commandSlots, commandEffects, commandRules] as WeakMap<object, unknown>[]) {
+    if (map.has(adopted)) map.set(command, map.get(adopted));
+  }
+  const stated = restatements.get(adopted);
+  if (stated) restatements.set(command, stated);
+}
+
 /** A line's cell read against the catalog the command runs over (commandInput.ts `lineCell`). */
 type ReadCellOption = NonNullable<Parameters<typeof readCommandInput>[2]>['cell'];
 
@@ -1215,7 +1249,7 @@ export function parseRegisteredInput(
     now?: Date;
   },
 ): unknown {
-  if (!registered.has(command)) return fail('Command must be created with defineCommand.');
+  if (!registered.has(command)) adoptCommand(command);
   const read = readCommandInput(command.fields, raw, {
     publicForm: options.publicForm,
     richText: (value, most) => readRichTextInput(value, {}, most),
@@ -1274,7 +1308,7 @@ export function judgeDraft(
 
 /** Internal: the captured `initial`, when the command declares one. */
 export function registeredInitial(command: AnyBusinessCommand): ((context: BusinessCommandInitialContext) => unknown) | undefined {
-  if (!registered.has(command)) return fail('Command must be created with defineCommand.');
+  if (!registered.has(command)) adoptCommand(command);
   const initial = commandRules.get(command)?.initial;
   return initial && ((context: BusinessCommandInitialContext) => Reflect.apply(initial, undefined, [context]));
 }
@@ -1283,7 +1317,7 @@ export function registeredInitial(command: AnyBusinessCommand): ((context: Busin
 export function registeredAvailability(
   command: AnyBusinessCommand,
 ): ((context: BusinessCommandAvailabilityContext) => unknown) | undefined {
-  if (!registered.has(command)) return fail('Command must be created with defineCommand.');
+  if (!registered.has(command)) adoptCommand(command);
   const availability = commandRules.get(command)?.availability;
   return availability && ((context: BusinessCommandAvailabilityContext) => Reflect.apply(availability, undefined, [context]));
 }
@@ -1291,19 +1325,19 @@ export function registeredAvailability(
 /** Internal execution metadata; application code never receives a journal or
  * the ability to replace captured declarations after command registration. */
 export function getCommandEvents<Input, Output>(command: BusinessCommand<Input, Output>): CapturedCommandEvents<Output> | undefined {
-  if (!registered.has(command)) return fail('Command must be created with defineCommand.');
+  if (!registered.has(command)) adoptCommand(command);
   return commandEvents.get(command) as CapturedCommandEvents<Output> | undefined;
 }
 
 /** Internal: every event slot the command's batch carries, its own and its effects', sorted: what its fingerprint names. */
 export function commandEventSlots(command: AnyBusinessCommand): readonly string[] {
-  if (!registered.has(command)) return fail('Command must be created with defineCommand.');
+  if (!registered.has(command)) adoptCommand(command);
   return commandSlots.get(command) ?? [];
 }
 
 /** Internal: each effect's name and webhook, in declaration order, when the command has effects. */
 export function getCommandEffects(command: AnyBusinessCommand): CapturedEffects['targets'] | undefined {
-  if (!registered.has(command)) return fail('Command must be created with defineCommand.');
+  if (!registered.has(command)) adoptCommand(command);
   return commandEffects.get(command);
 }
 
@@ -1311,7 +1345,7 @@ export function getCommandEffects(command: AnyBusinessCommand): CapturedEffects[
 export function registeredLookup(
   command: AnyBusinessCommand,
 ): ((context: BusinessCommandLookupContext, input: unknown) => unknown) | undefined {
-  if (!registered.has(command)) return fail('Command must be created with defineCommand.');
+  if (!registered.has(command)) adoptCommand(command);
   const lookup = commandRules.get(command)?.lookup;
   return lookup && ((context: BusinessCommandLookupContext, input: unknown) => Reflect.apply(lookup, undefined, [context, input]));
 }

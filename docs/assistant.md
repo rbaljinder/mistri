@@ -73,12 +73,18 @@ part; what it cannot give — the person's authority on every call — is the
 largest.
 
 The provider is one small interface (`server/assistant/assistantModel.ts`):
-`stream(request, onText, signal) → { content, stopReason, usage }`. The one
-provider is Anthropic's Messages API over plain `fetch` with streaming (no SDK
-dependency: the image carries nothing new and the interface is the seam an SDK
-would sit behind). The default model is `claude-sonnet-5-5`; an App may name
-another. The operator's key is `ANTHROPIC_API_KEY` in the server's
-environment — never in the App definition, never sent to the client.
+`stream(request, onText, signal) → { content, stopReason, usage }`. The two
+providers behind it are Anthropic's Messages API and OpenAI's Chat
+Completions API, each over plain `fetch` with streaming (no SDK
+dependency: the image carries nothing new and the interface is the seam an
+SDK would sit behind; OpenAI's mapping lives in
+`server/assistant/assistantOpenAI.ts`, including its tool-call mapping and
+`finish_reason` translation). The default model is `claude-sonnet-5-5`; an
+App may name another. The operator's key is `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` in the server's environment — never in the App definition,
+never sent to the client — chosen by `MISTRI_ASSISTANT_PROVIDER`
+(`anthropic` or `openai`; Anthropic unless the operator says otherwise and
+only Anthropic's key is set, OpenAI when only its key is set).
 
 A **scripted model** (`server/assistant/assistantScripted.ts`) is the test
 double: turns written as data (text, tool calls, the person's words they

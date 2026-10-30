@@ -39,6 +39,7 @@ import {
   type SearchIndex,
   type SearchScope,
 } from './searchProvider.js';
+import { MEMORY_SEARCH_CONNECTION, memorySearchProvider } from './memorySearch.js';
 
 interface SearchedResource {
   name: string;
@@ -83,6 +84,9 @@ export function assertAppSearch(apps: readonly AppDef[], registry: Registry): vo
   for (const app of apps) {
     for (const [name, resource] of Object.entries(app.resources ?? {})) {
       if (!resource.search) continue;
+      /* The built-in memory provider needs no plug-in: a search through
+         `memory` is satisfied by it, whatever the registry holds. */
+      if (resource.search.connection === MEMORY_SEARCH_CONNECTION) continue;
       if (!provider) throw new Error(`App "${app.name}": resources "${name}" declares a search, and ${NO_SEARCH_PROVIDER}`);
       if (!provider.index(resource.search.connection)) {
         throw new Error(
@@ -93,9 +97,10 @@ export function assertAppSearch(apps: readonly AppDef[], registry: Registry): vo
   }
 }
 
-/* The index a resource's search names; undefined without a provider or without that connection. */
+/* The index a resource's search names; undefined without a provider or without that connection. The memory
+   connection falls back to the built-in provider, so a `memory` search works with no pack plugged in. */
 const indexOf = (registry: Registry, found: SearchedResource): SearchIndex | undefined =>
-  searchProviderOf(registry)?.index(found.search.connection);
+  searchProviderOf(registry)?.index(found.search.connection) ?? memorySearchProvider.index(found.search.connection);
 
 const collectionOf = (index: SearchIndex, app: AppDef, found: SearchedResource) =>
   searchCollection(index.collectionPrefix, app.id, found.name);
@@ -557,9 +562,11 @@ class SearchIndexer {
   }
 
   private index(found: SearchedResource): SearchIndex {
-    if (!searchProviderOf(this.registry)) throw new SearchUnavailable(`"${found.search.connection}": ${NO_SEARCH_PROVIDER}`);
     const index = indexOf(this.registry, found);
-    if (!index) throw new SearchUnavailable(`"${found.search.connection}" is not a connection of the search provider.`);
+    if (!index) {
+      if (!searchProviderOf(this.registry)) throw new SearchUnavailable(`"${found.search.connection}": ${NO_SEARCH_PROVIDER}`);
+      throw new SearchUnavailable(`"${found.search.connection}" is not a connection of the search provider.`);
+    }
     return index;
   }
 

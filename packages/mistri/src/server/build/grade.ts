@@ -10,7 +10,7 @@
  * its figures one way, a chart's axis counts in round steps, a record's name
  * keeps to two lines on a phone. Each of those is a measurement, not a taste
  * call, so this serves the App the way `mistri shot` does (shot.ts), opens
- * every view and a record of each page at 1280, 390 and 320 in light and at
+ * every view and a record of each page at 1280, 768, 390 and 320 in light and at
  * 390 in dark, measures each in the page (gradeProbe.ts) and judges the
  * measurements here, where they can be tested without a browser.
  *
@@ -331,7 +331,7 @@ export async function runGrade(
 ): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) {
     write(
-      `${GRADE_USAGE}\n\nServe the App as mistri shot does and open every view and a record of each page at 1280, 390 and 320 wide,\n` +
+      `${GRADE_USAGE}\n\nServe the App as mistri shot does and open every view and a record of each page at 1280, 768, 390 and 320 wide,\n` +
         'and at 390 in the dark scheme. Each is measured, not looked at: sideways scroll, figures and words cut off, controls\n' +
         `drawn over each other, targets under ${TAP}px on a phone, text and field edges below the contrast rule, layout shift after\n` +
         'the first paint, page errors and failed requests, empty sections, two number formats in one surface, chart axes in\n' +

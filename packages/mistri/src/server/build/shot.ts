@@ -1206,7 +1206,14 @@ class ShotRun {
         const exited = new Promise((done) => child.once('exit', done));
         child.kill('SIGTERM');
         await Promise.race([exited, new Promise((done) => setTimeout(done, 5_000))]);
-        if (child.exitCode === null) child.kill('SIGKILL');
+        if (child.exitCode === null) {
+          child.kill('SIGKILL');
+          /* A killed child is not a reaped one: the old code returned
+             while the server was still dying, and a grade that exited 1
+             left its server on its port until killed by hand. Wait for
+             the exit (or a second grace period) before the run ends. */
+          await Promise.race([exited, new Promise((done) => setTimeout(done, 5_000))]);
+        }
       }
       const unreleased = await this.member?.release();
       if (unreleased) this.warn(`warning: ${unreleased}`);
