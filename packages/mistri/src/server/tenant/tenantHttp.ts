@@ -303,6 +303,9 @@ interface TenantHttpOptions {
   readonly readerName?: (req: IncomingMessage) => string | undefined;
   /** The free-form pages' loaders, by name: the commands module's `loaders` (commands/pageLoaders.ts). */
   readonly loaders?: Readonly<Record<string, PageLoader>>;
+  /** Whether this request's login was made here in the last five minutes, by the rule opening a support session
+      keeps (nativeSignInAge.ts): what issuing an API token asks. Absent, no token is issued. */
+  readonly recentSignIn?: (req: IncomingMessage) => Promise<boolean>;
 }
 
 /* The loaders as handed over, captured once: own names, each a defineLoader's object, never a proxy. */
@@ -335,6 +338,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     'assistant',
     'readerName',
     'loaders',
+    'recentSignIn',
   ]);
   const integrationSettings = raw.integrations as TenantHttpOptions['integrations'];
   const tokens = raw.tokens as TenantTokenService | undefined;
@@ -343,6 +347,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
   const assistantSwitch = raw.assistant as TenantHttpOptions['assistant'];
   if (raw.readerName !== undefined && (typeof raw.readerName !== 'function' || isProxy(raw.readerName))) return denyTenant();
   const readerName = raw.readerName as TenantHttpOptions['readerName'];
+  if (raw.recentSignIn !== undefined && (typeof raw.recentSignIn !== 'function' || isProxy(raw.recentSignIn))) return denyTenant();
+  const recentSignIn = raw.recentSignIn as TenantHttpOptions['recentSignIn'];
   if (raw.look !== undefined && (typeof raw.look !== 'function' || isProxy(raw.look))) return denyTenant();
   const look = raw.look as TenantHttpOptions['look'];
   /* A name that is not one plain line of text is no name (appGreeting.ts). */
@@ -1344,7 +1350,21 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               if (typeof principal.membershipId !== 'string' || typeof principal.accountId !== 'string') return denyTenant();
               try {
                 if (path === '/api/tokens') return reply({ tokens: await tokens.list(principal), choices: tokens.choices(principal) });
-                if (path === '/api/tokens/issue') return reply(await tokens.issue(principal, input));
+                if (path === '/api/tokens/issue') {
+                  /* A token outlives the session that made it, up to a year: it is made only by a sign-in made here
+                     a moment ago, as a support session is opened. A stolen cookie, or a session a host's assertion
+                     opened, makes none. */
+                  if (!recentSignIn || !(await recentSignIn(req)))
+                    return {
+                      status: 403,
+                      body: {
+                        error: 'Sign in again to make a token: making one needs a sign-in from the last five minutes.',
+                        code: 'sign_in_required',
+                        outcome: 'not_applied',
+                      },
+                    };
+                  return reply(await tokens.issue(principal, input));
+                }
                 await tokens.revoke(principal, input.id);
                 return reply({ revoked: true });
               } catch (error) {

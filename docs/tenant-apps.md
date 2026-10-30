@@ -1564,6 +1564,7 @@ The timing is fixed in code, not in policy:
 
 - Opening needs a native sign-in created no more than five minutes ago. An
   older login is asked to sign in again; that creates a new native session.
+  A session a host's embed exchange opened is never recent, on any origin.
 - A session lasts the least of thirty minutes, the native session's expiry and
   the parent platform membership's validity. Nothing renews it.
 - Status and exit need the same native login, not a recent one. An expired

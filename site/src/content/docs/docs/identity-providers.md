@@ -51,7 +51,7 @@ Every sign-in is a code flow with PKCE, state and nonce. The server checks the I
 - **Whose claims.** With more than one provider, say which one a rule reads: `claims: { provider: oidc('workforce'), groups: ['admins'] }`. A rule without `provider` is read from any of them, and `check` warns where there is more than one.
 - **Sign-up.** `'invite'` makes no account at a first sign-in, `'open'` does, and `{ providers, domains }` does through those providers or for a verified email in those domains.
 - **Linking.** An address links to an existing account only if verified (`email_verified`, or `verifiedEmails`).
-- **Step-up.** Opening a support session needs a sign-in from the last five minutes; with `mfa`, one with more than one factor.
+- **Step-up.** Opening a support session or making a tenant API token needs a sign-in from the last five minutes (a host's [embed sign-in](/docs/embed-sign-in/) never counts); a support session with `mfa` needs one with more than one factor.
 - **A tenant's own.** `oidc.tenants()` offers **Sign in with your work email**; an entry with `"tenant": "north", "domains": ["north-motors.com"]` is that tenant's, set by whoever runs the platform. It gives no membership.
 - **SAML 2.0.** `saml('corp')` and a `"kind": "saml"` entry sign in the same way: [SAML 2.0 sign-in](/docs/saml/). A directory that adds and removes people is [SCIM provisioning](/docs/scim/).
 - **Back-channel logout.** With `"backchannelLogout": true`, register `<public URL>/api/auth/backchannel-logout/<name>` at the provider (startup prints it). A signed logout token ends the sessions that provider's session opened, by `sid` or by subject; API tokens are the account's and stay.

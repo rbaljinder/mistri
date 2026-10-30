@@ -63,7 +63,8 @@ All keys: [the generated reference](/docs/dsl-auth/). Changing `auth` needs a re
 An account holding `admin` adds accounts (name, email, roles and, with
 passwords, a first password), sets roles, deactivates and reactivates them,
 and sets a new password. Deactivating or a new password ends the account's
-other sessions. An administrator cannot remove their own `admin` or deactivate
+other sessions and revokes its API tokens and OAuth grants, as a reset by
+link does; a reactivation brings none of them back. An administrator cannot remove their own `admin` or deactivate
 themself. What `admin` reads and writes in the App comes from its entry in
 `roles`, as for any role.
 

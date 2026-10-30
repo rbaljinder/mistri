@@ -151,7 +151,12 @@ const pageFrom = (offset: unknown) =>
 
 export function createAccountAdministration(
   api: AccountAdminApi,
-  options: { passwords: boolean; audit: AccountAuditStore },
+  options: {
+    passwords: boolean;
+    audit: AccountAuditStore;
+    /** Ends the account's API tokens and OAuth grants (accountApiTokens.ts), by the actor. */
+    revokeTokens?: (accountId: string, by: string) => Promise<void>;
+  },
 ): AccountAdministration {
   const { audit } = options;
   /* Who is asking, as the store has it now: the actor's own session, or an
@@ -247,6 +252,8 @@ export function createAccountAdministration(
             if (account.id === actor.id) refuse(409, 'You cannot deactivate your own account.');
             // Better Auth ends every session of a banned account; the reason says who, on the account itself.
             await api.banUser({ headers, body: { userId: account.id, banReason: `Deactivated by ${actor.who}` } });
+            // A ban refuses its tokens while it lasts; revoked, they stay refused after a reactivation, as a directory's are.
+            await options.revokeTokens?.(account.id, actor.id);
             await record({
               targetId: account.id,
               targetEmail: account.email,
@@ -270,7 +277,10 @@ export function createAccountAdministration(
             await api.setUserPassword({ headers, body: { userId: account.id, newPassword: password } });
             // Whoever held the old password may hold a session; a reset ends them, as the reset link does.
             const others = account.id !== actor.id;
-            if (others) await api.revokeUserSessions({ headers, body: { userId: account.id } });
+            if (others) {
+              await api.revokeUserSessions({ headers, body: { userId: account.id } });
+              await options.revokeTokens?.(account.id, actor.id);
+            }
             // That a password was set, and whether sessions ended: nothing of the password itself.
             await record({
               targetId: account.id,
