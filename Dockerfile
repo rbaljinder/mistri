@@ -48,6 +48,7 @@ COPY packages/kit/package.json ./packages/kit/
 COPY packages/mistri/package.json ./packages/mistri/
 COPY packages/tablewalk/package.json ./packages/tablewalk/
 COPY packages/create-mistri/package.json ./packages/create-mistri/
+COPY packages/cloudflare/package.json ./packages/cloudflare/
 RUN npm ci --no-audit --no-fund
 
 # Run the complete build: client, UI, Observer, embed and SSR bundles, then bundle and

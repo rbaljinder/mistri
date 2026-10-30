@@ -1,19 +1,19 @@
 /**
- * The run: build, backup check, migrations, `wrangler deploy`, a restart until the new container answers, a smoke.
+ * The run: build, backup check, migrations, `wrangler deploy`, a wait for the new container, a smoke.
  *
  * Migrations go first because the compatibility lint guarantees an expand-only migration works with the code still
  * running; a contract step is its own later deploy (--allow-contract). Verification is by fingerprint, not liveness:
  * `/readyz` answers `{ deploy, build }`, where `deploy` is the id this run put in the Worker's environment (so the
  * new configuration reached the container) and `build` is the new image's build id. A code update resets the
- * Durable Object but leaves a running container as it is, so a restart goes in until both match.
+ * Durable Object but leaves a running container as it is; the container class replaces its own container once it runs
+ * the new Worker version, so the roll polls (rollTo) and restarts only as a fallback.
  */
 import { planLines, type Plan } from './plan.js';
-import { RESTART_HEADER, type DeployFlags, type DeployRow, type DeployRunner, type HttpAnswer } from './types.js';
+import { PROBE_PATH, RESTART_HEADER, type DeployFlags, type DeployRow, type DeployRunner, type HttpAnswer } from './types.js';
 
 const POLL_MS = 5_000;
-/** The least between two restarts, and the most: a container still starting must not be restarted under itself. */
+/** The least between two restarts, and how long the container may lag its Durable Object before one: a container still starting must not be restarted under itself. */
 const RESTART_GAP_MS = 60_000;
-const RESTART_GAP_MAX_MS = 300_000;
 
 interface Fingerprint {
   deployId: string;
@@ -47,11 +47,40 @@ function restartAnswer(answer: HttpAnswer | { error: string }): string {
 
 const minutes = (ms: number) => `${Math.floor(ms / 60_000)}m${String(Math.round((ms % 60_000) / 1000)).padStart(2, '0')}s`;
 
+/** What the Durable Object's status probe answers (@mistriwork/cloudflare, `GET /__mistri/status`). */
+interface Probe {
+  workerVersion: string | null;
+  desired: { image: string | null; deployId: string | null };
+  startedWith: { image: string | null; deployId: string | null; at: string } | null;
+  container: { running: boolean; image: string | null };
+}
+
+/** A probe answer, or null for anything else: an older Worker proxies the path to the App, which does not answer this. */
+function probeOf(answer: HttpAnswer | { error: string }): Probe | null {
+  if (!isAnswer(answer) || answer.status !== 200) return null;
+  try {
+    const body = JSON.parse(answer.body) as Partial<Probe> | null;
+    if (!body || typeof body !== 'object' || typeof body.desired !== 'object' || body.desired === null) return null;
+    return {
+      ...body,
+      desired: body.desired,
+      startedWith: body.startedWith ?? null,
+      container: body.container ?? { running: false, image: null },
+    } as Probe;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Restart the container until `/readyz` reports the expected fingerprint, or `timeoutMs` passes. A starting
- * container (no answer, 503) is waited for; one that answers with the old fingerprint is restarted, at most once
- * per growing gap, since the image rollout can take longer than the first restart waits for. `restart: false` only
- * waits (`deploy verify` without --roll).
+ * Wait for `/readyz` to report the expected fingerprint, or `timeoutMs` to pass. Under Cloudflare's `durable_object`
+ * policy the container replaces itself once its Durable Object runs the new Worker version, so this polls: `/readyz`
+ * and, when there is a token, the Durable Object's status probe, printing a timeline line whenever the probe changes
+ * and at each milestone (the Durable Object wants the new deploy, the container started on it, `/readyz` matched), so
+ * a slow roll shows where its time went. A restart goes in only as a fallback: when the probe shows the Durable
+ * Object already wants the new deploy and the container has been on the old one for more than a minute, at most once
+ * a minute. With no probe answer (an older Worker) it restarts as before, at most once a minute.
+ * `restart: false` only waits (`deploy verify` without --roll).
  */
 export async function rollTo(
   runner: DeployRunner,
@@ -62,29 +91,56 @@ export async function rollTo(
   restart = true,
 ): Promise<{ ok: true } | { ok: false; saw: string }> {
   const started = runner.now();
+  const at = () => `+${Math.round((runner.now() - started) / 1000)}s`;
+  const short = (id: string | null | undefined) => (id ? id.slice(0, 8) : 'none');
   let lastRestart = Number.NEGATIVE_INFINITY;
-  let gap = RESTART_GAP_MS;
+  let wantedSince: number | undefined;
   let saw = 'nothing yet';
   let restarts = 0;
+  let last = '';
+  const told = new Set<string>();
+  const milestone = (key: string, line: string) => {
+    if (told.has(key)) return;
+    told.add(key);
+    runner.say(`  ${at()} ${line}`);
+  };
   for (;;) {
     const elapsed = runner.now() - started;
     if (elapsed >= timeoutMs) return { ok: false, saw: `${saw} after ${restarts} restart${restarts === 1 ? '' : 's'}` };
     const reading = seen(await runner.http(`${url}/readyz`));
     saw = reading.saw;
+    const probed = token ? await runner.http(`${url}${PROBE_PATH}`, { headers: { [RESTART_HEADER]: token } }) : undefined;
+    const probe = probed ? probeOf(probed) : null;
+    /* A probe that fails (a 5xx, no answer) is a Durable Object resetting itself behind the new Worker, not an older
+       Worker: that one proxies the path to the App, which answers. */
+    const resetting = probed !== undefined && ('error' in probed || probed.status >= 500);
+    if (probe) {
+      const line = `probe: worker version ${short(probe.workerVersion)}, Durable Object wants deploy ${short(probe.desired.deployId)}, container started with deploy ${short(probe.startedWith?.deployId)} (${probe.container.running ? 'running' : 'not running'})`;
+      if (line !== last) runner.say(`  ${at()} ${line}`);
+      last = line;
+      const wants = probe.desired.deployId === expected.deployId;
+      if (wants) milestone('wants', `Durable Object wants the new deploy ${short(expected.deployId)}`);
+      const there = probe.startedWith?.deployId === expected.deployId;
+      if (there) milestone('started', `container started on the new deploy (${probe.startedWith?.at})`);
+      wantedSince = wants && !there ? (wantedSince ?? runner.now()) : undefined;
+    }
     if (reading.match?.deploy === expected.deployId && reading.match.build === expected.buildId) {
+      milestone('ready', '/readyz matched');
       runner.say(
         `  verified: deploy ${expected.deployId.slice(0, 8)} build ${expected.buildId} after ${restarts} restart${restarts === 1 ? '' : 's'}, ${minutes(runner.now() - started)}`,
       );
       return { ok: true };
     }
-    /* Only a container that answers with another fingerprint is the old one; a silent one is starting. */
-    const stale = reading.match !== undefined;
-    if (restart && runner.now() - lastRestart >= gap && (stale || restarts === 0)) {
+    /* With a probe, the container replaces itself and a restart is the fallback for one that does not. Without, only a
+       container that answers with another fingerprint is the old one; a silent one is starting. */
+    const fallback = probe
+      ? wantedSince !== undefined && runner.now() - wantedSince > RESTART_GAP_MS
+      : !resetting && (reading.match !== undefined || restarts === 0);
+    if (restart && fallback && runner.now() - lastRestart >= RESTART_GAP_MS) {
       const answer = await runner.http(`${url}/`, { method: 'POST', headers: { [RESTART_HEADER]: token } });
       restarts++;
       lastRestart = runner.now();
-      if (restarts > 1) gap = Math.min(gap * 2, RESTART_GAP_MAX_MS);
-      runner.say(`  restart ${restarts}: ${restartAnswer(answer)}; saw ${saw}`);
+      runner.say(`  ${at()} restart ${restarts}: ${restartAnswer(answer)}; saw ${saw}`);
     }
     await runner.sleep(POLL_MS);
   }

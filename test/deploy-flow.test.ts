@@ -268,7 +268,9 @@ test('--dry-run prints the plan and does nothing; a declined confirmation does n
 test('a deploy runs build, backup check, migrations, wrangler deploy, the roll and the smoke in that order, and records it', async () => {
   const result = await run([...base, '--yes', '--backup-check', './backup-fresh.sh', '--smoke', './smoke.sh'], { pending: [expand] });
   assert.equal(result.code, 0, result.said.join('\n'));
-  const order = result.calls.filter((c) => !c.startsWith('wrangler secret') && !c.includes('/readyz') && !c.endsWith('/app.js'));
+  const order = result.calls.filter(
+    (c) => !c.startsWith('wrangler secret') && !c.includes('/readyz') && !c.includes('/__mistri/status') && !c.endsWith('/app.js'),
+  );
   assert.deepEqual(order.slice(0, 4), ['build', 'hook ./backup-fresh.sh', 'migrate', order[3]]);
   assert.match(order[3], /^wrangler deploy --var MISTRI_DEPLOY_ID:00000000-0000-0000-0000-000000000001$/);
   assert.equal(order[4], `POST https://app.example.com/`);
@@ -760,4 +762,97 @@ test('a failure after wrangler deploy says the new version is serving and what t
   assert.ok(!smokeFail.said.join('\n').includes('mistri deploy rollback'), 'no earlier deploy to go back to');
   const early = await run([...base, '--yes'], { migrateFails: true, pending: [expand] }, []);
   assert.ok(!early.said.join('\n').includes('is serving'));
+});
+
+/** A fake Worker for the roll: `/readyz` and the status probe each follow the elapsed seconds since the first poll
+ * (a probe of 'resetting' fails the way a Durable Object aborting itself does). */
+function rolling(options: {
+  probe: (seconds: number) => unknown | undefined;
+  ready: (seconds: number) => { deploy: string; build: string } | undefined;
+}) {
+  const made = fake();
+  const first = made.runner.now();
+  const seconds = () => Math.round((made.runner.now() - first) / 1000);
+  made.runner.http = async (url, init) => {
+    made.calls.push(`${init?.method ?? 'GET'} ${url}`);
+    if (url.endsWith('/readyz')) {
+      const body = options.ready(seconds());
+      return body ? { status: 200, headers: {}, body: JSON.stringify(body) } : { status: 503, headers: {}, body: '{}' };
+    }
+    if (url.endsWith('/__mistri/status')) {
+      const body = options.probe(seconds());
+      if (body === 'resetting') return { status: 500, headers: {}, body: 'Durable Object reset' };
+      return body ? { status: 200, headers: {}, body: JSON.stringify(body) } : { status: 200, headers: {}, body: '<html>the App</html>' };
+    }
+    return { status: 200, headers: {}, body: '' };
+  };
+  return made;
+}
+const NEW = '00000000-0000-0000-0000-000000000001';
+const probeOf = (version: string | null, wants: string, started: string | null, running = true) => ({
+  workerVersion: version,
+  desired: { image: 'img', deployId: wants },
+  startedWith: started ? { image: 'img', deployId: started, at: '2026-10-29T00:00:00.000Z' } : null,
+  container: { running, image: null },
+});
+
+test('a roll polls the probe and prints a timeline, and sends no restart when the container upgrades itself', async () => {
+  const made = rolling({
+    probe: (s) => (s < 10 ? probeOf('v-old', 'old', 'old') : s < 40 ? probeOf('v-new', NEW, 'old') : probeOf('v-new', NEW, NEW)),
+    ready: (s) => (s < 50 ? { deploy: 'old', build: 'build-old' } : { deploy: NEW, build: 'build-new' }),
+  });
+  const { rollTo } = await import('../packages/mistri/src/server/deploy/run.js');
+  assert.deepEqual(await rollTo(made.runner, 'https://a.test', { deployId: NEW, buildId: 'build-new' }, TOKEN, 600_000), { ok: true });
+  assert.ok(!made.calls.some((c) => c.startsWith('POST ')), 'no restart');
+  const said = made.said.join('\n');
+  assert.match(said, /\+0s probe: worker version v-old, Durable Object wants deploy old, container started with deploy old \(running\)/);
+  assert.match(said, /\+10s probe: worker version v-new, Durable Object wants deploy 00000000/);
+  assert.match(said, /\+10s Durable Object wants the new deploy 00000000/);
+  assert.match(said, /\+40s container started on the new deploy/);
+  assert.match(said, /\+50s \/readyz matched/);
+  assert.match(said, /verified: deploy 00000000 build build-new after 0 restarts, 0m50s/);
+  /* The probe is read each poll with the token. */
+  assert.ok(made.calls.filter((c) => c.endsWith('/__mistri/status')).length >= 10);
+});
+
+test('the fallback restart goes in only when the Durable Object wants the new deploy and the container lags it for over a minute', async () => {
+  const { rollTo } = await import('../packages/mistri/src/server/deploy/run.js');
+  /* The Durable Object is still on the old Worker version: a restart there would bring the old image back. */
+  const old = rolling({ probe: () => probeOf('v-old', 'old', 'old'), ready: () => ({ deploy: 'old', build: 'build-old' }) });
+  assert.equal((await rollTo(old.runner, 'https://a.test', { deployId: NEW, buildId: 'build-new' }, TOKEN, 300_000)).ok, false);
+  assert.ok(!old.calls.some((c) => c.startsWith('POST ')));
+  /* It wants the new deploy but the container does not follow: one restart after 60 s, then one per minute. */
+  const lag = rolling({
+    probe: () => probeOf('v-new', NEW, 'old'),
+    ready: (s) => (s < 200 ? { deploy: 'old', build: 'build-old' } : { deploy: NEW, build: 'build-new' }),
+  });
+  assert.equal((await rollTo(lag.runner, 'https://a.test', { deployId: NEW, buildId: 'build-new' }, TOKEN, 600_000)).ok, true);
+  const restarts = lag.calls.filter((c) => c.startsWith('POST '));
+  assert.equal(restarts.length, 3, lag.said.join('\n'));
+  assert.match(lag.said.join('\n'), /\+6\ds restart 1: sent; saw deploy old/);
+  /* No restart at all with restart: false (verify without --roll). */
+  const waiting = rolling({ probe: () => probeOf('v-new', NEW, 'old'), ready: () => ({ deploy: 'old', build: 'build-old' }) });
+  await rollTo(waiting.runner, 'https://a.test', { deployId: NEW, buildId: 'build-new' }, TOKEN, 200_000, false);
+  assert.ok(!waiting.calls.some((c) => c.startsWith('POST ')));
+});
+
+test('against an older Worker with no probe, the roll restarts as before with a gap of at most a minute', async () => {
+  const { rollTo } = await import('../packages/mistri/src/server/deploy/run.js');
+  const made = rolling({ probe: () => undefined, ready: () => ({ deploy: 'old', build: 'build-old' }) });
+  const result = await rollTo(made.runner, 'https://a.test', { deployId: NEW, buildId: 'build-new' }, TOKEN, 600_000);
+  assert.equal(result.ok, false);
+  /* 10 minutes at one per 60 s, not the old doubling gap (which sent four). */
+  assert.equal(made.calls.filter((c) => c.startsWith('POST ')).length, 10);
+  assert.ok(!made.said.join('\n').includes('probe:'));
+});
+
+test('a probe that fails while the Durable Object resets itself sends no restart', async () => {
+  const { rollTo } = await import('../packages/mistri/src/server/deploy/run.js');
+  const made = rolling({
+    probe: (s) => (s < 10 ? 'resetting' : s < 25 ? probeOf('v-new', NEW, 'old') : probeOf('v-new', NEW, NEW)),
+    ready: (s) => (s < 30 ? { deploy: 'old', build: 'build-old' } : { deploy: NEW, build: 'build-new' }),
+  });
+  assert.deepEqual(await rollTo(made.runner, 'https://a.test', { deployId: NEW, buildId: 'build-new' }, TOKEN, 600_000), { ok: true });
+  assert.ok(!made.calls.some((c) => c.startsWith('POST ')), made.said.join('\n'));
+  assert.match(made.said.join('\n'), /verified: deploy 00000000 build build-new after 0 restarts/);
 });

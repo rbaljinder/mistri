@@ -15,7 +15,10 @@
  * and drops its databases through), CAPACITY_ROUTE (host:port the served pools
  * reach that server through — a delay proxy; absent, directly), CAPACITY_PORT,
  * CAPACITY_CONTROL_PORT, CAPACITY_ORIGIN (the origin a client uses),
- * CAPACITY_USERS, CAPACITY_OUT (where profiles are written).
+ * CAPACITY_USERS, CAPACITY_OUT (where profiles are written), CAPACITY_LIVE
+ * (`0`: live sync off, as `--live 0` asks), CAPACITY_EDIT_LEADS (qualified
+ * leads seeded in each dealership for `--edit convertLead`, and put back
+ * after each conversion, so a save is a save and not a refusal).
  */
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -36,6 +39,8 @@ const ORIGIN = env('CAPACITY_ORIGIN', `http://127.0.0.1:${PORT}`);
 const USERS = Number(env('CAPACITY_USERS', '25'));
 const OUT = env('CAPACITY_OUT', join(tmpdir(), 'capacity'));
 const ROUTE = process.env.CAPACITY_ROUTE;
+const LIVE = process.env.CAPACITY_LIVE !== '0';
+const EDIT_LEADS = Number(process.env.CAPACITY_EDIT_LEADS ?? 0);
 const password = 'Capacity-harness-password-123!';
 
 const directory = mkdtempSync(join(tmpdir(), 'mistri-capacity-'));
@@ -55,10 +60,20 @@ const { createAppAuth } = await import('../../packages/mistri/src/server/auth/au
 const { createNativeAccount } = await import('../../packages/mistri/src/server/auth/authAccounts.js');
 const { createTenantAuthenticatedHttpServer } = await import('../../packages/mistri/src/server/tenant/tenantAuthenticatedHttp.js');
 const { prepareTenantStartup } = await import('../../packages/mistri/src/server/tenant/tenantStartup.js');
+/* Writes in the order the CLI serves an App in (mistriMain.ts): keyed, on a pool of writers. The default, serial,
+   is the database browser's, and put every save of the run behind one connection. */
+const { configureWriteOrder } = await import('../../packages/engine/src/adapters/writeLanes.js');
+configureWriteOrder('keyed');
 
 const started = performance.now();
 const lending = await openIgnitionLending(context, 'postgres', { events: true });
 const loaded = await loadApp(IGNITION_DIR);
+/* Live sync on, as a field deployment runs it: its change store in the App's database, a change row in every
+   write's transaction, and the hub reading them for the streams the harness holds open. */
+if (LIVE) {
+  const { provisionPostgresLiveChange } = await import('../../packages/mistri/src/adapters/live/postgresLiveChange.js');
+  await provisionPostgresLiveChange(lending.source.url!);
+}
 /* Sessions in a PostgreSQL store of their own, as a deployment keeps them (`auth.store`), not the
    SQLite file a checkout defaults to: every request resolves its session there, so its cost is part
    of what a request costs. */
@@ -73,6 +88,50 @@ const { DEALERS } = await import('../../examples/databases/ignition/schema.mjs')
 const tenants = (DEALERS as ReadonlyArray<{ id: string; status: string }>)
   .filter((dealer) => dealer.status === 'active')
   .map((dealer) => dealer.id);
+/* An insert of a child and an update of its parent, repeatable: convertLead on leads of their own, each with a
+   vehicle of its own (a vehicle is converted once), put back to qualified once converted, outside the App. */
+let resetting: ReturnType<typeof setInterval> | undefined;
+if (EDIT_LEADS > 0) {
+  const columns = async (table: string, except: string[]) =>
+    String(
+      (
+        await lending.rows(
+          `SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position) AS c FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = ? AND NOT (column_name = ANY (?))`,
+          [table, except],
+        )
+      )[0]!.c,
+    );
+  const leadColumns = await columns('lead', ['id', 'reference', 'vehicle_stock', 'status', 'qualified_by', 'qualified_on', 'employer']);
+  const vehicleColumns = await columns('vehicle', ['id', 'stock_reference', 'status']);
+  for (const tenant of tenants) {
+    const [lead] = await lending.rows(`SELECT id FROM lead WHERE tenant_id = ? AND status IN ('new', 'qualified') LIMIT 1`, [tenant]);
+    const [vehicle] = await lending.rows(`SELECT id FROM vehicle WHERE tenant_id = ? LIMIT 1`, [tenant]);
+    for (let n = 0; n < EDIT_LEADS; n += 1) {
+      const tag = String(n).padStart(3, '0');
+      await lending.exec(
+        `INSERT INTO vehicle (id, stock_reference, status, ${vehicleColumns}) SELECT ?, ?, 'available', ${vehicleColumns} FROM vehicle WHERE id = ?`,
+        [`${tenant}:vehicle:load-${tag}`, `LOAD-${tag}`, vehicle!.id],
+      );
+      await lending.exec(
+        `INSERT INTO lead (id, reference, vehicle_stock, status, qualified_by, qualified_on, employer, ${leadColumns})
+         SELECT ?, ?, ?, 'qualified', 'capacity', '2026-10-01', 'Capacity load', ${leadColumns} FROM lead WHERE id = ?`,
+        [`${tenant}:lead:load-${tag}`, `L-9${tag}`, `LOAD-${tag}`, lead!.id],
+      );
+    }
+  }
+  resetting = setInterval(() => {
+    void lending
+      .exec(
+        `WITH converted AS (
+           DELETE FROM loan_application a USING lead l
+           WHERE a.lead_id = l.id AND l.employer = 'Capacity load' AND l.status = 'converted' RETURNING l.id)
+         UPDATE lead SET status = 'qualified' WHERE id IN (SELECT id FROM converted)`,
+      )
+      .catch(() => {});
+  }, 1000);
+  resetting.unref();
+}
 const accounts: Array<{ email: string; password: string; accountId: string; tenant: string; role: string }> = [];
 for (let i = 0; i < USERS; i += 1) {
   const tenant = tenants[i % tenants.length];
@@ -88,7 +147,10 @@ const routed = (url: string) => {
   parsed.host = ROUTE;
   return parsed.href;
 };
-const served = { ...loaded, app: { ...loaded.app, auth: { ...loaded.app.auth!, store: routed(authStore.url) } } };
+const served = {
+  ...loaded,
+  app: { ...loaded.app, ...(LIVE ? { live: true as const } : {}), auth: { ...loaded.app.auth!, store: routed(authStore.url) } },
+};
 const auth = await createAppAuth(served, {
   baseURL: ORIGIN,
   trustedOrigins: [ORIGIN],
@@ -146,6 +208,7 @@ let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
+  clearInterval(resetting);
   control.close();
   owner.server.closeAllConnections();
   await owner.retire().catch(() => {});

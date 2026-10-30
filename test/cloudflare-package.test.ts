@@ -14,7 +14,7 @@ registerHooks({
   resolve: (specifier, context, next) =>
     specifier === '@cloudflare/containers' ? { url: stub, shortCircuit: true } : next(specifier, context),
 });
-const { MistriContainer, mistriWorker, forwardEmail, signMail, isRestart, containerEnv } =
+const { MistriContainer, mistriWorker, forwardEmail, signMail, isRestart, isProbe, containerEnv } =
   await import('../packages/cloudflare/src/index.js');
 
 const TOKEN = 'a'.repeat(40);
@@ -167,4 +167,142 @@ test('the mail forwarder signs <timestamp>.<body> with HMAC-SHA-256 and maps the
   status = 503;
   await assert.rejects(forwardEmail(message, env, options), /answered 503/);
   await assert.rejects(forwardEmail(message, { ...env, MAIL_SECRET: undefined }, options), /MAIL_SECRET is not set/);
+});
+
+/** A Durable Object context whose container is running, with storage that remembers. */
+function upgradable(env: Record<string, unknown>, images: Record<string, unknown> = { app: 'IMG-2' }, aborts: string[] = []) {
+  const kv = new Map<string, unknown>();
+  const runtime = {
+    images,
+    running: true,
+    inspect: async () => ({ image: 'IMG-1' }),
+    start: () => undefined,
+  };
+  const app = make({ MISTRI_RESTART_TOKEN: TOKEN, ...env }, runtime);
+  (app.ctx as { storage: unknown }).storage = undefined;
+  const storage = { get: async (k: string) => kv.get(k), put: async (k: string, v: unknown) => void kv.set(k, v) };
+  const abort = (reason?: string) => {
+    aborts.push(reason ?? '');
+    throw new Error('aborted');
+  };
+  const rebuilt = new App({ container: runtime, storage, abort } as never, { MISTRI_RESTART_TOKEN: TOKEN, ...env }) as App &
+    Record<string, any>;
+  return { app: rebuilt, runtime, kv };
+}
+const get = (path = '/') => new Request(`https://app.test${path}`);
+const probe = () => new Request('https://app.test/__mistri/status', { headers: { 'x-mistri-restart': TOKEN } });
+
+test('a request replaces a healthy container that was started with another deploy, once', async () => {
+  const { app, kv } = upgradable({ MISTRI_DEPLOY_ID: 'new' });
+  await app.onStart();
+  assert.equal((kv.get('mistri:started') as { deployId: string }).deployId, 'new');
+  await app.fetch(get());
+  assert.equal(app.destroyed, 0, 'the container already runs what this Worker version wants');
+  kv.set('mistri:started', { image: 'IMG-2', deployId: 'old', instanceType: 'standard-1', at: 't' });
+  (app as any).recorded = undefined;
+  await app.fetch(get());
+  assert.equal(app.destroyed, 1);
+  /* No storm: the next requests inside the minute, from the same stale record, replace nothing more. */
+  await Promise.all([app.fetch(get()), app.fetch(get()), app.fetch(get('/x'))]);
+  assert.equal(app.destroyed, 1);
+});
+
+test('the scheduled tick upgrades through the same path, and a changed image or instance type counts', async () => {
+  const stale = { image: 'IMG-1', deployId: 'new', instanceType: 'standard-1', at: 't' };
+  const { app, kv } = upgradable({ MISTRI_DEPLOY_ID: 'new' });
+  kv.set('mistri:started', stale);
+  const env = {
+    APP: { idFromName: (n: string) => n, get: () => ({ fetch: (r: Request) => app.fetch(r) }) },
+    MISTRI_PUBLIC_URL: 'https://app.test',
+  };
+  await mistriWorker({ binding: 'APP', instance: 'a' }).scheduled(undefined, env);
+  assert.equal(app.destroyed, 1, 'the image differs although the deploy id does not');
+  const typed = upgradable({ MISTRI_DEPLOY_ID: 'new' });
+  typed.kv.set('mistri:started', { ...stale, image: 'IMG-2', instanceType: 'basic' });
+  await typed.app.fetch(get());
+  assert.equal(typed.app.destroyed, 1, 'the instance type differs');
+  /* A container with no record was started before the Durable Object kept one: replaced once. */
+  const unrecorded = upgradable({ MISTRI_DEPLOY_ID: 'new' });
+  await unrecorded.app.fetch(get());
+  assert.equal(unrecorded.app.destroyed, 1);
+});
+
+test('a container that is still starting, stopped or not asked about a deploy is left alone', async () => {
+  const stale = { image: 'IMG-2', deployId: 'old', instanceType: 'standard-1', at: 't' };
+  const starting = upgradable({ MISTRI_DEPLOY_ID: 'new' });
+  starting.kv.set('mistri:started', stale);
+  starting.app.containerStatus = 'running';
+  await starting.app.fetch(get());
+  assert.equal(starting.app.destroyed, 0);
+  const stopped = upgradable({ MISTRI_DEPLOY_ID: 'new' });
+  stopped.kv.set('mistri:started', stale);
+  stopped.runtime.running = false;
+  await stopped.app.fetch(get());
+  assert.equal(stopped.app.destroyed, 0);
+  const local = upgradable({}, {});
+  await local.app.fetch(get());
+  assert.equal(local.app.destroyed, 0, 'nothing is wanted, so nothing differs');
+});
+
+test('the status probe is gated by the token and answers what is desired, started and running', async () => {
+  const { app, kv } = upgradable({ MISTRI_DEPLOY_ID: 'new', CF_VERSION_METADATA: { id: 'ver-1' } });
+  kv.set('mistri:started', { image: 'IMG-2', deployId: 'new', instanceType: 'standard-1', at: '2026-10-29T00:00:00.000Z' });
+  assert.equal(isProbe(probe(), { MISTRI_RESTART_TOKEN: TOKEN }), true);
+  assert.equal(
+    isProbe(new Request('https://x/__mistri/status', { method: 'POST', headers: { 'x-mistri-restart': TOKEN } }), {
+      MISTRI_RESTART_TOKEN: TOKEN,
+    }),
+    false,
+  );
+  assert.equal(isProbe(new Request('https://x/', { headers: { 'x-mistri-restart': TOKEN } }), { MISTRI_RESTART_TOKEN: TOKEN }), false);
+  assert.equal(await (await app.fetch(new Request('https://app.test/__mistri/status'))).text(), 'from the container');
+  assert.deepEqual(await (await app.fetch(probe())).json(), {
+    workerVersion: 'ver-1',
+    desired: { image: 'IMG-2', deployId: 'new' },
+    startedWith: { image: 'IMG-2', deployId: 'new', at: '2026-10-29T00:00:00.000Z' },
+    container: { running: true, image: 'IMG-1' },
+  });
+  const bare = upgradable({ MISTRI_DEPLOY_ID: 'new' }, {});
+  assert.deepEqual(await (await bare.app.fetch(probe())).json(), {
+    workerVersion: null,
+    desired: { image: null, deployId: 'new' },
+    startedWith: null,
+    container: { running: true, image: 'IMG-1' },
+  });
+});
+
+test('the Worker stamps its version on the probe and the tick only, and drops a client copy', async () => {
+  const seen: Array<string | null> = [];
+  const env = {
+    MISTRI_PUBLIC_URL: 'https://app.test',
+    CF_VERSION_METADATA: { id: 'v2', timestamp: '2026-10-30T05:00:00.000Z' },
+    APP: {
+      idFromName: (n: string) => n,
+      get: () => ({ fetch: async (r: Request) => (seen.push(r.headers.get('x-mistri-worker-version')), new Response('ok')) }),
+    },
+  };
+  const worker = mistriWorker({ binding: 'APP', instance: 'a' });
+  await worker.fetch(probe(), env);
+  await worker.scheduled(undefined, env);
+  await worker.fetch(get('/x'), env);
+  await worker.fetch(new Request('https://app.test/x', { headers: { 'x-mistri-worker-version': 'forged 2099-01-01' } }), env);
+  assert.deepEqual(seen, ['v2 2026-10-30T05:00:00.000Z', 'v2 2026-10-30T05:00:00.000Z', null, null]);
+});
+
+test('a Durable Object behind a newer Worker resets itself, once per gap, and never for an older one', async () => {
+  const own = { id: 'v1', timestamp: '2026-10-30T04:00:00.000Z' };
+  const aborts: string[] = [];
+  const { app, kv } = upgradable({ MISTRI_DEPLOY_ID: 'd', CF_VERSION_METADATA: own }, undefined, aborts);
+  await app.onStart();
+  const stampedBy = (value: string) => new Request('https://app.test/readyz', { headers: { 'x-mistri-worker-version': value } });
+  await assert.rejects(app.fetch(stampedBy('v2 2026-10-30T05:00:00.000Z')), /aborted/);
+  assert.deepEqual(aborts, ['Worker version v2 is live']);
+  assert.equal(typeof kv.get('mistri:reset-at'), 'number');
+  /* Inside the gap a second stamp passes through: the object the platform started again is still old. */
+  assert.equal(await (await app.fetch(stampedBy('v2 2026-10-30T05:00:00.000Z'))).text(), 'from the container');
+  kv.set('mistri:reset-at', 0);
+  for (const value of ['v0 2026-10-30T03:00:00.000Z', 'v1 2026-10-30T04:00:00.000Z', 'v2', '']) {
+    assert.equal(await (await app.fetch(stampedBy(value))).text(), 'from the container', `no reset for "${value}"`);
+  }
+  assert.equal(aborts.length, 1);
 });

@@ -7,8 +7,9 @@
  * The kit once named its client modules at dist paths a published kit never carried (`@mistriwork/kit/client/…`), and
  * the browser package its `tablewalk/*` twins at files outside its `files` list: both installed, and both failed
  * at the first import. A pattern (`./*`) names no file of its own, so it is listed, not proven. An import that
- * fails only for an optional peer the package declares (React for a component module) is said as such: the project
- * that uses that subpath installs the peer.
+ * fails only for a peer the package declares (React for a component module, the Containers class for the Cloudflare
+ * glue) is said as such: the project that uses that subpath installs the peer. Each JavaScript subpath must also be typed by a declaration file the package
+ * ships (scripts/export-types.mjs).
  *
  *   node scripts/prove-exports.mjs                 pack every workspace package (run `npm run build` first)
  *   node scripts/prove-exports.mjs <tarball>…      prove those tarballs instead
@@ -18,19 +19,12 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { targetsOf, untypedExports } from './export-types.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const scratch = mkdtempSync(join(tmpdir(), 'mistri-prove-exports-'));
 const environment = { ...process.env };
 for (const key of ['NODE_OPTIONS', 'NODE_PATH', 'TSX_TSCONFIG_PATH']) delete environment[key];
-
-/** Each export target an install reads, by condition: `{ types, default }` or a string. */
-const targetsOf = (target) =>
-  typeof target === 'string'
-    ? [['default', target]]
-    : Object.entries(target ?? {}).flatMap(([condition, value]) =>
-        typeof value === 'string' ? [[condition, value]] : targetsOf(value).map(([inner, path]) => [`${condition}.${inner}`, path]),
-      );
 
 try {
   let tarballs = process.argv.slice(2).map((tarball) => resolve(tarball));
@@ -61,7 +55,9 @@ try {
     const name = JSON.parse(execFileSync('tar', ['-xOzf', tarball, 'package/package.json'], { encoding: 'utf8' })).name;
     const dir = join(project, 'node_modules', name);
     const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-    const optionalPeers = new Set(Object.keys(manifest.peerDependenciesMeta ?? {}));
+    /* Any peer the package declares: the install omits peers, and the project that uses the subpath installs them. */
+    const peers = new Set([...Object.keys(manifest.peerDependencies ?? {}), ...Object.keys(manifest.peerDependenciesMeta ?? {})]);
+    for (const missing of untypedExports(dir, manifest.exports)) problems.push(`${name} export ${missing}: no declarations in the package`);
     for (const [subpath, target] of Object.entries(manifest.exports ?? {})) {
       if (subpath.includes('*')) {
         patterns.push(`${name}/${subpath.slice(2)}`);
@@ -94,8 +90,8 @@ try {
               .slice(0, missing.startsWith('@') ? 2 : 1)
               .join('/')
           : undefined;
-      if (missingPackage && (optionalPeers.has(missingPackage) || isOptionalPeerOfInstalled(project, missingPackage))) {
-        peerOnly.push(`${specifier} (needs the optional peer ${missingPackage})`);
+      if (missingPackage && (peers.has(missingPackage) || isOptionalPeerOfInstalled(project, missingPackage))) {
+        peerOnly.push(`${specifier} (needs the peer ${missingPackage})`);
         proven += 1;
       } else problems.push(`${specifier} does not import: ${imported.stderr.trim().split('\n').slice(0, 3).join(' ')}`);
     }
@@ -113,7 +109,7 @@ try {
 
 /** Whether `name` is an optional peer of some installed workspace package: a subpath reached through another one. */
 function isOptionalPeerOfInstalled(project, name) {
-  for (const scope of ['', '@mistri']) {
+  for (const scope of ['', '@mistriwork']) {
     const base = join(project, 'node_modules', scope);
     if (!existsSync(base)) continue;
     for (const entry of readdirSync(base)) {

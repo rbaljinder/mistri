@@ -5,6 +5,8 @@ export class Container {
   envVars: Record<string, string> = {};
   destroyed = 0;
   started: unknown[][] = [];
+  /** What getState reports; the real class reads it from the Durable Object's storage. */
+  containerStatus = 'healthy';
   constructor(ctx: unknown, env: unknown) {
     this.ctx = ctx;
     this.env = env;
@@ -14,6 +16,9 @@ export class Container {
   }
   async destroy(): Promise<void> {
     this.destroyed++;
+  }
+  async getState(): Promise<{ status: string; lastChange: number }> {
+    return { status: this.containerStatus, lastChange: 0 };
   }
   async onActivityExpired(): Promise<void> {
     (this as unknown as { expired: number }).expired = ((this as unknown as { expired?: number }).expired ?? 0) + 1;

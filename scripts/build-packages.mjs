@@ -25,6 +25,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { untypedExports } from './export-types.mjs';
 import { published } from './pack-manifest.mjs';
 import { PACKAGES } from './workspace.mjs';
 
@@ -37,7 +38,10 @@ const node = (...args) => run(process.execPath, args);
 rmSync(STAGE, { recursive: true, force: true });
 for (const { dir } of PACKAGES) rmSync(join(ROOT, dir, 'dist'), { recursive: true, force: true });
 
-run(bin('tsc'), ['-p', 'tsconfig.build.json', '--noCheck']);
+/* The first program is checked: a build from a tag or a tarball has not run `npm test` first, and an emit that
+   ignores a type error ships it. The second is the same sources again, emitting only declarations, so it is not
+   checked twice (a declaration the checker could not name is still an emit error). */
+run(bin('tsc'), ['-p', 'tsconfig.build.json']);
 run(bin('tsc'), ['-p', 'tsconfig.commands.json', '--noCheck']);
 for (const { dir } of PACKAGES) {
   const emitted = join(STAGE, dir.replace(/^packages\//, ''), 'src');
@@ -83,23 +87,13 @@ if (missing.length) {
   console.error(`build-packages: the build did not write ${missing.join(', ')}.`);
   process.exit(1);
 }
-/* Every module an install can import has its types: an export with no `types` condition is typed by the .d.ts beside
-   its .js, and without one a consumer's tsc reads the module as `any` and refuses every declaration that imports it
-   (TS7016). The engine shipped that way once, its declarations never emitted, and only an installed typecheck saw it. */
-const untyped = PACKAGES.flatMap(({ dir }) => {
-  const { exports = {} } = published(JSON.parse(readFileSync(join(ROOT, dir, 'package.json'), 'utf8')));
-  const targets = (target) =>
-    typeof target === 'string'
-      ? [target]
-      : target && typeof target === 'object' && !('types' in target)
-        ? Object.values(target).flatMap(targets)
-        : [];
-  return Object.values(exports)
-    .flatMap(targets)
-    .filter((target) => target.endsWith('.js') && !existsSync(join(ROOT, dir, target.replace(/\.js$/, '.d.ts'))))
-    .map((target) => `${dir}/${target.slice(2)}`);
-});
+/* Every module an install can import has its types (scripts/export-types.mjs says the rule, and why). */
+const untyped = PACKAGES.flatMap(({ dir }) =>
+  untypedExports(join(ROOT, dir), published(JSON.parse(readFileSync(join(ROOT, dir, 'package.json'), 'utf8'))).exports).map(
+    (missing) => `${dir}: ${missing}`,
+  ),
+);
 if (untyped.length) {
-  console.error(`build-packages: these exports have no declarations: ${untyped.join(', ')}.`);
+  console.error(`build-packages: these exports have no declarations:\n  ${untyped.join('\n  ')}`);
   process.exit(1);
 }

@@ -69,6 +69,13 @@ function flightsOf(header: string | null): Record<string, number> {
   return out;
 }
 
+/* A request that read its session from the sign-in store: the store's reads are kept for a window
+   (MISTRI_AUTH_SESSION_CACHE, authStoreReads.ts), and the first request past it reads them again, two `auth` flights
+   paid once a window and not by that request. On a loaded machine a measurement lands on it, as on the catalog's
+   digest. Statements are the window's, any request's, so the request's own header says whether it paid. */
+const refreshed = (answer: Answer): boolean =>
+  (answer.flights.auth ?? 0) > 0 && answer.statements.some((statement) => /from "auth_session"/.test(statement.text));
+
 function byFlight(statements: Statement[], width = Number(process.env.TABLEWALK_FLIGHTS_WIDTH ?? 220)): string {
   const flights = new Map<string, string[]>();
   for (const statement of statements) {
@@ -354,7 +361,11 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
          digest again: a flight paid once per window, not per request. On a loaded machine a measurement can land
          on it, and is asked again. */
       let answer = await ask();
-      for (let again = 0; again < 2 && answer.statements.some((statement) => /md5\(string_agg/.test(statement.text)); again++)
+      for (
+        let again = 0;
+        again < 2 && (answer.statements.some((statement) => /md5\(string_agg/.test(statement.text)) || refreshed(answer));
+        again++
+      )
         answer = await ask();
       assert.ok(answer.status < 300, `${name}: ${answer.status} ${answer.text.slice(0, 300)}`);
       measured[name] = answer;
@@ -362,9 +373,49 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       t.diagnostic(line);
       if (PRINT) console.log(`${line} ${answer.text.slice(0, 300)}\n${byFlight(answer.statements)}`);
     }
-    const over = Object.entries(measured).filter(([name, answer]) => answer.total > BUDGETS[name]!);
+    /* Saves at once, as a dealership's people make them, each its own lead: each pays its own round trips still.
+       Waiting on a writer, a lane or a lock is time, never another flight. One at a time, the budget could not
+       see that. (A field deployment's saves read 7 round trips at the median under 25 people on rc.3 and 9 on rc.4:
+       the load test had changed which command it saved with, not the platform — the two commands take 7 and 9 on
+       either release, statement for statement.) */
+    const together = (
+      await f.lending.rows(`SELECT id FROM lead WHERE tenant_id = ? AND status IN ('new', 'qualified') ORDER BY id LIMIT 4`, [f.tenant])
+    ).map((row) => String(row.id));
+    assert.equal(together.length, 4, 'four leads to qualify at once');
+    await f.lending.exec(`UPDATE lead SET status = 'new', qualified_by = NULL, qualified_on = NULL WHERE id = ANY (?)`, [together]);
+    const versions: unknown[] = [];
+    for (const id of together)
+      versions.push((await read('/api/commands/prepare', { command: 'qualifyLead', commandVersion: 1, key: { id } })).body.expectedVersion);
+    const saved = await Promise.all(
+      together.map((id, at) =>
+        read('/api/commands/execute', {
+          command: 'qualifyLead',
+          commandVersion: 1,
+          key: { id },
+          expectedVersion: versions[at],
+          idempotencyKey: `tenant-flights-together-${at}`,
+          input: {},
+        }),
+      ),
+    );
+    /* The window's one session refresh (refreshed, above), which one of the four pays when the saves land past the
+       cache's window, as they do on a loaded machine, is not theirs: it is discounted from that one save. Two or more
+       paying it is a cache that stopped holding, and stays counted. */
+    const refreshes = saved.filter(refreshed);
+    for (const [at, answer] of saved.entries()) {
+      assert.ok(answer.status < 300, `execute together ${at}: ${answer.status} ${answer.text.slice(0, 300)}`);
+      const counted =
+        refreshes.length === 1 && refreshes[0] === answer ? { ...answer, total: answer.total - answer.flights.auth! } : answer;
+      measured[`execute together ${at}`] = counted;
+      t.diagnostic(
+        `execute together ${at}: ${answer.total} flights ${JSON.stringify(answer.flights)}${counted === answer ? '' : ' (one session refresh)'}`,
+      );
+    }
+    const over = Object.entries(measured).filter(([name, answer]) => answer.total > BUDGETS[name.replace(/ together \d+$/, '')]!);
     assert.deepEqual(
-      over.map(([name, answer]) => `${name}: ${answer.total} > ${BUDGETS[name]}\n${byFlight(answer.statements)}`),
+      over.map(
+        ([name, answer]) => `${name}: ${answer.total} > ${BUDGETS[name.replace(/ together \d+$/, '')]}\n${byFlight(answer.statements)}`,
+      ),
       [],
     );
   });
