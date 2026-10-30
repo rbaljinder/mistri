@@ -34,7 +34,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { describePostgresRelations } from '../commands/postgresRelations.js';
 import { withPostgresMaintenanceTransaction } from '../commands/postgresCommandJournalSchema.js';
 import { layoutRefusal, postgresLayoutVersion, sqliteLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
-import { PgConnectionManager, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
+import { RUNTIME_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
+import { sharedPgConnections, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { beforeCommit } from '@mistriwork/engine/adapters/postgresTransactionHandle.js';
 import { runtimeName, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 
@@ -695,7 +696,7 @@ export async function provisionPostgresIntegrations(url: string): Promise<{ vers
 }
 
 async function openPostgresIntegrationStore(url: string): Promise<IntegrationStore> {
-  const pg = new PgConnectionManager(url);
+  const pg = sharedPgConnections(url, RUNTIME_STORE_POOL);
   try {
     await pg.withWriteClient((client) => assertPostgresIntegrations(client));
   } catch (error) {

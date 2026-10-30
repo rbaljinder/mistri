@@ -53,6 +53,7 @@ stable.
 | Dashboard `note` `variant: 'banner'`, `breakdown` `shape: 'steps'`, a donut's `total`, `curve: 'smooth'`, `windowControl: 'button'` | Stable |
 | Gallery, `headline()` (and its earlier figure, `was`), `card()`, facts, sheet and property-rail sections, section `tab`, ordered workflow strip, related cards, `related(…, { same, near })` | Stable |
 | The Gantt presentation (`gantt()`, `kind: 'gantt'` and its keys) | Preview |
+| `roundTrips(response)` in `@mistriwork/mistri/testing`: the database flights a request made, for a test to hold a budget with | Preview |
 | Row-defined fields (`defined`) | Stable |
 | Flows from rows (`flows`, `flowRunner`, the `flows()` and `diagram()` sections, `mistri flows start`) | Stable |
 | Forms with groups and `when`; multi-step forms (`form.steps`) | Stable |
@@ -111,6 +112,7 @@ stable.
 | `mistri` | The App framework and its command (`npx @mistriwork/mistri`) | Stable |
 | `tablewalk` | The [database browser](/docs/database-browser/) and its MCP server (`npx tablewalk`) | Stable |
 | `@mistriwork/ui` | The React primitives both are drawn with, usable [on their own](/docs/mistri-ui/) | Preview |
+| `@mistriwork/cloudflare` and `mistri deploy` | The [Cloudflare Containers roll](/docs/build-and-deploy/#deploy-to-cloudflare): one target, proven on one deployment so far | Preview |
 | `@mistriwork/engine`, `@mistriwork/kit` | The engine and the shared client both install; internal, with no promise to an App's author | Internal |
 
 The database browser (SQLite, PostgreSQL) is read-only by

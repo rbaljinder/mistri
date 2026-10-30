@@ -5,6 +5,62 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.4 (unreleased)
+
+- **`mistri deploy` after its first real run.** A migration history that does not match the directory refuses the plan (it used to apply nothing silently), `--migrations <dir>` overrides the config's directory, `deploy verify` re-checks the newest deploy and repairs its record, `status` is read-only and short, smoke follows same-origin redirects, wrangler's output streams during the image build, and `init` names the Worker after the App and sets no pooler default.
+
+- **Fewer round trips per tenant request.** A read snapshot sends its BEGIN, its settings, the reads and its COMMIT
+  as one pipelined flight, and ends itself when the reads are whole. On a PostgreSQL tenant App a list, a record, a
+  search or a pool read is 2 round trips, the counts 2, the inbox 3, a record's decisions 1, a command's prepare 2 and
+  its execute 4, and a first page about 14 (a test holds 16). A source's store attestations are kept per pool under
+  the catalog fingerprint instead of asked on every read; a session is asked outside the snapshot, and a context
+  opened inside one is refused. Each request's round trips are counted off its Server-Timing in the tests.
+- **One connection manager per database.** A database's holders share one manager per pool shape, so a field App's
+  tenant requests, stores and background work fit 16 connections where they held 51 (18 with a sign-in store of 2,
+  `MISTRI_AUTH_POOL`). A tenant App's request pool is sized by its connection's `pool`, a replica counts its readers
+  alone, and the background writer's line is bounded (`PoolBusy`: `queue_full`, `queue_timeout`).
+- **People arriving at once wait their turn.** A burst of first visits to a tenant App on a small container is let in
+  a few at a time instead of being answered busy.
+- **Live sync lets go.** A subscriber that leaves before its pass is released when it leaves and when the hub stops,
+  and a closed pool's Server-Timing gauges are removed. The capacity harness can report the heap and write a heap
+  snapshot.
+- **Operations documentation.** Backup, the audit key, moving from 0.9, incidents and the sandbox limit are written
+  down; the Node floor is 24.22.1 and the framework peers are bounded; Renovate and a production dependency audit run
+  in CI.
+
+- **Performance by default.** `mistri check` reports `index-missing` (PostgreSQL): a declared access path with no index leading
+  with its columns, with the `CREATE INDEX` line (information under 10,000 estimated rows, a warning above; `--no-index-check`).
+  `mistri dev --db-latency <ms>` (or `MISTRI_DEV_DB_LATENCY`) delays each database round trip so the distance shows in
+  development; it is refused in production and for a build. `mistri dev` logs each request's round trips, database time and CPU,
+  and warns past a budget (read 3, command 6, first page 16); Server-Timing is on in dev, with `proc` still behind its token.
+  `roundTrips(response)` in `@mistriwork/mistri/testing` (Preview) lets an App's tests hold a budget. New page: Performance by default.
+
+- **`mistri deploy` for Cloudflare Containers.** `mistri deploy init cloudflare` writes `deploy/cloudflare/`
+  (a Worker against the new `@mistriwork/cloudflare`, `wrangler.jsonc`, `package.json` and the build request) and
+  names every `${NAME}` the configuration reads as a secret; it creates nothing on Cloudflare. `mistri deploy` prints
+  a plan and changes nothing until confirmed (`--yes` in CI, `--dry-run` to stop after the plan), refusing when
+  `check --deploy` fails, a secret is missing from the Worker (compared by name, never read), a pending migration is
+  a contract step (unless `--allow-contract`) or the working tree is dirty (unless `--allow-dirty`). It then builds,
+  runs `--backup-check`, applies the migrations from the operator's machine over `--migrate-url` / `MISTRI_MIGRATE_URL` and the App's
+  stores over the store URLs its config names, read from that machine's environment, runs `wrangler deploy` with a new `MISTRI_DEPLOY_ID`, and restarts the
+  container until `/readyz` reports that deploy and this build, up to `--roll-timeout` (20 minutes), then smokes the
+  public address (and `--smoke <cmd>`). Every deploy is a row in `__mistri_deploys` beside the migration history;
+  `status`, `rollback` (refused past a contract migration) and `logs` use it and wrangler.
+- **`@mistriwork/cloudflare`**, a new package: `MistriContainer` (always on, waits out mistri's startup checks,
+  hands the Worker's named vars and secrets to the container, token-gated restart, optional image and instance-type
+  pin), `mistriWorker({ binding, instance, location })` for `fetch` and the once-a-minute `scheduled`, and
+  `forwardEmail` for inbound tenant mail. `@cloudflare/containers` is its peer; mistri depends on neither.
+  `examples/deploy/cloudflare` is gone: `mistri deploy init cloudflare` is the template.
+- **`/readyz` carries `{ deploy, build }`** beside its status: `deploy` is `MISTRI_DEPLOY_ID` (null when unset) and
+  `build` the served build's id (null for an App served from source). Status codes are unchanged.
+- **Server-Timing's process entry is held behind `MISTRI_SERVER_TIMING_TOKEN`.** With the token set, the `proc`
+  entry is added only to a request that sends it as `x-mistri-timing`; the per-request entries stay public. Timing on
+  without a token logs one startup warning that `proc` is public.
+- **`mistri check --deploy` judges pending migrations against the code still running.** A pending migration that
+  drops or renames a table or column, changes a type, sets NOT NULL or adds a NOT NULL column without a default is a
+  warning (an error with `--strict-migrations`; a note when marked `-- mistri: contract`), with its expand/contract
+  fix, and `MISTRI_SERVER_TIMING=1` without a token is a warning.
+
 ## 1.0.0-rc.3
 
 - **MySQL and MariaDB are not supported.** The adapter, the `mysql2` driver and every MySQL branch of the SQL

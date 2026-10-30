@@ -536,6 +536,14 @@ test('--app-mcp answers the App API as MCP tools on stdio: reads, a command, its
     run = named('run_change_'),
     recover = named('recover_change_');
   assert.ok(tools.every((tool) => tool.inputSchema && typeof tool.inputSchema === 'object'));
+  // The App's whole tool inventory, by name (the suffix is a digest of the tool's contract): adding, removing or changing a tool is a visible change to this list.
+  assert.deepEqual(tools.map((tool) => tool.name).sort(), [
+    'get_item_ab9e4df0e2376a0a37c99345',
+    'list_item_0b74f7fed6c9796336b56112',
+    'prepare_change_32d0e82a8789a42cdef1e804',
+    'recover_change_cdcf735ca92ab9302c72cedf',
+    'run_change_1770023c69db21b03a06611b',
+  ]);
   const read = await mcp.request('tools/call', { name: get, arguments: { id: '1' } });
   assert.deepEqual(read.result.structuredContent, { id: '1', version: '0', name: 'One' });
   const key = 'mcp-cli-attempt-00001';

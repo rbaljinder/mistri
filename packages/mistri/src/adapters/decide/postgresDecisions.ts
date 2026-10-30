@@ -4,13 +4,13 @@
  * description (columns, types, collations, constraints, indexes, and no
  * trigger, rule or policy) compared with the one provisioning produces.
  *
- * The runtime runs on a small pool of its own, one writer: a decision is
+ * The runtime runs on the server stores' shared pool (RUNTIME_STORE_POOL): a decision is
  * recorded outside any business write, and the App's pools stay the App's.
  */
-import { SMALL_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
+import { RUNTIME_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
-import { PgConnectionManager, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
+import { sharedPgConnections, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import {
   describePostgresRelations,
@@ -226,9 +226,9 @@ const numbered = (sql: string) => {
   return sql.replace(/\?/g, () => `$${++n}`);
 };
 
-/** The store over a pool of its own; opening attests, and a store that cannot be is not returned. */
+/** The store over the server stores' shared pool; opening attests, and a store that cannot be is not returned. */
 export async function openPostgresDecisions(url: string): Promise<DecisionStore> {
-  const connections = new PgConnectionManager(url, undefined, undefined, SMALL_STORE_POOL);
+  const connections = sharedPgConnections(url, RUNTIME_STORE_POOL);
   const ready = await connections.withWriteClient((client) => postgresDecisionsReady(client)).catch(() => false);
   if (!ready) {
     const message = await connections

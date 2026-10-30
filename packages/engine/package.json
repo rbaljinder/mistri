@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.3",
+  "version": "1.0.0-rc.4",
   "description": "The engine both products stand on: the adapters (SQLite, Postgres), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -177,6 +177,10 @@
     "./adapters/writeAhead.js": {
       "mistri-built": "./dist/adapters/writeAhead.js",
       "default": "./src/adapters/writeAhead.ts"
+    },
+    "./adapters/dbLatency.js": {
+      "mistri-built": "./dist/adapters/dbLatency.js",
+      "default": "./src/adapters/dbLatency.ts"
     },
     "./adapters/writeLanes.js": {
       "mistri-built": "./dist/adapters/writeLanes.js",
@@ -395,6 +399,10 @@
     "./server/migrate/database.js": {
       "mistri-built": "./dist/server/migrate/database.js",
       "default": "./src/server/migrate/database.ts"
+    },
+    "./server/migrate/files.js": {
+      "mistri-built": "./dist/server/migrate/files.js",
+      "default": "./src/server/migrate/files.ts"
     },
     "./server/migrate/history.js": {
       "mistri-built": "./dist/server/migrate/history.js",

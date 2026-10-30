@@ -121,6 +121,7 @@ test('genuine same-file read/write pair returns captured immutable namespace wit
     'scopeReads',
     'scopeSupportReads',
     'together',
+    'togetherFenced',
     'withPlatformReads',
     'withReads',
   ]);

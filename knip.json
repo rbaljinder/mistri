@@ -70,6 +70,11 @@
       ],
       "includeEntryExports": true
     },
+    "packages/cloudflare": {
+      "project": [
+        "src/**"
+      ]
+    },
     "packages/create-mistri": {
       "ignoreDependencies": [
         "@mistriwork/mistri"
@@ -158,9 +163,6 @@
       "exports"
     ],
     "scripts/soak/k6/mixed.js": [
-      "unlisted"
-    ],
-    "examples/deploy/cloudflare/src/index.ts": [
       "unlisted"
     ],
     "packages/mistri/src/shared/tenantHttp.ts": [

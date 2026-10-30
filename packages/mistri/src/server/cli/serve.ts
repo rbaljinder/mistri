@@ -6,6 +6,7 @@
  * listens, a busy default port rolls on, and a signal shuts it all down.
  */
 import { learnValueLabels } from '../app/valueLabels.js';
+import { setBuildIdSource } from '@mistriwork/engine/server/http/probes.js';
 import { startupReport } from '@mistriwork/engine/shared/refusal.js';
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
@@ -204,6 +205,8 @@ export async function startServing(
       !pausedTenantWriters().length,
   };
   let listening = false;
+  /* The build being served is what /readyz fingerprints (engine http/probes.ts). */
+  setBuildIdSource(() => serving.apps.find((host) => host.app.build)?.app.build?.id ?? null);
   /* OpenTelemetry when OTEL_* asks for it (nothing loaded otherwise), and the
      dev observer when --dev does — on a loopback listener only, since what it
      keeps is the SQL with its parameters and the bodies both ways. A

@@ -4139,6 +4139,7 @@
         "./maintenance: pruneAnalyticsEvents",
         "./openfeature: createOpenFeatureProvider",
         "./page: Gantt",
+        "./testing: roundTrips",
         "./ui: FlagReader",
         "./ui: useAnalytics",
         "./ui: useFlags",
@@ -4180,6 +4181,11 @@
         "entry @mistriwork/ui"
       ]
     },
+    "package @mistriwork/cloudflare": {
+      "preview": [
+        "entry @mistriwork/cloudflare"
+      ]
+    },
     "package @mistriwork/kit": {
       "preview": [
         "entry @mistriwork/kit"
@@ -4218,6 +4224,8 @@
         "command theme",
         "command virtual",
         "flag --ahead",
+        "flag --allow-contract",
+        "flag --allow-dirty",
         "flag --allowed-host",
         "flag --api",
         "flag --api-integers",
@@ -4231,6 +4239,7 @@
         "flag --append",
         "flag --as",
         "flag --auth-proxy-header",
+        "flag --backup-check",
         "flag --base-path",
         "flag --both",
         "flag --brief",
@@ -4246,6 +4255,7 @@
         "flag --dark",
         "flag --days",
         "flag --db",
+        "flag --db-latency",
         "flag --defaults",
         "flag --demo",
         "flag --deploy",
@@ -4282,10 +4292,12 @@
         "flag --max-cost",
         "flag --max-error",
         "flag --mcp",
+        "flag --migrate-url",
         "flag --migrations",
         "flag --mount",
         "flag --name",
         "flag --no-config",
+        "flag --no-index-check",
         "flag --no-live",
         "flag --open",
         "flag --openapi",
@@ -4308,6 +4320,8 @@
         "flag --repeatable",
         "flag --replicas",
         "flag --roles",
+        "flag --roll",
+        "flag --roll-timeout",
         "flag --routes",
         "flag --rows",
         "flag --samples",
@@ -4318,6 +4332,8 @@
         "flag --search",
         "flag --seed",
         "flag --shutdown-grace",
+        "flag --smoke",
+        "flag --strict-migrations",
         "flag --suite",
         "flag --template",
         "flag --tenant",
@@ -4331,6 +4347,7 @@
         "flag --truth",
         "flag --type",
         "flag --url",
+        "flag --verbose",
         "flag --version",
         "flag --wait",
         "flag --wait-for",
@@ -4343,6 +4360,7 @@
       ],
       "preview": [
         "command analytics",
+        "command deploy",
         "command experiments",
         "command flags",
         "command suite",
@@ -4427,6 +4445,7 @@
         "deploy-missing-secret",
         "deploy-per-process-limits",
         "deploy-public-url",
+        "deploy-server-timing-public",
         "deploy-sqlite-auth-store",
         "deploy-sqlite-source",
         "deploy-unset-reference",
@@ -4444,6 +4463,7 @@
         "identity-provider-kind",
         "identity-provider-tenant",
         "identity-provider-unknown",
+        "index-missing",
         "integration-action-unknown",
         "integration-channel-unknown",
         "integration-event-input",
@@ -4466,6 +4486,7 @@
         "message-syntax",
         "message-untranslated",
         "message-unused",
+        "migration-breaks-running-code",
         "money-minor",
         "mount",
         "needs-auth",

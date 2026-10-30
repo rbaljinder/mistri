@@ -14,7 +14,7 @@ npx @mistriwork/mistri check --app .
 npx @mistriwork/mistri --app .
 ```
 
-**You need** Node 24 or newer and a database with a few related tables. To
+**You need** Node 24.22.1 or newer and a database with a few related tables. To
 practice, use a copy, or a role that can only read.
 
 ## 1. Draft it

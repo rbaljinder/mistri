@@ -31,6 +31,14 @@ A change to any of these is breaking, and does not happen before 2.0:
 Adding a key, a command, a flag, a tool, a route or an optional field is not
 breaking.
 
+## Supported environment
+
+Node 24.22.1 or newer (every package's `engines`; CI runs Node 24). Optional peers
+are bounded to the majors mistri supports: TypeScript 7 (`>=7 <8`),
+React 19, Next.js 14.1 to 16, React Router 6.4 to 7, and TanStack Router 1.
+A new major of a peer is a mistri release's work to support, not a range you
+widen yourself.
+
 ## Preview
 
 A **Preview** feature works as documented and is enforced on the server, but its

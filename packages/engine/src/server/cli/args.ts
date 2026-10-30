@@ -28,6 +28,8 @@ export interface Options {
   noConfig: boolean;
   /** `--no-live`: no change rows written, no `/api/live` (live/liveBinding.ts). */
   noLive?: boolean;
+  /** `--db-latency <ms>`: each database round trip waits this long first, in development (adapters/dbLatency.ts). */
+  dbLatency?: string;
   /** Extra names the `Host` header may carry. See `doorRefusal`. */
   allowedHosts: string[];
   /** Speak MCP over stdio instead of serving HTTP. For coding agents. */
@@ -203,6 +205,7 @@ export function parseArgs(argv: string[]): Options {
     } else if (arg === '--config') opts.config = argv[++i] ?? '';
     else if (arg === '--no-config') opts.noConfig = true;
     else if (arg === '--no-live') opts.noLive = true;
+    else if (arg === '--db-latency') opts.dbLatency = argv[++i] ?? '';
     else if (arg === '--app') (opts.apps ??= []).push(argv[++i] ?? '');
     else if (arg === '--mount') {
       const said = argv[++i] ?? '';

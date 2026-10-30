@@ -60,6 +60,9 @@ import { componentTypes } from '../typegenComponents.js';
 import { checkApp } from './build.js';
 import { documentedFix } from './checkCodes.js';
 import { connectionBudgets, deployFindings } from './checkDeploy.js';
+import { SMALL_TABLE_ROWS, indexFindings, readPgIndexes } from './checkIndexes.js';
+import { asDeployFinding, migrationsToJudge } from './deployMigrations.js';
+import { migrationFindings } from './migrationSafety.js';
 import type { ServedFacts } from './servedHosts.js';
 import { lintComponents, pageManifestsOf } from '../app/componentLint.js';
 import { designLint, sayDesignFinding } from '../app/designLint.js';
@@ -115,7 +118,7 @@ export function warningSummary(kinds: ReadonlyMap<string, number>): string {
 const CHECK_EXIT = { passed: 0, couldNotCheck: 1, types: 2, typecheck: 3, validation: 4, components: 5, pending: 6, deploy: 7 } as const;
 
 const CHECK_USAGE =
-  'mistri check --app <dir> [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>]] [--json | --brief]';
+  'mistri check --app <dir> [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--no-index-check] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]';
 
 type Status = 'passed' | 'failed' | 'skipped';
 /** A step's verdict, its lines as the text output says them, and its findings as `--json` gives them (checkProblems.ts). */
@@ -146,7 +149,8 @@ interface CheckReport {
   ok: boolean;
   exit: number;
   seconds: number;
-  steps: Array<{ step: CheckStep; status: Status; detail: string }>;
+  /** `lines` is a step's text output, kept for an in-process caller (`runCheck`'s `tap`) and never printed as JSON. */
+  steps: Array<{ step: CheckStep; status: Status; detail: string; lines?: string[] }>;
   problems: CheckProblem[];
   routes?: Array<{ path: string; what: string }>;
 }
@@ -443,6 +447,8 @@ const NARRATION = /^mistri: (app ".*" from |\d+ connection\(s\)|.+ \((sqlite|pos
 export async function runCheck(
   argv: string[],
   write: (line: string) => void = (line) => process.stdout.write(`${line}\n`),
+  /** Handed the report before it is printed, with the deploy step's lines (the connection math) that the JSON leaves out. */
+  tap?: (report: { steps: Array<{ step: string; lines?: string[] }> }) => void,
 ): Promise<number> {
   const brief = argv.includes('--brief');
   if (!(argv.includes('--json') || brief) || argv.includes('--help') || argv.includes('-h'))
@@ -487,8 +493,10 @@ export async function runCheck(
       ),
     ),
   };
+  tap?.(report);
+  const printed = { ...report, steps: report.steps.map(({ lines: _lines, ...step }) => step) };
   if (brief && !argv.includes('--json')) for (const line of briefLines(report, { all: argv.includes('--warnings') })) write(line);
-  else write(JSON.stringify(report, null, 2));
+  else write(JSON.stringify(printed, null, 2));
   return code;
 }
 
@@ -567,6 +575,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
   let defaults = false;
   let failOnDesignWarning = false;
   let showWarnings = false;
+  let indexCheck = true;
   let pending = false;
   let pendingOn: string | undefined;
   let deploy = false;
@@ -574,6 +583,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
   let connectionLimit: number | undefined;
   let cpus: number | undefined;
   let migrations: string | undefined;
+  let strictMigrations = false;
   let historyTable: string | undefined;
   let rest: string[] = [];
   for (let i = 0; i < argv.length; i++) {
@@ -588,9 +598,10 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           '--fail-on-design-warning includes design checks and fails with exit 4 when they report warnings.\n' +
           '--warnings lists every warning in full; without it they are one line a kind after the errors (a failing App was buried under ~60 of them).\n' +
           "--defaults prints every rule the platform infers for each resource (mistri docs conventions) and the layout each page is drawn in, and whether the App's own wins.\n" +
+          '--no-index-check skips the indexes step: on PostgreSQL, the foreign keys, default sorts, fixed filters, ownership columns and searches the App reads by that no index leads with (index-missing, with the CREATE INDEX that adds it).\n' +
           '--bump <command> moves a command whose contract changed to its next version in authority.lock (its API route, receipts and jobs follow).\n' +
           "--pending judges the App against the schema as it will be after the pending migrations (mistri migrate), applied to a scratch copy, or with --pending-on <url> to the scratch database that URL names (a branch of the database, never the App's own). Exit 6: one failed there.\n" +
-          "--deploy judges whether the App survives a container being replaced (mistri docs build-and-deploy): it refuses a source or auth.store on a SQLite file, the default auth.store, and a missing BETTER_AUTH_SECRET or ${NAME} the environment lacks, and with --replicas <n> above one it warns about per-process rate limits. Run it with the deployment's environment. Exit 7.\n" +
+          "--deploy judges whether the App survives a container being replaced (mistri docs build-and-deploy): it refuses a source or auth.store on a SQLite file, the default auth.store, and a missing BETTER_AUTH_SECRET or ${NAME} the environment lacks, and with --replicas <n> above one it warns about per-process rate limits. It also reads the migrations not yet applied and warns about a statement that breaks the code still running (a dropped or renamed column or table, a type change, SET NOT NULL, a NOT NULL column without a default), as expand/contract steps; mark a deliberate one with a '-- mistri: contract' comment on the line before it, and add --strict-migrations to fail on the rest. Run it with the deployment's environment. Exit 7.\n" +
           '--json prints one JSON document instead (schema/check.schema.json): every finding with its code, file, line, column, path and fix.\n' +
           '--brief prints one line per problem, `code file:line message — fix: …`, and nothing else (ok when there is none): errors each in full, warnings a group by code and resource with its count and one example (--warnings lists every one). Exit codes are the same. mistri explain <code> says more.',
       );
@@ -617,6 +628,10 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       showWarnings = true;
       continue;
     }
+    if (argv[i] === '--no-index-check') {
+      indexCheck = false;
+      continue;
+    }
     if (argv[i] === '--fail-on-design-warning') {
       design = true;
       failOnDesignWarning = true;
@@ -634,6 +649,10 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       }
       pending = true;
       pendingOn = given;
+      continue;
+    }
+    if (argv[i] === '--strict-migrations') {
+      strictMigrations = true;
       continue;
     }
     if (argv[i] === '--deploy') {
@@ -705,8 +724,12 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     );
     return CHECK_EXIT.couldNotCheck;
   }
-  if ((migrations !== undefined || historyTable !== undefined) && !pending) {
-    console.error(`mistri check: --migrations and --history-table say where --pending finds the migrations. ${CHECK_USAGE}`);
+  if ((migrations !== undefined || historyTable !== undefined) && !pending && !deploy) {
+    console.error(`mistri check: --migrations and --history-table say where --pending and --deploy find the migrations. ${CHECK_USAGE}`);
+    return CHECK_EXIT.couldNotCheck;
+  }
+  if (strictMigrations && !deploy) {
+    console.error(`mistri check: --strict-migrations makes --deploy fail on a migration that breaks the running code. ${CHECK_USAGE}`);
     return CHECK_EXIT.couldNotCheck;
   }
   let opts = parseArgs(rest);
@@ -1013,6 +1036,12 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     const unloaded = !named;
     if (!unloaded) steps.push(typecheckStep);
 
+    /* 2b. The indexes the App's reads lean on (checkIndexes.ts), read before validation: on PostgreSQL they say
+       what the older, leading-column advice in validation's warnings said, and say it with the fix. */
+    const ran = indexCheck && loaded ? await indexStep(registry, loaded, opts.policy) : undefined;
+    const indexed = ran?.step;
+    const OLD_INDEX_ADVICE = /leads no index|has no trigram index/;
+
     // 3. Validation: the real mistri check, as CI runs it.
     const checked = await checkApp([...rest, '--app', appDir]);
     // Placed only in the modules the App was loaded from, and what they import: never a copy kept beside them.
@@ -1020,7 +1049,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     const verdict = checked.stdout
       .split('\n')
       .map((line) => line.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((line) => indexed === undefined || !OLD_INDEX_ADVICE.test(line));
     /* A finding's own lines under it (indented past the finding's two spaces): a changed authority lock's diff, one
        granted fact a line. They are the finding's, not findings of their own: each was an `invalid-app` error that
        said "Correct the declaration" over a change the author made on purpose and accepts with --write-authority. */
@@ -1120,6 +1150,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
             problems: [...verdict.filter((_, i) => i !== Math.max(head, 0)), ...stderr].flatMap((line) => found(line, true) ?? []),
           },
     );
+
+    if (indexed) steps.push(indexed);
 
     if (unloaded)
       steps.push(
@@ -1355,7 +1387,13 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           env: process.env,
         };
         const budget = connectionBudgets(deployInput);
-        const findings = [...deployFindings(deployInput), ...budget.findings];
+        const migrationsRead = await migrationsToJudge(registry, config, opts, appDir, loaded.app, {
+          dir: migrations,
+          table: historyTable,
+          scratch: copy !== undefined,
+        });
+        const unsafe = migrationsRead.files.flatMap((file) => migrationFindings(file.script, file.sql, { strict: strictMigrations }));
+        const findings = [...deployFindings(deployInput), ...budget.findings, ...unsafe.map(asDeployFinding)];
         const errors = findings.filter((finding) => finding.severity === 'error');
         steps.push({
           name: 'deploy',
@@ -1365,7 +1403,11 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
             : 'every store is a network database and the secrets are set',
           lines: [
             ...budget.rows.map((row) => `connections ${sayBudget(row)}`),
-            ...findings.map((finding) => `${finding.severity === 'warning' ? 'warning: ' : ''}${finding.message} Fix: ${finding.fix}`),
+            ...(migrationsRead.said ? [`migrations ${migrationsRead.said}`] : []),
+            ...findings.map(
+              (finding) =>
+                `${finding.severity === 'warning' ? 'warning: ' : finding.severity === 'info' ? 'note: ' : ''}${finding.message} Fix: ${finding.fix}`,
+            ),
           ],
           problems: findings.map((finding) =>
             problem('deploy', finding.code, finding.message, { fix: finding.fix, file: shown(loaded!.path) }, finding.severity),
@@ -1395,6 +1437,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     }
     if (iconsNamed) write(`  ${iconListLine()}`);
     if (warned.size) write(`  ${warningSummary(warned)}`);
+    /* An indexes step that could not run is one note, not a step: a step would change every SQLite App's count of them. */
+    if (ran?.note) write(`  indexes: ${ran.note}`);
     /* The Preview features the App uses: one line, not a step's, since it fails nothing (the finding is info). */
     const previewed = steps.flatMap((step) => step.problems ?? []).find((found) => found.code === PREVIEW_FEATURE);
     if (previewed) write(`  preview: ${previewed.message}`);
@@ -1441,7 +1485,12 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       ok: !failed,
       exit: code,
       seconds: Number(seconds),
-      steps: steps.map((step) => ({ step: step.name, status: step.status, detail: step.detail })),
+      steps: steps.map((step) => ({
+        step: step.name,
+        status: step.status,
+        detail: step.detail,
+        ...(step.name === 'deploy' ? { lines: step.lines } : {}),
+      })),
       problems,
       ...(routeTableSaid ? { routes: routeTableSaid } : {}),
     });
@@ -1450,6 +1499,61 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     console.log = log;
     await registry.closeAll();
     await copy?.cleanup();
+  }
+}
+
+/**
+ * The indexes step: the App's declared access paths against the database's index list, on PostgreSQL. It never
+ * fails the check. Where it cannot run (SQLite, a role that may not read the catalog) it says one note instead.
+ */
+async function indexStep(registry: Registry, loaded: LoadedApp, policyFile: string | undefined): Promise<{ step?: Step; note?: string }> {
+  const app = loaded.app;
+  const bound = app.connection ?? (app.sources ? app.sources[homeSourceOf(app)!]?.connection : undefined);
+  const connection = bound
+    ? registry.list().find((c) => c.id === bound || c.name === bound)
+    : registry.list().find((c) => c.id === registry.active);
+  if (!connection) return {};
+  try {
+    const { adapter } = await registry.open(connection.id);
+    if (adapter.dialect !== 'postgres')
+      return { note: 'skipped, PostgreSQL only: SQLite reads a table from a file, with no round trip to save.' };
+    const indexes = await readPgIndexes(adapter);
+    if (!indexes) return { note: 'skipped, the database would not list its indexes to this role.' };
+    const { schema } = await loadAppRuntimeResources(registry, app, connection.id);
+    /* A tenant App's ownership columns live in its policy module, which a request reads: with --policy, they are judged too. */
+    let owners: Record<string, string> | undefined;
+    if (app.auth?.rows === 'tenant' && policyFile) {
+      const { loadAppTenantPolicy } = await import('../policy/appTenantPolicy.js');
+      const policy = await loadAppTenantPolicy(resolve(policyFile)).catch(() => undefined);
+      owners = Object.fromEntries(
+        Object.entries(policy?.ownership ?? {}).flatMap(([id, owner]) => (owner.kind === 'tenant' ? [[id, owner.column]] : [])),
+      );
+    }
+    const found = indexFindings({ app, pages: loaded.pages, schema: withRollups(app, schema), indexes, ...(owners ? { owners } : {}) });
+    const warnings = found.filter((finding) => finding.severity === 'warning').length;
+    return {
+      step: {
+        name: 'indexes',
+        status: 'passed',
+        detail: found.length
+          ? `${found.length} read${found.length === 1 ? '' : 's'} no index leads (${warnings} on tables of ${SMALL_TABLE_ROWS.toLocaleString('en-US')} rows or more)`
+          : 'every foreign key, sort, filter and search the App reads by is led by an index',
+        lines: found.map(
+          (finding) => `${finding.severity === 'warning' ? 'warning: ' : 'note: '}${finding.message} Add: ${finding.fix} [index-missing]`,
+        ),
+        problems: found.map((finding) =>
+          problem(
+            'indexes',
+            'index-missing',
+            finding.message,
+            { path: finding.declaration, fix: finding.fix, file: shown(loaded.path) },
+            finding.severity,
+          ),
+        ),
+      },
+    };
+  } catch (error) {
+    return { note: `skipped, could not read the indexes: ${(error as Error).message}` };
   }
 }
 
@@ -1553,6 +1657,7 @@ async function servedFactsOf(
       ...facts,
       jobs: module.jobs.size + module.workflows.size > 0,
       decisions: (module.decisions?.size ?? 0) > 0,
+      mail: module.mail !== undefined,
       integrations: module.integrations !== undefined,
       inbound: module.inbound.size > 0,
     };

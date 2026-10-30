@@ -35,10 +35,23 @@ interface Hold {
 export const managerConnections = (readers: number, writers: number): number => readers + writers + 1;
 
 /**
- * What a small runtime store (the assistant's, the decisions', the API event feed's) asks of its own manager: one
- * reader and one writer. `mistri check --deploy` counts the same size (servedHosts.ts), so they cannot drift.
+ * What a short-lived store manager asks for (a retention prune's, a command line's): one reader and one writer.
  */
 export const SMALL_STORE_POOL = Object.freeze({ readers: 1, writers: 1 });
+
+/**
+ * The one manager the server's own stores share on a database (postgresPool.ts sharedPgConnections): the jobs host
+ * with its workflow and event-delivery stores, the effects host, the mail outbox, the integrations store, the
+ * decisions, assistant and API event stores. Two readers and two writers, whatever the App's pools, sized for their
+ * short statements and kept apart from the pools a person's reads and saves use, where a burst of job claims could
+ * otherwise queue ahead of a save. Not all of them are background: the assistant store, a tenant's decision
+ * suggestions and the API event feed answer a person, and share the two readers and two writers with job claims
+ * and completions, the mail outbox and the integrations. That is deliberate (no connection is added for them) and
+ * bounded by the pool's own queue, which answers busy. A job's own command and every delivery run as background
+ * work, on the one background writer, whose line is bounded the same way (postgresPool.ts). `mistri check --deploy`
+ * counts the same size (servedHosts.ts), so they cannot drift.
+ */
+export const RUNTIME_STORE_POOL = Object.freeze({ readers: 2, writers: 2 });
 
 /** `host:port/database` of a connection string, without its credentials: what two URLs share when they name one database. */
 export function databaseOf(url: string): string {

@@ -11,5 +11,5 @@ npm create mistri                                  # a starter App
 npm create mistri my-app -- --brief BRIEF.md       # an App drafted from a brief
 ```
 
-Node 24 or newer. The App framework, its command and its reference are in
+Node 24.22.1 or newer. The App framework, its command and its reference are in
 [`@mistriwork/mistri`](https://www.npmjs.com/package/@mistriwork/mistri).

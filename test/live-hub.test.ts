@@ -492,3 +492,65 @@ test('the last subscriber leaving mid-pass while another joins ends neither the 
   assert.deepEqual(faults, []);
   assert.deepEqual(logged, [], 'nothing was logged as a live sync fault');
 });
+
+test('a subscriber that leaves before its pass, as the last one, is not kept until the next arrives', async () => {
+  /* The hub stops with its last subscriber; one still waiting to join stayed in its line, and with it the stream it
+     wrote to, until another subscriber's pass took it out — in a quiet process, indefinitely. */
+  const store: LiveStore = {
+    dialect: 'sqlite',
+    ready: async () => true,
+    head: async () => ({ id: '0' }),
+    read: async () => [],
+    locate: async (cursor) => ({ id: cursor }),
+    prune: async () => 0,
+  };
+  const hub = new LiveHub({} as Adapter, store, { pollMs: 10_000 });
+  const quiet = { authority: async () => ({ actor: '', tables: new Map(), probe: async () => new Set<string>() }) };
+  const leaving: LiveTap = { ...quiet, receive: () => {}, placed: () => {}, reset: () => {}, fail: () => {} };
+  try {
+    void hub.attach(leaving);
+    hub.detach(leaving);
+    assert.equal((hub as unknown as { joining: unknown[] }).joining.length, 0);
+  } finally {
+    await hub.close();
+  }
+});
+
+test('a subscriber that leaves before its pass settles its attach, whether it was the last one or not', async () => {
+  /* A choice cache holds its attach as `listening` until it settles (forms/choiceCache.ts); a tap that detached before
+     its pass left that promise pending for good, and the cache with it. */
+  const store: LiveStore = {
+    dialect: 'sqlite',
+    ready: async () => true,
+    head: async () => ({ id: '0' }),
+    read: async () => [],
+    locate: async (cursor) => ({ id: cursor }),
+    prune: async () => 0,
+  };
+  const hub = new LiveHub({} as Adapter, store, { pollMs: 10_000 });
+  const quiet = { authority: async () => ({ actor: '', tables: new Map(), probe: async () => new Set<string>() }) };
+  const make = (): LiveTap => ({ ...quiet, receive: () => {}, placed: () => {}, reset: () => {}, fail: () => {} });
+  const settled = (promise: Promise<void>) => Promise.race([promise.then(() => true), delay(500).then(() => false)]);
+  try {
+    const last = make();
+    assert.equal(
+      await settled(
+        (() => {
+          const p = hub.attach(last);
+          hub.detach(last);
+          return p;
+        })(),
+      ),
+      true,
+      'the last one leaving',
+    );
+    const stays = make();
+    const leaves = make();
+    const pending = [hub.attach(stays), hub.attach(leaves)];
+    hub.detach(leaves);
+    assert.equal(await settled(pending[1]), true, 'one of two leaving');
+    assert.equal(await settled(pending[0]), true, 'the one that stays is placed');
+  } finally {
+    await hub.close();
+  }
+});

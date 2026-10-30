@@ -216,6 +216,18 @@ export const main: Main = async () => {
     return refuseBrowser('a server with no App', process.argv.slice(2), registry);
   /* Before any App opens a writer: a tenant App's is bound to live sync as it is made (tenantLive.ts). */
   if (opts.noLive) (await import('../live/liveBinding.js')).setLiveSync(false);
+  /* The wait each database round trip is given, to feel a remote database in development (dbLatency.ts): before any
+     App opens a connection, so none is leased without it. */
+  /* `--dev` times its requests without MISTRI_SERVER_TIMING (serverTiming.ts): a cost line each, and a warning past the budget. */
+  if (opts.dev) (await import('@mistriwork/engine/adapters/telemetry/serverTiming.js')).setServerTimingDev();
+  const latency = await import('@mistriwork/engine/adapters/dbLatency.js');
+  try {
+    latency.configureDbLatency(opts.dbLatency);
+  } catch (error) {
+    console.error(`mistri: ${(error as Error).message}`);
+    process.exitCode = 2;
+    return;
+  }
   /* An App's writes are ordered by record and run on a writer pool; the
      database browser's run one at a time, the order its Undo needs
      (writeLanes.ts). Decided on the names alone, before loading an App
@@ -223,6 +235,14 @@ export const main: Main = async () => {
   configureWriteOrder(config.apps.length || opts.apps?.length || opts.appEntry !== undefined ? 'keyed' : 'serial');
   const apps: StartupApps = await (await import('./apps.js')).loadStartupApps(opts, registry, config);
   const { loadedApps } = apps;
+  try {
+    if (loadedApps.some((loaded) => loaded.build)) latency.refuseForBuild();
+  } catch (error) {
+    console.error(`mistri: ${(error as Error).message}`);
+    await registry.closeAll();
+    process.exitCode = 2;
+    return;
+  }
   // Commands are hosted when the App was loaded with its module: --commands, or its commands.ts.
   const hasCommands = opts.commands !== undefined || loadedApps.some((loaded) => loaded.commands);
   if (opts.apiReads) {

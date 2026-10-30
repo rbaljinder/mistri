@@ -104,6 +104,10 @@ async function startHost(options: HostOptions, argumentsFor: (port: number) => P
            with 429 past the third in ten seconds. The host listens on loopback only, where the server honours this
            (auth/requestRules.ts); the per-account lockout stays. A test of the limits passes "on" in `environment`. */
         MISTRI_TEST_AUTH_LIMITS: 'off',
+        /* Each response says its database round trips, for roundTrips(response); the token keeps the process entry
+           (heap, pools) out of them (serverTiming.ts). */
+        MISTRI_SERVER_TIMING: '1',
+        MISTRI_SERVER_TIMING_TOKEN: randomBytes(16).toString('hex'),
         ...options.environment,
         XDG_CONFIG_HOME: options.workspace.path('config'),
         HOME: options.workspace.directory,

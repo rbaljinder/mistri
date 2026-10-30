@@ -15,7 +15,7 @@ npx tablewalk --demo                            # no database yet: a throwaway s
 ![A customer record in the database browser: its fields, the invoices that point at it, and a rail of every table that refers to it.](../../../assets/screens/browser-record.webp)
 
 tablewalk is a product of its own, from the same repository as mistri: a
-foreign key is a place you can go. It needs Node 24 or newer, no build step
+foreign key is a place you can go. It needs Node 24.22.1 or newer, no build step
 and no config; `npx tablewalk --version` says which one you have. It serves no
 App: `npx tablewalk --app …` is refused and names the `npx @mistriwork/mistri` command
 that runs it, and mistri, in turn, serves no database browser. Apps run on

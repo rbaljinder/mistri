@@ -32,6 +32,7 @@ export type CheckStep =
   | 'schema types'
   | 'typecheck'
   | 'validation'
+  | 'indexes'
   | 'components'
   | 'routes'
   | 'design'

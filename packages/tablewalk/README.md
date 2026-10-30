@@ -18,7 +18,7 @@ npx tablewalk                 # or nothing, and the page asks for a connection
 No config, no build step, no schema to define first — it reads the catalog on
 connect. **Read-only** until you turn editing on, per connection. Runs from
 `npx`, a [Docker image](#docker-and-a-desktop-app), or a desktop app. It needs
-Node 24 or newer (`engines` in `package.json`); an older Node is refused at
+Node 24.22.1 or newer (`engines` in `package.json`); an older Node is refused at
 start with one line that says so.
 
 `npx tablewalk` with no target opens a page that asks for a connection: a form

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "America/Los_Angeles",
+  "prConcurrentLimit": 4,
+  "labels": ["dependencies"],
+  "automerge": false,
+  "packageRules": [
+    {
+      "description": "Dev dependencies move together, by hand: never automerged",
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "dev dependencies",
+      "automerge": false
+    },
+    {
+      "description": "Runtime dependencies move together, minor and patch only; a major is its own pull request",
+      "matchDepTypes": ["dependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "runtime dependencies"
+    },
+    {
+      "description": "GitHub Actions, pinned by digest",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Node and the Docker base image are chosen with the release, not by a bot",
+      "matchPackageNames": ["node", "node-alpine"],
+      "enabled": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "description": "A security fix is not held for Monday",
+    "schedule": ["at any time"],
+    "labels": ["dependencies", "security"]
+  }
+}

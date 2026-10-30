@@ -39,7 +39,7 @@ indexes every key). The sample Apps the references and guides link, Tick, Lintel
    5. only for layout: `npx @mistriwork/mistri shot --app . <route> --both`, open both
       PNGs, grade them with [rubric.md](references/rubric.md).
 6. **Walk the journey**: create, change, reload, an invalid value, an empty list, a denied action, a phone. Serve with
-   `npx @mistriwork/mistri dev .` (a printed throwaway sign-in per role): a refusal names its cause (`because: …`), and
+   `npx @mistriwork/mistri dev . --db-latency 20` (a printed throwaway sign-in per role; each database round trip waits 20 ms, a typical cloud distance, so a page that asks too many questions is slow here too): a refusal names its cause (`because: …`), and
    `npx @mistriwork/mistri observe --mcp` gives `tail`, `recent_errors`, `get_trace`, `explain_access`, `n_plus_one`, `slow_queries`.
    One App is served at the root (`/leads/127`); `check --routes` prints its addresses.
 7. **Test it**: `npx @mistriwork/mistri test init .` writes a journey per role and a permissions matrix; then the

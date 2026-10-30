@@ -52,6 +52,8 @@ over your own database.
   mistri tenant init|grant        a tenant App's first boot: its realms, tenants and first operators (see below)
   mistri tenant clone|import|clock
                                   a tenant App's sandboxes: clone, import plan, dev clock (see below)
+  mistri deploy [init cloudflare|status|verify|rollback|logs]
+                                  an App on Cloudflare Containers (see below)
   mistri docs [topic]             the App reference, offline: access, relationships,
                                   dates, dashboards, reload and restart, …
   mistri agent init               put the agent skill where coding agents read it (see below)
@@ -147,6 +149,12 @@ Options:
                       (live: true): its open pages then refresh on focus and
                       after their own saves. Nothing is written to the change
                       store and /api/live answers 204.
+      --db-latency <ms>
+                      Development only: every database round trip waits this
+                      long before it is sent (a pipelined batch pays once), to
+                      feel a remote database on this machine; 20 is a typical
+                      cloud distance. Or set MISTRI_DEV_DB_LATENCY. Refused
+                      under NODE_ENV=production and when serving a build.
       --app <dir>     Serve an app: a directory whose app.ts (or app.mjs /
                       app.json) declares its resources, views, navigation
                       and pages. Repeatable; with more than one, every app
@@ -291,8 +299,9 @@ Checking an App while authoring it — the one command of the loop:
                   [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>]
                   [--routes [--mount <app>=<path>] [--base-path <path>]]
                   [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
+                  [--no-index-check]
                   [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
-                  [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>]] [--json | --brief]
+                  [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
 
   Three or four steps, each with its own verdict line. Schema types: regenerates
   the App's mistri-schema.d.ts from the database when it has drifted (a
@@ -311,7 +320,9 @@ Checking an App while authoring it — the one command of the loop:
   and the server's environment, warned on what a look cannot dress. Every
   step runs; the errors print first, and warnings are advisory (unless
   --fail-on-design-warning is set) and print as one line a kind unless --warnings
-  lists them in full.
+  lists them in full. On PostgreSQL an indexes step names each foreign key, default
+  sort, fixed filter, ownership column and search the App reads by that no index
+  leads (index-missing), with the CREATE INDEX that adds it; --no-index-check skips it.
   --routes also prints every address the App answers to (/{app}/leads/{id},
   /{app}/leads/new, ...) and what each one opens. --design reads its pages,
   forms and shell for compositions that come out basic (a list cut beside an
@@ -343,7 +354,13 @@ Checking an App while authoring it — the one command of the loop:
   times --replicas, and with --connection-limit <n> (the connections the
   database allows this role) refuses a total above it. Pool defaults follow
   the cores: --cpus <n> says the deployment's (this machine's otherwise,
-  and the line says which it assumed). --json prints one JSON
+  and the line says which it assumed). It also reads the migrations not yet
+  applied and warns about each statement that breaks the code still running
+  (a dropped or renamed column or table, a type change, SET NOT NULL, a NOT
+  NULL column without a default, a dropped view or function), with how to
+  stage it as expand, deploy, contract; a comment "-- mistri: contract"
+  on the line before a deliberate contract step makes it a note, and
+  --strict-migrations makes the rest fail. --json prints one JSON
   document instead of the lines (schema/check.schema.json): every finding
   of every step with its code, file, line, column, definition path and fix,
   for an agent; the exit code is the same. --brief prints one line per
@@ -705,6 +722,49 @@ Building an App for production — optional; an App also runs from its source:
   it and never watched.
   Exit codes: 1 could not build, 2 typecheck, 3 validation, 4 bundle.
 
+Deploying an App to Cloudflare Containers — a Worker in front of one always-on container:
+
+  mistri deploy init cloudflare --app <dir> [--config <path>] [--commands <file>] [--jobs <file>]
+                  [--policy <file>] [--app-entry <file>] [--out <dir>] [--dir <dir>] [--force]
+  mistri deploy [--dry-run] [--yes] [--allow-contract] [--allow-dirty]
+                  [--migrate-url <url>] [--migrations <dir>] [--connection-limit <n>] [--verbose]
+                  [--backup-check <cmd>] [--smoke <cmd>] [--roll-timeout <minutes>] [--dir <dir>]
+  mistri deploy verify [--roll] [--roll-timeout <minutes>] [--smoke <cmd>] [--dir <dir>]
+  mistri deploy status | rollback [<deploy-id>] [--dry-run] | logs [--dir <dir>]
+
+  init writes deploy/cloudflare/ (wrangler.jsonc, src/index.ts against
+  @mistriwork/cloudflare, package.json and the build request) from the App's
+  build flags, naming every secret mistri.json reads. It creates nothing on
+  Cloudflare and refuses to replace existing files without --force.
+  deploy prints a plan and changes nothing until confirmed (--yes in CI;
+  --dry-run stops after the plan). It refuses when check --deploy fails, a
+  secret is missing from the Worker (compared by name through wrangler
+  secret list, never read), a pending migration is a contract step marked
+  "-- mistri: contract" (unless --allow-contract), or the working tree is
+  dirty (unless --allow-dirty). It then builds, runs --backup-check (a
+  non-zero exit refuses), applies the migrations and the App's stores from
+  this machine: the versioned migrations over --migrate-url or
+  MISTRI_MIGRATE_URL (a direct database address, never the container's), the
+  App's stores over the store URLs its config names, read from this
+  machine's environment and not from --migrate-url. It runs wrangler deploy with a new
+  MISTRI_DEPLOY_ID, and restarts the container with MISTRI_RESTART_TOKEN
+  until /readyz reports that deploy id and this build's id, for up to
+  --roll-timeout minutes (default 20), failing with what it last saw. --smoke
+  runs your command afterwards. Each deploy is a row in __mistri_deploys in
+  the migration database. A history problem (a recorded migration missing from
+  the directory) refuses the plan; --migrations <dir> overrides the config's
+  directory. A failure after wrangler deploy says the new Worker version is
+  serving; verify re-checks the newest deploy against /readyz and the smoke
+  (--roll restarts the container until it matches) and corrects its record.
+  status prints the live /readyz fingerprint and the record it matches, the
+  recorded deploys and the newest five Cloudflare deployments (it creates
+  nothing); rollback returns to the previous successful deploy (or the
+  one named) with wrangler rollback and the same verification, and refuses
+  when a contract migration was applied after it; logs is wrangler tail. Run
+  from the project root. wrangler reads its login from $XDG_CONFIG_HOME/.wrangler when
+  that is set: a shell whose XDG_CONFIG_HOME differs from the one used at
+  wrangler login reports "not logged in". Exit codes: 1 could not, declined or failed, 7 refused.
+
 Comparing exported App API documents:
 
   mistri compare-openapi <previous.json> <current.json>
@@ -846,7 +906,7 @@ over your own database.
   mistri test init [<app-dir>]    a starter suite: a journey per role, a permissions matrix
   mistri docs [topic]             the App reference, offline
   mistri explain <check-code>     what a check code means, with a fix example
-  and: new, suite, virtual, flags, experiments, analytics, theme, schema, messages,
+  and: new, deploy, suite, virtual, flags, experiments, analytics, theme, schema, messages,
        flows, jobs, decide, tenant, agent, observe, compare-openapi, api-token, mail-dns
 
 Common options:

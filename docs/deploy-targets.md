@@ -108,7 +108,10 @@ workers or child processes. Inside it, beside the HTTP server:
 - **The email outbox** and contact mail, when an App sends email.
 - **The analytics sink**, when configured.
 - **Write lanes**: per database, `read + write + 1` PostgreSQL connections at
-  most, nine by default (`docs/postgresql.md`, "Sizing").
+  most for the App's (or a tenant App's) one request pool, nine by default, and
+  five more for the server's stores when it declares any, and the sign-in
+  store's own pool (`MISTRI_AUTH_POOL`, default 4) when it is on the same
+  database (`docs/postgresql.md`, "Sizing" and "Per database, per process").
 
 Streams are Server-Sent Events, not WebSockets: the assistant
 (`packages/mistri/src/server/http/assistantRoutes.ts`), a suite's notices
@@ -347,12 +350,31 @@ $0.70; CPU is billed on active use only, ~$1 at a light load. **≈ $13/month**;
   Virginia. The `regions` constraint fixes this at region granularity only.
 - The container's peer is Cloudflare's internal path, so the client address
   needs `CF-Connecting-IP`, which mistri does not read (G2).
-- The glue is a template, `examples/deploy/cloudflare/` (G9, 0.9.7): a Worker
-  that forwards to the `Container` class by a random pick over a fixed
-  `INSTANCES`, a `wrangler.jsonc` with the container, its Durable Object, the
-  `ENAM` placement and a `* * * * *` cron, and a `scheduled` handler that
-  touches every instance's `/readyz` so none sleeps. What has actually run is in
-  "What has run" above.
+- The glue is a package and a command (rc.4). `mistri deploy init cloudflare`
+  writes `deploy/cloudflare/`: a Worker of about fifteen lines against
+  `@mistriwork/cloudflare`, a `wrangler.jsonc` with the container, its Durable
+  Object, the `ENAM` placement and a `* * * * *` cron, and the build request.
+  `MistriContainer` is the class a field deployment needed in the end: always
+  on (`onActivityExpired` does nothing, so jobs, effects and mail run between
+  requests), patient (mistri listens only after its startup checks, and the
+  class's own 20 s port wait turned every request during a start into a 500),
+  pinned to an image and instance type when the account creates container
+  applications from the Durable Object, restartable with a token (a code update
+  resets the Durable Object but leaves a running container alone), and it hands
+  the Worker's named vars and secrets to the container. `mistriWorker` forwards
+  `fetch` to one named instance and touches `/readyz` on the cron;
+  `forwardEmail` signs inbound tenant mail to the App.
+- `mistri deploy` is the manual runbook as one checked command: plan (check
+  --deploy, secrets by name, pending migrations and the contract refusal, a
+  backup hook), build, migrations over a direct URL from the operator's machine,
+  `wrangler deploy --var MISTRI_DEPLOY_ID:<uuid>`, then a restart until
+  `/readyz` answers `{ deploy, build }` with both new ids (the check is of the
+  configuration, not liveness: one restart reached the old Durable Object and
+  started a container with the old environment), a smoke, and a row in
+  `__mistri_deploys`. `rollback` is `wrangler rollback` plus the same
+  verification, and refuses past a contract migration. What has actually run is
+  in "What has run" above; this has been exercised against a fake runner, not
+  yet an account.
 - Fine today for: one always-on instance of a small App, a demo, a preview
   per branch.
 
@@ -446,7 +468,8 @@ are fine here.
 
 **Size.** PS-10 single node (1/8 vCPU, 1 GiB, $10/month arm64) for a proof;
 HA from $30. Watch PgBouncer's `max_client_conn` (100 per bouncer) against
-instances × (read + write + 1).
+instances × (read + write + 2), and five more each when the App declares jobs
+or another server store.
 
 ## Gaps before 1.0, ranked
 
@@ -463,7 +486,7 @@ working days including tests and the prose that states the fact.
 | G6 | **Done in 0.9.7** (health check, `PORT` and the jobs sentence in 0.9.6; `mistri build --dockerfile <file>` writes an App's Dockerfile, and the release image is built for `linux/amd64` and `linux/arm64`). **Container polish**: `Dockerfile` health check on `/healthz`; honour `PORT`; an App base image or `mistri build --dockerfile`; multi-arch publish; fix the "one worker replica" sentence | Each is small; together they are the difference between the docs and the first try | 2 |
 | G7 | **Done in 0.9.7** (`identity.store` and `identity.grants` as `postgres://` URLs, together or not at all; the grants, preferences and authority history are schemas of the grants database; a write fences its grant re-read at the last await before `COMMIT`, as PostgreSQL sessions already do). **Suite stores on PostgreSQL** (grants, preferences, authority were SQLite-only) | Only suites; a suite could not run stateless at all | 3 |
 | G8 | **Done in 0.9.6.** **`sslrootcert=system`**: accept it as "the system CAs" when parsing a connection URL | The first string a PlanetScale user pastes fails | 0.5 |
-| G9 | **Done in 0.9.7** (`examples/deploy/cloudflare/`, a template). **Cloudflare glue**: a Worker template, `wrangler.jsonc`, keep-awake cron | Only if Cloudflare is pursued | 1–2 |
+| G9 | **Done in 0.9.7, now `mistri deploy` and `@mistriwork/cloudflare` (rc.4).** **Cloudflare glue**: a Worker template, `wrangler.jsonc`, keep-awake cron | Only if Cloudflare is pursued | 1–2 |
 | G10 | **Done in 0.9.7** (`--pending-on <url>`, any engine). **`check --pending` against a named scratch database** (`--pending-on <url>`) instead of `CREATE DATABASE … TEMPLATE` | Hosted roles often lack `CREATEDB`; a branch is the better copy | 1 |
 
 Not gaps: health endpoints, sessions in PostgreSQL, the command stores on

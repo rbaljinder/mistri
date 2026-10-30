@@ -43,6 +43,7 @@ export const CARRIED = {
   kit: EVERY,
   mistri: { ...EVERY, skills: 'skills', examples: 'examples' },
   'create-mistri': EVERY,
+  cloudflare: EVERY,
   tablewalk: EVERY,
 };
 

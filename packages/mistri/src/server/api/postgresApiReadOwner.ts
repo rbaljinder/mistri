@@ -1,7 +1,7 @@
 /** Private PG read response composition. Holds native business snapshot and
  * native token handoff through a trusted synchronous send. No HTTP activation,
  * cookie fallback, caller principal or promise of remote delivery/atomicity. */
-import { SMALL_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
+import { RUNTIME_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { isAsyncFunction, isGeneratorFunction, isPromise, isProxy } from 'node:util/types';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Registry } from '@mistriwork/engine/server/connections.js';
@@ -29,7 +29,7 @@ import { ApiTokenStoreUnavailable } from '../auth/apiTokenStoreFailure.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
 import { narrowApiReadOpenApi } from './apiNarrowedReadOpenApi.js';
 import { previewApiMcpReadTools } from './apiMcpReadTools.js';
-import { PgConnectionManager } from '@mistriwork/engine/adapters/postgresPool.js';
+import { sharedPgConnections } from '@mistriwork/engine/adapters/postgresPool.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { storeTargetOf } from '../commands/appCommandEvents.js';
 import { eventFeedAudience, eventFeedSource, parseEventFeedQuery, readPostgresEventFeed } from './apiEventFeed.js';
@@ -211,11 +211,10 @@ export async function createPostgresApiReadOwner(
       cursorSecret = randomBytes(32),
       deploymentId = randomUUID();
     // The event feed reads the App's command-event store beside its data, on
-    // one reader of its own for the owner's lifetime (apiEventFeed.ts).
+    // the server stores' shared manager for the owner's lifetime (apiEventFeed.ts).
     const feedSource = eventFeedSource(initial.app, commands, discovery, connection);
     const store = app.api.events.length ? storeTargetOf(configs.get(feedSource.connection)?.url) : undefined;
-    const events =
-      store && 'postgres' in store ? new PgConnectionManager(store.postgres, undefined, undefined, SMALL_STORE_POOL) : undefined;
+    const events = store && 'postgres' in store ? sharedPgConnections(store.postgres, RUNTIME_STORE_POOL) : undefined;
     const run = (
       credential: unknown,
       operationId: string,

@@ -23,6 +23,7 @@ import { Registry } from '@mistriwork/engine/server/connections.js';
 import { loadApp, type LoadedApp } from '../app/apps.js';
 import { AUTHORITY_LOCK, checkAuthorityLock } from '../app/authorityLock.js';
 import { serverEntry } from '../serverEntry.js';
+import { buildInputId } from './fingerprint.js';
 import {
   BUILD_ENTRY_KINDS,
   BUILD_MANIFEST,
@@ -452,6 +453,7 @@ async function stagedBuild({
       checks: { typecheck: { status: typecheck.status, detail: typecheck.detail }, validation: 'passed', database },
       entries: built,
       outputs,
+      id: await buildInputId(request),
       sha256: {},
     };
     for (const file of await filesUnder(staging)) manifest.sha256[file] = sha256(await readFile(join(staging, file)));

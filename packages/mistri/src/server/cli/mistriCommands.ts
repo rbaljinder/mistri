@@ -71,6 +71,8 @@ export const MISTRI_COMMANDS: Subcommands = {
       return runBuild(argv, USAGE);
     },
   },
+  /* An App on Cloudflare Containers: plan, migrate, deploy and verify by fingerprint (deploy/). */
+  deploy: { run: async (argv) => (await import('../deploy/command.js')).runDeployCommand(argv) },
   /* The authoring loop: its flags are a start's, handed on to the validation it runs, but the command is its own. */
   check: { run: async (argv) => (await import('../build/check.js')).runCheck(argv) },
   /* The loop's eyes: the App served and photographed. */

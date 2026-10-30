@@ -18,6 +18,17 @@ const mime = {
   '.txt': 'text/plain',
   '.wasm': 'application/wasm',
 };
+/* Starlight's Search button can take a click before its element has wired the dialog, which a slow runner shows as a
+   dialog that never opens: click again until it does, then wait for Pagefind's input. */
+async function openSearch(page) {
+  const dialog = page.locator('dialog[open]');
+  for (let attempt = 0; attempt < 5 && !(await dialog.isVisible()); attempt++) {
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await dialog.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+  }
+  await page.locator('dialog input.pagefind-ui__search-input').waitFor({ state: 'visible' });
+}
+
 async function files(directory) {
   return (
     await Promise.all(
@@ -117,7 +128,7 @@ try {
       await menu.click();
       checks++;
     }
-    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await openSearch(page);
     const search = page.locator('dialog input.pagefind-ui__search-input');
     await search.fill('receipt');
     const result = page.locator('dialog a[href*="/docs/commands/"]').first();
@@ -133,7 +144,7 @@ try {
       ),
       'Agent guide must retain the copyable implementation/verification brief',
     );
-    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await openSearch(page);
     await page.locator('dialog input.pagefind-ui__search-input').fill('agent brief');
     const agentGuide = page.locator('dialog a[href*="/docs/build-with-an-agent/"]').first();
     await agentGuide.waitFor({ state: 'visible' });

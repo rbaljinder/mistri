@@ -14,7 +14,7 @@ npm install
 npx @mistriwork/mistri dev
 ```
 
-**You need** Node 24 or newer. The starter brings its own SQLite database, so
+**You need** Node 24.22.1 or newer. The starter brings its own SQLite database, so
 nothing else has to be running. Two other ways in, further down: [from a
 schema of your own](#from-a-schema-of-your-own) on PostgreSQL, and [from a
 database you have](/docs/quickstart-app/).

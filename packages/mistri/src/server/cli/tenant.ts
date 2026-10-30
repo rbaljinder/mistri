@@ -5,6 +5,7 @@
  * acquired. The deployment's files are watched from before validation, so a
  * change during startup is a restart rather than a half-read deployment.
  */
+import { setBuildIdSource } from '@mistriwork/engine/server/http/probes.js';
 import { readFile } from 'node:fs/promises';
 import { createAppAuth } from '../auth/auth.js';
 import { loadConfig, type Registry } from '@mistriwork/engine/server/connections.js';
@@ -74,6 +75,8 @@ export async function startTenantServing(
     const { prepareTenantStartup, watchTenantStartup } = await import('../tenant/tenantStartup.js');
     const { lookOnlyChange } = await import('../tenant/tenantLook.js');
     const loaded = loadedApps[0];
+    /* The build being served is what /readyz fingerprints (engine http/probes.ts), as in cli/serve.ts. */
+    setBuildIdSource(() => loaded.build?.id ?? null);
     /* One App, so at the root unless --mount says otherwise, and under
        --base-path as every server is (shared/mount.ts): the rule the
        ordinary App server reads its addresses by. */

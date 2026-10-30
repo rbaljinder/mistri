@@ -45,7 +45,8 @@ import { connectionFailure } from '../storeConnection.js';
 import { workflowJobId } from '../workflows/workflowKeys.js';
 import { createWorkflowOperator, type WorkflowOperator } from '../workflows/workflowOperator.js';
 import { deliveryQueueOperator, jobQueueOperator, type DeliveryQueueOperator, type JobQueueOperator } from '../operations/queueOperator.js';
-import { PgConnectionManager } from '@mistriwork/engine/adapters/postgresPool.js';
+import { RUNTIME_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
+import { sharedPgConnections } from '@mistriwork/engine/adapters/postgresPool.js';
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
 import type { AppDef } from '../../shared/app.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
@@ -308,7 +309,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
   const clock = options.now ? ('caller' as const) : ('database' as const);
   // A tenant App's host is the one that knows its tenants: its workflows keep each tenant's instances apart.
   const tenancy = options.tenants !== undefined;
-  const pg = 'postgres' in target ? new PgConnectionManager(target.postgres) : undefined;
+  const pg = 'postgres' in target ? sharedPgConnections(target.postgres, RUNTIME_STORE_POOL) : undefined;
   const deliveries: Array<{ job: string; store: EventDeliveryStore; producer: EventProducer; kind: 'job' | 'workflow'; name: string }> = [];
   let opened: JobStore | undefined;
   let workflows: WorkflowStore | undefined;

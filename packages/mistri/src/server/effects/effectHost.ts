@@ -20,7 +20,8 @@ import type { EventDeliveryStore } from '../../adapters/events/eventDeliveryCont
 import { openSqliteEventDeliveryStore } from '../../adapters/events/eventDeliveryStore.js';
 import { captureEventDeliveryPolicy, type EventDeliveryPolicy } from '../../adapters/events/eventDeliveryTypes.js';
 import { openPostgresEventDeliveryStore } from '../../adapters/events/postgresEventDeliveryStore.js';
-import { PgConnectionManager } from '@mistriwork/engine/adapters/postgresPool.js';
+import { RUNTIME_STORE_POOL } from '@mistriwork/engine/adapters/connectionBudget.js';
+import { sharedPgConnections } from '@mistriwork/engine/adapters/postgresPool.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { appCommandEventStore, type StoreTarget } from '../commands/appCommandEvents.js';
 import { CHANNEL_DESTINATION_PREFIX, webhookTransport, type Webhook } from '../commands/commandEffects.js';
@@ -156,7 +157,7 @@ export async function openEffectHost(
   const now = options.now ?? Date.now,
     idleMs = options.idleMs ?? 1_000;
   const clock = options.now ? ('caller' as const) : ('database' as const);
-  const pg = 'postgres' in target ? new PgConnectionManager(target.postgres) : undefined;
+  const pg = 'postgres' in target ? sharedPgConnections(target.postgres, RUNTIME_STORE_POOL) : undefined;
   const deliveries: Array<{ webhook: string; store: EventDeliveryStore; producer: EventProducer }> = [];
   const events = deployment.events;
   try {

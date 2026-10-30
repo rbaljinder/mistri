@@ -247,7 +247,8 @@ test("a suite answers the orchestrator's probes itself, though no App is at its 
   for (const path of ['/desk/readyz', '/desk/healthz']) {
     const answer = await fetch(`http://127.0.0.1:${port}${path}`);
     assert.equal(answer.status, 200, path);
-    assert.deepEqual(await answer.json(), { status: 'ok' });
+    // The probe also names the deploy and the build it serves (http/probes.ts); a suite host has neither of its own, so null.
+    assert.deepEqual(await answer.json(), { status: 'ok', deploy: process.env.MISTRI_DEPLOY_ID || null, build: null });
   }
   assert.equal((await fetch(`http://127.0.0.1:${port}/readyz`)).status, 404, 'outside the base path, as every route is');
   assert.equal(await (await fetch(`http://127.0.0.1:${port}/desk/lender/`)).text(), 'lender');

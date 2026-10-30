@@ -57,6 +57,7 @@ import { setBaselineHeaders } from '@mistriwork/engine/server/http/baselineHeade
 import { dispatchResourceReadHttp } from '@mistriwork/engine/server/resourceReadHttp.js';
 import { APP_READS } from '../app/appReads.js';
 import { createTenantContexts, TenantContextsBusy, tenantLeaseFailureCode } from './tenantContexts.js';
+import { arrivalGate, arrivalWidth } from './tenantArrivals.js';
 import {
   captureTenantData,
   denyTenant,
@@ -72,7 +73,7 @@ import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { databaseUnanswered, unansweredWrite } from './tenantWriteFault.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
-import type { TenantReadContext } from './tenantReadRuntime.js';
+import { withBoundedReads, type TenantReadContext } from './tenantReadRuntime.js';
 import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
 import type { SupportReadContext } from './tenantSupportReadRuntime.js';
 import { tenantRetirement } from './tenantRetirement.js';
@@ -208,6 +209,17 @@ type ReadContext = Pick<TenantReadContext, 'schema' | 'data'> & {
 };
 /** `work` with its reads on one snapshot of `context`, where the context can share one; else as it is. */
 const together = <T>(context: ReadContext, work: () => Promise<T>): Promise<T> => (context.together ? context.together(work) : work());
+/* The resource reads whose every statement is the context's own and bounded: no file's bytes from object storage
+   (FILE_READ_PATH), and each answered from the database alone (withBoundedReads). */
+const BOUNDED_READS: ReadonlySet<string> = new Set([
+  '/api/query',
+  '/api/count',
+  '/api/counts',
+  '/api/run',
+  '/api/view/run',
+  '/api/breakdown',
+  '/api/breakdowns',
+]);
 
 /* The App and pages in another language or a tenant's own words, captured once per localization. localizedApp keeps
    each (locale, words) localization as the same two objects, built from the App's definition and nobody's request,
@@ -596,6 +608,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
   });
   /* Live streams this server holds open: ended when it retires, so its close does not wait ten minutes for them. */
   const liveStreams = new Set<ServerResponse>();
+  /* People arriving, a few at a time (tenantArrivals.ts): a burst of them queued here, cheaply, instead of for the
+     readers the people already in are using, where they waited past the pool's limit and were answered busy. */
+  const arrivals = arrivalGate(arrivalWidth());
   const server = createServer((req, res) => {
     setBaselineHeaders(req, res, (raw.bound as Bound | undefined)?.trustedProxies);
     let finish!: () => void;
@@ -606,6 +621,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     accepted.add(req);
     let path = '',
       completedWrite = false;
+    /* An arrival's turn (below), given back when the request is done, however it ends. */
+    let arrival: (() => void) | undefined;
     const controller = new AbortController(),
       abort = () => controller.abort();
     req.once('aborted', abort);
@@ -786,6 +803,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       if (!get && !flagExposures) tenantRecord(input, fields[path]);
       assertActive();
       if (req.aborted || res.destroyed) return denyTenant();
+      if (path === TENANT_ENTER_PATH || path === '/api/tenant/bootstrap') {
+        arrival = await arrivals.admit(controller.signal);
+        assertActive();
+        if (req.aborted || res.destroyed) return denyTenant();
+      }
       if (path === '/api/tenant/bootstrap') {
         const found = await discoverFor(req);
         if (req.aborted || res.destroyed) return denyTenant();
@@ -1048,8 +1070,14 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
            auth.tenancy.platform.me names them; a people table of
            the other realm, or a shared one, holds nobody's row here, and a
            support operator is never one of a dealer's people. */
+        /* A bounded request's session, asked before its context opens (withBoundedReads) and read here inside it:
+           asked between its reads, a session store slow to answer held the request's snapshot open, and a
+           connection of the pool with it. The context asks the session again after its snapshot ends, and that
+           check decides; this one only says who the reader is. */
+        let sessionAsked: { readonly value: VerifiedSessionInstance | null } | undefined;
+        const sessionOf = async () => (sessionAsked ? sessionAsked.value : verified(req));
         const tenantPerson = async (context: ReadContext, schema: ReturnType<typeof tenantServedSchema>) => {
-          const session = await verified(req);
+          const session = await sessionOf();
           const staff = platform ? app.auth?.tenancy?.platform?.me : undefined;
           const people = staff ? { ...app, auth: { ...app.auth!, me: staff } } : app;
           const owned = people.auth?.me ? ownership.ownership[people.auth.me.from]?.kind : undefined;
@@ -1280,7 +1308,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               if (onSupport) return denyTenant();
               const tenantId = platform ? undefined : (context.principal as { tenantId?: unknown }).tenantId;
               if (!platform && typeof tenantId !== 'string') return denyTenant();
-              const session = await verified(req);
+              const session = await sessionOf();
               const options = {
                 app,
                 reader: readAdapter(context),
@@ -1624,9 +1652,16 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           return result;
         };
         if (path === '/api/pages/compose' && !composeInputValid(input)) return invalid();
+        /* A member's list, count, breakdown or inbox reads its context alone, each read bounded: on one snapshot, its
+           release fence riding that snapshot's end (withBoundedReads). Not where a search engine filters the rows —
+           the snapshot would be held across its answer — nor on another realm's lease. */
+        const bounded = !platform && !onSupport && (path === '/api/inbox' || (!search && BOUNDED_READS.has(path)));
         /* A computed column that says `me` is this reader's: their session is
-           asked only where one does, since asking it costs a store read. */
-        const readerEmail = computedSaysMe ? ((await verified(req))?.identity.who ?? null) : null;
+           asked only where one does, since asking it costs a store read; and for a bounded request, before its
+           snapshot opens (sessionOf). */
+        const session = bounded || computedSaysMe ? await verified(req) : null;
+        if (bounded) sessionAsked = { value: session };
+        const readerEmail = computedSaysMe ? (session?.identity.who ?? null) : null;
         /* A composed record page without its `checks`, and with which of its verbs the record offers: advice,
            asked as its own request asks it (the command's footprint, in one read snapshot), once the page's
            reads are in. A refusal leaves them to the page. */
@@ -1790,9 +1825,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             return send(req, res, 200, { ...entering.found, entered: { context: booted.context, boot } }, ownerHeaders(booted.context));
           return send(req, res, 200, boot, ownerHeaders(booted.context));
         }
-        const result = await within(async (context) =>
-          route(context, tenantServedSchema(context, app, new Date(now()), readerEmail), path, input),
-        );
+        const answer = () =>
+          within(async (context) => route(context, tenantServedSchema(context, app, new Date(now()), readerEmail), path, input));
+        const result = await (bounded ? withBoundedReads(answer) : answer());
         let value = result.value.body;
         if (path === '/api/pages/compose') value = await withVerbs(value);
         const failure =
@@ -2119,6 +2154,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         if (!res.destroyed) res.destroy();
       })
       .finally(() => {
+        arrival?.();
         req.off('aborted', abort);
         res.off('close', abort);
         if (!liveStreams.has(res)) expectedAccounts.delete(req);

@@ -46,7 +46,7 @@ import * as ts from 'typescript/unstable/ast';
 import { API } from 'typescript/unstable/sync';
 import { readEntries, splitName, workspaceProblems, ENTRIES } from './boundary/entries.mjs';
 
-export const LAYERS = ['engine', 'ui', 'kit', 'browser', 'mistri'];
+export const LAYERS = ['engine', 'ui', 'kit', 'browser', 'mistri', 'cloudflare'];
 /** What each layer may import. */
 const MAY = {
   engine: ['engine'],
@@ -54,6 +54,8 @@ const MAY = {
   kit: ['kit', 'ui', 'engine'],
   browser: ['browser', 'kit', 'ui', 'engine'],
   mistri: ['mistri', 'kit', 'ui', 'engine'],
+  /* The Workers-side glue `mistri deploy` writes a Worker against: it imports nothing of the repository. */
+  cloudflare: ['cloudflare'],
 };
 export const BINS = 'scripts/boundary/bins.json';
 export const ALLOW = 'scripts/boundary/allow.json';

@@ -208,10 +208,13 @@ export default defineConfig({
           label: 'Ship',
           items: [
             { label: 'Build and deploy', slug: 'docs/build-and-deploy' },
+            { label: 'Move from tablewalk 0.9', slug: 'docs/upgrade-from-0-9' },
             { label: 'Connections and services', slug: 'docs/services' },
             { label: 'Several Apps in one server', slug: 'docs/suites' },
             { label: 'Observe and operate', slug: 'docs/observe' },
+            { label: 'Incident runbook', slug: 'docs/incident-runbook' },
             { label: 'Performance and pools', slug: 'docs/performance' },
+            { label: 'Performance by default', slug: 'docs/performance-by-default' },
             { label: 'Behavior analytics', slug: 'docs/analytics' },
             { label: 'Experiment analytics', slug: 'docs/experiments' },
           ],

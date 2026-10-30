@@ -1,8 +1,8 @@
 {
   "name": "tablewalk-workspace",
-  "version": "1.0.0-rc.3",
+  "version": "1.0.0-rc.4",
   "private": true,
-  "description": "The workspace root: the packages under packages/ (tablewalk, mistri, create-mistri, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
+  "description": "The workspace root: the packages under packages/ (tablewalk, mistri, create-mistri, @mistriwork/cloudflare, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
   "author": "Baljinder Randhawa",
   "repository": {
@@ -15,6 +15,7 @@
     "packages/kit",
     "packages/mistri",
     "packages/create-mistri",
+    "packages/cloudflare",
     "packages/tablewalk"
   ],
   "type": "module",
@@ -39,6 +40,7 @@
     "demo": "tsx test/make-demo-db.ts .demo/demo.db --scale 3000 && tsx packages/tablewalk/src/server/index.ts --db .demo/demo.db --open",
     "e2e": "node scripts/test-e2e.mjs",
     "lint": "oxlint",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "seed:live": "tsx test/seed-live.ts",
     "smoke": "playwright test e2e/smoke-tablewalk.spec.ts e2e/smoke-mistri.spec.ts",
     "test:tokens": "node scripts/visual-matrix.mjs --tokens",

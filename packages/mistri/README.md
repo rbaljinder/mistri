@@ -14,7 +14,7 @@ npx @mistriwork/mistri dev ./my-app             # serve it with a dev secret and
 npx @mistriwork/mistri check --app ./my-app     # schema types, typecheck and validation
 ```
 
-It needs Node 24 or newer. Browsing a database with no App is the database
+It needs Node 24.22.1 or newer. Browsing a database with no App is the database
 browser's, a package of its own: `npx tablewalk <db>`. The DSL is imported as
 `@mistriwork/mistri/app`, `@mistriwork/mistri/commands` and the rest until the names move.
 
@@ -63,7 +63,7 @@ What 0.8.1 builds, each shown once on the site:
 | **Commands** | Declared inputs, a typed `db`, a checked record, `refuse` and output shapes, `lookup` and `effects`: [actions & commands](https://mistriwork.dev/docs/commands/) |
 | **Sources and services** | An API as a connection, a shared cache and webhooks; tenant Apps with invitations, events and public intake: [services](https://mistriwork.dev/docs/services/) |
 | **Jobs and workflows** | Jobs on events and at times, signed callbacks and durable workflows; flows whose steps are rows that people edit while the App runs: [events & jobs](https://mistriwork.dev/docs/events-and-jobs/) |
-| **Shipping** | `mistri build`, an App's first page in 314 KB of script with brotli, PostgreSQL pools sized per connection: [build and deploy](https://mistriwork.dev/docs/build-and-deploy/), [performance](https://mistriwork.dev/docs/performance/) |
+| **Shipping** | `mistri build`, `mistri deploy` to Cloudflare Containers, an App's first page in 314 KB of script with brotli, PostgreSQL pools sized per connection: [build and deploy](https://mistriwork.dev/docs/build-and-deploy/), [performance](https://mistriwork.dev/docs/performance/) |
 
 Building with a coding agent? Use the [agent build guide](https://mistriwork.dev/docs/build-with-an-agent/)
 for a copyable prompt that works from the npm package, the loop and a concrete verification checklist,
@@ -167,6 +167,8 @@ providers; it is an optional dependency, installed only by apps that ask.
 mistri --app <dir>            serve an App: its pages, commands and jobs (below)
 mistri check --app <dir>      types, typecheck and validation of an App (below)
 mistri build --app <dir>      make an App ready for production (below)
+mistri deploy [init cloudflare|status|verify|rollback|logs]
+                              check, migrate, deploy and verify an App on Cloudflare Containers (below)
 mistri new [<name>] [<dir>]   a starter App with its own SQLite database: a task
                               list in one app.ts, a schema and rows, for mistri dev
 mistri new --brief <BRIEF.md> [<dir>]
@@ -269,6 +271,12 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
                               refresh on focus and after their own saves.
                               Nothing is written to the change store and
                               /api/live answers 204
+      --db-latency <ms>       development only: every database round trip
+                              waits this long before it is sent (a pipelined
+                              batch pays once), to feel a remote database on
+                              this machine; 20 is a typical cloud distance. Or
+                              set MISTRI_DEV_DB_LATENCY. Refused under
+                              NODE_ENV=production and when serving a build
       --app <dir>             serve an app: a directory whose app.ts (or
                               app.mjs / app.json) declares its resources,
                               views, navigation and pages. Repeatable; with
@@ -411,8 +419,9 @@ mistri check --app <dir> [--app-entry <file>]
                 [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>]
                 [--routes [--mount <app>=<path>] [--base-path <path>]]
                 [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
+                [--no-index-check]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
-                [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>]] [--json | --brief]
+                [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
                               the authoring loop in one command: regenerate the
                               App's mistri-schema.d.ts when the database
                               has changed, its mistri-commands.d.ts from
@@ -420,7 +429,7 @@ mistri check --app <dir> [--app-entry <file>]
                               (a props type for each custom component, from its
                               declaration), typecheck it (file:line, the
                               mismatch, a hint) and validate it. Every
-                              step runs; the errors print first, and warnings are advisory (unless --fail-on-design-warning is set) and print as one line a kind unless --warnings lists them in full. --routes also
+                              step runs; the errors print first, and warnings are advisory (unless --fail-on-design-warning is set) and print as one line a kind unless --warnings lists them in full. On PostgreSQL an indexes step names each read the App declares that no index leads (index-missing), with the CREATE INDEX that adds it; --no-index-check skips it. --routes also
                               prints every address the App answers to, as the
                               --mount and --base-path given would serve it, and
                               fails on a route another App's place would hide;
@@ -446,7 +455,10 @@ mistri check --app <dir> [--app-entry <file>]
                               refuses pools that sum past it, counting the
                               hosts the App serves with; --cpus <n> sizes
                               the pool defaults for the deployment's cores,
-                              not this machine's); --json prints one JSON document of
+                              not this machine's); it also warns of
+                              migrations that break the running code
+                              (--strict-migrations fails on them);
+                              --json prints one JSON document of
                               every finding (code, file, line, path, fix) for
                               an agent, or --brief one line per problem
                               (code file:line message — fix: …). Exit 1 could not check, 2 schema
@@ -751,6 +763,31 @@ mistri build --app <dir> [--app-entry <file>] [--out <dir>]
                               that builds this App in a build stage and serves
                               it (tini, uid 1000, PORT, a /healthz health
                               check); run docker build from the project root
+
+mistri deploy init cloudflare --app <dir> [--config <path>] [--commands <file>] [--jobs <file>]
+                [--policy <file>] [--app-entry <file>] [--out <dir>] [--dir <dir>] [--force]
+mistri deploy [--dry-run] [--yes] [--allow-contract] [--allow-dirty]
+                [--migrate-url <url>] [--migrations <dir>] [--connection-limit <n>] [--verbose]
+                [--backup-check <cmd>] [--smoke <cmd>] [--roll-timeout <minutes>] [--dir <dir>]
+mistri deploy verify [--roll] [--roll-timeout <minutes>] [--smoke <cmd>] [--dir <dir>]
+mistri deploy status | rollback [<deploy-id>] [--dry-run] | logs [--dir <dir>]
+                              init writes deploy/cloudflare/ (a Worker against
+                              @mistriwork/cloudflare, wrangler.jsonc, the build
+                              request) and creates nothing on Cloudflare. deploy
+                              prints a plan and refuses on a failing check --deploy,
+                              a missing secret, a contract migration (unless
+                              --allow-contract) or a dirty tree (unless
+                              --allow-dirty); after confirmation it builds, runs
+                              --backup-check, migrates over --migrate-url or
+                              MISTRI_MIGRATE_URL (the App's stores use the store
+                              URLs its config names, from this machine's
+                              environment, not --migrate-url), runs wrangler deploy with a new
+                              MISTRI_DEPLOY_ID and restarts the container until
+                              /readyz reports that deploy and this build, for
+                              --roll-timeout minutes (default 20). Each deploy is
+                              a row in __mistri_deploys; rollback refuses past a
+                              contract migration. Exit 1 could not, declined or
+                              failed, 7 refused
 
 mistri docs [topic]           the reference the package ships: with no topic,
                               the topics (start, access-model, secrets,

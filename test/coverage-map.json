@@ -910,6 +910,16 @@
       "tests": [{ "file": "test/config-relative-sqlite.test.ts" }, { "file": "e2e/shot-text.spec.ts" }]
     },
     { "id": "cli-flag-connection", "surface": ["cli: flag --connection"], "tests": [{ "file": "test/migrate-flags.test.ts" }] },
+    { "id": "cli-command-deploy", "surface": ["cli: command deploy"], "tests": [{ "file": "test/deploy-flow.test.ts" }] },
+    { "id": "cli-flag-allow-contract", "surface": ["cli: flag --allow-contract"], "tests": [{ "file": "test/deploy-flow.test.ts" }] },
+    { "id": "cli-flag-allow-dirty", "surface": ["cli: flag --allow-dirty"], "tests": [{ "file": "test/deploy-flow.test.ts" }] },
+    { "id": "cli-flag-backup-check", "surface": ["cli: flag --backup-check"], "tests": [{ "file": "test/deploy-flow.test.ts" }] },
+    { "id": "cli-flag-migrate-url", "surface": ["cli: flag --migrate-url"], "tests": [{ "file": "test/deploy-flow.test.ts" }] },
+    { "id": "cli-flag-roll-timeout", "surface": ["cli: flag --roll-timeout"], "tests": [{ "file": "test/deploy-flow.test.ts" }] },
+    { "id": "cli-flag-roll", "surface": ["cli: flag --roll"], "tests": [{ "file": "test/deploy-flow.test.ts" }] },
+    { "id": "cli-flag-verbose", "surface": ["cli: flag --verbose"], "tests": [{ "file": "test/deploy-flow.test.ts" }] },
+    { "id": "cli-flag-smoke", "surface": ["cli: flag --smoke"], "tests": [{ "file": "test/deploy-flow.test.ts" }] },
+    { "id": "cli-flag-strict-migrations", "surface": ["cli: flag --strict-migrations"], "tests": [{ "file": "test/migration-safety.test.ts" }] },
     { "id": "cli-flag-connection-limit", "surface": ["cli: flag --connection-limit"], "tests": [{ "file": "test/check-deploy.test.ts" }] },
     { "id": "cli-flag-cpus", "surface": ["cli: flag --cpus"], "tests": [{ "file": "test/connection-budget.test.ts" }, { "file": "test/check-deploy.test.ts" }] },
     { "id": "cli-flag-dark", "surface": ["cli: flag --dark"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
@@ -948,6 +958,7 @@
       "surface": ["cli: flag --dir"],
       "tests": [{ "file": "test/first-run.test.ts" }, { "file": "test/agent-skill.test.ts" }]
     },
+    { "id": "cli-flag-db-latency", "surface": ["cli: flag --db-latency"], "tests": [{ "file": "test/db-latency.test.ts" }] },
     {
       "id": "cli-flag-dry-run",
       "surface": ["cli: flag --dry-run"],
@@ -1040,6 +1051,7 @@
       "surface": ["cli: flag --no-config"],
       "tests": [{ "file": "test/server-shutdown-cli.test.ts" }, { "file": "test/http-openapi-boot.test.ts" }]
     },
+    { "id": "cli-flag-no-index-check", "surface": ["cli: flag --no-index-check"], "tests": [{ "file": "test/check-indexes.test.ts" }] },
     { "id": "cli-flag-no-live", "surface": ["cli: flag --no-live"], "tests": [{ "file": "test/live-sync-route.test.ts" }] },
     { "id": "cli-flag-open", "surface": ["cli: flag --open"], "tests": [{ "file": "test/cli-open-defaults.test.ts" }] },
     {

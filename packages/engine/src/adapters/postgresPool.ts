@@ -51,6 +51,7 @@ import type { NetworkPolicy } from './net/networkPolicy.js';
 import { transactionScoped } from './postgresPooler.js';
 import { balancedPoolSize, inBackgroundWork, isWriterCount, lockTimeoutMs, MAX_WRITERS, writeOrder, writerPoolSize } from './writeLanes.js';
 import { startSpan } from './telemetry/trace.js';
+import { delayFlights } from './dbLatency.js';
 import type * as ServerTiming from './telemetry/serverTiming.js';
 import { configureServerSettings, serverSettings } from './serverSettings.js';
 import { MAX_REPLICAS, noteWrite, primaryReads, ReplicaSet } from './replicas.js';
@@ -104,6 +105,10 @@ type PgPoolLoader = () => Promise<unknown>;
 const pipelining = new WeakSet<PgQuery>();
 /** This lease's client pipelines: several queries asked at once leave together. */
 export const pipelines = (client: PgQuery): boolean => pipelining.has(client);
+/** `wrapper` sends through `client` and nothing else: it pipelines where `client` does. */
+export const pipelinesAs = (wrapper: PgQuery, client: PgQuery): void => {
+  if (pipelining.has(client)) pipelining.add(wrapper);
+};
 
 /** The one-off client a cancel is sent from. */
 interface PgCancelClient {
@@ -181,6 +186,8 @@ export interface PgConnectionOptions {
   readonly timingLabel?: string;
   /** False for a replica's manager, whose readers its primary's manager has already counted (connectionBudget.ts). */
   readonly counted?: boolean;
+  /** Only readers are ever opened here (a tenant App's replica): the budget counts them and no writer. */
+  readonly readersOnly?: boolean;
 }
 
 /* Server timing (telemetry/serverTiming.ts) is loaded with the first pool, not with this module: a print-and-exit
@@ -243,6 +250,8 @@ export class PgConnectionManager {
   /** The pools once they exist, for the meters' physical counts. */
   private readonly opened: Partial<Record<OwnRole, PgPool>> = {};
   private closed = false;
+  /* Server timing's gauges on this manager's pools, taken out at its close: each holds its pool alive. */
+  private readonly gauges: Array<() => void> = [];
   private closing?: Promise<void>;
   /** What sits between this process and the server, for every lease of this manager. */
   readonly pooler: PoolerMode;
@@ -300,7 +309,11 @@ export class PgConnectionManager {
       options.counted === false
         ? []
         : [
-            holdConnections(connectionString, managerConnections(readers, writers), () => this.read() as never),
+            holdConnections(
+              connectionString,
+              options.readersOnly ? readers : managerConnections(readers, writers),
+              () => this.read() as never,
+            ),
             ...replicas.map((url) => holdConnections(url, readers)),
           ];
     this.releaseBudget = () => releases.forEach((release) => release());
@@ -423,6 +436,7 @@ export class PgConnectionManager {
   close(): Promise<void> {
     this.closed = true;
     this.releaseBudget();
+    for (const off of this.gauges.splice(0)) off();
     for (const timer of Object.values(this.limitHolds)) clearTimeout(timer);
     this.closing ??= Promise.all([this.endPools(), ...(this.replicas?.pools ?? []).map((replica) => replica.close())]).then(() => {});
     return this.closing;
@@ -521,10 +535,11 @@ export class PgConnectionManager {
       idleCount?: number;
       waitingCount?: number;
     };
-    if (timing.serverTimingOn()) {
-      timing.registerGauge(`pool-${role}-use`, () => (counts.totalCount ?? 0) - (counts.idleCount ?? 0));
-      timing.registerGauge(`pool-${role}-wait`, () => counts.waitingCount ?? 0);
-    }
+    if (timing.serverTimingOn() && !this.closed)
+      this.gauges.push(
+        timing.registerGauge(`pool-${role}-use`, () => (counts.totalCount ?? 0) - (counts.idleCount ?? 0)),
+        timing.registerGauge(`pool-${role}-wait`, () => counts.waitingCount ?? 0),
+      );
     /* With server timing on, the round trip from here to this database, once, on a connection of its own: a
        driver without a Client (a test's) is not measured. */
     if (!write)
@@ -565,10 +580,13 @@ export class PgConnectionManager {
           })
         : undefined;
     const meter = this.meters[role];
-    /* The background writer is one connection that jobs wait for by design;
-       a person's read or write is answered, not held. */
+    /* The background writer is one connection that background work waits for by design, for as long as the driver's
+       connect timeout rather than the queue-wait budget a person's read or write has. Its line is bounded all the
+       same: past the queue's length, or past that timeout, the work is answered busy before anything was leased, so
+       a job's command, a delivery or a workflow step is asked again (temporarily_unavailable, a retry) instead of
+       a burst of them failing together as an unavailable store. */
     const bounded = role !== 'background';
-    if (bounded && meter.waiting() >= meter.size * this.queuePerConnection) {
+    if (meter.waiting() >= meter.size * this.queuePerConnection) {
       meter.refuse();
       throw new PoolBusy(write ? 'write' : 'read', 'queue_full');
     }
@@ -586,13 +604,16 @@ export class PgConnectionManager {
         waiting?.end();
         throw error;
       }
-      checkout.failed(ACQUISITION_TIMEOUT.test(error instanceof Error ? error.message : ''));
+      const timedOut = ACQUISITION_TIMEOUT.test(error instanceof Error ? error.message : '');
+      checkout.failed(timedOut);
       waiting?.fail('pool_timeout');
       waiting?.end();
+      if (!bounded && timedOut) throw new PoolBusy('write', 'queue_timeout', error);
       throw error;
     }
     waiting?.end();
     timing?.timeClient(client, this.timingLabel);
+    delayFlights(client);
     const giveBack = checkout.acquired();
     const scoped =
       this.pooler === 'transaction'
@@ -856,6 +877,94 @@ export class PgConnectionManager {
     const failed = ended.find((result) => result.status === 'rejected');
     if (failed?.status === 'rejected') throw failed.reason;
   }
+}
+
+/** The pool shape a holder of a shared manager names: the sizes, and whether its readers pipeline. */
+export type SharedPoolShape = Pick<PgConnectionOptions, 'readers' | 'writers' | 'pipelineReads' | 'readersOnly'>;
+
+/** The reader and writer counts a manager takes for `shape`: its own, else the process's (`--read-pool`, `--write-pool`) or the defaults. */
+export function poolSizes(shape: Pick<SharedPoolShape, 'readers' | 'writers'> = {}): { readers: number; writers: number } {
+  const writers = writeOrder() === 'serial' ? 1 : (shape.writers ?? writerPoolSize());
+  return { writers, readers: shape.readers ?? serverSettings().readers ?? defaultReaders(writers) };
+}
+
+/* The managers holders share, by database URL and the settings that make two managers alike (sharedPgConnections). */
+const sharedManagers = new Map<string, { manager: PgConnectionManager; holders: number }>();
+/* A load hook told apart by identity in the key: two holders share only where they load pg alike. */
+const loadHooks = new WeakMap<object, number>();
+let hooks = 0;
+const hookId = (hook: object): number => {
+  let id = loadHooks.get(hook);
+  if (id === undefined) loadHooks.set(hook, (id = ++hooks));
+  return id;
+};
+
+/**
+ * The manager every holder of `url` with this `shape` shares, instead of one
+ * each. Every pool sized for its process and blind to its neighbors was how a
+ * tenant App came to hold `3R + 6W + 5` connections on one database — its
+ * reader, discovery, writer, administration and support each with a manager of
+ * their own (docs/postgresql.md) — while each sat mostly idle: a field
+ * deployment whose role allowed eighteen ran fixed four-and-four pools and
+ * still could not fit. Shared, the readers and writers are one pool for all of
+ * them, sized once, and counted once (connectionBudget.ts).
+ *
+ * What sharing leaves alone: each holder keeps its own write lanes
+ * (writeLanes.ts), so per-record order is what it was; and a manager is shared
+ * only with holders that would have built the same one — the URL, the sizes
+ * after the process defaults, the pooler, the lock wait and the load hook all
+ * in the key — so a handler mounted with settings of its own never borrows
+ * another's pools.
+ *
+ * Each call is one holder. The handle is the manager behind a proxy whose
+ * `close` lets that holder go — once, however often it is called — and the
+ * pools close with the last holder; everything else is the manager's own, so
+ * the handle passes wherever a manager does (`instanceof` too).
+ */
+export function sharedPgConnections(url: string, shape: SharedPoolShape = {}, onLoad?: (pg: unknown) => void): PgConnectionManager {
+  const { readers, writers } = poolSizes(shape);
+  const pipelineReads = shape.pipelineReads === true;
+  const readersOnly = shape.readersOnly === true;
+  const key = JSON.stringify([
+    url,
+    readers,
+    writers,
+    pipelineReads,
+    readersOnly,
+    serverSettings().pooler,
+    lockTimeoutMs(),
+    onLoad ? hookId(onLoad) : 0,
+  ]);
+  let entry = sharedManagers.get(key);
+  if (!entry) {
+    const manager = new PgConnectionManager(url, onLoad, undefined, { readers, writers, pipelineReads, readersOnly });
+    entry = { manager, holders: 0 };
+    sharedManagers.set(key, entry);
+  }
+  const held = entry;
+  held.holders += 1;
+  let released = false;
+  const close = (): Promise<void> => {
+    if (released) return Promise.resolve();
+    released = true;
+    held.holders -= 1;
+    if (held.holders > 0) return Promise.resolve();
+    if (sharedManagers.get(key) === held) sharedManagers.delete(key);
+    return held.manager.close();
+  };
+  /* Methods are bound once per handle: a store asks for withWriteClient on every statement. Kept by the function
+     found, not its name, so a method replaced on the class (a test's mock) is the one called. */
+  const bound = new WeakMap<object, unknown>();
+  return new Proxy(held.manager, {
+    get(target, property) {
+      if (property === 'close') return close;
+      const value = Reflect.get(target, property, target) as unknown;
+      if (typeof value !== 'function') return value;
+      let method = bound.get(value);
+      if (method === undefined) bound.set(value, (method = (value as (...args: unknown[]) => unknown).bind(target)));
+      return method;
+    },
+  });
 }
 
 /** What a runtime store leases for each of its transactions: one writer

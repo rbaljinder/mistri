@@ -6,7 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { isPromise, isProxy } from 'node:util/types';
 import { isPoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { Serial, TransactionOutcomeUnknown, type TransactionOperations } from '@mistriwork/engine/adapters/adapter.js';
-import { PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
+import { tenantAdapter } from './tenantConnections.js';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
 import { captureAppAuthRuntime, type AppAuthRuntime, type AppAuthRuntimeBinding, type VerifiedSessionInstance } from '../auth/auth.js';
@@ -662,7 +662,7 @@ async function openPostgresAdministrationStore(
   auth: AppAuthRuntimeBinding,
 ): Promise<AdministrationStore> {
   auth.assertCurrent();
-  const writer = new PostgresAdapter(url, 'Private tenant administration');
+  const writer = tenantAdapter(url, 'Private tenant administration');
   try {
     let invitationStorage: boolean | undefined;
     const attestInvitations = async (client: PgQuery) => {
