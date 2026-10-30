@@ -578,7 +578,6 @@ test('init names the Worker after the App, reads every source of a secret, and s
   assert.ok(stored.optionalSecrets.includes('MISTRI_AUDIT_KEY') && !stored.secrets.includes('MISTRI_AUDIT_KEY'));
   const pinned = JSON.parse(readFileSync('deploy/cloudflare/package.json', 'utf8')).dependencies['@mistriwork/cloudflare'];
   assert.equal(pinned, JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).version);
-  assert.match(pinned, /rc\.4$/);
 });
 
 test('an optional secret that is not set is only noted, never a refusal', async () => {
@@ -597,6 +596,29 @@ test('the instance type is read from the container, either spelling, or from the
   assert.equal(readWorker('deploy/cloudflare').instanceType, undefined);
   writeFileSync('deploy/cloudflare/src/index.ts', "static override options = { instanceType: 'standard-2' };\n");
   assert.equal(readWorker('deploy/cloudflare').instanceType, 'standard-2');
+});
+
+test('the address a deploy sends its restart token to is https, or http on this machine only', async () => {
+  const { readWorker } = await import('../packages/mistri/src/server/deploy/config.js');
+  const text = readFileSync('deploy/cloudflare/wrangler.jsonc', 'utf8');
+  const at = (url: string) => {
+    writeFileSync('deploy/cloudflare/wrangler.jsonc', text.replace('"https://app.example.com"', JSON.stringify(url)));
+    return () => readWorker('deploy/cloudflare').url;
+  };
+  try {
+    for (const url of [
+      'http://app.example.com',
+      'http://203.0.113.9:8080',
+      'ftp://app.example.com',
+      'app.example.com',
+      'http://localhost.example.com',
+    ])
+      assert.throws(at(url), /must be https:\/\//, url);
+    for (const url of ['https://app.example.com', 'http://localhost:8787', 'http://127.0.0.1:8787', 'http://[::1]:8787'])
+      assert.equal(at(url)(), url, url);
+  } finally {
+    writeFileSync('deploy/cloudflare/wrangler.jsonc', text);
+  }
 });
 
 test('init prints a path under the working directory relative to it, and one outside it in full', () => {

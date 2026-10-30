@@ -1,6 +1,6 @@
 {
   "name": "tablewalk",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.5",
   "description": "Follow the data. A database browser built around the walk: a foreign key is a place you can go.",
   "keywords": [
     "browser",
@@ -42,9 +42,9 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.4",
-    "@mistriwork/kit": "1.0.0-rc.4",
-    "@mistriwork/ui": "1.0.0-rc.4"
+    "@mistriwork/engine": "1.0.0-rc.5",
+    "@mistriwork/kit": "1.0.0-rc.5",
+    "@mistriwork/ui": "1.0.0-rc.5"
   },
   "engines": {
     "node": ">=24.22.1"

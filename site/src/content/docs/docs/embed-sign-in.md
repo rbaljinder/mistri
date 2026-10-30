@@ -51,7 +51,7 @@ const { token } = await reply.json(); // only from another origin: send it as `A
 ## What you'll see
 
 - On the App's own origin (you proxy or mount it): the App's ordinary session cookie, the same grants as a password sign-in, and no sign-in screen.
-- From another origin in `origins`: no cookie, but a bearer good for an hour, only from that page and only on the App's browser routes. Never on sign-in, account or API-token routes (so it cannot be traded for a longer-lived credential), nor on a tenant's administration, invitations or an integration's settings; those stay on the App's own origin. The bearer opens a session of its own that lapses with it.
+- From another origin in `origins`: no cookie, but a bearer good for an hour, only from that page and only on the App's browser routes. Never on sign-in, account or API-token routes (so it cannot be traded for a longer-lived credential), nor on a tenant's administration, invitations, branding or an integration's settings, nor on a platform operator's support sessions inside a tenant; those stay on the App's own origin. The bearer opens a session of its own that lapses with it.
 
 ## When to use it, and when not
 

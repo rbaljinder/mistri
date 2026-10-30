@@ -62,8 +62,25 @@ export async function embedDoor(
   }
   req.headers.cookie = `${embed.sessionCookie}=${token}`;
   delete req.headers.authorization;
+  admitted.add(req);
   vouchForOrigin(req);
   return 'bearer';
+}
+
+/* Requests the door admitted on a host's bearer. The door takes their
+   Authorization header away (the session cookie now stands in for it), so a
+   dispatcher further in that refuses a bearer asks `carriesBearer`, never the
+   header, which by then says nothing. */
+const admitted = new WeakSet<IncomingMessage>();
+
+/**
+ * Whether a request came with a bearer of any kind: an App API or MCP token
+ * still in its Authorization header, or a host's embed bearer that the door
+ * (`embedDoor`) exchanged for its session. What only a person at this App's
+ * own page may do — open a support session, say — asks this.
+ */
+export function carriesBearer(req: IncomingMessage): boolean {
+  return req.headers.authorization !== undefined || admitted.has(req);
 }
 
 /**
@@ -89,11 +106,18 @@ export function corsHeaders(origin: string): Record<string, string> {
 /* Routes a bearer never opens: another token's (the App API, MCP), the native
    auth and account routes, a member's own API tokens, a tenant's
    administration and invitations, saving an integration's settings and
-   secrets, and everything that is the operator's rather than a reader's.
-   Matched on the routed path, a prefix and what is under it. A bearer lapses
-   in an hour by design; the token routes would trade it for a credential that
-   lasts up to a year, and the administration routes would let a script on the
-   host page grant itself a membership or invite someone who keeps one. */
+   secrets, a tenant's branding, a platform operator's support sessions inside
+   a tenant and their audit trail, the Suite console, and everything that is
+   the operator's rather than a reader's. Matched on the routed path, a prefix
+   and what is under it. A bearer lapses in an hour by design; the token routes
+   would trade it for a credential that lasts up to a year, and the
+   administration routes would let a script on the host page grant itself a
+   membership or invite someone who keeps one.
+   Support goes further than the rest: opening a session asks for a native
+   sign-in no older than five minutes, and an exchanged bearer is always
+   fresh, so a host whose assertions link verified addresses
+   ("link-verified-email") could otherwise open a support session into any
+   tenant for an operator whose address it named. */
 const NOT_FOR_BEARERS = [
   '/api/auth',
   '/api/v1',
@@ -102,7 +126,10 @@ const NOT_FOR_BEARERS = [
   '/api/tokens',
   '/api/tenant/administration',
   '/api/tenant/invitations',
+  '/api/tenant/support',
   '/api/integrations/save',
+  '/api/branding/save',
+  '/api/console',
   '/api/connections',
   '/api/sql',
   '/api/ddl',

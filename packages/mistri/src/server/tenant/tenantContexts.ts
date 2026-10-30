@@ -695,7 +695,8 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       if (error instanceof TenantSupportUnavailable) throw error;
       leaseProblem = tenantLeaseFailureCode(error) ?? leaseProblem;
       if (leaseProblem) throw new TenantLeaseError(leaseProblem);
-      return denyTenant();
+      // Classified as a tenant's read is (above): a database that could not answer is a 503, not a denial.
+      return denyTenantFor(error);
     });
   };
   /** A support session's one family: a read inside the dealer it entered, with
@@ -768,7 +769,8 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
     }).catch((error) => {
       leaseProblem = tenantLeaseFailureCode(error) ?? leaseProblem;
       if (leaseProblem) throw new TenantLeaseError(leaseProblem);
-      return denyTenant();
+      // Its runtime classifies (tenantSupportReadRuntime.ts); flattened here, a busy database still read as a denial.
+      return denyTenantFor(error);
     });
   };
   /** A command or a generic edit on this tab's platform lease: a read's

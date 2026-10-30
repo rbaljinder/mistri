@@ -219,12 +219,21 @@ test.each(['sorted another way', 'grant', 'connection', 'field', 'actions'])('%s
 });
 
 test('a queue takes Alt+↓ as a move, and a bare arrow still moves the focus', async () => {
+  // The write is held until the test lets it go: a slow runner can otherwise answer it, and the drawing is let go
+  // (32 ms after the answer), before the assertion on "before the write is answered" reads the rows.
+  let answer!: () => void;
+  const held = new Promise<void>((resolve) => (answer = resolve));
+  mocks.api.mockImplementation(async (_path: string, body: { values?: unknown }) => {
+    await held;
+    return { affected: 1, applied: body.values };
+  });
   wrap(<QueueList table={table} rows={rows} spec={{ kind: 'queue', primary: 'name' }} order={live} />);
   const option = (name: string) => screen.getByRole('row', { name: new RegExp(`^${name}`) });
   option('First').focus();
   await alt('ArrowDown');
-  // Drawn in its new place at once, before the write is answered, with the focus.
-  expect(screen.getAllByRole('row').map((row) => row.textContent)).toEqual(['Second⠿Open', 'First⠿Open', 'Third⠿Open']);
+  // Drawn in its new place at once, before the write is answered (the row says it is saving), with the focus.
+  expect(screen.getAllByRole('row').map((row) => row.textContent)).toEqual(['Second⠿Open', 'FirstSaving…⠿Open', 'Third⠿Open']);
+  answer();
   await waitFor(() => expect(updates()).toEqual([[1, 2560]]));
   // The row is what holds the focus in the selection grid, so it takes it back.
   await waitFor(() => expect(option('First')).toHaveFocus());

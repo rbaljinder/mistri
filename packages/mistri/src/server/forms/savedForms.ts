@@ -29,6 +29,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { InsertRequest, InsertResult, WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import type { Condition, Filter } from '@mistriwork/engine/shared/filter.js';
+import { arrivedOverHttps, type ProxyRange } from '@mistriwork/engine/server/http/trust.js';
 import type { AppFormSave } from '../../shared/appSavedForms.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { BusinessCommandExecutionError } from '../commands/commandErrors.js';
@@ -124,16 +125,13 @@ export function draftCookie(form: string, token: string | null, days: number, se
   return parts.join('; ');
 }
 
-/** Whether a browser keeps a Secure cookie from this request. */
-export function secureRequest(req: Pick<IncomingMessage, 'headers' | 'socket'>, trustedForwarded: boolean): boolean {
-  if ((req.socket as { encrypted?: boolean }).encrypted) return true;
-  if (
-    trustedForwarded &&
-    String(req.headers['x-forwarded-proto'] ?? '')
-      .split(',')[0]
-      .trim() === 'https'
-  )
-    return true;
+/**
+ * Whether a browser keeps a Secure cookie from this request: one that arrived
+ * over https (trust.ts `arrivedOverHttps`), or one to this machine, which a
+ * browser treats as secure over plain http.
+ */
+export function secureRequest(req: Pick<IncomingMessage, 'headers' | 'socket'>, trustedProxies: readonly ProxyRange[] = []): boolean {
+  if (arrivedOverHttps(req, trustedProxies)) return true;
   const host = String(req.headers.host ?? '')
     .replace(/:\d+$/, '')
     .replace(/^\[|\]$/g, '');

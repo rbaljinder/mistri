@@ -25,7 +25,6 @@ import { formCommands, isSavedForm } from '../../shared/appSavedForms.js';
 import { withTableChoices } from '../forms/formChoices.js';
 import { dispatchSavedFormHttp, savedFormAction, savedSteps, type SavedForm, type SavedFormAction } from '../forms/savedFormHttp.js';
 import { readDraftToken, secureRequest } from '../forms/savedForms.js';
-import { trustedProxyPeer } from '@mistriwork/engine/server/http/trust.js';
 import { requestRecordBranding, withRecordBranding } from './recordBranding.js';
 import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { challengePasses, type HumanCheck } from '../commands/challenges.js';
@@ -308,7 +307,7 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
       form: form as SavedForm,
       captureFlags: captureHttpCommandFlags,
       action: action!,
-      secure: secureRequest(req, trustedProxyPeer(req.socket.remoteAddress, bound.trustedProxies)),
+      secure: secureRequest(req, bound.trustedProxies),
       ...(commands.events ? { events: commands.events } : {}),
       // The verified session's account alone: a link names it, and an owner reads by it.
       ...(ctx.identity.id

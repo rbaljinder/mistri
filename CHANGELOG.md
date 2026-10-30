@@ -5,6 +5,85 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.5 (unreleased)
+
+- **A tenant App's start describes each PostgreSQL catalog once.** Startup's two checks, its trial enrollment and the
+  host's, each read source, the first scoped transaction and each platform source's snapshots each described the
+  catalog afresh: on Ignition, 16 descriptions of its two databases (96 catalog statements, one round trip each)
+  before the port opened. A description is now kept for the process under the exact version it was read at — the
+  catalog digest read in its own snapshot, or the schema epoch — and any adapter of the same database that reads the
+  same version gets a copy; a time-filed version is never shared. Measured on Ignition: 2 descriptions, 318 boot
+  statements where there were 388, and the start 2.1 s quicker (12.4 s to 10.3 s) with a 20 ms round trip.
+  `test/postgres-tenant-flights.test.ts` holds the start to one description per database and every warm request to
+  none. A command's execute already described nothing warm, and still does.
+- **A tenant App's start attests each runtime store's catalog once.** Every adapter and snapshot that opened at the
+  start — startup's checks, both enrollments, the read and write sources, the administration and support paths —
+  attested the tenant, administration, invitation and support stores for itself: on Ignition, 42 layout reads and 32
+  ownership checks. What an attestation proves of the catalog (the layout, and that the runtime schema, its tables and
+  grants are this role's alone) is now shared in the process under the exact catalog version the transaction read
+  before it — the digest or the schema epoch; a transaction without one reads the digest when it first has a store to
+  attest — so another adapter of the same database that reads the same version finds it attested, and any DDL, grant,
+  owner, role or object in the runtime schema moves the version and attests in full again. The store's meta row, which
+  binds it to this App, source and store, is data the version does not see, so each adapter still reads it when it
+  opens, as before. The catalog digest now also covers the conversions, operator families, text search objects,
+  extended statistics and extensions an attestation counts in the runtime schema. Measured on Ignition with a 20 ms
+  round trip: 4 ownership checks, 230 boot statements where there were 318, and the start 10.3 s to 7.8 s.
+- **What a write saw of a moving catalog is not kept under a version it did not see.** A write reads committed state
+  statement by statement, so DDL that committed between its version read and its describe or attestation was in what
+  it then kept under the older version, where a snapshot begun before the DDL would be handed a catalog it cannot see.
+  A write now reads its version again after describing or attesting and keeps the result only if it has not moved. A
+  kept description is served for five minutes, since comments and the row estimates that decide when a large table's
+  count is estimated move without the version (ANALYZE, autovacuum): a table that grows is counted as large minutes
+  later rather than never. A DDL statement behind a comment (`/* … */ ALTER`, `-- …` then `ALTER`) now forgets the
+  version as a bare one does, and an App's foreign-key violation forgets what its own adapter attested but no longer
+  what every adapter of the database shares.
+- **A long request reads `now` when it reads, not when it arrived.** A tenant live stream's re-resolutions and probes
+  and each read and write of an import are now their own unit of work at their own instant; before, a stream open all
+  afternoon judged a computed `now` at the minute it opened. A catalog served outside a request (a notice's mail, a
+  public page) no longer leaves its instant in the async context with `enterWith`, where every later timer in that
+  flow read it however old: each runs at an instant scoped to its own work, and a statement written where nobody
+  scoped one refuses (`StatementInstantMissing`) instead of writing a stale one.
+- **A session store that does not answer is a 503 a client retries, not a refusal.** Better Auth's session lookup
+  catches whatever its store threw and throws a bare 500 of its own ("Failed to get session"), with nothing of the
+  driver's error beneath it, so the tenant host read a store whose pool would not lend a connection, or whose lookup
+  timed out, as the session refused: a field deployment at its database's connection limit answered a signed-in
+  member's list read `403 tenant_context_unavailable`, and the page showed a refusal instead of retrying. The
+  PostgreSQL auth store now notes a refused checkout or a failed statement for the call that asked, and the tenant
+  path answers it as it answers the store's own observation failing: `503 tenant_temporarily_unavailable` with
+  `Retry-After`, which the tenant transport already retries. The same failure elsewhere is answered the same way: a
+  tenant host's `/api/whoami` (503 `auth_temporarily_unavailable`, was 403 `auth_unavailable`), a non-tenant App's
+  signed-in requests (503 `server_busy`, as a busy pool's are, was 403), and the platform realm's and a support
+  session's reads, whose admission, runtime and lease flattened any failure into a denial where a tenant's read
+  already told the database not answering from a refusal. No sign-in, membership or realm refusal changes, and the
+  caller is told nothing of the driver's words.
+- **A host's bearer never opens a support session.** The embed door takes a host page's `Authorization` header
+  away once it has read the bearer as its session, and the support routes refused a bearer by looking for that header,
+  so a host whose assertions link verified addresses (`"accounts": "link-verified-email"`) could open a platform
+  operator's support session inside any tenant the operator may enter, and read that tenant's rows on its lease. The
+  support routes (`/api/tenant/support/…`, the dealer's log and the lender's sessions view included), a tenant's
+  branding save and the Suite console now never take a bearer, and a request the door admitted on one is marked, so
+  any route that refuses a bearer refuses it whether or not the header is still there. A support session opened at
+  the App's own page was never reachable through a bearer, since its lease is bound to that sign-in; a test now
+  holds that too.
+- **Only the deploy can make a Cloudflare container's Durable Object reset.** `mistriWorker` stamped its version on
+  every `GET /__mistri/status`, token or not, and the object reset itself before it checked the token, so any visitor
+  could set off the reset an object behind a newer Worker does (at most once in thirty seconds). The Worker now stamps
+  only its own once-a-minute tick and a probe that carries the restart token. A project whose container names its own
+  token secret (`restartTokenEnv`) names it to `mistriWorker` too.
+- **`mistri deploy` sends the restart token only over https.** The status probe and the restart carry
+  `MISTRI_RESTART_TOKEN` to `vars.MISTRI_PUBLIC_URL`, which was taken as written; an `http://` address beyond this
+  machine is now refused before anything runs (`http://localhost` and `127.0.0.1` still work).
+- **An https `MISTRI_PUBLIC_URL` makes every request https.** Behind a front end that ends TLS and forwards plain
+  http from an address nobody can list in `--trust-proxy` (Cloudflare Containers, Cloud Run), a form's draft and claim
+  cookies and a status sign-in's were set without `Secure`, no answer carried `Strict-Transport-Security`, and
+  sitemaps and link previews named `http://`. Sign-in's own cookies already followed the public address. Now one rule
+  decides all of them: a TLS socket, an `https://` public address (or a mounting host's https origin), or a trusted
+  proxy's `X-Forwarded-Proto: https`.
+- **Live sync counts a signed-out visitor by the client the proxy names.** Each account may hold eight live streams,
+  and a visitor was counted by the socket's peer, so behind a load balancer or Cloudflare every visitor of a public
+  page shared one visitor's eight and the ninth had no live updates. A visitor is now the client the rate limits name
+  (`--trust-proxy`, `--trust-proxy-hops`, `--trust-proxy-cloudflare`).
+
 ## 1.0.0-rc.4 (unreleased)
 
 - **A Cloudflare deploy rolls in under forty seconds, not five to eight minutes.** Under the `durable_object`

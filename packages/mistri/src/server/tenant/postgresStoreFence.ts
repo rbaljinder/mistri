@@ -27,8 +27,17 @@ import { attestOnce as attestOnAdapter } from '@mistriwork/engine/adapters/postg
 /**
  * Attest the store under `prefix` for `bound` inside the caller's transaction:
  * in full (`full`, which refuses) unless the adapter this transaction runs on
- * attested it for the same binding already.
+ * attested it for the same binding already, or another adapter of the database
+ * did under the catalog version this transaction read and `rebound` — its meta
+ * row read again — says the row still binds it (postgresTransactionHandle.ts).
  */
-export function attestOnce(client: PgQuery, prefix: string, bound: string, full: () => Promise<void>): Promise<void> {
-  return attestOnAdapter(client, `${prefix}\u0000${bound}`, full);
+export function attestOnce(
+  client: PgQuery,
+  prefix: string,
+  bound: string,
+  full: () => Promise<void>,
+  rebound: () => Promise<boolean>,
+): Promise<void> {
+  // A row that cannot be read does not bind: the full attestation says why.
+  return attestOnAdapter(client, `${prefix}\u0000${bound}`, full, () => rebound().catch(() => false));
 }

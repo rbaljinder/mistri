@@ -13,6 +13,7 @@
  * maintenance step, as the command journal's is — and offers no synchronous
  * lookups, so it does not carry a tenant binding.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -36,6 +37,34 @@ const POSTGRES_URL = /^postgres(ql)?:\/\//i;
 
 /** A `postgres://` or `postgresql://` URL selects the PostgreSQL store. */
 export const isPostgresAuthStore = (store: string): boolean => POSTGRES_URL.test(store);
+
+/* Better Auth answers a store that failed beneath one of its calls with an error of its own: its getSession catches
+   whatever the adapter threw and throws a bare 500, "Failed to get session", with nothing of the driver's error
+   beneath it. Read as no cause, that was a denial — a member's read answered 403 tenant_context_unavailable when the
+   store's pool would not lend a connection (a field deployment at its database's connection limit). So the store's
+   own failure is noted here, for the async context of the call that asked, and handed back in place of Better
+   Auth's word for it (`storeFailureBeneath`). Only the PostgreSQL store notes one; the file store's calls are
+   answered as before. */
+const failures = new AsyncLocalStorage<{ error?: unknown }>();
+type Noted = { error?: unknown } | undefined;
+const note = (slot: Noted, error: unknown) => {
+  if (slot && error !== undefined) slot.error ??= error;
+};
+
+/**
+ * `work` (a Better Auth call), and where it failed with Better Auth's own 500 over a store that failed beneath it,
+ * the store's failure instead: what the tenant path reads to tell the store not answering (a 503) from a refusal
+ * (evidence.ts `databaseUnanswered`). Any other outcome, a refusal of Better Auth's own among them, is unchanged.
+ */
+export async function storeFailureBeneath<T>(work: () => Promise<T>): Promise<T> {
+  const slot: { error?: unknown } = {};
+  try {
+    return await failures.run(slot, work);
+  } catch (error) {
+    const internal = !!error && typeof error === 'object' && (error as { statusCode?: unknown }).statusCode === 500;
+    throw internal && slot.error !== undefined ? slot.error : error;
+  }
+}
 
 export interface AuthStoreHandle {
   readonly kind: 'sqlite' | 'postgres';
@@ -201,10 +230,13 @@ export function observedClient(Client: ClientClass, reads: AuthStoreReads): Clie
             ? (request as { text: string }).text
             : undefined;
       const answered = reads.statement(this, text);
+      // Taken as the statement is sent: the call that sent it is the one told (storeFailureBeneath).
+      const slot = failures.getStore();
       const done = args.at(-1);
       if (typeof done === 'function') {
         args[args.length - 1] = (error: unknown, result: unknown) => {
           answered();
+          if (error) note(slot, error);
           (done as (error: unknown, result: unknown) => void)(error, result);
         };
       }
@@ -213,10 +245,15 @@ export function observedClient(Client: ClientClass, reads: AuthStoreReads): Clie
         pending = (super.query as (...given: unknown[]) => unknown)(...args);
       } catch (error) {
         answered();
+        note(slot, error);
         throw error;
       }
       if (typeof done !== 'function') {
-        if (pending && typeof (pending as Promise<unknown>).then === 'function') (pending as Promise<unknown>).then(answered, answered);
+        if (pending && typeof (pending as Promise<unknown>).then === 'function')
+          (pending as Promise<unknown>).then(answered, (error: unknown) => {
+            answered();
+            note(slot, error);
+          });
         // A submittable (a cursor, a stream) says it is done by its events.
         else if (request && typeof (request as { once?: unknown }).once === 'function') {
           (request as { once(event: string, listener: () => void): void }).once('end', answered);
@@ -226,6 +263,25 @@ export function observedClient(Client: ClientClass, reads: AuthStoreReads): Clie
       return pending as never;
     }
   } as unknown as ClientClass;
+}
+
+/**
+ * The pool the store's statements are leased from, with a checkout it would not lend — every connection in use past
+ * its wait, or the server refusing another — noted for the call that asked, as a statement's failure is
+ * (storeFailureBeneath). Better Auth's adapter asks with the promise form; a callback (pool.query's own checkout)
+ * answers its caller with the error itself.
+ */
+function witnessedPool(Pool: new (options: Record<string, unknown>) => PgPool): new (options: Record<string, unknown>) => PgPool {
+  return class extends (Pool as unknown as new (options: Record<string, unknown>) => { connect(...args: unknown[]): unknown }) {
+    override connect(...args: unknown[]): unknown {
+      if (args.length) return super.connect(...args);
+      const slot = failures.getStore();
+      return (super.connect() as Promise<unknown>).catch((error: unknown) => {
+        note(slot, error);
+        throw error;
+      });
+    }
+  } as unknown as new (options: Record<string, unknown>) => PgPool;
 }
 
 export async function openPostgresAuthStore(url: string): Promise<AuthStoreHandle> {
@@ -255,7 +311,7 @@ export async function openPostgresAuthStore(url: string): Promise<AuthStoreHandl
   const pooled = postgresPoolDefaults().pooler === 'transaction';
   const size = authPoolSize();
   const reads = createAuthStoreReads(url, authReadTtlMs());
-  const pool = new Pool({
+  const pool = new (witnessedPool(Pool))({
     ...pgConnectionOptions(url),
     max: size,
     connectionTimeoutMillis: 10_000,

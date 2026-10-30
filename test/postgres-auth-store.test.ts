@@ -631,6 +631,56 @@ describe('the authentication store on PostgreSQL', { skip: liveSkip('postgres', 
       }
     });
 
+    /* Better Auth answers a store that failed beneath its session lookup with a bare 500 of its own; the gate read any
+       failure as a refusal, so a pool that would not lend a connection answered a signed-in person's read 403. It is
+       the server being busy: 503 with Retry-After, which a client retries. A refusal stays one. */
+    test('a session lookup the store does not answer is busy (503), never a refusal', async (t) => {
+      await reset();
+      const kept = process.env.MISTRI_AUTH_SESSION_CACHE;
+      // Nothing kept, so every request asks the store.
+      process.env.MISTRI_AUTH_SESSION_CACHE = '0';
+      let served: Served;
+      try {
+        served = await serve(await app(LIVE!));
+      } finally {
+        if (kept === undefined) delete process.env.MISTRI_AUTH_SESSION_CACHE;
+        else process.env.MISTRI_AUTH_SESSION_CACHE = kept;
+      }
+      t.after(() => served.stop());
+      const { origin } = served;
+      const up = await call(origin, '/api/auth/sign-up/email', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'Ada', email: 'ada@example.org', password: 'ada-password-1' }),
+      });
+      assert.equal(up.status, 200, up.text);
+      const { Pool } = await pgModule();
+      const connect = (Pool.prototype as unknown as { connect: (...args: unknown[]) => unknown }).connect;
+      let refused = 0;
+      const checkout = t.mock.method(
+        Pool.prototype as unknown as { connect: (...args: unknown[]) => unknown },
+        'connect',
+        function (this: { options?: { connectionString?: string } }, ...args: unknown[]) {
+          // Better Auth's adapter checks out with the promise form, on the auth store's own pool.
+          if (!args.length && this.options?.connectionString === LIVE) {
+            refused++;
+            return Promise.reject(new Error('timeout exceeded when trying to connect'));
+          }
+          return Reflect.apply(connect, this, args);
+        },
+      );
+      const busy = await fetch(`${origin}/api/schema`, { headers: { origin, cookie: up.cookie } });
+      const text = await busy.text();
+      checkout.mock.restore();
+      assert.ok(refused > 0, 'the lookup reached the store');
+      assert.equal(busy.status, 503, text);
+      assert.equal(JSON.parse(text).code, 'server_busy');
+      assert.equal(busy.headers.get('retry-after'), '1');
+      assert.doesNotMatch(text, /timeout/i);
+      assert.equal((await call(origin, '/api/schema', { cookie: up.cookie })).status, 200);
+      // Signed out is still signed out.
+      assert.equal((await call(origin, '/api/schema')).status, 401);
+    });
+
     test('the admin from the environment is created on PostgreSQL, once, and signs in with the admin scope', async () => {
       await reset();
       process.env.MISTRI_AUTH_ADMIN_EMAIL = 'admin@example.org';

@@ -320,21 +320,31 @@ async function keyDiffers(client: PgQuery, owner: TenantStoreBinding, key: Suppo
 }
 async function isLayout(client: PgQuery, owner: TenantStoreBinding, key: SupportAuditKey): Promise<boolean> {
   if (canonical(await describePostgresRelations(client, SUPPORT_AUDIT_PREFIX)) !== canonical(layout)) return false;
+  return binds(client, owner, key);
+}
+/** Whether the meta row binds the audit to `owner` and `key`: read in every attestation, a shared one too (postgresStoreFence.ts). */
+async function binds(client: PgQuery, owner: TenantStoreBinding, key: SupportAuditKey): Promise<boolean> {
   const rows = (await client.query(`SELECT singleton, version, app_id, source_id, store_id, key_id FROM ${q(tables.meta)}`)).rows;
   return rows.length === 1 && bound(owner, key)(rows[0]);
 }
 /* Attested in full when an adapter first uses it, after its tenant store (postgresStoreFence.ts). */
 async function attest(client: PgQuery, owner: TenantStoreBinding, key: SupportAuditKey): Promise<void> {
   await assertPostgresTenantStore(client, owner);
-  await attestOnce(client, SUPPORT_AUDIT_PREFIX, canonical([owner, keyId(key)]), async () => {
-    if (!(await isLayout(client, owner, key)))
-      return denyLayout(
-        (await keyDiffers(client, owner, key))
-          ? SUPPORT_AUDIT_KEY_DIFFERS
-          : layoutRefusal('The PostgreSQL support audit', await postgresLayoutVersion(client, q(tables.meta)), SUPPORT_AUDIT_VERSION),
-      );
-    if ((await reservedTableOwnershipProblems(client, SUPPORT_AUDIT_PREFIX)).length) denyTenant();
-  });
+  await attestOnce(
+    client,
+    SUPPORT_AUDIT_PREFIX,
+    canonical([owner, keyId(key)]),
+    async () => {
+      if (!(await isLayout(client, owner, key)))
+        return denyLayout(
+          (await keyDiffers(client, owner, key))
+            ? SUPPORT_AUDIT_KEY_DIFFERS
+            : layoutRefusal('The PostgreSQL support audit', await postgresLayoutVersion(client, q(tables.meta)), SUPPORT_AUDIT_VERSION),
+        );
+      if ((await reservedTableOwnershipProblems(client, SUPPORT_AUDIT_PREFIX)).length) denyTenant();
+    },
+    () => binds(client, owner, key),
+  );
 }
 /* What a deleted row leaves behind, as on SQLite: an entry whose session is
    gone, or a session with no opening entry. */

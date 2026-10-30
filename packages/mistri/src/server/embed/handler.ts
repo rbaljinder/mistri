@@ -184,6 +184,8 @@ async function prepare(
     settings: {
       ...defaultServerSettings(),
       clientAddress: client.policy,
+      // The host's own origin: https there means its requests reached it over TLS, as its socket says too (fetchBridge.ts).
+      ...(origin.protocol === 'https:' ? { httpsFront: true } : {}),
       ...(pools.readers !== undefined ? { readers: pools.readers } : {}),
       ...(pools.pooler !== undefined ? { pooler: pools.pooler } : {}),
       ...(pools.writers !== undefined ? { writers: pools.writers } : {}),

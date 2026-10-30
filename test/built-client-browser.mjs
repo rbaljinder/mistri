@@ -317,8 +317,23 @@ try {
   servers.push(workbench);
   browser = await chromium.launch();
 
-  const landing = (page) => page.getByRole('heading', { level: 1, name: 'Find a car you will love driving' }).waitFor();
-  const list = (page) => page.getByRole('list', { name: 'Vehicles' }).getByRole('listitem').first().waitFor();
+  /* A page is drawn when the parts it asked for have arrived and drawn what they hold: the cards come from a part loaded
+     on demand (CardsList), after the App's first reads, and their photographs after that. Each step waits on the one
+     before it, and on a slow runner the gap between two of them can outlast the 500 ms of quiet `networkidle` calls
+     idle, which then closed the cold visit before the part was fetched and let the warm one fetch it "again". */
+  const cardsDrawn = (page) =>
+    page.waitForFunction(() => {
+      const photos = [...globalThis.document.querySelectorAll('img.cards-image')].filter((img) => img.loading !== 'lazy');
+      return photos.length > 0 && photos.every((img) => img.complete);
+    });
+  const landing = async (page) => {
+    await page.getByRole('heading', { level: 1, name: 'Find a car you will love driving' }).waitFor();
+    await cardsDrawn(page);
+  };
+  const list = async (page) => {
+    await page.getByRole('list', { name: 'Vehicles' }).getByRole('listitem').first().waitFor();
+    await cardsDrawn(page);
+  };
   const schema = (page) => page.locator('.diagram-schema > *').first().waitFor();
   const signIn = (page) => page.locator('.signin-title').waitFor();
   const tasks = (page) => page.getByRole('checkbox').first().waitFor();
