@@ -20,6 +20,10 @@
     /* The client is plain JS with no build step. allowJs lets the test suite
        import its DOM-free modules directly rather than testing a copy. */
     "allowJs": true,
+    /* Off here on purpose, not left off: the client's plain .js (every package's src/client, 84 files) is checked
+       through JSDoc by tsconfig.client.json, which has checkJs on and no diagnostic filtered. `npm run test:static`
+       runs it as test/check-client-types.mjs, and CI runs test:static. This project would check those files a second
+       time under its strict settings, which they are not written to. */
     "checkJs": false,
     /* The React half of the client — src/client/react — is TypeScript with
        JSX, checked here under strict like the server. */

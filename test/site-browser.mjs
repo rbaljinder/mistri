@@ -29,6 +29,10 @@ async function openSearch(page) {
   await page.locator('dialog input.pagefind-ui__search-input').waitFor({ state: 'visible' });
 }
 
+/* Starlight draws Pagefind's input from a requestIdleCallback with no deadline, which a busy CI runner can starve for
+   longer than any wait (the search on the second page never appeared in 60 s): give the page's idle callbacks one. */
+const IDLE_DEADLINE = `{ const idle = window.requestIdleCallback; if (idle) window.requestIdleCallback = (callback, options) => idle.call(window, callback, { timeout: 2000, ...options }); }`;
+
 async function files(directory) {
   return (
     await Promise.all(
@@ -70,6 +74,7 @@ try {
   browser = await chromium.launch();
   for (const width of [1440, 390]) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
+    await context.addInitScript(IDLE_DEADLINE);
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -158,6 +163,7 @@ try {
      another look, and neither the manager nor the preview throws. */
   if (await stat(join(library, 'index.html')).catch(() => null)) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+    await context.addInitScript(IDLE_DEADLINE);
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));

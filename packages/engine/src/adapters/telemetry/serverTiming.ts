@@ -357,6 +357,15 @@ export async function timedPart<T>(name: string, work: () => Promise<T>): Promis
   }
 }
 
+/**
+ * `work`, outside whatever request it was asked from: for a process's own work that one request only set off. A
+ * timer or promise begun inside a request carries the request's timing to everything it runs, so a live sync pass a
+ * save woke had its reads counted as that save's round trips whenever the save was still answering 50 ms later.
+ */
+export function untimed<T>(work: () => T): T {
+  return on ? storage.exit(work) : work();
+}
+
 /** A connection checkout begun: call the result once it is had (or refused). */
 export function poolWait(label: string): () => void {
   const timing = on ? storage.getStore() : undefined;

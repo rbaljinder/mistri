@@ -12,7 +12,7 @@ export interface MistriContainerOptions {
   vars?: readonly string[];
   /** Worker secrets handed to the container by name. */
   secrets?: readonly string[];
-  /** The secret holding the restart token; a POST with its value in `x-mistri-restart` stops the container. Default MISTRI_RESTART_TOKEN. */
+  /** The secret holding the restart token; a POST with its value in `x-mistri-restart` stops the container, and a GET of `/__mistri/status` with it reports the roll. Default MISTRI_RESTART_TOKEN. */
   restartTokenEnv?: string;
   /** The Durable Object's sleep timer. Default '5m'; it never stops an always-on container. */
   sleepAfter?: string;
@@ -21,6 +21,9 @@ export interface MistriContainerOptions {
 }
 
 export const RESTART_HEADER = 'x-mistri-restart';
+export const PROBE_PATH = '/__mistri/status';
+/** `<version id> <upload time>` of the Worker, stamped by mistriWorker on the probe and the tick; a client's copy is dropped. */
+export const WORKER_VERSION_HEADER = 'x-mistri-worker-version';
 export const DEFAULT_RESTART_TOKEN_ENV = 'MISTRI_RESTART_TOKEN';
 export const DEFAULT_STARTUP_MS = 240_000;
 export const DEFAULT_PORT = 4111;

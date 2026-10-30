@@ -34,11 +34,9 @@
        repository does. They were dropped for size (about a third of the
        server's bytes); the owner chose readable over smaller. */
     "removeComments": false
-    /* `npm run build` emits with --noCheck: `npm test` (test:static) has
-       typechecked every file already, and CI runs it on every change and
-       every tag. Checking again here made the build check the same program
-       twice more — this one and tsconfig.commands.json — for about half its
-       time, and the emitted JavaScript is the same either way. */
+    /* `npm run build` checks this program (scripts/build-packages.mjs): a build from a tag or a tarball has not run
+       `npm test` first, and an emit that ignores a type error ships it. tsconfig.commands.json, the same sources again
+       for their declarations, is emitted with --noCheck rather than checked twice. */
   },
   "include": ["packages/*/src"],
   /* The client is Vite's, not tsc's: `vite build` bundles src/client into

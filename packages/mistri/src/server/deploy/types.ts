@@ -153,3 +153,5 @@ export const DEFAULT_ROLL_TIMEOUT_MS = 20 * 60_000;
 export const DEFAULT_RESTART_TOKEN_ENV = 'MISTRI_RESTART_TOKEN';
 /** The request header the Worker's container class reads a restart token from (packages/cloudflare). */
 export const RESTART_HEADER = 'x-mistri-restart';
+/** The path of the Durable Object's token-gated status probe (packages/cloudflare). */
+export const PROBE_PATH = '/__mistri/status';

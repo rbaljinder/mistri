@@ -293,7 +293,13 @@ nothing has to be built first. The build is the maintainer's, never the user's.
 
 - `test/prose.test.ts` fails when the README, the site or `USAGE` disagree
   with the code about tool counts, flags or dialects.
-- `test/check-client-types.mjs` type-checks the client through JSDoc;
+- `test/check-client-types.mjs` type-checks the client through JSDoc: it runs
+  `tsc -p tsconfig.client.json`, which has `checkJs` on and covers every package's
+  `src/client` (the plain `.js` modules as well as the TypeScript), with no
+  diagnostic code filtered. It is part of `npm run test:static`, which CI runs on
+  every change. The main `tsconfig.json` leaves `checkJs` off because that
+  project is strict and the `.js` modules are not written to it; they are checked,
+  under the client's looser settings, by this one;
   `test/check-client-geometry.mjs` enforces the one zoom-aware ruler;
   `test/check-client-host.mjs` keeps the page around the shell — history,
   title, `<html>`, `<body>`, id lookups, window and document listeners —

@@ -204,7 +204,10 @@ export default mistriWorker({ binding: 'APP', instance: 'app-1', location: 'enam
     // Add a value here for any other setting src/index.ts forwards (MISTRI_WRITE_POOL, MISTRI_READ_POOL, MISTRI_POOLER, ...);
     // none is set for you, so the connection decides each (docs/postgresql.md).
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+
+  // The Worker version's id, which the container's status probe reports so \`mistri deploy\` can show where a roll waits.
+  "version_metadata": { "binding": "CF_VERSION_METADATA" }
 }
 // Secrets, once each: \`npx wrangler secret put <NAME>\` for ${secrets.join(', ')} and MISTRI_RESTART_TOKEN
 // (32+ random characters; the same value in MISTRI_RESTART_TOKEN where you run \`mistri deploy\`).${

@@ -28,6 +28,7 @@
  */
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import { storeHostOf } from '@mistriwork/engine/adapters/storeHost.js';
+import { untimed } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
 import { LIVE_CHANGE_LIMITS, LIVE_CHANGE_PAGE, LIVE_CHANNEL, onLiveChanges } from '../../adapters/live/liveChange.js';
 import { listenForWake, type CommandEventListener } from '../../adapters/events/postgresCommandEventWake.js';
 import { deliverChange, emptyDelivery, type LiveAuthority, type LiveDelivery, type ProbeMemo } from './liveFilter.js';
@@ -124,7 +125,8 @@ export class LiveHub {
     private readonly options: LiveHubOptions = {},
   ) {
     this.now = options.now ?? Date.now;
-    this.pruner = setInterval(() => guard('prune', () => this.prune()), PRUNE_MS);
+    /* Made inside whichever request first subscribed: its timers are the process's, not that request's. */
+    this.pruner = untimed(() => setInterval(() => guard('prune', () => this.prune()), PRUNE_MS));
     this.pruner.unref?.();
   }
 
@@ -165,19 +167,24 @@ export class LiveHub {
   wake(delay = WAKE_COALESCE_MS): void {
     if (this.closed || !this.attached.size) return;
     if (this.scheduled) return;
-    this.scheduled = setTimeout(
-      () =>
-        guard('wake', () => {
-          this.scheduled = undefined;
-          this.passing = this.passing
-            .then(() => this.pass())
-            .catch((error: unknown) => {
-              liveFault('read', error);
-              this.failAll();
-            })
-            .catch((error: unknown) => liveFault('read', error));
-        }),
-      delay,
+    /* The pass is the process's work, though a save's commit or a subscriber's request usually wakes it: begun
+       inside that request it was timed as part of it, its store read, authorities and probes counted as the save's
+       round trips and database time whenever the save was still answering when the pass ran. */
+    this.scheduled = untimed(() =>
+      setTimeout(
+        () =>
+          guard('wake', () => {
+            this.scheduled = undefined;
+            this.passing = this.passing
+              .then(() => this.pass())
+              .catch((error: unknown) => {
+                liveFault('read', error);
+                this.failAll();
+              })
+              .catch((error: unknown) => liveFault('read', error));
+          }),
+        delay,
+      ),
     );
     this.scheduled.unref?.();
   }
@@ -235,19 +242,21 @@ export class LiveHub {
 
   private polling(ms: number, cheap: boolean): void {
     if (this.poll || !this.unnudge) return;
-    this.poll = setInterval(
-      () =>
-        guard('poll', async () => {
-          if (!cheap || !this.store.moved) return this.wake(0);
-          let moved = true;
-          try {
-            moved = await this.store.moved();
-          } catch (error) {
-            liveFault('poll', error);
-          }
-          if (moved) this.wake(0);
-        }),
-      ms,
+    this.poll = untimed(() =>
+      setInterval(
+        () =>
+          guard('poll', async () => {
+            if (!cheap || !this.store.moved) return this.wake(0);
+            let moved = true;
+            try {
+              moved = await this.store.moved();
+            } catch (error) {
+              liveFault('poll', error);
+            }
+            if (moved) this.wake(0);
+          }),
+        ms,
+      ),
     );
     this.poll.unref?.();
   }

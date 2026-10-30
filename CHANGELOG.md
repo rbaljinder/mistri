@@ -7,6 +7,20 @@ desktop app has its own version in `desktop/package.json`.
 
 ## 1.0.0-rc.4 (unreleased)
 
+- **A Cloudflare deploy rolls in under forty seconds, not five to eight minutes.** Under the `durable_object`
+  scheduling policy `wrangler deploy` replaces no container, and the platform moved a running Durable Object onto the
+  new Worker version only after about five minutes and twenty seconds (the same three times); a restart that reached
+  the object before then brought the old image back. `MistriContainer` now records what it started the container
+  with and replaces a healthy one that differs from its own Worker version's image, deploy id or instance type (once a
+  minute at most, never while starting), and `mistriWorker` stamps its version on the status probe and the tick, so an
+  object behind a newer Worker resets itself and starts again on it. `mistri deploy` polls `/readyz` and a token-gated
+  `GET /__mistri/status` every 5 seconds, prints a timeline, and restarts only as a fallback; `deploy init` adds the
+  `version_metadata` binding. Measured on a field deployment: 37 seconds from upload to the new container answering,
+  1 minute 49 for the whole command with the image unchanged.
+- **The build type-checks.** `npm run build` no longer emits with `--noCheck` over `tsconfig.build.json`: a build from a tag or a tarball that has not run `npm test` fails on a type error instead of shipping it (about a second on TypeScript 7). Every public export of every package must also have declarations it ships, `types` condition or the `.d.ts` beside its `.js`: the build checks the checkout's `dist/`, `npm run test:exports` checks the installed tarballs, and `test/export-types.test.ts` holds the rule (`scripts/export-types.mjs`).
+- **Where the client's plain JavaScript is checked is written down.** The main `tsconfig.json` keeps `checkJs` off because `tsconfig.client.json` checks all 84 `src/client` `.js` modules with it on (`test/check-client-types.mjs`, part of `test:static`); the comment there and `docs/architecture.md` now say so.
+- **A store upgrade is rehearsed, kill included.** `test/store-upgrade-rehearsal.test.ts` restores the committed v1 record-history fixture into SQLite (and PostgreSQL when `TABLEWALK_TEST_PG` is set), runs the real `upgradeStores` with a v2 step in a child process, SIGKILLs the child inside the step, and proves the store reads v1 with every row, and that running again finishes the upgrade with the version recorded once. Every shipped store is still at layout version 1, so the v2 is the test's own.
+
 - **`mistri deploy` after its first real run.** A migration history that does not match the directory refuses the plan (it used to apply nothing silently), `--migrations <dir>` overrides the config's directory, `deploy verify` re-checks the newest deploy and repairs its record, `status` is read-only and short, smoke follows same-origin redirects, wrangler's output streams during the image build, and `init` names the Worker after the App and sets no pooler default.
 
 - **Fewer round trips per tenant request.** A read snapshot sends its BEGIN, its settings, the reads and its COMMIT
@@ -24,6 +38,12 @@ desktop app has its own version in `desktop/package.json`.
 - **Live sync lets go.** A subscriber that leaves before its pass is released when it leaves and when the hub stops,
   and a closed pool's Server-Timing gauges are removed. The capacity harness can report the heap and write a heap
   snapshot.
+- **A save is timed alone.** Live sync's pass ran in the context of the save whose commit woke it, so its store read,
+  authorities and probes were counted in that save's Server-Timing (round trips and database time) whenever the save
+  was still answering when the pass began; the hub's timers are the process's now. The tenant flights test holds
+  four saves at once to a save's budget, and the capacity harness serves Ignition with keyed writes as the CLI does
+  (it ran every save on one writer), live sync on, `--edit-leads` for a repeatable insert-and-update save, and the
+  database and server time of each endpoint.
 - **Operations documentation.** Backup, the audit key, moving from 0.9, incidents and the sandbox limit are written
   down; the Node floor is 24.22.1 and the framework peers are bounded; Renovate and a production dependency audit run
   in CI.

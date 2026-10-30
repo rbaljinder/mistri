@@ -5,8 +5,9 @@
  * (live-sync-route.test.ts) hold the security properties end to end.
  */
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { EventEmitter, once } from 'node:events';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,6 +30,7 @@ import { lendStoreHost, type PostgresStoreHost } from '../packages/engine/src/ad
 import type { Adapter } from '../packages/engine/src/adapters/adapter.js';
 import { openLiveStream } from '../packages/mistri/src/server/live/liveStream.js';
 import type { LivePosition, LiveStore } from '../packages/mistri/src/server/live/liveStore.js';
+import { setServerTiming, timedSum, timeRequests } from '../packages/engine/src/adapters/telemetry/serverTiming.js';
 
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync, hub: LiveHub) => Promise<void>) {
   const dir = mkdtempSync(join(tmpdir(), 'tablewalk-live-hub-'));
@@ -552,5 +554,44 @@ test('a subscriber that leaves before its pass settles its attach, whether it wa
     assert.equal(await settled(pending[0]), true, 'the one that stays is placed');
   } finally {
     await hub.close();
+  }
+});
+
+test("a pass a request woke is the process's work, not that request's", async () => {
+  /* A save's commit wakes the hub from inside the save's request, and the pass ran in its context: on a field
+     deployment its store read, authorities and probes were counted as the save's round trips and database time
+     whenever the save was still answering when the pass began. The pass marks its read here as a request's part
+     would be marked, and the request that woke it must not carry it. */
+  setServerTiming(true);
+  let read = 0;
+  const store: LiveStore = {
+    dialect: 'sqlite',
+    ready: async () => true,
+    head: async () => ({ id: '0' }),
+    read: () => timedSum('hub-read', async () => ((read += 1), [])),
+    locate: async (cursor) => ({ id: cursor }),
+    prune: async () => 0,
+  };
+  const hub = new LiveHub({} as Adapter, store, { pollMs: 10_000 });
+  const quiet = { authority: async () => ({ actor: '', tables: new Map(), probe: async () => new Set<string>() }) };
+  const server = timeRequests(
+    createServer(async (_req, res) => {
+      const before = read;
+      hub.wake(0);
+      await until(() => read > before);
+      res.end('saved');
+    }),
+  );
+  try {
+    await hub.attach({ ...quiet, receive: () => {}, placed: () => {}, reset: () => {}, fail: () => {} });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`);
+    assert.equal(await response.text(), 'saved');
+    assert.doesNotMatch(response.headers.get('server-timing') ?? '', /hub-read/);
+  } finally {
+    server.close();
+    await hub.close();
+    setServerTiming(false);
   }
 });

@@ -16,9 +16,15 @@ export default mistriWorker({ binding: 'APP', instance: 'app-1', location: 'enam
 ```
 
 `MistriContainer` is always on, waits out mistri's startup checks before it answers 500, hands the Worker's named
-vars and secrets to the container, stops the container on a `POST` carrying `MISTRI_RESTART_TOKEN` in
-`x-mistri-restart` (what `mistri deploy` sends until the new container reports its fingerprint on `/readyz`), and
-logs its start and exit. Its `options` are `port`, `instanceType` and `image` (pinned at each start, for an account
+vars and secrets to the container, and logs its start and exit. It also upgrades itself: `wrangler deploy` rolls
+nothing out under the `durable_object` scheduling policy and a running container keeps its startup image and env, so
+the Durable Object records what it started the container with (image, `MISTRI_DEPLOY_ID`, instance type) and, on a
+request or the Worker's tick, replaces a healthy container that differs from what its own Worker version wants (never
+one still starting, at most once a minute). The platform moves a running Durable Object onto a new Worker version
+only after about five minutes, so `mistriWorker` stamps its version on the status probe and the tick, and an object
+behind a newer Worker resets itself (at most once per 30 seconds) and starts again on it. `GET /__mistri/status` with `MISTRI_RESTART_TOKEN` in `x-mistri-restart`
+reports the Worker version (`version_metadata` binding `CF_VERSION_METADATA`), what is desired and what the container
+started with, which `mistri deploy` polls; a `POST` with the token stops the container, the manual fallback. Its `options` are `port`, `instanceType` and `image` (pinned at each start, for an account
 whose container applications are created by the Durable Object), `startupTimeoutMs`, `vars`, `secrets`,
 `restartTokenEnv`, `sleepAfter` and `alwaysOn`.
 

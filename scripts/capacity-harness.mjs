@@ -15,7 +15,7 @@
  *   node scripts/capacity-harness.mjs [--mode docker|local] [--cpus 0.5] [--users 25]
  *        [--warmup 60] [--steady 180] [--profile 60] [--delay-ms 10] [--think 3000 | 3000-10000]
  *        [--live 1|0] [--locale es] [--enters 12] [--edit commandId] [--create commandId]
- *        [--pool-query 'table:filter;...'] [--label name] [--out dir]
+ *        [--pool-query 'table:filter;...'] [--edit-leads n] [--label name] [--out dir]
  *
  * And for an App that is not in this repository, served by the ordinary CLI
  * (`--app` replaces Ignition; every path is the App checkout's own):
@@ -40,6 +40,13 @@
  * - `--volume`: a directory the served App writes (its config home, a cache),
  *   mounted at the same path. In docker mode every path is mounted where it is
  *   on this machine, so an App's `node_modules` may link into a checkout.
+ * - `--edit-leads` (Ignition only): n qualified leads seeded in each dealership,
+ *   each with a vehicle of its own, and put back once converted, so
+ *   `--edit convertLead --pool-query 'lead:employer = "Capacity load"'` saves
+ *   an application and its lead on every edit — an insert of a child and an
+ *   update of its parent, as a field deployment's edit was — rather than
+ *   being refused once each lead has moved on. `--live 0` also serves
+ *   Ignition with live sync off; on, its change store is provisioned.
  * - `--server-root`: the mistri checkout that serves (this one by default), to
  *   measure another commit with this harness: its CLI serves an `--app`, which
  *   must resolve `@mistriwork/*` to the same checkout, and without `--app` its
@@ -139,6 +146,7 @@ const POOL_QUERY = Object.fromEntries(
     .map((part) => [part.slice(0, part.indexOf(':')), part.slice(part.indexOf(':') + 1)]),
 );
 const ENTERS = Number(opt('enters', '12'));
+const EDIT_LEADS = Number(opt('edit-leads', '0'));
 const LABEL = opt('label', new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19));
 const OUT = resolve(opt('out', join(ROOT, '.capacity', LABEL)));
 if (!['docker', 'local'].includes(MODE)) throw new Error('--mode is docker or local');
@@ -288,6 +296,8 @@ async function setUp() {
     CAPACITY_PORT: port,
     CAPACITY_ORIGIN: origin,
     CAPACITY_USERS: USERS,
+    CAPACITY_LIVE: LIVE ? '1' : '0',
+    CAPACITY_EDIT_LEADS: EDIT_LEADS,
   };
   let route;
   if (MODE === 'docker') {
@@ -435,6 +445,8 @@ class Person {
     let status = 0,
       json,
       serverCpu,
+      serverTotal,
+      dbMs,
       flights;
     try {
       const res = await fetch(this.base + path, {
@@ -458,6 +470,10 @@ class Person {
       status = res.status;
       const timing = res.headers.get('server-timing') ?? '';
       serverCpu = Number(/(?:^|, )cpu;dur=([\d.]+)/.exec(timing)?.[1]);
+      serverTotal = Number(/(?:^|, )total;dur=([\d.]+)/.exec(timing)?.[1]);
+      /* The time its connections spent awaiting the database, every database summed, as flights are. */
+      const waits = [...timing.matchAll(/(?:^|, )db-[a-z-]+;dur=([\d.]+)/g)].map((m) => Number(m[1]));
+      if (waits.length) dbMs = waits.reduce((sum, n) => sum + n, 0);
       /* The request's round trips, every database it touched (`db-app`, `db-auth`) summed, as a field load test reads them. */
       const each = [...timing.matchAll(/(?:^|, )db-[a-z-]+;[^,]*?desc="flights=(\d+)/g)].map((m) => Number(m[1]));
       if (each.length) flights = each.reduce((sum, n) => sum + n, 0);
@@ -477,6 +493,8 @@ class Person {
       ms: performance.now() - start,
       status,
       serverCpu,
+      serverTotal,
+      ...(dbMs === undefined ? {} : { dbMs }),
       ...(flights === undefined ? {} : { flights }),
       ...(status >= 400 ? { code: json?.code } : {}),
     });
@@ -914,6 +932,10 @@ const latencies = (name) => {
   for (const r of rows) if (Number.isFinite(r.serverCpu)) (cpuBy[r.endpoint] ??= []).push(r.serverCpu);
   const flightsBy = {};
   for (const r of rows) if (Number.isFinite(r.flights)) (flightsBy[r.endpoint] ??= []).push(r.flights);
+  const dbBy = {};
+  for (const r of rows) if (Number.isFinite(r.dbMs)) (dbBy[r.endpoint] ??= []).push(r.dbMs);
+  const totalBy = {};
+  for (const r of rows) if (Number.isFinite(r.serverTotal)) (totalBy[r.endpoint] ??= []).push(r.serverTotal);
   return {
     overall: summary(rows.map((r) => r.ms)),
     errors: rows.filter((r) => r.status < 200 || r.status >= 400).length,
@@ -930,6 +952,8 @@ const latencies = (name) => {
     interactions: Object.fromEntries(Object.entries(ixs).map(([k, v]) => [k, summary(v)])),
     serverCpuByEndpoint: Object.fromEntries(Object.entries(cpuBy).map(([k, v]) => [k, summary(v)])),
     flightsByEndpoint: Object.fromEntries(Object.entries(flightsBy).map(([k, v]) => [k, summary(v)])),
+    dbMsByEndpoint: Object.fromEntries(Object.entries(dbBy).map(([k, v]) => [k, summary(v)])),
+    serverMsByEndpoint: Object.fromEntries(Object.entries(totalBy).map(([k, v]) => [k, summary(v)])),
   };
 };
 
