@@ -4,6 +4,14 @@
 import type { VerifiedSessionInstance } from './auth.js';
 import { denyTenant } from '@mistriwork/engine/server/evidence.js';
 
+/**
+ * The longest a step-up may count a sign-in as recent. A session a host's
+ * assertion opened is looked for only while it is younger than this
+ * (auth.ts), so an age asked of anything older could not tell one from a
+ * sign-in made here: it is refused.
+ */
+export const RECENT_SIGN_IN_MAX_MS = 900_000;
+
 type NativeRead =
   | { synchronous: true; checkSession(proof: VerifiedSessionInstance, createdAt: number): void }
   | { synchronous: false; checkSession(proof: VerifiedSessionInstance, createdAt: number): Promise<void> };
@@ -34,6 +42,7 @@ export function createNativeSignInAge(
       at < 0 ||
       !Number.isSafeInteger(maximumAgeMs) ||
       maximumAgeMs < 0 ||
+      maximumAgeMs > RECENT_SIGN_IN_MAX_MS ||
       at < createdAt ||
       at - since > maximumAgeMs ||
       at >= proof.expiresAt

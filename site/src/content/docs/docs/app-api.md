@@ -220,7 +220,9 @@ On a tenant App with an `api` block, a signed-in member makes their own
 tokens on their tenant's context, as **API tokens** in the account menu does: `POST /api/tokens` lists
 them with the roles on offer, `/api/tokens/issue` takes
 `{ label, roles?, operations?, days? }` (90 days unless said, at most 366)
-and answers the secret once, and `/api/tokens/revoke` takes `{ id }`. Each
+and answers the secret once, and `/api/tokens/revoke` takes `{ id }`. Making
+one needs a sign-in from the last five minutes; an older session answers 403
+`sign_in_required`, and the person signs in again. Each
 token binds the member's own membership in that tenant, with roles no wider
 than theirs and the API's. A member sees and ends their own tokens. A
 tenant's administrator — a member the tenant policy's `administration` lets

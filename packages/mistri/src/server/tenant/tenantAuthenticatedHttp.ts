@@ -38,11 +38,13 @@ import type { TestControl } from '../http/testControl.js';
 import { signInOf, isPublicForm, type AppDef } from '../../shared/app.js';
 import { createServer, validateHeaderValue, type IncomingMessage, type ServerResponse } from 'node:http';
 import { isDeepStrictEqual } from 'node:util';
+import { isPromise } from 'node:util/types';
 import { LOADED_APP_KEYS, type LoadedApp } from '../app/apps.js';
 import {
   authHoldsOwnProof,
   captureAppAuthRuntime,
   captureNativeDisplayName,
+  captureNativeSignInAge,
   signInInfo,
   type AppAuthRuntime,
   type VerifiedSessionInstance,
@@ -72,7 +74,7 @@ import {
 import { openTenantAdministration, type TenantAdministration } from './tenantAdministration.js';
 import { tenantClonePlan } from './tenantClonePlan.js';
 import { openTenantSupport, type TenantSupport } from './tenantSupportOperations.js';
-import { SUPPORT_REFUSAL_CODES } from '../../shared/tenantSupport.js';
+import { SUPPORT_OPENING_AGE_MS, SUPPORT_REFUSAL_CODES } from '../../shared/tenantSupport.js';
 import { createTenantAdministrationHttp, isTenantAdministrationHttpRequest } from './tenantAdministrationHttp.js';
 import {
   ADMINISTRATION_HTTP_HEADER,
@@ -579,12 +581,33 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         return undefined;
       }
     };
+    /* Whether a request's login was made here a moment ago, as opening a support session asks
+       (tenantSupportOperations.ts): issuing an API token asks it too. Read off the proof this request was
+       verified by; a session a host's assertion opened never counts (embed/ledger.ts). */
+    let signInAge: ReturnType<typeof captureNativeSignInAge> | undefined;
+    try {
+      signInAge = captureNativeSignInAge(raw.auth as AppAuthRuntime);
+    } catch {
+      signInAge = undefined;
+    }
+    const recentSignIn = async (request: IncomingMessage): Promise<boolean> => {
+      const proof = resolved.get(request);
+      if (!proof || !signInAge) return false;
+      try {
+        const observed = signInAge.observeRecent(proof, Date.now(), SUPPORT_OPENING_AGE_MS);
+        if (isPromise(observed)) await observed;
+        return true;
+      } catch {
+        return false;
+      }
+    };
     data = createTenantHttpServer({
       app: loaded.app,
       look: () => look,
       enrollment,
       verifySessionInstance: verify,
       readerName,
+      recentSignIn,
       bound: raw.bound as Bound,
       ...(support ? { support } : {}),
       ...(components ? { components } : {}),

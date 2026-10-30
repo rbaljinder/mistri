@@ -78,3 +78,57 @@ export function assertionLedger(adapter: () => Promise<LedgerAdapter>, now: () =
     },
   };
 }
+
+/** The rows that say a session was opened by a host's assertion, and the only ones `embedSessionMarks` sweeps. */
+const EMBED_SESSION = 'mistri-embed-session';
+const markId = (sessionId: string) => `embed-session-${createHash('sha256').update(sessionId).digest('base64url')}`;
+
+/**
+ * Sessions a host's assertion opened (exchange.ts), kept beside the spent
+ * assertions in the auth store, so every instance that shares the store knows
+ * one whatever cache it has. A host signs a person in without asking them
+ * anything this App can see, so such a session is never a recent sign-in: what
+ * asks for one (opening a support session, issuing an API token) asks the
+ * person to sign in here again (auth.ts, nativeSignInAge.ts).
+ *
+ * The mark is written before the session's cookie or bearer leaves the
+ * server, so a session nobody has seen marked never gains a mark later.
+ */
+export function embedSessionMarks(adapter: () => Promise<LedgerAdapter>, now: () => number = Date.now) {
+  let swept = 0;
+  return {
+    /** Mark `sessionId` until it expires; throws when the store cannot say it did. */
+    async mark(sessionId: string, until: number): Promise<void> {
+      const db = await adapter();
+      if (now() - swept >= SWEEP_EVERY_MS) {
+        swept = now();
+        await db
+          .deleteMany({
+            model: 'verification',
+            where: [
+              { field: 'identifier', value: EMBED_SESSION },
+              { field: 'expiresAt', value: new Date(now()), operator: 'lt' },
+            ],
+          })
+          .catch(() => {});
+      }
+      await db.create({
+        model: 'verification',
+        data: {
+          id: markId(sessionId),
+          identifier: EMBED_SESSION,
+          value: 'embed',
+          expiresAt: new Date(until),
+          createdAt: new Date(now()),
+          updatedAt: new Date(now()),
+        },
+        forceAllowId: true,
+      });
+    },
+    /** Whether a host's assertion opened `sessionId`; throws when the store cannot say. */
+    async marked(sessionId: string): Promise<boolean> {
+      const db = await adapter();
+      return (await db.findOne({ model: 'verification', where: [{ field: 'id', value: markId(sessionId) }] })) !== null;
+    },
+  };
+}

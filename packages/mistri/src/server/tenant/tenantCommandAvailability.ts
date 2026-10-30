@@ -78,20 +78,29 @@ export async function collectTenantAvailability(batch: TenantAvailabilityBatch):
         checks,
         async (check) => {
           const authorization = batch.authorize(check.command);
-          return runTenantCommandTransaction(ownership, scope, authorization, records, undefined, batch.extractor(check.command), (tx) =>
-            readCommandAvailability({
-              check,
-              command: authorization.command,
-              actor: authorization.actor,
-              catalog: authorization.catalog,
-              ...(authorization.people ? { people: authorization.people } : {}),
-              machine: authorization.machine,
-              reader: tx.records,
-              signal,
-              flags,
-              ...options,
-              assertTarget: (key) => tx.target(key),
-            }),
+          return runTenantCommandTransaction(
+            ownership,
+            scope,
+            authorization,
+            records,
+            undefined,
+            batch.extractor(check.command),
+            (tx) =>
+              readCommandAvailability({
+                check,
+                command: authorization.command,
+                actor: authorization.actor,
+                catalog: authorization.catalog,
+                ...(authorization.people ? { people: authorization.people } : {}),
+                machine: authorization.machine,
+                reader: tx.records,
+                signal,
+                flags,
+                ...options,
+                assertTarget: (key) => tx.target(key),
+              }),
+            // One snapshot: a target its check's read just found is asserted from that read, not read again.
+            true,
           );
         },
         signal,

@@ -83,6 +83,9 @@ export async function runTenantCommandTransaction<T>(
   journal: CommandJournal | undefined,
   extract: (result: unknown) => readonly CommandResultReference[],
   callback: (context: TenantCommandRecords) => T | Promise<T>,
+  /* `raw` is one read snapshot (an availability batch, tenantCommandAvailability.ts): every read sees one state, so
+     a target row its own read already found through this transaction is not read again (`target`). */
+  snapshot = false,
 ): Promise<T> {
   // Where this principal writes, from its kind (tenantCommandKind*.ts).
   const place = commandKindOf(scope.principal).place(scope.principal);
@@ -157,19 +160,54 @@ export async function runTenantCommandTransaction<T>(
     const columns = (ownership.schema.tables.find((value) => value.id === table) ?? deny()).columns;
     return { key, kinds: Object.fromEntries(columns.map((column) => [column.name, columnKind(column.type)])) };
   };
+  /** The column a row's owner is read from where this kind reads owners; undefined where it does not. */
+  const ownerOf = (table: string): string | undefined => {
+    const rule = ownership.ownership[table];
+    return place.readsOwners && rule.kind === 'tenant' ? rule.column : undefined;
+  };
+  // A key that has no canonical spelling is never kept, and so is read, as before.
+  const keyText = (key: Readonly<Record<string, unknown>>): string | undefined => {
+    try {
+      return canonicalCommandJson(key, 8192);
+    } catch {
+      return undefined;
+    }
+  };
+  /* In a snapshot, the command's target rows its own reads found through this transaction, by their key, with
+     their owner where this kind reads one: the read `visible` would ask, already answered in the same state. An
+     availability check reads its targets and then asserts each (commandAvailability.ts); asserted by a second read,
+     that was a second round trip after the first for every check on a record page. */
+  const readTargets = new Map<string, string>();
+  const noteFound = (table: string, rows: readonly Record<string, unknown>[]) => {
+    if (!snapshot || table !== authorization.table(authorization.command.target)) return;
+    const columns = (ownership.schema.tables.find((value) => value.id === table) ?? deny()).columns,
+      shape = keyShape(
+        table,
+        columns.filter((column) => column.primaryKey).map((column) => column.name),
+      ),
+      owner = ownerOf(table);
+    for (const row of rows) {
+      const key = canonicalKey(shape, row),
+        text = key && keyText(key),
+        value = owner ? row[owner] : '';
+      if (text && typeof value === 'string') readTargets.set(text, value);
+    }
+  };
   /** Whether the row is visible here and, where the kind reads owners, whose
    * it is: a tenant row's owner, or '' for a platform row. */
   const visible = async (reference: CommandResultReference): Promise<string> => {
     tenantRecord(reference, ['table', 'key']);
     const table = authorization.table(reference.table),
       key = keyFor(table, reference.key);
-    const rule = ownership.ownership[table],
-      owner = place.readsOwners && rule.kind === 'tenant' ? rule.column : undefined;
+    const owner = ownerOf(table);
     /* The key and the row it names, each in its columns' one spelling (commandDb.ts canonicalKey): a record page
        reached by its address says an integer id as its digits, `{"id":"3"}`, and the row reads back 3. Compared as
        spelled, the platform's prepare on a page opened by its address was refused. */
     const shape = keyShape(table, Object.keys(key));
     const asked = canonicalKey(shape, key) ?? deny();
+    const text = snapshot ? keyText(asked) : undefined,
+      seen = text === undefined ? undefined : readTargets.get(text);
+    if (seen !== undefined) return seen;
     const result = await tx.query({
       table,
       columns: [...new Set([...Object.keys(key), ...(owner ? [owner] : [])])],
@@ -218,7 +256,9 @@ export async function runTenantCommandTransaction<T>(
         input,
         async (value) => {
           assertStructuredReadFilter(value.filter, 'column');
-          const result = await tx.query({ ...value, table: authorization.table(value.table) });
+          const table = authorization.table(value.table);
+          const result = await tx.query({ ...value, table });
+          noteFound(table, result.rows);
           return { ...result, sql: { text: '', params: [] } };
         },
         true,

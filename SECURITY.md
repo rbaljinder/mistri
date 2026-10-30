@@ -4,7 +4,7 @@
 
 tablewalk opens databases. If you find a way for it to read, write or reach
 something it should not, please report it privately rather than in a public
-issue, by email to security@tablewalk.dev. You will get an acknowledgement
+issue, by email to security@mistriwork.dev. You will get an acknowledgement
 within a few days and a fix or a reasoned answer as soon as one exists.
 Credit is given in the release notes unless you would rather it were not.
 

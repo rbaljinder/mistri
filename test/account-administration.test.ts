@@ -8,6 +8,7 @@
  */
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,6 +18,9 @@ import { createApp } from './support/createApp.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { loadApp, type AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
+import { provisionSqliteApiTokenStore } from '../packages/mistri/src/server/auth/provisionSqliteApiTokenStore.js';
+import { captureAuthStoreExclusion } from '../packages/mistri/src/server/auth/sqliteStoreIdentity.js';
+import { accountCredentials } from './support/accountCredentials.js';
 import { makeDemoDatabase, seedDemoDatabase } from './make-demo-db.js';
 
 process.env.BETTER_AUTH_SECRET = 'test-secret-that-is-at-least-thirty-two-characters-long';
@@ -63,6 +67,13 @@ describe('the accounts screen', () => {
     server = createApp({ registry, apps: [host], bound: { host: '127.0.0.1', port: 0 } });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    // The auth file first, then its API token store beside the accounts, then the server on both.
+    (await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin] })).close();
+    provisionSqliteApiTokenStore(join(tmp, 'auth.db'), {
+      appId: 'desk',
+      storeId: randomUUID(),
+      exclusions: [captureAuthStoreExclusion(db)],
+    });
     host.auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin] });
     console.log = (...args: unknown[]) => {
       logged.push(args.join(' '));
@@ -154,7 +165,10 @@ describe('the accounts screen', () => {
     assert.equal((await call('/api/schema', { cookie: patCookie })).status, 200);
 
     // Deactivated: its session ends, it cannot sign in, and the store says who did it.
+    const madeBefore = accountCredentials(host.auth!.store, 'desk', pat.id);
     assert.equal((await change(root, { operation: 'deactivate', accountId: pat.id })).status, 200);
+    // Its tokens and grants are revoked, so a reactivation brings none of them back.
+    assert.deepEqual(madeBefore(), { token: true, grant: true });
     assert.equal((await call('/api/schema', { cookie: patCookie })).status, 401);
     assert.notEqual((await signIn('pat@example.org', 'pat-password-1')).status, 200);
     assert.equal(stored('pat@example.org')!.banReason, 'Deactivated by root@example.org');
@@ -163,7 +177,9 @@ describe('the accounts screen', () => {
 
     // A new password, set by the administrator, ends the old sessions.
     const before = (await signIn('pat@example.org', 'pat-password-1')).cookie;
+    const heldBefore = accountCredentials(host.auth!.store, 'desk', pat.id);
     assert.equal((await change(root, { operation: 'setPassword', accountId: pat.id, password: 'pat-password-2' })).status, 200);
+    assert.deepEqual(heldBefore(), { token: true, grant: true }, 'and the tokens and grants made under the old one');
     assert.equal((await call('/api/schema', { cookie: before })).status, 401);
     assert.equal((await signIn('pat@example.org', 'pat-password-2')).status, 200);
 

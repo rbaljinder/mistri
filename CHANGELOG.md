@@ -5,6 +5,30 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.6 (unreleased)
+
+- **A record page's actions are one round trip fewer.** Which verbs a record offers is checked in the request's one
+  read snapshot, each command reading its target rows and then asserting each target visible by reading it again: a
+  second wave of reads after the first, every record page, a round trip on a database a network away. The assertion
+  is now answered by the check's own read, which went through the same scoped transaction in the same snapshot; a
+  target that read did not find, or whose owner it could not see, is still read. Ignition's record page enters in 18
+  flights, the same on any machine, where a loaded one counted 19.
+- **A host's sign-in is never a recent one.** An embed exchange on the App's own origin answers with an ordinary
+  session cookie, and the cross-origin bearer's refusals did not reach it: a host whose issuer links verified
+  addresses could sign its page in as a platform operator and open a support session inside a tenant. Every session
+  an exchange opens is now recorded in the sign-in store before its cookie or bearer leaves, and whatever needs a
+  sign-in from the last few minutes (opening support, making an API token) asks for one at the App's own page
+  instead. `test/embed-tenant.test.ts` holds the same-origin case.
+- **Making a tenant API token needs a recent sign-in, and a reset password ends the account's tokens.** A token
+  lives up to a year, longer than the session that made it, so a member now makes one only with a sign-in from the
+  last five minutes, as opening support asks; an older session is told to sign in again (`sign_in_required`). A
+  password reset by its link, a password an administrator sets for someone, and a deactivation now revoke the
+  account's API tokens and OAuth grants with its sessions, so a reactivation brings none of them back.
+- **A wrong step-up code counts toward the reference's lockout.** Wrong codes were counted only by the process that
+  sent the code, five a code and three codes an hour, apart from the lockout every instance shares. They now count
+  in the shared one, beside wrong details: five wrong tries of either lock the reference for an hour on every
+  instance, and only a right code takes its count away.
+
 ## 1.0.0-rc.5 (unreleased)
 
 - **A tenant App's start describes each PostgreSQL catalog once.** Startup's two checks, its trial enrollment and the

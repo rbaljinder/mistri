@@ -275,6 +275,17 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       };
       const mine = await tokens(oscar, await dealerLease(f, oscar, 'north'), { tenant: 'north' });
       assert.match(String(mine.body.code), /^tokens_/, mine.text);
+      // Making one needs a sign-in from the last five minutes, as opening support does: a token outlives the
+      // session that made it, so a stolen or stale one makes none. Fresh, the ask reaches the token store.
+      const issue = async (lease: TenantContextReply) => {
+        const { query: search, headers: sent } = leased(oscar, lease, { tenant: 'north' });
+        return f.call(`/api/tokens/issue?${search}`, { body: { label: 'Nightly export' }, headers: sent });
+      };
+      const fresh = await issue(await dealerLease(f, oscar, 'north'));
+      assert.match(String(fresh.body.code), /^tokens_/, fresh.text);
+      await f.native.age(oscar.cookie, 310_000);
+      const stale = await issue(await dealerLease(f, oscar, 'north'));
+      assert.deepEqual([stale.status, stale.body.code, stale.body.outcome], [403, 'sign_in_required', 'not_applied'], stale.text);
       const refused = await tokens(avery, await lenderLease(f, avery), { realm: 'platform' });
       assert.equal(refused.status, 404, refused.text);
     },

@@ -225,3 +225,40 @@ test("a host that links verified addresses never opens a platform operator's sup
   assert.equal(read.status, 403, read.text);
   assert.doesNotMatch(read.text, /North lead/);
 });
+
+test("a host's sign-in on the App's own origin is never a recent one: it opens no support session, however fresh", async (t) => {
+  /* Same-origin, the exchange answers with an ordinary session cookie, not a
+     bearer, so the bearer's refusal does not apply. The session is marked at
+     the exchange instead, before the cookie leaves, and the step-up rules
+     read it as never recent: support asks for a sign-in at this App's own page. */
+  const f = await fixture(t, 'link-verified-email');
+  const { olivia } = f.accounts;
+  f.authDb().prepare('UPDATE user SET emailVerified = 1 WHERE email = ?').run(olivia.email);
+  const signed = await f.call('/api/auth/embed/exchange', {
+    body: {
+      assertion: await mintEmbedAssertion({
+        issuer: 'https://dealers.example',
+        key: SECRET,
+        app: appId,
+        origin: f.origin,
+        subject: 'host-olivia',
+        email: olivia.email,
+        emailVerified: true,
+      }),
+    },
+  });
+  assert.equal(signed.status, 200, signed.text);
+  const host = { cookie: cookieOf(signed), accountId: olivia.accountId };
+  assert.equal((await f.call(`/api/whoami?app=${appId}`, { headers: { cookie: host.cookie } })).body.accountId, olivia.accountId);
+
+  const status = await f.support(host, 'status');
+  assert.equal(status.status, 200, status.text);
+  assert.equal(status.body.signInRequired, true, status.text);
+  const asked = await f.open(host, 'north', 'dealer_staff');
+  assert.equal(asked.status, 403, asked.text);
+  assert.equal(asked.body.code, 'tenant_support_sign_in_required', asked.text);
+  assert.equal((await f.support(olivia, 'status')).body.session, null, 'no session was opened');
+
+  // The operator's own sign-in at the App's page still opens one.
+  assert.equal((await f.open(olivia, 'north', 'dealer_staff')).status, 200);
+});
