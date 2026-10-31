@@ -271,10 +271,11 @@ test('the status probe is gated by the token and answers what is desired, starte
   });
 });
 
-test('the Worker stamps its version on the probe and the tick only, and drops a client copy', async () => {
+test('the Worker stamps its version on the token-carrying probe and the tick only, and drops a client copy', async () => {
   const seen: Array<string | null> = [];
   const env = {
     MISTRI_PUBLIC_URL: 'https://app.test',
+    MISTRI_RESTART_TOKEN: TOKEN,
     CF_VERSION_METADATA: { id: 'v2', timestamp: '2026-10-30T05:00:00.000Z' },
     APP: {
       idFromName: (n: string) => n,
@@ -286,7 +287,17 @@ test('the Worker stamps its version on the probe and the tick only, and drops a 
   await worker.scheduled(undefined, env);
   await worker.fetch(get('/x'), env);
   await worker.fetch(new Request('https://app.test/x', { headers: { 'x-mistri-worker-version': 'forged 2099-01-01' } }), env);
-  assert.deepEqual(seen, ['v2 2026-10-30T05:00:00.000Z', 'v2 2026-10-30T05:00:00.000Z', null, null]);
+  // A visitor's status request, without the token or with a wrong one, is not stamped: it cannot reset the object.
+  await worker.fetch(get('/__mistri/status'), env);
+  await worker.fetch(new Request('https://app.test/__mistri/status', { headers: { 'x-mistri-restart': 'b'.repeat(40) } }), env);
+  await worker.fetch(new Request('https://app.test/__mistri/status', { headers: { 'x-mistri-worker-version': 'forged 2099-01-01' } }), env);
+  assert.deepEqual(seen, ['v2 2026-10-30T05:00:00.000Z', 'v2 2026-10-30T05:00:00.000Z', null, null, null, null, null]);
+  // A project that names its own token secret names it to the Worker too.
+  seen.length = 0;
+  const own = mistriWorker({ binding: 'APP', instance: 'a', restartTokenEnv: 'OWN_TOKEN' });
+  await own.fetch(probe(), { ...env, MISTRI_RESTART_TOKEN: undefined, OWN_TOKEN: TOKEN });
+  await own.fetch(probe(), env);
+  assert.deepEqual(seen, ['v2 2026-10-30T05:00:00.000Z', null]);
 });
 
 test('a Durable Object behind a newer Worker resets itself, once per gap, and never for an older one', async () => {

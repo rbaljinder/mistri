@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test, type TestContext } from 'node:test';
 import { setServerTiming } from '../packages/engine/src/adapters/telemetry/serverTiming.js';
+import { postgresDescriptionCounts } from '../packages/engine/src/adapters/postgres.js';
 import { migratePostgresAuthStore } from '../packages/mistri/src/adapters/auth/postgresAuthStore.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
@@ -151,6 +152,8 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
     { id: 'loans', name: 'loans', url: relay.route(lending.source.url!), source: 'config', writable: true },
     { id: 'applicants', name: 'applicants', url: relay.route(lending.platformSources[0].url!), source: 'config' },
   ];
+  /* The start, from its first statement to the open port: what it reads of the two catalogs is counted below. */
+  const booting = { at: Date.now(), described: postgresDescriptionCounts().described };
   const prepared = await prepareTenantStartup({
     loaded: served,
     connections,
@@ -169,6 +172,10 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
   });
   owner.server.listen(port, '127.0.0.1');
   await once(owner.server, 'listening');
+  const boot = {
+    statements: relay.statements(booting.at),
+    described: postgresDescriptionCounts().described - booting.described,
+  };
 
   const jar = new Map<string, string>();
   const call = async (path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Answer> => {
@@ -226,7 +233,7 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
   } finally {
     await store.end();
   }
-  return { call, accountId, tenant, lending };
+  return { call, accountId, tenant, lending, boot };
 }
 
 /* The App's lists and an update command, read from its payload as scripts/capacity-harness.mjs reads them. */
@@ -266,6 +273,12 @@ const BUDGETS: Record<string, number> = {
      COMMIT) and its fence: 14, a flight or two more as the parallel snapshots interleave on the wire. */
   enter: 16,
 };
+/* The first of a catalog description's six statements (adapters/postgresCatalog.ts). */
+const DESCRIBES = /\bAS approx_rows\b/;
+/* What a runtime store's full attestation reads of the catalog: its relations' layout (postgresRelations.ts), and who
+   owns, may use or holds objects in the runtime schema beside them (postgresRuntimeSchemaProblems). */
+const STORE_LAYOUT = /\bc\.relrowsecurity AS rls\b/;
+const STORE_OWNERS = /^\s*WITH me AS \(SELECT r\.oid, r\.rolsuper\b/;
 const listQuery = (list: { table: string; show: string[]; tabs: string[] }, tab: number) =>
   `${list.table} ${list.tabs[tab] ?? ''}${list.show.length ? ` show ${list.show.join(', ')}, id` : ''}`.replace(/\s+/g, ' ').trim();
 
@@ -274,6 +287,33 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
     const relay = await startLatencyProxy(LIVE!, 0);
     t.after(() => relay.close());
     const f = await deploy(t, relay);
+    /* A start describes each database's catalog once: startup's two checks, its trial enrollment and the host's, each
+       read source, the first scoped transaction and each platform source's two snapshots each described it afresh —
+       sixteen descriptions of these two databases, six round trips apiece. Every other reader finds the one kept under
+       the digest it reads in its own snapshot (sharedDescriptions, adapters/postgres.ts). */
+    const described = f.boot.statements.filter((statement) => DESCRIBES.test(statement.text)).length;
+    t.diagnostic(`start: ${f.boot.statements.length} statements, ${described} catalog descriptions`);
+    assert.equal(described, 2, 'the tenant source and the platform source are each described once at the start');
+    assert.equal(f.boot.described, 2);
+    /* Each runtime store is attested once at the start, under the catalog version the first attesting transaction
+       read, and every other adapter and snapshot of the database that reads the same version finds it attested
+       (sharedAttestations, postgresTransactionHandle.ts): 42 layout reads and 32 ownership checks when each adapter
+       attested for itself. The tenant, administration, invitation and support stores' checks, one each; what each
+       adapter still reads for itself is the store's meta row, which binds it to this App. */
+    const owners = f.boot.statements.filter((statement) => STORE_OWNERS.test(statement.text));
+    const layouts = f.boot.statements.filter((statement) => STORE_LAYOUT.test(statement.text) && statement.params?.[2] === 'mistri');
+    t.diagnostic(`start: ${layouts.length} store layout reads, ${owners.length} ownership checks`);
+    assert.deepEqual(owners.map((statement) => statement.params?.[1]).sort(), ['admin_', 'invitation_', 'support_', 'tenant_']);
+    // The invitation store's layout is also read twice to ask whether it is there at all, which attests nothing.
+    const shared = ['admin_', 'support_', 'tenant_'];
+    assert.deepEqual(
+      layouts
+        .map((statement) => statement.params?.[0])
+        .filter((prefix) => shared.includes(prefix!))
+        .sort(),
+      shared,
+      'each shared store layout is read once',
+    );
     const who = await f.call('/api/whoami?app=ignition');
     assert.equal(who.status, 200, who.text);
     const identity = { 'x-mistri-account': f.accountId, 'x-mistri-app': 'ignition' };
@@ -411,6 +451,13 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
         `execute together ${at}: ${answer.total} flights ${JSON.stringify(answer.flights)}${counted === answer ? '' : ' (one session refresh)'}`,
       );
     }
+    // A warm request trusts the description its digest or epoch finds: none describes the catalog again.
+    assert.deepEqual(
+      Object.entries(measured)
+        .filter(([, answer]) => answer.statements.some((statement) => DESCRIBES.test(statement.text)))
+        .map(([name]) => name),
+      [],
+    );
     const over = Object.entries(measured).filter(([name, answer]) => answer.total > BUDGETS[name.replace(/ together \d+$/, '')]!);
     assert.deepEqual(
       over.map(

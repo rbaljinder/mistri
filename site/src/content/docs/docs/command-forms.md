@@ -146,7 +146,8 @@ example shows one.
 A `statusCheck` lets an applicant ask for a submitted application's state at
 `/form/<key>/status`, confirmed by one to three details only they know. Every
 wrong answer gets the same reply, and five failures lock the receipt for an hour. `stepUp: { email, show }` emails a six-digit code that
-opens more for 15 minutes, through the [email service](/docs/email/). `link`
+opens more for 15 minutes, through the [email service](/docs/email/); a wrong code counts toward the same lock, on
+every instance. `link`
 adds a submitted application to an account on proven control only (the same
 device, a passed status check, or an email verified by code), never on a
 matching name.

@@ -183,6 +183,10 @@ const canonical = (value: unknown) => canonicalCommandJson(value, 1_048_576);
 
 async function isLayout(client: PgQuery, owner: TenantStoreBinding): Promise<boolean> {
   if (canonical(await describePostgresRelations(client, ADMINISTRATION_JOURNAL_PREFIX)) !== canonical(layout)) return false;
+  return binds(client, owner);
+}
+/** Whether the meta row binds the journal to `owner`: read in every attestation, a shared one too (postgresStoreFence.ts). */
+async function binds(client: PgQuery, owner: TenantStoreBinding): Promise<boolean> {
   const rows = (await client.query(`SELECT singleton, version, app_id, source_id, store_id FROM ${q(tables.meta)}`)).rows;
   return rows.length === 1 && bound(owner)(rows[0]);
 }
@@ -195,17 +199,23 @@ const bound = (owner: TenantStoreBinding) => (row: Record<string, unknown>) =>
 /* Attested in full when an adapter first uses it, after its tenant store (postgresStoreFence.ts). */
 async function attest(client: PgQuery, owner: TenantStoreBinding): Promise<void> {
   await assertPostgresTenantStore(client, owner);
-  await attestOnce(client, ADMINISTRATION_JOURNAL_PREFIX, canonical(owner), async () => {
-    if (!(await isLayout(client, owner)))
-      return denyLayout(
-        layoutRefusal(
-          'The PostgreSQL tenant administration journal',
-          await postgresLayoutVersion(client, q(tables.meta)),
-          POSTGRES_ADMINISTRATION_JOURNAL_VERSION,
-        ),
-      );
-    if ((await reservedTableOwnershipProblems(client, ADMINISTRATION_JOURNAL_PREFIX)).length) denyTenant();
-  });
+  await attestOnce(
+    client,
+    ADMINISTRATION_JOURNAL_PREFIX,
+    canonical(owner),
+    async () => {
+      if (!(await isLayout(client, owner)))
+        return denyLayout(
+          layoutRefusal(
+            'The PostgreSQL tenant administration journal',
+            await postgresLayoutVersion(client, q(tables.meta)),
+            POSTGRES_ADMINISTRATION_JOURNAL_VERSION,
+          ),
+        );
+      if ((await reservedTableOwnershipProblems(client, ADMINISTRATION_JOURNAL_PREFIX)).length) denyTenant();
+    },
+    () => binds(client, owner),
+  );
 }
 
 /** Attest the journal (and its tenant store) inside the caller's transaction. */

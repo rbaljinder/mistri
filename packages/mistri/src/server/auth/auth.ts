@@ -71,7 +71,7 @@ import {
   type AuthStoreExclusion,
   type PostgresSeparationConnection,
 } from './authStoreSeparation.js';
-import { isPostgresAuthStore, openPostgresAuthStore, openSqliteAuthStore, type AuthStoreHandle } from './authStore.js';
+import { isPostgresAuthStore, openPostgresAuthStore, openSqliteAuthStore, storeFailureBeneath, type AuthStoreHandle } from './authStore.js';
 import { expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.js';
 import type { PgQuery, PgPool } from '@mistriwork/engine/adapters/postgresPool.js';
 import { withPostgresAuthModels } from '../../adapters/auth/postgresAuthStore.js';
@@ -106,20 +106,21 @@ import { timedSum } from '@mistriwork/engine/adapters/telemetry/serverTiming.js'
 
 import { captureApiTokenCommandContext } from './apiTokenCommandContext.js';
 
-import { createNativeSignInAge } from './nativeSignInAge.js';
+import { createNativeSignInAge, RECENT_SIGN_IN_MAX_MS } from './nativeSignInAge.js';
 import { acquirePostgresTokenObservation, acquireSqliteTokenObservation } from './nativeTokenObservation.js';
 import type { EmailTransport } from '../email/email.js';
 import { appAuthProviders, passwordResetDelivery } from './authProviders.js';
 import { embedProblems, issuersFor, type EmbedIssuerConfig } from '../embed/issuerConfig.js';
 import { EmbedRefusal, embedIssuers } from '../embed/assertion.js';
 import { createEmbedExchange } from '../embed/exchange.js';
-import { assertionLedger, type LedgerAdapter } from '../embed/ledger.js';
+import { assertionLedger, embedSessionMarks, type LedgerAdapter } from '../embed/ledger.js';
 import type { ProxyRange } from '@mistriwork/engine/server/http/trust.js';
 import { embedSignInPlugin, type EmbedApi, type EmbedSignInAnswer } from '../embed/signInPlugin.js';
 import { oauthProblems, oauthRoleCeiling, type OAuthServerConfig } from '../api/oauthConfig.js';
 import { bindOAuthResource, oauthTenancyOf } from './oauthResource.js';
 import { scimEntriesFor, type ScimDirectoryConfig } from './scimConfig.js';
 import { scimProvisioning } from './scimDirectory.js';
+import { accountTokenRevoker } from './accountApiTokens.js';
 import { authFailureLog } from './authFailureLog.js';
 
 /** A name that is one plain line: trimmed, short, no control characters. A malformed one is not said at all. */
@@ -1276,6 +1277,18 @@ export async function createAppAuth(
     const scim = { environment, baseURL: opts.baseURL, APIError, store: handle, current };
     const provisioning = directories.length ? await scimProvisioning(directories, loaded, scim, () => auth.handler) : undefined;
     const failures = authFailureLog(loaded.app.id, under);
+    /* A reset ends the account's sessions (revokeSessionsOnPasswordReset); its API tokens and OAuth grants go
+       with them, since whoever held the old password may have made one, and a token outlives every session. */
+    const revokeAccountTokens = accountTokenRevoker(handle.file ? { file: handle.file } : { pool: handle.database as PgQuery });
+    const passwords = (providers as { emailAndPassword?: Record<string, unknown> }).emailAndPassword;
+    const endsTokens = passwords
+      ? {
+          emailAndPassword: {
+            ...passwords,
+            onPasswordReset: async ({ user }: { user: { id: string } }) => revokeAccountTokens(user.id, user.id),
+          },
+        }
+      : {};
     const given = {
       appName: loaded.app.name,
       database: handle.database,
@@ -1294,6 +1307,7 @@ export async function createAppAuth(
       secret,
       trustedOrigins: [...opts.trustedOrigins],
       ...providers,
+      ...endsTokens,
       plugins: [
         admin({ defaultRole: spec.defaultRole }),
         accountAuditPlugin(),
@@ -1405,6 +1419,7 @@ export async function createAppAuth(
     const administration = createAccountAdministration(auth.api as unknown as AccountAdminApi, {
       passwords: spec.providers.includes('email'),
       audit,
+      revokeTokens: revokeAccountTokens,
     });
     const signInInstants = new WeakMap<VerifiedSessionInstance, number>();
     const displayNames = new WeakMap<VerifiedSessionInstance, string>();
@@ -1424,7 +1439,12 @@ export async function createAppAuth(
     const sessionOf = (req: IncomingMessage, fixed: boolean) => timedSum('auth', () => readSession(req, fixed));
     const readSession = async (req: IncomingMessage, fixed: boolean) => {
       const headers = fromNodeHeaders(req.headers);
-      const ask = () => auth.api.getSession(fixed ? { headers, query: { disableCookieCache: true, disableRefresh: true } } : { headers });
+      /* The store failing beneath it is that failure, not Better Auth's bare 500 over it (storeFailureBeneath): the
+         tenant path answers it as the store not answering, never as the session refused. */
+      const ask = () =>
+        storeFailureBeneath(() =>
+          auth.api.getSession(fixed ? { headers, query: { disableCookieCache: true, disableRefresh: true } } : { headers }),
+        );
       if (!reads) return ask();
       const presented = createHash('sha256')
         .update(JSON.stringify([req.headers.cookie ?? null, req.headers.authorization ?? null]))
@@ -1462,6 +1482,25 @@ export async function createAppAuth(
     let oauthDoor: { handle(req: IncomingMessage, res: ServerResponse, route: string): Promise<void> } | undefined;
     const sessionCookie = ((await auth.$context) as unknown as { authCookies: { sessionToken: { name: string } } }).authCookies.sessionToken
       .name;
+    /* Sessions a host's assertion opened (embed/ledger.ts): never a recent sign-in, whatever their age. Asked only
+       of a session young enough to be one, once per session in this process; a mark is written before its session
+       is ever handed out, so an answer, either way, holds for the session's life. Bounded as a cache is. */
+    const embedSessions = embedSessionMarks(async () => ((await auth.$context) as unknown as { adapter: LedgerAdapter }).adapter);
+    const openedByHost = new Map<string, boolean>();
+    const hostOpened = async (sessionId: string): Promise<boolean> => {
+      const known = openedByHost.get(sessionId);
+      if (known !== undefined) return known;
+      let marked: boolean;
+      try {
+        marked = await embedSessions.marked(sessionId);
+      } catch {
+        // A store that cannot say counts the session as a host's: a step-up then asks again, and nothing opens.
+        return true;
+      }
+      if (openedByHost.size >= 10_000) openedByHost.delete(openedByHost.keys().next().value!);
+      openedByHost.set(sessionId, marked);
+      return marked;
+    };
     const embedExchange = embedded.length
       ? createEmbedExchange({
           appId: loaded.app.id,
@@ -1505,6 +1544,15 @@ export async function createAppAuth(
               ?.slice(sessionCookie.length + 1)
               .split(';')[0];
             if (!token) throw new Error(`${at}: the embed sign-in set no session cookie.`);
+            /* Marked before the cookie or bearer leaves: a host's sign-in asked the person nothing here, so it never
+               counts as a recent one (opening support, issuing an API token). A mark that cannot be written ends the
+               session rather than hand out one that would. */
+            try {
+              await embedSessions.mark(response.sessionId, response.expiresAt);
+            } catch (error) {
+              await (auth.api as unknown as EmbedApi).mistriEmbedEnd({ body: { token } }).catch(() => {});
+              throw error;
+            }
             /* The roles the issuer's mapping gave, for this session alone
                (embedRole): the account keeps what an administrator set. */
             if (config.roles) {
@@ -1691,6 +1739,15 @@ export async function createAppAuth(
           if (evidence) {
             stepUps.instants.set(proof, evidence.at);
             stepUps.providers.set(proof, evidence.provider);
+          } else if (
+            /* A session a host's assertion opened is never recent (embed/ledger.ts). Older than any step-up asks, it
+               could not count as recent anyway, so only a young one is looked up. */
+            Number.isSafeInteger(createdAt) &&
+            Date.now() - createdAt <= RECENT_SIGN_IN_MAX_MS &&
+            (await hostOpened(session.id))
+          ) {
+            if (closed) return denyTenant();
+            stepUps.instants.set(proof, null);
           }
           return proof;
         } catch (error) {

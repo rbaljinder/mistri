@@ -182,6 +182,34 @@ export function trustedProxyPeer(address: string | undefined, trusted: readonly 
   return !!groups && trusted.some((range) => inRange(groups, range));
 }
 
+/** Whether a public address (MISTRI_PUBLIC_URL) is an https one: what `ServerSettings.httpsFront` is set from. */
+export function httpsAddress(url: string | undefined): boolean {
+  try {
+    return url !== undefined && new URL(url.trim()).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a request reached this server over https: its socket is TLS; the
+ * server is published at an https address (`ServerSettings.httpsFront`), so
+ * a TLS front end stood before it; or a proxy it trusts (`trustedProxyPeer`)
+ * says in `X-Forwarded-Proto` that it forwarded https. The one rule for a
+ * Secure cookie, `Strict-Transport-Security` and the origin a page writes
+ * into a sitemap or a link preview (requestOrigin.ts, baselineHeaders.ts,
+ * forms/savedForms.ts `secureRequest`).
+ */
+export function arrivedOverHttps(req: Pick<IncomingMessage, 'headers' | 'socket'>, trusted: readonly ProxyRange[] = []): boolean {
+  if ((req.socket as { encrypted?: boolean }).encrypted) return true;
+  if (serverSettings().httpsFront) return true;
+  const forwarded = String(req.headers['x-forwarded-proto'] ?? '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+  return forwarded === 'https' && trustedProxyPeer(req.socket.remoteAddress, trusted);
+}
+
 /*
  * How to name the client behind a managed front end, whose own address cannot
  * be written into `--trust-proxy` (Cloud Run's, Cloudflare's: a changing pool

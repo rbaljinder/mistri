@@ -322,6 +322,39 @@ test(
 );
 
 test(
+  'wrong step-up codes count toward the reference lockout every instance shares, not only the code in one process',
+  { timeout: 30_000 },
+  async () => {
+    await fixture(async (f) => {
+      const ada = new Browser(f.base, 'ada');
+      const receipt = await ada.apply('ada@example.test');
+      const visitor = new Browser(f.base, 'visitor');
+      resetPublicFormLimits();
+      assert.deepEqual((await visitor.post('/api/forms/apply/stepup', { receipt, confirm: { last_name: 'Lovelace' } })).body, {
+        sent: true,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const code = codeIn(f.mail()[0])!;
+      const wrong = code === '000000' ? '111111' : '000000';
+      for (let i = 0; i < 5; i++) {
+        resetPublicFormLimits();
+        const refused = await visitor.post('/api/forms/apply/stepup', { receipt, confirm: { last_name: 'Lovelace' }, code: wrong });
+        assert.equal(refused.body.code, 'code_refused', refused.raw);
+      }
+      // Another instance holds none of this process's codes or tries; the reference is locked there too.
+      resetOneTimeCodes();
+      resetPublicFormLimits();
+      const again = await visitor.post('/api/forms/apply/stepup', { receipt, confirm: { last_name: 'Lovelace' } });
+      assert.equal(again.status, 404, again.raw);
+      assert.equal(f.mail().length, 1, 'no second code is sent');
+      resetPublicFormLimits();
+      assert.equal((await visitor.post('/api/forms/apply/status', { receipt, confirm: { last_name: 'Lovelace' } })).status, 404);
+    });
+    resetOneTimeCodes();
+  },
+);
+
+test(
   "an account's email finds applications only once verified, each linked by its own Yes; a proved address links without asking",
   { timeout: 30_000 },
   async () => {

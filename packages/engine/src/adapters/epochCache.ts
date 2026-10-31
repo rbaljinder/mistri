@@ -72,6 +72,11 @@ export class EpochCache<V> {
     this.entries.clear();
   }
 
+  /** Drop what is kept for `key`, whatever its version. */
+  forget(key: string): void {
+    this.entries.delete(key);
+  }
+
   get size(): number {
     return this.entries.size;
   }

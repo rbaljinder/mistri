@@ -4,10 +4,12 @@
  * server's log (`MISTRI_AUTH_RESET=log`): what this proves is that the link
  * goes there and nowhere else — never into an HTTP answer, which would hand
  * any account to whoever asked — that it works once, and that it ends the
- * sessions the old password held.
+ * sessions the old password held, and the API tokens and OAuth grants made
+ * while it held.
  */
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,6 +18,9 @@ import { createApp } from './support/createApp.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { loadApp, type AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
+import { provisionSqliteApiTokenStore } from '../packages/mistri/src/server/auth/provisionSqliteApiTokenStore.js';
+import { captureAuthStoreExclusion } from '../packages/mistri/src/server/auth/sqliteStoreIdentity.js';
+import { accountCredentials } from './support/accountCredentials.js';
 import { makeDemoDatabase, seedDemoDatabase } from './make-demo-db.js';
 
 process.env.BETTER_AUTH_SECRET = 'test-secret-that-is-at-least-thirty-two-characters-long';
@@ -57,6 +62,13 @@ describe('a password reset by a logged link', () => {
     origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
     process.env.MISTRI_AUTH_RESET = 'log';
     try {
+      // The auth file first, then its API token store beside the accounts, then the server on both.
+      (await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin], development: true })).close();
+      provisionSqliteApiTokenStore(join(tmp, 'auth.db'), {
+        appId: loaded.app.id,
+        storeId: randomUUID(),
+        exclusions: [captureAuthStoreExclusion(db)],
+      });
       host.auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin], development: true });
     } finally {
       delete process.env.MISTRI_AUTH_RESET;
@@ -111,6 +123,11 @@ describe('a password reset by a logged link', () => {
     const old = up.cookie;
     assert.equal((await call('/api/whoami', { cookie: old })).json.who, 'ada@example.org');
 
+    // A token and a grant made while the old password held: whoever held it may have made them.
+    const account = String((up.json.user as { id: string }).id);
+    const revoked = accountCredentials(join(tmp, 'auth.db'), host.app.app.id, account);
+    assert.deepEqual(revoked(), { token: false, grant: false });
+
     const back = `${origin}/secured/sign-in?reset=1`;
     const asked = await post('/api/auth/request-password-reset', { email: 'ada@example.org', redirectTo: back });
     assert.equal(asked.status, 200, asked.text);
@@ -138,6 +155,8 @@ describe('a password reset by a logged link', () => {
 
     const changed = await post('/api/auth/reset-password', { newPassword: 'second-password-2', token });
     assert.equal(changed.status, 200, changed.text);
+    // Its tokens and grants end with its sessions.
+    assert.deepEqual(revoked(), { token: true, grant: true });
     // Once: the same token is refused after it is spent.
     const again = await post('/api/auth/reset-password', { newPassword: 'third-password-3', token });
     assert.equal(again.status, 400);

@@ -38,11 +38,13 @@ import type { TestControl } from '../http/testControl.js';
 import { signInOf, isPublicForm, type AppDef } from '../../shared/app.js';
 import { createServer, validateHeaderValue, type IncomingMessage, type ServerResponse } from 'node:http';
 import { isDeepStrictEqual } from 'node:util';
+import { isPromise } from 'node:util/types';
 import { LOADED_APP_KEYS, type LoadedApp } from '../app/apps.js';
 import {
   authHoldsOwnProof,
   captureAppAuthRuntime,
   captureNativeDisplayName,
+  captureNativeSignInAge,
   signInInfo,
   type AppAuthRuntime,
   type VerifiedSessionInstance,
@@ -54,7 +56,15 @@ import { doorRefusal, writes, type Bound, type ProxyRange } from '@mistriwork/en
 import { setBaselineHeaders } from '@mistriwork/engine/server/http/baselineHeaders.js';
 import { embedDoor } from '../embed/crossOrigin.js';
 import { TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
-import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
+import {
+  captureTenantData,
+  databaseUnanswered,
+  denyTenant,
+  tenantIdentifier,
+  tenantOptions,
+  tenantRecord,
+} from '@mistriwork/engine/server/evidence.js';
+import { poolBusyRetryAfterSeconds } from '@mistriwork/engine/adapters/poolMetrics.js';
 import {
   captureTenantAdministrationEnrollment,
   captureTenantEnrollment,
@@ -64,7 +74,7 @@ import {
 import { openTenantAdministration, type TenantAdministration } from './tenantAdministration.js';
 import { tenantClonePlan } from './tenantClonePlan.js';
 import { openTenantSupport, type TenantSupport } from './tenantSupportOperations.js';
-import { SUPPORT_REFUSAL_CODES } from '../../shared/tenantSupport.js';
+import { SUPPORT_OPENING_AGE_MS, SUPPORT_REFUSAL_CODES } from '../../shared/tenantSupport.js';
 import { createTenantAdministrationHttp, isTenantAdministrationHttpRequest } from './tenantAdministrationHttp.js';
 import {
   ADMINISTRATION_HTTP_HEADER,
@@ -571,12 +581,33 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         return undefined;
       }
     };
+    /* Whether a request's login was made here a moment ago, as opening a support session asks
+       (tenantSupportOperations.ts): issuing an API token asks it too. Read off the proof this request was
+       verified by; a session a host's assertion opened never counts (embed/ledger.ts). */
+    let signInAge: ReturnType<typeof captureNativeSignInAge> | undefined;
+    try {
+      signInAge = captureNativeSignInAge(raw.auth as AppAuthRuntime);
+    } catch {
+      signInAge = undefined;
+    }
+    const recentSignIn = async (request: IncomingMessage): Promise<boolean> => {
+      const proof = resolved.get(request);
+      if (!proof || !signInAge) return false;
+      try {
+        const observed = signInAge.observeRecent(proof, Date.now(), SUPPORT_OPENING_AGE_MS);
+        if (isPromise(observed)) await observed;
+        return true;
+      } catch {
+        return false;
+      }
+    };
     data = createTenantHttpServer({
       app: loaded.app,
       look: () => look,
       enrollment,
       verifySessionInstance: verify,
       readerName,
+      recentSignIn,
       bound: raw.bound as Bound,
       ...(support ? { support } : {}),
       ...(components ? { components } : {}),
@@ -899,7 +930,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     /* What a link preview reads of the landing (clientHttp.ts socialMeta), as the ordinary host says it (handler.ts socialHead). */
     const landingSocial = async (req: IncomingMessage, path: string, hosted: BrandingPresentation | undefined) => {
       const landing = landingCard(path, hosted);
-      const origin = landing && requestOrigin(req, raw.bound as Bound);
+      const origin = landing && requestOrigin(req, publicBound);
       if (!landing || !origin) return {};
       const image = await shareCardImage(origin, mount, path, landing.card).catch(() => undefined);
       const social: SocialHead = {
@@ -951,7 +982,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     const widget = challenge?.widget?.script;
     const egress = shellEgress([{ ui: loaded.app.ui, components: Boolean(loaded.components), ...(widget ? { widget } : {}) }]);
     const server = createServer((req, res) => {
-      setBaselineHeaders(req, res, (raw.bound as Bound).trustedProxies);
+      setBaselineHeaders(req, res, publicBound.trustedProxies);
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
         finish = resolve;
@@ -1409,9 +1440,14 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             return;
           }
           for (const name of Object.values(headers)) res.removeHeader(name);
-          send(req, res, error instanceof AuthRequestRefusal ? error.status : dispatchedMutation ? 503 : 403, {
+          /* Nothing dispatched and the store did not answer (a whoami whose session lookup found the pool busy):
+             nothing was decided, so not the 403 a refusal is but a 503 with when to come back, as the tenant
+             routes answer it (tenantWire.ts send). */
+          const unanswered = !dispatchedMutation && !(error instanceof AuthRequestRefusal) && databaseUnanswered(error);
+          if (unanswered) res.setHeader('retry-after', String(poolBusyRetryAfterSeconds(error)));
+          send(req, res, error instanceof AuthRequestRefusal ? error.status : dispatchedMutation || unanswered ? 503 : 403, {
             error: 'The authentication request could not be confirmed.',
-            code: dispatchedMutation ? 'auth_unknown' : 'auth_unavailable',
+            code: dispatchedMutation ? 'auth_unknown' : unanswered ? 'auth_temporarily_unavailable' : 'auth_unavailable',
             ...(dispatchedMutation ? { outcome: 'unknown' } : {}),
           });
         })

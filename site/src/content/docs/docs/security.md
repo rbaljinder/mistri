@@ -97,7 +97,7 @@ An App is trusted server code. Its `app.ts`, `commands.ts`, jobs and custom comp
 
 <!-- TODO(1.0): reporting address -->
 
-Email security@tablewalk.dev rather than opening a public issue. You will get
+Email security@mistriwork.dev rather than opening a public issue. You will get
 an acknowledgement within a few days. The repository's `SECURITY.md` holds the
 whole model, point by point.
 

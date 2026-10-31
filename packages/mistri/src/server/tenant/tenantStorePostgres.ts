@@ -256,6 +256,10 @@ async function assertPostgresTransaction(client: PgQuery): Promise<void> {
 
 async function isLayout(client: PgQuery, owner: TenantStoreBinding): Promise<boolean> {
   if (canonical(await describePostgresRelations(client, TENANT_STORE_PREFIX)) !== canonical(layout)) return false;
+  return binds(client, owner);
+}
+/** Whether the meta row binds the store to `owner`: read in every attestation, a shared one too (postgresStoreFence.ts). */
+async function binds(client: PgQuery, owner: TenantStoreBinding): Promise<boolean> {
   const rows = (await client.query(`SELECT singleton, version, app_id, source_id, store_id FROM ${q(tables.meta)}`)).rows;
   if (rows.length === 1 && typeof rows[0].app_id === 'string' && rows[0].app_id !== owner.appId)
     throw new TenantStoreOfAnotherApp(rows[0].app_id, owner.appId);
@@ -296,20 +300,26 @@ const bound = (owner: TenantStoreBinding) => (row: Record<string, unknown>) =>
 async function attest(client: PgQuery, owner: TenantStoreBinding): Promise<void> {
   // A read snapshot's handle says it attested already.
   if (attestedStores.has(client)) return;
-  return attestOnce(client, TENANT_STORE_PREFIX, canonical(owner), async () => {
-    await assertPostgresTransaction(client);
-    let layout: boolean;
-    try {
-      layout = await isLayout(client, owner);
-    } catch (error) {
-      return denyTenantFor(error);
-    }
-    if (!layout)
-      return denyLayout(
-        layoutRefusal('The PostgreSQL tenant store', await postgresLayoutVersion(client, q(tables.meta)), POSTGRES_TENANT_STORE_VERSION),
-      );
-    if ((await reservedTableOwnershipProblems(client, TENANT_STORE_PREFIX)).length) denyTenant();
-  });
+  return attestOnce(
+    client,
+    TENANT_STORE_PREFIX,
+    canonical(owner),
+    async () => {
+      await assertPostgresTransaction(client);
+      let layout: boolean;
+      try {
+        layout = await isLayout(client, owner);
+      } catch (error) {
+        return denyTenantFor(error);
+      }
+      if (!layout)
+        return denyLayout(
+          layoutRefusal('The PostgreSQL tenant store', await postgresLayoutVersion(client, q(tables.meta)), POSTGRES_TENANT_STORE_VERSION),
+        );
+      if ((await reservedTableOwnershipProblems(client, TENANT_STORE_PREFIX)).length) denyTenant();
+    },
+    () => binds(client, owner),
+  );
 }
 
 /** Attest inside the caller's transaction. Never creates or repairs. */

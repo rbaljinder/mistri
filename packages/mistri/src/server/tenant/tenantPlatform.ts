@@ -8,7 +8,14 @@
  */
 import { isPromise } from 'node:util/types';
 import type { Identity } from '../auth/auth.js';
-import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
+import {
+  captureTenantData,
+  denyTenant,
+  denyTenantFor,
+  tenantIdentifier,
+  tenantOptions,
+  tenantRecord,
+} from '@mistriwork/engine/server/evidence.js';
 import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { evidenceRefused, type AdmissionCache } from './tenantAdmissionCache.js';
 import { revision, roles, time, type TenantStoreBinding } from './tenantStoreContract.js';
@@ -163,7 +170,7 @@ function delivered<T>(result: T | Promise<T>): T | Promise<T> {
     return Promise.prototype.then.call(
       result,
       (value: T) => captureTenantData(value),
-      () => denyTenant(),
+      (error: unknown) => denyTenantFor(error),
     ) as Promise<T>;
   return captureTenantData(result);
 }
@@ -348,8 +355,10 @@ export function createPlatformMembershipIssuer<Request>(options: PlatformMembers
             if (!keptEvidence || admission.retry !== true || !evidenceRefused(error)) throw error;
           }
         }
-      } catch {
-        return denyTenant();
+      } catch (error) {
+        /* As a tenant's admission is (tenantMembership.ts): the platform realm flattened every failure into a
+           denial, so a busy or unreachable database told an operator their context was gone (a 403, not a 503). */
+        return denyTenantFor(error);
       } finally {
         pending.delete(held);
         finish();

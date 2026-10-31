@@ -147,31 +147,26 @@ function bound(base: DatabaseSchema, app: AppDef, now: Date, me: string | null, 
 }
 let boundMade = 0;
 
-/* The instant a request's statements write for `now` (computed.ts statementInstant): one per request, the same for
-   every statement in it. A tenant HTTP request fixes it as it starts (withRequestInstant, tenantHttp.ts), so a
-   catalog served anywhere in that request, and every statement written after, reads the one instant. Elsewhere —
-   a notice's mail, a public page's read — serving a catalog says it for what follows from there, as folding it
-   into that catalog did; never kept past the work it was said in, so no request reads another's. */
-interface RequestInstant {
-  readonly at: string;
-  /** Said for the whole request, not by one serving of the catalog. */
-  readonly fixed: boolean;
-}
-const requestInstant = new AsyncLocalStorage<RequestInstant>();
-readStatementInstantFrom(() => requestInstant.getStore()?.at);
+/* The instant a request's statements write for `now` (computed.ts statementInstant): one per unit of work, the same
+   for every statement in it. A tenant HTTP request fixes it as it starts (withRequestInstant, tenantHttp.ts), so a
+   catalog served anywhere in that request, and every statement written after, reads the one instant; work that is
+   not a request — a notice's mail, a public page's read — runs in one of its own. Always scoped by `run`: serving a
+   catalog outside any once said its instant with `enterWith`, which stayed in the async context after the work it
+   was said for — every timer and callback begun later in that flow read it, however old — so a statement written
+   where nobody scoped an instant now says so (StatementInstantMissing) rather than writing a stale one. A request
+   that lasts — a live stream, an import — is many units of work, and each says its own (tenantHttp.ts). */
+const requestInstant = new AsyncLocalStorage<string>();
+readStatementInstantFrom(() => requestInstant.getStore());
 
-/** Run one request's work at one instant: every catalog it is served and every statement it writes read it. */
+/** Run one unit of work at one instant: every catalog it is served and every statement it writes read it. Nested,
+ * the inner work reads its own. */
 export function withRequestInstant<T>(at: Date, work: () => T): T {
-  return requestInstant.run({ at: at.toISOString(), fixed: true }, work);
+  return requestInstant.run(at.toISOString(), work);
 }
 
-/** The instant this serving reads: its request's where one is fixed, else the one given, said for what follows. */
+/** The instant this serving reads: its work's where one is scoped, else the one given, for this catalog alone. */
 function servedInstant(now: Date): string {
-  const held = requestInstant.getStore();
-  if (held?.fixed) return held.at;
-  const at = now.toISOString();
-  requestInstant.enterWith({ at, fixed: false });
-  return at;
+  return requestInstant.getStore() ?? now.toISOString();
 }
 
 /** The kept catalog a served one is a request's copy of (bound), or the catalog itself. */

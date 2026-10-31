@@ -139,6 +139,15 @@ export const main: Main = async () => {
     return;
   }
   configureProcess(opts, 'mistri');
+  /* Published at an https address, the server stands behind a TLS front end: its cookies are Secure, its answers pin
+     https and the pages it writes name https, though the front end forwards plain http (trust.ts arrivedOverHttps). */
+  if (process.env.MISTRI_PUBLIC_URL) {
+    const [{ httpsAddress }, { configureServerSettings }] = await Promise.all([
+      import('@mistriwork/engine/server/http/trust.js'),
+      import('@mistriwork/engine/adapters/serverSettings.js'),
+    ]);
+    if (httpsAddress(process.env.MISTRI_PUBLIC_URL)) configureServerSettings({ httpsFront: true });
+  }
   /* An App names its commands, so loading one reads its commands module:
      the HTTP runtime, mistri check and an export of an App. The modes that
      load no App take none. */

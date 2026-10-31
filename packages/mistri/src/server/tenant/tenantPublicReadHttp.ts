@@ -47,7 +47,7 @@ import { readAdapter, tenantFileRead } from './tenantHttp.js';
 import { projectTenantMetadata } from './tenantMetadata.js';
 import { tenantPagePlan, tenantReferences } from './tenantPageOperations.js';
 import { TenantPublicNotFound, type PublicPlacement, type PublicReadContext } from './tenantPublicReadRuntime.js';
-import { tenantServedSchema } from './tenantServedSchema.js';
+import { tenantServedSchema, withRequestInstant } from './tenantServedSchema.js';
 import type { TenantSearch } from './tenantSearch.js';
 
 /* The fields each body may say, as the member lane's (tenantHttp.ts), and the App it is for. */
@@ -174,11 +174,14 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
       /* Nobody is known, so the browser's language among the App's catalogs (or a pick kept in this browser) says
          the visitor's words and figures, as a single App's public page does (readerLocale.ts). */
       const locale = requestLocale(app, { visitor: true, req, res });
-      const answer = await withPublicContext(placement, async (context) => {
-        const instant = () => zonedNow(appZone(app.ui), new Date(now()));
-        const schema = tenantServedSchema(context, app, new Date(now()));
-        return route(context, schema, path, input, instant, locale);
-      });
+      /* One instant for the read, as for a member's request (tenantHttp.ts): the catalog and every statement it writes. */
+      const answer = await withPublicContext(placement, (context) =>
+        withRequestInstant(new Date(now()), () => {
+          const instant = () => zonedNow(appZone(app.ui), new Date(now()));
+          const schema = tenantServedSchema(context, app, new Date(now()));
+          return route(context, schema, path, input, instant, locale);
+        }),
+      );
       assertActive();
       if (req.aborted || res.destroyed) return;
       // A missing record and a refused one read the same as a missing page from outside.

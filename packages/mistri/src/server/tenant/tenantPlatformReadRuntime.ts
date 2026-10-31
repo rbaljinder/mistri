@@ -29,6 +29,7 @@ import type { TenantCapabilities } from './tenantCapabilities.js';
 import {
   captureTenantData,
   denyTenant,
+  denyTenantFor,
   TenantContextError,
   tenantIdentifier,
   tenantOptions,
@@ -87,7 +88,7 @@ function delivered<T>(value: T | Promise<T>): T | Promise<T> {
     ? (Promise.prototype.then.call(
         value,
         (result: T) => captureTenantData(result),
-        () => denyTenant(),
+        (error: unknown) => denyTenantFor(error),
       ) as Promise<T>)
     : captureTenantData(value);
 }
@@ -213,7 +214,10 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
           async (principal) => {
             let active = true,
               accepting = true,
-              failed = false;
+              failed = false,
+              /* The first failure, kept so the answer can tell a database that did not answer from a denial
+                 (tenantReadRuntime.ts keeps it the same way). */
+              failure: unknown;
             let lastTime = principal.verifiedAt;
             const pending = new Set<Promise<void>>();
             let releaseFlags = () => {};
@@ -283,9 +287,10 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                   const snapshot = captureTenantData(value);
                   await revalidateSession();
                   return snapshot;
-                } catch {
+                } catch (error) {
                   failed = true;
-                  return denyTenant();
+                  failure ??= error;
+                  return denyTenantFor(error);
                 }
               })();
               void operation.then(
@@ -444,12 +449,13 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
               try {
                 const result = delivered(callback(context));
                 output = isPromise(result) ? await result : result;
-              } catch {
+              } catch (error) {
                 callbackFailed = true;
+                failure ??= error;
               }
               accepting = false;
               await Promise.allSettled([...pending]);
-              if (callbackFailed || failed) return denyTenant();
+              if (callbackFailed || failed) return denyTenantFor(failure);
               await revalidate();
               return output as T;
             } finally {
@@ -462,8 +468,8 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
           },
           { retry: true },
         );
-      } catch {
-        return denyTenant();
+      } catch (error) {
+        return denyTenantFor(error);
       } finally {
         pendingRequests.delete(held);
         finish();

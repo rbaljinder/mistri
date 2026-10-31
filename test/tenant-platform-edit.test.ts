@@ -22,7 +22,8 @@ import { parseAppConfig, resolveAppAccess } from '../packages/mistri/src/shared/
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import type { TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
 import { defineAppTenantPolicy } from '../packages/mistri/src/server/policy/appTenantPolicy.js';
-import { TenantContextError } from '../packages/engine/src/server/evidence.js';
+import { PoolBusy } from '../packages/engine/src/adapters/poolMetrics.js';
+import { TenantContextError, TenantUnavailableError } from '../packages/engine/src/server/evidence.js';
 import { projectPlatformCapabilities } from '../packages/mistri/src/server/tenant/tenantCapabilities.js';
 import { createTenantContexts } from '../packages/mistri/src/server/tenant/tenantContexts.js';
 import { createTenantEnrollment, type TenantEnrollment } from '../packages/mistri/src/server/tenant/tenantEnrollment.js';
@@ -423,6 +424,29 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       assert.deepEqual(await rows('SELECT id FROM region'), [{ id: 'r1' }]);
       assert.deepEqual(await rows('SELECT name FROM vehicle_model'), [{ name: 'Sedan' }]);
       assert.deepEqual(await rows("SELECT name FROM plan WHERE id = 'p1'"), [{ name: 'Basic' }]);
+    });
+
+    /* The platform realm flattened every failure into a denial — its admission, its read runtime and the lease's
+       read — so a database that did not answer told an operator their context was gone: a 403 the browser does not
+       retry, where a tenant's read says 503. Each is classified now, as the tenant realm's is. */
+    test('a platform read the database does not answer is unavailable, and a refusal stays a refusal', async (t) => {
+      const { contexts } = await fixture(t, dialect);
+      const lease = await contexts.openPlatform(as('lee'));
+      const expected = { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision };
+      for (const fault of [
+        new PoolBusy('read', 'connection_limit'),
+        Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014', severity: 'ERROR' }),
+      ])
+        await assert.rejects(
+          contexts.withPlatformContext(as('lee'), expected, () => Promise.reject(fault)),
+          (error: unknown) => error instanceof TenantUnavailableError && error.code === 'tenant_temporarily_unavailable',
+        );
+      await assert.rejects(
+        contexts.withPlatformContext(as('lee'), expected, () => Promise.reject(new TenantContextError())),
+        (error: unknown) => error instanceof TenantContextError && !(error instanceof TenantUnavailableError),
+      );
+      // The lease stands through all of them.
+      assert.equal((await contexts.withPlatformContext(as('lee'), expected, () => 1)).value, 1);
     });
 
     test('a lease edits after the platform is suspended no more: the next Save is refused and nothing changes', async (t) => {

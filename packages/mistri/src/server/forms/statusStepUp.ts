@@ -29,7 +29,7 @@ import { statusWords, type AppFormLink, type AppFormSave, type AppStatusCheck } 
 import type { CommandCatalog } from '../commands/commandDb.js';
 import type { EmailTransport } from '../email/email.js';
 import { CODE_MINUTES, issueCode, spendCode } from './oneTimeCode.js';
-import { checkApplicationStatus, parseStatusRequest, settle, statusNotFound } from './statusCheck.js';
+import { checkApplicationStatus, parseStatusRequest, settle, statusLockKey, statusNotFound, wrongStepUpCodes } from './statusCheck.js';
 import type { SavedFormReply } from './savedFormHttp.js';
 
 type StepUp = NonNullable<AppStatusCheck['stepUp']>;
@@ -191,7 +191,12 @@ export async function stepUpReply({
       sendCode(mail, answer.more?.[check.stepUp.email], issued.code, appName, form.label, key);
       return { status: 200, body: { sent: true } };
     }
-    if (!spendCode(subject, code)) return { status: 404, body: { code: 'code_refused', message: CODE_REFUSED, error: CODE_REFUSED } };
+    const lockKey = statusLockKey(key, request.receipt, appId);
+    if (!spendCode(subject, code)) {
+      await wrongStepUpCodes.count(lockKey);
+      return { status: 404, body: { code: 'code_refused', message: CODE_REFUSED, error: CODE_REFUSED } };
+    }
+    await wrongStepUpCodes.clear(lockKey);
     const token = randomBytes(32).toString('base64url');
     const until = Date.now() + SESSION_MINUTES * 60_000;
     await signInState.put(

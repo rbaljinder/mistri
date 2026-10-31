@@ -1126,6 +1126,87 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
     assert.equal((await f.data('/api/query', context, { table: 'item' })).status, 200);
   });
 
+  /* Better Auth's own session lookup, before the observation: it catches whatever the store threw and throws a bare
+     500 of its own, with nothing of the driver's error beneath it. Read as no cause, that was a denial — a field
+     deployment at its database's connection limit answered a signed-in member's list read 403
+     tenant_context_unavailable, and the browser took it as a refusal and did not retry. The store refusing a
+     checkout, and refusing the lookup itself, are both the store not answering. */
+  test("a session lookup Better Auth's store does not answer is unavailable (503), never a lost context", async (t) => {
+    const f = await fixture(t);
+    await f.grant(f.member);
+    const context = await f.open(f.member);
+    const specifier = 'pg';
+    const pg = (await import(specifier)) as {
+      default?: { Client: { prototype: PgQuery }; Pool: { prototype: { connect: (...args: unknown[]) => unknown } } };
+      Client?: { prototype: PgQuery };
+      Pool?: { prototype: { connect: (...args: unknown[]) => unknown } };
+    };
+    const client = (pg.Client ?? pg.default!.Client).prototype as PgQuery & Record<string, unknown>;
+    const pool = (pg.Pool ?? pg.default!.Pool).prototype;
+    const query = client.query,
+      connect = pool.connect;
+    t.after(() => {
+      client.query = query;
+      pool.connect = connect;
+    });
+    const faults = {
+      // The pool would not lend a connection in time: every one in use, or the server refusing another.
+      checkout: () => {
+        let refused = 0;
+        pool.connect = function (this: { options?: { connectionString?: string } }, ...args: unknown[]) {
+          // Kysely's checkout (Better Auth's adapter) is the promise form; the observation asks with a callback.
+          if (!args.length && this.options?.connectionString === authUrl) {
+            refused++;
+            return Promise.reject(new Error('timeout exceeded when trying to connect'));
+          }
+          return connect.apply(this, args);
+        };
+        return () => refused;
+      },
+      // The lookup itself, cancelled by the store's statement cap.
+      statement: () => {
+        let cancelled = 0;
+        client.query = function (this: unknown, request: unknown, ...rest: unknown[]) {
+          const text = typeof request === 'string' ? request : (request as { text?: string } | null)?.text;
+          if (text && /from "auth_session"/i.test(text) && !text.includes('u.banned')) {
+            cancelled++;
+            const error = Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014', severity: 'ERROR' });
+            const callback = rest.at(-1);
+            if (typeof callback === 'function') return void queueMicrotask(() => callback(error));
+            return Promise.reject(error);
+          }
+          return (query as (...given: unknown[]) => unknown).call(this, request, ...rest);
+        } as PgQuery['query'];
+        return () => cancelled;
+      },
+    };
+    for (const [name, inject] of Object.entries(faults)) {
+      let reached = inject();
+      /* Who am I, asked while the store does not answer: decided nothing either, so not the 403 auth_unavailable a
+         refusal is. */
+      const who = await f.call(`/api/whoami?app=${appId}`, undefined, { cookie: f.member.cookie });
+      assert.ok(reached() > 0, `${name}: whoami's lookup reached the store`);
+      assert.equal(who.status, 503, `${name}: ${who.text}`);
+      assert.equal(who.body.code, 'auth_temporarily_unavailable', name);
+      assert.equal(who.headers.get('retry-after'), '1', name);
+      assert.doesNotMatch(who.text, /timeout|canceling/i, name);
+      client.query = query;
+      pool.connect = connect;
+      reached = inject();
+      const reply = await f.data('/api/query', context, { table: 'item' });
+      client.query = query;
+      pool.connect = connect;
+      assert.ok(reached() > 0, `${name}: Better Auth's lookup reached the store`);
+      refused(reply);
+      assert.equal(reply.status, 503, `${name}: ${reply.text}`);
+      assert.equal(reply.body.code, 'tenant_temporarily_unavailable', name);
+      assert.equal(reply.headers.get('retry-after'), '1', name);
+      // Nothing of the driver's words reaches the caller.
+      assert.doesNotMatch(reply.text, /timeout|canceling/i, name);
+      assert.equal((await f.data('/api/query', context, { table: 'item' })).status, 200, name);
+    }
+  });
+
   test('a sign-out in this process is refused at once, inside what was kept', async (t) => {
     const f = await fixture(t, { keptSessions: undefined });
     await f.grant(f.member);

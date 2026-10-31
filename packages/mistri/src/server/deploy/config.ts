@@ -53,6 +53,18 @@ function pinnedInstanceType(dir: string, wrangler: { main?: string; containers?:
   return /\binstanceType:\s*['"`]([^'"`]+)['"`]/.exec(readFileSync(main, 'utf8'))?.[1];
 }
 
+/** An https address, or an http one on this machine. */
+function secureOrLocal(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol === 'https:') return true;
+  return parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+}
+
 export function readWorker(dir: string): WorkerFacts {
   const file = join(dir, 'wrangler.jsonc');
   if (!existsSync(file)) throw new Error(`${file} does not exist. Write the Worker with: mistri deploy init cloudflare`);
@@ -66,6 +78,12 @@ export function readWorker(dir: string): WorkerFacts {
   const url = vars.MISTRI_PUBLIC_URL;
   if (!wrangler.name) throw new Error(`${file} has no "name".`);
   if (!url) throw new Error(`${file} has no vars.MISTRI_PUBLIC_URL, which is the address a deploy is verified at.`);
+  /* The status probe and the restart carry the restart token in a header, so the address they go to is https; plain
+     http only to this machine, where nothing between could read it. */
+  if (!secureOrLocal(url))
+    throw new Error(
+      `${file} has vars.MISTRI_PUBLIC_URL ${JSON.stringify(url)}. A deploy sends the restart token there, so it must be https:// (http:// only for localhost).`,
+    );
   return {
     name: wrangler.name,
     url: url.replace(/\/+$/, ''),

@@ -597,7 +597,10 @@ test.each(['503', '429', 'network'])('a current %s is asked again with backoff b
   const fetcher =
     kind === 'network'
       ? vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
-      : vi.fn(async () => new Response(JSON.stringify({ error: 'Unavailable', code: 'tenant_unavailable' }), { status: Number(kind) }));
+      : vi.fn(
+          async () =>
+            new Response(JSON.stringify({ error: 'Unavailable', code: 'tenant_temporarily_unavailable' }), { status: Number(kind) }),
+        );
   vi.stubGlobal('fetch', fetcher);
   await expect(outwait(transport.tenantReadApi('/api/schema'))).rejects.toThrow();
   expect(fetcher).toHaveBeenCalledTimes(4);
@@ -614,7 +617,10 @@ test.each(['503', 'network', 'broken body'])('a %s that passes leaves the lease 
   const fetcher = vi.fn();
   if (kind === 'network') fetcher.mockRejectedValueOnce(new TypeError('Failed to fetch'));
   else if (kind === 'broken body') fetcher.mockResolvedValueOnce(broken);
-  else fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Unavailable', code: 'tenant_unavailable' }), { status: 503 }));
+  else
+    fetcher.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'Unavailable', code: 'tenant_temporarily_unavailable' }), { status: 503 }),
+    );
   fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Unavailable' }), { status: 502 }));
   fetcher.mockResolvedValueOnce(reply({ tables: ['item'] }));
   vi.stubGlobal('fetch', fetcher);

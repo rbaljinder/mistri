@@ -62,6 +62,11 @@ export {
 } from './FormParts.js';
 /* The landing hero's blocks. Preview, like the controls: a badge over a heading, two to four photo tiles, icon rows. */
 export { Badge, IconRows, PhotoTiles, type BadgeProps, type IconRowsProps, type PhotoTile, type PhotoTilesProps } from './HeroBlocks.js';
+export { digits, grouped, isoDay, maskNamed, masks, type Mask, type MaskName } from './masks.js';
+export { ComponentStyleScope } from './ComponentStyleScope.js';
+export { layoutViewport, zoomAnchor } from './anchor.js';
+export { popupContainer, drawPopupsIn } from './popups.js';
+export { measureFrom, refreshViewportScale, viewportBox, viewportScale, viewportSize } from './ruler.js';
 /* The standalone primitives added for the showcase's missing list: a switch, tabs, a drawer, a popover, an avatar disc and pagination. Preview, like the controls. */
 export { Switch, SwitchControl, type SwitchProps } from './Switch.js';
 export { Tabs, TabsControl, type TabItem, type TabsProps } from './Tabs.js';
@@ -69,8 +74,3 @@ export { Drawer, DrawerSheet, type DrawerProps, type DrawerSide } from './Drawer
 export { Popover, PopoverLayer, type PopoverProps } from './Popover.js';
 export { Avatar, AvatarDisc, initialsOf, type AvatarProps, type AvatarSize } from './Avatar.js';
 export { Pagination, paginationItems, type PaginationProps } from './Pagination.js';
-export { digits, grouped, isoDay, maskNamed, masks, type Mask, type MaskName } from './masks.js';
-export { ComponentStyleScope } from './ComponentStyleScope.js';
-export { layoutViewport, zoomAnchor } from './anchor.js';
-export { popupContainer, drawPopupsIn } from './popups.js';
-export { measureFrom, refreshViewportScale, viewportBox, viewportScale, viewportSize } from './ruler.js';

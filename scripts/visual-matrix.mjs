@@ -256,20 +256,35 @@ export function tracked(page) {
     const url = new URL(request.url());
     return /^https?:$/.test(url.protocol) && !/\/api\/(?:app\/)?live$/.test(url.pathname);
   };
-  page.on('request', (request) => waited(request) && open.add(request));
+  const started = [];
+  page.on('request', (request) => {
+    if (!waited(request)) return;
+    open.add(request);
+    started.push(new URL(request.url()).pathname);
+  });
   page.on('requestfinished', (request) => open.delete(request));
   page.on('requestfailed', (request) => open.delete(request));
-  inFlight.set(page, open);
+  inFlight.set(page, { open, started });
   return page;
 }
-export async function quiet(page, { idleMs = 500, timeout = 30_000 } = {}) {
-  const open = inFlight.get(page);
-  if (!open) throw new Error('quiet(page) needs a page made by tracked()');
+/* 60 s, not 30: on a shared CI runner a public page's chain of photos, several pages at once, once kept requests
+   overlapping for 30 s with nothing wrong. A page that never settles still fails, naming what kept it busy. */
+export async function quiet(page, { idleMs = 500, timeout = 60_000 } = {}) {
+  const tracking = inFlight.get(page);
+  if (!tracking) throw new Error('quiet(page) needs a page made by tracked()');
+  const { open, started } = tracking;
+  const first = started.length;
   const deadline = Date.now() + timeout;
   let since = Date.now();
   while (Date.now() - since < idleMs) {
-    if (Date.now() > deadline)
-      throw new Error(`the page's network did not go quiet in ${timeout} ms: ${[...open].map((request) => request.url()).join(', ')}`);
+    if (Date.now() > deadline) {
+      const during = started.slice(first);
+      const busiest = [...Map.groupBy(during, (path) => path)].sort((a, b) => b[1].length - a[1].length).slice(0, 5);
+      throw new Error(
+        `the page's network did not go quiet in ${timeout} ms: ${during.length} requests began while waiting` +
+          ` (${busiest.map(([path, hits]) => `${path} ×${hits.length}`).join(', ')}); in flight: ${[...open].map((request) => request.url()).join(', ') || 'none'}`,
+      );
+    }
     if (open.size) since = Date.now();
     await delay(50);
   }

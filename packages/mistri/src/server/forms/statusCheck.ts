@@ -45,6 +45,22 @@ const LOCK_MS = 3_600_000;
    a cache configured, a receipt locked on one instance is locked on all, and
    the window runs from the first failure whichever instance counted it. */
 
+/** The key a receipt's lockout counts under. One App's lockouts are its own: a suite's Apps may share a form name. */
+export function statusLockKey(form: string, receipt: string, appId?: string): string {
+  return createHash('sha256')
+    .update(appId === undefined ? `${form}\u0000${receipt}` : `${appId}\u0000${form}\u0000${receipt}`)
+    .digest('hex');
+}
+
+/* A wrong step-up code (statusStepUp.ts) counts toward the receipt's lockout as a wrong detail does, in the same
+   shared state, so instances do not each give their own tries. Its count is kept apart because a right set of details
+   clears theirs, and each step-up try starts with one: only a right code takes it away. */
+const codeKey = (lockKey: string) => `code\u0000${lockKey}`;
+export const wrongStepUpCodes = {
+  count: (lockKey: string): Promise<number> => signInState.fail(codeKey(lockKey), LOCK_MS),
+  clear: (lockKey: string): Promise<void> => signInState.clearFailures(codeKey(lockKey)),
+};
+
 /** Forget every lockout: tests use it. */
 export function resetStatusLockouts(): void {
   resetSignInState();
@@ -104,14 +120,11 @@ export async function checkApplicationStatus(options: {
 }): Promise<StatusAnswer> {
   const { check, save, roots, records, request, form, link, catalog, account } = options;
   const now = (options.now ?? Date.now)();
-  // One App's lockouts are its own: a suite's Apps may share a form name.
-  const receiptKey = createHash('sha256')
-    .update(options.appId === undefined ? `${form}\u0000${request.receipt}` : `${options.appId}\u0000${form}\u0000${request.receipt}`)
-    .digest('hex');
+  const receiptKey = statusLockKey(form, request.receipt, options.appId);
   /* Each attempt is counted before it is judged: read first and counted after,
      guesses sent together all read the count as it was and all were judged,
      however many there were. A success takes the count away again. */
-  const attempt = await signInState.fail(receiptKey, LOCK_MS);
+  const attempt = (await signInState.fail(receiptKey, LOCK_MS)) + (check.stepUp ? await signInState.failures(codeKey(receiptKey)) : 0);
   const locked = attempt > LOCK_AFTER;
   const rows: Array<{ table: string; row: Record<string, unknown> }> = [];
   for (const table of roots) {

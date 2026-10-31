@@ -89,6 +89,8 @@ import {
   attestedOn,
   keepAttestedOn,
   forgetAttestations,
+  noteCatalogVersion,
+  readsCatalogVersion,
   suspectsStores,
   type AheadReport,
   type PipelinedStatement,
@@ -129,6 +131,34 @@ export type { PostgresReadSnapshot } from './postgresReadSnapshot.js';
 
 const SCOPED_CATALOG_DIGEST = postgresCatalogDigestStatement(SYSTEM_SCHEMAS);
 
+/* Every adapter of one database in this process describes the same catalog, and a tenant App's start made a dozen
+   of them, each describing it afresh in a snapshot of its own: startup's two checks, its trial enrollment and the
+   host's, each read source, the first scoped transaction, every platform source twice — sixteen descriptions of
+   two databases, six round trips each, before the port opened. A description is kept here under the exact version
+   it was read at — the catalog digest read in its own snapshot, or the schema epoch — and any adapter of the same
+   database and schemas that reads the same version is handed a copy: the same version is the same catalog rows
+   (postgresCatalogDigest.ts), so nothing is trusted that a fresh description would not have said. A time-filed
+   version (epochlessEpoch) is never shared: it stands only for the adapter that took the risk.
+
+   A write reads its version, then describes, each statement seeing what had committed when it ran (READ COMMITTED):
+   it reads the version again and files the description only if that has not moved, so nothing is kept under a
+   version its description never saw. A snapshot describes the catalog its digest was read in, and files at once.
+
+   Two things a description carries move without the version: comments, and the planner's row estimates
+   (`approxRows`, which ANALYZE and autovacuum change, and which decide whether a large table's count is estimated,
+   resourceReadOperations.ts). A kept description is therefore served for a few minutes only, after which the next
+   reader describes again: a table that grew is counted as large a few minutes later rather than never, and a start,
+   whose readers come within seconds, still describes each catalog once. */
+const sharedDescriptions = new EpochCache<Readonly<{ schema: DatabaseSchema; at: number }>>(32);
+const SHARED_DESCRIPTION_MS = 5 * 60_000;
+let descriptionsRead = 0,
+  descriptionsKept = 0;
+
+/** For the budget tests: how many times this process described a PostgreSQL catalog, and how many were found kept. */
+export function postgresDescriptionCounts(): Readonly<{ described: number; kept: number }> {
+  return { described: descriptionsRead, kept: descriptionsKept };
+}
+
 /**
  * An adapter on the manager every adapter of `url` with this `shape` shares (sharedPgConnections): its own catalog,
  * lanes and stores, the pools of its neighbors. Closing it lets its share go; the pools close with the last one.
@@ -144,8 +174,10 @@ export class PostgresAdapter implements Adapter {
      browser, by record for an App, each on a writer of its own. Raw SQL
      waits for everything before it, in either. */
   private writes = new WriteLanes();
-  /* The last catalog a scoped transaction described, and the digest read just before it (describeScoped). */
-  private scopedCatalog?: Readonly<{ digest: string; schema: DatabaseSchema }>;
+  /* What a description is shared under (sharedDescriptions): the database, and the schemas this adapter describes. */
+  private readonly describes: string;
+  /* The database alone: what a store attestation is shared under (noteCatalogVersion), whatever schemas are described. */
+  private readonly database: string;
   /* What a write transaction asks the catalog — the journal's layout, the
      scope catalog, a relation's kind, its columns and key — kept under the
      schema epoch the transaction read in the message that began it
@@ -162,7 +194,7 @@ export class PostgresAdapter implements Adapter {
     return work.catch((error) => {
       if (schemaMoved(error)) {
         this.catalogCache.clear();
-        this.scopedCatalog = undefined;
+        sharedDescriptions.forget(this.describes);
       }
       throw error;
     });
@@ -178,6 +210,9 @@ export class PostgresAdapter implements Adapter {
     pool?: PgConnectionOptions,
   ) {
     this.connections = connections ?? new PgConnectionManager(connectionString, keepDatesAsText, undefined, pool);
+    this.describes = `${connectionString}\0${schemas.join('\0')}`;
+    this.database = connectionString;
+    readsCatalogVersion(this, connectionString, async (db) => `digest:${postgresCatalogDigestOf(await db.query(SCOPED_CATALOG_DIGEST))}`);
     if (this.connections instanceof PgConnectionManager) pinnedReaders.set(this, this.connections);
     /* The App stores this database may hold read and write through these (stores/appStores.ts). */
     lendStoreHost(this, {
@@ -498,15 +533,61 @@ export class PostgresAdapter implements Adapter {
   /* Still `async`: a caller holding this as a value gets a rejected promise
      rather than a synchronous throw, exactly as the method it replaced did. */
   private async describe(db: PgQuery): Promise<DatabaseSchema> {
+    descriptionsRead++;
     return describePostgresCatalog(db, { schemas: this.schemas, label: this.label, dialect: this.dialect });
+  }
+
+  /** The catalog as `db` sees it at `version`, read there before: a copy of the one kept under it (sharedDescriptions),
+   * or described now and kept. Another adapter's copy carries this one's label. */
+  private async describedAt(version: string, db: PgQuery, reread?: () => Promise<string | undefined>): Promise<DatabaseSchema> {
+    const shared = !version.startsWith('ttl:');
+    const found = shared ? sharedDescriptions.get(version, this.describes) : undefined;
+    const kept =
+      found && Date.now() - found.at < SHARED_DESCRIPTION_MS
+        ? found.schema
+        : shared
+          ? undefined
+          : (this.catalogCache.get(version, 'describe') as DatabaseSchema | undefined);
+    if (kept) {
+      if (shared) descriptionsKept++;
+      return { ...structuredClone(kept), label: this.label };
+    }
+    const schema = await this.describe(db);
+    // A write's version is read again: a description that saw DDL committed after it is not kept under it.
+    if (shared) {
+      if (!reread || (await reread()) === version)
+        sharedDescriptions.set(version, this.describes, Object.freeze({ schema: Object.freeze(structuredClone(schema)), at: Date.now() }));
+    } else this.catalogCache.set(version, 'describe', Object.freeze(structuredClone(schema)));
+    return schema;
+  }
+
+  /** A snapshot's description: the digest first, in the same snapshot, then the description kept under it or a new one. */
+  private async describeSnapshot(db: PgQuery, committed = false): Promise<DatabaseSchema> {
+    const version = `digest:${postgresCatalogDigestOf(await db.query(SCOPED_CATALOG_DIGEST))}`;
+    const reread = committed ? this.rereadOf(db, version) : undefined;
+    return this.describedAt(this.versionRead(db, version, reread), db, reread);
+  }
+
+  /** `version`, the exact one `db`'s transaction just read, said for what it attests next (noteCatalogVersion); a time-filed one is not said. */
+  private versionRead(db: PgQuery, version: string, reread?: () => Promise<string | undefined>): string {
+    if (!version.startsWith('ttl:')) noteCatalogVersion(db, this.database, version, reread);
+    return version;
+  }
+
+  /** How a write (READ COMMITTED) reads `version` again, the digest or the epoch as it read it; a time-filed one is not read. */
+  private rereadOf(db: PgQuery, version: string): (() => Promise<string | undefined>) | undefined {
+    if (version.startsWith('ttl:')) return undefined;
+    if (version.startsWith('digest:')) return async () => `digest:${postgresCatalogDigestOf(await db.query(SCOPED_CATALOG_DIGEST))}`;
+    return async () => schemaEpochOf(await db.query(schemaEpochStatement()));
   }
 
   /**
    * The catalog as a scoped transaction's writer sees it, described again
    * only when it has moved. Every transaction reads the catalog digest
    * (postgresCatalogDigest.ts) — one statement where a description is six —
-   * and reuses the last description when the digest is the one read just
-   * before that description was. Read before, never after: DDL committing
+   * and reuses a description read just after the same digest was, by this
+   * adapter or another of the same database (sharedDescriptions). Read
+   * before, never after: DDL committing
    * between the two then leaves a digest no later read can match, so the
    * description is taken again rather than trusted on a digest it postdates.
    * The digest covers every schema but the system's, a superset of what
@@ -515,16 +596,9 @@ export class PostgresAdapter implements Adapter {
    * never authority.
    */
   private async describeScoped(db: PgQuery): Promise<DatabaseSchema> {
-    // Under an epoch this transaction read, the description kept under it is exact.
+    // Under an epoch this transaction read, a description kept under it, by any adapter of this database, is exact.
     const epoch = this.txEpochs.get(db);
-    if (epoch !== undefined)
-      return structuredClone((await this.catalogCache.through(epoch, 'describe', () => this.describe(db))) as DatabaseSchema);
-    const digest = postgresCatalogDigestOf(await db.query(SCOPED_CATALOG_DIGEST));
-    const kept = this.scopedCatalog;
-    if (kept?.digest === digest) return structuredClone(kept.schema);
-    const schema = await this.describe(db);
-    this.scopedCatalog = Object.freeze({ digest, schema: structuredClone(schema) });
-    return schema;
+    return epoch !== undefined ? this.describedAt(epoch, db, this.rereadOf(db, epoch)) : this.describeSnapshot(db, true);
   }
 
   /**
@@ -543,6 +617,8 @@ export class PostgresAdapter implements Adapter {
     options: { lock?: readonly string[]; pin?: string; digest?: boolean; sent?: () => void },
     began: () => void,
   ): Promise<{ epoch?: string }> {
+    // Begun again on the same handle (a scope's retry), what the last transaction read is not this one's.
+    noteCatalogVersion(write, this.database, undefined);
     if (this.epochStore === false) {
       if (options.digest) return this.openWithDigest(write, options, began);
       const opening = write.query('BEGIN');
@@ -581,10 +657,11 @@ export class PostgresAdapter implements Adapter {
     const results = (Array.isArray(answered) ? answered : [answered]) as Array<{ rows: Record<string, unknown>[] }>;
     const last = results.at(-1);
     const epoch = schemaEpochOf(last);
-    if (epoch !== undefined) this.txEpochs.set(write, epoch);
+    if (epoch !== undefined) this.txEpochs.set(write, this.versionRead(write, epoch, this.rereadOf(write, epoch)));
     // The store is there but not whole (its trigger disabled): the digest stands in, read after the LOCK above.
     else if (options.digest) {
-      const digest = `digest:${postgresCatalogDigestOf(await write.query(SCOPED_CATALOG_DIGEST))}`;
+      const read = `digest:${postgresCatalogDigestOf(await write.query(SCOPED_CATALOG_DIGEST))}`;
+      const digest = this.versionRead(write, read, this.rereadOf(write, read));
       this.txEpochs.set(write, digest);
       return { epoch: digest };
     }
@@ -625,7 +702,8 @@ export class PostgresAdapter implements Adapter {
     }
     began();
     const results = (Array.isArray(answered) ? answered : [answered]) as Array<{ rows: Record<string, unknown>[] }>;
-    const epoch = `digest:${postgresCatalogDigestOf(results.at(-1))}`;
+    const read = `digest:${postgresCatalogDigestOf(results.at(-1))}`;
+    const epoch = this.versionRead(write, read, this.rereadOf(write, read));
     this.txEpochs.set(write, epoch);
     return { epoch };
   }
@@ -636,7 +714,7 @@ export class PostgresAdapter implements Adapter {
    * stands attested. A read that fails the way a moved catalog fails one
    * forgets it, and the next read attests in full.
    */
-  private async attestedStore<T>(_client: PgQuery, store: StoreMeta, read: (attested: boolean) => Promise<T>): Promise<T> {
+  private async attestedStore<T>(client: PgQuery, store: StoreMeta, read: (attested: boolean) => Promise<T>): Promise<T> {
     const key = `store:${store.name}`,
       attested = attestedOn(this, key);
     try {
@@ -644,7 +722,7 @@ export class PostgresAdapter implements Adapter {
       if (!attested) keepAttestedOn(this, key);
       return result;
     } catch (error) {
-      if (suspectsStores(error)) forgetAttestations(this);
+      if (suspectsStores(error)) forgetAttestations(this, client);
       throw error;
     }
   }
@@ -1547,7 +1625,7 @@ export class PostgresAdapter implements Adapter {
   ): Promise<T> {
     return readSnapshotOn(
       this.connections,
-      (db, checkout) => (checkout ? PostgresAdapter.prototype.describe.call(this, db) : this.describe(db)),
+      (db, checkout) => (checkout ? PostgresAdapter.prototype.describe.call(this, db) : this.describeSnapshot(db)),
       run,
       observeCheckout,
       prologue,
