@@ -509,7 +509,7 @@ for (const mode of ['app', 'db'] as const) {
       assert.deepEqual(inserted.applied, { id: 9, name: 'Created' });
       projection(inserted, mode, true);
       const duplicate = await f.call('/api/insert', { table: f.table, values: { id: 9, name: 'Duplicate' } });
-      assert.equal(duplicate.status, 200);
+      assert.equal(duplicate.status, 409);
       diagnostics(duplicate.body);
       assert.equal(duplicate.body.outcome, 'rejected');
       if (mode === 'app') {
@@ -541,7 +541,7 @@ for (const mode of ['app', 'db'] as const) {
         assert.equal(f.row(9), undefined);
       }
       const restricted = await f.call('/api/delete', { table: f.table, key: { id: 1 }, confirm: true });
-      assert.equal(restricted.status, 200);
+      assert.equal(restricted.status, 409);
       assert.equal(restricted.body.deleted, false);
       assert.equal(restricted.body.outcome, 'rejected');
       assert.equal(restricted.body.impact[0].table, f.note);

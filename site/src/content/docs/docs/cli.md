@@ -61,11 +61,12 @@ The server's flags: where the data is, how it is served, and what an App adds.
 | `-p, --port <n>` | Port to listen on (default 4111) |
 | `--host <addr>` | Interface to bind (default 127.0.0.1, loopback only) |
 | `--allowed-host <name>` | Also answer for this Host header; repeatable. Needed behind a proxy or in a container reached by name. Or set MISTRI_ALLOWED_HOSTS=a.example,b.example |
-| `--trust-proxy <address|CIDR>` | A proxy whose X-Forwarded-For the public forms' rate limit may believe: 10.0.0.0/8, 172.17.0.1, fd00::/8. Repeatable or comma-separated; loopback is always trusted. Also who may set --auth-proxy-header. Or set MISTRI_TRUST_PROXY=10.0.0.0/8,fd00::/8 |
+| `--trust-proxy <address|CIDR>` | A proxy whose X-Forwarded-For the public forms' rate limit may believe: 172.17.0.1 or a range like fd00::/8. Repeatable or comma-separated; loopback is always trusted. Client address only: it never lets a proxy set --auth-proxy-header (that is --auth-proxy-from). Or set MISTRI_TRUST_PROXY=172.17.0.1 |
 | `--trust-proxy-hops <n>` | Behind a managed front end with no address to name (Cloud Run, a cloud load balancer): how many proxies append to X-Forwarded-For. The client is the address n places from the right; anything the visitor wrote left of it is ignored. Rate limiting only. Or set MISTRI_TRUST_PROXY_HOPS=1 |
 | `--trust-proxy-cloudflare` | Read CF-Connecting-IP as the client. Only when the server is reachable through Cloudflare alone (a tunnel or its address ranges): anyone else can write the header. Not with --trust-proxy-hops. Or set MISTRI_TRUST_PROXY_CLOUDFLARE=1 |
 | `--insecure-http-sign-in` | Serve sign-in at an http address beyond this machine, which is otherwise refused: passwords would cross the network in the clear. Prefer MISTRI_PUBLIC_URL set to the https address of a TLS proxy. Or set MISTRI_INSECURE_HTTP_SIGN_IN=1 |
-| `--auth-proxy-header <name>` | Behind a proxy that signs people in: the header it sets with the user (X-Forwarded-User). Requests from beyond loopback must carry it and come from a --trust-proxy address; every write is journaled with it. Or set MISTRI_AUTH_PROXY_HEADER. |
+| `--auth-proxy-header <name>` | Behind a proxy that signs people in: the header it sets with the user (X-Forwarded-User). Requests from beyond loopback must carry it; it is believed only from loopback and --auth-proxy-from peers. Every write is journaled with it. Or set MISTRI_AUTH_PROXY_HEADER. |
+| `--auth-proxy-from <address|CIDR>` | A peer, beside loopback, whose --auth-proxy-header value is believed: the proxy's own address (10.0.0.7). Same syntax as --trust-proxy, but a separate list; a range lets every peer in it name the signed-in user. Or set MISTRI_AUTH_PROXY_FROM=10.0.0.7 |
 | `--schema <name>` | Postgres only; repeatable. Defaults to all user schemas. |
 | `--read-pool <n>` | PostgreSQL connections that may read at once, per database (default 4; an App's follows its writers, at most 64). A connection's "pool": { "read": n } in mistri.json wins. Or set MISTRI_READ_POOL. |
 | `--write-pool <n>` | Connections an App may write through at once, per PostgreSQL database (default twice the cores, 4 to 16; at most 64). A connection's "pool": { "write": n } wins. Or set MISTRI_WRITE_POOL. |
@@ -423,14 +424,16 @@ mistri migrate stores status | up
                 [--suite <suite.json>] [--app <dir> [--jobs <file>] [--policy <file>]]
                 [<db> | --db <target> | --config <path>] [--connection <name>]
 The layouts mistri keeps in a database of its own (auth, tokens, history,
-inbox, command journal and sequences, tenant stores, flags, experiments, analytics)
+inbox, command journal and sequences, tenant stores, flags, experiments, analytics,
+the assistant's conversations)
 move forward only here: serving never migrates, and refuses a store behind
 its layout with this command in the message. status prints one line per
 store; up applies each pending step in its own transaction (PostgreSQL: under
 an advisory lock) and is safe to run twice. --suite adds the suite's identity,
 grant, preference, flag and experiment stores and each App's connections.
 With --app, up also creates every store the App uses: the inbox its notify
-rules write, the record history it shows, the command journal and event
+rules write, the record history it shows, the assistant's
+conversations, the command journal and event
 store its commands need, their effects' store; --jobs <file> adds the jobs
 module's stores and delivery destinations. The one step before it serves.
 A tenant App's stores are bound to its policy: with --policy <file>, up
@@ -772,6 +775,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--app-mcp` | [Options](#options) |
 | `--append` | [Rows to look at](#rows-to-look-at) |
 | `--as` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
+| `--auth-proxy-from` | [Options](#options) |
 | `--auth-proxy-header` | [Options](#options) |
 | `--backup-check` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--base-path` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Watching what a --dev server did](#watching-what-a---dev-server-did) |

@@ -638,7 +638,13 @@ export const BUDGET = {
     /* Ledger's look, as on the public first paint: App script 1,391,388 / 381,477 (+5,913 / +902). The same room. */
     /* The same merge, as on the public first paint: App script 1,391,686 / 381,512 (36 bytes past its raw ceiling; brotli
        inside). Its raw ceiling moves to 1_391_950, about 250 bytes of room. */
-    app: { script: { raw: 1_391_950, br: 381_880 }, style: { raw: 389_425, br: 52_325 } },
+    /* A refused write is a 409 or 422 the client reads as a rejection (core.js), and a related list without a title is
+       headed in words: App script 1,392,083 / 381,650 (133 bytes past its raw ceiling; brotli inside). Its raw ceiling
+       moves to 1_392_330, about 250 bytes of room. */
+    /* The image's Node (24.22.1-alpine) compresses the same bytes about 300 bytes larger in brotli than a desk's 24.15:
+       the release image measured 373.0 KB against the ceiling's 372.9, the desk 372.7. The brotli ceiling moves to
+       382_400, so the one that compresses worst keeps about 400 bytes of room. */
+    app: { script: { raw: 1_392_330, br: 382_400 }, style: { raw: 389_425, br: 52_325 } },
   },
   tablewalk: {
     workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 375_300, br: 51_125 } },

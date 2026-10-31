@@ -32,7 +32,7 @@ Credit is given in the release notes unless you would rather it were not.
   past a private network belongs behind a proxy that authenticates — and
   `--auth-proxy-header` carries that proxy's decision in, refusing requests
   that skipped it or carry it from a peer that is neither loopback nor in
-  `--trust-proxy`, and journaling every write with who made it.
+  `--auth-proxy-from`, and journaling every write with who made it.
 - **Queries compile to structure, never to SQL text.** Every value is a
   bound parameter; table names are checked against the catalog before being
   quoted; raw SQL runs one statement at a time inside a read-only session

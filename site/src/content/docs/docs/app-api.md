@@ -113,7 +113,7 @@ Either alone is refused at startup.
 
 ```sh
 mistri --app ./ledger --config ./mistri.json --host 0.0.0.0 --port 4111 \
-  --allowed-host api.example.com --trust-proxy 10.0.0.0/8 \
+  --allowed-host api.example.com --trust-proxy 10.0.0.5 \
   --api-reads --api-integers decimal-string --api-requests-per-minute 120
 ```
 

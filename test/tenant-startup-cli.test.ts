@@ -131,6 +131,7 @@ for (const args of [
   ['--diff', 'other'],
   ['--demo'],
   ['--auth-proxy-header', 'X-Identity'],
+  ['--auth-proxy-from', '10.0.0.7'],
   ['--db', '/not/a/real/tenant.db'],
 ]) {
   test(`tenant CLI rejects incompatible mode ${args.join(' ')} before policy/auth`, async (t) => {

@@ -575,10 +575,10 @@ mistri --app <dir>            an App, served: the App framework's, npx @mistriwo
       --allowed-host <name>   also answer for this Host header; repeatable
       --trust-proxy <address|CIDR>
                               a proxy whose X-Forwarded-For the public forms'
-                              rate limit may believe (10.0.0.0/8, 172.17.0.1,
-                              fd00::/8); repeatable or comma-separated, or set
-                              TABLEWALK_TRUST_PROXY. Loopback is always trusted.
-                              Also who may set --auth-proxy-header
+                              rate limit may believe (172.17.0.1, or a range
+                              like fd00::/8); repeatable or comma-separated, or
+                              set TABLEWALK_TRUST_PROXY. Loopback is always trusted.
+                              Client address only, never identity
       --trust-proxy-hops <n>  behind a managed front end with no address to name
                               (Cloud Run, a cloud load balancer): how many
                               proxies append to X-Forwarded-For; the client is
@@ -592,9 +592,15 @@ mistri --app <dir>            an App, served: the App framework's, npx @mistriwo
       --auth-proxy-header <name>
                               behind a proxy that signs people in: the header
                               it sets with the user (X-Forwarded-User). Requests
-                              from beyond loopback must carry it and come from
-                              a --trust-proxy address; every write is journaled
-                              with it
+                              from beyond loopback must carry it; it is
+                              believed only from loopback and --auth-proxy-from
+                              peers. Every write is journaled with it
+      --auth-proxy-from <address|CIDR>
+                              a peer, beside loopback, whose
+                              --auth-proxy-header value is believed: the
+                              proxy's own address (10.0.0.7). A separate list
+                              from --trust-proxy; repeatable or
+                              comma-separated, or set TABLEWALK_AUTH_PROXY_FROM
       --config <path>         read connections from this file, and the
                               cache, search, webhook, email (smtps://,
                               smtp:// or log:) and OAuth services beside
@@ -729,9 +735,11 @@ proxy sets). Every request from beyond loopback must then carry it, so a
 request that skipped the proxy is refused at the door, and every write in the
 journal says who made it. That is the proxy's decision carried into this
 process, not a login of tablewalk's own; per-user tabs, pins and history are
-still the browser's. (`--trust-proxy` and its `-hops` and `-cloudflare`
-siblings are unrelated: they say where a visitor's address is read for a
-public form's rate limit, and sign nobody in.)
+still the browser's. The header is believed only from loopback and from the
+peers `--auth-proxy-from` names: give it the proxy's own address
+(`--auth-proxy-from 10.0.0.7`), not a network. (`--trust-proxy` and its
+`-hops` and `-cloudflare` siblings are a different question: they say where a
+visitor's address is read for a public form's rate limit, and sign nobody in.)
 
 ## Docker, and a desktop app
 

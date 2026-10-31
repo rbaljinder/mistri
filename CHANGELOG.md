@@ -5,9 +5,120 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
-## 1.0.0-rc.6 (unreleased)
+## 1.0.0-rc.7 (unreleased)
 
 - **The showcase review's UI work lands as code.** A pill no longer spills a dangling ".." past its edge in a narrow grid cell (it truncates inside itself, full text in `title`); every board lane head uses one treatment (word and dot, never a pill background); the sidebar's muted ink is the nav's own, measured against the menu ground, and the current entry on an inverted menu carries an accent edge; `mistri grade` measures a 768px tablet window beside desk, phone and dark; `grade` and `shot` reap their server on every exit path; an App loaded outside the checkout no longer fails its own commands with "must be created with defineCommand" (a command from another copy of the module is adopted); search through the built-in `memory` connection needs no pack plugged in; `@mistriwork/ui` gains standalone Preview primitives (Switch, Tabs, Drawer, Popover, Avatar, Pagination) whose rules live in `standalone.css`, not in the kit's first paint; the assistant gains an OpenAI provider behind `MISTRI_ASSISTANT_PROVIDER`; and a donut slice drills like its legend button — as a group holding buttons, not buttons inside an image, so the accessibility audit stays clean.
+- **`mistri --help` says where the pool and lock flags are.** `--read-pool`, `--write-pool` and the lock timeouts are
+  in `--help all` only, and the short help's line for it said just "every command and option". It now names them. The
+  CLI reference pages are regenerated, which also brings in `--auth-proxy-from` and the assistant's store.
+- **A command route that is sent `app` in the body says where it goes.** Resource routes take `app` in the JSON body and
+  command routes in the query string, and a command body with `app` in it answered `invalid_input` with nothing to say
+  why. It now answers "A command route takes app in the query string (/api/commands/execute?app=<id>), not in the
+  body"; any other stray member is still refused without being echoed. The authoring guide notes the difference. The
+  startup refusal for a missing command journal names `@mistriwork/mistri/maintenance`, as the docs now do.
+- **`mistri migrate stores` takes `--commands`.** A command's journal is a store, and `stores up --app` finds the
+  commands module beside the App; an App whose commands live in another file could be started with `--commands <file>`
+  but not migrated with it (`"--commands" is not an option of migrate`). It is passed through now, as `--policy` is, and
+  the usage line names it.
+- **`supportLog` is documented as the parsed form of `operations: ['support']`.** The tenant server reads a role's
+  `supportLog` flag, and the validator refuses it as an authored key; both are right, because parsing folds
+  `operations: ['support']` into the flag. The Tenant Apps guide and the code now say so, and nothing was removed.
+- **A command that returns a value without declaring `output` is told what to declare.** An omitted `output` means the
+  handler returns nothing, so a handler that returns an object answers `invalid_result` (503) at run time, and neither
+  `mistri check` nor `tsc` can see a return value. The terminal used to say only that the result was not its declared
+  output; it now says `returned a value but declares no output. Declare output: shape({ … })`, and the commands guide's
+  common mistakes list it.
+- **The migrate functions are documented from the entry that exports them.** `migratePostgresAuthStore`,
+  `migratePostgresCommandJournal` and `migrateSqliteCommandJournal` are exported by `@mistriwork/mistri/maintenance`
+  only, but the auth reference, the `auth.store` schema description, the Tenant Apps guide and a command journal's
+  startup refusal sent the reader to `@mistriwork/mistri/commands`, where `import` finds nothing.
+  `test/migrate-import-path.test.ts` reads the docs, the schema and the messages for it.
+- **A tenant list's search box no longer searches the tenant column, and a suggested page's related lists are headed in
+  words.** A table with no name column of its own was named by its first required text column, which in a tenant table
+  is the ownership column (`tenant_id`): the list searched who owns the rows, the same on every one. A text column that
+  references another table is a pointer, not a name, and no longer names a row. A record page's related list that a
+  suggested page titled by the bare table name (`visit_attachment`) is headed "Visit attachment", as an untitled list
+  already was. A tenant record's attachment link was checked as well: its click is saved from the lease and never
+  followed to the file route, and `AttachmentList.test.tsx` now holds that.
+- **An upload's reply no longer carries the file back.** The reply to a file upload (an App's, and a tenant App's) held
+  the row as written, so a 2 MB file came back as a JSON `Buffer` of about 6 MB. A written row now shows a file's bytes
+  as the `<n bytes>` label every read gives a blob. The upload messages are plainer too: a tenant body past its ceiling
+  answers 413 with a size sentence (it said the change was unavailable under the permissions), "is 2 MB; this App takes
+  files up to 2 MB" says bytes when the two would print the same, and a control character or bidi override in a file
+  name becomes `_` rather than vanishing (`evil.png\0.html` was stored as `evil.png.html`).
+- **`mistri migrate stores up --app` now makes the assistant's store.** The assistant keeps its conversations and token
+  counts in a store of its own, which serving never creates, but the one command that provisions an App's other stores
+  skipped it, so the only way to make it was a script calling `provisionStores`. An App that declares an `assistant`
+  now has its store made on its connection (a tenant App's, beside its tenant source, with `--policy`), `status` lists
+  it with its peers, and a second `up` leaves it alone. A server that finds it missing refuses naming this command.
+  `test/migrate-app-stores.test.ts` holds it.
+- **`--trust-proxy` no longer lets a proxy say who is signed in; `--auth-proxy-from` does.** One list used to grant two
+  things: believing a proxy's `X-Forwarded-For` for rate limits and logs, and believing its `--auth-proxy-header`
+  value as the signed-in person. The documented examples were wide ranges (`10.0.0.0/8`, Docker's `172.17.0.1`), so
+  any pod in the range, or any client behind Docker Desktop's gateway, could forge the identity header, be believed,
+  and also turn off the "anyone can read" warning. The identity header is now believed only from loopback and from
+  the peers a new `--auth-proxy-from <address|CIDR>` (or `MISTRI_AUTH_PROXY_FROM` / `TABLEWALK_AUTH_PROXY_FROM`)
+  names, with the same list syntax; `--trust-proxy` keeps only the client address. A server behind an off-box
+  signing-in proxy must now name it there, or every request is refused with that flag in the message. Startup warns,
+  without refusing, when `--auth-proxy-from` holds a range wider than one host, and the documented `--trust-proxy`
+  examples name a single proxy. Tenant serving refuses `--auth-proxy-from` as it already refused
+  `--auth-proxy-header`. `test/trust-proxy.test.ts` holds the split.
+- **A click in a list or a record answers sooner.** Four costs sat inside the click itself. A form page's width rule
+  and one of Lumen's tone rules were written as `:has()` selectors that made Chrome restyle the whole pane each time
+  an element came or went anywhere in it, four times in one sort; they are now a container query and a pair of plain
+  rules that draw the same. The focus left with the room it stood in, which forced a style update of the whole page
+  inside the removal; it is now let go before the room changes. The App's own stylesheet was copied for the held
+  picture during the click when it had arrived after the idle moment meant for it; it is copied when it arrives. And
+  a filter bar that had to fold several pickers folded one a render, a render and a measure of the row each; it
+  folds as many as the row's overflow covers at once. On `test/built-client-vitals.mjs`'s slowed CPU, Compass at a
+  desk sorts in 120 ms where it took 216, opens a record in 152 (232), searches in 152 (296); Forecourt opens a
+  record in 120 (208). No room-changing interaction is over its 200 ms budget now, at a desk or on a phone.
+- **One person's saves sent together in a tenant App all apply.** Two or more `/api/update` or `/api/insert` requests
+  on one lease at the same moment — a form's fields saved together, two tabs — found the account's history partition
+  held by the first and were refused 403, "unavailable under the current permissions or record state": five of ten
+  in a live load test, twenty-three of forty. The partition is held by one save at a time on purpose, so the history's
+  order is the order the saves committed in and an Undo reverts the newest with nothing landing in between; that
+  holds. A save that finds it held now waits for it, in arrival order, after admission and before its transaction,
+  holding no connection. The wait is bounded as the writer pool's own queue is: past 30 seconds, or behind 64 saves of
+  the same account, it is refused 503 `server_busy` with `Retry-After`, `not_applied` — the code a tenant write
+  refused by a busy pool now also says, where it said `temporarily_unavailable`. An Undo still refuses while a save
+  of the same partition is running. `test/tenant-update-history.test.ts` and `test/tenant-history-partitions.test.ts`
+  hold it.
+- **A tenant write the database refuses for good is a 409 or a 422, not a 503 to retry.** A duplicate key, a
+  reference to nothing or a value its column cannot hold was answered as the database not answering — 503
+  `temporarily_unavailable` with `Retry-After` — so a client retried a write that could never succeed (a live load
+  test). A tenant App now answers as a single-database App does: a key taken or a reference to nothing is 409
+  (`duplicate_value`, `reference_conflict`), a required value, a check or a value its column cannot hold is 422, in
+  the `rejected` envelope and with no `Retry-After`. It says only the code's fixed sentence, never a column, a
+  constraint or a value, because a key is global while rows are a tenant's: an id another tenant holds gets the answer
+  an id this tenant holds gets, byte for byte. Only a connection or availability failure is still a 503. A plain
+  App's write refused for a value its column cannot hold now says `rejected` where it said `unknown`.
+  `test/postgres-tenant-http.test.ts` holds it.
+- **A refused write is never a 2xx.** `/api/insert`, `/api/update`, `/api/file/upload` and `/api/delete` answered a
+  write the database refused — a reference to nothing, a duplicate key, a delete others still point at — and one the
+  App's validation refused with HTTP 200 and `outcome: 'rejected'` in the body, so a client that read only the status
+  took the refused write for a saved one (a live load test, on a dangling reference). The same envelope now comes at
+  409 for a key taken or a reference (`duplicate_value`, `reference_conflict`) and 422 for the App's validation, a
+  required value, a check or a value its column cannot hold — as a line's `consumes` already was, in a single-database
+  App, under a row policy, in a tenant App and in the database browser alike. Under a row policy the database's
+  refusal is said by its code's fixed sentence, the same for a row the policy shows and one it hides, where it was a
+  400 saying the change was unavailable under the current permissions. A delete the adapter refuses is a 400. The
+  App's client reads a 409 or 422 rejected envelope as the refused write it is, the field marked and the draft kept,
+  as it read the 200. `test/http.test.ts`, `test/resource-http-contract.test.ts` and
+  `test/row-policy-refusal-causes.test.ts` hold it.
+- **A body refused as too large leaves its connection clean.** A request body past its route's cap was read up to the
+  cap and answered 413 with the rest still unread on a keep-alive connection, so the next request on it was read out
+  of the leftovers and hung or was reset (a live load test). The rest is now read and dropped before the 413, for an
+  App's routes and uploads and a tenant App's alike; past 16 MiB beyond the cap the connection is closed instead.
+  `test/http.test.ts` holds it.
+- **A save behind a held row is refused after one lock timeout, not two.** A save sends its record's lock behind
+  its BEGIN; when that lock waited out the lock timeout, the transaction began again without it and asked for the
+  same lock again, so `row_locked` came after ten seconds where five are documented (a live load test). The wait is
+  now the transaction's answer, on a plain App's saves and a scoped or tenant App's alike.
+  `test/postgres-writers-live.test.ts` holds it.
+
+## 1.0.0-rc.6 (unreleased)
+
 - **A record page's actions are one round trip fewer.** Which verbs a record offers is checked in the request's one
   read snapshot, each command reading its target rows and then asserting each target visible by reading it again: a
   second wave of reads after the first, every record page, a round trip on a database a network away. The assertion

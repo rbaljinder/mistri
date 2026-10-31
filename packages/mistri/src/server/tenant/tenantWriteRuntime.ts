@@ -102,12 +102,17 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
       callback: (context: TenantWriteContext) => T | Promise<T>,
       guard?: TenantInvocationGuard,
       operation?: TenantWriteOperation,
+      /** Awaited once the request is admitted and before its transaction begins: what must wait for this principal
+       * waits here, holding no connection (tenantRecordHistory.ts, its history partition). Run again for each
+       * admission, should the request be admitted afresh. */
+      admitted?: (principal: TenantMembershipEvidence) => Promise<void>,
     ): Promise<T> {
       if (typeof callback !== 'function') return Promise.reject(new TenantWriteFailure('not_applied'));
       return runtime.run(
         request,
         selectors,
-        (scope) => {
+        async (scope) => {
+          if (admitted) await admitted(scope.principal);
           const { principal, grants, rows, session } = scope;
           // Ordinary values never receive managed-field authority, even under a
           // broad role. Globals are read-only. Keep all other field ceilings intact.

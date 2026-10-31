@@ -141,3 +141,16 @@ test('authored empty guidance keeps the upload control usable', async () => {
   expect(await screen.findByRole('status')).toHaveTextContent('Attached “proof.txt”');
   expect(send).toHaveBeenCalledOnce();
 });
+
+test('a file on a tenant lease is saved from the lease, never followed to the file route (which a lease cannot open)', () => {
+  const save = vi.fn().mockResolvedValue(undefined);
+  const fetched = vi.spyOn(globalThis, 'fetch');
+  render(<AttachmentList items={[{ ...items[0], save }]} emptyText="" />);
+  const link = screen.getByRole('link', { name: 'Download repro-steps.txt' });
+  // fireEvent.click returns false when the click's default (following the link) was prevented.
+  expect(fireEvent.click(link)).toBe(false);
+  expect(save).toHaveBeenCalledOnce();
+  // No viewer either: a viewer reads its file by address, and a leased file has none.
+  expect(screen.queryByRole('button', { name: 'repro-steps.txt' })).toBeNull();
+  expect(fetched).not.toHaveBeenCalled();
+});

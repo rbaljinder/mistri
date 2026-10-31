@@ -1159,8 +1159,14 @@
      dress, because a page's own width rule (FormSurface.css) is a component's and outranks the base. */
   @media (min-width: 1024px) {
     .form-page:has(.multi-step-aside) { width: min(calc(40rem + 300px + var(--space-8)), 100%); container: form-page / inline-size; }
-    /* Narrower than both: the one column, at its measure, as everywhere else. */
-    .form-page:has(.multi-step-aside) > * { width: 100%; max-width: 40rem; justify-self: center; box-sizing: border-box; }
+    /* Narrower than both: the one column, at its measure, as everywhere else. Its children are found through the
+       container the rule above makes, which only a page with its steps beside it is, never as
+       `.form-page:has(.multi-step-aside) > *`: a :has() whose subject may be any element made Chrome restyle the
+       whole pane each time an element came or went anywhere in it, 25 ms a time on the vitals' slowed CPU and four
+       times in one sort of a list (test/built-client-vitals.mjs). The class said twice keeps the weight :has() gave. */
+    @container form-page (min-width: 0) {
+      .form-page.form-page > * { width: 100%; max-width: 40rem; justify-self: center; box-sizing: border-box; }
+    }
     /* Cards whose words are short (IntakeControls' cardFit) stand side by side rather than stretching "Tile" across
        the column: a label alone three to a row, a label and a short line two, and four of either two by two so no
        row is left with one. They share a row's height, as a row of fields does. A phone and a dialog keep one a row. */
@@ -1168,9 +1174,9 @@
     .form-page:has(.multi-step-aside) .choice-cards[data-fit='short']:not(:has(> :nth-child(4):last-child)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @container form-page (min-width: 56rem) {
-    .form-page:has(.multi-step-aside) > * { max-width: none; }
+    .form-page.form-page > * { max-width: none; }
     /* The page's name and description stand over the form's column, not over the steps. */
-    .form-page:has(.multi-step-aside) > :not(form) { max-width: calc(100% - 300px - var(--space-8)); justify-self: start; }
+    .form-page.form-page > :not(form) { max-width: calc(100% - 300px - var(--space-8)); justify-self: start; }
     .multi-step-form:has(> .multi-step-aside) { position: relative; padding-inline-end: calc(300px + var(--space-8)); }
     .multi-step-form > .multi-step-aside { display: block; position: absolute; inset-block: 0; inset-inline-end: 0; width: 300px; }
     .multi-step-aside > nav { position: sticky; top: var(--space-6); padding-inline-start: var(--space-6); border-inline-start: 1px solid var(--line); }

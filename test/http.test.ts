@@ -28,6 +28,8 @@ import { test, before, after, describe } from 'node:test';
 import { toolCounts } from '../packages/tablewalk/src/server/mcp.js';
 import assert from 'node:assert/strict';
 import { request as httpRequest, type Server } from 'node:http';
+import { connect } from 'node:net';
+import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -592,7 +594,7 @@ describe('writing needs a connection that says so', () => {
       key: { id: 2 },
       values: { country_code: 'NO_SUCH_COUNTRY' },
     });
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 409);
     assert.equal(res.json.outcome, 'rejected');
     assert.match(res.json.errors[0].message, /country|foreign key/i);
     assert.equal(valueIn(RW_DB, 'SELECT country_code AS v FROM customer WHERE id=2'), before);
@@ -619,13 +621,14 @@ describe('writing needs a connection that says so', () => {
     assert.equal(typeof res.json.key.id, 'number');
   });
 
-  test('a constraint the database enforces is a 200 in its words, not a 500', async () => {
+  test('a constraint the database enforces is a 409 in its words, not a 500 and never a 2xx', async () => {
     const res = await post('/api/insert', {
       conn: 'writable',
       table: 'country',
       values: { code: 'AU', name: 'Again' },
     });
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 409);
+    assert.equal(res.json.outcome, 'rejected');
     assert.match(res.json.errors[0].message, /UNIQUE constraint failed/);
   });
 
@@ -714,7 +717,7 @@ describe('writing needs a connection that says so', () => {
     assert.ok('onDelete' in line);
   });
 
-  test("a constraint the database enforces comes back as 200 with the database's words", async () => {
+  test("a constraint the database enforces comes back as 409 with the database's words", async () => {
     /* The other vocabulary. The delete was allowed, attempted, and refused by
        SQLite — that is not an outage, it is an answer, and the impact report
        is still worth sending with it. */
@@ -724,7 +727,7 @@ describe('writing needs a connection that says so', () => {
       key: { id: 1001 },
       confirm: true,
     });
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 409);
     assert.equal(res.json.deleted, false);
     assert.match(res.json.errors[0].message, /FOREIGN KEY|constraint/i);
     assert.equal(rowsIn(RW_DB, 'SELECT COUNT(*) AS n FROM invoice WHERE id = 1001'), 1);
@@ -1715,7 +1718,7 @@ describe('a proxy that signs people in', () => {
     });
     const trusted = {
       ...bound,
-      trustedProxies: parseTrustedProxies(['10.0.0.0/8']).ranges,
+      identityProxies: parseTrustedProxies(['10.0.0.0/8']).ranges,
     };
     assert.deepEqual(identityFor(req({ 'x-forwarded-user': 'ada@example.org' }, '10.0.0.9'), trusted), { who: 'ada@example.org' });
     assert.deepEqual(identityFor(req({ 'x-forwarded-user': 'ada@example.org' }, '127.0.0.1'), bound), { who: 'ada@example.org' });
@@ -2400,6 +2403,36 @@ describe('reading a request body', () => {
     } catch (err) {
       assert.match((err as Error).message, /fetch failed|terminated/i);
     }
+  });
+
+  /* A keep-alive connection whose body was cut off at the cap still held the rest of it, unread: the next request on
+     that socket was parsed out of the leftover bytes and hung or was reset (a live load test). The rest is read and
+     dropped now, so the 413 leaves the connection clean and the next request on it is answered. Megabytes past the
+     cap, so most of the body is still on its way when the cap is met. */
+  test('a body over the cap leaves its keep-alive connection clean for the next request', async () => {
+    const socket = connect(bound.port, '127.0.0.1');
+    await once(socket, 'connect');
+    const head = (length: number) =>
+      `POST /api/count HTTP/1.1\r\nHost: 127.0.0.1:${bound.port}\r\nOrigin: http://127.0.0.1:${bound.port}\r\n` +
+      `Content-Type: application/json\r\nContent-Length: ${length}\r\nConnection: keep-alive\r\n\r\n`;
+    let said = '';
+    socket.on('data', (chunk: Buffer) => (said += chunk.toString('latin1')));
+    socket.on('error', () => {});
+    const answers = async (count: number) => {
+      for (const until = Date.now() + 5000; Date.now() < until; await new Promise((resolve) => setTimeout(resolve, 20)))
+        if ((said.match(/HTTP\/1\.1 \d{3} /g) ?? []).length >= count && said.endsWith('}')) return;
+    };
+    const over = JSON.stringify({ table: 'customer', pad: 'x'.repeat(4 * 1024 * 1024) });
+    socket.write(head(Buffer.byteLength(over)) + over);
+    await answers(1);
+    assert.match(said, /^HTTP\/1\.1 413 /);
+    const next = JSON.stringify({ table: 'customer' });
+    socket.write(head(Buffer.byteLength(next)) + next);
+    await answers(2);
+    socket.destroy();
+    // Each reply follows the last one's body directly: the answers are counted by their status lines.
+    const replies = said.match(/HTTP\/1\.1 \d{3}/g);
+    assert.deepEqual(replies, ['HTTP/1.1 413', 'HTTP/1.1 200'], said.slice(-400));
   });
 
   test('a body just under the cap is read normally', async () => {

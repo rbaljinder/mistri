@@ -1155,7 +1155,7 @@ export interface AppAuth<Resource extends string = string, Role extends string =
       made at its first sign-in through an identity provider, with a verified email in one of the domains. */
   signUp?: 'open' | 'invite' | { providers?: readonly AuthProvider[]; domains?: readonly string[] };
   /** Where accounts and sessions live: a SQLite file, or a postgres:// URL (name its password, or the whole URL, by a
-      `${NAME}` reference; `migratePostgresAuthStore` from @mistriwork/mistri/commands makes its schema before the first start).
+      `${NAME}` reference; `migratePostgresAuthStore` from @mistriwork/mistri/maintenance makes its schema before the first start).
       Never a business database, which a tenant App refuses at startup. Default: a SQLite file in the config directory,
       named for the app. */
   store?: string;

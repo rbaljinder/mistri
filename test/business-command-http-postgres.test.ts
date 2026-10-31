@@ -281,7 +281,7 @@ describe('HTTP business commands on PostgreSQL, against a real server', { skip: 
       const resources = await loadAppRuntimeResources(f.registry, f.host.app.app, 'pg-db');
       await assert.rejects(
         validateBusinessCommandStartup(f.host.app.app, f.commands, resources, () => true),
-        /command journal on connection "pg-db" is unavailable: it is provisioned once, never on startup\. Run `mistri migrate stores up --app <the App's directory>` with the server stopped, as a role that may create tables \(or migratePostgresCommandJournal\(url\) from @mistriwork\/mistri\/commands\)/,
+        /command journal on connection "pg-db" is unavailable: it is provisioned once, never on startup\. Run `mistri migrate stores up --app <the App's directory>` with the server stopped, as a role that may create tables \(or migratePostgresCommandJournal\(url\) from @mistriwork\/mistri\/maintenance\)/,
       );
       assert.equal(
         (await control.query(`SELECT count(*) AS n FROM pg_class WHERE relname LIKE '\\_\\_mistri\\_command\\_%'`)).rows[0].n,

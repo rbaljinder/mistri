@@ -236,10 +236,10 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
       --allowed-host <name>   also answer for this Host header; repeatable
       --trust-proxy <address|CIDR>
                               a proxy whose X-Forwarded-For the public forms'
-                              rate limit may believe (10.0.0.0/8, 172.17.0.1,
-                              fd00::/8); repeatable or comma-separated, or set
-                              MISTRI_TRUST_PROXY. Loopback is always trusted.
-                              Also who may set --auth-proxy-header
+                              rate limit may believe (172.17.0.1, or a range
+                              like fd00::/8); repeatable or comma-separated, or
+                              set MISTRI_TRUST_PROXY. Loopback is always trusted.
+                              Client address only, never identity
       --trust-proxy-hops <n>  behind a managed front end with no address to name
                               (Cloud Run, a cloud load balancer): how many
                               proxies append to X-Forwarded-For; the client is
@@ -258,9 +258,15 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
       --auth-proxy-header <name>
                               behind a proxy that signs people in: the header
                               it sets with the user (X-Forwarded-User). Requests
-                              from beyond loopback must carry it and come from
-                              a --trust-proxy address; every write is journaled
-                              with it
+                              from beyond loopback must carry it; it is
+                              believed only from loopback and --auth-proxy-from
+                              peers. Every write is journaled with it
+      --auth-proxy-from <address|CIDR>
+                              a peer, beside loopback, whose
+                              --auth-proxy-header value is believed: the
+                              proxy's own address (10.0.0.7). A separate list
+                              from --trust-proxy; repeatable or
+                              comma-separated, or set MISTRI_AUTH_PROXY_FROM
       --config <path>         read connections from this file, and the
                               cache, search, webhook, email (smtps://,
                               smtp:// or log:) and OAuth services beside
@@ -509,7 +515,8 @@ mistri migrate stores status | up
                 [--suite <suite.json>] [--app <dir> [--jobs <file>] [--policy <file>]]
                 [<db> | --db <target> | --config <path>] [--connection <name>]
 The layouts mistri keeps in a database of its own (auth, tokens, history,
-inbox, command journal and sequences, tenant stores, flags, experiments, analytics)
+inbox, command journal and sequences, tenant stores, flags, experiments, analytics,
+the assistant's conversations)
 move forward only here: serving never migrates, and refuses a store behind
 its layout with this command in the message. status prints one line per
 store; up applies each pending step in its own transaction (PostgreSQL: under

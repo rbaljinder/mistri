@@ -26,7 +26,8 @@ function unavailable(app: AppDef, dialect: string, error?: unknown): AssistantSt
   const call = `provisionStores({ ${dialect === 'postgres' ? 'postgres: url' : 'sqlite: path'} }, { only: ['assistant'] })`;
   return new AssistantStoreUnavailable(
     `${app.name} declares an assistant, and its database holds no assistant store of this version. ` +
-      `Provision it once with ${call} from @mistriwork/mistri/maintenance, then start the server again.`,
+      `Provision it once with \`mistri migrate stores up --app <the App's directory>\` (with the server stopped), ` +
+      `or ${call} from @mistriwork/mistri/maintenance, then start the server again.`,
   );
 }
 

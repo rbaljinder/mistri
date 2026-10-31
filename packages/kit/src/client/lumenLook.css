@@ -1247,9 +1247,15 @@
     line-height: 1.45;
     color: var(--ink-muted);
   }
-  /* A card's toned value is its category chip: over the title, in capitals on its tint. */
-  :root[data-look-board='strip'] :is(.board-card-line, .triage-card-subtitle):has(> .tone:not(.tone-neutral)) {
+  /* A card's toned value is its category chip: over the title, in capitals on its tint. A neutral one keeps its
+     place, said as a rule of its own rather than as `:has(> .tone:not(.tone-neutral))`: a :not() inside :has() lets
+     any element added anywhere change what :has() matches, and Chrome then restyled the whole pane — the screen held
+     for a navigation with it — for each one (test/built-client-vitals.mjs). */
+  :root[data-look-board='strip'] :is(.board-card-line, .triage-card-subtitle):has(> .tone) {
     order: -1;
+  }
+  :root[data-look-board='strip'] :is(.board-card-line, .triage-card-subtitle):has(> .tone-neutral) {
+    order: 0;
   }
   html:root[data-look-board='strip'] :is(.board-card-line, .triage-card-subtitle) > .tone:not(.tone-neutral) {
     padding: 0 var(--space-3);

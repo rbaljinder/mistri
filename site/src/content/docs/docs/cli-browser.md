@@ -37,10 +37,11 @@ The server's flags: where the data is, and how it is served.
 | `-p, --port <n>` | Port to listen on (default 4111) |
 | `--host <addr>` | Interface to bind (default 127.0.0.1, loopback only) |
 | `--allowed-host <name>` | Also answer for this Host header; repeatable. Needed behind a proxy or in a container reached by name. Or set TABLEWALK_ALLOWED_HOSTS=a.example,b.example |
-| `--trust-proxy <address|CIDR>` | A proxy whose X-Forwarded-For the rate limit may believe: 10.0.0.0/8, 172.17.0.1, fd00::/8. Repeatable or comma-separated; loopback is always trusted. Also who may set --auth-proxy-header. Or set TABLEWALK_TRUST_PROXY=10.0.0.0/8,fd00::/8 |
+| `--trust-proxy <address|CIDR>` | A proxy whose X-Forwarded-For the rate limit may believe: 172.17.0.1 or a range like fd00::/8. Repeatable or comma-separated; loopback is always trusted. Client address only: it never lets a proxy set --auth-proxy-header (that is --auth-proxy-from). Or set TABLEWALK_TRUST_PROXY=172.17.0.1 |
 | `--trust-proxy-hops <n>` | Behind a managed front end with no address to name (Cloud Run, a cloud load balancer): how many proxies append to X-Forwarded-For. The client is the address n places from the right; anything the visitor wrote left of it is ignored. Rate limiting only. Or set TABLEWALK_TRUST_PROXY_HOPS=1 |
 | `--trust-proxy-cloudflare` | Read CF-Connecting-IP as the client. Only when the server is reachable through Cloudflare alone (a tunnel or its address ranges): anyone else can write the header. Not with --trust-proxy-hops. Or set TABLEWALK_TRUST_PROXY_CLOUDFLARE=1 |
-| `--auth-proxy-header <name>` | Behind a proxy that signs people in: the header it sets with the user (X-Forwarded-User). Requests from beyond loopback must carry it and come from a --trust-proxy address; every write is journaled with it. Or set TABLEWALK_AUTH_PROXY_HEADER. |
+| `--auth-proxy-header <name>` | Behind a proxy that signs people in: the header it sets with the user (X-Forwarded-User). Requests from beyond loopback must carry it; it is believed only from loopback and --auth-proxy-from peers. Every write is journaled with it. Or set TABLEWALK_AUTH_PROXY_HEADER. |
+| `--auth-proxy-from <address|CIDR>` | A peer, beside loopback, whose --auth-proxy-header value is believed: the proxy's own address (10.0.0.7). Same syntax as --trust-proxy, but a separate list; a range lets every peer in it name the signed-in user. Or set TABLEWALK_AUTH_PROXY_FROM=10.0.0.7 |
 | `--schema <name>` | Postgres only; repeatable. Defaults to all user schemas. |
 | `--read-pool <n>` | PostgreSQL connections that may read at once, per database (default 4, at most 64). A connection's "pool": { "read": n } in tablewalk.json wins. Or set TABLEWALK_READ_POOL. |
 | `--lock-timeout <s>` | Seconds a write waits for a row or table another transaction holds before it is refused (default 5, 0.1 to 30). Or set TABLEWALK_LOCK_TIMEOUT. |
@@ -189,6 +190,7 @@ Browsing is read-only. Editing is off by default, per connection: its
 | `--api-url` | [Options](#options) |
 | `--app` | [Changing the schema](#changing-the-schema), [Rows to look at](#rows-to-look-at) |
 | `--append` | [Rows to look at](#rows-to-look-at) |
+| `--auth-proxy-from` | [Options](#options) |
 | `--auth-proxy-header` | [Options](#options) |
 | `--base-path` | [Options](#options), [Connections can also come from a tablewalk.json](#connections-can-also-come-from-a-tablewalkjson) |
 | `--config` | [Options](#options), [Changing the schema](#changing-the-schema), [Rows to look at](#rows-to-look-at) |

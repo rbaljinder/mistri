@@ -375,7 +375,7 @@ own. In order, from CI or a one-off task, over the database's direct port:
 # 1. The build carries the policy, and the image it writes starts with it.
 mistri build --app ./app --commands ./app/commands.ts --policy ./app/policy.ts --dockerfile Dockerfile
 # 2. The sign-in store: a PostgreSQL database of its own, never the business database.
-node -e "import('@mistriwork/mistri/commands').then((m) => m.migratePostgresAuthStore(process.env.MISTRI_AUTH_STORE))"
+node -e "import('@mistriwork/mistri/maintenance').then((m) => m.migratePostgresAuthStore(process.env.MISTRI_AUTH_STORE))"
 # 3. The tenant store, the journals the policy declares, and every store beside them.
 mistri migrate stores up --config mistri.json --app ./build/app --policy ./build/app/server/policy.mjs
 # 4. The first boot: the platform realm, the first tenants, the first operator. Each runs again safely.
@@ -1710,7 +1710,8 @@ are named in `withheld`, so the log says that something was changed without
 showing what; columns the resource's `audit` block marks remain the keyed hash
 the write trail stored, for a reader who holds the log but not the key.
 
-In the browser, a member holding the grant is offered **Support visits** beside
+The grant is authored as `operations: ['support']` on a tenant role; `supportLog` is only the name the parsed grant and
+the App payload give it, and a role that writes `supportLog: true` is refused with that migration. In the browser, a member holding the grant is offered **Support visits** beside
 the tenant control — the same place a lender is offered "Enter dealer", which
 is the other side of the same feature. The entry appears on the App payload's
 `supportLog`, a runtime answer beside `writableTables`: roles are per-tenant, so

@@ -12,6 +12,7 @@ import { type Bound } from '@mistriwork/engine/server/http/trust.js';
 import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { poolBusyRetryAfterSeconds } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { replyJson } from './tenantReplyJson.js';
+import { readBounded } from '@mistriwork/engine/server/http/reply.js';
 
 export class InvalidRequest extends Error {
   constructor(readonly status = 400) {
@@ -84,18 +85,12 @@ export function ownerHeaders(owner: TenantContextReply): Record<string, string> 
     ...(owner.realm === 'platform' || owner.realm === 'support' ? { [headers.realm]: owner.realm } : {}),
   };
 }
+// A body past `maximum` is still read off the wire and dropped, so its 413 leaves the keep-alive connection clean (readBounded).
 export async function body(req: IncomingMessage, maximum: number): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const part of req) {
-    const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part);
-    if ((size += chunk.length) > maximum) return invalid(413);
-    chunks.push(chunk);
-  }
+  const read = await readBounded(req, maximum);
+  if (!read) return invalid(413);
   try {
-    const value: unknown = captureTenantData(
-      JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks))),
-    );
+    const value: unknown = captureTenantData(JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(read)));
     tenantRecord(value);
     return value;
   } catch {

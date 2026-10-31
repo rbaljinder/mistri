@@ -108,7 +108,7 @@ test('a deal that closes before it was created is refused, keeps the form, and i
     const refused = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/insert');
     await form.getByRole('button', { name: 'Add', exact: true }).click();
     const response = await refused;
-    expect(response.status()).toBe(200);
+    expect(response.status()).toBe(422);
     expect(await response.json()).toMatchObject({
       outcome: 'rejected',
       errors: [{ code: 'validation_failed', message: REFUSED, fields: [{ field: 'close_date', message: CLOSE_RULE }] }],
@@ -172,7 +172,7 @@ test('the lead rule holds on the update route: converting without a contact is r
   const refused = await page.request.post(`${CRM}/api/update`, {
     data: { app: 'compass', table: 'lead', key: { id }, values: { status: 'converted' } },
   });
-  expect(refused.status()).toBe(200);
+  expect(refused.status()).toBe(422);
   expect(await refused.json()).toMatchObject({
     outcome: 'rejected',
     errors: [{ code: 'validation_failed', message: REFUSED, fields: [{ field: 'converted_contact_id', message: LEAD_RULE }] }],

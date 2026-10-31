@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.6",
+  "version": "1.0.0-rc.7",
   "description": "The engine both products stand on: the adapters (SQLite, Postgres), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {

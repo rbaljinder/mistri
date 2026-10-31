@@ -41,10 +41,11 @@ Options:
                       Or set TABLEWALK_ALLOWED_HOSTS=a.example,b.example
       --trust-proxy <address|CIDR>
                       A proxy whose X-Forwarded-For the rate limit may
-                      believe: 10.0.0.0/8, 172.17.0.1, fd00::/8.
+                      believe: 172.17.0.1 or a range like fd00::/8.
                       Repeatable or comma-separated; loopback is always
-                      trusted. Also who may set --auth-proxy-header. Or set
-                      TABLEWALK_TRUST_PROXY=10.0.0.0/8,fd00::/8
+                      trusted. Client address only: it never lets a proxy set
+                      --auth-proxy-header (that is --auth-proxy-from). Or set
+                      TABLEWALK_TRUST_PROXY=172.17.0.1
       --trust-proxy-hops <n>
                       Behind a managed front end with no address to name
                       (Cloud Run, a cloud load balancer): how many proxies
@@ -61,9 +62,15 @@ Options:
       --auth-proxy-header <name>
                       Behind a proxy that signs people in: the header it sets
                       with the user (X-Forwarded-User). Requests from beyond
-                      loopback must carry it and come from a --trust-proxy
-                      address; every write is journaled with it. Or set
-                      TABLEWALK_AUTH_PROXY_HEADER.
+                      loopback must carry it; it is believed only from
+                      loopback and --auth-proxy-from peers. Every write is
+                      journaled with it. Or set TABLEWALK_AUTH_PROXY_HEADER.
+      --auth-proxy-from <address|CIDR>
+                      A peer, beside loopback, whose --auth-proxy-header value
+                      is believed: the proxy's own address (10.0.0.7). Same
+                      syntax as --trust-proxy, but a separate list; a range
+                      lets every peer in it name the signed-in user. Or set
+                      TABLEWALK_AUTH_PROXY_FROM=10.0.0.7
       --schema <name> Postgres only; repeatable. Defaults to all user schemas.
       --read-pool <n> PostgreSQL connections that may read at once, per
                       database (default 4, at most 64). A connection's

@@ -540,6 +540,15 @@ test('a write the stock refused at 422 comes back as the refused write it is, no
   });
 });
 
+test('a write the database refused at 409 comes back as the refused write it is, not a failure', async () => {
+  const message = 'A record with these unique values already exists. Use different values and try again.';
+  fetchReply(response({ error: message, errors: [{ code: 'duplicate_value', message }], outcome: 'rejected' }, null, 409));
+  await expect(transport.tenantMutationApi('/api/update', update())).resolves.toMatchObject({
+    errors: [{ code: 'duplicate_value', message }],
+    outcome: 'rejected',
+  });
+});
+
 test.each(['tenant_lease_stale', 'tenant_lease_expired'])(
   'HTTP 409 %s preserves exact refusal/uncertainty and suspends without retry',
   async (code) => {

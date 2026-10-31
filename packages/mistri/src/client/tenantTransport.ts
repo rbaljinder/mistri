@@ -898,9 +898,9 @@ export async function tenantMutationApi(
           .filter((item) => typeof item.message === 'string')
           .map((item) => ({ message: item.message, ...(typeof item.code === 'string' ? { code: item.code } : {}) }))
       : [];
-    /* A write the App's rules refused is answered, not failed, whatever its status (core.js request): a line's
-       `consumes` says it at 422, in the same envelope a 200 refusal has. */
-    const rejected = response.status === 422 && outcome === 'rejected' && diagnostics.length > 0;
+    /* A refused write is answered, not failed (core.js request): the App's rules or a value refusing it say 422,
+       the database's keys 409, in the one `rejected` envelope. */
+    const rejected = (response.status === 409 || response.status === 422) && outcome === 'rejected' && diagnostics.length > 0;
     if (!response.ok && !rejected)
       throw mutationError(message, outcome, { status: response.status, ...(typeof value.code === 'string' ? { code: value.code } : {}) });
     return {

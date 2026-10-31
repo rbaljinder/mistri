@@ -124,6 +124,24 @@ test('a write the stock refused answers 422 with its envelope, which the form re
   await expect(api('/api/insert', { table: 'work_order_part', values: {} })).rejects.toMatchObject({ status: 422, message: 'No.' });
 });
 
+test('a write the database refused answers 409 with the same envelope, read as any refused write', async () => {
+  const refused = {
+    errors: [{ code: 'duplicate_value', message: 'Another record already has this code. Use a different value and try again.' }],
+    outcome: 'rejected',
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(new Response(JSON.stringify(refused), { status: 409, headers: { 'x-mistri-account': 'alice' } })),
+  );
+  await expect(api('/api/insert', { table: 'country', values: { code: 'AU' } })).resolves.toEqual(refused);
+  // A 409 that is not the write envelope stays a failure with its status (No connection is open.).
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'No.' }), { status: 409, headers: { 'x-mistri-account': 'alice' } })),
+  );
+  await expect(api('/api/insert', { table: 'country', values: {} })).rejects.toMatchObject({ status: 409, message: 'No.' });
+});
+
 test('HTTP command failures retain safe code, message and outcome alongside the legacy error wrapper', async () => {
   vi.stubGlobal(
     'fetch',

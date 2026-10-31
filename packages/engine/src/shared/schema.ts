@@ -470,8 +470,17 @@ export function labelColumn(table: TableMeta): string | undefined {
      on hundreds of rows after. And a column the row must have beats one it
      may leave blank: the first text column of a purchase order was a
      nullable `received_by`, and every order was named by nothing. */
+  /* Nor a pointer: a text column that references another table holds that record's key, not this row's name. The
+     one that mattered is a tenant table's ownership column (`tenant_id`, required and the same on every row), which
+     named a list's search box and every row of a table with no name of its own. */
   const texts = table.columns.filter(
-    (c) => !c.primaryKey && /char|text|varchar|string/i.test(c.type) && !looksLikeDate(c) && !c.allowed?.length && !/_by$/i.test(c.name),
+    (c) =>
+      !c.primaryKey &&
+      !c.references &&
+      /char|text|varchar|string/i.test(c.type) &&
+      !looksLikeDate(c) &&
+      !c.allowed?.length &&
+      !/_by$/i.test(c.name),
   );
   const firstText = texts.find((c) => !c.nullable) ?? texts[0];
   return firstText?.name ?? table.columns.find((c) => c.primaryKey)?.name;

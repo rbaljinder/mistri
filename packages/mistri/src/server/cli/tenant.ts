@@ -63,6 +63,7 @@ export async function startTenantServing(
       opts.target ||
       opts.schemas.length ||
       opts.authProxyHeader ||
+      opts.authProxyFrom.length ||
       config.views.length ||
       config.queries.length ||
       pagesBeforeApp.length ||

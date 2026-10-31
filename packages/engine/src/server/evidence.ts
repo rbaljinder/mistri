@@ -70,6 +70,16 @@ export function databaseFault(error: unknown): boolean {
   // node:sqlite: busy, locked, I/O, a missing or unreadable file.
   if (code === 'ERR_SQLITE_ERROR') return true;
   if (typeof code === 'string' && NETWORK.has(code)) return true;
+  /* An integrity rule the database enforced (class 23: a key already taken, a
+     reference to nothing, a required value, a check) is the database answering,
+     and refusing: permanent for that write, and never a reason to try again.
+     Counted as unanswered, a duplicate key was told "try again" with a
+     Retry-After (a live load test). Every write route answers it as the refusal
+     it is (constraints.ts writeRefusalStatus). A data exception (class 22) stays
+     below on purpose: on a tenant read it is a filter value its column cannot
+     hold, and a denial there would end the person's context; a write route
+     recognizes it before asking this (tenantWriteFault.ts). */
+  if (typeof severity === 'string' && typeof code === 'string' && code.startsWith('23')) return false;
   // pg's DatabaseError: a server-reported SQLSTATE (a terminated backend, a
   // database refusing connections, a cancelled or timed-out statement).
   if (typeof severity === 'string' && typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return true;

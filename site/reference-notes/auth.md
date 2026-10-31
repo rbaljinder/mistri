@@ -23,6 +23,6 @@ directory by default, or a dedicated PostgreSQL database by its `postgres://`
 URL. The manifest is committed, so name the password, or the whole URL, by a
 `${NAME}` reference (`store: '${MISTRI_AUTH_STORE}'`); an unset variable
 refuses at startup. Run `migratePostgresAuthStore(url)` from
-`@mistriwork/mistri/commands` once before the first start: startup checks the store's
+`@mistriwork/mistri/maintenance` once before the first start: startup checks the store's
 schema and never creates it. The store is never a business database, and a
 tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).

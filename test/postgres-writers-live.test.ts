@@ -358,3 +358,56 @@ test("over HTTP an App's save that waited out a lock is 503 with Retry-After and
     await check.end();
   }
 });
+
+/* A save sends its record's lock behind the BEGIN (writeAhead.ts). When that lock waited out the lock timeout, the
+   transaction began again without it and asked for the same lock again, waiting a second time: a held row was
+   answered `row_locked` after ten seconds where five are documented (a live load test). It waits once now. The
+   connection is warmed by a save first, so the second save's lock is the one sent ahead. */
+test('a save behind a held row is refused after one lock timeout, not two', { skip }, async () => {
+  const registry = new Registry();
+  registry.add({ id: 'once-db', name: 'Once', url: database!.url, source: 'config', writable: true });
+  const definition = parseAppConfig(
+    {
+      id: 'once',
+      name: 'Once',
+      connection: 'once-db',
+      resources: { item: { access: 'write' } },
+      views: { items: { kind: 'list', from: 'item', show: ['label'] } },
+      home: 'items',
+      nav: ['items'],
+    },
+    'once fixture',
+  );
+  const host = { app: { path: 'once.ts', app: definition, pages: [], sources: {} }, pages: [] } as unknown as AppHost;
+  const bound = { host: '127.0.0.1', port: 0 };
+  const server = createApp({ registry, bound, apps: [host], pages: [] });
+  server.listen(0, bound.host);
+  await once(server, 'listening');
+  bound.port = (server.address() as { port: number }).port;
+  const save = (id: number, label: string) =>
+    fetch(`http://${bound.host}:${bound.port}/api/update`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(20_000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app: 'once', table: 'item', key: { id }, values: { label } }),
+    });
+  try {
+    for (const label of ['warm', 'warmer']) assert.equal((await save(1, label)).status, 200);
+    const held = await holdRow(2);
+    try {
+      const started = performance.now();
+      const response = await save(2, 'locked out');
+      const waited = performance.now() - started;
+      assert.equal(response.status, 503, await response.text());
+      // The lock timeout is 400 ms here (configureLockTimeout above): once, with room, and well short of twice.
+      assert.ok(waited >= 350 && waited < 750, `waited ${Math.round(waited)} ms`);
+    } finally {
+      await held.release();
+    }
+  } finally {
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+    server.closeAllConnections();
+    await closed;
+    await registry.closeAll();
+  }
+});

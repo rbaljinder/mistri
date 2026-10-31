@@ -2969,6 +2969,9 @@ test("a tenant App's attachment uploads on the lease, reads back as its tenant's
   });
   owned(sent, north);
   assert.deepEqual(sent.body.key, { id: 'north-file' });
+  // The reply names the file, never echoes it.
+  assert.equal((sent.body.applied as Record<string, unknown>).data, `<${bytes.byteLength} bytes>`);
+  assert.ok(JSON.stringify(sent.body).length < 1000, JSON.stringify(sent.body));
   const stored = f.db
     .prepare("SELECT tenant_id, file_name, content_type, hex(data) AS hex FROM db_attachment WHERE id = 'north-file'")
     .get()!;
@@ -3003,6 +3006,19 @@ test("a tenant App's attachment uploads on the lease, reads back as its tenant's
     file: { name: 'big.bin', data: Buffer.alloc(5000).toString('base64') },
   });
   assert.equal(big.status, 413);
+  // Past the tenant ceiling by more than the body's slack (10 MiB, a 10.25 MiB file) the body is refused before it is read: a size sentence, not a permissions one.
+  const huge = await f.raw(
+    f.select('/api/file/upload'),
+    JSON.stringify({
+      table: 'attachment',
+      values: { id: 'huge', item_id: 'north-item' },
+      file: { name: 'huge.bin', data: Buffer.alloc(10 * 1024 * 1024 + 256 * 1024).toString('base64') },
+    }),
+    { ...f.headers(north), connection: 'close' },
+  );
+  assert.equal(huge.status, 413);
+  assert.match(String(huge.body.error), /too large.*10 MB/);
+  assert.doesNotMatch(String(huge.body.error), /permission/);
   const nowhere = await f.data('/api/file/upload', north, {
     table: 'item',
     values: { id: 'x' },

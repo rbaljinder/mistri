@@ -15,7 +15,7 @@ import { findTable } from '@mistriwork/engine/shared/schema.js';
 import { appError, appWriteError } from '../app/appErrors.js';
 import { appDataResponse } from '../app/appResponses.js';
 import { indexerFor } from '../app/appSearchRuntime.js';
-import { AppValidationDenied, ConsumesRefused } from '../app/appValidationDenied.js';
+import { AppValidationDenied } from '../app/appValidationDenied.js';
 import { appForConnection, appWriteWording } from '../app/apps.js';
 import { fileStoreTrouble, placeFile } from '../files/fileStorage.js';
 import { updateActionLabel } from '../recordHistory.js';
@@ -123,16 +123,16 @@ const RULES: RecordRules = {
     return { ...(alongside ? { alongside } : {}), lines: read.lines };
   },
   /* An App's root `validation` refusing a write is the user's to fix, like a
-     constraint the database enforces: the same 200 envelope with a `rejected`
+     constraint the database enforces: the same envelope with a `rejected`
      outcome, so the form keeps the draft and marks the fields. Rethrown as a
      plain Refusal it became a 400 mapped for reads, which dropped the field
      names the error carries. Only field names cross; never values or rule text.
-     A line's `consumes` refusing is the one status apart: 422, as every other
-     door (a command, the App API) answers it and the docs say, in the same body,
-     so a caller that reads only the status still sees the stock refused. */
+     At 422, as a line's `consumes` refusing is and every other door (a command,
+     the App API) answers it: it was a 200, and a caller that reads only the
+     status took the refused record for a saved one (a live load test). */
   refused: (res, path, error) => {
     if (!(error instanceof AppValidationDenied)) return false;
-    sendResource(res, path, error instanceof ConsumesRefused ? 422 : 200, { errors: [appError(error, 'write')], outcome: 'rejected' });
+    sendResource(res, path, 422, { errors: [appError(error, 'write')], outcome: 'rejected' });
     return true;
   },
   failure: (post, error, completed) => appWriteError(error, completed, captionsOf(post)),

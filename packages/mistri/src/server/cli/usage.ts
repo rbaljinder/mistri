@@ -81,10 +81,11 @@ Options:
                       Or set MISTRI_ALLOWED_HOSTS=a.example,b.example
       --trust-proxy <address|CIDR>
                       A proxy whose X-Forwarded-For the public forms' rate
-                      limit may believe: 10.0.0.0/8, 172.17.0.1, fd00::/8.
+                      limit may believe: 172.17.0.1 or a range like fd00::/8.
                       Repeatable or comma-separated; loopback is always
-                      trusted. Also who may set --auth-proxy-header. Or set
-                      MISTRI_TRUST_PROXY=10.0.0.0/8,fd00::/8
+                      trusted. Client address only: it never lets a proxy set
+                      --auth-proxy-header (that is --auth-proxy-from). Or set
+                      MISTRI_TRUST_PROXY=172.17.0.1
       --trust-proxy-hops <n>
                       Behind a managed front end with no address to name
                       (Cloud Run, a cloud load balancer): how many proxies
@@ -107,9 +108,15 @@ Options:
       --auth-proxy-header <name>
                       Behind a proxy that signs people in: the header it sets
                       with the user (X-Forwarded-User). Requests from beyond
-                      loopback must carry it and come from a --trust-proxy
-                      address; every write is journaled with it. Or set
-                      MISTRI_AUTH_PROXY_HEADER.
+                      loopback must carry it; it is believed only from
+                      loopback and --auth-proxy-from peers. Every write is
+                      journaled with it. Or set MISTRI_AUTH_PROXY_HEADER.
+      --auth-proxy-from <address|CIDR>
+                      A peer, beside loopback, whose --auth-proxy-header value
+                      is believed: the proxy's own address (10.0.0.7). Same
+                      syntax as --trust-proxy, but a separate list; a range
+                      lets every peer in it name the signed-in user. Or set
+                      MISTRI_AUTH_PROXY_FROM=10.0.0.7
       --schema <name> Postgres only; repeatable. Defaults to all user schemas.
       --read-pool <n> PostgreSQL connections that may read at once, per
                       database (default 4; an App's follows its writers, at most 64). A connection's
@@ -588,14 +595,16 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
                   [--suite <suite.json>] [--app <dir> [--jobs <file>] [--policy <file>]]
                   [<db> | --db <target> | --config <path>] [--connection <name>]
   The layouts mistri keeps in a database of its own (auth, tokens, history,
-  inbox, command journal and sequences, tenant stores, flags, experiments, analytics)
+  inbox, command journal and sequences, tenant stores, flags, experiments, analytics,
+  the assistant's conversations)
   move forward only here: serving never migrates, and refuses a store behind
   its layout with this command in the message. status prints one line per
   store; up applies each pending step in its own transaction (PostgreSQL: under
   an advisory lock) and is safe to run twice. --suite adds the suite's identity,
   grant, preference, flag and experiment stores and each App's connections.
   With --app, up also creates every store the App uses: the inbox its notify
-  rules write, the record history it shows, the command journal and event
+  rules write, the record history it shows, the assistant's
+  conversations, the command journal and event
   store its commands need, their effects' store; --jobs <file> adds the jobs
   module's stores and delivery destinations. The one step before it serves.
   A tenant App's stores are bound to its policy: with --policy <file>, up
@@ -918,7 +927,8 @@ Common options:
       --app <dir>     Serve an app: a directory whose app.ts declares it
   -v, --version       Print the version and stop
 
-  mistri --help all               every command and option, in full
+  mistri --help all               every command and option, in full: the connection pool
+                                  sizes (--read-pool, --write-pool), lock timeouts, limits
   mistri <command> --help         one command's options
 
 Browsing a database with no App is tablewalk's: npx tablewalk --help.

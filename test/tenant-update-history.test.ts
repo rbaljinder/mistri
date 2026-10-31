@@ -679,6 +679,31 @@ test('duplicate Undo during postcommit acknowledgment is busy and cannot run twi
   assert.equal((await service.preview(request, ['north'])).next?.id, older);
 });
 
+/* A person's saves sent together — a form's fields saved at once, two tabs — were refused 403 for every one that
+   found their history partition held by another (a live load test: 5 of 10). They wait for it, outside any
+   transaction, and the history they leave is the order they committed in: each Undo restores the save before it. */
+test('one account’s concurrent saves all apply, one after another, and Undo walks them back in commit order', async (t) => {
+  const f = await fixture(t),
+    service = await f.issue();
+  const names = Array.from({ length: 10 }, (_, at) => `Concurrent ${at}`);
+  const saved = await Promise.allSettled(names.map((name) => service.update(request, ['north'], change(name))));
+  assert.deepEqual(
+    saved.map((outcome) => outcome.status),
+    names.map(() => 'fulfilled'),
+  );
+  const tokens = saved.map((outcome) => undoId((outcome as PromiseFulfilledResult<{ undoId?: string }>).value));
+  assert.equal(new Set(tokens).size, names.length);
+  // Sent together, applied in the order they arrived: the last one is what the row holds.
+  assert.equal(f.row()!.name, names.at(-1));
+  for (let at = names.length - 1; at >= 0; at--) {
+    const next = (await service.preview(request, ['north'])).next;
+    assert.equal(next?.id, tokens[at]);
+    await service.undo(request, ['north'], { expectedId: next!.id });
+    assert.equal(f.row()!.name, at ? names[at - 1] : 'Original');
+  }
+  assert.deepEqual(plain(await service.preview(request, ['north'])), { writes: [] });
+});
+
 test('retirement stops admission synchronously and drains reserved authentication before closing', async (t) => {
   const f = await fixture(t),
     entered = gate(),

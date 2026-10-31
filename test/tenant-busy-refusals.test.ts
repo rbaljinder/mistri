@@ -9,7 +9,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PoolBusy } from '../packages/engine/src/adapters/poolMetrics.js';
+import { POOL_BUSY_MESSAGE, PoolBusy } from '../packages/engine/src/adapters/poolMetrics.js';
 import {
   databaseFault,
   databaseUnanswered,
@@ -19,6 +19,7 @@ import {
   TenantContextError,
   TenantUnavailableError,
 } from '../packages/engine/src/server/evidence.js';
+import { unansweredWrite } from '../packages/mistri/src/server/tenant/tenantWriteFault.js';
 import { TenantWriteFailure } from '../packages/mistri/src/server/tenant/tenantWriteSource.js';
 
 const thrown = (run: () => unknown): unknown => {
@@ -62,4 +63,28 @@ test('a fault recorded beneath a failure is read through it; a denial beneath on
   // And a plain failure with nothing recognized beneath it denies, as before.
   const plain = thrown(() => denyTenantFor(recordRefusalCause(new TenantWriteFailure('not_applied'), new Error('closed'))));
   assert.ok(plain instanceof TenantContextError && !(plain instanceof TenantUnavailableError));
+});
+
+/* A write the pool, or the person's own saves ahead of it (tenantHistoryPartitions.ts), held past its bound is the
+   server busy: said in a single-database App's words and code, `server_busy`, with nothing applied. A database that
+   did not answer keeps its own sentence. */
+test('a tenant write refused as busy says server_busy; one the database did not answer says so', () => {
+  const busy = unansweredWrite(
+    '/api/update',
+    recordRefusalCause(new TenantWriteFailure('not_applied'), new PoolBusy('write', 'queue_timeout')),
+  );
+  assert.equal(busy.status, 503);
+  assert.equal(busy.code, 'server_busy');
+  assert.deepEqual(busy.body, {
+    error: POOL_BUSY_MESSAGE,
+    code: 'server_busy',
+    errors: [{ code: 'server_busy', message: POOL_BUSY_MESSAGE }],
+    outcome: 'not_applied',
+  });
+  const dropped = unansweredWrite(
+    '/api/delete',
+    recordRefusalCause(new TenantWriteFailure('not_applied'), new Error('Connection terminated')),
+  );
+  assert.equal(dropped.code, 'temporarily_unavailable');
+  assert.equal(dropped.body.deleted, false);
 });

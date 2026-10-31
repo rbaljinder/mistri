@@ -881,6 +881,11 @@
       ]
     },
     {
+      "id": "cli-flag-auth-proxy-from",
+      "surface": ["cli: flag --auth-proxy-from"],
+      "tests": [{ "file": "test/trust-proxy.test.ts" }, { "file": "test/tenant-startup-cli.test.ts" }]
+    },
+    {
       "id": "cli-flag-base-path",
       "surface": ["cli: flag --base-path"],
       "tests": [{ "file": "e2e/app-mounts.spec.ts" }, { "file": "test/app-check.test.ts" }]

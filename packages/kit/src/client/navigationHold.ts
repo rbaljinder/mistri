@@ -91,7 +91,7 @@ let shown: { entry: unknown; place: string; depth: number; address: string } | n
    that follows it closely, and only once. */
 let traversedAt = -Infinity;
 const TRAVERSAL_WINDOW = 1000;
-let lastInput: { pointer: boolean; at: number } = { pointer: false, at: 0 };
+let lastInput: { pointer: boolean; at: number; target?: EventTarget | null } = { pointer: false, at: 0 };
 const scrollAt = new Map<string, number>();
 let restoring: { top: number; until: number } | null = null;
 
@@ -152,8 +152,8 @@ export function installNavigationHold(host: HTMLElement, reads?: HoldProbe): voi
         }
     }).observe(document.head, { childList: true });
   }
-  const input = (pointer: boolean) => () => {
-    lastInput = { pointer, at: performance.now() };
+  const input = (pointer: boolean) => (event: Event) => {
+    lastInput = { pointer, at: performance.now(), target: event.target };
     if (hold) release();
     restoring = null;
   };
@@ -198,6 +198,23 @@ export function beforePaint(room: boolean, entry: Place | undefined, depth: numb
     recent &&
     !motionStill() &&
     (!sameThing(entry, shown.entry as Place | undefined) || depth !== shown.depth);
+  /* The focus leaves the room it stands in now, while nothing on the page waits to be restyled. Taken away with the
+     room, it went in the middle of the paint, and Chrome brought the whole pane's style up to date to let it go: the
+     picture and the room being left, restyled only to be removed, 60 ms of a tab's click on the vitals' slowed CPU.
+     The blur is the one removal sends (Chrome sends it), sent first; the room puts the focus back where it belongs.
+     Only where the focus is what was just clicked: a search narrowing the list as it is typed into a rail's box,
+     arriving while the pointer goes down on one of the box's suggestions, leaves the focus in the box, which the
+     suggestion still needs. */
+  const focused = document.activeElement;
+  if (
+    lastInput.pointer &&
+    recent &&
+    focused &&
+    pane.contains(focused) &&
+    lastInput.target instanceof Node &&
+    focused.contains(lastInput.target)
+  )
+    (focused as HTMLElement).blur();
   const made = picture(pane);
   /* Nothing to draw the picture with (no constructable stylesheets): the paint is only a paint, as it was. */
   if (!made) return;
@@ -354,6 +371,10 @@ function readLinked(href: string): void {
     )
     .then((text) => {
       linked.set(href, text);
+      /* And its twin built now, while nothing waits: left to the next navigation, the App's own sheet (390 KB),
+         still on its way when the page was first idle, was built in the click that opened a record or a tab, 35 ms
+         of it on the vitals' slowed CPU (test/built-client-vitals.mjs). */
+      mirrorSheets();
     });
 }
 

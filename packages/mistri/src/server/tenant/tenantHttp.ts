@@ -70,7 +70,7 @@ import {
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
 import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
-import { databaseUnanswered, unansweredWrite } from './tenantWriteFault.js';
+import { databaseUnanswered, refusedWrite, unansweredWrite } from './tenantWriteFault.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
 import { withBoundedReads, type TenantReadContext } from './tenantReadRuntime.js';
@@ -1010,7 +1010,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         // each resource as arrays. The map is built here, outside.
         const viewer = await contexts.withContext(req, selectors, expected, (context: TenantReadContext) => {
           const roles = context.principal.roles;
-          // The grant is a role's, declared in the App. Without it the log is
+          // The grant is a role's, declared in the App as `operations: ['support']`, which parsing folds into this
+          // `supportLog` flag (appAuthGrants.ts supportSessions); an authored `supportLog` is refused. Without it the log is
           // refused outright: being a member of the dealer is not by itself
           // being someone the dealer chose to show its support history to.
           if (!roles.some((role) => app.auth?.roles?.[role]?.supportLog === true)) return denyTenant();
@@ -2121,9 +2122,14 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         }
         if (writes.has(path)) {
           const unknown = completedWrite || (error instanceof TenantWriteFailure && error.outcome === 'unknown');
+          const refused = unknown ? undefined : refusedWrite(path, error);
+          if (refused) {
+            reportRefusal(req, refused.status, refused.code, String(refused.body.error), error);
+            return send(req, res, refused.status, refused.body, {}, error);
+          }
           if (!unknown && databaseUnanswered(error)) {
-            const failure = unansweredWrite(path);
-            reportRefusal(req, failure.status, 'temporarily_unavailable', String(failure.body.error), error, true);
+            const failure = unansweredWrite(path, error);
+            reportRefusal(req, failure.status, failure.code, String(failure.body.error), error, true);
             return send(req, res, failure.status, failure.body, {}, error);
           }
           /* The App's rules refused the record: the same rejected envelope a
@@ -2136,17 +2142,24 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             (path === '/api/insert' || path === '/api/update')
           ) {
             const message = 'The record does not satisfy the application rules.';
-            reportRefusal(req, 200, 'validation_failed', message, error);
-            return send(req, res, 200, { errors: [{ code: 'validation_failed', message, fields: error.fields }], outcome: 'rejected' });
+            reportRefusal(req, 422, 'validation_failed', message, error);
+            return send(req, res, 422, { errors: [{ code: 'validation_failed', message, fields: error.fields }], outcome: 'rejected' });
           }
           const outcome = unknown ? 'unknown' : path === '/api/revert' ? 'not_applied' : 'rejected';
+          /* A body past its ceiling is a matter of size, not of permission (tenantWire.ts body). */
+          const tooLarge = !unknown && error instanceof InvalidRequest && error.status === 413;
           const message = unknown
             ? 'The change could not be confirmed. Refresh and reconcile before trying again.'
-            : (refusalSaid(error) ?? 'The change is unavailable under the current permissions or record state.');
-          reportRefusal(req, unknown ? 503 : 403, unknown ? 'write_unconfirmed' : 'forbidden', message, error);
+            : tooLarge
+              ? path === FILE_UPLOAD_PATH
+                ? `The file is too large; a tenant App takes files up to ${TENANT_FILE_MOST / 1024 / 1024} MB.`
+                : 'The request is too large.'
+              : (refusalSaid(error) ?? 'The change is unavailable under the current permissions or record state.');
+          const said = unknown ? 'write_unconfirmed' : tooLarge ? 'too_large' : 'forbidden';
+          reportRefusal(req, unknown ? 503 : tooLarge ? 413 : 403, said, message, error);
           return send(req, res, unknown ? 200 : error instanceof InvalidRequest ? error.status : 403, {
             error: message,
-            errors: [{ code: unknown ? 'write_unconfirmed' : 'forbidden', message }],
+            errors: [{ code: said, message }],
             outcome,
             ...(path === '/api/delete' ? { deleted: unknown ? null : false } : path === '/api/revert' ? { reverted: false } : {}),
           });

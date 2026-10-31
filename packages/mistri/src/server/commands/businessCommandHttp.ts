@@ -81,6 +81,21 @@ export function businessCommandHttpError(error: unknown, statusOnly = false) {
   };
 }
 
+/* A resource route names its App in the body (`{ app, table, … }`); a command route takes it in the query string
+   (`/api/commands/execute?app=<id>`), and its envelope holds exactly the command's own members. An `app` member is
+   the one stray name that is not the caller's text to echo but a known mistake, so it is the one the refusal says.
+   Its outcome is the route's own for an invalid envelope: a scoped route says unknown of every refusal. */
+function assertEnvelopeHasNoApp(body: unknown, outcome: 'unknown' | 'not_applied'): void {
+  if (body && typeof body === 'object' && !Array.isArray(body) && Object.hasOwn(body, 'app'))
+    throw new BusinessCommandExecutionError(
+      'invalid_input',
+      outcome,
+      undefined,
+      undefined,
+      'A command route takes app in the query string (/api/commands/execute?app=<id>), not in the body.',
+    );
+}
+
 /** At most 64 KiB of JSON; anything else is an invalid input, not a parse detail. */
 /** A body past the 64 KB envelope: an invalid input to every caller that already reads it so, and a 413 to a public
     door that says which (http/pageCommandRoutes.ts). */
@@ -197,6 +212,7 @@ export async function dispatchScopedBusinessCommandHttp(options: {
   try {
     if (req.aborted || res.destroyed) abort();
     const body = options.body !== undefined ? options.body : await commandBody(req);
+    assertEnvelopeHasNoApp(body, 'unknown');
     if (controller.signal.aborted) throw new BusinessCommandExecutionError('cancelled', 'unknown');
     const execution = {
       signal: controller.signal,
@@ -260,6 +276,7 @@ export async function dispatchBusinessCommandHttp(options: {
   try {
     if (req.aborted || res.destroyed) abort();
     const body = snapshot(options.body !== undefined ? options.body : await commandBody(req), MAX_COMMAND_BYTES).value;
+    assertEnvelopeHasNoApp(body, 'not_applied');
     if (controller.signal.aborted) throw new BusinessCommandExecutionError('cancelled');
     const resources = await loadAppRuntimeResources(registry, app, connection, (owner) => releases.push(registry.lease(owner)));
     const { binding, references } = bindHttpBusinessCommands(

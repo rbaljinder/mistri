@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { labelPath, primaryKey, type DatabaseSchema, type TableMeta } from '../packages/engine/src/shared/schema.js';
+import { labelColumn, labelPath, primaryKey, type DatabaseSchema, type TableMeta } from '../packages/engine/src/shared/schema.js';
 
 const vehicle: TableMeta = {
   id: 'vehicle',
@@ -40,4 +40,27 @@ test('record-label paths distinguish explicit joins, unavailable labels, and leg
   // A projected false neither reveals the denied path nor re-infers account_id.
   assert.equal(labelPath(schema, savedVehicle, false), undefined);
   assert.deepEqual(primaryKey(savedVehicle), ['vehicle_id', 'saved_at']);
+});
+
+test("a tenant table's ownership column, a required text reference, never names its rows", () => {
+  const tally: TableMeta = {
+    id: 'tally',
+    name: 'tally',
+    schema: '',
+    isView: false,
+    columns: [
+      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+      { name: 'tenant_id', type: 'TEXT', nullable: false, primaryKey: false, references: { table: 'clinic', column: 'id' } },
+      { name: 'n', type: 'INTEGER', nullable: true, primaryKey: false },
+    ],
+  };
+  // With no name of its own, a record is named by its key (a list then searches that), not by who owns it.
+  assert.equal(labelColumn(tally), 'id');
+  // A table that does carry a name keeps it.
+  const patient: TableMeta = {
+    ...tally,
+    id: 'patient',
+    columns: [...tally.columns, { name: 'name', type: 'TEXT', nullable: true, primaryKey: false }],
+  };
+  assert.equal(labelColumn(patient), 'name');
 });

@@ -306,7 +306,7 @@ test('recorded HTTP confirmed constraint rollback sanitizes driver details and k
       });
     const refused = await f.call('/api/update', { table: f.table, key: { id: 1 }, values: { name: 'rolled back' } });
     assert.equal(mutated, true);
-    assert.equal(refused.status, 200);
+    assert.equal(refused.status, 409);
     assert.equal(refused.body.outcome, 'rejected');
     assert.equal(refused.body.errors[0].code, 'duplicate_value');
     assert.equal(refused.body.undoId, undefined);

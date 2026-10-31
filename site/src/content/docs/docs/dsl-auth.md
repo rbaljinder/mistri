@@ -32,7 +32,7 @@ directory by default, or a dedicated PostgreSQL database by its `postgres://`
 URL. The manifest is committed, so name the password, or the whole URL, by a
 `${NAME}` reference (`store: '${MISTRI_AUTH_STORE}'`); an unset variable
 refuses at startup. Run `migratePostgresAuthStore(url)` from
-`@mistriwork/mistri/commands` once before the first start: startup checks the store's
+`@mistriwork/mistri/maintenance` once before the first start: startup checks the store's
 schema and never creates it. The store is never a business database, and a
 tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).
 
@@ -129,7 +129,7 @@ tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `auth.store` | string | Stable | Where accounts and sessions live: a SQLite file, or a postgres:// URL (name its password, or the whole URL, by a ${NAME} reference; migratePostgresAuthStore from @mistriwork/mistri/commands makes its schema before the first start). Never a business database, which a tenant App refuses at startup. Default: a SQLite file in the mistri config directory, named for the app. |
+| `auth.store` | string | Stable | Where accounts and sessions live: a SQLite file, or a postgres:// URL (name its password, or the whole URL, by a ${NAME} reference; migratePostgresAuthStore from @mistriwork/mistri/maintenance makes its schema before the first start). Never a business database, which a tenant App refuses at startup. Default: a SQLite file in the mistri config directory, named for the app. |
 
 ## `auth.tenancy`
 

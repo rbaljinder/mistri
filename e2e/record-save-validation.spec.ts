@@ -38,7 +38,7 @@ test('a lead converted without a contact is refused on its record, marks the con
     const refused = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/update');
     await dock.getByRole('button', { name: 'Save changes', exact: true }).click();
     const response = await refused;
-    expect(response.status()).toBe(200);
+    expect(response.status()).toBe(422);
     expect(await response.json()).toMatchObject({
       outcome: 'rejected',
       errors: [{ code: 'validation_failed', message: REFUSED, fields: [{ field: 'converted_contact_id', message: FIELD }] }],

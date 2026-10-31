@@ -294,6 +294,18 @@ describe('the short help', () => {
     });
 });
 
+describe('the short help', () => {
+  test("mistri's says where the pool and lock flags are, and they are in --help all", () => {
+    const cli = readFileSync(new URL('../packages/mistri/src/server/cli/usage.ts', import.meta.url), 'utf8');
+    const short = cli.match(/export const SHORT_USAGE = `([\s\S]*?)`/)?.[1] ?? '';
+    assert.match(
+      short,
+      /--help all\s+every command and option, in full: the connection pool\s+sizes \(--read-pool, --write-pool\), lock timeouts/,
+    );
+    assert.match(cli.replace(short, ''), /--read-pool <n>[\s\S]*--write-pool[\s\S]*--lock-timeout/);
+  });
+});
+
 describe('the repository', () => {
   /* Private Apps that report gaps are credited as field reports, not named. Built from parts so this file passes too. */
   const NAME = ['ost', 'ler'].join('');

@@ -228,10 +228,18 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
               request,
               selectors,
               (context) => {
-                lease = partitions.enter(context.principal);
+                if (!lease) return denyTenant();
                 return work(context);
               },
               guard,
+              undefined,
+              /* The person's history partition, waited for before the transaction begins: two saves of theirs sent
+                 together run one after the other, as the partition requires, instead of the second being refused. */
+              async (principal) => {
+                lease?.release();
+                lease = undefined;
+                lease = await partitions.acquire(principal);
+              },
             ),
           work: (context) => work(context, captured),
           history: {
@@ -439,7 +447,7 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
             request,
             selectors,
             async (context) => {
-              lease = partitions.enter(context.principal);
+              if (!lease) return denyTenant();
               const entries = await visibleEntries(context, lease),
                 next = latestRevertible(entries);
               return {
@@ -450,10 +458,16 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
                   ...(entry.undoState ? { undoState: entry.undoState } : {}),
                   ...(entry.blocksUndo ? { blocksUndo: true } : {}),
                 })),
-                ...(next ? { next: summary(next, lease) } : {}),
+                ...(next ? { next: summary(next, lease!) } : {}),
               };
             },
             guard,
+            undefined,
+            async (principal) => {
+              lease?.release();
+              lease = undefined;
+              lease = await partitions.acquire(principal);
+            },
           );
           if (closed) return denyTenant();
           return result;
