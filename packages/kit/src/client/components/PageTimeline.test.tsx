@@ -133,6 +133,8 @@ describe('a conversation timeline', () => {
   test('reads oldest first, tints an internal note and draws a system line as one quiet row', async () => {
     draw();
     await screen.findByText('Oldest');
+    // The conversation box holds its own scroll by design, so the grade probe must not count it as a second scroller.
+    expect(document.querySelector('.timeline-scroll')?.hasAttribute('data-scrolls')).toBe(true);
     const rows = [...document.querySelectorAll('.timeline-row')];
     expect(rows.map((row) => row.querySelector('.timeline-text')?.textContent)).toEqual(['Oldest', 'Escalated', 'Newest']);
     expect(rows[0].getAttribute('data-tone')).toBe('warn');

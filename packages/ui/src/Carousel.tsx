@@ -8,11 +8,14 @@
  * slide and Next on the last, so the row keeps its shape and a reader is
  * never spun back to the start without asking. Only the current slide is
  * exposed to assistive tech (the rest are `aria-hidden`); the arrow keys
- * on the region move, Home goes first, End goes last, and the slide's
- * movement is silenced for a reader who asked for reduced motion (the
- * track's transition lives under `no-preference` in standalone.css).
+ * on the region move, Home goes first, End goes last — except where
+ * focus sits inside an input, where the keys stay the input's own — and
+ * the slide's movement is silenced for a reader who asked for reduced
+ * motion (the track's transition lives under `no-preference` in
+ * standalone.css). A step button that disables under a focused finger
+ * hands focus to the other step, never to nowhere.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export interface CarouselSlide {
   /** The slide's short name, said after its number ("1 of 3: Studio"). */
@@ -43,14 +46,55 @@ export function CarouselControl({
   className,
 }: CarouselProps) {
   const [uncontrolled, setUncontrolled] = useState(defaultIndex);
-  if (!slides.length) return null;
-  const current = Math.min(Math.max(index ?? uncontrolled, 0), slides.length - 1);
+  const prevRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  const regionRef = useRef<HTMLElement>(null);
+  /* The step last focused, so a step that disables under it is rescued
+     even where the browser already moved focus to the body on disable. */
+  const lastStepRef = useRef<'prev' | 'next' | null>(null);
+  const current = slides.length ? Math.min(Math.max(index ?? uncontrolled, 0), slides.length - 1) : 0;
   const go = (next: number) => {
     const clamped = Math.min(Math.max(next, 0), slides.length - 1);
     if (index === undefined) setUncontrolled(clamped);
     onIndexChange?.(clamped);
   };
+  /* A step that disables under its own focus hands focus on: the other
+     step where it is live, the region itself where both ends are shut
+     (one slide). Rescue runs only while focus is still on that step or
+     has already fallen to the body — a reader who tabbed onward is never
+     pulled back, and a caller-driven index change moves nothing. */
+  useEffect(() => {
+    if (!slides.length) return;
+    const active = document.activeElement;
+    const lost = active === document.body;
+    /* The rescued step becomes the last-focused one: the next disable
+       under it rescues again, even where the rescue focus itself is
+       what set the ref (the null-after-focus ordering bug, otherwise). */
+    const focusStep = (step: 'prev' | 'next') => {
+      const other = step === 'prev' ? prevRef.current : nextRef.current;
+      if (other && !other.disabled) {
+        other.focus();
+        lastStepRef.current = step;
+      } else {
+        regionRef.current?.focus();
+        lastStepRef.current = null;
+      }
+    };
+    if (current === 0 && lastStepRef.current === 'prev' && (lost || active === prevRef.current)) focusStep('next');
+    else if (current === slides.length - 1 && lastStepRef.current === 'next' && (lost || active === nextRef.current)) focusStep('prev');
+  }, [current, slides.length]);
+  if (!slides.length) return null;
   const onRegionKeyDown = (event: React.KeyboardEvent) => {
+    /* Inside an input the keys are the input's: arrows move its caret,
+       Home and End its ends, and the region must not hijack them. */
+    const target = event.target as HTMLElement | null;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      target?.isContentEditable
+    )
+      return;
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
       go(current - 1);
@@ -67,9 +111,13 @@ export function CarouselControl({
   };
   return (
     <section
+      ref={regionRef}
       className={['ui-carousel', className].filter(Boolean).join(' ')}
       aria-roledescription="carousel"
       aria-label={label ?? 'Carousel'}
+      /* Programmatic focus only, for the step-disable rescue above:
+         -1 is no tab stop. */
+      tabIndex={-1}
       onKeyDown={onRegionKeyDown}
     >
       <div className="ui-carousel-viewport">
@@ -90,7 +138,16 @@ export function CarouselControl({
         </div>
       </div>
       <div className="ui-carousel-controls">
-        <button type="button" className="ui-carousel-step" disabled={current === 0} onClick={() => go(current - 1)}>
+        <button
+          ref={prevRef}
+          type="button"
+          className="ui-carousel-step"
+          disabled={current === 0}
+          onFocus={() => {
+            lastStepRef.current = 'prev';
+          }}
+          onClick={() => go(current - 1)}
+        >
           {previousLabel}
         </button>
         <span className="ui-carousel-dots" role="group" aria-label="Choose a slide">
@@ -105,7 +162,16 @@ export function CarouselControl({
             />
           ))}
         </span>
-        <button type="button" className="ui-carousel-step" disabled={current === slides.length - 1} onClick={() => go(current + 1)}>
+        <button
+          ref={nextRef}
+          type="button"
+          className="ui-carousel-step"
+          disabled={current === slides.length - 1}
+          onFocus={() => {
+            lastStepRef.current = 'next';
+          }}
+          onClick={() => go(current + 1)}
+        >
           {nextLabel}
         </button>
       </div>

@@ -142,7 +142,12 @@ export function ResizablePanels({ panels, direction = 'horizontal', sizes, onSiz
         /* A fragment, not a wrapper: the flex row's children must be the
            panes and their handles, or the handles never sit between them. */
         <Fragment key={i}>
-          <div id={`${baseId}-panel-${i}`} className="ui-resizable-panel" style={{ flexBasis: `${current[i]}%` }} aria-label={panel.label}>
+          {/* Grow shares, not basis percents: basis percents add to 100%
+              before the handles' fixed widths, so every extra pane
+              overflowed sideways by one handle width. With basis zero the
+              handles take their width first and the free space splits by
+              share, so panes plus handles always fit the container. */}
+          <div id={`${baseId}-panel-${i}`} className="ui-resizable-panel" style={{ flex: `${current[i]} 1 0` }} aria-label={panel.label}>
             {panel.children}
           </div>
           {i < panels.length - 1 ? (

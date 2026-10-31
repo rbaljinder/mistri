@@ -9,11 +9,12 @@
  *   look's light ground as `background_color` and `theme_color`, and two
  *   PNG icons (192 and 512, `any maskable`) painted from the look's grounds.
  * - `/{app}/sw.js`: a worker that caches the App shell's same-scope static
- *   files as they are fetched and answers a navigation with an offline page
- *   when the network fails. It never caches a navigation itself: a shell
- *   page carries its reader's first paint, and a cached one could show one
- *   reader's page to the next. It never touches `/api/`, so App data is
- *   never cached, and offline DATA is not this feature — see below.
+ *   files only where the server marked them immutable, and answers a
+ *   navigation with an offline page when the network fails. It never
+ *   caches a navigation itself: a shell page carries its reader's first
+ *   paint, and a cached one could show one reader's page to the next. It
+ *   never touches `/api/`, so App data is never cached, and offline DATA
+ *   is not this feature — see below.
  * - `/{app}/pwa/register.js`: the page's registration, run on load, silent
  *   when the browser has no worker support or registration fails.
  *
@@ -30,6 +31,7 @@
  * without pretending to be its brand.
  */
 import { deflateSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { outward, type AddressMount } from '@mistriwork/engine/shared/mount.js';
 
 /** The App's look grounds, as `lookGroundsFor` answers them. */
@@ -100,7 +102,7 @@ export function pwaOfflinePage(app: { name: string }, grounds: PwaGrounds): stri
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="${escapeHtml(grounds.light)}">
 <title>${escapeHtml(app.name)} is offline</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:${escapeHtml(grounds.light)};color:${escapeHtml(grounds.dark)};font-family:system-ui,sans-serif}main{max-width:28rem;padding:2rem;text-align:center}h1{font-size:1.25rem;margin:0 0 0.5rem}p{margin:0 0 1.5rem;line-height:1.5}button{font:inherit;padding:0.5rem 1rem;border:1px solid ${escapeHtml(grounds.dark)};border-radius:0.5rem;background:${escapeHtml(grounds.dark)};color:${escapeHtml(grounds.light)};cursor:pointer}</style>
@@ -121,15 +123,28 @@ export function pwaOfflinePage(app: { name: string }, grounds: PwaGrounds): stri
  * with the offline page on failure, same-scope static files cache-first,
  * and nothing else — no `/api/`, no PWA file of its own, no POST. A new
  * worker takes over at once (`skipWaiting`, `clients.claim`), and an old
- * cache under another name is dropped on activation, so a theme change
- * (which rewrites this file) retires the old shell.
+ * cache under another name is dropped on activation.
+ *
+ * What lands in the cache, and what never does: only a response the
+ * server marked `immutable` — and never one marked `private`, `no-store`
+ * or `no-cache`, nor one varying by cookie. A file the server marks
+ * no-cache (the client SDK, for one) is therefore never stored, so an
+ * upgrade cannot mix an old module with new client code; and a
+ * signed-in-only file, which varies by cookie, cannot linger for the
+ * next user of a shared device. Query strings are part of the key: a
+ * cache-busting `?v=` is a different file, not the same one ignored.
+ *
+ * The cache name is a hash of the worker itself, so any change to it —
+ * a theme change rewriting the offline page, or new worker logic in a
+ * later build — retires the old cache on activation instead of reusing
+ * it under one fixed name.
  */
 export function pwaServiceWorker(app: { name: string }, grounds: PwaGrounds, urls: PwaUrls): string {
   const own = [urls.manifest, urls.serviceWorker, urls.register, urls.icon192, urls.icon512].map(
     (url) => new URL(url, 'http://pwa.invalid').pathname,
   );
-  return `'use strict';
-const CACHE = 'mistri-pwa-v1';
+  const draft = `'use strict';
+const CACHE = '__MISTRI_PWA_CACHE__';
 const OFFLINE = ${JSON.stringify(pwaOfflinePage(app, grounds))};
 const OWN = ${JSON.stringify(own)};
 self.addEventListener('install', (event) => {
@@ -154,17 +169,29 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   event.respondWith((async () => {
-    const cached = await caches.match(request, { ignoreSearch: true });
+    const cached = await caches.match(request);
     if (cached) return cached;
     const response = await fetch(request);
     if (response.ok) {
-      const cache = await caches.open(CACHE);
-      await cache.put(request, response.clone());
+      const control = response.headers.get('cache-control') ?? '';
+      const vary = response.headers.get('vary') ?? '';
+      const immutable = /(^|,)\\s*immutable\\s*(,|$)/.test(control);
+      const withheld = /private|no-store|no-cache/.test(control) || /(^|,)\\s*cookie\\s*(,|$)/i.test(vary);
+      if (immutable && !withheld) {
+        const cache = await caches.open(CACHE);
+        await cache.put(request, response.clone());
+      }
     }
     return response;
   })());
 });
 `;
+  /* The name versions the cache per generated worker: the same inputs
+     paint the same name, and any change to the worker retires the old
+     cache on activation. The hash is over the draft, so the name itself
+     is not part of what is hashed. */
+  const hash = createHash('sha256').update(draft).digest('hex').slice(0, 16);
+  return draft.replaceAll('__MISTRI_PWA_CACHE__', `mistri-pwa-${hash}`);
 }
 
 /** The registration: on load, silent when workers are unsupported or registration fails, so a failure never breaks the page. */

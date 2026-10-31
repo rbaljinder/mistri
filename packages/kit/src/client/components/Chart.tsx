@@ -242,6 +242,19 @@ function OneLine({
   const svg = useRef<SVGSVGElement>(null);
   const [near, setNear] = useState<number | null>(null);
   const [measured, setMeasured] = useState(0);
+  /* Roving tabindex for drillable points: one tab stop for the whole
+     line, not one per point. The tabbable point is the roved-to one, or
+     the first drillable one where the roved-to one stopped drilling;
+     arrows move among drillable points only, Home and End take the
+     first and last. */
+  const drillableAt = points.map((p, i) => (onPick && p.raw != null ? i : -1)).filter((i) => i >= 0);
+  const [roved, setRoved] = useState<number | null>(null);
+  const tabbable = roved !== null && drillableAt.includes(roved) ? roved : drillableAt[0];
+  const moveRoving = (at: number) => {
+    setRoved(at);
+    const el = svg.current?.querySelectorAll('.chart-point-drill')[drillableAt.indexOf(at)];
+    (el as HTMLElement | undefined)?.focus?.();
+  };
   /* Alone, a point has no line to join it to and no neighbour to space against: a dotted line draws even one. */
   const drawn = points.length >= 2 || (dots && points.length === 1);
   useLayoutEffect(() => {
@@ -351,7 +364,8 @@ function OneLine({
           /* A point drills where a door is wanted: the same raw value a
              legend button would carry. A dot is too small a target to be
              the button itself, so a drillable point is a group holding the
-             dot and a wider transparent hit disc — one tab stop, not two.
+             dot and a wider transparent hit disc — one tab stop, not two,
+             and roving tabindex keeps the whole line to that one stop.
              Gap-filled buckets hold no raw key and are no door, as a
              donut's "others" slice is none. */
           const drillable = onPick && p.raw != null;
@@ -361,13 +375,37 @@ function OneLine({
               key={i}
               className="chart-point-drill"
               role="button"
-              tabIndex={0}
+              tabIndex={i === tabbable ? 0 : -1}
               aria-label={`${named[i]}: ${say(p.value)}`}
               onClick={() => onPick!(p.raw)}
               onKeyDown={(event: React.KeyboardEvent) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
                   onPick!(p.raw);
+                } else if (event.key === 'ArrowRight') {
+                  const at = drillableAt[drillableAt.indexOf(i) + 1];
+                  if (at !== undefined) {
+                    event.preventDefault();
+                    moveRoving(at);
+                  }
+                } else if (event.key === 'ArrowLeft') {
+                  const at = drillableAt[drillableAt.indexOf(i) - 1];
+                  if (at !== undefined) {
+                    event.preventDefault();
+                    moveRoving(at);
+                  }
+                } else if (event.key === 'Home') {
+                  const at = drillableAt[0];
+                  if (at !== undefined) {
+                    event.preventDefault();
+                    moveRoving(at);
+                  }
+                } else if (event.key === 'End') {
+                  const at = drillableAt[drillableAt.length - 1];
+                  if (at !== undefined) {
+                    event.preventDefault();
+                    moveRoving(at);
+                  }
                 }
               }}
             >

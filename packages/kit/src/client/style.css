@@ -1000,6 +1000,60 @@ th.sorted { color: var(--accent-ink); border-bottom-color: var(--accent); }
   th:has(> .th-controls):is(:hover, :focus-within) { z-index: 3; }
 }
 .align-right .th-sort { padding-left: var(--space-2); padding-right: 0; }
+/* A head's own arrangement, beside its sort: the column's move buttons
+   and the resizer on its trailing edge (Grid.tsx). The moves wait with
+   the filter caret — quiet until the head is hovered or holds focus, and
+   always there on touch — and draw at the caret's 24px, with a finger's
+   44px hit area on a coarse pointer, as the chrome's small controls do
+   (structure.css). The resizer's line shows the same way, its handle
+   inset to its own head's trailing edge: a handle straddling the edge
+   reaches into the neighbour's head and overlaps the neighbour's sort
+   control (grade's overlap check caught exactly that on a list's first
+   two columns), and a click near the edge would then answer the wrong
+   control. No
+   transition anywhere here: a width or an order lands where it is put,
+   so reduced motion needs nothing special. */
+.th-move {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 24px; min-height: 24px;
+  background: none; border: none; border-radius: min(3px, var(--radius));
+  color: var(--ink-subtle); cursor: pointer;
+  padding: 0; line-height: 1; opacity: 0;
+}
+.th-move:disabled { cursor: default; }
+.th-move:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+th:focus-within .th-move { opacity: 1; }
+.th-resizer {
+  position: absolute; top: 0; bottom: 0; right: 0; width: var(--space-4);
+  cursor: col-resize; touch-action: none;
+}
+.th-resizer::before {
+  content: ''; position: absolute; top: var(--space-2); bottom: var(--space-2); left: 50%; width: 1px;
+  background: var(--line-strong); opacity: 0;
+}
+.th-resizer:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+@media (hover: hover) {
+  th:is(:hover, :focus-within) .th-move { opacity: 1; }
+  .th-move:not(:disabled):hover { color: var(--accent-ink); background: var(--accent-soft); }
+  th:is(:hover, :focus-within) .th-resizer::before, .th-resizer:hover::before { opacity: 1; }
+}
+@media (hover: none) {
+  .th-move { opacity: 1; }
+  .th-resizer::before { opacity: 1; }
+}
+@media (pointer: coarse) {
+  .th-move { position: relative; }
+  .th-move::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: max(100%, 44px); height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+  .th-resizer::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: max(100%, 44px); height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}
 /* A figure's head ends where its figures end: the cell's own padding, nothing more (the last column's is 14px, above). */
 th.align-right:not(:last-child) { padding-right: var(--space-3h); }
 

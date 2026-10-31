@@ -31,6 +31,17 @@
  * that stops naming one leaves its column, unread, rather than rewriting
  * the index.
  *
+ * Core already passes the tenant field in with the declared fields, and
+ * the definition appends it once, so `ensureCollection` drops it from the
+ * incoming list first — naming it twice refuses the create, on every
+ * tenant App.
+ *
+ * FTS5's `id` is an ordinary unindexed column, so a delete by key scans
+ * the whole table and a full reindex grows quadratically. A second table
+ * maps each key to its FTS rowid, so an update deletes and re-inserts by
+ * rowid — a lookup, not a scan — and a rebuild copies rowids with the
+ * rows, so the map survives it.
+ *
  * Identifiers are never interpolated unchecked: a collection name and every
  * field name must be word characters (the runtime already sanitises a
  * collection to `<prefix>_<app>_<resource>`), and anything else is refused
@@ -96,20 +107,27 @@ export class SqliteFtsIndex implements SearchIndex {
   /** The collection exists and holds every field named; a field added later rebuilds the table to hold it. */
   async ensureCollection(name: string, fields: readonly string[]): Promise<void> {
     const table = identifier(name, 'A search collection');
-    const wanted = fields.map((field) => identifier(field, 'A searched field'));
+    /* Core already passes the tenant field in; the definition appends it
+       once, so it is dropped here first — naming it twice refuses the
+       create, on every tenant App. */
+    const wanted = fields.filter((field) => field !== TENANT_FIELD).map((field) => identifier(field, 'A searched field'));
     const have = this.fields.get(table) ?? this.readFields(table);
     if (!have) {
       this.db.exec(`CREATE VIRTUAL TABLE "${table}" USING fts5(${definition(wanted)}, tokenize='unicode61')`);
       this.fields.set(table, [...wanted]);
+      this.ensureKeys(table);
       return;
     }
+    this.ensureKeys(table);
     const missing = wanted.filter((field) => !have.includes(field));
     if (!missing.length) return;
     const next = [...have, ...missing];
     this.db.exec('BEGIN');
     try {
       this.db.exec(`CREATE VIRTUAL TABLE "${table}__next" USING fts5(${definition(next)}, tokenize='unicode61')`);
-      const columns = ['id', ...have, TENANT_FIELD].join(', ');
+      /* Rowids travel with the rows, so the key map still names the same
+         rows after the rename — it is not rebuilt, only the table is. */
+      const columns = ['rowid', 'id', ...have, TENANT_FIELD].join(', ');
       this.db.exec(`INSERT INTO "${table}__next"(${columns}) SELECT ${columns} FROM "${table}"`);
       this.db.exec(`DROP TABLE "${table}"`);
       this.db.exec(`ALTER TABLE "${table}__next" RENAME TO "${table}"`);
@@ -125,18 +143,58 @@ export class SqliteFtsIndex implements SearchIndex {
     this.fields.set(table, next);
   }
 
+  /** The key-to-rowid map for `table`, created when absent and backfilled once from the rows already there. */
+  private ensureKeys(table: string): void {
+    const keys = `${table}__keys`;
+    const found = this.db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = ?`).get(keys) as
+      | { count: number }
+      | undefined;
+    if (found && found.count > 0) return;
+    this.db.exec(`CREATE TABLE "${keys}"(id TEXT PRIMARY KEY, rowid INTEGER NOT NULL)`);
+    this.db.exec(`INSERT INTO "${keys}"(id, rowid) SELECT id, rowid FROM "${table}"`);
+  }
+
+  /** The rowid the key map holds for `id`, or undefined where the map holds none — or is not there at all. */
+  private keyRowid(table: string, id: string): number | undefined {
+    try {
+      const row = this.db.prepare(`SELECT rowid FROM "${table}__keys" WHERE id = ?`).get(id) as { rowid: number } | undefined;
+      return row?.rowid;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** The record's document, replacing any document its key already had; a document whose collection was never ensured is ensured from its own fields. */
   async upsert(collection: string, document: SearchDocument): Promise<void> {
     const table = identifier(collection, 'A search collection');
     const fields = Object.keys(document).filter((key) => key !== 'id' && key !== TENANT_FIELD);
     await this.ensureCollection(table, fields);
     const held = this.fields.get(table)!;
-    this.db.prepare(`DELETE FROM "${table}" WHERE id = ?`).run(document.id);
+    const keys = `${table}__keys`;
     const columns = ['id', ...held, TENANT_FIELD];
-    const values = columns.map((column) => (column === 'id' ? document.id : (document[column] ?? null)));
-    this.db
-      .prepare(`INSERT INTO "${table}"(${columns.map((column) => `"${column}"`).join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`)
-      .run(...values);
+    const values: SQLInputValue[] = columns.map((column) =>
+      column === 'id' ? document.id : ((document[column] ?? null) as SQLInputValue),
+    );
+    const insert = (extra: string[], extraValues: SQLInputValue[]) =>
+      this.db
+        .prepare(
+          `INSERT INTO "${table}"(${[...extra, ...columns].map((column) => `"${column}"`).join(', ')}) VALUES (${[...extra, ...columns].map(() => '?').join(', ')})`,
+        )
+        .run(...extraValues, ...values);
+    /* A known key reuses its rowid: the old row is deleted by rowid and
+       the new one takes the same rowid, so the map never moves. A new key
+       records the rowid its insert got. Only a row the map never saw —
+       written before the map existed and missed by its backfill — falls
+       back to a delete by key. */
+    const known = this.keyRowid(table, document.id);
+    if (known !== undefined) {
+      this.db.prepare(`DELETE FROM "${table}" WHERE rowid = ?`).run(known);
+      insert(['rowid'], [known]);
+      return;
+    }
+    this.db.prepare(`DELETE FROM "${table}" WHERE id = ?`).run(document.id);
+    const result = insert([], []);
+    this.db.prepare(`INSERT INTO "${keys}"(id, rowid) VALUES (?, ?)`).run(document.id, result.lastInsertRowid);
   }
 
   /** Gone from the index; a document that was never there is gone already, and a collection never ensured holds nothing — as does a name the index cannot hold. */
@@ -144,7 +202,14 @@ export class SqliteFtsIndex implements SearchIndex {
     if (!isIdentifier(collection)) return;
     const table = collection;
     if (!this.readFields(table)) return;
-    this.db.prepare(`DELETE FROM "${table}" WHERE id = ?`).run(id);
+    const known = this.keyRowid(table, id);
+    if (known !== undefined) this.db.prepare(`DELETE FROM "${table}" WHERE rowid = ?`).run(known);
+    else this.db.prepare(`DELETE FROM "${table}" WHERE id = ?`).run(id);
+    try {
+      this.db.prepare(`DELETE FROM "${table}__keys" WHERE id = ?`).run(id);
+    } catch {
+      /* No key map yet: there is no row to drop from it. */
+    }
   }
 
   /** The keys of the best matches for `phrase` across `fields`, best first, at most `limit`; a collection never indexed matches nothing, and neither does a name the index cannot hold. */

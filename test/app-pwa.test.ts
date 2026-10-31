@@ -64,6 +64,20 @@ describe('an App PWA', () => {
     assert.match(worker, /request\.method !== 'GET'/);
     assert.match(worker, /api\\\//);
     assert.match(worker, /caches\.match/);
+    // Only immutable responses are stored, and the query string is part
+    // of the key: a no-cache file is never stored, and a cache-busting
+    // `?v=` is a different file.
+    assert.match(worker, /immutable/);
+    assert.doesNotMatch(worker, /ignoreSearch/);
+    // The cache name versions the cache per generated worker: the same
+    // inputs paint the same worker, and a different look paints another
+    // cache name, so an old cache is dropped on activation.
+    assert.match(worker, /mistri-pwa-[0-9a-f]{16}/);
+    assert.equal(worker, pwaServiceWorker(APP, GROUNDS, urls), 'identical inputs paint an identical worker');
+    assert.notEqual(
+      worker.match(/mistri-pwa-[0-9a-f]{16}/)?.[0],
+      pwaServiceWorker(APP, { light: '#ffffff', dark: '#000000' }, urls).match(/mistri-pwa-[0-9a-f]{16}/)?.[0],
+    );
     // The offline page is in the worker, and it says the limit plainly.
     assert.match(worker, /needs a connection/);
     const page = pwaOfflinePage(APP, GROUNDS);
@@ -130,7 +144,7 @@ describe('an App PWA', () => {
     const worker = run('GET', '/billing/sw.js');
     assert.equal(worker.call?.status, 200);
     assert.match(worker.call?.headers['content-type'] ?? '', /text\/javascript/);
-    assert.match(worker.call!.body.toString(), /mistri-pwa-v1/);
+    assert.match(worker.call!.body.toString(), /mistri-pwa-[0-9a-f]{16}/);
     const icon = run('GET', '/billing/pwa/icon-192.png');
     assert.equal(icon.call?.status, 200);
     assert.equal(icon.call?.headers['content-type'], 'image/png');

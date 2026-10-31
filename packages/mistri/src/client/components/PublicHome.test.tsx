@@ -21,11 +21,11 @@ vi.mock('../../../../kit/src/client/components/viewLink.js', () => ({ viewLink: 
 const { PublicHome } = await import('./PublicHome.js');
 
 const app = { id: 'lending', name: 'Lending' };
-function draw(view: string) {
+function draw(view: string, landingView?: string | null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <PublicHome view={view} loadError="" />
+      <PublicHome view={view} loadError="" landingView={landingView} />
     </QueryClientProvider>,
   );
 }
@@ -57,6 +57,43 @@ test('a public form, when the landing is another view; it is drawn under its lab
   expect(await screen.findByRole('heading', { name: 'Apply for financing' })).toBeInTheDocument();
   expect(screen.queryByText('Finance your next car')).toBeNull();
   expect(asked).toEqual(['/api/landing', '/api/forms/finance']);
+});
+
+test('a public form home skips the landing probe when the payload names another landing view', async () => {
+  answers['/api/forms/finance'] = {
+    app,
+    form: {
+      id: 'finance',
+      label: 'Apply for financing',
+      input: [{ name: 'name', label: 'Name', type: 'text' }],
+      steps: [{ id: 'you', label: 'You', fields: ['name'] }],
+    },
+  };
+  draw('finance', 'welcome');
+  expect(await screen.findByRole('heading', { name: 'Apply for financing' })).toBeInTheDocument();
+  expect(asked).toEqual(['/api/forms/finance']);
+});
+
+test('a public form home skips the landing probe when the payload names no landing', async () => {
+  answers['/api/forms/finance'] = {
+    app,
+    form: {
+      id: 'finance',
+      label: 'Apply for financing',
+      input: [{ name: 'name', label: 'Name', type: 'text' }],
+      steps: [{ id: 'you', label: 'You', fields: ['name'] }],
+    },
+  };
+  draw('finance', null);
+  expect(await screen.findByRole('heading', { name: 'Apply for financing' })).toBeInTheDocument();
+  expect(asked).toEqual(['/api/forms/finance']);
+});
+
+test('the landing, when the payload names it as the home', async () => {
+  answers['/api/landing'] = { app, view: 'welcome', landing: { hero: { heading: 'Finance your next car', actions: [] } } };
+  draw('welcome', 'welcome');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Finance your next car' })).toBeInTheDocument();
+  expect(asked).toEqual(['/api/landing']);
 });
 
 test('a home nothing answers for is said, not drawn blank', async () => {

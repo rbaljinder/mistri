@@ -609,7 +609,14 @@ export const BUDGET = {
        200 raw bytes every first paint draws, none of it deferrable
        behind onDemand.tsx. The raw style ceilings move by 250 and keep
        about 250 bytes of room. */
-    public: { script: { raw: 669_950, br: 187_330 }, style: { raw: 389_550, br: 52_350 } },
+    /* The showcase follow-up's grid column move and resize (Grid.tsx, gridArrange.ts, the head's move buttons and
+       resizer in style.css), and the landing payload carried on the boot (appPayload.ts, appShell.js,
+       PublicHome.tsx): the head's controls are the first paint's own grid chrome, so they cannot wait behind
+       onDemand.tsx. Measured: public style 390,632 / 52,424 (+1,082 / +74), App script 1,394,754 / 382,242
+       (+2,804 / +362), App style 390,513 / 52,395 (+1,088 / +70); the Workbench wears the same sheet, style
+       375,835 / 51,192 (+535 / +67). Each ceiling keeps about 250 bytes of room raw, about 100 in brotli for the
+       styles and 400 for the App script. */
+    public: { script: { raw: 669_950, br: 187_330 }, style: { raw: 390_900, br: 52_500 } },
     /* A one-click command's revision asked as the pointer or focus reaches its button (commandSend.ts readyCommand,
        Actions.tsx), so the click sends only the execute: about 500 raw bytes, 1335.1 KiB measured. The App script's
        raw ceiling moves to 1_367_400 and keeps about 250 bytes of room; its brotli did not move past its ceiling. */
@@ -638,10 +645,11 @@ export const BUDGET = {
     /* Ledger's look, as on the public first paint: App script 1,391,388 / 381,477 (+5,913 / +902). The same room. */
     /* The same merge, as on the public first paint: App script 1,391,686 / 381,512 (36 bytes past its raw ceiling; brotli
        inside). Its raw ceiling moves to 1_391_950, about 250 bytes of room. */
-    app: { script: { raw: 1_391_950, br: 381_880 }, style: { raw: 389_425, br: 52_325 } },
+    app: { script: { raw: 1_395_000, br: 382_650 }, style: { raw: 390_800, br: 52_500 } },
   },
   tablewalk: {
-    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 375_300, br: 51_125 } },
+    /* The follow-up's grid head rules, as above. */
+    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 376_100, br: 51_300 } },
   },
 };
 

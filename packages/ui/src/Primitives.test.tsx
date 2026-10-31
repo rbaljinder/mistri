@@ -148,6 +148,28 @@ test('a carousel moves on arrow keys and Home/End', async () => {
   expect(screen.getByText('Slide 2 of 2')).toBeVisible();
 });
 
+test('a carousel leaves arrow keys to an input inside its slides', async () => {
+  const slides = [{ children: <input aria-label="Slide note" /> }, { children: 'Two' }];
+  render(<Carousel slides={slides} />);
+  const input = screen.getByLabelText('Slide note');
+  input.focus();
+  await userEvent.keyboard('{ArrowRight}');
+  expect(screen.getByText('Slide 1 of 2')).toBeVisible();
+  expect(input).toHaveFocus();
+});
+
+test('a carousel hands focus on when its step disables under it', async () => {
+  const slides = [{ children: 'One' }, { children: 'Two' }];
+  render(<Carousel slides={slides} />);
+  const previous = screen.getByRole('button', { name: 'Previous slide' });
+  const next = screen.getByRole('button', { name: 'Next slide' });
+  next.focus();
+  await userEvent.keyboard('{ArrowRight}');
+  expect(previous).toHaveFocus();
+  await userEvent.keyboard('{ArrowLeft}');
+  expect(next).toHaveFocus();
+});
+
 test('a carousel renders nothing for no slides', () => {
   const { container } = render(<Carousel slides={[]} />);
   expect(container).toBeEmptyDOMElement();
@@ -193,16 +215,29 @@ test('resizable panes scale shares that do not add to 100, and refuse fewer than
   expect(container).toBeEmptyDOMElement();
 });
 
-test('a scroll area is a labelled tab stop holding its content', () => {
-  render(
+test('a scroll area is a labelled region, a tab stop only while its content overflows', () => {
+  const { rerender } = render(
     <ScrollArea label="Recent activity" maxHeight="320px">
       <p>First row</p>
       <p>Second row</p>
     </ScrollArea>,
   );
   const region = screen.getByRole('region', { name: 'Recent activity' });
-  expect(region).toHaveAttribute('tabindex', '0');
+  /* Nothing overflows under a test renderer, so there is no tab stop
+     to nowhere — only the labelled region holding its content. */
+  expect(region).toHaveAttribute('tabindex', '-1');
   expect(screen.getByText('Second row')).toBeVisible();
+  /* Once the content outgrows the box, the region becomes the tab stop
+     a keyboard reader scrolls with. */
+  Object.defineProperty(region, 'scrollHeight', { configurable: true, value: 600 });
+  Object.defineProperty(region, 'clientHeight', { configurable: true, value: 320 });
+  rerender(
+    <ScrollArea label="Recent activity" maxHeight="320px">
+      <p>First row</p>
+      <p>Second row</p>
+    </ScrollArea>,
+  );
+  expect(region).toHaveAttribute('tabindex', '0');
 });
 
 test('a tooltip says its note on hover and on focus, and names it from the trigger', async () => {

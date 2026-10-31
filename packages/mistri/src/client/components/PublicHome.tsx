@@ -21,8 +21,16 @@ import { say } from '../copy/public/components/PublicHome.js';
 type PublicApp = { id: string; name: string };
 type Found = { kind: 'landing'; app: PublicApp; landing: AppLanding } | { kind: 'form'; app: PublicApp; form: FormPresentation };
 
-async function publicView(view: string): Promise<Found> {
-  const landing = (await api('/api/landing').catch(() => null)) as { view?: string; app: PublicApp; landing: AppLanding } | null;
+/**
+ * The landing's view key as `/api/app` served it, or null when that payload says the App declares no landing;
+ * undefined when no payload key was passed, and the landing is probed as before. A home the payload says is not
+ * the landing is a public form, so the landing is not probed for it — an App without a landing answered that
+ * probe 404, on every signed-in visit to a form home.
+ */
+async function publicView(view: string, landingView?: string | null): Promise<Found> {
+  const landing = (
+    landingView === undefined ? await api('/api/landing').catch(() => null) : landingView === view ? await api('/api/landing') : null
+  ) as { view?: string; app: PublicApp; landing: AppLanding } | null;
   if (landing?.view === view) {
     // The hero's rules are not the shell's first stylesheet (landingHero.css): they arrive before the landing is drawn.
     await import('../landingHeroShell.js');
@@ -34,8 +42,13 @@ async function publicView(view: string): Promise<Found> {
   return { kind: 'form', app: found.app, form: found.form };
 }
 
-export function PublicHome({ view, loadError }: { view: string; loadError: string }) {
-  const found = useQuery({ queryKey: ['public-home', view], queryFn: () => publicView(view), retry: false, staleTime: Infinity });
+export function PublicHome({ view, loadError, landingView }: { view: string; loadError: string; landingView?: string | null }) {
+  const found = useQuery({
+    queryKey: ['public-home', view, landingView ?? null],
+    queryFn: () => publicView(view, landingView),
+    retry: false,
+    staleTime: Infinity,
+  });
   const data = found.data;
   return (
     <div className="public-home">

@@ -776,7 +776,8 @@ export interface AppResource<Column extends string = string, Page extends string
       and re-read the rows under the reader's grants; while it is down they search the database, as
       they do without it. Needs a single-column primary key. On a tenant App each document keeps its
       tenant and a search asks within the member's tenant. Search providers are packs (Typesense is
-      `@mistriwork/search-typesense`, SQLite FTS5 is `@mistriwork/search-sqlite`), which ship after 1.0; until one is plugged in, an App that
+      `@mistriwork/search-typesense`, SQLite FTS5 is `@mistriwork/search-sqlite`, Postgres tsvector is
+      `@mistriwork/search-postgres`), which ship after 1.0; until one is plugged in, an App that
       declares `search` is refused at startup — except through the built-in connection `memory`,
       which searches an in-memory index in the server process (lost on restart until the next
       reindex, and suited to moderate tables, not a large catalog). */

@@ -66,7 +66,7 @@ export function httpConnectionOf(entry: Record<string, unknown>, path: string): 
   /* Said by name rather than as an unknown kind: a config written for 0.9.5 or earlier had one, and the reader should learn where it went. */
   if (entry.kind === 'search') {
     throw new Error(
-      `${where} has "kind": "search". Search providers are not part of ${product()}: they are packs (Typesense is @mistriwork/search-typesense, SQLite FTS5 is @mistriwork/search-sqlite), which ship after 1.0. Remove the entry, and a text filter runs on the database.`,
+      `${where} has "kind": "search". Search providers are not part of ${product()}: they are packs (Typesense is @mistriwork/search-typesense, SQLite FTS5 is @mistriwork/search-sqlite, Postgres tsvector is @mistriwork/search-postgres), which ship after 1.0. Remove the entry, and a text filter runs on the database.`,
     );
   }
   if (entry.kind !== 'http') {

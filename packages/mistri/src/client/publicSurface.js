@@ -92,10 +92,12 @@ export async function showPublicAddress(formAt, landingAt) {
  * (`landingView`): a home that is not it is a public form, so the landing
  * is not probed for it — an App without a landing answered that probe 401,
  * a console error on every signed-out visit to a form home. Where who-am-I
- * names none, the probe stays, as before.
+ * names none, the caller passes null — known to have none — and the probe
+ * is skipped too; only an undefined landingView, from a caller that never
+ * asked who-am-I, still probes, as before.
  * @param {string} view
  * @param {string | undefined} appId
- * @param {{ landingView?: string }} [options]
+ * @param {{ landingView?: string | null }} [options]
  * @returns {Promise<boolean>}
  */
 export async function showPublicHome(view, appId, options) {

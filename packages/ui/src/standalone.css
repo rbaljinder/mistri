@@ -333,6 +333,10 @@
   flex: none;
   background: var(--raised);
   border: 1px solid var(--line);
+  /* A touch drag resizes, never scrolls the page: without this the
+     browser takes the gesture for scrolling before the pointer handler
+     sees it. */
+  touch-action: none;
 }
 .ui-resizable-horizontal .ui-resizable-handle {
   width: var(--space-4);

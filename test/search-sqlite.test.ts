@@ -13,7 +13,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { sqliteSearch, sqliteSearchConnectionOf } from '../packs/search-sqlite/src/index.js';
+import { SqliteFtsIndex } from '../packs/search-sqlite/src/sqliteFts.js';
 
 describe('the SQLite search pack', () => {
   test('only a configured connection has an index, and a bad entry is refused', () => {
@@ -111,6 +113,47 @@ describe('the SQLite search pack', () => {
       '2',
     ]);
     provider.close();
+  });
+
+  test('a tenant App passes its tenant field in, and the table still names it once', async () => {
+    /* Core passes the tenant field in with the declared fields
+       (appSearchRuntime.ts); the definition appends it once, so
+       ensureCollection drops it first — naming it twice refused the
+       create, on every tenant App. */
+    const db = new DatabaseSync(':memory:');
+    const index = new SqliteFtsIndex(db, 'mistri');
+    await index.ensureCollection('mistri_test_app_task', ['name', 'mistri_tenant']);
+    const columns = db.prepare(`SELECT name FROM pragma_table_info(?)`).all('mistri_test_app_task') as Array<{ name: string }>;
+    assert.equal(columns.filter((column) => column.name === 'mistri_tenant').length, 1);
+    await index.upsert('mistri_test_app_task', { id: '1', name: 'Stone countertop', mistri_tenant: 'tenant-a' });
+    await index.upsert('mistri_test_app_task', { id: '2', name: 'Stone path', mistri_tenant: 'tenant-b' });
+    assert.deepEqual(await index.search('mistri_test_app_task', 'stone', ['name'], 10, { field: 'mistri_tenant', value: 'tenant-a' }), [
+      '1',
+    ]);
+    db.close();
+  });
+
+  test('updates, removes and re-upserts keep one row per key, across a rebuild', async () => {
+    const db = new DatabaseSync(':memory:');
+    const index = new SqliteFtsIndex(db, 'mistri');
+    const table = 'mistri_test_app_task';
+    await index.ensureCollection(table, ['name']);
+    for (let i = 0; i < 15; i++) await index.upsert(table, { id: `m${i}`, name: `Marble slab ${i}` });
+    for (let i = 0; i < 15; i++) await index.upsert(table, { id: `g${i}`, name: `Granite slab ${i}` });
+    /* Updates reuse their rowids; removes drop their map rows. */
+    for (let i = 0; i < 5; i++) await index.upsert(table, { id: `m${i}`, name: `Marble tile ${i}` });
+    for (let i = 0; i < 14; i++) await index.remove(table, `g${i}`);
+    /* A field added later rebuilds the table; rowids travel with the rows,
+       so the map still names the same rows after the rename. */
+    await index.ensureCollection(table, ['name', 'note']);
+    await index.upsert(table, { id: 'g14', name: 'Granite slab 14', note: 'Veined' });
+    const keys = db.prepare(`SELECT COUNT(*) AS count FROM "${table}__keys"`).get() as { count: number };
+    assert.equal(keys.count, 16);
+    const hits = await index.search(table, 'marble', ['name'], 50);
+    assert.equal(hits.length, 15);
+    assert.equal(new Set(hits).size, 15);
+    assert.deepEqual([...hits].sort(), Array.from({ length: 15 }, (_, i) => `m${i}`).sort());
+    db.close();
   });
 
   test('a file survives a close and reopen, and a second provider over it reads the same index', async () => {

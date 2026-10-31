@@ -286,8 +286,9 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
      A second box scrolling the same way is the double scrollbar the
      policy forbids (docs/design.md, Standing layout rules). Deliberate
      ones say so with `data-scrolls` — a board's lanes, a heat map past
-     its cells' floor — and overlays (a dialog, a menu, a listbox, a
-     glance panel) scroll inside themselves, so neither counts here. */
+     its cells' floor, a conversation timeline in its own box — and
+     overlays (a dialog, a menu, a listbox, a glance panel) scroll
+     inside themselves, so neither counts here. */
   const room = document.querySelector('#content, .content, .page-body, .public-page') ?? document.body;
   const inOverlay = (el: Element) => {
     for (let e: Element | null = el; e && e !== room; e = e.parentElement) {
@@ -297,6 +298,18 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
     return false;
   };
   const scrolls: string[] = [];
+  /* The room's own pane counts first: it is itself a scroller, and a pane
+     with one inner scroller is the double scrollbar the policy forbids —
+     counting only what is inside it never reported that main case. */
+  if (room !== document.body && room instanceof HTMLElement && shown(room) && !room.closest('[data-scrolls]')) {
+    const style = getComputedStyle(room);
+    if (
+      (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+      room.clientHeight !== 0 &&
+      room.scrollHeight - room.clientHeight > 1
+    )
+      scrolls.push(say(room));
+  }
   for (const el of room.querySelectorAll('*')) {
     if (!(el instanceof HTMLElement) || !shown(el)) continue;
     if (el.closest('[data-scrolls]') || inOverlay(el)) continue;

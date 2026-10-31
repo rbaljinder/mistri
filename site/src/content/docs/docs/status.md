@@ -45,7 +45,7 @@ stable.
 | Rollups (`count`, `sum`, `min`, `max`) | Stable |
 | Editing, autosave, lists edited in place (`editable`) and **Set field…** | Stable |
 | Files and attachments (`file`), tags (`tags`), CSV import (`import`) | Stable |
-| A resource's `search` and `mistri --reindex`: they need a search pack, which ships after 1.0, so nothing can be plugged in before then; the packs are the SQLite FTS pack (`@mistriwork/search-sqlite`, no external engine) and the Typesense pack | Preview |
+| A resource's `search` and `mistri --reindex`: they need a search pack, which ships after 1.0, so nothing can be plugged in before then; the packs are the SQLite FTS pack (`@mistriwork/search-sqlite`, no external engine), the Postgres tsvector pack (`@mistriwork/search-postgres`, in the deployment's own database) and the Typesense pack | Preview |
 | An installable PWA (`ui.pwa`): the App's manifest, worker, painted icons and offline page for failed navigations — installable plus shell-offline, not offline data | Preview |
 | Resource `validation`, transitions (`machine`) and an action's `reason` | Stable |
 | A machine state's `after` and a resource's `at` timers, which run through the jobs, and a machine's service-only moves (`by`) | Stable |

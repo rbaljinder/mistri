@@ -205,7 +205,9 @@ test('shot and grade read a config from another folder the same way', { timeout:
   }
   assert.equal(shot.code, 0, `${shot.out}\n${shot.err}`);
   // The one row of the file beside the config: an empty file opened here would have no table at all.
-  assert.match(shot.out, /table: .*Name — 1 row/);
+  // Column headers carry the grid's move buttons (‹ ›) in interactive lists, so text output shows them
+  // after each column name; the row count is the assertion, not the absence of those marks.
+  assert.match(shot.out, /table: .*Name(‹›)? — 1 row/);
   const grade = await run(['grade', '../app', '--config', '../mistri.json'], here, { TMPDIR: browserTmp });
   assert.equal(grade.code, 0, `${grade.out}\n${grade.err}`);
   assert.match(grade.out, /^grade: \d+\/100/m);

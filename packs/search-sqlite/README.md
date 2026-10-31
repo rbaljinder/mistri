@@ -63,10 +63,10 @@ and searches already hide rows the database no longer has.
 ## What it is not
 
 - **Postgres tsvector.** The tree serves two databases, but this pack covers
-  SQLite only. A Postgres-backed provider would need a live Postgres to
-  verify — Postgres-gated tests skip locally — so it is not claimed here;
-  it is the same seam with a different index, and it lands when a live
-  Postgres run proves it.
+  SQLite only. A Postgres-backed provider is the same seam with a different
+  index, in `@mistriwork/search-postgres` (one tsvector table per
+  collection, GIN-indexed, in the deployment's own database); its tests are
+  Postgres-gated, so a live Postgres run in CI is what proves it.
 - **A large catalog.** FTS5 in one file suits the moderate tables Mistri's
   home turf holds. A large catalog still wants the Typesense pack, which
   answers from a dedicated engine instead of the deployment's disk.
