@@ -225,8 +225,20 @@ describe('served', () => {
     await serve(definition(), async (call) => {
       const reply = await call('/api/whoami');
       assert.equal(reply.status, 200);
-      assert.deepEqual(Object.keys(reply.body).sort(), ['accountId', 'appId', 'header', 'home', 'signIn', 'signedIn', 'who']);
+      assert.deepEqual(Object.keys(reply.body).sort(), [
+        'accountId',
+        'appId',
+        'header',
+        'home',
+        'landingView',
+        'signIn',
+        'signedIn',
+        'who',
+      ]);
       assert.deepEqual([reply.body.signedIn, reply.body.home], [false, 'welcome']);
+      /* The public home only: who-am-I names the landing's view key, and
+         nothing else about the App's views. */
+      assert.equal(reply.body.landingView, 'welcome');
       assert.doesNotMatch(reply.text, /desk|overview|activities|leads|boss|clerk/);
       assert.equal((await call('/api/app')).status, 401, 'the App itself stays behind sign-in');
     });

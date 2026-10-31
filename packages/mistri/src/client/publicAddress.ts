@@ -50,12 +50,12 @@ import {
   viewRoom,
 } from '@mistriwork/kit/client/components/appRooms.js';
 import {
-  appListQuery,
   litTabFor,
   searchColumn,
   specTabs,
   splitListSpec,
   splitOf,
+  tabQuestion,
   visibleQuestion,
   wholeQuery,
   type ListSpec,
@@ -178,7 +178,7 @@ type TabQuestion = { label: string; slug: string; query: string; order: string; 
     and that sort is the tab's own, not a reader's refinement. */
 function tabQuestions(spec: ListSpec): TabQuestion[] {
   return specTabs(spec).map((tab, index) => {
-    const parts = splitQuery(`${spec.table} ${visibleQuestion(spec, appListQuery(spec, index))}`) as { filter: string; sort?: string };
+    const parts = splitQuery(`${spec.table} ${tabQuestion(spec, index)}`) as { filter: string; sort?: string };
     return {
       label: tab.label,
       slug: tabKey(tab),
@@ -218,7 +218,7 @@ export function listParams(
   if (!view || view.table !== entry.table) return undefined;
   const spec = plumbingOf(view, entry.query);
   const refinement = visibleQuestion(spec, entry.query);
-  if (canonicalize(refinement) === canonicalize(visibleQuestion(spec, appListQuery(spec, 0)))) return '';
+  if (canonicalize(refinement) === canonicalize(tabQuestion(spec, 0))) return '';
   const parts = splitQuery(`${spec.table} ${refinement}`) as { filter: string; sort?: string; show?: string; limit?: string };
   const whole = new URLSearchParams({ q: refinement }).toString();
   if (parts.show || parts.limit) return whole;

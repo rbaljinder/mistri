@@ -14,7 +14,7 @@ import { TMP } from './support/fixtures';
  * ladleHost.ts), so none of them ever ran what a host installs. From 0.9.0 to 0.9.8 that was a library that did not
  * start: Base UI's CommonJS helper (use-sync-external-store) was bundled with its `require("react")` intact, and the
  * Provider drew "… could not start. Calling `require` for "react" in an environment that doesn't expose the
- * `require` function." vite.embed.config.ts says why; scripts/bundle-budget.mjs refuses a require() in the build.
+ * `require` function." config/vite.embed.config.ts says why; scripts/bundle-budget.mjs refuses a require() in the build.
  *
  * The host is the Ladle sample's own server (examples/apps/ladle/host/server.ts) as its README runs it, started
  * through e2e/support/ladleBuiltHost.ts: its page imports `@mistriwork/mistri/react` by name, which an install's exports send to
@@ -33,7 +33,7 @@ test.describe.configure({ timeout: 90_000 });
 test.beforeAll(async () => {
   test.setTimeout(120_000);
   if (!existsSync(BUILT))
-    throw new Error(`${BUILT} is missing: build @mistriwork/mistri/react first (npx vite build -c vite.embed.config.ts).`);
+    throw new Error(`${BUILT} is missing: build @mistriwork/mistri/react first (npx vite build -c config/vite.embed.config.ts).`);
   const directory = mkdtempSync(join(TMP, 'embed-built-'));
   const db = join(directory, 'ladle.db');
   execFileSync(process.execPath, [resolve('examples/databases/ladle/seed.mjs'), db], { stdio: 'pipe' });

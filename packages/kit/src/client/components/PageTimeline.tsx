@@ -375,7 +375,11 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
         <>
           {composeButton}
           {rows.length ? (
-            <div className={conversation ? 'timeline-scroll' : undefined} ref={setScroller}>
+            <div
+              className={conversation ? 'timeline-scroll' : undefined}
+              {...(conversation ? { 'data-scrolls': '' } : {})}
+              ref={setScroller}
+            >
               <ol className="timeline">
                 {byDay(rows).map(({ day, items }, d) => (
                   <li key={day || d} className="timeline-day">

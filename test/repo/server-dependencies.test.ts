@@ -171,7 +171,7 @@ test('@mistriwork/mistri/ui and @mistriwork/mistri/react import only optional pe
   assert.deepEqual(
     stray,
     [],
-    'dist/ui or dist/embed imports a package no author or host installs: bundle it (vite.ui.config.ts, vite.embed.config.ts), or declare it an optional peer.',
+    'dist/ui or dist/embed imports a package no author or host installs: bundle it (config/vite.ui.config.ts, config/vite.embed.config.ts), or declare it an optional peer.',
   );
 });
 

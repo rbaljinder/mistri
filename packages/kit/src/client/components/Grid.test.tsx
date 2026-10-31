@@ -433,7 +433,9 @@ describe('the header', () => {
     const filter = within(controls as HTMLElement).getByRole('button', { name: 'Filter on customer_id' });
     expect(filter.querySelector('.th-filter-icon')).toHaveAttribute('aria-hidden', 'true');
     expect(filter).toHaveTextContent('');
-    expect(controls?.children).toHaveLength(2);
+    /* The sort, the column's move buttons (one wrapper, out of the head's flow where a pointer hovers), and the filter chevron. */
+    expect(controls?.children).toHaveLength(3);
+    expect(controls?.querySelectorAll('.th-moves > .th-move')).toHaveLength(2);
   });
 
   test('sorts by clicking, adds a level by shift-clicking, and says why a column cannot be sorted', async () => {

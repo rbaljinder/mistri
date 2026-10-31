@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { brotliCompressSync } from 'node:zlib';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-/** Each binary's built client (vite.tablewalk.config.ts, vite.mistri.config.ts): each is held to its own ceilings. */
+/** Each binary's built client (config/vite.tablewalk.config.ts, config/vite.mistri.config.ts): each is held to its own ceilings. */
 export const CLIENTS = {
   tablewalk: join(ROOT, 'packages/tablewalk/dist/client'),
   mistri: join(ROOT, 'packages/mistri/dist/client'),
@@ -609,7 +609,14 @@ export const BUDGET = {
        200 raw bytes every first paint draws, none of it deferrable
        behind onDemand.tsx. The raw style ceilings move by 250 and keep
        about 250 bytes of room. */
-    public: { script: { raw: 669_950, br: 187_330 }, style: { raw: 389_550, br: 52_350 } },
+    /* The showcase follow-up's grid column move and resize (Grid.tsx, gridArrange.ts, the head's move buttons and
+       resizer in style.css), and the landing payload carried on the boot (appPayload.ts, appShell.js,
+       PublicHome.tsx): the head's controls are the first paint's own grid chrome, so they cannot wait behind
+       onDemand.tsx. Measured: public style 390,632 / 52,424 (+1,082 / +74), App script 1,394,754 / 382,242
+       (+2,804 / +362), App style 390,513 / 52,395 (+1,088 / +70); the Workbench wears the same sheet, style
+       375,835 / 51,192 (+535 / +67). Each ceiling keeps about 250 bytes of room raw, about 100 in brotli for the
+       styles and 400 for the App script. */
+    public: { script: { raw: 669_950, br: 187_330 }, style: { raw: 391_100, br: 52_500 } },
     /* A one-click command's revision asked as the pointer or focus reaches its button (commandSend.ts readyCommand,
        Actions.tsx), so the click sends only the execute: about 500 raw bytes, 1335.1 KiB measured. The App script's
        raw ceiling moves to 1_367_400 and keeps about 250 bytes of room; its brotli did not move past its ceiling. */
@@ -644,10 +651,27 @@ export const BUDGET = {
     /* The image's Node (24.22.1-alpine) compresses the same bytes about 300 bytes larger in brotli than a desk's 24.15:
        the release image measured 373.0 KB against the ceiling's 372.9, the desk 372.7. The brotli ceiling moves to
        382_400, so the one that compresses worst keeps about 400 bytes of room. */
-    app: { script: { raw: 1_392_330, br: 382_400 }, style: { raw: 389_425, br: 52_325 } },
+    /* A list's questions read once per view rather than every time a paint asks (appListModel.ts), and a record page
+       that says from its definition which aside stacked columns weave in (Page.tsx), so page.css asks no :has() of the
+       whole layout: App script 1,392,581 / 381,814 (+432 / +234), style 388,994 / 52,236 (-231 / -25). Its raw ceiling
+       moves to 1_392_830, about 250 bytes of room. */
+    /* The remainder wave's grid column move and resize and landing payload (the follow-up above), landed beside rc.8's
+       own first-paint changes. The follow-up measured App script 1,394,754 / 382,242 alone; with rc.8's LandingSurface
+       footer and the rest it is 1,395,682 / 382,550, style 390,276 / 52,346 (+2,852 / +150 and +851 / +21 beside the
+       ceilings before it). The ceilings keep about 250 bytes of room raw, 400 in brotli for the script and about 100
+       for the style. */
+    /* The review fixes to the grid head's move buttons: their wrapper, the arrows drawn by the stylesheet (so the head's
+       text stays its label) and the out-of-flow placement beside the filter caret (style.css). App style 390,720 /
+       52,437, +444 / +91 over the measure above; the script is unchanged in kind (1,395,747 / 382,832). The style ceilings
+       keep about 280 bytes of room raw and 110 in brotli. */
+    app: { script: { raw: 1_395_950, br: 382_950 }, style: { raw: 391_000, br: 52_550 } },
   },
   tablewalk: {
-    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 375_300, br: 51_125 } },
+    /* The follow-up's grid head rules, as above. */
+    /* The grid head's controls placed inside their own head (style.css; they lay over the neighbour's label): about
+       130 raw bytes over the follow-up, so the public and Workbench style ceilings move by 200 raw and the Workbench's
+       brotli by 150. */
+    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 376_300, br: 51_450 } },
   },
 };
 
@@ -657,7 +681,7 @@ export const BUDGET = {
    elements, the navigator, the session and the protocol check — and is held small on purpose: the shell is a chunk
    of its own, loaded by an effect the first time an element is on screen. `adapter` is the largest router adapter
    with what it imports (the navigator). `shell` is that chunk with its static imports: the served client's shell,
-   built once more with the embed's seams and its stylesheets as scoped text (vite.embed.config.ts). It is library
+   built once more with the embed's seams and its stylesheets as scoped text (config/vite.embed.config.ts). It is library
    output, whose whitespace Vite leaves for the host's minifier, so its raw size is larger than the served
    client's for the same code; what loads after it is the same split into parts loaded on demand as when served.
    The first measure, when @mistriwork/mistri/react arrived: provider 13,112 / 4,678, adapter 3,452 / 1,332, shell 514,833 /
@@ -741,7 +765,7 @@ export function embedSizes(embed = EMBED) {
 
 /**
  * The files under dist/embed that still call require(), each with the first
- * call in it. vite.embed.config.ts says why there must be none, and how there
+ * call in it. config/vite.embed.config.ts says why there must be none, and how there
  * came to be one: a CommonJS dependency's `require("react")` that
  * esmExternalRequirePlugin did not rewrite, left to rolldown's runtime shim
  * (`typeof require` and its "doesn't expose the `require` function" throw).
@@ -868,7 +892,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   for (const { file, excerpt } of requires) console.error(`${file} calls require(): …${excerpt.replace(/\s+/g, ' ')}…`);
   if (requires.length) {
     console.error(
-      '@mistriwork/mistri/react must hold no require(): no browser or ESM host provides one. A CommonJS dependency reaching React is rewritten by esmExternalRequirePlugin in vite.embed.config.ts, which must be the only place those specifiers are made external.',
+      '@mistriwork/mistri/react must hold no require(): no browser or ESM host provides one. A CommonJS dependency reaching React is rewritten by esmExternalRequirePlugin in config/vite.embed.config.ts, which must be the only place those specifiers are made external.',
     );
     process.exitCode = 1;
   }

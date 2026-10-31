@@ -23,6 +23,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { doorRefusal, identityFor, writes, type Bound } from './trust.js';
 import type { Identity } from './context.js';
+import { admitAs } from '../../adapters/poolAdmission.js';
 
 /** Which step refused: a dispatcher answers each in its own shape (a command's, the API's, a page's). */
 type DoorCheck = 'host' | 'identity' | 'origin';
@@ -73,6 +74,10 @@ export async function door<S>(ask: DoorAsk, session: SessionDoor<S>): Promise<{ 
   }
   const admitted = await session.admit(identity);
   if (admitted === undefined) return undefined;
+  /* Signed in, its pool checkouts wait their turn as the account's, not its
+     address's (adapters/poolAdmission.ts): one person's tabs on two networks
+     are one share of the line, and an office behind one address is many. */
+  admitAs(identity.id ?? identity.who);
   /* Every request that can change something is checked before it is read, so
      a refusal costs nothing and happens before any work. Admitted on a bearer
      (embedDoor), the Origin was checked against the one the bearer was issued

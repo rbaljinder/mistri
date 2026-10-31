@@ -62,7 +62,15 @@ A Valkey server (or Redis) every instance of a deployment shares. It holds cache
 
 ## Search
 
-A `contains` filter (the list's search box, a reference picker, the palette) runs on the database. Search engines are not services: providers are packs, Typesense the first (`@mistriwork/search-typesense`), shipping after 1.0. A `"kind": "search"` entry is refused, and so is a resource's `search` while no provider is plugged in.
+A `contains` filter (the list's search box, a reference picker, the palette) runs on the database. Search engines are not services: providers are packs, shipping after 1.0. Until one is plugged in, an App that declares `search` is refused at startup — except through the built-in connection `memory`, which searches an in-memory index in the server process (lost on restart until the next reindex, and suited to moderate tables, not a large catalog). A `"kind": "search"` entry is refused.
+
+The packs are `@mistriwork/search-sqlite` (SQLite FTS5 in one file beside the deployment, on Node's built-in `node:sqlite` — no external engine, and the index survives a restart), `@mistriwork/search-postgres` (Postgres tsvector tables, GIN-indexed, in the deployment's own database — no external engine, and the index survives a restart) and `@mistriwork/search-typesense` (a dedicated engine). A deployment plugs one in where it builds its server (`plugSearch(registry, sqliteSearch([{ name: 'fts', file: './search.db' }]))` or `plugSearch(registry, postgresSearch([{ name: 'pgsearch', url: '${DATABASE_URL}' }]))`, with the exact imports in the pack's README), and an App names the connection in its resource:
+
+```ts
+resources: { ticket: { search: { connection: 'fts', fields: ['subject', 'requester.name'] } } }
+```
+
+Search is an index, never a source of truth: it holds a copy of the declared fields under the record's key and answers keys, and the rows are re-read from the database under the reader's grants. `mistri --reindex` fills the index from the database; the App's writes keep it in step after that. The Postgres pack's tests are Postgres-gated, so a live Postgres run in CI is what proves them.
 
 ## Webhooks (`"kind": "webhook"`)
 

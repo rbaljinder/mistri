@@ -64,7 +64,7 @@ SQLite, for a quick local try:
 
 ```sh
 node --import tsx test/fixtures/databases/atelier/seed.mjs /tmp/atelier.db
-npm run start -- check --app test/fixtures/apps/atelier --config /tmp/atelier.db.json
+npx tsx packages/mistri/src/server/index.ts check --app test/fixtures/apps/atelier --config /tmp/atelier.db.json
 BETTER_AUTH_SECRET=<32+ random characters> MISTRI_AUTH_ADMIN_EMAIL=you@example.test MISTRI_AUTH_ADMIN_PASSWORD=<password> \
   npx tsx packages/mistri/src/server/index.ts --config /tmp/atelier.db.json --app test/fixtures/apps/atelier --port 4747
 ```

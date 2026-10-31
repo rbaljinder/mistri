@@ -129,11 +129,15 @@ describe('the schema a brief makes', () => {
     assert.match(sql, /email TEXT UNIQUE/);
   });
 
-  test('stubs each command as a working change with its refusals as TODO lines', () => {
+  test('stubs each command as a working change with its refusals as TODO lines, refused until they are written', () => {
     const text = commandsModule(parseBrief(document(BLOCK)), 'wag_wander');
     assert.match(text, /defineSource<Rows>\('wag_wander'\)/);
     assert.match(text, /when: "status = requested"/);
     assert.match(text, /TODO refuse\("Needs a walker\."\)/);
+    assert.match(text, /import \{ defineCommand, defineCommands, defineSource, refuse, shape, text \}/);
+    assert.match(text, /if \(!rulesWritten\) refuse\("Confirm is not ready: its rules are not written yet\."\);/);
+    const free = commandsModule(parseBrief(document({ ...BLOCK, commands: [{ ...BLOCK.commands[0], refuse: [] }] })), 'wag_wander');
+    assert.doesNotMatch(free, /rulesWritten|refuse[(,]/, 'a command with no rules to write runs as it is');
     assert.match(text, /await db\.booking\.update\(record, \{ status: 'confirmed' \}\)/);
     assert.match(text, /export default defineCommands\(\{ confirmBooking \}\)/);
   });

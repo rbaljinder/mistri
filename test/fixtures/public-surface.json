@@ -3181,6 +3181,7 @@
         "app: resources.*.search",
         "app: resources.*.search.connection",
         "app: resources.*.search.fields",
+        "app: ui.pwa",
         "app: views.*[kind=list].presentation[kind=gantt].by",
         "app: views.*[kind=list].presentation[kind=gantt].end",
         "app: views.*[kind=list].presentation[kind=gantt].kind",

@@ -750,7 +750,7 @@ mounted `tablewalk.json` and holds no configuration of its own:
 docker run --rm -p 127.0.0.1:4111:4111 -v "$PWD:/config:ro" ghcr.io/rbaljinder/tablewalk
 ```
 
-`DEPLOY.md` covers the two things a container changes about the
+`docs/deploy.md` covers the two things a container changes about the
 security model — binding `0.0.0.0` inside while publishing only to the host's
 loopback, and `--allowed-host` for reaching it by a name other than
 `localhost`.

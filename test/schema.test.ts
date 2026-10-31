@@ -703,7 +703,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.1 forms wave 3a (public doors): auth.challenge, a hero's badge, tiles and points (and their keys).
     // 1.0.0-rc.1 forms wave 3b: a palette's `primary` and `onPrimary` (light and dark), and a New form field's `as` (five entries; `onPrimary` is the one new name): 1661/498.
     // 1.0.0-rc.1 retention: the App's `retention` and its `history`, `commands` and `attempts` windows (four entries; `retention`, `history` and `attempts` are new names): 1665/501.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1665, names: 501 });
+    // PR #12: `ui.pwa`, the PWA opt-in (one entry, one new name): 1666/502.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1666, names: 502 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

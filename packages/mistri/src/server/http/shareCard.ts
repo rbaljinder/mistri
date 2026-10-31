@@ -54,8 +54,13 @@ export interface ShareCard {
   readonly mark?: readonly string[];
 }
 
-/** Draws one card as a PNG (shareCardDraw.ts). */
-export type CardDrawing = (card: ShareCard) => Promise<Uint8Array>;
+/**
+ * Draws one card as a PNG (shareCardDraw.ts). `drawable` says whether the
+ * face can set any of the card's identity: a title and a site name that are
+ * wholly outside it would be a card with nothing on it, which is worse than
+ * the page's default picture. A drawing that does not say draws every card.
+ */
+export type CardDrawing = ((card: ShareCard) => Promise<Uint8Array>) & { drawable?: (card: ShareCard) => boolean };
 
 /* Raised when what a card looks like changes, so every hash — and every cached copy — moves with it. */
 const DRAWING_REVISION = 1;
@@ -126,11 +131,6 @@ let loader: () => Promise<CardDrawing | undefined> = async () => (await import('
 let loading: Promise<CardDrawing | undefined> | undefined;
 const drawing = () => (loading ??= loader().catch(() => undefined));
 
-/** Whether this server draws cards: satori and resvg both load. Asked by the head; the first ask loads them. */
-async function shareCardsDrawn(): Promise<boolean> {
-  return (await drawing()) !== undefined;
-}
-
 /** Another drawing, or none (`async () => undefined`): for a test, which must say what it stands in for. */
 export function drawShareCardsWith(load: () => Promise<CardDrawing | undefined>): void {
   loader = load;
@@ -155,7 +155,9 @@ export async function shareCardImage(
   card: ShareCard | undefined,
   locale?: string,
 ): Promise<string | undefined> {
-  if (!card || !(await shareCardsDrawn())) return undefined;
+  if (!card) return undefined;
+  const draw = await drawing();
+  if (!draw || draw.drawable?.(card) === false) return undefined;
   const query = new URLSearchParams({ path: inside, ...(locale && CARD_LOCALE.test(locale) ? { locale } : {}), v: cardVersion(card) });
   return `${origin}${serverPath(mount, SHARE_CARD_PATH)}?${query}`;
 }
@@ -217,7 +219,7 @@ async function drawn(card: ShareCard, version: string): Promise<Uint8Array | und
     return hit;
   }
   const draw = await drawing();
-  if (!draw) return undefined;
+  if (!draw || draw.drawable?.(card) === false) return undefined;
   const already = drawingNow.get(version);
   if (already) return already;
   if (running >= AT_ONCE && waiting.length >= WAITING_MOST) throw new Busy();

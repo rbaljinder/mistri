@@ -88,7 +88,7 @@ const relationships = ['logDealerVisit', 'setDealerStatus', 'closeIntakeSubmissi
 
 export default defineApp({
   id: 'lender',
-  name: 'Keystone',
+  name: 'Keystone Lending',
   sources: { keystone: { connection: 'keystone' } },
   resources,
   auth: {

@@ -260,8 +260,8 @@ describe('the @mistriwork/mistri/workflows entry', () => {
   test('the package maps and builds it, and it exports the declarations', () => {
     const pkg = published(JSON.parse(readFileSync(new URL('../packages/mistri/package.json', import.meta.url), 'utf8')));
     assert.deepEqual(pkg.exports['./workflows'], { types: './dist/server/workflows.d.ts', default: './dist/server/workflows.js' });
-    const commands = JSON.parse(readFileSync(new URL('../tsconfig.commands.json', import.meta.url), 'utf8'));
-    assert.ok(commands.include.includes('packages/mistri/src/server/workflows.ts'));
+    const commands = JSON.parse(readFileSync(new URL('../config/tsconfig.commands.json', import.meta.url), 'utf8'));
+    assert.ok(commands.include.includes('../packages/mistri/src/server/workflows.ts'));
     assert.deepEqual(Object.keys(workflowsEntry).sort(), [
       'StepRefused',
       'WorkflowDeclarationError',

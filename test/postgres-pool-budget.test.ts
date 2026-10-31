@@ -261,7 +261,6 @@ test('a checkout that waited behind a held connection records the wait, and the 
 test('a checkout that times out is counted as one and keeps the pool saturated; another failure is counted apart', async () => {
   const { manager, pools } = fixture({ readers: 1 });
   await manager.read();
-  pools[0].timeoutMs = 20;
   let release!: () => void;
   const holding = manager.withReadClient(
     () =>
@@ -270,11 +269,12 @@ test('a checkout that times out is counted as one and keeps the pool saturated; 
       }),
   );
   while (manager.stats()[0].inUse !== 1) await tick();
-  await assert.rejects(
-    manager.withReadClient(async () => 'never'),
-    /timeout exceeded when trying to connect/,
-  );
+  /* The checkout waits its turn in the manager's own line (poolAdmission.ts), then asks the driver, which gives up
+     on the connection. */
+  const waited = manager.withReadClient(async () => 'never');
+  pools[0].failNext = new Error('timeout exceeded when trying to connect');
   release();
+  await assert.rejects(waited, /timeout exceeded when trying to connect/);
   await holding;
   const stats = manager.stats()[0];
   assert.deepEqual(

@@ -7,7 +7,7 @@
     "is not decoration: the macOS keychain that credentials.ts prefers does",
     "not exist in a Linux container, so environment expansion is the credential",
     "mechanism for Docker. An unset variable is a startup error, not an empty",
-    "password. See DEPLOY.md.",
+    "password. See docs/deploy.md.",
     "",
     "\"writable\" is opt-in per connection and enforced by the server, not by",
     "the browser's toggle. Leaving it false is the right default for a file a",

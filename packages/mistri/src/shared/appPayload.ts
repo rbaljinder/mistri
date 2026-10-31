@@ -69,6 +69,10 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
       are read from their public routes. Absent when no rule names a view
       this principal can open; the client draws the App's home card then. */
   home?: string;
+  /** The App's landing view key, where it declares a landing (`landing.view`): PublicHome matches its home
+      against it instead of probing `/api/landing` — an App without a landing answered that probe 404, and one
+      whose landing is another view does not need the probe either. Absent when the App declares no landing. */
+  landingView?: string;
   /** What each resource says about its rows, keyed by resolved table id. */
   resources: Record<string, ResolvedResource>;
   /** The App's record pages as its addresses need them (appAddress.ts): each
@@ -213,6 +217,7 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
   return {
     id: app.id,
     name: app.name,
+    ...(app.landing ? { landingView: app.landing.view } : {}),
     views,
     nav: servedNav(app.nav, views),
     resources: resolveResources(app, schema).resources,

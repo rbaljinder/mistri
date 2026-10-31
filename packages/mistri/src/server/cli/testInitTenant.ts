@@ -18,6 +18,7 @@ import { Registry } from '@mistriwork/engine/server/connections.js';
 import { CONFIG_SECTIONS } from '../serviceConnections.js';
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
 import type { AppCommandField } from '../../shared/command.js';
+import { article } from './article.js';
 import { sampleInput } from '../testing/appRequests.js';
 
 interface Grants {
@@ -100,7 +101,7 @@ export async function tenantsModule(loaded: LoadedApp, grants: Map<string | null
     rows.map((row) => `    [${row.map((value) => (typeof value === 'number' ? String(value) : q(value))).join(', ')}],`).join('\n');
   return `/**
  * ${app.name}'s ${one} isolation, written by \`mistri test init\`: a member works in its own ${one} only; for each
- * resource a ${one} owns, two ${one}s list their own rows and never open each other's records; each command a ${one}'s
+ * resource ${article(one)} ${one} owns, two ${one}s list their own rows and never open each other's records; each command ${article(one)} ${one}'s
  * role runs is refused on another ${one}'s record; and the platform realm's reads are answered. Members are made by
  * the test host as an operator grants them (\`host.tenant\`, \`host.platform\`); every assertion is the server's own
  * answer. Yours to change.
@@ -147,7 +148,7 @@ ${
 }${
     tables.length
       ? `
-  /* Each resource a ${one} owns, with a role that reads it. */
+  /* Each resource ${article(one)} ${one} owns, with a role that reads it. */
   for (const [table, role] of [
 ${list(tables)}
   ] as const) {
@@ -162,7 +163,7 @@ ${list(tables)}
   }${
     commands.length
       ? `
-  /* Each command a ${one}'s role runs on its records: [command, version, its table, a role that runs it, one that
+  /* Each command ${article(one)} ${one}'s role runs on its records: [command, version, its table, a role that runs it, one that
      reads the table, an input that passes its questions ('' where one needs you)]. */
   for (const [command, version, table, role, reader, input] of [
 ${list(commands)}
@@ -190,7 +191,7 @@ ${list(commands)}
   for (const [role, tables] of [
 ${platformRoles.map(([role, held]) => `    [${q(role)}, [${[...held.read].sort().map(q).join(', ')}]],`).join('\n')}
   ] as const) {
-    await t.test(\`\${role} reads the platform's tables and is no member of a ${one}\`, async () => {
+    await t.test(\`\${role} reads the platform's tables and is no member of ${article(one)} ${one}\`, async () => {
       const platform = await host.platform({ roles: [role] });
       for (const table of tables) {
         const rows = await platform.rows(table);

@@ -147,7 +147,7 @@ Cloudflare, which has accepted only that.
 
 **Configuration.** `mistri.json` is baked into the image, with every secret
 written as `${NAME}` (expanded at open, never sent to the browser,
-`DEPLOY.md#passwords-in-a-container`). No volume mounts: none of the three
+`docs/deploy.md#passwords-in-a-container`). No volume mounts: none of the three
 offers a convenient one, and none is needed.
 
 **Port and bind.** `TABLEWALK_HOST=0.0.0.0`, `TABLEWALK_PORT=4111`; tell the

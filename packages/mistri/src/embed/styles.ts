@@ -5,7 +5,7 @@
  * The embed build turns every stylesheet the shell imports into a string,
  * already scoped to `.tw-root` and nested in one `@layer mistri`
  * (scripts/embed-css.mjs), and a module that hands the string here
- * (vite.embed.config.ts, `adoptedCss`). Each becomes a constructed sheet,
+ * (config/vite.embed.config.ts, `adoptedCss`). Each becomes a constructed sheet,
  * adopted by the document while a mistri element is on the page and taken
  * back when the last one leaves. A constructed sheet is CSSOM, so a host CSP
  * without `'unsafe-inline'` still applies it, and a host that never renders

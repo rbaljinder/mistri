@@ -28,6 +28,7 @@ const SATURATION_MEMORY_MS = 60_000;
  * at once — a page's boot has up to eight reads in flight, and a field report saw
  * two thirds of the tabs opened at one moment by 25 people turned away busy
  * on a server with its loop idle. The wait is what bounds a slow server.
+ * Who gets the places in the line, account by account, is poolAdmission.ts's.
  */
 export const POOL_QUEUE_WAIT_MS = 2_000;
 export const POOL_QUEUE_PER_CONNECTION = 64;

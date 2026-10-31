@@ -43,6 +43,10 @@ export const GRADE_CODES = {
     severity: 'error',
     fix: 'something is wider than the window: show fewer columns (show: […]), let the row wrap, or draw the section full width; mistri shot --phone --width <px> to look',
   },
+  'double-scroll': {
+    severity: 'error',
+    fix: 'one scroll container per room: the content pane scrolls, lists paginate, drawers and modals scroll inside themselves; a list pane whose job is to scroll says so with data-scrolls',
+  },
   'clipped-number': {
     severity: 'error',
     fix: "a figure is never cut: give its column room (fewer columns beside it, show: […]) or its section more width (width: 'full')",
@@ -277,6 +281,16 @@ export function judge(
       ),
     );
   if (probe.sideways > 1) found.push(judged('sideways-scroll', `the page scrolls ${Math.round(probe.sideways)}px sideways`));
+  /* One scroll container per room: the room's own pane. A second box
+     scrolling the same way is the double scrollbar the policy forbids;
+     deliberate list panes never reach here — the probe leaves them out. */
+  if ((probe.scrolls ?? []).length > 1)
+    found.push(
+      judged(
+        'double-scroll',
+        `${count(probe.scrolls!.length, 'vertical scroll container')} in the room: ${some(probe.scrolls!, (what) => what)}`,
+      ),
+    );
   const numbers = probe.clipped.filter((entry) => entry.numeric);
   if (numbers.length)
     found.push(

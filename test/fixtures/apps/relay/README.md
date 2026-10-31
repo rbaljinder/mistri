@@ -7,8 +7,8 @@ detail pages exercise a different workflow from CRM.
 From the repository root:
 
 ```sh
-node examples/apps/relay/seed.mjs
-npm run start -- --config .demo/relay.db.json --app examples/apps/relay --port 4707
+node test/fixtures/apps/relay/seed.mjs
+npx tsx packages/mistri/src/server/index.ts --config .demo/relay.db.json --app test/fixtures/apps/relay --port 4707
 ```
 
 Open http://127.0.0.1:4707/relay. The seed command refuses to replace an existing

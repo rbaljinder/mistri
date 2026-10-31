@@ -93,7 +93,10 @@ export async function start() {
     const door = me.public !== true || landingAt?.kind === 'sign-in';
     if (home || door) {
       const surface = await publicSurface();
-      if (home && (await surface.showPublicHome(me.home, landingAt.app))) return;
+      /* Who-am-I names the landing's view key only where the App has one:
+         null marks "known to have none", so a landing-less App's form home
+         is drawn without the /api/landing probe that answered 401. */
+      if (home && (await surface.showPublicHome(me.home, landingAt.app, { landingView: me.landingView ?? null }))) return;
       if (door) {
         surface.showSignInFor(me, landingAt);
         return;

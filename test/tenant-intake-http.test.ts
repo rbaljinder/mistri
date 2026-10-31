@@ -121,6 +121,7 @@ async function fixture(t: TestContext, mount = '') {
         },
         views: {
           leads: { kind: 'list', from: 'lead' },
+          welcome: { kind: 'landing', hero: { heading: 'Finance your next car', actions: [{ label: 'Apply', to: 'apply' }] } },
           triage: { kind: 'list', from: 'intake_submission' },
           apply: { kind: 'form', label: 'Apply for financing', public: true, command: { id: 'apply', version: 1, input } },
           // Saved on every step: each step resolved from its address, its draft kept where the first step landed.
@@ -293,6 +294,9 @@ test('signed out, a tenant App serves its public form, says so in who-am-I, and 
   assert.equal(me.signedIn, false);
   assert.equal(me.tenant, true);
   assert.equal(me.home, 'apply');
+  // The landing's view key rides the signed-out answer as the single-App one sends it: the client matches
+  // its home against it instead of dropping a landing for the sign-in screen.
+  assert.equal(me.landingView, 'welcome');
   const form = await f.request('/api/forms/apply');
   assert.equal(form.status, 200);
   assert.deepEqual(tenantHeaders(form), []);
@@ -302,13 +306,13 @@ test('signed out, a tenant App serves its public form, says so in who-am-I, and 
   assert.equal(JSON.stringify(body).includes('"command"'), false, 'the command id and version are never presented');
   assert.equal((await f.request('/api/forms')).status, 200);
   // The list names no address; a form's read may name one (it places a choice from a table), and answers the same
-  // for every address. No landing is declared.
+  // for every address.
   assert.equal((await f.request(`/api/forms${via(NORTH)}`)).status, 400);
   const placed = await f.request(`/api/forms/apply${via(NORTH)}`),
     unplaced = await f.request(`/api/forms/apply${via(UNKNOWN)}`);
   assert.equal(placed.status, 200);
   assert.deepEqual(await placed.json(), await unplaced.json());
-  assert.equal((await f.request('/api/landing')).status, 404);
+  assert.equal((await f.request('/api/landing')).status, 200);
   assert.equal((await f.request('/api/forms/leads')).status, 404);
 });
 

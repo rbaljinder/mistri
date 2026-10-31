@@ -4,7 +4,7 @@
  * other address is the host's own page, a React app (./embed-react-host)
  * that shows Compass at `/crm` through @mistriwork/mistri/react. The host's page is
  * served from source through Vite's middleware with the embed's plugins
- * (vite.embed.config.ts `embedPlugins`), as every suite serves the client:
+ * (config/vite.embed.config.ts `embedPlugins`), as every suite serves the client:
  * nothing is built first. What e2e/embed-react.spec.ts walks.
  *
  * Arguments: the config file, the port, and the App (Compass when absent).
@@ -19,7 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer as createVite } from 'vite';
 import { createHandler, mintEmbedAssertion } from '../../packages/mistri/src/server/handler.ts';
-import { embedPlugins } from '../../vite.embed.config.ts';
+import { embedPlugins } from '../../config/vite.embed.config.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../..');

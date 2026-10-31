@@ -4,7 +4,7 @@
  * The shell and nothing more. There is no second implementation of anything
  * here: the same server runs, serving the same client, and this process opens
  * a window pointed at it. That is the whole reason Electron was chosen over
- * Tauri for this codebase — see DEPLOY.md — because the one hard requirement
+ * Tauri for this codebase — see docs/deploy.md — because the one hard requirement
  * is a real Node 24 runtime for `node:sqlite`, and Electron 43 *is* Node
  * 24.18. Tauri would have meant shipping a separate ~110 MB node binary per
  * platform to get the same thing.
@@ -28,6 +28,7 @@ const { createServer } = require('node:net');
 const { existsSync, readFileSync, writeFileSync, mkdirSync } = require('node:fs');
 const { join, dirname, resolve } = require('node:path');
 const { homedir } = require('node:os');
+const { createServerLifecycle, isAllowedExternal } = require('./lifecycle.js');
 
 /**
  * Where the server and node_modules live.
@@ -42,8 +43,6 @@ const ROOT = app.isPackaged ? join(process.resourcesPath, 'server') : resolve(__
 /** Where the window's choice of database is remembered between launches. */
 const STATE = join(app.getPath('userData'), 'state.json');
 
-let serverProcess = null;
-let serverPort = 0;
 let window = null;
 /** Set on the way out, so the child's exit is not reported as a crash. */
 let quitting = false;
@@ -133,107 +132,49 @@ async function chooseDatabase() {
  * Startup failure is a normal outcome, not an exception: a config error or an
  * unreachable database makes the server print a diagnosis and exit 1. That
  * text is the best explanation anyone will get, so it is captured and shown
- * rather than replaced with "could not start".
+ * rather than replaced with "could not start". The lifetime rules themselves
+ * (deadline, retirement of an old child) live in lifecycle.js, where they are
+ * tested without Electron.
  */
+const server = createServerLifecycle({
+  spawn,
+  fetch: (url, init) => fetch(url, init),
+  freePort,
+  entry: serverEntry,
+  root: ROOT,
+  spawnOptions: {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      /* Re-enter our own binary as plain Node. This is what gives the server
+         Node 24 and `node:sqlite` without a second runtime in the bundle. */
+      ELECTRON_RUN_AS_NODE: '1',
+      /* Not inherited: the desktop app's window is the browser, and a second
+         one opening in Safari is a bug rather than a feature. */
+      TABLEWALK_OPEN: '',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  },
+  isQuitting: () => quitting,
+  write: (text) => process.stdout.write(text),
+  onUnexpectedExit: (log, code) => {
+    dialog.showErrorBox('tablewalk server stopped', log || `Exited with code ${code}.`);
+    app.quit();
+  },
+});
+
 function startServer(target) {
-  const entry = serverEntry();
-  if (!entry) {
-    return Promise.reject(
-      new Error(
-        `No server found under ${ROOT}. In a checkout, run "npm install" at the repo root; ` +
-          'for a packaged build, run "npm run dist" from desktop/.',
-      ),
-    );
-  }
-
-  return freePort().then((port) => {
-    serverPort = port;
-    const args = [...entry.args, '--port', String(port), '--host', '127.0.0.1'];
-    if (target) args.push('--db', target);
-
-    serverProcess = spawn(process.execPath, args, {
-      cwd: ROOT,
-      env: {
-        ...process.env,
-        /* Re-enter our own binary as plain Node. This is what gives the server
-           Node 24 and `node:sqlite` without a second runtime in the bundle. */
-        ELECTRON_RUN_AS_NODE: '1',
-        /* Not inherited: the desktop app's window is the browser, and a second
-           one opening in Safari is a bug rather than a feature. */
-        TABLEWALK_OPEN: '',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    /** Kept so a startup failure can be reported in the server's own words. */
-    let log = '';
-    const note = (chunk) => {
-      log = `${log}${chunk}`.slice(-4000);
-      process.stdout.write(`[server] ${chunk}`);
-    };
-    serverProcess.stdout.on('data', note);
-    serverProcess.stderr.on('data', note);
-
-    return new Promise((ok, fail) => {
-      let settled = false;
-      serverProcess.on('exit', (code) => {
-        if (settled) {
-          // Died later, with a window already open. Nothing works from here,
-          // so say so rather than leaving a page that 404s every request.
-          if (!quitting) {
-            dialog.showErrorBox('tablewalk server stopped', log || `Exited with code ${code}.`);
-            app.quit();
-          }
-          return;
-        }
-        settled = true;
-        fail(new Error(log.trim() || `The server exited with code ${code} before it was ready.`));
-      });
-
-      const deadline = Date.now() + 30_000;
-      const poll = () => {
-        if (settled) return;
-        fetch(`http://127.0.0.1:${port}/api/connections`)
-          .then((res) => {
-            if (!res.ok) throw new Error(String(res.status));
-            settled = true;
-            ok(port);
-          })
-          .catch(() => {
-            if (Date.now() > deadline) {
-              settled = true;
-              fail(new Error(log.trim() || 'The server did not answer within 30 seconds.'));
-              return;
-            }
-            setTimeout(poll, 150);
-          });
-      };
-      setTimeout(poll, 100);
-    });
-  });
+  return server.start(target);
 }
 
-/**
- * Stop the server, and mean it.
- *
- * SIGTERM first, because the server handles it and closes its database
- * connections on the way out. SIGKILL after a grace period, because "the app
- * closed but a process is still holding the database" is a worse outcome than
- * an unclean shutdown. Synchronous by design: `will-quit` does not wait for a
- * promise.
- */
-function stopServer() {
-  const child = serverProcess;
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
-  serverProcess = null;
-  child.kill('SIGTERM');
-  const hard = setTimeout(() => child.kill('SIGKILL'), 3000);
-  // Unref so a server that exits promptly does not hold the event loop open
-  // for the full three seconds on the way out.
-  if (typeof hard.unref === 'function') hard.unref();
-}
+const stopServer = () => server.stop();
 
 /* ---------- the window ---------- */
+
+/** The one door to the OS's link handlers; lifecycle.js says what may pass. */
+function openExternal(url) {
+  if (isAllowedExternal(url)) void shell.openExternal(url);
+}
 
 function createWindow(port) {
   window = new BrowserWindow({
@@ -269,13 +210,13 @@ function createWindow(port) {
   /* A link to somewhere else is a link to a browser. An Electron window that
      navigates away from its own app is a window with no way back. */
   window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    openExternal(url);
     return { action: 'deny' };
   });
   window.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(`http://127.0.0.1:${serverPort}/`)) {
+    if (!url.startsWith(`http://127.0.0.1:${server.port}/`)) {
       event.preventDefault();
-      void shell.openExternal(url);
+      openExternal(url);
     }
   });
 
@@ -315,7 +256,7 @@ function buildMenu() {
         {
           label: 'Open in Browser',
           click: () => {
-            if (serverPort) void shell.openExternal(`http://127.0.0.1:${serverPort}/`);
+            if (server.port) void shell.openExternal(`http://127.0.0.1:${server.port}/`);
           },
         },
         { type: 'separator' },
@@ -388,7 +329,7 @@ if (!app.requestSingleInstanceLock()) {
     app.on('activate', () => {
       // macOS: clicking the dock icon with no windows open should give one
       // back, and the server is still running, so this is just a window.
-      if (BrowserWindow.getAllWindows().length === 0 && serverPort) createWindow(serverPort);
+      if (BrowserWindow.getAllWindows().length === 0 && server.port) createWindow(server.port);
     });
   });
 

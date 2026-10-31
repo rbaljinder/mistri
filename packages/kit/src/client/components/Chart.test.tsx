@@ -184,6 +184,88 @@ describe('the line', () => {
     expect(cursor).toHaveAttribute('hidden');
   });
 
+  test('a point itself drills, by click and by keyboard, and the figure holding buttons is a group', async () => {
+    const user = userEvent.setup();
+    const picked: unknown[] = [];
+    const { container } = render(
+      <LineChart
+        rows={[
+          { key: 'a', value: 1 },
+          { key: 'b', value: 2 },
+        ]}
+        say={money}
+        onPick={(v) => picked.push(v)}
+      />,
+    );
+    const points = screen.getAllByRole('button', { name: /: \$/ });
+    expect(points).toHaveLength(2);
+    await user.click(points[1]);
+    expect(picked).toEqual(['b']);
+    fireEvent.keyDown(points[0], { key: 'Enter' });
+    expect(picked).toEqual(['b', 'a']);
+    fireEvent.keyDown(points[0], { key: ' ' });
+    expect(picked).toEqual(['b', 'a', 'a']);
+    /* The figure holding buttons is a group, not an image: a button
+       inside role="img" fails axe's nested-interactive, as a donut's does. */
+    expect(container.querySelector('.chart-line')).toHaveAttribute('role', 'group');
+  });
+
+  test('a line chart keeps one tab stop across its drillable points, roving with the arrows', () => {
+    const picked: unknown[] = [];
+    render(
+      <LineChart
+        rows={[
+          { key: 'a', value: 1 },
+          { key: 'b', value: 2 },
+          { key: 'c', value: 3 },
+        ]}
+        say={money}
+        onPick={(v) => picked.push(v)}
+      />,
+    );
+    const points = screen.getAllByRole('button', { name: /: \$/ });
+    expect(points).toHaveLength(3);
+    /* One tab stop for the line: the first drillable point, the rest -1. */
+    expect(points.map((p) => p.getAttribute('tabindex'))).toEqual(['0', '-1', '-1']);
+    fireEvent.keyDown(points[0], { key: 'ArrowRight' });
+    expect(points.map((p) => p.getAttribute('tabindex'))).toEqual(['-1', '0', '-1']);
+    fireEvent.keyDown(points[1], { key: 'End' });
+    expect(points.map((p) => p.getAttribute('tabindex'))).toEqual(['-1', '-1', '0']);
+    fireEvent.keyDown(points[2], { key: 'Home' });
+    expect(points.map((p) => p.getAttribute('tabindex'))).toEqual(['0', '-1', '-1']);
+    /* The roved-to point still drills. */
+    fireEvent.keyDown(points[0], { key: 'Enter' });
+    expect(picked).toEqual(['a']);
+  });
+
+  test('a line with nothing to drill stays an image, and a gap-filled bucket is no door', () => {
+    const picked: unknown[] = [];
+    const { container } = render(
+      <LineChart
+        rows={[
+          { key: '2026-01', value: 10 },
+          { key: '2026-03', value: 30 },
+        ]}
+        say={money}
+        onPick={(v) => picked.push(v)}
+      />,
+    );
+    /* Jan and Mar drill; the Feb bucket fillGaps invented holds no raw key. */
+    expect(screen.getAllByRole('button', { name: /: \$/ })).toHaveLength(2);
+    expect(container.querySelector('.chart-line')).toHaveAttribute('role', 'group');
+    const { container: plain } = render(
+      <LineChart
+        rows={[
+          { key: 'a', value: 1 },
+          { key: 'b', value: 2 },
+        ]}
+        say={money}
+      />,
+    );
+    expect(plain.querySelector('.chart-line')).toHaveAttribute('role', 'img');
+    expect(picked).toEqual([]);
+  });
+
   test('one point is not a line', () => {
     render(<LineChart rows={[{ key: 'a', value: 1 }]} />);
     expect(screen.getByText('Not enough points to draw a line.')).toBeInTheDocument();

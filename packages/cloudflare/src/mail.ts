@@ -70,8 +70,11 @@ function mailBody(message: Pick<InboundMessage, 'to'>, mail: ParsedMail): string
 }
 
 /**
- * Forward one message. A 404 from the App rejects it ("No such mailbox"), a 413 as too large, and a 5xx throws so
- * Email Routing retries later.
+ * Forward one message, and let nothing finish quietly that the App did not take. A 2xx (204 taken, 202 dropped and
+ * logged) and the replay 409 are done. A 404 rejects it ("No such mailbox"), a 413 as too large, and a 400 or 422 as
+ * unreadable: those are the message's own fault and a retry cannot change them. Everything else — 401 or 403 (the
+ * signature or the Worker's clock or secret), 429, a 5xx, a redirect — is the deployment's problem, not the sender's, so
+ * it throws, for Email Routing to retry and for the Worker's logs to show. The error names the status, never the message.
  */
 export async function forwardEmail(message: InboundMessage, env: Record<string, unknown>, options: ForwardEmailOptions): Promise<void> {
   const secret = env[options.secretEnv];
@@ -92,7 +95,10 @@ export async function forwardEmail(message: InboundMessage, env: Record<string, 
       },
     }),
   );
+  if (answer.ok || answer.status === 409) return;
   if (answer.status === 404) message.setReject('No such mailbox');
   else if (answer.status === 413) message.setReject('Message too large');
-  else if (answer.status >= 500) throw new Error(`the App answered ${answer.status}`);
+  else if (answer.status === 400 || answer.status === 422) message.setReject('Message could not be processed');
+  else
+    throw new Error(`the App answered ${answer.status}${answer.status === 401 ? ' (check the signing secret and the Worker clock)' : ''}`);
 }

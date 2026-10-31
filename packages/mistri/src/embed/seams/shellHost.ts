@@ -1,7 +1,7 @@
 /**
  * packages/kit/src/client/shellHost.ts as an embedded shell has it: the same names, each
  * answered by the host the shell is bound to (../binding.ts) instead of the
- * document's globals. vite.embed.config.ts puts this module wherever the
+ * document's globals. config/vite.embed.config.ts puts this module wherever the
  * shell imports that one; test/embed-seams.test.ts holds the two to the same
  * exports.
  */

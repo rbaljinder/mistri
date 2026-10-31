@@ -73,7 +73,7 @@ function changedFiles(since) {
 const BLIND = [
   [/^packages\/[^/]+\/schema\//, 'the published schema and types, which authored Apps compile against'],
   [/\.css$/, 'a stylesheet reaches the page without an import edge the graph follows'],
-  [/^(?:packages\/[^/]+\/)?package\.json$|^tsconfig|^vite\.config|^playwright\.config/, 'build and runner configuration'],
+  [/^(?:packages\/[^/]+\/)?package\.json$|^tsconfig|^config\/|^vite\.config|^playwright\.config/, 'build and runner configuration'],
 ];
 
 /* Read by path, not imported. These select the suites whose own source (or a

@@ -124,8 +124,9 @@ test('--help and --version load the flag parser, not the server, from either bin
        shared their entry's preamble (cli/bin.ts) rather than one bin carrying it. 33 once each main said which
        product it is (server/product.ts), so a shared flag is read in the binary's own name. 34 once the pools said
        what they may hold (adapters/connectionBudget.ts, a leaf postgresPool.ts loads for its manager's constructor). 35 for the wait a development flight is given
-       (adapters/dbLatency.ts, a leaf postgresPool.ts loads for its flights). */
-    assert.ok(help.length <= 35, `${bin} --help loaded ${help.length} modules:\n${help.join('\n')}`);
+       (adapters/dbLatency.ts, a leaf postgresPool.ts loads for its flights). 36 for the line a checkout waits in
+       (adapters/poolAdmission.ts, a leaf postgresPool.ts loads to take turns across accounts). */
+    assert.ok(help.length <= 36, `${bin} --help loaded ${help.length} modules:\n${help.join('\n')}`);
     assert.ok(help.includes('server/cli/args.ts'));
     const version = loaded(['--version'], '', bin);
     assert.ok(version.length <= 70, `${bin} --version loaded ${version.length} modules`);
@@ -210,8 +211,9 @@ test('--mcp loads the MCP tools, not the HTTP server, the auth store or the tena
      main said which product it is (server/product.ts). 163 with two leaves of every write path:
      adapters/writeAhead.ts, the statements a write sends ahead of its BEGIN, which recordWriteOperations.ts and
      the PostgreSQL adapter read synchronously around each write (an AsyncLocalStorage, so it cannot arrive late), and
-     adapters/scoped/keyRows.ts, the keyset reader the PostgreSQL adapter's scoped reads stand on. */
-  assert.ok(mcp.length <= 163, `--mcp loaded ${mcp.length} modules:\n${mcp.join('\n')}`);
+     adapters/scoped/keyRows.ts, the keyset reader the PostgreSQL adapter's scoped reads stand on. 164 with
+     adapters/poolAdmission.ts, the leaf postgresPool.ts loads to take a pool's turns across accounts. */
+  assert.ok(mcp.length <= 164, `--mcp loaded ${mcp.length} modules:\n${mcp.join('\n')}`);
 });
 
 /** Every module under src/ a serving start loads by the time it listens, then stopped. */

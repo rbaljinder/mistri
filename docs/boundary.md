@@ -84,7 +84,7 @@ either: the page's entry, `packages/kit/src/client/shellStart.js`, wears the
 kit's look and starts the main of the product that sent the page — the
 database browser's (`workbenchShell.js`) where the page carries the
 `mistri-shell` meta, the App framework's (`appShell.js`) otherwise. Each
-product's build (`vite.tablewalk.config.ts`, `vite.mistri.config.ts`) puts the
+product's build (`config/vite.tablewalk.config.ts`, `config/vite.mistri.config.ts`) puts the
 other's main out of its bundle; from source, Vite serves both. Each main hands
 the kit's shell (`app.js`) its chrome, and the Workbench its tools, through the
 shell API in `shells.ts`; neither the kit nor one product imports the other.
