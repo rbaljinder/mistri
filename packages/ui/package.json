@@ -1,7 +1,7 @@
 {
   "name": "@mistriwork/ui",
   "version": "1.0.0-rc.6",
-  "description": "The standalone React primitives both shells are drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, Switch, Tabs, Drawer, Popover, Avatar and Pagination, the form controls built on them (text, masked, money and sensitive boxes, listboxes, choices, slider, progress and action bar; Preview), the landing hero's blocks (badge, photo tiles, icon rows; Preview), their tokens and stylesheet, and the zoom-aware ruler their popups are placed by.",
+  "description": "The standalone React primitives both shells are drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, Switch, Tabs, Drawer, Popover, Avatar, Pagination, Carousel, Resizable, ScrollArea and Tooltip, the form controls built on them (text, masked, money and sensitive boxes, listboxes, choices, slider, progress and action bar; Preview), the landing hero's blocks (badge, photo tiles, icon rows; Preview), their tokens and stylesheet, and the zoom-aware ruler their popups are placed by.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
     "url": "https://github.com/rbaljinder/mistri/issues"
@@ -35,6 +35,10 @@
     "./Button.js": {
       "mistri-built": "./dist/Button.js",
       "default": "./src/Button.tsx"
+    },
+    "./Carousel.js": {
+      "mistri-built": "./dist/Carousel.js",
+      "default": "./src/Carousel.tsx"
     },
     "./Choices.js": {
       "mistri-built": "./dist/Choices.js",
@@ -84,6 +88,14 @@
       "mistri-built": "./dist/Pagination.js",
       "default": "./src/Pagination.tsx"
     },
+    "./Resizable.js": {
+      "mistri-built": "./dist/Resizable.js",
+      "default": "./src/Resizable.tsx"
+    },
+    "./ScrollArea.js": {
+      "mistri-built": "./dist/ScrollArea.js",
+      "default": "./src/ScrollArea.tsx"
+    },
     "./Popover.js": {
       "mistri-built": "./dist/Popover.js",
       "default": "./src/Popover.tsx"
@@ -115,6 +127,10 @@
     "./Typeahead.js": {
       "mistri-built": "./dist/Typeahead.js",
       "default": "./src/Typeahead.tsx"
+    },
+    "./Tooltip.js": {
+      "mistri-built": "./dist/Tooltip.js",
+      "default": "./src/Tooltip.tsx"
     },
     "./anchor.js": {
       "mistri-built": "./dist/anchor.js",

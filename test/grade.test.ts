@@ -108,6 +108,11 @@ describe('each measurement is its finding', () => {
     assert.deepEqual(codes({ shift: 0.05 }), []);
     assert.deepEqual(codes({ empty: ['"Visits"'] }), ['empty-section']);
   });
+  test('two vertical scroll containers in one room are a finding; one is the room itself', () => {
+    assert.deepEqual(codes({ scrolls: ['div.content'] }), []);
+    assert.deepEqual(codes({ scrolls: ['div.content', 'div.related'] }), ['double-scroll']);
+    assert.deepEqual(codes({ scrolls: [] }), []);
+  });
   test('a small target is a finding on a phone only', () => {
     const small = [{ what: 'button "⋯"', width: 28, height: 28 }];
     assert.deepEqual(codes({ small }, desk), []);

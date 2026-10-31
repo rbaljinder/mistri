@@ -178,6 +178,13 @@ interface ShellTitle {
   looks?: readonly string[];
   /** The density that look starts at (clientSurface.ts lookDensityFor), said in the page so boot zooms to it once. */
   density?: string;
+  /**
+   * The App at this address is an installable PWA (mistri http/pwaRoutes.ts):
+   * its manifest and the script that registers its worker, both from this
+   * origin, so the page's `script-src 'self'` admits them with no inline
+   * script and no hash to keep. Absent, the page says nothing of the kind.
+   */
+  pwa?: { manifest: string; register: string };
   /** The scheme that look says (clientSurface.ts lookSchemeFor), said in the page so it is dark from its first paint. */
   scheme?: 'dark' | 'dark-only';
   /** The page's colours in each mode (clientSurface.ts lookGroundsFor), written as `color-scheme` and `theme-color`. */
@@ -251,7 +258,8 @@ const writesHead = (head: ShellTitle | undefined) =>
     head?.branding ||
     head?.looks?.length ||
     head?.social ||
-    head?.pane,
+    head?.pane ||
+    head?.pwa,
   );
 
 /** Generate only registered token names and validated theme values. Row text
@@ -332,6 +340,15 @@ export function withHead(html: string, head: ShellTitle | undefined): string {
     out = out.replace(/<\/head>/i, () => `  <meta name="mistri-observe" content="${escapeHtml(head!.observe!)}">\n  </head>`);
   if (head!.density)
     out = out.replace(/<\/head>/i, () => `  <meta name="mistri-density" content="${escapeHtml(head!.density!)}">\n  </head>`);
+  /* An installable App: its manifest, and the script that registers its
+     worker once the page has loaded. Both from this origin, so no inline
+     script is needed and the page's policy admits them as they stand. */
+  if (head!.pwa)
+    out = out.replace(
+      /<\/head>/i,
+      () =>
+        `  <link rel="manifest" href="${escapeHtml(head!.pwa!.manifest)}">\n  <script src="${escapeHtml(head!.pwa!.register)}" defer></script>\n  </head>`,
+    );
   if (!head?.title && !head?.canonical) return out;
   /* Replaced by a function, never a replacement string: a string's `$&`,
      `` $` `` and `$'` are patterns, and a record's name is anybody's text —

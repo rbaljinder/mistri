@@ -88,13 +88,19 @@ export async function showPublicAddress(formAt, landingAt) {
  * Draw the public view a signed-out visitor starts on, as who-am-I named it:
  * the landing, whose answer carries its own view key, else the public form
  * with that key. False when neither answers for this App; the caller signs in.
+ * Who-am-I already names the landing's view key where the App has one
+ * (`landingView`): a home that is not it is a public form, so the landing
+ * is not probed for it — an App without a landing answered that probe 401,
+ * a console error on every signed-out visit to a form home. Where who-am-I
+ * names none, the probe stays, as before.
  * @param {string} view
  * @param {string | undefined} appId
+ * @param {{ landingView?: string }} [options]
  * @returns {Promise<boolean>}
  */
-export async function showPublicHome(view, appId) {
+export async function showPublicHome(view, appId, options) {
   installShell({ ...surfaceShell, signInHere });
-  const found = await loadLanding();
+  const found = options?.landingView !== undefined && options.landingView !== view ? undefined : await loadLanding();
   if (found?.view === view && (!appId || found.app.id === appId)) {
     wear(found.app);
     showLanding(found.app, found.landing);

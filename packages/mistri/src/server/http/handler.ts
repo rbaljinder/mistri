@@ -28,6 +28,8 @@ import {
 } from '@mistriwork/engine/server/clientSurface.js';
 import { fontRoute } from './fontRoutes.js';
 import { brandRoute } from './brandRoutes.js';
+import { pwaRoute } from './pwaRoutes.js';
+import { pwaUrls } from '../app/appPwa.js';
 import { publicHead, type ShellHead } from './publicHead.js';
 import { personAddress } from './personAddress.js';
 import { cardRequest, SHARE_CARD_PATH, sendShareCard, shareCard, shareCardImage } from './shareCard.js';
@@ -359,6 +361,8 @@ const ROUTES: readonly Route<RequestContext>[] = [
   // Its logo's pictures (brandRoutes.ts), the same way.
   (ctx) =>
     !ctx.path.startsWith('/api/') && brandRoute(ctx, ctx.path, (id) => ctx.appHosts?.find((host) => host.app.app.id === id)?.app.brand),
+  // An opted-in App's PWA files (pwaRoutes.ts), the same way.
+  (ctx) => !ctx.path.startsWith('/api/') && pwaRoute(ctx, ctx.path, (id) => ctx.appHosts?.find((host) => host.app.app.id === id)?.app.app),
   async (ctx) => {
     if (ctx.path.startsWith('/api/')) return false;
     await serveShell(ctx);
@@ -615,6 +619,14 @@ async function serveShell(ctx: RequestContext): Promise<void> {
     ...(pane ? { pane } : {}),
     ...(head?.canonical ? { canonical: outward(ctx.mount, head.canonical) } : {}),
     ...(egress ? { egress } : {}),
+    /* An opted-in App's install story (pwaRoutes.ts): its manifest and
+       registration, said in the head, and nowhere else. */
+    ...(served?.ui?.pwa
+      ? (() => {
+          const urls = pwaUrls(ctx.mount, served.id);
+          return { pwa: { manifest: urls.manifest, register: urls.register } };
+        })()
+      : {}),
     mount,
     path: ctx.path,
     looks: lookSheetsFor(served?.ui, audience),

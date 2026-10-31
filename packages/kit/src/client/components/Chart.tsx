@@ -31,6 +31,8 @@ const tickSay = (say: Say) => say.tick ?? say;
 interface Point {
   key: string;
   value: number;
+  /** The row's key as it came, where a point drills: a gap-filled bucket has none. */
+  raw?: unknown;
 }
 
 const f1 = (n: number) => n.toFixed(1);
@@ -178,6 +180,7 @@ export function LineChart({
   dots = false,
   seriesLabel = String,
   seriesVocabulary,
+  onPick,
 }: {
   /** With `series` on its rows, a line per series (MultiLine). */
   rows: Array<ChartRow & { series?: unknown }>;
@@ -192,6 +195,9 @@ export function LineChart({
   seriesLabel?: (key: unknown) => string;
   /** The series column's vocabulary: its order, and each value's color, are the vocabulary's. */
   seriesVocabulary?: readonly string[];
+  /** Where a point goes when it drills, by its raw key: single-series lines only — a multi-series line takes no
+      drill, since one pick cannot name both a series and a point. */
+  onPick?: ((value: unknown) => void) | null;
 }) {
   if (rows.some((row) => row.series !== undefined))
     return (
@@ -206,7 +212,7 @@ export function LineChart({
         vocabulary={seriesVocabulary}
       />
     );
-  return <OneLine rows={rows} say={say} wide={wide} high={high} target={target} smooth={smooth} dots={dots} />;
+  return <OneLine rows={rows} say={say} wide={wide} high={high} target={target} smooth={smooth} dots={dots} onPick={onPick} />;
 }
 
 function OneLine({
@@ -217,6 +223,7 @@ function OneLine({
   target,
   smooth,
   dots,
+  onPick,
 }: {
   rows: ChartRow[];
   say: Say;
@@ -225,9 +232,12 @@ function OneLine({
   target?: number;
   smooth: boolean;
   dots: boolean;
+  onPick?: ((value: unknown) => void) | null;
 }) {
   const points = fillGaps(
-    rows.map((r) => ({ key: r.key == null ? '—' : String(r.key), value: Number(r.value) })).filter((p) => Number.isFinite(p.value)),
+    rows
+      .map((r) => ({ key: r.key == null ? '—' : String(r.key), value: Number(r.value), raw: r.key }))
+      .filter((p) => Number.isFinite(p.value)),
   ) as Point[];
   const svg = useRef<SVGSVGElement>(null);
   const [near, setNear] = useState<number | null>(null);
@@ -293,13 +303,18 @@ function OneLine({
   const cx = near === null ? 0 : x(near);
   const cy = near === null ? 0 : y(points[near].value);
   const right = cx > W * 0.7;
+  /* A picture must not hold buttons: where any point drills, the figure
+     is a group holding buttons, not an image — axe's nested-interactive
+     fails a button inside role="img", as a donut's does. Where nothing
+     drills it stays an image, as before. */
+  const anyDrillable = onPick && points.some((p) => p.raw != null);
   return (
     <>
       <svg
         ref={svg}
         className="chart-line"
         viewBox={`0 0 ${W} ${H}`}
-        role="img"
+        role={anyDrillable ? 'group' : 'img'}
         aria-label={`${sayCopy('lineSummary', { count: points.length, from: say(points[0].value), to: say(points[points.length - 1].value), peak: say(Math.max(...points.map((p) => p.value))) })}${goal === undefined ? '' : sayCopy('targetAfter', { goal: say(goal) })}`}
         onPointerMove={onMove}
         onPointerLeave={() => setNear(null)}
@@ -322,17 +337,45 @@ function OneLine({
         )}
         {!dots && <path className="chart-area" d={area} />}
         {!dots && <path className="chart-stroke" d={line} />}
-        {points.map((p, i) => (
-          <circle
-            key={i}
-            className={dots && p.value !== 0 ? 'chart-dot chart-dot-solid' : 'chart-dot'}
-            cx={f1(x(i))}
-            cy={f1(y(p.value))}
-            r={dots ? 4 : 3}
-          >
-            <title>{`${named[i]}: ${say(p.value)}`}</title>
-          </circle>
-        ))}
+        {points.map((p, i) => {
+          const dot = (
+            <circle
+              className={dots && p.value !== 0 ? 'chart-dot chart-dot-solid' : 'chart-dot'}
+              cx={f1(x(i))}
+              cy={f1(y(p.value))}
+              r={dots ? 4 : 3}
+            >
+              <title>{`${named[i]}: ${say(p.value)}`}</title>
+            </circle>
+          );
+          /* A point drills where a door is wanted: the same raw value a
+             legend button would carry. A dot is too small a target to be
+             the button itself, so a drillable point is a group holding the
+             dot and a wider transparent hit disc — one tab stop, not two.
+             Gap-filled buckets hold no raw key and are no door, as a
+             donut's "others" slice is none. */
+          const drillable = onPick && p.raw != null;
+          if (!drillable) return <g key={i}>{dot}</g>;
+          return (
+            <g
+              key={i}
+              className="chart-point-drill"
+              role="button"
+              tabIndex={0}
+              aria-label={`${named[i]}: ${say(p.value)}`}
+              onClick={() => onPick!(p.raw)}
+              onKeyDown={(event: React.KeyboardEvent) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onPick!(p.raw);
+                }
+              }}
+            >
+              <circle className="chart-point-hit" cx={f1(x(i))} cy={f1(y(p.value))} r={12} />
+              {dot}
+            </g>
+          );
+        })}
         {marks.map(({ index, text }) => (
           <text
             key={`m${index}`}

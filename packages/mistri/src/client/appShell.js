@@ -93,7 +93,7 @@ export async function start() {
     const door = me.public !== true || landingAt?.kind === 'sign-in';
     if (home || door) {
       const surface = await publicSurface();
-      if (home && (await surface.showPublicHome(me.home, landingAt.app))) return;
+      if (home && (await surface.showPublicHome(me.home, landingAt.app, { landingView: me.landingView }))) return;
       if (door) {
         surface.showSignInFor(me, landingAt);
         return;

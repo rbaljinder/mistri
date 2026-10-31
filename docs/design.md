@@ -695,6 +695,13 @@ every look, so the picture it keeps reads on whatever page shows it.
   nothing. The window's own bar stays the platform's, so a page that scrolls
   as a whole still says so. The cost, stated plainly: on a desk where bars are
   permanent, these panes no longer advertise that there is more below.
+- **One scroll container per room.** The content pane is the room's scroll
+  container; lists paginate rather than growing a second one, and drawers
+  and modals scroll inside themselves with focus trapped. Never two
+  same-axis scrollbars in one room: a room with two vertical scroll
+  containers fails grade as `double-scroll`. A list pane whose job is to
+  scroll is the deliberate exception, and says so with `data-scrolls`, as a
+  board's lanes and a heat map past its cells' floor do.
 - **A table wider than its room fades at the edge that has more.** A list is
   sized to its room first (`gridSizing.ts` measures the heads as they are
   drawn, and the menu caret reserves nothing). An App's head may wrap to two

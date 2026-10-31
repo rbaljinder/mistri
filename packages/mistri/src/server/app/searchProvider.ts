@@ -4,9 +4,9 @@
  *
  * Core rides on the database. A resource's `search` block names a connection
  * and the fields an index holds; what answers it is a provider, and the
- * providers are packs (packs/search-typesense is the first), not core, so a
- * deployment that wants Typesense or another engine chooses it and core never
- * carries a vendor's client or config. Without a provider plugged in, a
+ * providers are packs (packs/search-typesense is the first, packs/search-sqlite
+ * the second), not core, so a deployment that wants Typesense, SQLite FTS5 or
+ * another engine chooses it and core never carries a vendor's client or config. Without a provider plugged in, a
  * `search` block is refused at startup and a text filter runs on the database.
  *
  * Internal on purpose: nothing exports it from an entry point, so it does not
@@ -65,5 +65,5 @@ export function searchProviderOf(registry: Registry): SearchProvider | undefined
 
 /** Said when a `search` block meets a registry with no provider. */
 export const NO_SEARCH_PROVIDER =
-  'no search provider is plugged in. Search providers are packs (Typesense is @mistriwork/search-typesense), which ship after 1.0; ' +
+  'no search provider is plugged in. Search providers are packs (Typesense is @mistriwork/search-typesense, SQLite FTS5 is @mistriwork/search-sqlite), which ship after 1.0; ' +
   'until then remove the "search" block, name the connection "memory" for the built-in in-memory provider, and a text filter runs on the database.';

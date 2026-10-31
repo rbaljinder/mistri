@@ -93,6 +93,7 @@ npx @mistriwork/mistri grade . --config mistri.json --theme all --palette all --
 | `page-error` | The page threw, or a section could not be drawn (error) | read the console; `mistri check --app` names most causes |
 | `failed-request` | A request the page made failed or answered 400 or more (error) | the server's log says why; a 404 is a route, file or record the App does not have |
 | `sideways-scroll` | The page scrolls sideways (error) | fewer columns (`show:`), a row that wraps, or a full-width section |
+| `double-scroll` | Two vertical scroll containers in one room (error) | one scroll container per room: the content pane scrolls, lists paginate, drawers and modals scroll inside themselves; a list pane whose job is to scroll says so with `data-scrolls` |
 | `clipped-number` | A figure is cut off: an ellipsis on a number, a metric wider than its card (error) | give its column room (fewer columns beside it) or its section `width: 'full'` |
 | `overlap` | Two controls are drawn over each other (error); the page scrolling under a bar pinned to the window, as a phone record's verbs are, is not one while the page can scroll it clear | let the row wrap, or move one into the ⋯ menu |
 | `low-contrast` | Text under 4.5:1 (3:1 when large) on its ground (error) | the look's tokens, not a color of your own |

@@ -107,6 +107,13 @@
    which slice holds focus. */
 .chart-slice-drill { cursor: pointer; }
 .chart-slice-drill:focus-visible { stroke-width: 11; outline: none; }
+/* A point that drills: the pointer says it goes somewhere, the hit disc
+   is wider than the dot so a mouse finds it, and the focus ring is the
+   dot's own stroke widened, as a slice's stroke widens. */
+.chart-point-drill { cursor: pointer; }
+.chart-point-hit { fill: transparent; }
+.chart-point-drill:focus-visible { outline: none; }
+.chart-point-drill:focus-visible .chart-dot { stroke-width: 3.5; }
 .chart-donut-total { font: 600 calc(5px * var(--type-k)) var(--mono); fill: var(--ink); }
 .chart-legend { list-style: none; margin: 0; padding: 0; min-width: 0; flex: 1; }
 /* A donut's legend is a short list: its values stay within reach of their names, not a half-width away. */

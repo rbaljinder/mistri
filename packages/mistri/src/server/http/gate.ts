@@ -267,6 +267,11 @@ async function appSession(
         // already told the same thing (appLook).
         signIn: signInCard(signedIn),
         ...(home === undefined ? {} : { home }),
+        /* The landing's view key, where the App has one: the signed-out
+           home's drawer (publicSurface.ts) matches its home against it
+           instead of probing `/api/landing` for a home that is a public
+           form — an App without a landing answered that probe 401. */
+        ...(signedIn.app.app.landing ? { landingView: signedIn.app.app.landing.view } : {}),
         // Browsable signed out, within `auth.public`: the client boots the App, not the sign-in screen.
         ...(signedIn.app.app.auth?.public ? { public: true } : {}),
       };
