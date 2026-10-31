@@ -38,7 +38,7 @@ x-sample: &sample
 #
 #   MISTRI_OPEN=0            never try to open a browser from a container
 #   MISTRI_ALLOWED_HOSTS     the names the server answers to besides
-#                               loopback (DEPLOY.md, "Trusting the name
+#                               loopback (docs/deploy.md, "Trusting the name
 #                               people reach it by"). localhost:<port> from
 #                               the host needs nothing; the compose service
 #                               name is added so another container on this

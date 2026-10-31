@@ -2,7 +2,7 @@
 #
 #   docker compose up --build      then open http://localhost:4111
 #
-# What this file demonstrates, and what DEPLOY.md explains at length:
+# What this file demonstrates, and what docs/deploy.md explains at length:
 #
 #   - The image contains no configuration. Everything tablewalk browses comes
 #     from ./examples, mounted at /config. Point that mount somewhere else and
@@ -54,7 +54,7 @@ services:
       # reverse proxy, a hosts-file alias, another machine. Without it the page
       # loads (GETs are not checked) and then every write and every POST is
       # refused, because the Host header matches neither loopback nor the bound
-      # interface. See "Behind a proxy" in DEPLOY.md.
+      # interface. See "Behind a proxy" in docs/deploy.md.
       # TABLEWALK_ALLOWED_HOSTS: tablewalk.internal,tablewalk.example.com
     ports:
       # 127.0.0.1: on purpose and load-bearing.

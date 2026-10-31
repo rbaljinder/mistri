@@ -8,6 +8,7 @@ export const say = defineMessages({
   thisFileIsNotText: 'This file is not text, so it can only be downloaded.',
   thisFileIsNotPlayable: 'This file is not a recording this browser can play, so it can only be downloaded.',
   tooLargeToPlay: 'Recordings over {size} are not played here. Download the file to play it.',
+  tooLargeToShow: 'PDFs over {size} are not shown here. Download the file to open it.',
   opening: 'Opening {name}…',
   showingTheFirstDownload: 'Showing the first {size}. Download the file for the rest.',
   previewOf: 'Preview of {name}',

@@ -10,6 +10,7 @@ import { parseAppConfig, type AppDef } from '../packages/mistri/src/shared/app.j
 import { fromRecord } from '../packages/mistri/src/shared/branding.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import { themePreset } from '../packages/engine/src/shared/themePresets.js';
+import { NO_MOUNT } from '../packages/engine/src/shared/mount.js';
 import { APP_ICON_GLYPHS } from '../packages/engine/src/shared/iconGlyphs.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
@@ -18,8 +19,15 @@ import { closeRecordBranding } from '../packages/mistri/src/server/http/recordBr
 import { loadHttpAppPolicy } from '../packages/mistri/src/server/policy/appPolicyHttp.js';
 import { retireDevClient } from '../packages/engine/src/server/devclient.js';
 import type { AppHost, LoadedApp } from '../packages/mistri/src/server/app/apps.js';
-import { cardRequest, cardVersion, drawShareCardsWith, shareCard, type ShareCard } from '../packages/mistri/src/server/http/shareCard.js';
-import { inInter, loadCardDrawing } from '../packages/mistri/src/server/http/shareCardDraw.js';
+import {
+  cardRequest,
+  cardVersion,
+  drawShareCardsWith,
+  shareCard,
+  shareCardImage,
+  type ShareCard,
+} from '../packages/mistri/src/server/http/shareCard.js';
+import { drawable, inInter, loadCardDrawing } from '../packages/mistri/src/server/http/shareCardDraw.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
 import { defineAppTenantPolicy } from '../packages/mistri/src/server/policy/appTenantPolicy.js';
 import { createTenantAuthenticatedHttpServer } from '../packages/mistri/src/server/tenant/tenantAuthenticatedHttp.js';
@@ -119,6 +127,31 @@ test('satori and resvg, present, draw a 1200×630 PNG in Inter', { timeout: 60_0
   const bytes = Buffer.from(png);
   assert.deepEqual([...bytes.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   assert.deepEqual([bytes.readUInt32BE(16), bytes.readUInt32BE(20)], [1200, 630]);
+});
+
+test('a card whose title and site both fall outside the face is not drawn, so the page keeps its default picture', async () => {
+  const ui = {};
+  for (const word of ['烹饪课程', 'नमस्ते', 'مرحبا']) {
+    assert.equal(inInter(word), '');
+    assert.equal(drawable(shareCard({ site: word, title: word, ui })!), false, word);
+    // A Latin site name still names the card.
+    assert.equal(drawable(shareCard({ site: 'Lot', title: word, ui })!), true, word);
+    assert.equal(drawable(shareCard({ site: word, title: 'Cooking classes', ui })!), true, word);
+  }
+  assert.equal(drawable(shareCard({ site: 'Café', title: 'Crème brûlée', ui })!), true);
+
+  const real = await loadCardDrawing();
+  assert.ok(real);
+  drawShareCardsWith(async () => real);
+  try {
+    const image = (site: string, title: string) => shareCardImage('http://x', NO_MOUNT, '/lot', shareCard({ site, title, ui }));
+    assert.equal(await image('烹饪课程', '烹饪课程'), undefined);
+    assert.equal(await image('नमस्ते', 'مرحبا'), undefined);
+    assert.match((await image('Lot', 'Cooking classes'))!, /\/api\/og\?/);
+    assert.match((await image('烹饪课程', 'Cooking classes'))!, /\/api\/og\?/);
+  } finally {
+    drawShareCardsWith(async () => undefined);
+  }
 });
 
 /* A lot anyone may browse: vehicles and dealers read signed out (a dealer's email is not), inquiries only by staff. */

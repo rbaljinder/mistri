@@ -36,7 +36,8 @@ COPY packages/create-mistri/package.json ./packages/create-mistri/
 RUN npm ci --no-audit --no-fund
 
 # What `npm run build` reads, as the root Dockerfile copies it.
-COPY tsconfig.json tsconfig.build.json tsconfig.commands.json vite.config.ts vite.tablewalk.config.ts vite.mistri.config.ts vite.ui.config.ts vite.observe.config.ts vite.embed.config.ts vite.ssr.config.ts ./
+COPY tsconfig.json vite.config.ts ./
+COPY config ./config
 COPY scripts ./scripts
 # Every package carries the repository's LICENSE (scripts/pack-manifest.mjs CARRIED), and the build lays the
 # packages out as an install has them (scripts/install-packages.mjs) for its type budget.
@@ -98,7 +99,7 @@ ENV NODE_ENV=production
 # and any layout saved from the UI.
 ENV XDG_CONFIG_HOME=/config
 # Loopback inside a container reaches nothing; the compose file publishes to
-# the host's loopback instead (DEPLOY.md, "Bind broadly inside").
+# the host's loopback instead (docs/deploy.md, "Bind broadly inside").
 ENV MISTRI_HOST=0.0.0.0
 ENV MISTRI_PORT=4111
 

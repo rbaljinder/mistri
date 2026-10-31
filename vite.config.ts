@@ -118,7 +118,7 @@ export function noDevtoolsClient(): Plugin {
  * entry names both mains (shellStart.js), and each build stands the other's
  * in with a stub (`withoutOtherMain`) — so neither ships a byte of the other:
  *
- *   the App framework's (vite.mistri.config.ts)
+ *   the App framework's (config/vite.mistri.config.ts)
  *     index     the entry's own graph, the App framework's main (appShell.js,
  *               which every page runs before anything else), and whatever
  *               the public pages and the shell both need — so a first page
@@ -130,7 +130,7 @@ export function noDevtoolsClient(): Plugin {
  *     tenant    a tenant's flows, which load after the shell, so what they
  *               share with it is its.
  *
- *   the database browser's (vite.tablewalk.config.ts)
+ *   the database browser's (config/vite.tablewalk.config.ts)
  *     index     the entry's own graph;
  *     workbench the kit's shell, the database browser's main and its tools
  *               (workbenchShell.js, workbench.js): its only page fetches all
@@ -618,7 +618,7 @@ export function shortCatalogKeys(): Plugin {
 }
 
 /**
- * The client's config: with a product, that product's build (vite.tablewalk.config.ts, vite.mistri.config.ts) into
+ * The client's config: with a product, that product's build (config/vite.tablewalk.config.ts, config/vite.mistri.config.ts) into
  * its own dist/client; without one, the source serving devclient.ts and the test suites use, which serves both mains
  * from the kit's sources and builds nothing.
  */
@@ -689,13 +689,13 @@ export function clientConfig(product?: Product): UserConfig {
   };
 }
 
-/** The config with no product builds nothing: a client is one product's (vite.tablewalk.config.ts, vite.mistri.config.ts). */
+/** The config with no product builds nothing: a client is one product's (config/vite.tablewalk.config.ts, config/vite.mistri.config.ts). */
 function productless(): Plugin {
   return {
     name: 'mistri:productless',
     apply: 'build',
     buildStart() {
-      this.error('Build the client as one product: vite build -c vite.tablewalk.config.ts, or -c vite.mistri.config.ts.');
+      this.error('Build the client as one product: vite build -c config/vite.tablewalk.config.ts, or -c config/vite.mistri.config.ts.');
     },
   };
 }

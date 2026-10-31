@@ -9,7 +9,7 @@
  *
  * The page is the client's React, served like the rest of the client: from
  * source through Vite's middleware under tsx, from `dist/observe` in a build
- * (vite.observe.config.ts).
+ * (config/vite.observe.config.ts).
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';

@@ -12,7 +12,7 @@
  * passed here and failed there with "Cannot find module '@mistriwork/mistri/commands'".
  * This builds each package directory instead (scripts/install-packages.mjs),
  * its `dist/` holding the declarations emitted fresh from
- * `tsconfig.commands.json`, as `npm run build` does, each package's share in
+ * `config/tsconfig.commands.json`, as `npm run build` does, each package's share in
  * its own dist/. Nothing at run time reads those `dist/`
  * folders: an App's commands module is loaded against the running server's
  * own modules.
@@ -41,7 +41,7 @@ export function installTablewalk(nodeModules: string): string {
     writeFileSync(
       config,
       JSON.stringify({
-        extends: join(ROOT, 'tsconfig.commands.json'),
+        extends: join(ROOT, 'config/tsconfig.commands.json'),
         compilerOptions: { outDir: stage, noCheck: true, incremental: false, tsBuildInfoFile: null },
       }),
     );

@@ -88,7 +88,8 @@ export function Content({ onHome }: { onHome: () => void }) {
   const framed = frame !== undefined && (frame.width !== undefined || frame.gutter !== undefined || frame.heading === false);
   /* The App's footer belongs to every room, so it is drawn here rather than
      by each room — and inside the frame, so it takes the content's width
-     rather than the window's. A landing draws its own (LandingSurface). */
+     rather than the window's. A landing standing alone draws its own (LandingSurface); one drawn as this
+     pane's home is told not to (PublicHome), so there is one footer either way. */
   const footer = shell().inApp() ? shell().app()?.ui.footer : undefined;
   const withFooter = footer ? (
     <>

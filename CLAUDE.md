@@ -96,7 +96,7 @@ package's `dist/` by one `npm run build` (`scripts/build-packages.mjs`). The
 the TypeScript under `src/shared/` directly — one rule for what a row is
 called, how a record's columns group, where a condition ends, on both sides.
 That is runnable because of `vite.config.ts`: `npm run build` bundles the
-client once per product (`vite.tablewalk.config.ts`, `vite.mistri.config.ts`)
+client once per product (`config/vite.tablewalk.config.ts`, `config/vite.mistri.config.ts`)
 into that product's `dist/client`, each without the other's main, with a
 first-paint budget per binary (`scripts/bundle-budget.mjs`) — minified, content-named and precompressed, with its source
 maps shipped beside it. The entry (`boot.js`, `shellStart.js`) starts one

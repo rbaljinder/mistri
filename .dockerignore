@@ -44,7 +44,7 @@ credentials.json
 *.key
 
 # Project documents. They are not wrong to ship, they are just weight.
-DEPLOY.md
+docs/deploy.md
 README.md
 
 # Docker's own files: changing the compose file should not invalidate the

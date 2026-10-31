@@ -1,7 +1,7 @@
 /**
  * Where the page every server sends comes from. The page is the kit's: its index.html, its entry (boot.js) and the
  * shell, which start whichever product sent the page (shellStart.js). Each product builds it into its own dist/client
- * — the database browser's with vite.tablewalk.config.ts, the App framework's with vite.mistri.config.ts, each
+ * — the database browser's with config/vite.tablewalk.config.ts, the App framework's with config/vite.mistri.config.ts, each
  * without the other's main — and names that build with `clientFiles`; the engine serves whichever files it is handed
  * (clientHttp.ts, devclient.ts).
  *

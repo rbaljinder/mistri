@@ -39,11 +39,12 @@ import { join, relative, resolve } from 'node:path';
 import { loadApp, type LoadedApp } from '../app/apps.js';
 import { authorityReport } from '../../shared/appAuthority.js';
 import { grantsByRole, homeSourceOf, isRowPolicyApp, isTenantApp, logicalResource, navViewKeys, viewOrder } from '../../shared/appModel.js';
-import { columnKind, primaryKey, tableNamed } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, findTable, primaryKey, tableNamed } from '@mistriwork/engine/shared/schema.js';
 import { Registry } from '@mistriwork/engine/server/connections.js';
 import { CONFIG_SECTIONS } from '../serviceConnections.js';
 import type { CapturedJobModule } from '../jobs/jobModule.js';
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
+import { article } from './article.js';
 
 /**
  * The tests import `node:test` and `node:url`, and TypeScript 7 loads no @types package unless the tsconfig names it:
@@ -203,9 +204,18 @@ function commandActions(app: LoadedApp['app']): Array<{ table: string; action: s
 const q = (value: string) => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
 /** A row as an object literal in the suite's own style. */
-const literal = (row: Record<string, string | number | boolean>) =>
+const literal = (row: Record<string, SeedValue>) =>
   `{ ${Object.entries(row)
-    .map(([key, value]) => `${/^[A-Za-z_$][\w$]*$/.test(key) ? key : q(key)}: ${typeof value === 'string' ? q(value) : String(value)}`)
+    .map(
+      ([key, value]) =>
+        `${/^[A-Za-z_$][\w$]*$/.test(key) ? key : q(key)}: ${
+          typeof value === 'string'
+            ? q(value)
+            : typeof value === 'object'
+              ? `${value.from}${/^[A-Za-z_$][\w$]*$/.test(value.column) ? `.${value.column}` : `[${q(value.column)}]`}`
+              : String(value)
+        }`,
+    )
     .join(', ')} }`;
 
 /** The table a command runs on, as the App names its resources: none for a command that makes its record. */
@@ -308,7 +318,7 @@ function journeysModule(loaded: LoadedApp, grants: Map<string | null, Grants>, s
       lines.push('');
       lines.push(`  // A record of ${table}, as its page opens.`);
       lines.push(`  const records = await person.rows(${q(table)}, { limit: 1 });`);
-      lines.push(`  assert.ok(records.ok && records.value.length > 0, ${q(`a ${table} record to open`)});`);
+      lines.push(`  assert.ok(records.ok && records.value.length > 0, ${q(`${article(table)} ${table} record to open`)});`);
       lines.push(`  const record = await person.open({ table: ${q(table)}, key: await person.key(${q(table)}, records.value[0]) });`);
       lines.push("  assert.ok(record.ok, record.ok ? '' : record.message);");
     }
@@ -316,7 +326,9 @@ function journeysModule(loaded: LoadedApp, grants: Map<string | null, Grants>, s
     const command = held_verbs.find((verb) => verb.command) ?? commands.find((candidate) => held.commands.has(candidate.command));
     if (command && !('verb' in command)) {
       lines.push('');
-      lines.push(`  await t.test(${q(`${command.command}, a command it is granted, on a ${command.table} record`)}, async (t) => {`);
+      lines.push(
+        `  await t.test(${q(`${command.command}, a command it is granted, on ${article(command.table)} ${command.table} record`)}, async (t) => {`,
+      );
       lines.push(`    assertApplied(await person.act(${q(command.table)}, ${q(command.action)}), t);`);
       lines.push('  });');
     } else if (!command) lines.push('', '  // It is granted no command a record offers.');
@@ -334,10 +346,10 @@ function journeysModule(loaded: LoadedApp, grants: Map<string | null, Grants>, s
         const there = commands.find((candidate) => candidate.table === target && candidate.command === verb.command);
         lines.push('');
         if (!there) {
-          lines.push(`  // ${what}, run on a ${target} record, which offers it as no action: a step to write by hand.`);
+          lines.push(`  // ${what}, run on ${article(target)} ${target} record, which offers it as no action: a step to write by hand.`);
           continue;
         }
-        lines.push(`  await t.test(${q(`${what}, run on a ${target} record`)}, async (t) => {`);
+        lines.push(`  await t.test(${q(`${what}, run on ${article(target)} ${target} record`)}, async (t) => {`);
         lines.push(`    assertApplied(await person.act(${q(target)}, ${q(there.action)}), t);`);
         lines.push('  });');
         continue;
@@ -382,8 +394,14 @@ ${blocks.join('\n\n')}
 `;
 }
 
-/** A row to seed into a table the database has none of: each column it must be given, given a value that fits. */
-type Seed = { table: string; row: Record<string, string | number | boolean> };
+/** A value a seeded row is given: a literal, or a column of the row seeded before it (`from` is that row's variable). */
+type SeedValue = string | number | boolean | { from: string; column: string };
+
+/**
+ * A row to seed into a table the database has none of: each column it must be given, given a value that fits. `as`
+ * names the row where a later one refers to its key; `byHand` says what could not be arranged (a required cycle).
+ */
+type Seed = { table: string; row: Record<string, SeedValue>; as?: string; byHand: string[] };
 
 function permissionsModule(loaded: LoadedApp, grants: Map<string | null, Grants>, from: 'lock' | 'report', seeds: Seed[]): string {
   const app = loaded.app;
@@ -416,7 +434,12 @@ function permissionsModule(loaded: LoadedApp, grants: Map<string | null, Grants>
     ? `
   // No record of ${seeds.map((seed) => seed.table).join(', ')} is in the database the tests start on, and a row below needs one: arranged
   // here, as setup. Change the values to ones your App would hold.
-${seeds.map((seed) => `  await host.seed(${q(seed.table)}, ${literal(seed.row)});`).join('\n')}
+${seeds
+  .flatMap((seed) => [
+    ...seed.byHand.map((why) => `  // ${why}: seed it by hand.`),
+    `  ${seed.as ? `const ${seed.as} = ` : ''}await host.seed(${q(seed.table)}, ${literal(seed.row)});`,
+  ])
+  .join('\n')}
 `
     : '';
   return `/**
@@ -517,33 +540,79 @@ async function seedsFor(loaded: LoadedApp, grants: Map<string | null, Grants>, c
     const { adapter, schema } = await registry.open(connection.id);
     const today = new Date().toISOString().slice(0, 10);
     const seeds: Seed[] = [];
-    for (const name of [...needed].sort()) {
-      const table = tableNamed(schema, app.resources?.[name]?.physical ?? name);
-      if (!table || (await adapter.count(table.id)) > 0) continue;
+    const planned = new Map<string, Seed>();
+    const taken = new Set<string>();
+    /* A table's seed, after the seeds of the rows it refers to: a required reference to a table with a row is that
+       row's key; to one with none, a seed of that table first, whose key this row takes. A table already on the way
+       down (a cycle, a table that refers to itself) cannot be arranged in order: said in the file, not left to fail. */
+    type Column = NonNullable<ReturnType<typeof tableNamed>>['columns'][number];
+    const filler = (column: Column) => {
+      const kind = columnKind(column.type);
+      return column.allowed?.length
+        ? column.allowed[0]
+        : column.flag || kind === 'boolean'
+          ? true
+          : kind === 'number'
+            ? 1
+            : kind === 'date'
+              ? today
+              : 'Checked by the test suite';
+    };
+    /* `referred`: the column a child's reference names, filled even where it may be empty, so the child has a value to take. */
+    const plan = async (
+      table: NonNullable<ReturnType<typeof tableNamed>>,
+      label: string,
+      chain: string[],
+      referred?: string,
+    ): Promise<Seed | undefined> => {
+      const done = planned.get(table.id);
+      const named = referred === undefined ? undefined : table.columns.find((column) => column.name === referred);
+      if (done) {
+        if (named && !(named.name in done.row)) done.row[named.name] = filler(named);
+        return done;
+      }
+      if (chain.includes(table.id)) return undefined;
       const row: Seed['row'] = {};
+      const byHand: string[] = [];
       for (const column of table.columns) {
+        if (column === named && column.nullable && !column.references) {
+          row[column.name] = filler(column);
+          continue;
+        }
         if (column.nullable || column.default !== undefined || column.hasDefault || column.identity) continue;
         if (column.primaryKey && primaryKey(table).length === 1 && columnKind(column.type) === 'number') continue;
         if (column.references) {
-          const parent = await adapter
-            .query({ table: column.references.table, columns: [column.references.column], limit: 1, offset: 0 })
-            .catch(() => undefined);
-          const value = parent?.rows[0]?.[column.references.column];
-          if (typeof value === 'string' || typeof value === 'number') row[column.name] = value;
+          const { table: parentId, column: parentColumn } = column.references;
+          /* Several rows, not one: a reference may name a nullable unique column, and a parent whose first row
+             leaves it empty gives nothing to refer to. None that does, and the parent is seeded first. */
+          const parent = await adapter.query({ table: parentId, columns: [parentColumn], limit: 50, offset: 0 }).catch(() => undefined);
+          const value = parent?.rows.map((each) => each[parentColumn]).find((each) => typeof each === 'string' || typeof each === 'number');
+          if (typeof value === 'string' || typeof value === 'number') {
+            row[column.name] = value;
+            continue;
+          }
+          const parentTable = findTable(schema, parentId);
+          const before = parentTable ? await plan(parentTable, parentTable.id, [...chain, table.id], parentColumn) : undefined;
+          if (before) {
+            before.as ??= uniqueName(parentTable!.name, taken);
+            row[column.name] = { from: before.as, column: parentColumn };
+          } else
+            byHand.push(
+              `${table.name}.${column.name} refers to ${parentId}, which has no row to refer to and cannot be seeded first (a required cycle)`,
+            );
           continue;
         }
-        const kind = columnKind(column.type);
-        row[column.name] = column.allowed?.length
-          ? column.allowed[0]
-          : column.flag || kind === 'boolean'
-            ? true
-            : kind === 'number'
-              ? 1
-              : kind === 'date'
-                ? today
-                : 'Checked by the test suite';
+        row[column.name] = filler(column);
       }
-      seeds.push({ table: name, row });
+      const seed: Seed = { table: label, row, byHand };
+      planned.set(table.id, seed);
+      seeds.push(seed);
+      return seed;
+    };
+    for (const name of [...needed].sort()) {
+      const table = tableNamed(schema, app.resources?.[name]?.physical ?? name);
+      if (!table || (await adapter.count(table.id)) > 0) continue;
+      await plan(table, name, []);
     }
     return seeds;
   } catch {
@@ -553,6 +622,15 @@ async function seedsFor(loaded: LoadedApp, grants: Map<string | null, Grants>, c
     console.log = log;
     await registry.closeAll().catch(() => {});
   }
+}
+
+/** A variable name for a seeded row, from its table's, that no other seeded row has. */
+function uniqueName(table: string, taken: Set<string>): string {
+  const base = `${table.replace(/\W+/g, '_').replace(/^(\d)/, '_$1')}_row`;
+  let name = base;
+  for (let n = 2; taken.has(name); n++) name = `${base}${n}`;
+  taken.add(name);
+  return name;
 }
 
 function readFlags(argv: string[]) {

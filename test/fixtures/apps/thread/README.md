@@ -18,8 +18,8 @@ From the repository root, create a disposable copy outside the watched app:
 thread_demo=$(mktemp -d "${TMPDIR:-/tmp}/tablewalk-thread.XXXXXX")
 node test/fixtures/databases/thread/seed.mjs "$thread_demo/thread.db"
 npx tsc -p test/fixtures/apps/thread/tsconfig.json
-npm run start -- check --config "$thread_demo/thread.db.json" --app test/fixtures/apps/thread
-npm run start -- --config "$thread_demo/thread.db.json" --app test/fixtures/apps/thread --port 4708
+npx tsx packages/mistri/src/server/index.ts check --config "$thread_demo/thread.db.json" --app test/fixtures/apps/thread
+npx tsx packages/mistri/src/server/index.ts --config "$thread_demo/thread.db.json" --app test/fixtures/apps/thread --port 4708
 ```
 
 Open <http://127.0.0.1:4708/>. If 4708 already hosts a preview, select
@@ -106,7 +106,7 @@ already current):
 ```sh
 npx tsx packages/mistri/src/server/index.ts --config "$thread_demo/thread.db.json" --export types > test/fixtures/apps/thread/mistri-schema.d.ts
 npx tsc -p test/fixtures/apps/thread/tsconfig.json
-npm run start -- check --config "$thread_demo/thread.db.json" --app test/fixtures/apps/thread
+npx tsx packages/mistri/src/server/index.ts check --config "$thread_demo/thread.db.json" --app test/fixtures/apps/thread
 npx tsx --test test/thread-typescript.test.ts
 ```
 

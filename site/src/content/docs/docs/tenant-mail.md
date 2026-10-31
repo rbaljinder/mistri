@@ -136,8 +136,11 @@ export default {
     const signature = [...mac].map((b) => b.toString(16).padStart(2, '0')).join('');
     const answer = await fetch(env.MAIL_WEBHOOK, { method: 'POST', body, headers: {
       'content-type': 'application/json', 'x-mistri-timestamp': timestamp, 'x-mistri-signature': `v1=${signature}` } });
+    if (answer.ok || answer.status === 409) return;
     if (answer.status === 404) message.setReject('No such mailbox');
-    else if (answer.status >= 500) throw new Error(`mistri answered ${answer.status}`);
+    else if (answer.status === 413) message.setReject('Message too large');
+    else if (answer.status === 400 || answer.status === 422) message.setReject('Message could not be processed');
+    else throw new Error(`mistri answered ${answer.status}`); // 401, 403, 429, 5xx: let Email Routing retry
   },
 };
 ```

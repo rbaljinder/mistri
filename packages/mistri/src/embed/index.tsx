@@ -11,7 +11,7 @@
  * it is imported, so a server render of the host's page imports it safely:
  * each element renders an empty slot (or the host's `fallback`) on the server
  * and on the client's first render alike, and the shell — the served client,
- * built once more (vite.embed.config.ts) — is loaded by an effect, in a chunk
+ * built once more (config/vite.embed.config.ts) — is loaded by an effect, in a chunk
  * of its own, the first time a mistri element is on screen (./shell.ts).
  */
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';

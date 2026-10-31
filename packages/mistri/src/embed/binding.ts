@@ -5,7 +5,7 @@
  *
  * The client's seams (packages/kit/src/client/shellHost.ts, addressMount.js,
  * transport.ts) are exactly the globals they name when served. The embed
- * build swaps each for its twin in ./seams/ (vite.embed.config.ts,
+ * build swaps each for its twin in ./seams/ (config/vite.embed.config.ts,
  * `seamsForEmbed`), and every twin reads the binding set here. So the shell's
  * four hundred call sites are the same code in both builds, and the served
  * client does not carry a byte of this.

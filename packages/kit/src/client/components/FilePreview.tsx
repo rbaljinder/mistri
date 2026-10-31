@@ -19,7 +19,7 @@ import { formatBytes } from '../locale.js';
 import type { PreviewFile } from './filePreviewModel.js';
 import { say } from '../copy/record/components/FilePreview.js';
 
-/** Past this, a recording is a download: its bytes are read whole before they are played. */
+/** Past this, a recording or a PDF is a download: its bytes are read whole before they are shown. */
 const MEDIA_PREVIEW_BYTES = 64 * 1024 * 1024;
 
 /** Past this, a text file shows its beginning and says so: the rest is a download. */
@@ -54,12 +54,76 @@ export function mediaType(bytes: Uint8Array, kind: 'video' | 'audio'): string | 
   return undefined;
 }
 
+/**
+ * The body's bytes up to `limit`, counted as they arrive: a header can be absent or wrong, so the cap is on what is
+ * actually consumed. Past the limit the reader is cancelled, which stops the transfer, and `over` says there was more.
+ * With `keepPrefix` the first `limit` bytes are returned (a text's display prefix); without it, a body over the limit
+ * is refused and nothing is kept.
+ */
+async function readBounded(
+  res: Response,
+  limit: number,
+  keepPrefix: boolean,
+  signal: AbortSignal,
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; over: boolean }> {
+  if (!res.body) {
+    const whole = new Uint8Array(await res.arrayBuffer());
+    return whole.length > limit
+      ? { bytes: keepPrefix ? whole.subarray(0, limit) : new Uint8Array(0), over: true }
+      : { bytes: whole, over: false };
+  }
+  const reader = res.body.getReader();
+  /* A closed preview stops the transfer even while a read is waiting on the next chunk. */
+  const stop = () => void reader.cancel().catch(() => undefined);
+  signal.addEventListener('abort', stop, { once: true });
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let total = 0;
+  let over = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const room = limit - total;
+      if (value.length > room) {
+        over = true;
+        if (keepPrefix && room > 0) chunks.push(value.subarray(0, room));
+        break;
+      }
+      chunks.push(value);
+      total += value.length;
+    }
+  } finally {
+    signal.removeEventListener('abort', stop);
+    /* Leaving early (over the cap, a close, an error) releases the connection instead of draining it. */
+    if (over) await reader.cancel().catch(() => undefined);
+    else reader.releaseLock();
+  }
+  if (over && !keepPrefix) return { bytes: new Uint8Array(0), over };
+  const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.length;
+  }
+  return { bytes, over };
+}
+
 async function load(file: PreviewFile, signal: AbortSignal): Promise<Loaded> {
   const res = await fetch(file.href, { credentials: 'same-origin', signal });
   if (!res.ok) return { state: 'failed', why: res.status === 404 ? say('thisFileIsNoLonger') : say('thisFileCouldNotBeRead') };
-  if ((file.kind === 'video' || file.kind === 'audio') && Number(res.headers.get('content-length')) > MEDIA_PREVIEW_BYTES)
-    return { state: 'refused', why: say('tooLargeToPlay', { size: formatBytes(MEDIA_PREVIEW_BYTES) }) };
-  const bytes = new Uint8Array(await res.arrayBuffer());
+  const sized = file.kind === 'video' || file.kind === 'audio' || file.kind === 'pdf';
+  const refuse = () =>
+    ({
+      state: 'refused',
+      why: say(file.kind === 'pdf' ? 'tooLargeToShow' : 'tooLargeToPlay', { size: formatBytes(MEDIA_PREVIEW_BYTES) }),
+    }) as const;
+  /* A declared size over the cap is refused before a byte is read; the count below is what holds when it is absent or wrong. */
+  if (sized && Number(res.headers.get('content-length')) > MEDIA_PREVIEW_BYTES) {
+    void res.body?.cancel().catch(() => undefined);
+    return refuse();
+  }
+  const { bytes, over } = await readBounded(res, sized ? MEDIA_PREVIEW_BYTES : TEXT_PREVIEW_BYTES, !sized, signal);
+  if (sized && over) return refuse();
   if (file.kind === 'video' || file.kind === 'audio') {
     const type = mediaType(bytes, file.kind);
     if (!type) return { state: 'refused', why: say('thisFileIsNotPlayable') };
@@ -69,9 +133,9 @@ async function load(file: PreviewFile, signal: AbortSignal): Promise<Loaded> {
     if (!startsPdf(bytes)) return { state: 'refused', why: say('thisFileIsNamed') };
     return { state: 'pdf', url: URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })) };
   }
-  const shown = bytes.subarray(0, TEXT_PREVIEW_BYTES);
-  if (shown.includes(0)) return { state: 'refused', why: say('thisFileIsNotText') };
-  return { state: 'text', text: new TextDecoder('utf-8').decode(shown), cut: bytes.length > TEXT_PREVIEW_BYTES };
+  if (bytes.includes(0)) return { state: 'refused', why: say('thisFileIsNotText') };
+  /* A cut can split a multi-byte character; the decoder shows it as one replacement mark, not a failure. */
+  return { state: 'text', text: new TextDecoder('utf-8').decode(bytes), cut: over };
 }
 
 export function FilePreview({

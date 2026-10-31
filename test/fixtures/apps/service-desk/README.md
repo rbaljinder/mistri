@@ -28,7 +28,7 @@ No separate app build is required. The following command checks types without
 emitting JavaScript; building Tablewalk itself is a separate concern.
 
 ```sh
-npx tsc -p examples/apps/service-desk/tsconfig.json
+npx tsc -p test/fixtures/apps/service-desk/tsconfig.json
 ```
 
 The regular test suite also typechecks this app and checks its generated types
@@ -39,8 +39,8 @@ not a TypeScript parser imitation.
 ## Run
 
 ```sh
-node examples/apps/service-desk/seed.mjs .demo/service-desk.db
-npm run start -- --config .demo/service-desk.db.json --app examples/apps/service-desk --port 4709
+node test/fixtures/apps/service-desk/seed.mjs .demo/service-desk.db
+npx tsx packages/mistri/src/server/index.ts --config .demo/service-desk.db.json --app test/fixtures/apps/service-desk --port 4709
 ```
 
 Open http://127.0.0.1:4709/service-desk. Seeding refuses existing database or
@@ -52,7 +52,7 @@ On Node 24 with the optional `pg` driver installed, provide the setup connection
 URL through `PLANETSCALE_DATABASE_URL`, then run:
 
 ```sh
-node examples/apps/service-desk/seed-postgres.mjs
+node test/fixtures/apps/service-desk/seed-postgres.mjs
 ```
 
 The target must have an existing, empty `public` schema. The loader refuses
@@ -94,7 +94,7 @@ privileges. The app's authored write policy further limits editable tables.
 
 ```sh
 node --env-file=.demo/planetscale-preview.env --import tsx packages/mistri/src/server/index.ts \
-  --config .demo/planetscale-atlas.json --app examples/apps/service-desk --port 4710
+  --config .demo/planetscale-atlas.json --app test/fixtures/apps/service-desk --port 4710
 ```
 
 Open http://127.0.0.1:4710/service-desk; the SQLite preview can remain on 4709.

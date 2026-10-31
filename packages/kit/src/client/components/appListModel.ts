@@ -248,7 +248,7 @@ export function appListQuery(spec: ListSpec, index = 0): string {
     the question it opens is, so it lights on arrival and is never a chip ("Offered is Offered"). */
 export function shownTabs(spec: ListSpec): ListTab[] {
   return specTabs(spec).map((tab, i) => {
-    const query = visibleQuestion(spec, appListQuery(spec, i));
+    const query = tabQuestion(spec, i);
     const { query: _authored, ...rest } = tab;
     return query ? { ...rest, query } : rest;
   });
@@ -266,7 +266,7 @@ function activeTab(spec: ListSpec, query: string): number {
   const standing = standingHead(spec);
   if (standing && !unplumbed(spec, query).startsWith(standing)) return -1;
   const want = canonicalize(visibleQuestion(spec, query));
-  return specTabs(spec).findIndex((_, i) => canonicalize(visibleQuestion(spec, appListQuery(spec, i))) === want);
+  return specTabs(spec).findIndex((_, i) => kept(spec, `\u0001${i}`, () => canonicalize(tabQuestion(spec, i))) === want);
 }
 
 /** What the breadcrumb calls this list: the app's label, with the tab or
@@ -320,7 +320,29 @@ export function refinementWords(refinement: string): string {
  * plumbing, not part of anyone's question.
  */
 export function visibleQuestion(spec: ListSpec, query: string): string {
-  return inTabWords(spec, standingless(spec, query));
+  return kept(spec, query, () => inTabWords(spec, standingless(spec, query)));
+}
+
+/** A tab's question as the bar reads it: the whole question it opens (appListQuery), less the view's plumbing. */
+export const tabQuestion = (spec: ListSpec, index: number): string =>
+  kept(spec, `\u0000${index}`, () => visibleQuestion(spec, appListQuery(spec, index)));
+
+/* A view's questions as read, kept per view while the schema and the App stand: both are replaced when they change,
+   never edited in place. The list, its crumb, its room, its address and the nav each ask them several times a paint,
+   every tab's composed and read again for each; a sort asked them all again inside its click
+   (test/built-client-vitals.mjs). */
+let read = new WeakMap<ListSpec, Map<string, string>>();
+let readOver: unknown[] = [];
+function kept(spec: ListSpec, key: string, ask: () => string): string {
+  const over = [state.schema, shell().app()];
+  if (over[0] !== readOver[0] || over[1] !== readOver[1]) [read, readOver] = [new WeakMap(), over];
+  const said = read.get(spec) ?? new Map<string, string>();
+  read.set(spec, said);
+  if (!said.has(key)) {
+    if (said.size > 99) said.clear();
+    said.set(key, ask());
+  }
+  return said.get(key)!;
 }
 
 /**

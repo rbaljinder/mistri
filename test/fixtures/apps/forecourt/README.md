@@ -43,7 +43,7 @@ says what is applied. A schema change is a new migration there
 forecourt_demo=$(mktemp -d "${TMPDIR:-/tmp}/tablewalk-forecourt.XXXXXX")
 node --import tsx test/fixtures/databases/forecourt/seed.mjs "$forecourt_demo/forecourt.db"
 npx tsc -p test/fixtures/apps/forecourt/tsconfig.json
-npm run start -- check --config "$forecourt_demo/forecourt.db.json" --app test/fixtures/apps/forecourt \
+npx tsx packages/mistri/src/server/index.ts check --config "$forecourt_demo/forecourt.db.json" --app test/fixtures/apps/forecourt \
   --policy test/fixtures/apps/forecourt/policy.ts
 ```
 
@@ -55,7 +55,7 @@ export XDG_CONFIG_HOME="$forecourt_demo/auth"
 export BETTER_AUTH_SECRET="$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64url"))')"
 export MISTRI_AUTH_ADMIN_EMAIL=admin@example.invalid
 export MISTRI_AUTH_ADMIN_PASSWORD='choose-a-long-private-password'
-npm run start -- --config "$forecourt_demo/forecourt.db.json" --app test/fixtures/apps/forecourt \
+npx tsx packages/mistri/src/server/index.ts --config "$forecourt_demo/forecourt.db.json" --app test/fixtures/apps/forecourt \
   --policy test/fixtures/apps/forecourt/policy.ts --port 4730
 ```
 
@@ -144,7 +144,7 @@ After changing the seed schema, seed a new path and regenerate:
 
 ```sh
 npx tsx packages/mistri/src/server/index.ts --config "$forecourt_demo/forecourt.db.json" --app test/fixtures/apps/forecourt --export types > test/fixtures/apps/forecourt/mistri-schema.d.ts
-npm run start -- check --config "$forecourt_demo/forecourt.db.json" --app test/fixtures/apps/forecourt \
+npx tsx packages/mistri/src/server/index.ts check --config "$forecourt_demo/forecourt.db.json" --app test/fixtures/apps/forecourt \
   --policy test/fixtures/apps/forecourt/policy.ts --write-authority
 ```
 

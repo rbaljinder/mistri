@@ -174,14 +174,14 @@ jobs:
       # names it in the log), then the servers of every spec send the build. Specs
       # that need the source say `e2e-client: source` and run unbuilt
       # (scripts/test-e2e.mjs).
-      - run: npx vite build --config vite.tablewalk.config.ts --logLevel warn
-      - run: npx vite build --config vite.mistri.config.ts --logLevel warn
+      - run: npx vite build --config config/vite.tablewalk.config.ts --logLevel warn
+      - run: npx vite build --config config/vite.mistri.config.ts --logLevel warn
       # The public pages' server renderer: without mistri's dist/ssr a public page is
       # sent undrawn and the specs that read its drawn HTML fail.
-      - run: npx vite build --config vite.ssr.config.ts --logLevel warn
+      - run: npx vite build --config config/vite.ssr.config.ts --logLevel warn
       # tablewalk/react as it ships: e2e/embed-built.spec.ts starts the built
       # library in a host's page, the one run of what a host installs.
-      - run: npx vite build --config vite.embed.config.ts --logLevel warn
+      - run: npx vite build --config config/vite.embed.config.ts --logLevel warn
       # Two workers, as before. 0.8.6 measured three on an 8-core, 16 GB laptop;
       # a two-core, 7 GB runner is not that, so the width stays what CI has run
       # until a shard has been seen to hold three.

@@ -76,7 +76,7 @@ CMD ["--host", "0.0.0.0", "--config", "/config/mistri.json", \
 
 A build can sit anywhere — beside the App, or copied away from the project that made it: its `mistri/…` imports are answered by the mistri that serves it, the one version it is pinned to. Only a package the App installed itself needs a `node_modules` above the build.
 
-The build stage has no database, so also run `mistri build --config …` against a staging database in CI. `examples/docker` builds Tick this way, and `DEPLOY.md` covers binding, publishing and allowed hosts.
+The build stage has no database, so also run `mistri build --config …` against a staging database in CI. `examples/docker` builds Tick this way, and `docs/deploy.md` covers binding, publishing and allowed hosts.
 
 On Cloudflare Containers, `mistri deploy` does the rest. See [Deploy to Cloudflare](#deploy-to-cloudflare).
 

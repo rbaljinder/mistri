@@ -1,6 +1,6 @@
 /**
  * The shell's stylesheets, rewritten for a host's document: what the embed
- * build (vite.embed.config.ts) runs every sheet through, after its @imports
+ * build (config/vite.embed.config.ts) runs every sheet through, after its @imports
  * are inlined. The served client never sees it; src/client keeps its CSS in
  * source form.
  *

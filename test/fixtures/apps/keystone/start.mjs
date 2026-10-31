@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const root = resolve(here, '../../..');
+const root = resolve(here, '../../../..');
 const databaseTools = join(root, 'test/fixtures/databases/keystone');
 const apps = ['lender', 'leads', 'dealer', 'site', 'marketplace', 'customer'];
 const argv = process.argv.slice(2),

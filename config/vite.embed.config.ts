@@ -35,11 +35,12 @@ import { esmExternalRequirePlugin } from 'rolldown/plugins';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { jsMayBeTs, noDevtoolsClient, ownSourcesOnly, shortCatalogKeys } from './vite.config.js';
-import { KIT_CLIENT } from './packages/kit/src/clientFiles.ts';
-import { tablewalkScope } from './scripts/embed-css.mjs';
+import { jsMayBeTs, noDevtoolsClient, ownSourcesOnly, shortCatalogKeys } from '../vite.config.js';
+import { KIT_CLIENT } from '../packages/kit/src/clientFiles.ts';
+import { tablewalkScope } from '../scripts/embed-css.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+/* The repository root, whatever directory this file sits in. */
+const HERE = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CLIENT = KIT_CLIENT.source;
 const EMBED = resolve(HERE, 'packages/mistri/src/embed');
 /* Every package's sources: what this build scopes is ours, wherever it sits. */

@@ -41,7 +41,7 @@ the kit are plumbing for the two products, ui's exports its public API.
 ## Server
 
 TypeScript under each package's `src/server/`, compiled into its `dist/` by
-`npm run build`: one tsc program over every package (`tsconfig.build.json`),
+`npm run build`: one tsc program over every package (`config/tsconfig.build.json`),
 since a declaration graph crosses packages, split back into each package's
 `dist/` by `scripts/build-packages.mjs`.
 It serves the web UI, answers the HTTP API, and speaks MCP on stdio when
@@ -174,7 +174,7 @@ reads, then `http/dataWriteRoutes.ts` (update, insert, SQL, revert, delete).
 ## Client
 
 Each package's `src/client/` is served two ways from the same source. `npm run build` bundles
-it with Vite once per product (`vite.tablewalk.config.ts`, `vite.mistri.config.ts`, both
+it with Vite once per product (`config/vite.tablewalk.config.ts`, `config/vite.mistri.config.ts`, both
 `clientConfig` in `vite.config.ts`) into that product's `dist/client`: the browser's pages
 are the index and the Workbench, mistri's the index, the public pages, the App shell and
 a tenant's; neither bundle holds the other product's main. Minified, with source maps (sources inside)
@@ -294,7 +294,7 @@ nothing has to be built first. The build is the maintainer's, never the user's.
 - `test/prose.test.ts` fails when the README, the site or `USAGE` disagree
   with the code about tool counts, flags or dialects.
 - `test/check-client-types.mjs` type-checks the client through JSDoc: it runs
-  `tsc -p tsconfig.client.json`, which has `checkJs` on and covers every package's
+  `tsc -p config/tsconfig.client.json`, which has `checkJs` on and covers every package's
   `src/client` (the plain `.js` modules as well as the TypeScript), with no
   diagnostic code filtered. It is part of `npm run test:static`, which CI runs on
   every change. The main `tsconfig.json` leaves `checkJs` off because that
@@ -310,7 +310,7 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   ceiling, a header on every module, the import layers, and where tests live.
   `scripts/audit-exports.mjs` fails on an export no other file mentions. Both
   start from allowlists of today's exceptions, which may only shrink.
-  `knip` (`knip.json` names the entries: the package's `exports`, the client
+  `knip` (`package.json`'s `knip` key names the entries: the package's `exports`, the client
   surfaces, scripts, tests, examples) fails on a file, export or dependency
   that nothing reaches; what it cannot see — a module loaded by path, a name
   reached through a namespace — is an entry or an `ignoreIssues` line there.
@@ -336,8 +336,8 @@ nothing has to be built first. The build is the maintainer's, never the user's.
 ## What ships
 
 mistri's `dist/ui` is `@mistriwork/mistri/ui` and `@mistriwork/mistri/ui/testing` built for a component's
-own tests (`vite.ui.config.ts`); the page never loads it. mistri's `dist/embed` is
-`@mistriwork/mistri/react` (`vite.embed.config.ts`, `packages/mistri/src/embed/`): the same client
+own tests (`config/vite.ui.config.ts`); the page never loads it. mistri's `dist/embed` is
+`@mistriwork/mistri/react` (`config/vite.embed.config.ts`, `packages/mistri/src/embed/`): the same client
 built once more for a host's React app, with `shellHost.ts`, `addressMount.js`
 and `transport.ts` swapped for their twins in `src/embed/seams/` (which answer
 from the element the shell is drawn in and the host's router) and every

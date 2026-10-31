@@ -44,6 +44,7 @@ import {
   type PoolRole,
   type PoolRoleStats,
 } from './poolMetrics.js';
+import { PoolAdmission } from './poolAdmission.js';
 import { holdConnections, managerConnections } from './connectionBudget.js';
 import { pgConnectionOptions } from './postgresValues.js';
 import { sealedPgOptions } from './net/untrustedDatabase.js';
@@ -260,6 +261,8 @@ export class PgConnectionManager {
   private readonly queueWaitMs: number;
   private readonly queuePerConnection: number;
   private readonly meters: Readonly<Record<OwnRole, PoolMeter>>;
+  /** The line each person-facing role's checkouts wait in, turn by turn across accounts (poolAdmission.ts). */
+  private readonly admissions: Readonly<Record<'read' | 'write', PoolAdmission>>;
   /* One object, so every caller of read() holds the same handle, as when the handle was the pool itself. */
   private readonly reads: PgQuery;
   /** This database's replicas, each a manager of its own whose writers are never opened. */
@@ -300,6 +303,10 @@ export class PgConnectionManager {
       read: new PoolMeter('read', readers),
       write: new PoolMeter('write', writers),
       background: new PoolMeter('background', 1),
+    });
+    this.admissions = Object.freeze({
+      read: new PoolAdmission('read', readers, readers * this.queuePerConnection),
+      write: new PoolAdmission('write', writers, writers * this.queuePerConnection),
     });
     const replicas = options.replicas ?? [];
     if (replicas.length > MAX_REPLICAS)
@@ -586,18 +593,27 @@ export class PgConnectionManager {
        a job's command, a delivery or a workflow step is asked again (temporarily_unavailable, a retry) instead of
        a burst of them failing together as an unavailable store. */
     const bounded = role !== 'background';
-    if (meter.waiting() >= meter.size * this.queuePerConnection) {
+    if (!bounded && meter.waiting() >= meter.size * this.queuePerConnection) {
       meter.refuse();
-      throw new PoolBusy(write ? 'write' : 'read', 'queue_full');
+      throw new PoolBusy('write', 'queue_full');
     }
     const checkout = meter.begin();
     const had = timing?.poolWait(`${this.timingLabel}-${role}`);
     let client: PgClient;
+    /* A person's checkout waits its turn in the manager's own line, and only
+       then asks the driver, for a connection that is its: the line and the
+       connection share the one queue-wait budget. */
+    let place: (() => void) | undefined;
     try {
-      client = await (bounded ? this.connectWithin(pool, write ? 'write' : 'read') : this.connectHeld(pool, role));
+      if (bounded) {
+        const deadline = performance.now() + this.queueWaitMs;
+        place = await this.admissions[role].enter(this.queueWaitMs);
+        client = await this.connectWithin(pool, role, Math.max(1, deadline - performance.now()));
+      } else client = await this.connectHeld(pool, role);
       had?.();
     } catch (error) {
       had?.();
+      place?.();
       if (error instanceof PoolBusy) {
         checkout.failed(true);
         waiting?.fail('pool_busy');
@@ -751,25 +767,29 @@ export class PgConnectionManager {
         try {
           removeHealthListeners();
         } finally {
-          giveBack();
+          try {
+            giveBack();
+          } finally {
+            place?.();
+          }
         }
       }
     }
   }
 
   /**
-   * A connection, or PoolBusy once the queue-wait budget is spent. The driver
+   * A connection, or PoolBusy once what is left of the queue-wait budget, `waitMs`, is spent. The driver
    * cannot withdraw a request it has queued, so one that arrives late is given
    * straight back to the pool rather than leaked.
    */
-  private connectWithin(pool: PgPool, role: 'read' | 'write'): Promise<PgClient> {
+  private connectWithin(pool: PgPool, role: 'read' | 'write', waitMs: number): Promise<PgClient> {
     const connecting = this.connectHeld(pool, role);
     return new Promise<PgClient>((resolve, reject) => {
       let over = false;
       const timer = setTimeout(() => {
         over = true;
         reject(new PoolBusy(role, 'queue_timeout'));
-      }, this.queueWaitMs);
+      }, waitMs);
       connecting.then(
         (client) => {
           clearTimeout(timer);
@@ -816,11 +836,15 @@ export class PgConnectionManager {
     const size = this.meters[role].size;
     const options = found.options;
     if (held > 0 && options && typeof options.max === 'number') {
-      options.max = Math.min(options.max, held);
+      const most = Math.min(options.max, held);
+      options.max = most;
+      const line = role === 'background' ? undefined : this.admissions[role];
+      line?.resize(most);
       clearTimeout(this.limitHolds[role]);
       const timer = setTimeout(() => {
         delete this.limitHolds[role];
         options.max = size;
+        line?.resize(size);
       }, LIMIT_HOLD_MS);
       timer.unref?.();
       this.limitHolds[role] = timer;

@@ -7,7 +7,7 @@
 #
 #   - The client is built here, with the server, and served as it was built.
 #     `npm run build` bundles it into each product's dist/client with Vite
-#     (vite.tablewalk.config.ts, vite.mistri.config.ts):
+#     (config/vite.tablewalk.config.ts, config/vite.mistri.config.ts):
 #     minified, content-named, source maps beside it, and a brotli and a gzip
 #     copy of every text file, so the runtime copies files and compresses
 #     nothing per request.
@@ -53,7 +53,8 @@ RUN npm ci --no-audit --no-fund
 
 # Run the complete build: client, UI, Observer, embed and SSR bundles, then bundle and
 # public-authoring type budgets using the same fixtures as the package build.
-COPY tsconfig.json tsconfig.build.json tsconfig.commands.json vite.config.ts vite.tablewalk.config.ts vite.mistri.config.ts vite.ui.config.ts vite.observe.config.ts vite.embed.config.ts vite.ssr.config.ts ./
+COPY tsconfig.json vite.config.ts ./
+COPY config ./config
 COPY scripts ./scripts
 # Every package carries the repository's LICENSE (scripts/pack-manifest.mjs CARRIED), and the build lays the
 # packages out as an install has them (scripts/install-packages.mjs) for its type budget.
@@ -121,7 +122,7 @@ ENV XDG_CONFIG_HOME=/config
 # reach the server — the default that is right on a laptop is the one setting
 # that cannot work here. The container is the boundary now, so the safety has
 # to be re-established at the publish step instead: `-p 127.0.0.1:4111:4111`,
-# never `-p 4111:4111`. DEPLOY.md says so in more words.
+# never `-p 4111:4111`. docs/deploy.md says so in more words.
 ENV TABLEWALK_HOST=0.0.0.0
 
 WORKDIR /app
@@ -130,7 +131,7 @@ COPY docker/entrypoint.sh /usr/local/bin/tablewalk-entrypoint
 
 # The node image already ships an unprivileged `node` (uid 1000). /config is
 # created and handed to it so that a *named volume* mounted there inherits the
-# right owner; a bind mount keeps the host's ownership, which is why DEPLOY.md
+# right owner; a bind mount keeps the host's ownership, which is why docs/deploy.md
 # tells you to expect uid 1000. It stays empty in the image — an empty /config
 # with no mount is a tablewalk with nothing to browse, which is the correct
 # behaviour and says so on startup.

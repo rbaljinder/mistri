@@ -22,7 +22,7 @@ npx @mistriwork/mistri check --app . --config mistri.json --deploy --replicas 2 
 
 | You see | It means | Do |
 | --- | --- | --- |
-| 503 `server_busy`, `Retry-After: 1` | Every connection was busy for two seconds, or 64 requests were queued | Add pods or raise the pool within the database's limit; look for one slow statement first |
+| 503 `server_busy`, `Retry-After: 1` | Every connection was busy for two seconds, 64 requests were queued, or one account already held half the queue | Add pods or raise the pool within the database's limit; look for one slow statement first, and for one client retrying without waiting |
 | 503 `row_locked` | A write waited five seconds for a lock | A migration or a long transaction holds the table; end it |
 | 503 `Retry-After: 30` | The database's connection limit was reached | Lower the pools or processes; `check --deploy` says by how much |
 | 503 naming a store (the assistant, a journal, the audit) | The store is missing, behind its layout, or its database is down | `mistri migrate stores status`, then `up` ([back up first](/docs/build-and-deploy/#back-up-and-restore)) |

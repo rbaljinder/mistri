@@ -2,9 +2,9 @@
 /**
  * Build every package under packages/ into its own dist/.
  *
- * The server, shared and adapter modules of every package compile as one tsc program (tsconfig.build.json), because
+ * The server, shared and adapter modules of every package compile as one tsc program (config/tsconfig.build.json), because
  * a declaration graph crosses packages — `@mistriwork/mistri/commands`'s types reach the engine's — and one program emits that
- * graph whole. The declarations come from tsconfig.commands.json: mistri's public entries, and the engine and the kit's
+ * graph whole. The declarations come from config/tsconfig.commands.json: mistri's public entries, and the engine and the kit's
  * server modules whole, since tsc does not emit a file it reached through node_modules (a workspace link included) and
  * mistri's declarations import the engine by its package name. tsc writes the program under a stage, laid out as
  * packages/ is, and each package's share (`<stage>/<dir>/src/…`)
@@ -41,8 +41,8 @@ for (const { dir } of PACKAGES) rmSync(join(ROOT, dir, 'dist'), { recursive: tru
 /* The first program is checked: a build from a tag or a tarball has not run `npm test` first, and an emit that
    ignores a type error ships it. The second is the same sources again, emitting only declarations, so it is not
    checked twice (a declaration the checker could not name is still an emit error). */
-run(bin('tsc'), ['-p', 'tsconfig.build.json']);
-run(bin('tsc'), ['-p', 'tsconfig.commands.json', '--noCheck']);
+run(bin('tsc'), ['-p', 'config/tsconfig.build.json']);
+run(bin('tsc'), ['-p', 'config/tsconfig.commands.json', '--noCheck']);
 for (const { dir } of PACKAGES) {
   const emitted = join(STAGE, dir.replace(/^packages\//, ''), 'src');
   if (!existsSync(emitted)) continue;
@@ -57,12 +57,12 @@ for (const name of readdirSync(join(ROOT, 'packages/ui/src')))
 node('scripts/package-docs.mjs');
 node('--conditions=mistri-built', 'scripts/package-console.mjs');
 for (const config of [
-  'vite.tablewalk.config.ts',
-  'vite.mistri.config.ts',
-  'vite.ui.config.ts',
-  'vite.observe.config.ts',
-  'vite.embed.config.ts',
-  'vite.ssr.config.ts',
+  'config/vite.tablewalk.config.ts',
+  'config/vite.mistri.config.ts',
+  'config/vite.ui.config.ts',
+  'config/vite.observe.config.ts',
+  'config/vite.embed.config.ts',
+  'config/vite.ssr.config.ts',
 ])
   run(bin('vite'), ['build', '-c', config]);
 
