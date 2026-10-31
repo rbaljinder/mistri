@@ -430,6 +430,22 @@ describe('the donut', () => {
     expect(picked).toEqual(['b', 'a']);
     expect(container.querySelectorAll('.chart-slice')).toHaveLength(7);
     expect(container.querySelectorAll('.chart-slice-drill')).toHaveLength(6);
+    /* The figure holding buttons is a group, not an image: a button
+       inside role="img" fails axe's nested-interactive. */
+    expect(container.querySelector('.chart-donut')).toHaveAttribute('role', 'group');
+  });
+
+  test('a donut with nothing to drill stays an image', () => {
+    const { container } = render(
+      <DonutChart
+        rows={[
+          { key: 'a', value: 30 },
+          { key: 'b', value: 10 },
+        ]}
+        say={money}
+      />,
+    );
+    expect(container.querySelector('.chart-donut')).toHaveAttribute('role', 'img');
   });
 
   test('a total label sits under the summed figure, and the legend says each share', () => {

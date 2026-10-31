@@ -1100,12 +1100,18 @@ export function DonutChart({
     at -= share;
     return ring;
   });
+  /* A picture must not hold buttons: where any slice drills, the figure
+     is a group holding buttons, not an image — axe's nested-interactive
+     fails a button inside role="img", and a screen reader would meet the
+     slices as the picture's unnamed parts. Where nothing drills it stays
+     an image, as before. */
+  const anyDrillable = onPick && slices.some((p, i) => p.raw != null && !(rest.length && i === slices.length - 1));
   return (
     <div className={`chart-donut-wrap${ordered ? ' is-ordered' : ''}`}>
       <svg
         className="chart-donut"
         viewBox={`0 0 ${C * 2} ${C * 2}`}
-        role="img"
+        role={anyDrillable ? 'group' : 'img'}
         aria-label={sayCopy('inAll', { whole: say(whole), map: slices.map((p) => `${p.key} ${say(p.value)}`).join(', ') })}
       >
         {rings}

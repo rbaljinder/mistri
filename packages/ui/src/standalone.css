@@ -44,7 +44,8 @@
   height: 22px;
   border-radius: 50%;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  /* No shadow: a literal here would need a reviewed baseline entry, and
+     the shadow tokens are all sized for popups, not a 22px thumb. */
   transition: transform 150ms ease;
 }
 .ui-switch[data-checked] .ui-switch-thumb {
@@ -110,7 +111,7 @@
 /* The Drawer primitive (Drawer.tsx): a sheet from an edge, at most
    420px, full width on a phone, on the modal's scrim. */
 .ui-drawer-backdrop {
-  background: rgb(0 0 0 / 0.45);
+  background: var(--scrim);
 }
 .ui-drawer-viewport {
   position: fixed;
