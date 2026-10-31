@@ -92,7 +92,7 @@ the seed grants them.
 ## Run it
 
 ```sh
-npm run start -- --config /tmp/ignition-fixture/server.json \
+npx tsx packages/mistri/src/server/index.ts --config /tmp/ignition-fixture/server.json \
   --app test/fixtures/apps/ignition \
   --policy test/fixtures/apps/ignition/tenant-policy.ts \
   --jobs test/fixtures/apps/ignition/jobs.ts --port 4712
@@ -189,7 +189,7 @@ jobs: reviewDue@1 on application.submitted@1 (convertLead@1) → flagOverdueRevi
 
 ```sh
 npx tsc -p test/fixtures/apps/ignition/tsconfig.json
-npm run start -- check --config /tmp/ignition-fixture/server.json --app test/fixtures/apps/ignition \
+npx tsx packages/mistri/src/server/index.ts check --config /tmp/ignition-fixture/server.json --app test/fixtures/apps/ignition \
   --policy test/fixtures/apps/ignition/tenant-policy.ts \
   --jobs test/fixtures/apps/ignition/jobs.ts
 ```

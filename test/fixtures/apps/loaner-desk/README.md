@@ -12,11 +12,11 @@ Use Node 24+ with this repository's dependencies installed. From its root:
 ```sh
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/loaner-desk.XXXXXX")
 node --import tsx test/fixtures/databases/loaner-desk/seed.mjs "$WORK/loaner.db"
-npm run start -- check --app test/fixtures/apps/loaner-desk --config "$WORK/loaner.db.json"
+npx tsx packages/mistri/src/server/index.ts check --app test/fixtures/apps/loaner-desk --config "$WORK/loaner.db.json"
 BETTER_AUTH_SECRET="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')" \
 MISTRI_AUTH_ADMIN_EMAIL=admin@example.test \
 MISTRI_AUTH_ADMIN_PASSWORD=disposable-loaner-desk-password \
-npm run start -- --app test/fixtures/apps/loaner-desk --config "$WORK/loaner.db.json" --port 4746
+npx tsx packages/mistri/src/server/index.ts --app test/fixtures/apps/loaner-desk --config "$WORK/loaner.db.json" --port 4746
 ```
 
 Open `http://localhost:4746/` and sign in with the local administrator above.
@@ -108,7 +108,7 @@ npm run e2e -- e2e/loaner-desk.spec.ts
 ```
 
 The public acceptance suite in
-[test/loaner-desk-acceptance](../../testing/loaner-desk/) tests the App the
+[test/loaner-desk-acceptance](../../../loaner-desk-acceptance/) tests the App the
 way its own repository would, through `@mistriwork/mistri/testing` alone: unit, API,
 the kiosk as a virtual service, the browser on a desk and a phone, and the
 authorization matrix. `prove-red.mjs` breaks one policy and the kiosk's

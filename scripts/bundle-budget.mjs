@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { brotliCompressSync } from 'node:zlib';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-/** Each binary's built client (vite.tablewalk.config.ts, vite.mistri.config.ts): each is held to its own ceilings. */
+/** Each binary's built client (config/vite.tablewalk.config.ts, config/vite.mistri.config.ts): each is held to its own ceilings. */
 export const CLIENTS = {
   tablewalk: join(ROOT, 'packages/tablewalk/dist/client'),
   mistri: join(ROOT, 'packages/mistri/dist/client'),
@@ -644,7 +644,11 @@ export const BUDGET = {
     /* The image's Node (24.22.1-alpine) compresses the same bytes about 300 bytes larger in brotli than a desk's 24.15:
        the release image measured 373.0 KB against the ceiling's 372.9, the desk 372.7. The brotli ceiling moves to
        382_400, so the one that compresses worst keeps about 400 bytes of room. */
-    app: { script: { raw: 1_392_330, br: 382_400 }, style: { raw: 389_425, br: 52_325 } },
+    /* A list's questions read once per view rather than every time a paint asks (appListModel.ts), and a record page
+       that says from its definition which aside stacked columns weave in (Page.tsx), so page.css asks no :has() of the
+       whole layout: App script 1,392,581 / 381,814 (+432 / +234), style 388,994 / 52,236 (-231 / -25). Its raw ceiling
+       moves to 1_392_830, about 250 bytes of room. */
+    app: { script: { raw: 1_392_830, br: 382_400 }, style: { raw: 389_425, br: 52_325 } },
   },
   tablewalk: {
     workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 375_300, br: 51_125 } },
@@ -657,7 +661,7 @@ export const BUDGET = {
    elements, the navigator, the session and the protocol check — and is held small on purpose: the shell is a chunk
    of its own, loaded by an effect the first time an element is on screen. `adapter` is the largest router adapter
    with what it imports (the navigator). `shell` is that chunk with its static imports: the served client's shell,
-   built once more with the embed's seams and its stylesheets as scoped text (vite.embed.config.ts). It is library
+   built once more with the embed's seams and its stylesheets as scoped text (config/vite.embed.config.ts). It is library
    output, whose whitespace Vite leaves for the host's minifier, so its raw size is larger than the served
    client's for the same code; what loads after it is the same split into parts loaded on demand as when served.
    The first measure, when @mistriwork/mistri/react arrived: provider 13,112 / 4,678, adapter 3,452 / 1,332, shell 514,833 /
@@ -741,7 +745,7 @@ export function embedSizes(embed = EMBED) {
 
 /**
  * The files under dist/embed that still call require(), each with the first
- * call in it. vite.embed.config.ts says why there must be none, and how there
+ * call in it. config/vite.embed.config.ts says why there must be none, and how there
  * came to be one: a CommonJS dependency's `require("react")` that
  * esmExternalRequirePlugin did not rewrite, left to rolldown's runtime shim
  * (`typeof require` and its "doesn't expose the `require` function" throw).
@@ -868,7 +872,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   for (const { file, excerpt } of requires) console.error(`${file} calls require(): …${excerpt.replace(/\s+/g, ' ')}…`);
   if (requires.length) {
     console.error(
-      '@mistriwork/mistri/react must hold no require(): no browser or ESM host provides one. A CommonJS dependency reaching React is rewritten by esmExternalRequirePlugin in vite.embed.config.ts, which must be the only place those specifiers are made external.',
+      '@mistriwork/mistri/react must hold no require(): no browser or ESM host provides one. A CommonJS dependency reaching React is rewritten by esmExternalRequirePlugin in config/vite.embed.config.ts, which must be the only place those specifiers are made external.',
     );
     process.exitCode = 1;
   }

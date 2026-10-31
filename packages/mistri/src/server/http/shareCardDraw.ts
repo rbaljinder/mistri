@@ -49,6 +49,9 @@ export function inInter(text: string): string {
   return out.replace(/\s+/g, ' ').trim();
 }
 
+/** Whether Inter sets any of the card's identity: a title or a site name with one drawable letter. Otherwise the card would be blank. */
+export const drawable = (card: ShareCard): boolean => inInter(card.title) !== '' || inInter(card.site) !== '';
+
 /* The title steps down as it grows, so a long name still sits in three lines. */
 const titleSize = (title: string) => (title.length > 80 ? 52 : title.length > 44 ? 62 : 72);
 
@@ -128,8 +131,10 @@ export async function loadCardDrawing(): Promise<CardDrawing | undefined> {
   ];
   const lay = satori;
   const Paint = Resvg;
-  return async (card) => {
+  const paint: CardDrawing = async (card) => {
     const svg = await lay(layout(card), { width: WIDTH, height: HEIGHT, fonts });
     return new Paint(svg, { fitTo: { mode: 'width', value: WIDTH }, font: { loadSystemFonts: false } }).render().asPng();
   };
+  paint.drawable = drawable;
+  return paint;
 }

@@ -9,7 +9,7 @@ forms, a registered custom theme, and five composite detail pages
 and one `when` section that appears only once a lead is converted.
 
 The user/LLM authoring entry is [`app.ts`](app.ts). Database creation is separate
-under [`test/fixtures/databases/crm`](../../databases/compass/); generated
+under [`test/fixtures/databases/crm`](../../databases/crm/); generated
 [`mistri-schema.d.ts`](mistri-schema.d.ts) stays here with the App modules.
 
 ## TypeScript authoring

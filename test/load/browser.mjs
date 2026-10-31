@@ -81,6 +81,19 @@ async function listReady(page, title) {
   await painted(page);
 }
 
+/**
+ * Narrow the list to one issue through its search box, as a person looks for a known issue. The list is newest first
+ * and a page holds twenty, so a fixture's owned issue (the oldest) is off the first page of any fixture past that;
+ * waiting for it unsearched measured a timeout, not the list. Part of the measured journey, with the ownership and
+ * count checks left to the detail and the HTTP workload.
+ */
+async function find(page, title) {
+  const search = page.getByRole('searchbox').first();
+  await search.fill(title);
+  await search.press('Enter');
+  await listReady(page, title);
+}
+
 export async function journey(state, origin, fixture, options, signal) {
   const { page } = state;
   let timedOut = false,
@@ -97,7 +110,9 @@ export async function journey(state, origin, fixture, options, signal) {
   try {
     signal.throwIfAborted();
     await page.goto(`${origin}/issue`, { waitUntil: 'domcontentloaded' });
-    await listReady(page, fixture.title);
+    await page.locator('tbody tr[data-row]').first().waitFor({ state: 'visible' });
+    stage = 'find the owned issue';
+    await find(page, fixture.title);
     stage = 'open issue detail';
     await page.locator('tbody tr[data-row]').filter({ hasText: fixture.title }).first().click();
     const detail = page.locator('.record-modal');
@@ -115,10 +130,10 @@ export async function journey(state, origin, fixture, options, signal) {
     stage = 'select backlog';
     await page.getByRole('tab', { name: /^Backlog/ }).click();
     await page.locator('[role="tab"][aria-selected="true"]').filter({ hasText: 'Backlog' }).waitFor({ state: 'visible' });
-    await listReady(page, fixture.backlogTitle);
+    await find(page, fixture.backlogTitle);
     stage = 'restore active list';
     await page.getByRole('tab', { name: /^Active/ }).click();
-    await listReady(page, fixture.title);
+    await find(page, fixture.title);
     stage = 'drain requests';
     // Drain actual finite document/data requests, excluding HMR WebSockets.
     // This also prevents previous-phase network activity entering measurement.

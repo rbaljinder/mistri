@@ -177,8 +177,8 @@ function newest(paths) {
 /** `vite build`, unless `dist/client` is newer than everything the client is made from.
  * Any file newer than the build — an edit, a checkout — rebuilds; the cost of a wrong
  * guess is five seconds, never a stale page. The public pages' server renderer
- * (vite.ssr.config.ts) is built with it: without dist/ssr a public page is sent
- * undrawn, and the specs that read the drawn HTML fail. @mistriwork/mistri/react (vite.embed.config.ts)
+ * (config/vite.ssr.config.ts) is built with it: without dist/ssr a public page is sent
+ * undrawn, and the specs that read the drawn HTML fail. @mistriwork/mistri/react (config/vite.embed.config.ts)
  * is built with them too: e2e/embed-built.spec.ts starts the built library in a host's page,
  * which is the only run of what a host installs. */
 function buildClient() {
@@ -201,10 +201,10 @@ function buildClient() {
         'packages/kit/package.json',
         'packages/mistri/package.json',
         'vite.config.ts',
-        'vite.tablewalk.config.ts',
-        'vite.mistri.config.ts',
-        'vite.ssr.config.ts',
-        'vite.embed.config.ts',
+        'config/vite.tablewalk.config.ts',
+        'config/vite.mistri.config.ts',
+        'config/vite.ssr.config.ts',
+        'config/vite.embed.config.ts',
         'scripts/embed-css.mjs',
         'package.json',
         'scripts/generate-icons.mjs',
@@ -215,10 +215,10 @@ function buildClient() {
   }
   console.log('# client: vite build');
   for (const config of [
-    ['-c', 'vite.tablewalk.config.ts'],
-    ['-c', 'vite.mistri.config.ts'],
-    ['-c', 'vite.ssr.config.ts'],
-    ['-c', 'vite.embed.config.ts'],
+    ['-c', 'config/vite.tablewalk.config.ts'],
+    ['-c', 'config/vite.mistri.config.ts'],
+    ['-c', 'config/vite.ssr.config.ts'],
+    ['-c', 'config/vite.embed.config.ts'],
   ]) {
     const result = spawnSync('npx', ['vite', 'build', ...config, '--logLevel', 'warn'], { cwd: ROOT, stdio: 'inherit' });
     if (result.status !== 0) {

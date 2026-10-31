@@ -29,7 +29,7 @@ provisions the history empty.
 ```sh
 commons_demo=$(mktemp -d "${TMPDIR:-/tmp}/tablewalk-commons.XXXXXX")
 node --import tsx test/fixtures/databases/commons/seed.mjs "$commons_demo/commons.db"
-npm run start -- check --app test/fixtures/apps/commons --config "$commons_demo/commons.db.json"
+npx tsx packages/mistri/src/server/index.ts check --app test/fixtures/apps/commons --config "$commons_demo/commons.db.json"
 ```
 
 Dates are counted back from today; `COMMONS_TODAY=2026-09-04` pins the day.
@@ -41,7 +41,7 @@ export XDG_CONFIG_HOME="$commons_demo/auth"
 export BETTER_AUTH_SECRET="$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64url"))')"
 export MISTRI_AUTH_ADMIN_EMAIL=admin@example.invalid
 export MISTRI_AUTH_ADMIN_PASSWORD='choose-a-long-private-password'
-npm run start -- --config "$commons_demo/commons.db.json" --app test/fixtures/apps/commons --port 4731
+npx tsx packages/mistri/src/server/index.ts --config "$commons_demo/commons.db.json" --app test/fixtures/apps/commons --port 4731
 ```
 
 Open <http://127.0.0.1:4731/> signed out: that is the forum as a
@@ -53,7 +53,7 @@ notifications) only once the address is proven. Then choose **Post › Join**
 to pick a handle. Sign in as the bootstrapped administrator to moderate.
 Choose another port if 4731 is taken. In production the `mail` connection
 names a real relay (`smtps://…`): see
-[Email](../../../site/src/content/docs/docs/email.md).
+[Email](../../../../site/src/content/docs/docs/email.md).
 
 ### On PostgreSQL
 
@@ -63,7 +63,7 @@ provisioned there:
 
 ```sh
 node --import tsx test/fixtures/databases/commons/seed-postgres.mjs postgres://localhost/commons_demo "$commons_demo/pg.json"
-npm run start -- --config "$commons_demo/pg.json" --app test/fixtures/apps/commons
+npx tsx packages/mistri/src/server/index.ts --config "$commons_demo/pg.json" --app test/fixtures/apps/commons
 ```
 
 ## Reading order
@@ -105,7 +105,7 @@ npm run start -- --config "$commons_demo/pg.json" --app test/fixtures/apps/commo
    standing and `history()`), a post (its words, photos, reactions, earlier
    versions, and Report), a member's profile, a board, a report.
 10. [components.ts](components.ts) and [widgets/](widgets/): Commons' own
-   [custom components](../../../site/src/content/docs/docs/custom-components.md).
+   [custom components](../../../../site/src/content/docs/docs/custom-components.md).
    The **post stream** draws a thread's posts (`customList()` on the
    `thread-posts` view): oldest first, each with its author, date and "edited",
    its paragraphs and photos, a reaction bar whose chips run `reactToPost`

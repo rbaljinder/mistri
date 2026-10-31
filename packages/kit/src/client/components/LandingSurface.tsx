@@ -252,13 +252,19 @@ export function LandingSurface({
   renderSection,
   openView,
   imageSrc,
-}: { landing: AppLanding; app: { id: string; name: string } } & LandingHost) {
+  footer: drawsFooter = true,
+}: {
+  landing: AppLanding;
+  app: { id: string; name: string };
+  /** False where the surrounding shell draws the App's footer under this page (Content.tsx), so one is on screen, not two. */
+  footer?: boolean;
+} & LandingHost) {
   const host = { renderSection, openView, imageSrc };
   const id = useId();
   /* A landing is served the App's footer (landingRoutes),
      so there is one footer per App rather than a front page whose small print
      disagrees with every other room's. */
-  const footer = landing.footer;
+  const footer = drawsFooter ? landing.footer : undefined;
   return (
     <div className="front">
       <Hero landing={landing} app={app} id={id} host={host} />

@@ -68,7 +68,7 @@ export function buildInputs(root = ROOT) {
       ...[...text.matchAll(/'(scripts\/[\w.-]+\.mjs)'/g)].map((match) => match[1]),
     ];
     /* Only a config at the root is a source: type-budget.mjs names the tsconfig.budget.json it writes into a copy. */
-    for (const [, config] of text.matchAll(/'((?:tsconfig[\w.-]*\.json)|(?:vite[\w.-]*\.config\.ts))'/g))
+    for (const [, config] of text.matchAll(/'((?:config\/)?(?:(?:tsconfig[\w.-]*\.json)|(?:vite[\w.-]*\.config\.ts)))'/g))
       if (existsSync(join(root, config))) inputs.add(config);
     for (const path of found) {
       if (inputs.has(path)) continue;
@@ -76,8 +76,8 @@ export function buildInputs(root = ROOT) {
       pending.push(path);
     }
   }
-  for (const config of [...inputs].filter((path) => path.startsWith('vite'))) {
-    for (const [, path] of at(config).matchAll(/from\s+'\.\/(scripts\/[\w.-]+\.mjs)'/g)) inputs.add(path);
+  for (const config of [...inputs].filter((path) => /^(config\/)?vite/.test(path))) {
+    for (const [, path] of at(config).matchAll(/from\s+'\.\.?\/(scripts\/[\w.-]+\.mjs)'/g)) inputs.add(path);
   }
   /* The App fixtures the type budget copies and measures. */
   for (const [, path] of at('scripts/type-budget.mjs').matchAll(/\bfrom:\s*'([^']+)'/g)) inputs.add(path);

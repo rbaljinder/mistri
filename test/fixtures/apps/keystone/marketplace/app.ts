@@ -59,7 +59,7 @@ const catalog = { vehicle: vehiclePublic, dealer: dealerPublic };
 
 export default defineApp({
   id: 'marketplace',
-  name: 'Keystone',
+  name: 'Keystone Marketplace',
   sources: { keystone: { connection: 'keystone' } },
   resources,
   features: [publicForms, shortlist, inquiries, rateChecks],

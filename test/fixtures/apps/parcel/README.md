@@ -18,7 +18,7 @@ API, and start tablewalk with the sample's connection:
 export PARCEL_API_TOKEN="$(node -e 'console.log(require("crypto").randomBytes(24).toString("base64url"))')"
 node test/fixtures/apps/parcel/source/api.mjs &
 npx tsc -p test/fixtures/apps/parcel/tsconfig.json
-npm run start -- --config test/fixtures/apps/parcel/source/server.example.json --app test/fixtures/apps/parcel --port 4740
+npx tsx packages/mistri/src/server/index.ts --config test/fixtures/apps/parcel/source/server.example.json --app test/fixtures/apps/parcel --port 4740
 ```
 
 Open <http://127.0.0.1:4740/parcel>. The API listens on 127.0.0.1:4781; stop
@@ -31,7 +31,7 @@ To browse the API in the explorer with no config at all, one command reads
 the spec, whose server is the local API:
 
 ```sh
-npm run start -- --openapi test/fixtures/apps/parcel/source/openapi.json --api-token-env PARCEL_API_TOKEN --port 4741
+npx tsx packages/mistri/src/server/index.ts --openapi test/fixtures/apps/parcel/source/openapi.json --api-token-env PARCEL_API_TOKEN --port 4741
 ```
 
 The App still needs the config above, which names the connection `parcel`.

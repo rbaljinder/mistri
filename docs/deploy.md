@@ -2,8 +2,8 @@
 
 This page is about the database browser (`tablewalk`). To deploy an App built
 with mistri (a container, a load balancer, PostgreSQL stores, the connection
-arithmetic), read [Build and deploy an App](site/src/content/docs/docs/build-and-deploy.md)
-and [the deploy targets](docs/deploy-targets.md).
+arithmetic), read [Build and deploy an App](../site/src/content/docs/docs/build-and-deploy.md)
+and [the deploy targets](deploy-targets.md).
 
 Two ways to ship the browser: a Docker image, and a desktop app. They share the same
 server and the same client — nothing below is a second implementation of
@@ -383,14 +383,14 @@ a change to an App is `up --build`. Each container's
 `examples/docker/start.sh` seeds its database into a named volume at
 `/config` on first boot and skips the seed on every boot after.
 `docker compose … down -v` throws the data away; without `-v` it survives.
-[Build and deploy an App](site/src/content/docs/docs/build-and-deploy.md) is
+[Build and deploy an App](../site/src/content/docs/docs/build-and-deploy.md) is
 the same recipe for an App of your own.
 
 Lintel, the flagship, is not in the compose file. It needs a row policy, its
 commands, its jobs and the stores they use, and a seeding step of its own,
-with PostgreSQL as its target; [its README](examples/apps/lintel/README.md) is
+with PostgreSQL as its target; [its README](../examples/apps/lintel/README.md) is
 the recipe for running it, and
-[examples/docker/README.md](examples/docker/README.md) says the same in one
+[examples/docker/README.md](../examples/docker/README.md) says the same in one
 paragraph.
 
 ---

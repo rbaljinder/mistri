@@ -268,8 +268,8 @@ test('provisioning is bound, explicit and refuses without writing', async (t) =>
 test('published declarations type the provisioning steps without exposing private store APIs', () => {
   const pkg = published(JSON.parse(readFileSync(join(root, 'packages/mistri/package.json'), 'utf8')));
   assert.deepEqual(pkg.exports['./commands'], { types: './dist/server/commands.d.ts', default: './dist/server/commands.js' });
-  const config = JSON.parse(readFileSync(join(root, 'tsconfig.commands.json'), 'utf8')) as { include: string[] };
-  assert.ok(config.include.includes('packages/mistri/src/server/commands.ts'));
+  const config = JSON.parse(readFileSync(join(root, 'config/tsconfig.commands.json'), 'utf8')) as { include: string[] };
+  assert.ok(config.include.includes('../packages/mistri/src/server/commands.ts'));
   const { report, exports } = publishedDeclarations(
     `
     import {

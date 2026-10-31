@@ -35,9 +35,21 @@ history, because no transaction began (one that began and then lost its rollback
 is still `unknown`). The page asks a busy read again, a few times, with that
 delay, and never retries a write by itself. Refusals count in the pool's
 `timedOut` meter and keep it `saturated`, so readiness reports `pool_saturated`.
-The driver cannot withdraw a request it queued, so a connection that arrives
-after the refusal is returned to the pool unused. The bounds are fixed, not
-flags. The background writer waits as before.
+The bounds are fixed, not flags. The background writer waits as before.
+
+The queue is the manager's own (`packages/engine/src/adapters/poolAdmission.ts`),
+not the driver's, and the driver is asked for a connection only once one is the
+checkout's. Each waiting checkout is filed under its request's account: the
+signed-in account once the session names it, a signed-out client's address
+before then (a forwarded one only from `--trust-proxy`). Connections go round
+the accounts waiting, one each in turn, each account's own in arrival order. An
+account may hold at most half the queue's places, and past it is refused at once.
+A full queue refuses the newest waiter of its longest account, not the newcomer,
+when the newcomer's account holds fewer by more than one. Work no request sent (a job, the
+stdio MCP server) waits in turn as one more account, but is neither capped nor
+displaced. Before, the queue was the driver's: first come first served, a
+retry storm from one account kept it full, and every request that gave up still
+took its turn later, because the driver cannot withdraw a request it queued.
 
 All leases release in `finally`. Failed operations discard their client. Clients
 used for user-authored SQL are discarded even after success, because rollback

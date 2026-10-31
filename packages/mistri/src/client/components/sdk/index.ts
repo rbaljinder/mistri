@@ -7,7 +7,7 @@
  *
  * In the page this module is the page's own, handed to components through
  * the host modules (packages/mistri/src/server/app/componentSdk.ts); published, it is built to
- * dist/ui for a component's tests (vite.ui.config.ts), with its types in
+ * dist/ui for a component's tests (config/vite.ui.config.ts), with its types in
  * packages/mistri/schema/ui.d.ts. Its value exports are `UI_EXPORTS` (shared/uiSdk.ts),
  * which a test holds to this list.
  */

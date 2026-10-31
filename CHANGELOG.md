@@ -5,6 +5,48 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.8 (unreleased)
+
+- **`mistri new --brief` stubs fail closed.** A generated command whose refusals are still TODO lines refuses ("… is not ready: its rules are not written yet.") until the guard beside them is deleted, so a scaffold run before its rules are written cannot make the change they were meant to stop.
+- **Smaller faults an assessment found, fixed.** Opening another database in the desktop app no longer quits it (each
+  server child is retired on its own, a startup is bound by one deadline that aborts a hung request and stops the
+  child, and a link leaves the window only as `http`, `https`, `mailto` or `tel`); a share card whose title and site
+  the face cannot draw is not made, so the page keeps its default picture instead of a blank card; compressed JSON
+  replies honor `Accept-Encoding` weights; `forwardEmail` rejects or throws on every refusal instead of finishing as
+  if the mail were forwarded (a 2xx and a replay are done; 404, 413, 400 and 422 reject; 401, 403, 429 and 5xx throw);
+  MCP over HTTP holds at most 32 requests at once like the read and command transports; and the migration baseline
+  test passes under a restrictive umask.
+- **`mistri test init` seeds a row that satisfies the schema.** A table whose NOT NULL column references a table with no
+  rows seeded a row without it, and the generated permissions test failed on the constraint at once. The referenced
+  table's row is now seeded first, through any chain of required references, and the row takes its stored key; a
+  required cycle is said in the generated file as a seed to write by hand. The suite also says "an invoice record".
+- **A client that retries a busy server at once no longer crowds out everyone else.** At `--read-pool 1`, a few
+  accounts answering every 503 `server_busy` by asking again, `Retry-After` unread, kept the pool's queue full: other
+  accounts' requests were refused on arrival, and the ones let in waited behind the storm until they timed out, so a
+  live load test saw useful work collapse. The driver's queue made it worse, because it cannot withdraw a request, so
+  every request that gave up still took its turn later. The queue is now the server's own, per pool, shared across
+  accounts (the signed-in account, or a signed-out client's address as `--trust-proxy` reads it). Connections go to
+  each waiting account in turn, and one person's requests keep their order. One account may hold at most half the
+  queue, and past that it is refused at once with `Retry-After`. A full queue gives a quieter account's request the
+  place of the busiest account's newest. The two-second and 64-per-connection bounds are unchanged, and a write
+  refused here is still `not_applied`.
+- **Sorting a list answers inside its budget.** A sort on Compass's list at a desk took 112 ms to paint against a 100 ms
+  budget; it now takes 88. Every paint asked the list's tabs for their whole questions again (the list, its crumb, the
+  room, the address writer and the top bar each did), and the top bar drew every group's menu again on every walk tick
+  though what it lights had not moved. A view's questions are now read once per view while the schema and the App
+  stand, and the top bar is drawn again only when what it lights, or the schema under it, changes. A record page at
+  1100px and below no longer asks `:has()` of its whole layout to know whether a headline or card leads the aside:
+  the page says so from its definition (`data-leads`), so a row added or removed anywhere no longer restyles the page.
+  Opening a dialog on a phone went from 64 ms to 40, typing in a list's search from 160 to 144.
+- **A file preview reads only what it shows, and a landing is not footed twice.** A text preview read the whole file to
+  show its first 256 KiB; it now stops the transfer at that prefix and says so. A recording or a PDF is held to
+  64 MiB by the bytes that arrive, so a missing or wrong `Content-Length` no longer gets past the cap, and closing the
+  preview cancels the read. An App whose home is a landing drew the configured footer twice, its own and the App's;
+  now one. The Keystone fixture's launchers find the repository and the tenant-maintenance entry again, its Apps are
+  named Keystone Lending, Keystone Customer Portal and Keystone Marketplace so a chooser can tell them apart, the
+  fixture guides name current paths, the load smoke finds its issue through the list's search, and `.node-version`
+  names the minimum Node.
+
 ## 1.0.0-rc.7 (unreleased)
 
 - **The showcase review's UI work lands as code.** A pill no longer spills a dangling ".." past its edge in a narrow grid cell (it truncates inside itself, full text in `title`); every board lane head uses one treatment (word and dot, never a pill background); the sidebar's muted ink is the nav's own, measured against the menu ground, and the current entry on an inverted menu carries an accent edge; `mistri grade` measures a 768px tablet window beside desk, phone and dark; `grade` and `shot` reap their server on every exit path; an App loaded outside the checkout no longer fails its own commands with "must be created with defineCommand" (a command from another copy of the module is adopted); search through the built-in `memory` connection needs no pack plugged in; `@mistriwork/ui` gains standalone Preview primitives (Switch, Tabs, Drawer, Popover, Avatar, Pagination) whose rules live in `standalone.css`, not in the kit's first paint; the assistant gains an OpenAI provider behind `MISTRI_ASSISTANT_PROVIDER`; and a donut slice drills like its legend button — as a group holding buttons, not buttons inside an image, so the accessibility audit stays clean.

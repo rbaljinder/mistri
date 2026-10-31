@@ -18,7 +18,7 @@
  * Drawn with React's streaming renderer and collected whole: nothing in
  * these trees suspends, so the stream is one piece, and the page that
  * carries it is itself streamed (clientHttp.ts). Built for Node with React
- * inside (vite.ssr.config.ts), so an install needs no React of its own;
+ * inside (config/vite.ssr.config.ts), so an install needs no React of its own;
  * under tsx the server loads it through Vite (devclient.ts). Never part of
  * the client bundle.
  */

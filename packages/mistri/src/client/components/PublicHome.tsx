@@ -41,7 +41,15 @@ export function PublicHome({ view, loadError }: { view: string; loadError: strin
     <div className="public-home">
       <LoadErrorNote error={loadError} />
       {data?.kind === 'landing' ? (
-        <LandingSurface landing={data.landing} app={data.app} renderSection={landingSection} openView={viewLink} imageSrc={landingImage} />
+        /* Drawn inside the shell's content pane, which puts the App's footer under every room (Content.tsx). */
+        <LandingSurface
+          landing={data.landing}
+          app={data.app}
+          renderSection={landingSection}
+          openView={viewLink}
+          imageSrc={landingImage}
+          footer={false}
+        />
       ) : data?.kind === 'form' ? (
         <FormSurface
           form={data.form}

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import { TransactionOperations } from '../packages/engine/src/adapters/adapter.js';
+import { PoolAdmission } from '../packages/engine/src/adapters/poolAdmission.js';
 import { defineAppTenantPolicy } from '../packages/mistri/src/server/policy/appTenantPolicy.js';
 import type { LoadedApp } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth, type AppAuthRuntime } from '../packages/mistri/src/server/auth/auth.js';
@@ -889,6 +890,48 @@ test('post-construction auth method replacement refuses without running the subs
   } finally {
     for (const [key, descriptor] of descriptors) Reflect.defineProperty(f.auth, key, descriptor);
   }
+});
+
+/* A pool's line is shared across accounts (adapters/poolAdmission.ts), and a tenant request is filed under its
+   account once its session is verified. A line of one place with four to wait in, held, stands in for a full pool
+   at --read-pool 1: an account's share of it is two. Every request here comes from one address, so only the account
+   tells Ada's from Bob's: filed by address, Bob's read would be past the share Ada's already hold. */
+test("a tenant account storming the pool's line does not starve another account's read", async (t) => {
+  const f = await fixture(t),
+    ada = await f.signup('Ada'),
+    bob = await f.signup('Bob');
+  await f.grant(ada);
+  await f.grant(bob);
+  const [adaContext, bobContext] = [await f.open(ada), await f.open(bob)];
+  const line = new PoolAdmission('read', 1, 4);
+  let arrived = 0;
+  f.control.resolve = async () => {
+    arrived += 1;
+    (await line.enter(5_000))();
+  };
+  const reached = async (count: number) => {
+    for (let i = 0; i < 400 && arrived < count; i++) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(arrived, count);
+  };
+  const read = (context: Record<string, string>) => f.call(f.select('/api/query'), { table: 'item' }, context);
+  const holding = await line.enter(5_000);
+  // Ada's storm: two wait, the rest are refused at once, busy, without waiting their turn.
+  const storm = [read(adaContext), read(adaContext)];
+  await reached(2);
+  for (const refused of await Promise.all([read(adaContext), read(adaContext), read(adaContext)])) {
+    assert.equal(refused.status, 503, refused.text);
+    noTenantHeaders(refused);
+  }
+  const quiet = read(bobContext);
+  await reached(6);
+  holding();
+  const answers = await Promise.all([...storm, quiet]);
+  assert.deepEqual(
+    answers.map((answer) => answer.status),
+    [200, 200, 200],
+    answers.map((answer) => answer.text).join('\n'),
+  );
+  assert.equal(answers[2].headers.get('x-mistri-account'), bob.accountId);
 });
 
 test('retirement drains accepted tenant verification before closing auth and is idempotent', async (t) => {

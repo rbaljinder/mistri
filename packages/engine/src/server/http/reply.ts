@@ -148,21 +148,33 @@ const compressed = new Map<string, Buffer>();
 const COMPRESSED_KEPT = 64;
 
 /**
- * Brotli at quality 4 or gzip at level 6, whichever the request accepts
- * first by preference: 7–70 times fewer bytes than the JSON they carry,
- * for a few milliseconds. Static assets are precompressed at build time
- * (clientHttp.ts); a reply is compressed as it is sent.
+ * Brotli at quality 4 or gzip at level 6, whichever the request weights
+ * higher: 7–70 times fewer bytes than the JSON they carry, for a few
+ * milliseconds. Brotli wins a tie, being the smaller. `q=0` excludes an
+ * encoding, `*` weights the ones not named, and an `identity` the request
+ * names above both means it would rather have the bytes plain. Static assets
+ * are precompressed at build time (clientHttp.ts); a reply is compressed as
+ * it is sent.
  */
 export function acceptedEncoding(res: ServerResponse): 'br' | 'gzip' | undefined {
-  const accepted = String(res.req?.headers['accept-encoding'] ?? '').toLowerCase();
-  const allows = (name: string) =>
-    accepted.split(',').some((part) => {
-      const [token, ...params] = part.trim().split(';');
-      if (token.trim() !== name) return false;
-      const q = params.map((p) => p.trim()).find((p) => p.startsWith('q='));
-      return !q || Number(q.slice(2)) > 0;
-    });
-  return allows('br') ? 'br' : allows('gzip') ? 'gzip' : undefined;
+  const weights = new Map<string, number>();
+  for (const part of String(res.req?.headers['accept-encoding'] ?? '')
+    .toLowerCase()
+    .split(',')) {
+    const [token, ...params] = part.trim().split(';');
+    const name = token.trim();
+    if (!name) continue;
+    const q = params.map((p) => p.trim()).find((p) => p.startsWith('q='));
+    const weight = q ? Number(q.slice(2)) : 1;
+    weights.set(name, Number.isFinite(weight) ? Math.min(weight, 1) : 0);
+  }
+  const weightOf = (name: string) => weights.get(name) ?? weights.get('*') ?? 0;
+  const br = weightOf('br');
+  const gzip = weightOf('gzip');
+  const best = br >= gzip ? 'br' : 'gzip';
+  const quality = Math.max(br, gzip);
+  if (quality <= 0 || (weights.get('identity') ?? 0) > quality) return undefined;
+  return best;
 }
 
 function addVary(res: ServerResponse, name: string): void {

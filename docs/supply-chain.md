@@ -2,7 +2,7 @@
 
 Dependencies are watched in two places and triaged by one rule.
 
-- **Renovate** (`renovate.json`) opens a grouped pull request before 6 a.m. on
+- **Renovate** (`.github/renovate.json`) opens a grouped pull request before 6 a.m. on
   Mondays: one for dev dependencies (never automerged), one for runtime
   minor and patch updates, one for GitHub Actions (pinned by digest). A major
   version of a runtime dependency is its own pull request. A security update

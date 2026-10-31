@@ -48,9 +48,9 @@ the first time and after any change to an App or to the server.
   record layout saved from the UI (`/config/mistri/layouts.json`, through
   `XDG_CONFIG_HOME`).
 
-## The two rules from DEPLOY.md
+## The two rules from docs/deploy.md
 
-Both of [Two things to get right](../../DEPLOY.md#two-things-to-get-right)
+Both of [Two things to get right](../../docs/deploy.md#two-things-to-get-right)
 are applied as written.
 
 **Bind broadly inside, publish narrowly outside.** The image binds

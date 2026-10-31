@@ -329,7 +329,10 @@ describe('up, validate and repair on SQLite', () => {
     const baseline = await migrateBaseline(target);
     assert.equal(baseline.wrote, true);
     const snapshot = JSON.parse(readFileSync(join(dir, 'baseline.schema.json'), 'utf8')) as { objects: Record<string, string> };
-    assert.equal(statSync(join(dir, 'baseline.schema.json')).mode & 0o777, 0o444);
+    // Requested as 0444; the umask may only take bits away, so the invariant is no write bit and an owner who can read.
+    const baselineMode = statSync(join(dir, 'baseline.schema.json')).mode & 0o777;
+    assert.equal(baselineMode & 0o222, 0, 'a baseline snapshot has no write bits');
+    assert.equal(baselineMode & 0o400, 0o400, 'and its owner can read it');
     assert.equal(snapshot.objects['column "Customer Accounts"."Account ID"'], 'INTEGER primary key');
     assert.match(snapshot.objects['view big'], /CREATE VIEW big AS SELECT/);
     assert.match(snapshot.objects['trigger ledger.ledger_guard'], /BEFORE DELETE ON ledger/);

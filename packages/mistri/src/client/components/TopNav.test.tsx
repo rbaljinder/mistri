@@ -7,7 +7,9 @@ import { establishSessionIdentity, lockSessionIdentity } from '../../../../kit/s
 const { go, openPalette } = vi.hoisted(() => ({ go: vi.fn(), openPalette: vi.fn() }));
 vi.mock('../../../../kit/src/client/core.js', () => ({
   go,
-  state: {},
+  // Nothing on the walk, and a walk that never moves.
+  state: { stack: [] },
+  subscribeWalk: () => () => {},
   loadJson: (_key: string, fallback: unknown) => fallback,
   saveJson: () => {},
   toast: vi.fn(),
@@ -17,7 +19,6 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   pageView: (pageId: string) => ({ kind: 'page', pageId }),
 }));
 vi.mock('../../../../kit/src/client/palette.js', () => ({ openPalette }));
-vi.mock('../../../../kit/src/client/components/walk.js', () => ({ useWalk: () => [] }));
 vi.mock('../../../../kit/src/client/components/appListModel.js', () => ({
   appListQuery: ({ table }: { table: string }) => table,
   currentNavIndex: () => -1,
