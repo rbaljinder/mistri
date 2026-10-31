@@ -695,6 +695,13 @@ every look, so the picture it keeps reads on whatever page shows it.
   nothing. The window's own bar stays the platform's, so a page that scrolls
   as a whole still says so. The cost, stated plainly: on a desk where bars are
   permanent, these panes no longer advertise that there is more below.
+- **One scroll container per room.** The content pane is the room's scroll
+  container; lists paginate rather than growing a second one, and drawers
+  and modals scroll inside themselves with focus trapped. Never two
+  same-axis scrollbars in one room: a room with two vertical scroll
+  containers fails grade as `double-scroll`. A list pane whose job is to
+  scroll is the deliberate exception, and says so with `data-scrolls`, as a
+  board's lanes and a heat map past its cells' floor do.
 - **A table wider than its room fades at the edge that has more.** A list is
   sized to its room first (`gridSizing.ts` measures the heads as they are
   drawn, and the menu caret reserves nothing). An App's head may wrap to two
@@ -1121,6 +1128,11 @@ every look, so the picture it keeps reads on whatever page shows it.
     and named for assistive tech by what it takes ("Select all issues"). A
     presentation with no header row to hold it says "Select all", still
     without the count;
+  - a grid's columns are arranged by their reader (Grid.tsx, gridArrange.ts): move buttons in each head, one step
+    at a time, and a resizer on the head's trailing edge, dragged with a pointer or stepped with arrow keys and
+    restored with a double-click or Alt+Backspace; Alt+arrows move a column from any control in its head. The
+    arrangement lives only in that grid — a refetch never moves a placed column — and a scrolled grid takes a
+    fixed layout only once a width is dragged, so a grid never arranged draws as it did;
   - totals are over everything the list's conditions match, not the page,
     and sit in one ruled footer row;
   - a row's own menu is hidden, not dimmed, until its row is hovered or it

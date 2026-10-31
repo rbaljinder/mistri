@@ -67,7 +67,9 @@ export function AppHome({ paint, said, entry, pages }: AppHomeProps) {
           />
         </div>
       ) : app?.home !== undefined && !home ? (
-        <PublicHome key={paint} view={app.home} loadError={shell().loadError()} />
+        /* The payload is this server's own, so an absent landingView says the App declares no landing: null marks
+           that, against an omitted prop, which keeps PublicHome's legacy landing probe. */
+        <PublicHome key={paint} view={app.home} landingView={app.landingView ?? null} loadError={shell().loadError()} />
       ) : app ? (
         <AppHomeLanding app={app} loadError={shell().loadError()} pages={pages} />
       ) : null}

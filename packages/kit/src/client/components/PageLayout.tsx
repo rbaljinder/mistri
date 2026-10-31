@@ -12,6 +12,7 @@ export function PageLayout({
   aside,
   asideLabel = say('recordContext'),
   layout,
+  leads,
   below,
   panel,
 }: {
@@ -19,6 +20,8 @@ export function PageLayout({
   aside?: ReactNode;
   asideLabel?: string;
   layout?: PageLayoutName;
+  /** The aside holds an offer, a reference's card or the one current row, which stacked columns weave into the main one. */
+  leads?: boolean;
   /** A showcase's body: the main column's sections after its photos, under the showcase band at full width. */
   below?: ReactNode;
   /** A showcase's panel, named by what it offers ("Home: Asking rent") rather than as the record's context. */
@@ -49,7 +52,7 @@ export function PageLayout({
     );
   }
   return (
-    <div className="page-layout" data-layout={layout}>
+    <div className="page-layout" data-layout={layout} data-leads={leads || undefined}>
       <div className="page-body page-main">{children}</div>
       <aside className="page-body page-aside" aria-label={asideLabel}>
         {aside}

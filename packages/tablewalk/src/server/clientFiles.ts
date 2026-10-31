@@ -1,5 +1,5 @@
 /**
- * The database browser's page: the kit's, built by vite.tablewalk.config.ts into this package's dist/client, with
+ * The database browser's page: the kit's, built by config/vite.tablewalk.config.ts into this package's dist/client, with
  * the App framework's main left out. From source the built folder is this package's dist/client beside src/; built, it is the
  * dist/client beside this module's dist/server.
  */

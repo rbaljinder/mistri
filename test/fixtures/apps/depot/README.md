@@ -30,7 +30,7 @@ It uses shared building blocks only, through the App DSL: a `diagram()` of a flo
 
 ```sh
 node --import tsx test/fixtures/databases/depot/seed.mjs /tmp/depot.db
-npm run start -- check --app test/fixtures/apps/depot --config /tmp/depot.db.json
+npx tsx packages/mistri/src/server/index.ts check --app test/fixtures/apps/depot --config /tmp/depot.db.json
 BETTER_AUTH_SECRET=<32+ random characters> MISTRI_AUTH_ADMIN_EMAIL=you@example.test MISTRI_AUTH_ADMIN_PASSWORD=<password> \
   npx tsx packages/mistri/src/server/index.ts --config /tmp/depot.db.json --app test/fixtures/apps/depot --jobs test/fixtures/apps/depot/jobs.ts --port 4745
 ```
@@ -68,13 +68,13 @@ Accounts are invited. The administrator adds them and sets their roles under **M
 | `dashboards.ts` | Operations (with its first run) and Purchasing. |
 | `navigation.ts` | The side menu. |
 | `jobs.ts` | The `--jobs` entry: `flowRunner` for the purchase orders' flows, run as `automation`, which hears `po.decided`. |
-| `api.ts` | The [App API](../../../site/src/content/docs/docs/build-an-api.md): products and stock to read, a supplier's contact details to update, `shipList`, and `order.shipped` on the event feed. |
+| `api.ts` | The [App API](../../../../site/src/content/docs/docs/build-an-api.md): products and stock to read, a supplier's contact details to update, `shipList`, and `order.shipped` on the event feed. |
 | `pages/` | Product; purchase order, line and supplier; pick list and order; warehouse, bin, bin stock, cycle count and count line; and `pick-walk.page.tsx`, the pick walk (below). |
-| `components.ts`, `widgets/` | Depot's own [custom components](../../../site/src/content/docs/docs/custom-components.md): the **bin map** on a warehouse's page (every bin by where its code puts it, shaded by fill), the **stock sparkline** beside on hand in Products and Low stock (the last thirty days from the ledger), and, in `pages/`, the **pick walk**, a [free-form page](../../../site/src/content/docs/docs/custom-components.md#free-form-pages) for the phone that opens on the lists its loader (`pickWalk` in `commands.ts`) reads, walks one list a line at a time in bin order and ends in the Pick command (`page.useCommand`). Each has its examples (`*.examples.tsx`, stories in Storybook) and tests. |
+| `components.ts`, `widgets/` | Depot's own [custom components](../../../../site/src/content/docs/docs/custom-components.md): the **bin map** on a warehouse's page (every bin by where its code puts it, shaded by fill), the **stock sparkline** beside on hand in Products and Low stock (the last thirty days from the ledger), and, in `pages/`, the **pick walk**, a [free-form page](../../../../site/src/content/docs/docs/custom-components.md#free-form-pages) for the phone that opens on the lists its loader (`pickWalk` in `commands.ts`) reads, walks one list a line at a time in bin order and ends in the Pick command (`page.useCommand`). Each has its examples (`*.examples.tsx`, stories in Storybook) and tests. |
 
 ## The API
 
-A storefront or a carrier's system reaches Depot with a manager's token: `api.ts` exposes products, stock levels and pick lists to read, a supplier's contact details to update (a generic write, `update-supplier`), the dock's `shipList`, and the event feed of `order.shipped`. The seed provisions the event store `shipList` writes into. Issue a token and serve it as [App API](../../../site/src/content/docs/docs/app-api.md) says, with `--commands test/fixtures/apps/depot/commands.ts --api-reads`. Then `GET /api/apps/depot/v1/$events` lists every shipment since the cursor you last read. `test/depot-api.test.ts` ships a pick list and reads the event back.
+A storefront or a carrier's system reaches Depot with a manager's token: `api.ts` exposes products, stock levels and pick lists to read, a supplier's contact details to update (a generic write, `update-supplier`), the dock's `shipList`, and the event feed of `order.shipped`. The seed provisions the event store `shipList` writes into. Issue a token and serve it as [App API](../../../../site/src/content/docs/docs/app-api.md) says, with `--commands test/fixtures/apps/depot/commands.ts --api-reads`. Then `GET /api/apps/depot/v1/$events` lists every shipment since the cursor you last read. `test/depot-api.test.ts` ships a pick list and reads the event back.
 
 ## Tests
 

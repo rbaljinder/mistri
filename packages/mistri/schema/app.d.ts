@@ -776,7 +776,8 @@ export interface AppResource<Column extends string = string, Page extends string
       and re-read the rows under the reader's grants; while it is down they search the database, as
       they do without it. Needs a single-column primary key. On a tenant App each document keeps its
       tenant and a search asks within the member's tenant. Search providers are packs (Typesense is
-      `@mistriwork/search-typesense`), which ship after 1.0; until one is plugged in, an App that
+      `@mistriwork/search-typesense`, SQLite FTS5 is `@mistriwork/search-sqlite`, Postgres tsvector is
+      `@mistriwork/search-postgres`), which ship after 1.0; until one is plugged in, an App that
       declares `search` is refused at startup — except through the built-in connection `memory`,
       which searches an in-memory index in the server process (lost on restart until the next
       reindex, and suited to moderate tables, not a large catalog). */
@@ -3023,6 +3024,10 @@ export interface AppUi {
   editing?: AppEditing;
   /** false hides the Export menu everywhere the app curates, and the server refuses the file as well, over any role's export grant. Default true. */
   export?: boolean;
+  /** true makes the App an installable PWA: its pages carry its manifest and worker registration, and it serves
+      its worker, its painted icons and an offline page for failed navigations. Offline data is not part of it: with
+      no connection the App opens to its offline page, and its lists, records and writes need the network. @preview */
+  pwa?: boolean;
   /** BCP 47 tag the App is said and written in: its captions' language where it has `messages/<locale>.ts` catalogs, and
       every figure — numbers, money, dates, counts ("en-AU"). Default: the reader's browser decides the figures.
       `{ column: 'person.locale', default: 'en-US' }` says each reader's in the tag the first row of that text column

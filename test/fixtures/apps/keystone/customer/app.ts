@@ -17,7 +17,7 @@ const borrowing = ['makePayment', 'requestPayoffQuote', 'enrollAutopay', 'cancel
 
 export default defineApp({
   id: 'customer',
-  name: 'Keystone',
+  name: 'Keystone Customer Portal',
   sources: { keystone: { connection: 'keystone' } },
   resources,
   auth: {

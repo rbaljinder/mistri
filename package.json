@@ -1,6 +1,6 @@
 {
   "name": "tablewalk-workspace",
-  "version": "1.0.0-rc.7",
+  "version": "1.0.0-rc.8",
   "private": true,
   "description": "The workspace root: the packages under packages/ (tablewalk, mistri, create-mistri, @mistriwork/cloudflare, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
@@ -46,8 +46,8 @@
     "test:tokens": "node scripts/visual-matrix.mjs --tokens",
     "affected": "node scripts/affected.mjs",
     "test:components": "vitest run",
-    "format": "oxfmt \"{packages,test,e2e,scripts,desktop,storybook,site,examples,packs}/**/*.{ts,tsx,js,mjs,cjs,mts}\" \"*.{ts,mjs,js,cjs,mts}\"",
-    "format:check": "oxfmt --check \"{packages,test,e2e,scripts,desktop,storybook,site,examples,packs}/**/*.{ts,tsx,js,mjs,cjs,mts}\" \"*.{ts,mjs,js,cjs,mts}\""
+    "format": "oxfmt \"{packages,test,e2e,scripts,desktop,storybook,site,examples,packs}/**/*.{ts,tsx,js,mjs,cjs,mts}\" \"{*,config/*}.{ts,mjs,js,cjs,mts}\"",
+    "format:check": "oxfmt --check \"{packages,test,e2e,scripts,desktop,storybook,site,examples,packs}/**/*.{ts,tsx,js,mjs,cjs,mts}\" \"{*,config/*}.{ts,mjs,js,cjs,mts}\""
   },
   "devDependencies": {
     "@astrojs/starlight": "0.42.0",
@@ -103,5 +103,180 @@
   },
   "engines": {
     "node": ">=24.22.1"
+  },
+  "knip": {
+    "workspaces": {
+      ".": {
+        "entry": [
+          "scripts/**/*.{mjs,js}",
+          "test/**/*.{ts,mjs}",
+          "test/fixtures/**/*.{tsx,d.mts}",
+          "test/fixtures/theme-package/theme.js",
+          "e2e/**/*.{ts,mjs}",
+          "e2e/support/embed-react-host/main.tsx",
+          "e2e/support/uiMarkup.tsx",
+          "examples/**/*.{ts,tsx,mjs,d.mts}",
+          "packs/*/src/index.ts",
+          "storybook/**/*.{ts,tsx,mjs}",
+          "site/astro.config.mjs",
+          "vite*.config.ts",
+          "config/vite*.config.ts"
+        ],
+        "project": [
+          "scripts/**",
+          "test/**",
+          "e2e/**",
+          "examples/**",
+          "packs/**",
+          "storybook/**"
+        ],
+        "ignoreDependencies": [
+          "playwright",
+          "satori",
+          "@resvg/resvg-js",
+          "github-slugger",
+          "@storybook/react-vite",
+          "storybook",
+          "rolldown",
+          "next",
+          "react-router",
+          "@tanstack/react-router",
+          "postcss"
+        ]
+      },
+      "packages/engine": {
+        "entry": [
+          "schema/*.d.ts"
+        ],
+        "project": [
+          "src/**",
+          "schema/**"
+        ],
+        "includeEntryExports": true
+      },
+      "packages/ui": {
+        "project": [
+          "src/**"
+        ],
+        "ignoreDependencies": [
+          "@base-ui/react",
+          "react"
+        ]
+      },
+      "packages/kit": {
+        "entry": [
+          "src/client/index.html"
+        ],
+        "project": [
+          "src/**"
+        ],
+        "ignoreDependencies": [
+          "tablewalk",
+          "@mistriwork/mistri"
+        ],
+        "includeEntryExports": true
+      },
+      "packages/cloudflare": {
+        "project": [
+          "src/**"
+        ]
+      },
+      "packages/create-mistri": {
+        "ignoreDependencies": [
+          "@mistriwork/mistri"
+        ]
+      },
+      "packages/mistri": {
+        "entry": [
+          "src/server/{commands,policy,openfeature,maintenance,jobs,workflows,handler,integration}.ts",
+          "src/client/observe/main.tsx",
+          "src/client/devtoolsEventClient.js",
+          "src/client/observe/index.html",
+          "src/client/components/sdk/{index.ts,testing.tsx,page.tsx}",
+          "src/embed/{index.tsx,next.ts,react-router.ts,tanstack-router.ts}",
+          "src/client/ssr/{render.tsx,addressMount.server.ts}",
+          "src/client/components/console/*Room.tsx",
+          "schema/*.{mjs,d.ts}"
+        ],
+        "project": [
+          "src/**",
+          "schema/**"
+        ],
+        "ignoreDependencies": [
+          "oxfmt"
+        ],
+        "includeEntryExports": true
+      },
+      "packages/tablewalk": {
+        "project": [
+          "src/**"
+        ],
+        "includeEntryExports": true
+      }
+    },
+    "ignoreBinaries": [
+      "tablewalk",
+      "mistri",
+      "pg_dump",
+      "mkfifo"
+    ],
+    "ignoreUnresolved": [
+      "^/[\\w.]+\\.(js|ts)$"
+    ],
+    "rules": {
+      "duplicates": "off"
+    },
+    "ignoreIssues": {
+      "packages/*/schema/**": [
+        "exports",
+        "types"
+      ],
+      "packages/mistri/src/client/components/console/*Room.tsx": [
+        "exports"
+      ],
+      "packages/mistri/src/client/devtoolsEventClient.js": [
+        "exports"
+      ],
+      "packages/mistri/src/client/ssr/render.tsx": [
+        "exports",
+        "types"
+      ],
+      "packages/engine/src/shared/{appLinks,theme,page,pageModel,recordview,view,computed,appComponents}.ts": [
+        "types"
+      ],
+      "packages/mistri/src/shared/{command,branding,appApi}.ts": [
+        "types"
+      ],
+      "packages/engine/src/adapters/adapter.ts": [
+        "types"
+      ],
+      "packages/mistri/src/client/components/sdk/hooks.ts": [
+        "types"
+      ],
+      "packages/mistri/src/client/components/console/model.ts": [
+        "types"
+      ],
+      "packages/mistri/src/server/commands/{businessCommandExecution,commandDb}.ts": [
+        "types"
+      ],
+      "packages/mistri/src/server/flags/authority.ts": [
+        "types"
+      ],
+      "packages/mistri/src/shared/appProvenance.ts": [
+        "exports"
+      ],
+      "packages/mistri/src/shared/preview.ts": [
+        "exports"
+      ],
+      "scripts/soak/k6/mixed.js": [
+        "unlisted"
+      ],
+      "packages/mistri/src/shared/tenantHttp.ts": [
+        "types"
+      ],
+      "packages/mistri/src/server/console/components.ts": [
+        "exports"
+      ]
+    }
   }
 }

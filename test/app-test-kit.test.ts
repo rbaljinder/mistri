@@ -209,6 +209,97 @@ test('test init seeds a record a matrix row needs that the database has none of'
   assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
 });
 
+/** An App over a SQLite file made from `sql`, with `resources` all in its nav as lists; the roles are the caller's. */
+function sqliteApp(prefix: string, sql: string, tables: string[], roles: Record<string, unknown>) {
+  const dir = join(work, 'apps', `${prefix}-${++made}`);
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, '..', `${prefix}-${made}.db`);
+  const db = new DatabaseSync(file);
+  db.exec(sql);
+  db.close();
+  writeFileSync(join(dir, 'mistri.json'), JSON.stringify({ connections: [{ name: prefix, url: file, writable: true }] }));
+  writeFileSync(
+    join(dir, 'app.json'),
+    JSON.stringify({
+      id: prefix,
+      name: prefix,
+      connection: prefix,
+      resources: Object.fromEntries(tables.map((table) => [table, { access: 'write' }])),
+      auth: { roles },
+      views: Object.fromEntries(tables.map((table) => [table, { kind: 'list', from: table }])),
+      home: tables[0],
+      nav: tables,
+    }),
+  );
+  writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
+  return dir;
+}
+
+test('test init seeds the row a required reference points at when the database has none, and passes', () => {
+  const dir = sqliteApp(
+    'billing',
+    `CREATE TABLE customer(id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE invoice(id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customer(id), amount INTEGER NOT NULL, due_on DATE);`,
+    ['customer', 'invoice'],
+    { auditor: { read: ['customer', 'invoice'] }, biller: { read: ['customer', 'invoice'], write: ['invoice'] } },
+  );
+  assert.equal(cli(['test', 'init', dir]).status, 0);
+  const matrix = readFileSync(join(dir, 'tests', 'permissions.test.ts'), 'utf8');
+  /* The parent first, and the invoice takes the key it was stored with: no NOT NULL failure, no guessed id. */
+  assert.match(
+    matrix,
+    /const customer_row = await host\.seed\('customer', \{ name: '[^']+' \}\);\n\s+await host\.seed\('invoice', \{ customer_id: customer_row\.id, amount: 1 \}\);/,
+  );
+  const run = spawnSync(process.execPath, ['--import', 'tsx', '--test', 'tests/permissions.test.ts'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: {
+      ...Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== 'NODE_TEST_CONTEXT')),
+      TSX_TSCONFIG_PATH: join(ROOT, 'tsconfig.json'),
+    },
+  });
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+});
+
+test('test init seeds a chain of required references in order, and says a required cycle is for the author', () => {
+  const dir = sqliteApp(
+    'chain',
+    `CREATE TABLE region(id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE office(id INTEGER PRIMARY KEY, region_id INTEGER NOT NULL REFERENCES region(id));
+    CREATE TABLE invoice(id INTEGER PRIMARY KEY, office_id INTEGER NOT NULL REFERENCES office(id), memo TEXT);
+    CREATE TABLE node(id INTEGER PRIMARY KEY, up_id INTEGER NOT NULL REFERENCES node(id));
+    CREATE TABLE leaf(id INTEGER PRIMARY KEY, other_id INTEGER REFERENCES node(id));`,
+    ['invoice', 'node'],
+    { clerk: { read: ['invoice', 'node'], write: ['invoice', 'node'] } },
+  );
+  assert.equal(cli(['test', 'init', dir]).status, 0);
+  const matrix = readFileSync(join(dir, 'tests', 'permissions.test.ts'), 'utf8');
+  assert.match(
+    matrix,
+    /region_row = await host\.seed\('region'[^\n]*\n\s+const office_row = await host\.seed\('office', \{ region_id: region_row\.id \}\);\n\s+await host\.seed\('invoice', \{ office_id: office_row\.id \}\);/,
+  );
+  assert.match(matrix, /\/\/ node\.up_id refers to [^\n]*required cycle\): seed it by hand\./);
+  assert.match(readFileSync(join(dir, 'tests', 'journeys.test.ts'), 'utf8'), /an invoice record to open/);
+});
+
+test('test init seeds a parent whose rows leave a referred unique column empty, and fills that column', () => {
+  const dir = sqliteApp(
+    'ledger',
+    `CREATE TABLE account(id INTEGER PRIMARY KEY, code TEXT UNIQUE);
+    INSERT INTO account(code) VALUES (NULL);
+    CREATE TABLE entry(id INTEGER PRIMARY KEY, account_code TEXT NOT NULL REFERENCES account(code));`,
+    ['entry', 'account'],
+    { clerk: { read: ['entry', 'account'], write: ['entry'] } },
+  );
+  assert.equal(cli(['test', 'init', dir]).status, 0);
+  const matrix = readFileSync(join(dir, 'tests', 'permissions.test.ts'), 'utf8');
+  assert.doesNotMatch(matrix, /required cycle/);
+  assert.match(
+    matrix,
+    /const account_row = await host\.seed\('account', \{ code: '[^']+' \}\);\n\s+await host\.seed\('entry', \{ account_code: account_row\.code \}\);/,
+  );
+});
+
 test('test init writes a suite for a row-policy App: its policy and jobs served, a matrix of what it can know', async () => {
   const dir = await exampleApp('lintel');
   rmSync(join(dir, 'tests'), { recursive: true, force: true });

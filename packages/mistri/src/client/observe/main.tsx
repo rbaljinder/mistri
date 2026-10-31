@@ -1,7 +1,7 @@
 /**
  * The dev observer's page (server/observe/): one React tree over the
  * observer's JSON, polled. Its own entry, never part of an App's bundle —
- * it is built on its own (vite.observe.config.ts) and served only by a
+ * it is built on its own (config/vite.observe.config.ts) and served only by a
  * `--dev` start.
  */
 import { createRoot } from 'react-dom/client';

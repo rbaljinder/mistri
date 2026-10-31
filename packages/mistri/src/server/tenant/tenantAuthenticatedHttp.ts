@@ -52,7 +52,7 @@ import {
 import { appTenantDirectories, bindTenantDirectories } from '../auth/scimDirectory.js';
 import { nativeAccountEmailOf, nativeMailAccount } from '../auth/authAccounts.js';
 import { expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.js';
-import { doorRefusal, writes, type Bound, type ProxyRange } from '@mistriwork/engine/server/http/trust.js';
+import { doorRefusal, forwardedClient, writes, type Bound, type ProxyRange } from '@mistriwork/engine/server/http/trust.js';
 import { setBaselineHeaders } from '@mistriwork/engine/server/http/baselineHeaders.js';
 import { embedDoor } from '../embed/crossOrigin.js';
 import { TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
@@ -129,6 +129,7 @@ import { fontRoute } from '../http/fontRoutes.js';
 import { brandRoute } from '../http/brandRoutes.js';
 import { attachDevClient, closeDevClientHmr, SOURCE_CLIENT, retireDevClient } from '@mistriwork/engine/server/devclient.js';
 import { endAdmissionSession, noteAdmissionSession } from './tenantAdmissionCache.js';
+import { admitAs, withAdmission } from '@mistriwork/engine/adapters/poolAdmission.js';
 import { getTenantHostIntent } from '../http/tenantHosts.js';
 import { baseRecordBranding } from '../http/recordBranding.js';
 import { createSuiteLinkAccess } from './suiteLinkAccess.js';
@@ -346,15 +347,23 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       }
       // Which login this request was verified as: what kept admissions are keyed by (tenantAdmissionCache.ts).
       noteAdmissionSession(request, proof ? proof.sessionId : null);
+      // Its pool checkouts wait their turn as the account's from here (poolAdmission.ts).
+      if (proof) admitAs(proof.identity.id);
       return captureTenantData(proof);
     };
     // One verifier for the one deployment: a browser request's session, or an
     // App API request's own native token observation (tenantApiRequest.ts).
+    const verifiedRequest = withTenantApiRequests<IncomingMessage>(async (request) => (await verify(request))?.identity ?? null);
     enrollment = await createTenantEnrollment({
       ...input,
       app: loaded.app,
       pages: loaded.pages,
-      verifySession: withTenantApiRequests<IncomingMessage>(async (request) => (await verify(request))?.identity ?? null),
+      verifySession: async (request: IncomingMessage) => {
+        const identity = await verifiedRequest(request);
+        // An API token's request waits in the pool's line as its account's, as a session's does (poolAdmission.ts).
+        admitAs(identity?.id);
+        return identity;
+      },
       // A notice to a person (a tenant App's people hold account ids) is kept at the account's email.
       accountEmail: (accountId: string) => nativeAccountEmailOf(raw.auth as AppAuthRuntime, accountId),
     });
@@ -981,485 +990,496 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
        provider may draw its widget. */
     const widget = challenge?.widget?.script;
     const egress = shellEgress([{ ui: loaded.app.ui, components: Boolean(loaded.components), ...(widget ? { widget } : {}) }]);
-    const server = createServer((req, res) => {
-      setBaselineHeaders(req, res, publicBound.trustedProxies);
-      let finish!: () => void;
-      const held = new Promise<void>((resolve) => {
-        finish = resolve;
-      });
-      pending.add(held);
-      accepted.add(req);
-      // Retirement can interrupt admission before the native body reader has
-      // attached its own listener. Its later body wait needs an error, not just
-      // a socket close, so always own that error channel from acceptance.
-      req.once('error', () => {});
-      let dispatchedMutation = false;
-      const work = async () => {
-        /* A host's page on another origin (embed/crossOrigin.ts): its preflight
+    const server = createServer((req, res) =>
+      /* Its pool checkouts wait in line as its client's (a forwarded address only from --trust-proxy) until its
+         session names the account (verify, above; poolAdmission.ts). The data server runs inside this frame: it is
+         dispatched to, never listened on, and its own binding takes no proxies. */
+      withAdmission(forwardedClient(req, publicBound.trustedProxies), () => {
+        setBaselineHeaders(req, res, publicBound.trustedProxies);
+        let finish!: () => void;
+        const held = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        pending.add(held);
+        accepted.add(req);
+        // Retirement can interrupt admission before the native body reader has
+        // attached its own listener. Its later body wait needs an error, not just
+        // a socket close, so always own that error channel from acceptance.
+        req.once('error', () => {});
+        let dispatchedMutation = false;
+        const work = async () => {
+          /* A host's page on another origin (embed/crossOrigin.ts): its preflight
            answered, its bearer read as the session it stands for, and its
            cookies dropped either way. Never on a mapped public host. */
-        if (auth.embed && !getTenantHostIntent(req)) {
-          const at = (req.url ?? '').split('?')[0];
-          if ((await embedDoor(req, res, at, auth.embed)) === 'answered') return;
-        }
-        /* A test host's setup, before any gate as on the ordinary server: it answers only its own token from
+          if (auth.embed && !getTenantHostIntent(req)) {
+            const at = (req.url ?? '').split('?')[0];
+            if ((await embedDoor(req, res, at, auth.embed)) === 'answered') return;
+          }
+          /* A test host's setup, before any gate as on the ordinary server: it answers only its own token from
            loopback in a process started with NODE_ENV=test (http/testControl.ts), and never on a mapped host. */
-        if (testControl && !getTenantHostIntent(req) && (await testControl.handle(req, res, new URL(req.url ?? '/', 'http://localhost'))))
-          return;
-        // Before bearer APIs, support, administration or invitation dispatch:
-        // mapped hosts expose only public intake/landing, static files and the
-        // signed-out whoami. The canonical-path and Host checks below still
-        // apply; neither a cookie nor a tenant header can widen this surface.
-        const asked = new URL(req.url ?? '/', 'http://localhost');
-        if (getTenantHostIntent(req)) {
-          const path = (req.url ?? '').split('?')[0];
-          if (
-            !isTenantPublicPath(path) &&
-            !visitorRead(req, asked.pathname, asked) &&
-            !path.startsWith(BRANDING_LOGO_PATH) &&
-            !(
-              [APP_FLAG_VALUES_PATH, EXPERIMENT_EXPOSURES_PATH, EXPERIMENT_VISITOR_PATH].includes(path) &&
-              req.headers[EXPERIMENT_FORM_HEADER]
-            ) &&
-            path !== '/api/whoami' &&
-            !(browser && path === SHARE_CARD_PATH) &&
-            !(browser && path.startsWith('/') && path !== '/api' && !path.startsWith('/api/'))
-          )
-            return refuse(403);
-        }
-        /* A public address opens a visitor's reads and nothing else: on any other
+          if (testControl && !getTenantHostIntent(req) && (await testControl.handle(req, res, new URL(req.url ?? '/', 'http://localhost'))))
+            return;
+          // Before bearer APIs, support, administration or invitation dispatch:
+          // mapped hosts expose only public intake/landing, static files and the
+          // signed-out whoami. The canonical-path and Host checks below still
+          // apply; neither a cookie nor a tenant header can widen this surface.
+          const asked = new URL(req.url ?? '/', 'http://localhost');
+          if (getTenantHostIntent(req)) {
+            const path = (req.url ?? '').split('?')[0];
+            if (
+              !isTenantPublicPath(path) &&
+              !visitorRead(req, asked.pathname, asked) &&
+              !path.startsWith(BRANDING_LOGO_PATH) &&
+              !(
+                [APP_FLAG_VALUES_PATH, EXPERIMENT_EXPOSURES_PATH, EXPERIMENT_VISITOR_PATH].includes(path) &&
+                req.headers[EXPERIMENT_FORM_HEADER]
+              ) &&
+              path !== '/api/whoami' &&
+              !(browser && path === SHARE_CARD_PATH) &&
+              !(browser && path.startsWith('/') && path !== '/api' && !path.startsWith('/api/'))
+            )
+              return refuse(403);
+          }
+          /* A public address opens a visitor's reads and nothing else: on any other
            API route it is refused before a bearer, a session or a lease is read,
            so no member's request is ever answered as a visitor's or the reverse.
            Who-am-I reads it to answer as the visitor; a public form and its
            flags carry their own address. */
-        if (
-          asked.searchParams.has('via') &&
-          (asked.pathname === '/api' || asked.pathname.startsWith('/api/')) &&
-          asked.pathname !== '/api/whoami' &&
-          !isTenantPublicPath(asked.pathname) &&
-          ![APP_FLAG_VALUES_PATH, EXPERIMENT_EXPOSURES_PATH, EXPERIMENT_VISITOR_PATH].includes(asked.pathname) &&
-          !visitorRead(req, asked.pathname, asked)
-        )
-          return refuse(403);
-        /* A mail provider's delivery and a requester's signed link: each proves
+          if (
+            asked.searchParams.has('via') &&
+            (asked.pathname === '/api' || asked.pathname.startsWith('/api/')) &&
+            asked.pathname !== '/api/whoami' &&
+            !isTenantPublicPath(asked.pathname) &&
+            ![APP_FLAG_VALUES_PATH, EXPERIMENT_EXPOSURES_PATH, EXPERIMENT_VISITOR_PATH].includes(asked.pathname) &&
+            !visitorRead(req, asked.pathname, asked)
+          )
+            return refuse(403);
+          /* A mail provider's delivery and a requester's signed link: each proves
            itself (an HMAC, a signed token), never a session, so neither reaches
            a session's routes. The Host is still this deployment's; the Origin and the body's type are not asked, as
            a provider posts from no page and a link is followed from a mail client. */
-        const proven = { writing: writes(req), origin: 'none', json: false } as const;
-        if (mail) {
-          const at = (req.url ?? '').split('?')[0];
-          if (at === '/api/mail/inbound' || at === '/api/mail/link') {
+          const proven = { writing: writes(req), origin: 'none', json: false } as const;
+          if (mail) {
+            const at = (req.url ?? '').split('?')[0];
+            if (at === '/api/mail/inbound' || at === '/api/mail/link') {
+              if (doorRefusal(req, binding(), proven)) return refuse(403);
+              if (await mail.handle(req, res, new URL(req.url ?? '/', 'http://localhost'))) return;
+            }
+          }
+          // The link at the foot of a contact email proves itself by its signed token, before any session.
+          if (contactMail && (req.url ?? '').split('?')[0] === UNSUBSCRIBE_PATH) {
             if (doorRefusal(req, binding(), proven)) return refuse(403);
-            if (await mail.handle(req, res, new URL(req.url ?? '/', 'http://localhost'))) return;
+            if (await contactMail.handle(req, res, new URL(req.url ?? '/', 'http://localhost'))) return;
           }
-        }
-        // The link at the foot of a contact email proves itself by its signed token, before any session.
-        if (contactMail && (req.url ?? '').split('?')[0] === UNSUBSCRIBE_PATH) {
-          if (doorRefusal(req, binding(), proven)) return refuse(403);
-          if (await contactMail.handle(req, res, new URL(req.url ?? '/', 'http://localhost'))) return;
-        }
-        // An integration's webhook, an inbound endpoint, proves itself the same way: its provider's signature, under one tenant's secret.
-        if (integrations && (req.url ?? '').split('?')[0].startsWith('/api/inbound/')) {
-          if (doorRefusal(req, binding(), proven)) return refuse(403);
-          if (await integrations.handle(req, res, new URL(req.url ?? '/', 'http://localhost'))) return;
-        }
-        // A bearer request claims the App API namespace before anything else,
-        // with its own admission; it never reaches a browser or data route.
-        if (api) {
-          if (await api.mcp.handle(req, res)) return;
-          if (api.commands && (await api.commands.handle(req, res))) return;
-          if (await api.reads.handle(req, res)) return;
-        }
-        // Never inside a dealer: an account holding a live support session
-        // manages no tenant and no invitation until it exits. Fails closed.
-        if (support && (isTenantInvitationHttpRequest(req) || isTenantAdministrationHttpRequest(req)) && (await support.holds(req))) {
+          // An integration's webhook, an inbound endpoint, proves itself the same way: its provider's signature, under one tenant's secret.
+          if (integrations && (req.url ?? '').split('?')[0].startsWith('/api/inbound/')) {
+            if (doorRefusal(req, binding(), proven)) return refuse(403);
+            if (await integrations.handle(req, res, new URL(req.url ?? '/', 'http://localhost'))) return;
+          }
+          // A bearer request claims the App API namespace before anything else,
+          // with its own admission; it never reaches a browser or data route.
+          if (api) {
+            if (await api.mcp.handle(req, res)) return;
+            if (api.commands && (await api.commands.handle(req, res))) return;
+            if (await api.reads.handle(req, res)) return;
+          }
+          // Never inside a dealer: an account holding a live support session
+          // manages no tenant and no invitation until it exits. Fails closed.
+          if (support && (isTenantInvitationHttpRequest(req) || isTenantAdministrationHttpRequest(req)) && (await support.holds(req))) {
+            active();
+            return send(req, res, 403, {
+              error: 'Exit the dealer before managing tenants or invitations.',
+              code: SUPPORT_REFUSAL_CODES.active,
+              outcome: 'not_applied',
+            });
+          }
+          if (isTenantInvitationHttpRequest(req)) return dispatchInvitations(req, res);
+          if (isTenantAdministrationHttpRequest(req)) return dispatchAdministration(req, res);
           active();
-          return send(req, res, 403, {
-            error: 'Exit the dealer before managing tenants or invitations.',
-            code: SUPPORT_REFUSAL_CODES.active,
-            outcome: 'not_applied',
-          });
-        }
-        if (isTenantInvitationHttpRequest(req)) return dispatchInvitations(req, res);
-        if (isTenantAdministrationHttpRequest(req)) return dispatchAdministration(req, res);
-        active();
-        if (tenantHttpHeader(req, ADMINISTRATION_HTTP_HEADER) !== undefined) return refuse();
-        if (tenantHttpHeader(req, INVITATION_HTTP_HEADER) !== undefined) return refuse();
-        const target = req.url ?? '';
-        if (!target.startsWith('/') || target.startsWith('//') || target.includes('#')) return refuse();
-        const url = new URL(target, 'http://localhost'),
-          path = url.pathname;
-        if (path !== target.split('?')[0]) return refuse();
-        const bound = binding();
-        /* The Host, for everything below. A write's Origin and body are each dispatcher's own door further in: the
+          if (tenantHttpHeader(req, ADMINISTRATION_HTTP_HEADER) !== undefined) return refuse();
+          if (tenantHttpHeader(req, INVITATION_HTTP_HEADER) !== undefined) return refuse();
+          const target = req.url ?? '';
+          if (!target.startsWith('/') || target.startsWith('//') || target.includes('#')) return refuse();
+          const url = new URL(target, 'http://localhost'),
+            path = url.pathname;
+          if (path !== target.split('?')[0]) return refuse();
+          const bound = binding();
+          /* The Host, for everything below. A write's Origin and body are each dispatcher's own door further in: the
            data server's (tenantHttp.ts), a public form's, a visitor's read, the assistant's and native auth's below. */
-        if (doorRefusal(req, bound, { writing: false })) return refuse(403);
-        if (visitorRead(req, path, url)) {
-          // A visitor names no lease, tenant or realm, and holds no bearer: a request that does is a member's, or no one's.
-          if (req.headers.authorization !== undefined) return refuse(403);
-          for (const name of Object.values(headers)) tenantHttpHeader(req, name);
-          const app = tenantHttpHeader(req, headers.app);
-          if (
-            (app !== undefined && app !== loaded.app.id) ||
-            Object.values(headers).some((name) => name !== headers.app && req.headers[name] !== undefined) ||
-            url.searchParams.has('tenant') ||
-            url.searchParams.has('realm') ||
-            url.searchParams.has('conn')
-          )
-            return refuse(400);
-          const host = mappedHost(req);
-          // A mapped host names its tenant; an address there would name a second.
-          if (host && url.searchParams.has('via')) return refuse(400);
-          const vias = url.searchParams.getAll('via');
-          /* Two addresses, or one that is not an address, place nobody: answered as an unknown one is. */
-          const placement = host
-            ? { tenant: host.tenant }
-            : {
-                address: vias.length === 1 ? (publicAddress(vias[0]!) ?? '') : '',
-              };
-          return dispatchPublicReads!(req, res, url, placement);
-        }
-        /* A tenant's logo: public, as its sign-in page and its email need it, and named by the hash of its bytes,
-           which only its tenant's pages say. Served as an image that runs nothing, whatever it holds. */
-        if (branding && path.startsWith(BRANDING_LOGO_PATH)) {
-          if (req.method !== 'GET' && req.method !== 'HEAD') return refuse(405);
-          const hash = path.slice(BRANDING_LOGO_PATH.length);
-          if (!/^[0-9a-f]{64}$/.test(hash) || url.search) return refuse(404);
-          const logo = await branding.logo(hash);
-          active();
-          if (!logo)
-            return send(req, res, 404, {
-              error: 'Not found.',
-              code: 'not_found',
-            });
-          res.writeHead(200, brandingLogoHeaders(logo));
-          res.end(req.method === 'HEAD' ? undefined : Buffer.from(logo.bytes));
-          return;
-        }
-        /* The landing's share card (shareCard.ts): drawn from the landing's words in the host tenant's published
-           look, whoever asks — the address names the landing and nothing else, and no query names a tenant. */
-        if (browser && path === SHARE_CARD_PATH) {
-          if (req.method !== 'GET' && req.method !== 'HEAD') return refuse(405);
-          const asked = cardRequest(url);
-          const hosted = asked ? await hostBranding(req) : undefined;
-          active();
-          const card = asked && !asked.inside.search ? landingCard(asked.inside.pathname, hosted)?.card : undefined;
-          return sendShareCard(req, res, card, asked?.version);
-        }
-        if (browser && path !== '/api' && !path.startsWith('/api/')) {
-          if (req.method !== 'GET' && req.method !== 'HEAD') return refuse(405);
-          // Encoded separators/names must not disguise an API path as a SPA
-          // deep link when the static middleware decodes it later.
-          let decodedPath: string;
-          try {
-            decodedPath = new URL(decodeURIComponent(path).replace(/\\/g, '/').replace(/\/+/g, '/'), 'http://localhost').pathname;
-          } catch {
-            return refuse();
+          if (doorRefusal(req, bound, { writing: false })) return refuse(403);
+          if (visitorRead(req, path, url)) {
+            // A visitor names no lease, tenant or realm, and holds no bearer: a request that does is a member's, or no one's.
+            if (req.headers.authorization !== undefined) return refuse(403);
+            for (const name of Object.values(headers)) tenantHttpHeader(req, name);
+            const app = tenantHttpHeader(req, headers.app);
+            if (
+              (app !== undefined && app !== loaded.app.id) ||
+              Object.values(headers).some((name) => name !== headers.app && req.headers[name] !== undefined) ||
+              url.searchParams.has('tenant') ||
+              url.searchParams.has('realm') ||
+              url.searchParams.has('conn')
+            )
+              return refuse(400);
+            const host = mappedHost(req);
+            // A mapped host names its tenant; an address there would name a second.
+            if (host && url.searchParams.has('via')) return refuse(400);
+            const vias = url.searchParams.getAll('via');
+            /* Two addresses, or one that is not an address, place nobody: answered as an unknown one is. */
+            const placement = host
+              ? { tenant: host.tenant }
+              : {
+                  address: vias.length === 1 ? (publicAddress(vias[0]!) ?? '') : '',
+                };
+            return dispatchPublicReads!(req, res, url, placement);
           }
-          if (decodedPath === '/api' || decodedPath.startsWith('/api/')) return refuse();
-          const inside = insidePaths.get(req) ?? path;
-          // The server's root, where the App is mounted elsewhere: its home.
-          if (inside === '/') {
-            res.writeHead(303, {
-              location: appHome(mount, loaded.app.id),
-              'cache-control': 'no-store',
-              'content-length': '0',
-            });
-            res.end();
+          /* A tenant's logo: public, as its sign-in page and its email need it, and named by the hash of its bytes,
+           which only its tenant's pages say. Served as an image that runs nothing, whatever it holds. */
+          if (branding && path.startsWith(BRANDING_LOGO_PATH)) {
+            if (req.method !== 'GET' && req.method !== 'HEAD') return refuse(405);
+            const hash = path.slice(BRANDING_LOGO_PATH.length);
+            if (!/^[0-9a-f]{64}$/.test(hash) || url.search) return refuse(404);
+            const logo = await branding.logo(hash);
+            active();
+            if (!logo)
+              return send(req, res, 404, {
+                error: 'Not found.',
+                code: 'not_found',
+              });
+            res.writeHead(200, brandingLogoHeaders(logo));
+            res.end(req.method === 'HEAD' ? undefined : Buffer.from(logo.bytes));
             return;
           }
-          /* `/desk/` is `/desk`: the client refuses an empty segment in a tenant link, so a typed trailing
-             slash left a dead start screen. Relative, so it holds behind a proxy that strips the base. */
-          if (inside.length > 1 && inside.endsWith('/')) {
-            const [pathname, query] = (req.url ?? '/').split(/\?(.*)/s);
-            const trimmed = pathname.replace(/\/+$/, ''),
-              last = trimmed.split('/').pop();
-            if (last) {
-              const up = '../'.repeat(pathname.length - trimmed.length);
-              res.writeHead(308, {
-                location: `${up}${last}${query ? `?${query}` : ''}`,
+          /* The landing's share card (shareCard.ts): drawn from the landing's words in the host tenant's published
+           look, whoever asks — the address names the landing and nothing else, and no query names a tenant. */
+          if (browser && path === SHARE_CARD_PATH) {
+            if (req.method !== 'GET' && req.method !== 'HEAD') return refuse(405);
+            const asked = cardRequest(url);
+            const hosted = asked ? await hostBranding(req) : undefined;
+            active();
+            const card = asked && !asked.inside.search ? landingCard(asked.inside.pathname, hosted)?.card : undefined;
+            return sendShareCard(req, res, card, asked?.version);
+          }
+          if (browser && path !== '/api' && !path.startsWith('/api/')) {
+            if (req.method !== 'GET' && req.method !== 'HEAD') return refuse(405);
+            // Encoded separators/names must not disguise an API path as a SPA
+            // deep link when the static middleware decodes it later.
+            let decodedPath: string;
+            try {
+              decodedPath = new URL(decodeURIComponent(path).replace(/\\/g, '/').replace(/\/+/g, '/'), 'http://localhost').pathname;
+            } catch {
+              return refuse();
+            }
+            if (decodedPath === '/api' || decodedPath.startsWith('/api/')) return refuse();
+            const inside = insidePaths.get(req) ?? path;
+            // The server's root, where the App is mounted elsewhere: its home.
+            if (inside === '/') {
+              res.writeHead(303, {
+                location: appHome(mount, loaded.app.id),
                 'cache-control': 'no-store',
                 'content-length': '0',
               });
               res.end();
               return;
             }
-          }
-          /* A theme's font files: presentation the sign-in screen wears too, so to anyone (fontRoutes.ts). */
-          if (fontRoute({ req, res }, inside, (id) => (id === loaded.app.id ? (look ? look.fonts : loaded.fonts) : undefined))) return;
-          if (brandRoute({ req, res }, inside, (id) => (id === loaded.app.id ? loaded.brand : undefined))) return;
-          /* A custom component's code and the host modules it imports: code, never a row. Asked by its inside
+            /* `/desk/` is `/desk`: the client refuses an empty segment in a tenant link, so a typed trailing
+             slash left a dead start screen. Relative, so it holds behind a proxy that strips the base. */
+            if (inside.length > 1 && inside.endsWith('/')) {
+              const [pathname, query] = (req.url ?? '/').split(/\?(.*)/s);
+              const trimmed = pathname.replace(/\/+$/, ''),
+                last = trimmed.split('/').pop();
+              if (last) {
+                const up = '../'.repeat(pathname.length - trimmed.length);
+                res.writeHead(308, {
+                  location: `${up}${last}${query ? `?${query}` : ''}`,
+                  'cache-control': 'no-store',
+                  'content-length': '0',
+                });
+                res.end();
+                return;
+              }
+            }
+            /* A theme's font files: presentation the sign-in screen wears too, so to anyone (fontRoutes.ts). */
+            if (fontRoute({ req, res }, inside, (id) => (id === loaded.app.id ? (look ? look.fonts : loaded.fonts) : undefined))) return;
+            if (brandRoute({ req, res }, inside, (id) => (id === loaded.app.id ? loaded.brand : undefined))) return;
+            /* A custom component's code and the host modules it imports: code, never a row. Asked by its inside
              address: an App at the root is asked for `/_components/…`, which names it as `/{app}/_components/…`. */
-          if (
-            await tenantComponentRoute(
-              { req, res },
-              inside,
-              loaded.app.id,
-              loaded.components?.files,
-              async () => {
-                const proof = await verify(req);
-                active();
-                return proof !== null && proof.expiresAt > now();
-              },
-              mount.base,
-              visitorFiles,
-            )
-          )
-            return;
-          const hosted = await hostBranding(req);
-          // An OAuth consent page is framed by nobody, this origin included (http/handler.ts): a click there gives a token.
-          const consenting = url.searchParams.has('authorize');
-          if (consenting) res.setHeader('x-frame-options', 'DENY');
-          return serveClient(CLIENT_FILES, req, res, {
-            ...shell(inside, hosted, req),
-            ...(await landingSocial(req, inside, hosted)),
-            ...(consenting ? { unframed: true } : {}),
-          });
-        }
-        if (
-          [APP_FLAG_VALUES_PATH, EXPERIMENT_EXPOSURES_PATH, EXPERIMENT_VISITOR_PATH].includes(path) &&
-          req.headers[EXPERIMENT_FORM_HEADER]
-        ) {
-          const selection = experimentPublicSelection(req),
-            scope = flagHttpRequest();
-          if ([...url.searchParams.keys()].some((key) => key !== 'app')) return refuse(400);
-          /* Placed by the forms' one rule (tenantPublicPlacement.ts): the page's address on the shared host, the host's
-             tenant's own on this App's mapped host, where an address too would name a second tenant. */
-          const placement = tenantPublicPlacement(req, loaded.app.id, selection.address, hostAddress);
-          if (placement.conflict) return refuse(400);
-          if (
-            !scope ||
-            scope.request !== req ||
-            !selection.form ||
-            !isPublicForm(loaded.app.views[selection.form]) ||
-            !deployment.withPublicFlagIntake
-          )
-            return refuse(403);
-          if (req.headers.authorization || Object.values(headers).some((name) => name !== headers.app && req.headers[name] !== undefined))
-            return refuse(403);
-          const handler = scope.runtime.valuesHttp({
-            bound,
-            async withRequest(request, _response, guard, use) {
-              await deployment.withPublicFlagIntake!(selection.form!, await placement.address(), async (owner) => {
-                const assertCurrent = () => {
+            if (
+              await tenantComponentRoute(
+                { req, res },
+                inside,
+                loaded.app.id,
+                loaded.components?.files,
+                async () => {
+                  const proof = await verify(req);
                   active();
-                  guard();
-                  scope.lifetime.assertCurrent();
-                  owner.assertCurrent();
-                };
-                await use(
-                  await scope.runtime.public(request, {
-                    generation: scope.lifetime.generation,
-                    form: selection.form,
-                    tenantId: owner.tenantId,
-                    assertCurrent,
-                    async current() {
-                      assertCurrent();
-                      await owner.current();
-                      assertCurrent();
-                    },
-                  }),
-                );
-              });
-              active();
-              guard();
-            },
-          });
-          await handler(req, res);
-          return;
-        }
-        if (isTenantPublicPath(path)) return dispatchPublic(req, res, url);
-        const whoami = path === '/api/whoami',
-          native = path === '/api/auth' || path.startsWith('/api/auth/');
-        if (tenantAssistant?.handles(path)) return tenantAssistant.handle(req, res, url, path);
-        if (!whoami && !native) {
-          dispatchData(req, res);
-          return;
-        }
-        // Native account administration is deployment-wide, not tenant-scoped.
-        // Keep it off this bounded host; future operator APIs have their own
-        // explicit authority. Canonical native paths prevent encoded/duplicate
-        // separators from reaching a differently normalizing provider router.
-        if (
-          native &&
-          (path.includes('%') ||
-            path.includes('//') ||
-            path.toLowerCase() === '/api/auth/admin' ||
-            path.toLowerCase().startsWith('/api/auth/admin/'))
-        )
-          return refuse(403);
-        // Native auth is not a JSON-only resource API: sign-out may be
-        // bodyless and OAuth callbacks may be cross-site form POSTs. The routes
-        // that hold their own proof are not asked their Origin (auth.ts).
-        const ownProof = authHoldsOwnProof(path, auth.embed !== undefined);
-        if (doorRefusal(req, bound, { writing: writes(req), origin: ownProof ? 'none' : 'writes', sameSite: true, json: false }))
-          return refuse(403);
-        for (const name of Object.values(headers)) tenantHttpHeader(req, name);
-        const expected = tenantHttpHeader(req, headers.account),
-          app = tenantHttpHeader(req, headers.app);
-        if (
-          (app !== undefined && app !== loaded.app.id) ||
-          [headers.tenant, headers.tab, headers.context, headers.revision].some((name) => tenantHttpHeader(req, name) !== undefined)
-        )
-          return refuse();
-        if (
-          url.searchParams.has('tenant') ||
-          url.searchParams.has('conn') ||
-          url.searchParams.getAll('app').length > 1 ||
-          (url.searchParams.has('app') && url.searchParams.get('app') !== loaded.app.id)
-        )
-          return refuse();
-        if (whoami) {
-          if (req.method !== 'GET' && req.method !== 'HEAD') return refuse(405);
+                  return proof !== null && proof.expiresAt > now();
+                },
+                mount.base,
+                visitorFiles,
+              )
+            )
+              return;
+            const hosted = await hostBranding(req);
+            // An OAuth consent page is framed by nobody, this origin included (http/handler.ts): a click there gives a token.
+            const consenting = url.searchParams.has('authorize');
+            if (consenting) res.setHeader('x-frame-options', 'DENY');
+            return serveClient(CLIENT_FILES, req, res, {
+              ...shell(inside, hosted, req),
+              ...(await landingSocial(req, inside, hosted)),
+              ...(consenting ? { unframed: true } : {}),
+            });
+          }
           if (
-            url.searchParams.getAll('app').length !== 1 ||
-            [...url.searchParams.keys()].some((key) => key !== 'app' && !(key === 'via' && dispatchPublicReads)) ||
-            req.headers['transfer-encoding'] !== undefined ||
-            (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')
+            [APP_FLAG_VALUES_PATH, EXPERIMENT_EXPOSURES_PATH, EXPERIMENT_VISITOR_PATH].includes(path) &&
+            req.headers[EXPERIMENT_FORM_HEADER]
+          ) {
+            const selection = experimentPublicSelection(req),
+              scope = flagHttpRequest();
+            if ([...url.searchParams.keys()].some((key) => key !== 'app')) return refuse(400);
+            /* Placed by the forms' one rule (tenantPublicPlacement.ts): the page's address on the shared host, the host's
+             tenant's own on this App's mapped host, where an address too would name a second tenant. */
+            const placement = tenantPublicPlacement(req, loaded.app.id, selection.address, hostAddress);
+            if (placement.conflict) return refuse(400);
+            if (
+              !scope ||
+              scope.request !== req ||
+              !selection.form ||
+              !isPublicForm(loaded.app.views[selection.form]) ||
+              !deployment.withPublicFlagIntake
+            )
+              return refuse(403);
+            if (req.headers.authorization || Object.values(headers).some((name) => name !== headers.app && req.headers[name] !== undefined))
+              return refuse(403);
+            const handler = scope.runtime.valuesHttp({
+              bound,
+              async withRequest(request, _response, guard, use) {
+                await deployment.withPublicFlagIntake!(selection.form!, await placement.address(), async (owner) => {
+                  const assertCurrent = () => {
+                    active();
+                    guard();
+                    scope.lifetime.assertCurrent();
+                    owner.assertCurrent();
+                  };
+                  await use(
+                    await scope.runtime.public(request, {
+                      generation: scope.lifetime.generation,
+                      form: selection.form,
+                      tenantId: owner.tenantId,
+                      assertCurrent,
+                      async current() {
+                        assertCurrent();
+                        await owner.current();
+                        assertCurrent();
+                      },
+                    }),
+                  );
+                });
+                active();
+                guard();
+              },
+            });
+            await handler(req, res);
+            return;
+          }
+          if (isTenantPublicPath(path)) return dispatchPublic(req, res, url);
+          const whoami = path === '/api/whoami',
+            native = path === '/api/auth' || path.startsWith('/api/auth/');
+          if (tenantAssistant?.handles(path)) return tenantAssistant.handle(req, res, url, path);
+          if (!whoami && !native) {
+            dispatchData(req, res);
+            return;
+          }
+          // Native account administration is deployment-wide, not tenant-scoped.
+          // Keep it off this bounded host; future operator APIs have their own
+          // explicit authority. Canonical native paths prevent encoded/duplicate
+          // separators from reaching a differently normalizing provider router.
+          if (
+            native &&
+            (path.includes('%') ||
+              path.includes('//') ||
+              path.toLowerCase() === '/api/auth/admin' ||
+              path.toLowerCase().startsWith('/api/auth/admin/'))
+          )
+            return refuse(403);
+          // Native auth is not a JSON-only resource API: sign-out may be
+          // bodyless and OAuth callbacks may be cross-site form POSTs. The routes
+          // that hold their own proof are not asked their Origin (auth.ts).
+          const ownProof = authHoldsOwnProof(path, auth.embed !== undefined);
+          if (doorRefusal(req, bound, { writing: writes(req), origin: ownProof ? 'none' : 'writes', sameSite: true, json: false }))
+            return refuse(403);
+          for (const name of Object.values(headers)) tenantHttpHeader(req, name);
+          const expected = tenantHttpHeader(req, headers.account),
+            app = tenantHttpHeader(req, headers.app);
+          if (
+            (app !== undefined && app !== loaded.app.id) ||
+            [headers.tenant, headers.tab, headers.context, headers.revision].some((name) => tenantHttpHeader(req, name) !== undefined)
           )
             return refuse();
-          /* A visitor's address, or this App's mapped host, where the App opens reads to visitors: the
+          if (
+            url.searchParams.has('tenant') ||
+            url.searchParams.has('conn') ||
+            url.searchParams.getAll('app').length > 1 ||
+            (url.searchParams.has('app') && url.searchParams.get('app') !== loaded.app.id)
+          )
+            return refuse();
+          if (whoami) {
+            if (req.method !== 'GET' && req.method !== 'HEAD') return refuse(405);
+            if (
+              url.searchParams.getAll('app').length !== 1 ||
+              [...url.searchParams.keys()].some((key) => key !== 'app' && !(key === 'via' && dispatchPublicReads)) ||
+              req.headers['transfer-encoding'] !== undefined ||
+              (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')
+            )
+              return refuse();
+            /* A visitor's address, or this App's mapped host, where the App opens reads to visitors: the
              visitor's answer, whoever's cookie rides along — a member reads as a member at the App's own
              address, never through a tenant's public one. Whether the address places anyone is the reads'
              to say, each as one missing page; this answer names no tenant either way. */
-          if (dispatchPublicReads && (url.searchParams.has('via') || mappedHost(req))) {
-            if (mappedHost(req) && url.searchParams.has('via')) return refuse();
-            active();
-            return send(req, res, 200, {
-              signedIn: false,
-              accountId: null,
-              appId: loaded.app.id,
-              who: null,
-              header: null,
-              ...(signIn.suite ? { suite: signIn.suite } : {}),
-              signIn: {
-                ...signIn,
-                ...(browser ? { look: withIconGlyphs(appLook(loaded.app)) } : {}),
-              },
-              public: true,
-              tenantPublic: true,
-              ...(browser
-                ? {
-                    appName: loaded.app.name,
-                    ...(home === undefined ? {} : { home }),
-                  }
-                : {}),
-            });
-          }
-          const proof = await verify(req);
-          active();
-          const instant = now();
-          active();
-          if (!Number.isFinite(instant)) return denyTenant();
-          // Signed out, the public view the App's home rules start a visitor on — its
-          // landing or a public form — so the client draws it instead of the sign-in screen.
-          // With invitations and email sign-in, a signed-out invitee may claim an
-          // account-creating invitation: the form needs only the App to claim into.
-          if (proof === null)
-            return send(req, res, 200, {
-              signedIn: false,
-              accountId: null,
-              appId: loaded.app.id,
-              who: null,
-              header: null,
-              ...(signIn.suite ? { suite: signIn.suite } : {}),
-              signIn: {
-                ...signIn,
-                // The door in the App's own colours, as the ordinary server draws it (gate.ts).
-                ...(browser ? { look: withIconGlyphs(appLook(loaded.app)) } : {}),
-                ...(administration?.invitations?.claim && Array.isArray(signIn.providers) && signIn.providers.includes('email')
-                  ? { invitationClaim: loaded.app.id }
+            if (dispatchPublicReads && (url.searchParams.has('via') || mappedHost(req))) {
+              if (mappedHost(req) && url.searchParams.has('via')) return refuse();
+              active();
+              return send(req, res, 200, {
+                signedIn: false,
+                accountId: null,
+                appId: loaded.app.id,
+                who: null,
+                header: null,
+                ...(signIn.suite ? { suite: signIn.suite } : {}),
+                signIn: {
+                  ...signIn,
+                  ...(browser ? { look: withIconGlyphs(appLook(loaded.app)) } : {}),
+                },
+                public: true,
+                tenantPublic: true,
+                ...(browser
+                  ? {
+                      appName: loaded.app.name,
+                      ...(home === undefined ? {} : { home }),
+                      // The landing's view key, as the single-App who-am-I sends it (gate.ts): without it
+                      // the signed-out home skips the landing and a visitor gets the sign-in screen.
+                      ...(loaded.app.landing ? { landingView: loaded.app.landing.view } : {}),
+                    }
                   : {}),
-              },
+              });
+            }
+            const proof = await verify(req);
+            active();
+            const instant = now();
+            active();
+            if (!Number.isFinite(instant)) return denyTenant();
+            // Signed out, the public view the App's home rules start a visitor on — its
+            // landing or a public form — so the client draws it instead of the sign-in screen.
+            // With invitations and email sign-in, a signed-out invitee may claim an
+            // account-creating invitation: the form needs only the App to claim into.
+            if (proof === null)
+              return send(req, res, 200, {
+                signedIn: false,
+                accountId: null,
+                appId: loaded.app.id,
+                who: null,
+                header: null,
+                ...(signIn.suite ? { suite: signIn.suite } : {}),
+                signIn: {
+                  ...signIn,
+                  // The door in the App's own colours, as the ordinary server draws it (gate.ts).
+                  ...(browser ? { look: withIconGlyphs(appLook(loaded.app)) } : {}),
+                  ...(administration?.invitations?.claim && Array.isArray(signIn.providers) && signIn.providers.includes('email')
+                    ? { invitationClaim: loaded.app.id }
+                    : {}),
+                },
+                ...(browser
+                  ? {
+                      tenant: true,
+                      appName: loaded.app.name,
+                      ...(home === undefined ? {} : { home }),
+                      // The landing's view key, as the single-App who-am-I sends it (gate.ts): without it
+                      // the signed-out home skips the landing and a visitor gets the sign-in screen.
+                      ...(loaded.app.landing ? { landingView: loaded.app.landing.view } : {}),
+                    }
+                  : {}),
+              });
+            tenantIdentifier(proof.identity.id, 1024);
+            validateHeaderValue(headers.account, proof.identity.id);
+            if (proof.expiresAt <= instant) return denyTenant();
+            if (expected !== undefined && expected !== proof.identity.id) return refuse(409);
+            res.setHeader(headers.account, proof.identity.id);
+            return send(req, res, 200, {
+              signedIn: true,
+              accountId: proof.identity.id,
+              appId: loaded.app.id,
+              who: proof.identity.who,
+              header: null,
+              accountProfile: true,
+              ...roleLabelsOf(loaded.app.auth),
+              ...keepsRoles(loaded.app.auth),
+              ...(signIn.suite ? { suite: signIn.suite } : {}),
+              ...(administrationOptions?.policy ? { tenantAdministration: true } : {}),
+              ...(administration?.invitations ? { tenantInvitations: true } : {}),
+              ...(support ? { tenantSupport: true } : {}),
+              // A bell for the notices kept in each lease's own inbox (tenantInbox.ts).
+              ...(appKeepsInbox(loaded.app) ? { inbox: true } : {}),
+              /* The chooser is drawn before the App's payload, which needs a
+               chosen tenant: so its look, and what the App calls a tenant, travel here. */
               ...(browser
                 ? {
                     tenant: true,
                     appName: loaded.app.name,
-                    ...(home === undefined ? {} : { home }),
+                    look: withIconGlyphs(appLook(loaded.app)),
+                    ...(loaded.app.auth?.tenancy?.label ? { tenantLabel: loaded.app.auth.tenancy.label } : {}),
+                    ...(loaded.app.auth?.tenancy?.platform ? { platformLabel: loaded.app.auth.tenancy.platform.label } : {}),
                   }
                 : {}),
             });
-          tenantIdentifier(proof.identity.id, 1024);
-          validateHeaderValue(headers.account, proof.identity.id);
-          if (proof.expiresAt <= instant) return denyTenant();
-          if (expected !== undefined && expected !== proof.identity.id) return refuse(409);
-          res.setHeader(headers.account, proof.identity.id);
-          return send(req, res, 200, {
-            signedIn: true,
-            accountId: proof.identity.id,
-            appId: loaded.app.id,
-            who: proof.identity.who,
-            header: null,
-            accountProfile: true,
-            ...roleLabelsOf(loaded.app.auth),
-            ...keepsRoles(loaded.app.auth),
-            ...(signIn.suite ? { suite: signIn.suite } : {}),
-            ...(administrationOptions?.policy ? { tenantAdministration: true } : {}),
-            ...(administration?.invitations ? { tenantInvitations: true } : {}),
-            ...(support ? { tenantSupport: true } : {}),
-            // A bell for the notices kept in each lease's own inbox (tenantInbox.ts).
-            ...(appKeepsInbox(loaded.app) ? { inbox: true } : {}),
-            /* The chooser is drawn before the App's payload, which needs a
-               chosen tenant: so its look, and what the App calls a tenant, travel here. */
-            ...(browser
-              ? {
-                  tenant: true,
-                  appName: loaded.app.name,
-                  look: withIconGlyphs(appLook(loaded.app)),
-                  ...(loaded.app.auth?.tenancy?.label ? { tenantLabel: loaded.app.auth.tenancy.label } : {}),
-                  ...(loaded.app.auth?.tenancy?.platform ? { platformLabel: loaded.app.auth.tenancy.platform.label } : {}),
-                }
-              : {}),
-          });
-        }
-        if (path === '/api/auth/sign-out') {
-          // A sign-out that names no account is not refused for a session that no longer verifies.
-          const proof = expected !== undefined ? await verify(req) : await verify(req).catch(() => null);
-          active();
-          if (expected !== undefined && proof !== null && proof.identity.id !== expected) return refuse(409);
-          // Before the session ends, not after: evidence kept for it is gone however the sign-out goes.
-          if (proof !== null) endAdmissionSession(proof.sessionId);
-        }
-        active();
-        if (req.aborted || res.destroyed) return denyTenant();
-        // Preserve native cookies, redirects, body limits and profile outcome
-        // handling; these are auth operations, not selected tenant DTOs.
-        res.setHeader('cache-control', 'no-store');
-        dispatchedMutation = req.method !== 'GET' && req.method !== 'HEAD';
-        /* Better Auth routes by the whole address, the base path with it
-           (auth.ts): given back what the browser sent. */
-        req.url = arrivedUrls.get(req) ?? req.url;
-        await auth.handler(req, res);
-      };
-      /* Whether this browser (or token) wrote a moment ago, for every route
-         below: a fresh one reads the primary (adapters/replicas.ts). */
-      void readsAs(readFreshness(req, res, mount.base), work)
-        .catch((error) => {
-          if (res.headersSent) {
-            if (!res.writableEnded) res.destroy();
-            return;
           }
-          for (const name of Object.values(headers)) res.removeHeader(name);
-          /* Nothing dispatched and the store did not answer (a whoami whose session lookup found the pool busy):
+          if (path === '/api/auth/sign-out') {
+            // A sign-out that names no account is not refused for a session that no longer verifies.
+            const proof = expected !== undefined ? await verify(req) : await verify(req).catch(() => null);
+            active();
+            if (expected !== undefined && proof !== null && proof.identity.id !== expected) return refuse(409);
+            // Before the session ends, not after: evidence kept for it is gone however the sign-out goes.
+            if (proof !== null) endAdmissionSession(proof.sessionId);
+          }
+          active();
+          if (req.aborted || res.destroyed) return denyTenant();
+          // Preserve native cookies, redirects, body limits and profile outcome
+          // handling; these are auth operations, not selected tenant DTOs.
+          res.setHeader('cache-control', 'no-store');
+          dispatchedMutation = req.method !== 'GET' && req.method !== 'HEAD';
+          /* Better Auth routes by the whole address, the base path with it
+           (auth.ts): given back what the browser sent. */
+          req.url = arrivedUrls.get(req) ?? req.url;
+          await auth.handler(req, res);
+        };
+        /* Whether this browser (or token) wrote a moment ago, for every route
+         below: a fresh one reads the primary (adapters/replicas.ts). */
+        void readsAs(readFreshness(req, res, mount.base), work)
+          .catch((error) => {
+            if (res.headersSent) {
+              if (!res.writableEnded) res.destroy();
+              return;
+            }
+            for (const name of Object.values(headers)) res.removeHeader(name);
+            /* Nothing dispatched and the store did not answer (a whoami whose session lookup found the pool busy):
              nothing was decided, so not the 403 a refusal is but a 503 with when to come back, as the tenant
              routes answer it (tenantWire.ts send). */
-          const unanswered = !dispatchedMutation && !(error instanceof AuthRequestRefusal) && databaseUnanswered(error);
-          if (unanswered) res.setHeader('retry-after', String(poolBusyRetryAfterSeconds(error)));
-          send(req, res, error instanceof AuthRequestRefusal ? error.status : dispatchedMutation || unanswered ? 503 : 403, {
-            error: 'The authentication request could not be confirmed.',
-            code: dispatchedMutation ? 'auth_unknown' : unanswered ? 'auth_temporarily_unavailable' : 'auth_unavailable',
-            ...(dispatchedMutation ? { outcome: 'unknown' } : {}),
+            const unanswered = !dispatchedMutation && !(error instanceof AuthRequestRefusal) && databaseUnanswered(error);
+            if (unanswered) res.setHeader('retry-after', String(poolBusyRetryAfterSeconds(error)));
+            send(req, res, error instanceof AuthRequestRefusal ? error.status : dispatchedMutation || unanswered ? 503 : 403, {
+              error: 'The authentication request could not be confirmed.',
+              code: dispatchedMutation ? 'auth_unknown' : unanswered ? 'auth_temporarily_unavailable' : 'auth_unavailable',
+              ...(dispatchedMutation ? { outcome: 'unknown' } : {}),
+            });
+          })
+          .catch(() => {
+            if (!res.destroyed) res.destroy();
+          })
+          .finally(() => {
+            pending.delete(held);
+            accepted.delete(req);
+            finish();
           });
-        })
-        .catch(() => {
-          if (!res.destroyed) res.destroy();
-        })
-        .finally(() => {
-          pending.delete(held);
-          accepted.delete(req);
-          finish();
-        });
-    });
+      }),
+    );
     // The probes and the dev observer's address, and a span per request, as the App server has (http/server.ts).
     /* Every address read through the mount first, as createApp reads it
        (http/server.ts): the base path off `req.url`, which every route below

@@ -1,6 +1,6 @@
 /**
  * The Ladle sample's host server (examples/apps/ladle/host/server.ts) as a source checkout's suite runs it: its page
- * takes `@mistriwork/mistri/react` from src/embed through the embed's own Vite plugins (vite.embed.config.ts), as
+ * takes `@mistriwork/mistri/react` from src/embed through the embed's own Vite plugins (config/vite.embed.config.ts), as
  * embedReactHost.ts does, so nothing is built first. Everything else is the sample's, unchanged. What
  * e2e/ladle.spec.ts walks.
  *
@@ -8,7 +8,7 @@
  */
 import { resolve } from 'node:path';
 import { startHost } from '../../examples/apps/ladle/host/server.ts';
-import { embedPlugins } from '../../vite.embed.config.ts';
+import { embedPlugins } from '../../config/vite.embed.config.ts';
 
 const [config, port] = process.argv.slice(2);
 const host = await startHost({

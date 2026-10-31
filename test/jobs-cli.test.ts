@@ -205,8 +205,8 @@ describe('@mistriwork/mistri/jobs', () => {
   test('the package maps and builds the entry, and it exports the declarations', () => {
     const pkg = published(JSON.parse(readFileSync(new URL('../packages/mistri/package.json', import.meta.url), 'utf8')));
     assert.deepEqual(pkg.exports['./jobs'], { types: './dist/server/jobs.d.ts', default: './dist/server/jobs.js' });
-    const commands = JSON.parse(readFileSync(new URL('../tsconfig.commands.json', import.meta.url), 'utf8'));
-    assert.ok(commands.include.includes('packages/mistri/src/server/jobs.ts'));
+    const commands = JSON.parse(readFileSync(new URL('../config/tsconfig.commands.json', import.meta.url), 'utf8'));
+    assert.ok(commands.include.includes('../packages/mistri/src/server/jobs.ts'));
     assert.deepEqual(Object.keys(jobsEntry).sort(), [
       'DecisionDeclarationError',
       'JobDeclarationError',

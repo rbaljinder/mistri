@@ -20,6 +20,6 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["packages/*/src/client/**/*.js", "packages/*/src/client/**/*.ts", "packages/*/src/client/**/*.tsx"],
-  "exclude": ["packages/*/src/client/**/*.test.ts", "packages/*/src/client/**/*.test.tsx"]
+  "include": ["../packages/*/src/client/**/*.js", "../packages/*/src/client/**/*.ts", "../packages/*/src/client/**/*.tsx"],
+  "exclude": ["../packages/*/src/client/**/*.test.ts", "../packages/*/src/client/**/*.test.tsx"]
 }

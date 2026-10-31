@@ -29,7 +29,7 @@ import {
 } from './placement-launcher.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url)),
-  root = resolve(here, '../../..');
+  root = resolve(here, '../../../..');
 const ids = ['lender', 'leads', 'dealer', 'site', 'marketplace', 'customer'];
 const usage =
   'Usage: node --import tsx test/fixtures/apps/keystone/start-suite.mjs --runtime <directory> [--setup --database <empty-postgres-url> | --upgrade-placement] [--public-origin https://<staff-host> --site-host <dealer-host>] [--port 4880] [--photos featured|all|none]\nSetup and additive --upgrade-placement require explicit HTTPS origin and Site host (TLS proxy to the loopback listener). Upgrade provisions only placement and exits; resume uses the persisted enrollment.';
@@ -311,8 +311,8 @@ async function provision(config, environment, credentialsFile) {
     migratePostgresTenantAdministrationJournal,
     migratePostgresTenantInvitations,
     migratePostgresSupportAudit,
-  } = await import('@mistriwork/mistri/commands');
-  const { provisionStores } = await import('@mistriwork/mistri/maintenance');
+    provisionStores,
+  } = await import('@mistriwork/mistri/maintenance');
   const { supportAuditKey } = await import('../../../../packages/mistri/src/server/tenant/tenantSupportAuditContract.ts');
   const { createPostgresTenantAdministration } = await import('../../../../packages/mistri/src/server/tenant/tenantStorePostgres.ts');
   const { TransactionOperations } = await import('../../../../packages/engine/src/adapters/adapter.ts');

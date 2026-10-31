@@ -164,6 +164,13 @@ export function PageView(props: PageProps) {
     if (isCurrent()) props.onTab(tab);
   };
   const hasAside = page.sections.some((section) => section.region === 'aside' && !section.hidden);
+  /* An aside that says something of the record's surroundings — an offer, a reference's card, the one current row —
+     is woven into the main column where the columns stack (page.css). Said from the page, as the archetype is, rather
+     than asked of the drawn sections with :has(), which restyled the whole page each time an element came or went
+     in it (test/built-client-vitals.mjs). */
+  const leads = page.sections.some(
+    (section) => section.region === 'aside' && !section.hidden && (section.presentation === 'headline' || section.presentation === 'card'),
+  );
   const [labelOwner, setLabelOwner] = useState<number | undefined>(undefined);
   const [titleEditor, setTitleEditor] = useState<{ index: number; render: () => ReactNode } | null>(null);
   const onTitleEditor = useCallback((index: number, render: (() => ReactNode) | undefined) => {
@@ -345,7 +352,7 @@ export function PageView(props: PageProps) {
               {sectionsOf(hasAside ? 'main' : undefined, (index) => index === showcase)}
             </PageLayout>
           ) : (
-            <PageLayout layout={layout} aside={hasAside ? sectionsOf('aside') : undefined}>
+            <PageLayout layout={layout} leads={leads} aside={hasAside ? sectionsOf('aside') : undefined}>
               {sectionsOf(hasAside ? 'main' : undefined)}
             </PageLayout>
           )

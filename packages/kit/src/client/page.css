@@ -3751,27 +3751,31 @@
    accordion), and a section's row-wrap flex-basis means nothing here
    instead of becoming a height. */
   @media (max-width: 1100px) {
-    /* The row gap is the bodies' own (`--page-row-gap` is set on .page-body, which
+    /* Which layouts these are is said by the page (`data-leads`, Page.tsx), not asked with
+     `:has(> .page-aside :is(.page-headline, .page-card-section))`: a :has() over the whole layout restyled every
+     section on the page each time an element came or went in it (test/built-client-vitals.mjs). The attribute
+     said twice keeps the weight :has() gave.
+     The row gap is the bodies' own (`--page-row-gap` is set on .page-body, which
      gave up its box here): read bare on the layout it was undefined, the gap
      fell to nothing, and a card stood flush under the list above it. */
-    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) {
+    .page-layout[data-leads][data-leads]:not([data-layout]) {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       gap: var(--page-row-gap, var(--section-seam));
     }
-    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) > .page-body {
+    .page-layout[data-leads][data-leads]:not([data-layout]) > .page-body {
       display: contents;
     }
-    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) > .page-main > * {
+    .page-layout[data-leads][data-leads]:not([data-layout]) > .page-main > * {
       order: 2;
     }
-    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) > .page-main > :first-child {
+    .page-layout[data-leads][data-leads]:not([data-layout]) > .page-main > :first-child {
       order: 0;
     }
-    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section)) > .page-aside > * {
+    .page-layout[data-leads][data-leads]:not([data-layout]) > .page-aside > * {
       order: 3;
     }
-    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section))
+    .page-layout[data-leads][data-leads]:not([data-layout])
       > .page-aside
       > :is(:has(.page-headline), .page-card-section:not(.page-reference-card)) {
       order: 1;
@@ -3780,10 +3784,7 @@
      follows the main work with the rail (a field report on 0.9.0). */
     /* The card that followed the headline in the aside now follows the lists:
      it keeps the row gap instead of tucking under a box that is no longer above it. */
-    .page-layout:not([data-layout]):has(> .page-aside :is(.page-headline, .page-card-section))
-      > .page-aside
-      > .page-section:has(.page-headline)
-      + .page-card-section {
+    .page-layout[data-leads][data-leads]:not([data-layout]) > .page-aside > .page-section:has(.page-headline) + .page-card-section {
       margin-top: 0;
     }
   }

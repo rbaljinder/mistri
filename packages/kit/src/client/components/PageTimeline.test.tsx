@@ -133,6 +133,8 @@ describe('a conversation timeline', () => {
   test('reads oldest first, tints an internal note and draws a system line as one quiet row', async () => {
     draw();
     await screen.findByText('Oldest');
+    // The conversation box holds its own scroll by design, so the grade probe must not count it as a second scroller.
+    expect(document.querySelector('.timeline-scroll')?.hasAttribute('data-scrolls')).toBe(true);
     const rows = [...document.querySelectorAll('.timeline-row')];
     expect(rows.map((row) => row.querySelector('.timeline-text')?.textContent)).toEqual(['Oldest', 'Escalated', 'Newest']);
     expect(rows[0].getAttribute('data-tone')).toBe('warn');
@@ -221,6 +223,14 @@ describe('a conversation timeline', () => {
     draw({ newest: undefined, composer: undefined });
     await screen.findByText('Oldest');
     expect([...document.querySelectorAll('.timeline-text')].map((row) => row.textContent)).toEqual(['Newest', 'Escalated', 'Oldest']);
+  });
+
+  test('only a conversation says it scrolls on purpose: a plain stream grows the page, so the probe may count it', async () => {
+    draw({ newest: undefined, composer: undefined });
+    await screen.findByText('Oldest');
+    const box = document.querySelector('.timeline')!.parentElement!;
+    expect(box.hasAttribute('data-scrolls')).toBe(false);
+    expect(box.classList.contains('timeline-scroll')).toBe(false);
   });
 
   test('the composer sends the text through the mode that is chosen', async () => {

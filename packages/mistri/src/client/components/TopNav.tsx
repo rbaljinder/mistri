@@ -18,7 +18,7 @@ import { message, messageLanguage, subscribeMessages } from '@mistriwork/kit/cli
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { NavGlyph } from '@mistriwork/kit/client/components/NavGlyph.js';
 import { layoutViewport, zoomAnchor } from '@mistriwork/ui/anchor.js';
-import { go, pageView, tableView, toast, state } from '@mistriwork/kit/client/core.js';
+import { go, pageView, subscribeWalk, tableView, toast, state } from '@mistriwork/kit/client/core.js';
 import { openPalette } from '@mistriwork/kit/client/palette.js';
 import { appListQuery, currentNavIndex } from '@mistriwork/kit/client/components/appListModel.js';
 import {
@@ -34,7 +34,7 @@ import {
   roomPageId,
   type MenuEntry,
 } from '@mistriwork/kit/client/components/appRooms.js';
-import { useWalk } from '@mistriwork/kit/client/components/walk.js';
+import type { WalkEntry } from '@mistriwork/kit/client/components/walk.js';
 import {
   navigationContains,
   navigationNests,
@@ -82,9 +82,13 @@ function pendingGroups(
   });
 }
 
+/* The schema the strip last read, by when it was replaced: a new one is a new strip. */
+let schemaSeen: unknown;
+let schemaCount = 0;
+const schemaTick = () => (state.schema === schemaSeen ? schemaCount : ((schemaSeen = state.schema), ++schemaCount));
+
 export function TopNav({ app, host }: TopNavProps) {
   useSyncExternalStore(subscribeMessages, messageLanguage, messageLanguage);
-  const stack = useWalk();
   const [open, setOpen] = useState<string | null>(null);
   const [folded, setFolded] = useState(false);
   const [compactSearch, setCompactSearch] = useState(false);
@@ -92,12 +96,6 @@ export function TopNav({ app, host }: TopNavProps) {
   const returnGroup = useRef<string | null>(null);
   const links = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLButtonElement>(null);
-  const here = stack[stack.length - 1] as { kind?: string; table?: string; query?: string; pageId?: string; view?: string } | undefined;
-
-  /* Which room is current. A dashboard by its view key; a table by the
-     walk's query, preferring the module whose standing conditions lead it.
-     With nothing on the walk the visitor is on the home the server served
-     them, so its room is lit, a dashboard or a list. */
   const schema = state.schema as DatabaseSchema | null;
   const { hrefs: targetHrefs, pending } = useAppNavTargetState(app, schema);
   const availableTree = appMenu(app, (target) => targetHrefs.get(appNavTargetKey(target)));
@@ -126,25 +124,44 @@ export function TopNav({ app, host }: TopNavProps) {
         {favoriteItems}
       </Menu.Group>
     ) : null;
-  const home = here ? undefined : homeRoom(app);
-  const dashView =
-    here?.kind === 'page' && dashViewKey(here.pageId) !== undefined
-      ? dashViewKey(here.pageId)!
-      : home && 'sections' in home
-        ? home.id
-        : null;
-  const formView =
-    here?.kind === 'page' && formViewKey(here.pageId) !== undefined ? formViewKey(here.pageId)! : home && isFormView(home) ? home.id : null;
   const tables = navigationPaths(tree)
     .map((path) => path.entry)
     .filter(isListRoom);
-  const currentTable =
-    here?.table && !dashView && !formView
-      ? tables[currentNavIndex(tables, here.table ?? '', here.query ?? '', here.view)]
-      : home && isListRoom(home)
-        ? tables.find((entry) => entry.id === home.id)
-        : undefined;
-  const onAssistant = here?.kind === 'page' && here.pageId === ASSISTANT_PAGE;
+  /* Which room is current. A dashboard by its view key; a table by the
+     walk's query, preferring the module whose standing conditions lead it.
+     With nothing on the walk the visitor is on the home the server served
+     them, so its room is lit, a dashboard or a list. */
+  const lit = () => {
+    const here = (state.stack as WalkEntry[]).at(-1);
+    const home = here ? undefined : homeRoom(app);
+    const dashView =
+      here?.kind === 'page' && dashViewKey(here.pageId) !== undefined
+        ? dashViewKey(here.pageId)!
+        : home && 'sections' in home
+          ? home.id
+          : null;
+    const formView =
+      here?.kind === 'page' && formViewKey(here.pageId) !== undefined
+        ? formViewKey(here.pageId)!
+        : home && isFormView(home)
+          ? home.id
+          : null;
+    const currentTable =
+      here?.table && !dashView && !formView
+        ? tables[currentNavIndex(tables, here.table ?? '', here.query ?? '', here.view)]
+        : home && isListRoom(home)
+          ? tables.find((entry) => entry.id === home.id)
+          : undefined;
+    return { dashView, formView, currentTable, onAssistant: here?.kind === 'page' && here.pageId === ASSISTANT_PAGE };
+  };
+  /* The strip is drawn again when the walk changes what it lights, or the schema it reads under it, not on every
+     paint: a sort or a filter drew every group's menu again inside its click (test/built-client-vitals.mjs). */
+  const litWords = () => {
+    const now = lit();
+    return [now.dashView, now.formView, tables.indexOf(now.currentTable!), now.onAssistant, schemaTick()].join('\n');
+  };
+  useSyncExternalStore(subscribeWalk, litWords, litWords);
+  const { dashView, formView, currentTable, onAssistant } = lit();
   const isCurrent = (entry: MenuEntry) =>
     isAssistantRoom(entry)
       ? onAssistant

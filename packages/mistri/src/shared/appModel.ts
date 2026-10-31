@@ -1086,6 +1086,8 @@ export interface AppUi {
   customThemes?: ThemeDefinition[];
   /** false hides the Export menu everywhere the app curates, and the server refuses the file as well, over any role's export grant. Default true. */
   export?: boolean;
+  /** true makes the App an installable PWA (app/appPwa.ts): its pages carry its manifest and worker registration, and it serves its worker, icons and offline page. Preview: the shape may change in any 1.x release. Absent or false, it serves none of those. */
+  pwa?: boolean;
   /** App shell visibility and spacing; omitted settings keep the existing UI. */
   shell?: AppShell;
   /** Omission keeps explicit Save. Workbench always uses explicit review/apply. */

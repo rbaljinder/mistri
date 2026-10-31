@@ -5,7 +5,7 @@ import { bind, unbind } from '../binding.js';
 import { memoryNavigator } from '../navigator.js';
 
 /* The client's modules as the embed build has them: its address seam swapped for the embed's twin, as
-   vite.embed.config.ts swaps it. Everything else is the served client's own code. */
+   config/vite.embed.config.ts swaps it. Everything else is the served client's own code. */
 vi.mock('../../../../kit/src/client/addressMount.js', async () => await import('./addressMount.js'));
 const { configureVisualThemes } = await import('../../../../kit/src/client/visualTheme.js');
 const { brandMark } = await import('../../client/appBrand.js');

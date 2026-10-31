@@ -74,3 +74,8 @@ export { Drawer, DrawerSheet, type DrawerProps, type DrawerSide } from './Drawer
 export { Popover, PopoverLayer, type PopoverProps } from './Popover.js';
 export { Avatar, AvatarDisc, initialsOf, type AvatarProps, type AvatarSize } from './Avatar.js';
 export { Pagination, paginationItems, type PaginationProps } from './Pagination.js';
+/* The remainder-wave primitives: a carousel, resizable panes, a scroll area and a general tooltip, Preview like the rest. */
+export { Carousel, CarouselControl, type CarouselProps, type CarouselSlide } from './Carousel.js';
+export { Resizable, ResizablePanels, type ResizablePanel, type ResizableProps } from './Resizable.js';
+export { ScrollArea, ScrollAreaControl, type ScrollAreaProps } from './ScrollArea.js';
+export { Tooltip, TooltipLayer, type TooltipProps } from './Tooltip.js';

@@ -12,7 +12,7 @@
  * signed-in reader's pages stay the client's to draw.
  *
  * The renderer is client code, so the server never imports it: from the
- * build it is dist/ssr/render.js (vite.ssr.config.ts, React inside); under
+ * build it is dist/ssr/render.js (config/vite.ssr.config.ts, React inside); under
  * tsx, the source through Vite's server-side loader. Whatever goes wrong —
  * no build of it, a throw, a render past its time — the page is sent
  * without it and the client draws as it always did. MISTRI_SSR=0 turns it

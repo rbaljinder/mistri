@@ -1,5 +1,5 @@
 /**
- * The App framework's page: the kit's, built by vite.mistri.config.ts into this package's dist/client, with
+ * The App framework's page: the kit's, built by config/vite.mistri.config.ts into this package's dist/client, with
  * the database browser's main left out. From source the built folder is this package's dist/client beside src/; built, it is the
  * dist/client beside this module's dist/server.
  */

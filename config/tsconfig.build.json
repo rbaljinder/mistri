@@ -1,13 +1,13 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
     "allowImportingTsExtensions": false,
     /* One program over every package, so a declaration graph that crosses a package (@mistriwork/mistri/commands reaches
        the engine's types) is emitted whole. tsc writes each package's tree under the stage, and
        scripts/build-packages.mjs moves packages/<name>/src's output to packages/<name>/dist. */
-    "outDir": "node_modules/.cache/build-stage",
-    "rootDir": "packages",
+    "outDir": "../node_modules/.cache/build-stage",
+    "rootDir": "../packages",
     /* A build starts from an empty stage, so it emits everything: the checkout's incremental state says what was
        checked, not what is on disk here. */
     "incremental": false,
@@ -38,7 +38,7 @@
        `npm test` first, and an emit that ignores a type error ships it. tsconfig.commands.json, the same sources again
        for their declarations, is emitted with --noCheck rather than checked twice. */
   },
-  "include": ["packages/*/src"],
+  "include": ["../packages/*/src"],
   /* The client is Vite's, not tsc's: `vite build` bundles src/client into
      dist/client at the same `npm run build`. With `allowJs` on and `noEmit`
      off, tsc would otherwise *emit* the client too — a transpiled copy that
@@ -48,10 +48,10 @@
      them through the bundle. mistri's src/embed (@mistriwork/mistri/react) is the client
      built once more, by vite.embed.config.ts, and is Vite's for the same reason. */
   "exclude": [
-    "packages/*/src/client",
-    "packages/*/src/embed",
+    "../packages/*/src/client",
+    "../packages/*/src/embed",
     /* @mistriwork/ui's tests sit beside its primitives (Vitest runs them); a package ships what they test, not them. */
-    "packages/*/src/**/*.test.ts",
-    "packages/*/src/**/*.test.tsx"
+    "../packages/*/src/**/*.test.ts",
+    "../packages/*/src/**/*.test.tsx"
   ]
 }

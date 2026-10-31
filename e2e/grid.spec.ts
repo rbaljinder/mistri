@@ -304,3 +304,34 @@ test('Back and Forward still restore a sorted table, on the page a link restores
   await expect(page.getByRole('heading', { name: /invoice · / })).toBeVisible();
   expect(page.url()).toBe(record);
 });
+
+for (const scheme of ['light', 'dark'] as const) {
+  test(`${scheme}: no head's hidden controls cover a neighbour's label, and a figure's label is whole`, async ({ page }) => {
+    /* The last head's caret and move buttons stand before its label (style.css), over the head to its left; a figure's
+       head ("total", right-aligned) lies there. Invisible, they still answered the pointer and, with the wrapper's own
+       ground, painted over the label: "TOTAL" read "AL". Looked at as a pointer would: the label's two ends answer
+       as the label, and the label is not cut. */
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await open(page, DEMO, 'invoice');
+    const heads = await page.evaluate(() =>
+      [...document.querySelectorAll('th')]
+        .filter((th) => th.querySelector('.th-label'))
+        .map((th) => {
+          const label = th.querySelector('.th-label') as HTMLElement;
+          const box = label.getBoundingClientRect();
+          const y = box.top + box.height / 2;
+          const owner = (x: number) => !!document.elementFromPoint(x, y)?.closest('.th-label');
+          return {
+            name: label.textContent,
+            left: owner(box.left + 2),
+            right: owner(box.right - 2),
+            cut: label.scrollWidth > label.clientWidth,
+            align: th.className,
+          };
+        }),
+    );
+    expect(heads.some((h) => /align-right/.test(h.align))).toBe(true);
+    for (const h of heads) expect(h, `${h.name} head`).toMatchObject({ left: true, right: true, cut: false });
+  });
+}

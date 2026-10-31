@@ -3,6 +3,6 @@
  * `withoutOtherMain`), into packages/tablewalk/dist/client.
  */
 import { defineConfig } from 'vite';
-import { clientConfig } from './vite.config.js';
+import { clientConfig } from '../vite.config.js';
 
 export default defineConfig(clientConfig('tablewalk'));

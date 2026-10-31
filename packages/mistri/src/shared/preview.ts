@@ -8,6 +8,7 @@
 /** Key paths of the App DSL (the inventory's section 1) that are Preview. A path matches when any rule matches it. */
 export const PREVIEW_PATHS: readonly RegExp[] = [
   /^resources\.\*\.search(\.|$)/, // a search pack, which ships after 1.0
+  /^ui\.pwa(\.|$)/, // an installable PWA: manifest, worker and offline page, but no offline data
   /^(flags|audiences|experiments|analytics)(\.|\[|$)/,
   /^auth\.roles\.\*\.(flags|experiments)(\.|\[|$)/,
   /^auth\.roles\.\*\.operations\[\] = "analytics"$/,
@@ -64,6 +65,7 @@ interface PreviewApp {
   audiences?: object;
   experiments?: object;
   analytics?: unknown;
+  ui?: { pwa?: unknown };
   auth?: { roles?: Record<string, { flags?: unknown; experiments?: unknown; operations?: readonly string[] } | undefined> };
   views?: Record<string, { presentation?: { kind?: string } } | undefined>;
 }
@@ -72,12 +74,13 @@ const filled = (value: unknown) => (value && typeof value === 'object' ? Object.
 
 /** The Preview keys an App uses, in a stable order: what `check` lists in its `preview-feature` finding. */
 export function previewKeysUsed(app: unknown): string[] {
-  const { flags, audiences, experiments, analytics, auth, views } = app as PreviewApp;
+  const { flags, audiences, experiments, analytics, ui, auth, views } = app as PreviewApp;
   const used: string[] = [];
   if (filled(flags)) used.push('flags');
   if (filled(audiences)) used.push('audiences');
   if (filled(experiments)) used.push('experiments');
   if (filled(analytics)) used.push('analytics');
+  if (ui?.pwa) used.push('ui.pwa');
   const roles = Object.values(auth?.roles ?? {});
   if (roles.some((role) => filled(role?.flags))) used.push('auth.roles.*.flags');
   if (roles.some((role) => filled(role?.experiments))) used.push('auth.roles.*.experiments');

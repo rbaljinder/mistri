@@ -53,7 +53,9 @@ test('a signed-out App whose home is public asks for it, and signs in when nothi
     await import('./boot.js');
   });
   expect(await screen.findByRole('heading', { name: 'Sign in to Ignition · Assignments' }, { timeout: 20_000 })).toBeInTheDocument();
-  expect(fetch.mock.calls.map(([path]) => path)).toEqual(['/api/whoami?app=ignition-commands', '/api/landing', '/api/forms/welcome']);
+  // No `/api/landing` probe: who-am-I names no landing here, so the boot resolves it to null and
+  // the public home goes straight to the form instead of probing a landing that answers 404.
+  expect(fetch.mock.calls.map(([path]) => path)).toEqual(['/api/whoami?app=ignition-commands', '/api/forms/welcome']);
 }, 30_000);
 
 // A public home the landing does not claim is a public form: it is drawn
@@ -84,7 +86,9 @@ test('a signed-out App whose home is a public form draws the form and never sign
   });
   expect(await screen.findByRole('heading', { name: 'Apply for financing' })).toBeInTheDocument();
   expect(document.querySelector('.signin')).toBeNull();
-  expect(fetch.mock.calls.map(([path]) => path)).toEqual(['/api/whoami?app=ignition-commands', '/api/landing', '/api/forms/finance']);
+  // No `/api/landing` probe here either: the boot resolves an unnamed landing to null, so the
+  // public form is drawn without asking the App for a landing first.
+  expect(fetch.mock.calls.map(([path]) => path)).toEqual(['/api/whoami?app=ignition-commands', '/api/forms/finance']);
 }, 30_000);
 
 test.each(['whoami', 'tenant-whoami', 'runtime-401'])(

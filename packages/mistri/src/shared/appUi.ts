@@ -49,6 +49,7 @@ export const UI_KEYS = [
   'logo',
   'csp',
   'appSwitcher',
+  'pwa',
 ] as const;
 export const SHELL_KEYS = [
   'menuSearch',
@@ -121,6 +122,11 @@ export function parseUi(raw: unknown, where: string): AppUi {
   });
   if (raw.export !== undefined && typeof raw.export !== 'boolean') {
     throw new Error(`${where}: "ui.export" is not true or false.`);
+  }
+  /* An installable PWA is opt-in per App (`ui.pwa: true`, appPwa.ts): absent
+     or false, the App serves no manifest, no worker and no registration. */
+  if (raw.pwa !== undefined && typeof raw.pwa !== 'boolean') {
+    throw new Error(`${where}: "ui.pwa" is not true or false.`);
   }
   const parsedShell = raw.shell === undefined ? undefined : parseShell(raw.shell, where);
   const editing = raw.editing === undefined ? undefined : parseEditing(raw.editing, where);
@@ -204,6 +210,7 @@ export function parseUi(raw: unknown, where: string): AppUi {
     ...(shell === undefined || !Object.keys(shell).length ? {} : { shell }),
     ...(editing === undefined ? {} : { editing }),
     ...(raw.export === undefined ? {} : { export: raw.export as boolean }),
+    ...(raw.pwa === undefined ? {} : { pwa: raw.pwa as boolean }),
     ...(locale?.tag === undefined ? {} : { locale: locale.tag }),
     ...(locale?.column === undefined ? {} : { localeColumn: locale.column }),
     ...(messages === undefined ? {} : { messages }),

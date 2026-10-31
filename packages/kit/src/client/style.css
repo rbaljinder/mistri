@@ -982,26 +982,107 @@ th.sorted { color: var(--accent-ink); border-bottom-color: var(--accent); }
    head the column fits is never cut for it ("Co…" in an 80px column whose values fit). On touch it stays, beside the
    label, which gives way as before. */
 @media (hover: hover) {
-  .th-controls { position: relative; background: inherit; }
+  .th-controls { background: inherit; }
+  /* The controls stand inside their own head, never past it: placed against the head (sticky, so its containing
+     block), at its trailing edge inside the resizer's 16px, and at its leading edge for a figure's head, set to the
+     right, whose label leaves that side bare. A caret standing past its label's end, or before it in the last head,
+     lay over the NEIGHBOUR's label and answered its pointer ("TOTAL" read "AL" under the last head's moves). */
   .th-controls > .th-filter {
-    position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
+    position: absolute; right: var(--space-4); top: 50%; transform: translateY(-50%);
     background: inherit; opacity: 0;
   }
   th:is(:hover, :focus-within) .th-controls > .th-filter, .th-controls > .th-filter[aria-expanded="true"] { opacity: 1; }
-  /* A figure's head is set to the right: its caret stands before the label, not over the next head. */
-  /* The last head's caret stands before the label too: past its end it would lie beyond the table's inline end, and
-     the overflow the head no longer clips (below) widened the wrap by the caret's width, a sideways scroll in a list that fits. */
-  :is(.align-right, :last-child) > .th-controls > .th-filter { left: auto; right: 100%; }
-  /* A head whose label fills it (a sorted figure, a head wrapped to the least its column allows) has no padding for
-     the caret to lie over, and the head's own clip (th, above) cut it to a sliver its neighbour then answered the
-     pointer for. The caret may stand past its head instead, over the neighbour's edge, and the head that
-     holds the pointer or focus is raised above its neighbours so the caret, not the neighbour, answers there. */
-  th:has(> .th-controls) { overflow: visible; }
+  .align-right > .th-controls > .th-filter { right: auto; left: 0; }
+  /* A head whose label fills it (a sorted figure, a head wrapped to the least its column allows) has no bare side:
+     the controls then lie over the label's end, and only while the head is hovered or focused, which is raised above
+     its neighbours so they, not the neighbour, answer there. */
   th:has(> .th-controls):is(:hover, :focus-within) { z-index: 3; }
+  /* Stacked: the caret over the label's sort, the sort over the move buttons. Where a head's label fills it the moves
+     are under the sort (reached by the keyboard) and the click meant for the sort sorts; the caret is the one control
+     with no other way in, so it stays on top. The controls are their own stacking context, drawn on their head's
+     ground, and the moves sit in it beneath the flow (below): the caret, positioned, already paints over the sort.
+     The sort is not given a stacking context of its own to rise over them: a transparent layer of label text was
+     composited one way on the list and another in the navigation's held picture of it (navigationHold.ts), and on
+     Linux, where Chromium draws text with subpixel color on one and gray on the other, the heads' labels changed
+     under the reader as a record was opened. */
+  .th-controls { isolation: isolate; }
 }
+
 .align-right .th-sort { padding-left: var(--space-2); padding-right: 0; }
+/* A head's own arrangement, beside its sort: the column's move buttons
+   and the resizer on its trailing edge (Grid.tsx). The moves wait with
+   the filter caret — quiet until the head is hovered or holds focus, and
+   always there on touch — and draw at the caret's 24px, with a finger's
+   44px hit area on a coarse pointer, as the chrome's small controls do
+   (structure.css). The resizer's line shows the same way, its handle
+   inset to its own head's trailing edge: a handle straddling the edge
+   reaches into the neighbour's head and overlaps the neighbour's sort
+   control (grade's overlap check caught exactly that on a list's first
+   two columns), and a click near the edge would then answer the wrong
+   control. No
+   transition anywhere here: a width or an order lands where it is put,
+   so reduced motion needs nothing special. */
+.th-moves { display: contents; }
+.th-move {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 24px; min-height: 24px;
+  background: none; border: none; border-radius: min(3px, var(--radius));
+  color: var(--ink-subtle); cursor: pointer;
+  padding: 0; line-height: 1; opacity: 0;
+}
+/* The arrows are drawn here, not typed into the button: a glyph in the markup is text, and the head's text is its label. */
+.th-move-left::before { content: '‹'; }
+.th-move-right::before { content: '›'; }
+.th-move:disabled { cursor: default; }
+.th-move:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+th:focus-within .th-move { opacity: 1; }
+.th-resizer {
+  position: absolute; top: 0; bottom: 0; right: 0; width: var(--space-4);
+  cursor: col-resize; touch-action: none;
+}
+.th-resizer::before {
+  content: ''; position: absolute; top: var(--space-2); bottom: var(--space-2); left: 50%; width: 1px;
+  background: var(--line-strong); opacity: 0;
+}
+.th-resizer:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+@media (hover: hover) {
+  th:is(:hover, :focus-within) .th-move { opacity: 1; }
+  /* Out of the head's flow, as the filter caret is, and inside the head as it is: beside the caret where the head has
+     one, toward the label, so a fitted head loses no room to them (gridSizing.ts reserves none). A figure's stand
+     at the leading edge, mirrored. While hidden they answer no pointer (they stay focusable, and focus-within shows
+     them), and no ground is painted until the head is hovered or holds focus. */
+  .th-moves {
+    display: flex; position: absolute; right: var(--space-4); top: 50%; transform: translateY(-50%);
+    z-index: -1; pointer-events: none;
+  }
+  th:is(:hover, :focus-within) .th-moves { pointer-events: auto; background: inherit; }
+  .th-controls:has(> .th-filter) > .th-moves { right: calc(var(--space-4) + 24px); }
+  .align-right > .th-controls > .th-moves { right: auto; left: 0; }
+  .align-right > .th-controls:has(> .th-filter) > .th-moves { left: 24px; }
+  .th-move:not(:disabled):hover { color: var(--accent-ink); background: var(--accent-soft); }
+  th:is(:hover, :focus-within) .th-resizer::before, .th-resizer:hover::before { opacity: 1; }
+}
+@media (hover: none) {
+  .th-move { opacity: 1; }
+  .th-resizer::before { opacity: 1; }
+}
+@media (pointer: coarse) {
+  .th-move { position: relative; }
+  .th-move::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: max(100%, 44px); height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+  .th-resizer::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: max(100%, 44px); height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}
 /* A figure's head ends where its figures end: the cell's own padding, nothing more (the last column's is 14px, above). */
 th.align-right:not(:last-child) { padding-right: var(--space-3h); }
+/* ...and its resizer stops at the same line: wider, it lay over the label's last pixels and answered a click meant for the sort. */
+th.align-right:not(:last-child) .th-resizer { width: var(--space-3h); }
 
 .th-menu {
   /* Placed by the positioner (Base UI) under the header that opened it. */
@@ -2923,7 +3004,7 @@ tr.expanded > td { border-bottom-color: transparent; background: var(--accent-so
 /* Sticky belongs to the page's header, not to a table nested three rows down:
    an inner header pinning itself to the top of the scroller detaches from the
    rows it names. */
-.detail-cell thead th { position: static; }
+.detail-cell thead th { position: relative; }
 .detail-cell .pinned { background: color-mix(in srgb, var(--ink) 7%, var(--raised)); }
 
 /* ---------- what is in this database ---------- */

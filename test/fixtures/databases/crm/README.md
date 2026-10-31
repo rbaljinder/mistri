@@ -1,6 +1,6 @@
 # Compass database fixtures
 
-Start with the [Compass App README](../../apps/compass/README.md) for the complete
+Start with the [CRM fixture README](../../apps/crm/README.md) for the complete
 seed, launch, and validation commands. The typed App source lives separately in
 `test/fixtures/apps/crm`.
 

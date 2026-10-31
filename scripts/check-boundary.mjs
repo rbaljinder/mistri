@@ -482,7 +482,7 @@ export function closureOf(entry, { edges, owner, allow, exempt }) {
 
 /* Inside a package, a tsc-built entry is dist/<path>.js from src/<path>.ts; a Vite library build names its source in
    its config, which sits at the workspace root. */
-const VITE_LIBRARIES = { 'dist/ui/': 'vite.ui.config.ts', 'dist/embed/': 'vite.embed.config.ts' };
+const VITE_LIBRARIES = { 'dist/ui/': 'config/vite.ui.config.ts', 'dist/embed/': 'config/vite.embed.config.ts' };
 const conditionsOf = (value) => (value && typeof value === 'object' ? value : { default: value });
 function builtFrom(root, target, source) {
   const file = target.replace(/^\.\//, '');

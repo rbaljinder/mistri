@@ -13,6 +13,8 @@ import {
 } from '@mistriwork/engine/shared/mount.js';
 import { applyServerTimeouts } from '@mistriwork/engine/server/serverTimeouts.js';
 import { probe } from '@mistriwork/engine/server/http/probes.js';
+import { forwardedClient } from '@mistriwork/engine/server/http/trust.js';
+import { withAdmission } from '@mistriwork/engine/adapters/poolAdmission.js';
 import { SOURCE_CLIENT, attachDevClient, closeDevClientHmr, retireDevClient } from '@mistriwork/engine/server/devclient.js';
 import {
   createTenantHostRouter,
@@ -153,117 +155,121 @@ export async function createSuite(
     const selected = target(req.url);
     return selected?.id === intent.app ? selected : undefined;
   };
-  const server = createServer((req, res) => {
-    if (stopping) {
-      res.writeHead(503).end('The suite is stopping.');
-      return;
-    }
-    if (!hostRouter.accept(req)) {
-      res.writeHead(403).end('Invalid host.');
-      return;
-    }
-    res.once('finish', () => {
-      if (stopping) setImmediate(() => server.closeIdleConnections());
-    });
-    /* The orchestrator's probes are the suite's own, answered before any App: they went to the App at the root,
-       and a suite whose Apps are all mounted under a path has none, so /readyz answered 404 for its whole life and
-       an orchestrator, or @mistriwork/mistri/testing's host, waited out its timeout for a suite that was serving. */
-    const probed = (() => {
-      try {
-        const path = new URL(req.url ?? '/', 'http://localhost').pathname;
-        if (!mount.base) return path;
-        return path.startsWith(`${mount.base}/`) ? path.slice(mount.base.length) : undefined;
-      } catch {
-        return undefined;
-      }
-    })();
-    if (probed !== undefined && probe(req, res, probed, () => !stopping)) return;
-    const intent = getTenantHostIntent(req);
-    const home = intent && appHome(mount, intent.app);
-    if (home && home !== '/' && req.url?.split('?')[0] === '/') {
-      res.writeHead(302, { location: home, 'cache-control': 'no-store' }).end();
-      return;
-    }
-    const dispatch = async (entered = false) => {
-      if (res.destroyed || res.writableEnded) return;
+  const server = createServer((req, res) =>
+    /* The suite's own reads (its sign-in entry, its flag console) wait in a pool's line as their client's
+       (poolAdmission.ts); an App it hands the request to files it again, under its own door. */
+    withAdmission(forwardedClient(req), () => {
       if (stopping) {
         res.writeHead(503).end('The suite is stopping.');
         return;
       }
-      const host = customTarget(req);
-      if (!host) {
-        res.writeHead(404).end('No App at this address.');
+      if (!hostRouter.accept(req)) {
+        res.writeHead(403).end('Invalid host.');
         return;
       }
-      // The bare root's entry has already judged this account against the root App.
-      const gated = intent || entered ? undefined : identity?.gate?.(req, host.id);
-      if (gated) {
-        const destination = await gated;
+      res.once('finish', () => {
+        if (stopping) setImmediate(() => server.closeIdleConnections());
+      });
+      /* The orchestrator's probes are the suite's own, answered before any App: they went to the App at the root,
+       and a suite whose Apps are all mounted under a path has none, so /readyz answered 404 for its whole life and
+       an orchestrator, or @mistriwork/mistri/testing's host, waited out its timeout for a suite that was serving. */
+      const probed = (() => {
+        try {
+          const path = new URL(req.url ?? '/', 'http://localhost').pathname;
+          if (!mount.base) return path;
+          return path.startsWith(`${mount.base}/`) ? path.slice(mount.base.length) : undefined;
+        } catch {
+          return undefined;
+        }
+      })();
+      if (probed !== undefined && probe(req, res, probed, () => !stopping)) return;
+      const intent = getTenantHostIntent(req);
+      const home = intent && appHome(mount, intent.app);
+      if (home && home !== '/' && req.url?.split('?')[0] === '/') {
+        res.writeHead(302, { location: home, 'cache-control': 'no-store' }).end();
+        return;
+      }
+      const dispatch = async (entered = false) => {
         if (res.destroyed || res.writableEnded) return;
         if (stopping) {
           res.writeHead(503).end('The suite is stopping.');
           return;
         }
-        if (destination !== undefined) {
-          res.writeHead(302, { location: destination, 'cache-control': 'no-store' }).end();
+        const host = customTarget(req);
+        if (!host) {
+          res.writeHead(404).end('No App at this address.');
           return;
         }
-      }
-      const control = flags?.route(host.id, req, res);
-      if (control) {
-        await control.catch(() => {
-          if (!res.headersSent) res.writeHead(503, { 'cache-control': 'no-store' }).end('Flag controls are unavailable.');
-          else res.destroy();
-        });
-        return;
-      }
-      if (await host.publicPlacementRoute?.(req, res)) return;
-      if (res.destroyed || res.writableEnded) return;
-      if (stopping) {
-        res.writeHead(503).end('The suite is stopping.');
-        return;
-      }
-      // Child owners track their own accepted operations after this dispatch.
-      host.server.emit('request', req, res);
-    };
-    let operation = flags?.routeConsole(req, res) ?? (intent ? undefined : identity?.route(req, res));
-    const bareRoot =
-      (req.method === 'GET' || req.method === 'HEAD') && [mount.base, `${mount.base}/`].includes(req.url?.split('?')[0] ?? '/');
-    if (!operation && !intent && bareRoot) {
-      const entry = identity?.entry?.(req, async (appId, accountId) => {
-        const scopes = hosts.get(appId)?.flagScopes;
-        return scopes ? (await scopes(req, accountId)).length : 0;
-      });
-      if (entry)
-        operation = entry.then((destination) => {
+        // The bare root's entry has already judged this account against the root App.
+        const gated = intent || entered ? undefined : identity?.gate?.(req, host.id);
+        if (gated) {
+          const destination = await gated;
           if (res.destroyed || res.writableEnded) return;
           if (stopping) {
             res.writeHead(503).end('The suite is stopping.');
             return;
           }
-          if (destination !== undefined) res.writeHead(302, { location: destination, 'cache-control': 'no-store' }).end();
-          else return dispatch(true);
+          if (destination !== undefined) {
+            res.writeHead(302, { location: destination, 'cache-control': 'no-store' }).end();
+            return;
+          }
+        }
+        const control = flags?.route(host.id, req, res);
+        if (control) {
+          await control.catch(() => {
+            if (!res.headersSent) res.writeHead(503, { 'cache-control': 'no-store' }).end('Flag controls are unavailable.');
+            else res.destroy();
+          });
+          return;
+        }
+        if (await host.publicPlacementRoute?.(req, res)) return;
+        if (res.destroyed || res.writableEnded) return;
+        if (stopping) {
+          res.writeHead(503).end('The suite is stopping.');
+          return;
+        }
+        // Child owners track their own accepted operations after this dispatch.
+        host.server.emit('request', req, res);
+      };
+      let operation = flags?.routeConsole(req, res) ?? (intent ? undefined : identity?.route(req, res));
+      const bareRoot =
+        (req.method === 'GET' || req.method === 'HEAD') && [mount.base, `${mount.base}/`].includes(req.url?.split('?')[0] ?? '/');
+      if (!operation && !intent && bareRoot) {
+        const entry = identity?.entry?.(req, async (appId, accountId) => {
+          const scopes = hosts.get(appId)?.flagScopes;
+          return scopes ? (await scopes(req, accountId)).length : 0;
         });
-    }
-    operation ??= dispatch();
-    if (operation) {
-      req.once('error', () => {});
-      identityBodies.add(req);
-      const held = operation.catch(() => {
-        if (!res.headersSent)
-          res
-            .writeHead(503, { 'content-type': 'application/json', 'cache-control': 'no-store' })
-            .end(JSON.stringify({ error: 'The suite is unavailable.', outcome: 'unknown' }));
-        else res.destroy();
-      });
-      identityRequests.add(held);
-      void held.then(() => {
-        identityRequests.delete(held);
-        identityBodies.delete(req);
-      });
-      return;
-    }
-  });
+        if (entry)
+          operation = entry.then((destination) => {
+            if (res.destroyed || res.writableEnded) return;
+            if (stopping) {
+              res.writeHead(503).end('The suite is stopping.');
+              return;
+            }
+            if (destination !== undefined) res.writeHead(302, { location: destination, 'cache-control': 'no-store' }).end();
+            else return dispatch(true);
+          });
+      }
+      operation ??= dispatch();
+      if (operation) {
+        req.once('error', () => {});
+        identityBodies.add(req);
+        const held = operation.catch(() => {
+          if (!res.headersSent)
+            res
+              .writeHead(503, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+              .end(JSON.stringify({ error: 'The suite is unavailable.', outcome: 'unknown' }));
+          else res.destroy();
+        });
+        identityRequests.add(held);
+        void held.then(() => {
+          identityRequests.delete(held);
+          identityBodies.delete(req);
+        });
+        return;
+      }
+    }),
+  );
   server.on('upgrade', (req, socket, head) => {
     if (stopping || !hostRouter.accept(req)) {
       socket.destroy();

@@ -81,8 +81,8 @@ export function columnSizeHint(
   measure?: TextMeasure,
   squeezeName = false,
 ): { minimum: number; wanted: number; least: number; whole?: number; twoLines?: number } {
-  /* A head with controls keeps room for its sort's padding and arrow; its menu caret stands over the label's end
-     where a pointer hovers (style.css), so it is not reserved. */
+  /* A head with controls keeps room for its sort's padding and arrow; its menu caret and its move buttons stand past the
+     label's end where a pointer hovers (style.css), so they are not reserved. */
   const counted = Math.min(column.label.length, 22) * headChar;
   const around = column.controls ? 34 : 28;
   const header = Math.ceil(column.headWidth === undefined ? counted : Math.min(column.headWidth, counted * 1.15)) + around;

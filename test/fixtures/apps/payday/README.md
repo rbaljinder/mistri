@@ -11,10 +11,10 @@ Payday is a fictional, single-company HR and payroll workspace inspired by the c
 - **Time tracking**: weekly timesheets for the two hourly teammates, with the days behind each week. Several submitted timesheets approve together from the queue.
 - **Benefits**: a dashboard of plans with employee and company monthly cost, enrollments by plan, medical coverage tiers and elections still waiting; plan and enrollment pages.
 - **Documents**: offer letters, tax forms, direct deposit authorizations and the 2026 handbook acknowledgment, with the ones awaiting signature first. A reminder is recorded, not sent.
-- **Languages**: the people screens' captions are messages, from `messages/en.ts` and `messages/es.ts`. Payday is served in English (`ui.locale: 'en-US'`); a reader whose language the App names, by their row's `ui.locale` column or their tenant's, reads them in Spanish at the same addresses ([Languages](../../../site/src/content/docs/docs/languages.md)).
+- **Languages**: the people screens' captions are messages, from `messages/en.ts` and `messages/es.ts`. Payday is served in English (`ui.locale: 'en-US'`); a reader whose language the App names, by their row's `ui.locale` column or their tenant's, reads them in Spanish at the same addresses ([Languages](../../../../site/src/content/docs/docs/languages.md)).
 - **Reports**: payroll cost by month, headcount by department, time off by policy and by month, and the open signature and onboarding items.
 
-These screens use shared building blocks through the App DSL: dashboards with metric (each opening its list), chart, breakdown, matrix, rows and embedded queue sections, the aside's rows drawn as names; compact queue, card and calendar (with ranges) list presentations; record pages with facts, property rails, tabs, related lists (hidden while empty, totalled, matched on two keys) and page metrics. One screen is Payday's own: a payroll run's **Pay history** is a [custom component](../../../site/src/content/docs/docs/custom-components.md) (`widgets/PayrollTimeline.tsx`) that places every run's pay period on a month axis, the run in hand marked, and becomes a list on a phone. Its rows are a declared read, planned and authorized like a related list; it draws with `@mistriwork/mistri/ui` and the looks' tokens, and is tested with `@mistriwork/mistri/ui/testing` (`npx vitest run test/fixtures/apps/payday`). Serving it from source needs Rolldown, which a checkout has.
+These screens use shared building blocks through the App DSL: dashboards with metric (each opening its list), chart, breakdown, matrix, rows and embedded queue sections, the aside's rows drawn as names; compact queue, card and calendar (with ranges) list presentations; record pages with facts, property rails, tabs, related lists (hidden while empty, totalled, matched on two keys) and page metrics. One screen is Payday's own: a payroll run's **Pay history** is a [custom component](../../../../site/src/content/docs/docs/custom-components.md) (`widgets/PayrollTimeline.tsx`) that places every run's pay period on a month axis, the run in hand marked, and becomes a list on a phone. Its rows are a declared read, planned and authorized like a related list; it draws with `@mistriwork/mistri/ui` and the looks' tokens, and is tested with `@mistriwork/mistri/ui/testing` (`npx vitest run test/fixtures/apps/payday`). Serving it from source needs Rolldown, which a checkout has.
 
 ## First journeys
 
@@ -88,7 +88,7 @@ Submitting and approving a run, declining a request, approving timesheets and
 sending a reminder only set a status and stamp who and when (`me`, `now`),
 so they are fixed actions, granted to the payroll manager in `auth.roles`
 (`actions: { pay_run: ['Submit for review', 'Approve payroll'] }`,
-[granting a fixed action](../../../site/src/content/docs/docs/commands.md#grant-a-fixed-action-without-write)).
+[granting a fixed action](../../../../site/src/content/docs/docs/commands.md#grant-a-fixed-action-without-write)).
 The server admits each as exactly that action: its status, its stamps and its
 reason, judged against the record's current state, and nothing else. Approving
 time off stays a command in `commands.ts`, because it also spends the

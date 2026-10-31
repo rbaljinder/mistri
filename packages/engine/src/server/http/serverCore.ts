@@ -18,6 +18,7 @@ import { applyServerTimeouts } from '../serverTimeouts.js';
 import { Refusal, WriteConflict } from '../../adapters/adapter.js';
 import { HttpSourceError } from '../../adapters/http/egress.js';
 import { isPoolBusy } from '../../adapters/poolMetrics.js';
+import { withAdmission } from '../../adapters/poolAdmission.js';
 import { AppAccessDenied } from '../columnGrants.js';
 import { wrongTypeValue } from '../constraints.js';
 import type { RequestDiagnostics } from '../operations/diagnostics.js';
@@ -29,7 +30,7 @@ import { reportRefusal } from './refusalReport.js';
 import { HttpError, send, sendBusy } from './reply.js';
 import { routedPath, servedApp, traceRequest } from './traceRequest.js';
 import { setBaselineHeaders } from './baselineHeaders.js';
-import type { Bound } from './trust.js';
+import { forwardedClient, type Bound } from './trust.js';
 import { timeRequests } from '../../adapters/telemetry/serverTiming.js';
 
 /* From source, Vite's modules are addressed from the root whatever the base
@@ -139,53 +140,57 @@ export function listen(options: Listening, answering: Answering): Server {
      address after routeAddress has read it inward, never as the browser
      spelled it: under a base path or a root mount it is the same route. */
   const server = createServer((req, res) =>
-    traceRequest(req, res, () => {
-      options.diagnostics?.observe(req, res);
-      setBaselineHeaders(req, res, options.bound.trustedProxies);
-      // Node accepts request targets that URL cannot parse. Refuse them before
-      // dispatch, and reuse this parse in error mapping and drain tracking too.
-      let url: URL;
-      try {
-        url = new URL(req.url ?? '/', 'http://localhost');
-      } catch {
-        return send(res, 400, { error: 'Invalid request target.' });
-      }
-      const mount = answering.mount();
-      if (answering.outside?.(req, res, url)) return routedPath(req, url.pathname);
-      // An address outside the base, or an App's id where it is not mounted, names no route: its span says so.
-      if (!routeAddress(req, res, url, mount)) return routedPath(req, undefined);
-      routedPath(req, url.pathname);
-      if (answering.served) servedApp(req, answering.served(url));
-      // The orchestrator's probes, before any door: they are no product's.
-      if (probe(req, res, url.pathname, options.ready) || answering.ahead?.(req, res, url, mount)) return;
-      const operation = answering.answer(req, res, url, mount).catch((err: Error) => {
-        if (answering.failed?.(err, req, res, url)) return;
-        /* The client left: its request was cut off mid-body, or it closed the
+    /* Its pool checkouts wait in line as its client's until its session names
+       the account (adapters/poolAdmission.ts, http/door.ts). */
+    traceRequest(req, res, () =>
+      withAdmission(forwardedClient(req, options.bound.trustedProxies), () => {
+        options.diagnostics?.observe(req, res);
+        setBaselineHeaders(req, res, options.bound.trustedProxies);
+        // Node accepts request targets that URL cannot parse. Refuse them before
+        // dispatch, and reuse this parse in error mapping and drain tracking too.
+        let url: URL;
+        try {
+          url = new URL(req.url ?? '/', 'http://localhost');
+        } catch {
+          return send(res, 400, { error: 'Invalid request target.' });
+        }
+        const mount = answering.mount();
+        if (answering.outside?.(req, res, url)) return routedPath(req, url.pathname);
+        // An address outside the base, or an App's id where it is not mounted, names no route: its span says so.
+        if (!routeAddress(req, res, url, mount)) return routedPath(req, undefined);
+        routedPath(req, url.pathname);
+        if (answering.served) servedApp(req, answering.served(url));
+        // The orchestrator's probes, before any door: they are no product's.
+        if (probe(req, res, url.pathname, options.ready) || answering.ahead?.(req, res, url, mount)) return;
+        const operation = answering.answer(req, res, url, mount).catch((err: Error) => {
+          if (answering.failed?.(err, req, res, url)) return;
+          /* The client left: its request was cut off mid-body, or it closed the
          socket before the answer, and what failed was the read it no longer
          waits for. Nobody can be answered and nothing went wrong on this
          side, so it is not a 500 on the operator's terminal: the request's
          span still says it was aborted (traceRequest.ts). */
-        if (clientLeft(req, res, err)) {
-          res.destroy();
-          return;
-        }
-        /* The pool had no connection to give within its budget: the server is
+          if (clientLeft(req, res, err)) {
+            res.destroy();
+            return;
+          }
+          /* The pool had no connection to give within its budget: the server is
          busy, which is neither the caller's mistake nor a failure, and a 500
          after ten seconds said both. Answered now, with when to come back. */
-        if (isPoolBusy(err) && !res.headersSent) {
-          reportRefusal(req, 503, 'server_busy', err.message, err);
-          return sendBusy(res, {}, false, err);
+          if (isPoolBusy(err) && !res.headersSent) {
+            reportRefusal(req, 503, 'server_busy', err.message, err);
+            return sendBusy(res, {}, false, err);
+          }
+          const status = statusOf(err, answering);
+          if (answering.said?.(err, req, res, status)) return;
+          reportRefusal(req, status, undefined, err.message, err);
+          send(res, status, { error: err.message });
+        });
+        if (options.drainRequests || answering.drains?.(url)) {
+          pending.add(operation);
+          void operation.finally(() => pending.delete(operation));
         }
-        const status = statusOf(err, answering);
-        if (answering.said?.(err, req, res, status)) return;
-        reportRefusal(req, status, undefined, err.message, err);
-        send(res, status, { error: err.message });
-      });
-      if (options.drainRequests || answering.drains?.(url)) {
-        pending.add(operation);
-        void operation.finally(() => pending.delete(operation));
-      }
-    }),
+      }),
+    ),
   );
   commandOperations.set(server, pending);
   if (SOURCE_CLIENT && options.sourceClient !== false) attachDevClient(server);

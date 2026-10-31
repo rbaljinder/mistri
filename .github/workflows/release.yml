@@ -86,7 +86,7 @@ jobs:
             // The client entry is named for its content, so it is found the way a
             // browser finds it: by the module script index.html names. Its compressed
             // copies are what the server sends, and its map is what a trace reads.
-            // Each product builds its own client (vite.tablewalk.config.ts, vite.mistri.config.ts).
+            // Each product builds its own client (config/vite.tablewalk.config.ts, config/vite.mistri.config.ts).
             const client = (product) => {
               const html = require("fs").readFileSync(`packages/${product}/dist/client/index.html`, "utf8");
               const entry = /<script type="module"[^>]*\ssrc="\/(assets\/[^"]+\.js)"/.exec(html)?.[1];

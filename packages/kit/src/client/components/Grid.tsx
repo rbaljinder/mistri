@@ -18,6 +18,11 @@
  * spacer rows, so column widths, sticky headers, text selection and
  * Find-in-page all keep working. Below a few hundred rows windowing costs
  * more than it saves and every row is drawn.
+ *
+ * The reader arranges the columns they see (gridArrange.ts): each head
+ * carries move buttons and a resizer, one step or one drag at a time,
+ * and the arrangement lives only in this grid — a refetch never moves a
+ * column the reader placed, and another reader never sees it.
  */
 import { useMessageLanguage } from './useMessageLanguage.js';
 import {
@@ -49,6 +54,7 @@ import {
   rowLabel,
   state,
   viewportBox,
+  viewportScale,
 } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
 import { labelColumn as namingColumn } from '@mistriwork/engine/shared/schema.js';
@@ -95,6 +101,7 @@ import {
   GRID_SIZE_SAMPLE,
   GRID_TRAIL_WIDTH,
 } from './gridSizing.js';
+import { applyColumnOrder, applyColumnWidths, clampColumnWidth, columnResizeStep, MIN_COLUMN_WIDTH, moveColumn } from './gridArrange.js';
 import { VISUAL_THEME_EVENT } from '../visualTheme.js';
 import { JsonPreview } from './JsonPreview.js';
 import { AvatarPhotoContext, AvatarPhotos, avatarOwner } from './avatarPhotos.js';
@@ -991,13 +998,68 @@ export function Grid({
   );
   const drawn = useMemo(() => (kept ? asked.filter((_, index) => kept[index]) : asked), [asked, kept]);
   const drawnHints = useMemo(() => (kept ? sizeHints.filter((_, index) => kept[index]) : sizeHints), [sizeHints, kept]);
+  /* The reader's arrangement, over the drawn columns (gridArrange.ts): an
+     order the reader put the columns in, and widths they dragged them to.
+     Both live only in this grid — a refetch never moves a placed column —
+     and both are dropped for columns no longer drawn. */
+  const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const ordered = useMemo(() => applyColumnOrder(drawn, columnOrder), [drawn, columnOrder]);
+  const orderedHints = useMemo(() => ordered.map((name) => drawnHints[drawn.indexOf(name)]!), [ordered, drawn, drawnHints]);
   const fit = useMemo(
-    () => fitGridColumns(drawnHints, availableWidth, slotted, trailing, headChar, measureText, dropColumns),
-    [drawnHints, availableWidth, slotted, trailing, headChar, measureText, dropColumns],
+    () => fitGridColumns(orderedHints, availableWidth, slotted, trailing, headChar, measureText, dropColumns),
+    [orderedHints, availableWidth, slotted, trailing, headChar, measureText, dropColumns],
   );
-  const columns = useMemo(
-    () => helper.columns(drawn.map((name) => helper.accessor((row: Row) => row[name], { id: name, header: name }))),
+  /* A dragged width stands in place of its fitted one. A scrolled grid has
+     no colgroup until a width is dragged: then it takes one, and the fixed
+     layout that makes a dragged width hold, with the fitted widths for the
+     columns untouched — a grid that was never arranged draws exactly as it
+     did. */
+  const hasWidthOverrides = Object.keys(columnWidths).length > 0;
+  const colWidths = useMemo(
+    () => (hasWidthOverrides ? applyColumnWidths(fit.columns, ordered, columnWidths) : fit.columns),
+    [hasWidthOverrides, fit.columns, ordered, columnWidths],
+  );
+  const useColgroup = sizing === 'fit' || hasWidthOverrides;
+  const tableWidth = hasWidthOverrides
+    ? colWidths.reduce((sum, width) => sum + width, 0) + (slotted ? GRID_EXPANDER_WIDTH : 0) + (trailing ? GRID_TRAIL_WIDTH : 0)
+    : fit.width;
+  const moveColumnBy = useCallback(
+    (name: string, direction: 'left' | 'right') =>
+      setColumnOrder((current) => moveColumn(applyColumnOrder(drawn, current), name, direction)),
     [drawn],
+  );
+  const setColumnWidth = useCallback(
+    (name: string, width: number) =>
+      setColumnWidths((current) => {
+        const next = clampColumnWidth(width);
+        return current[name] === next ? current : { ...current, [name]: next };
+      }),
+    [],
+  );
+  const resetColumnWidth = useCallback(
+    (name: string) =>
+      setColumnWidths((current) => {
+        if (!(name in current)) return current;
+        const next = { ...current };
+        delete next[name];
+        return next;
+      }),
+    [],
+  );
+  /* One resizer drag at a time: where it started, the width it started
+     from, and the override it started over, so a cancelled drag puts
+     back exactly what was there — including no override at all. */
+  const resizeDrag = useRef<{
+    name: string;
+    startX: number;
+    startWidth: number;
+    hadOverride: boolean;
+    prevWidth: number | undefined;
+  } | null>(null);
+  const columns = useMemo(
+    () => helper.columns(ordered.map((name) => helper.accessor((row: Row) => row[name], { id: name, header: name }))),
+    [ordered],
   );
   const model = useTable({ features, columns, data: rows });
   const modelRows = model.getRowModel().rows;
@@ -1006,9 +1068,19 @@ export function Grid({
   const pinList = appMenu?.current?.listKey;
   const pinChange = useSyncExternalStore(subscribePins, pinsVersion);
   const pinned = useMemo(
-    () => (interactive ? (pinnedFor(table, drawn, pinList) as string[]) : []),
-    [interactive, table, drawn, pinList, pinChange],
+    () => (interactive ? (pinnedFor(table, ordered, pinList) as string[]) : []),
+    [interactive, table, ordered, pinList, pinChange],
   ); // eslint-disable-line react-hooks/exhaustive-deps
+  /* A pinned column keeps the block at the left that its sticky offsets are measured over (usePins.ts), so a
+     column steps only among its own kind: a move across the boundary would leave a scrolling column between two
+     frozen ones. The buttons and Alt+arrows both ask. */
+  const canMove = (name: string, direction: 'left' | 'right') => {
+    const next = ordered[ordered.indexOf(name) + (direction === 'left' ? -1 : 1)];
+    return next !== undefined && pinned.includes(next) === pinned.includes(name);
+  };
+  const stepColumn = (name: string, direction: 'left' | 'right') => {
+    if (canMove(name, direction)) moveColumnBy(name, direction);
+  };
   const navigable = Boolean(onRowClick) || keyed;
   const query = currentEntry()?.query ?? '';
 
@@ -1150,9 +1222,9 @@ export function Grid({
   const padBottom = virtual && items.length ? Math.max(0, rows.length - items[items.length - 1].index - 1) * rowHeight : 0;
 
   /* ---------- pins and the keyboard ---------- */
-  const lefts = usePins(wrap, drawn, pinned, shift, `${shown.join(',')}:${sizing}:${fit.columns.join(',')}`);
-  useStickyHead(wrap, `${drawn.join(',')}:${sizing}:${rows.length > 0}`);
-  const lastPinned = pinned.length ? drawn.filter((n) => pinned.includes(n)).pop() : undefined;
+  const lefts = usePins(wrap, ordered, pinned, shift, `${shown.join(',')}:${sizing}:${fit.columns.join(',')}`);
+  useStickyHead(wrap, `${ordered.join(',')}:${sizing}:${rows.length > 0}`);
+  const lastPinned = pinned.length ? ordered.filter((n) => pinned.includes(n)).pop() : undefined;
   /* Read on every paint, as the cells always read them — an App's display
      rules can change under the grid — and kept while they are equal. */
   const folded = folds && kept ? asked.filter((_, index) => !kept[index]) : [];
@@ -1160,10 +1232,10 @@ export function Grid({
      reads as part of the key. Then the widest column of plain words (not a state's chip), else the name after all. */
   const foldsInto = (() => {
     if (!folded.length) return undefined;
-    const named = titleName && drawn.includes(titleName) ? titleName : drawn[0]!;
-    const width = (name: string) => fit.columns[drawn.indexOf(name)] ?? 0;
+    const named = titleName && ordered.includes(titleName) ? titleName : ordered[0]!;
+    const width = (name: string) => fit.columns[ordered.indexOf(name)] ?? 0;
     if (width(named) >= FOLD_ROOM) return named;
-    const words = drawn.filter(
+    const words = ordered.filter(
       (name) =>
         (plans.get(name)?.kind === 'text' || Boolean(referenceLabels?.[name])) &&
         !(columnDisplay(table?.id, name) as DisplayRule | null)?.tone,
@@ -1171,7 +1243,7 @@ export function Grid({
     return words.reduce((best, name) => (width(name) > width(best) ? name : best), named);
   })();
   const cellColumns = useKeptColumns(
-    drawn.map((name) => {
+    ordered.map((name) => {
       /* A column of money says its cents only where one of its figures has some (centsAmong). */
       const display = centsAmong(
         columnDisplay(table?.id, name) as DisplayRule | null,
@@ -1196,7 +1268,7 @@ export function Grid({
         photoOwner: avatarOwner(table, name, display, data.columns),
         pin: lefts.get(name),
         edge: name === lastPinned,
-        ...(fit.wraps[drawn.indexOf(name)] ? { wraps: true } : {}),
+        ...(fit.wraps[ordered.indexOf(name)] ? { wraps: true } : {}),
         ...(name === foldsInto
           ? {
               more: folded.map((other) => ({
@@ -1224,7 +1296,7 @@ export function Grid({
   const openOne = useCallback((row: Row) => opener.current(row), []);
   useGridKeyboard(tableRef, wrap, {
     rowCount: rows.length,
-    columnCount: drawn.length,
+    columnCount: ordered.length,
     offset: shift,
     onOpen: navigable ? (index) => openRow(rows[index]) : undefined,
     onPeek: keyed ? (index) => peekRow(rows[index]) : undefined,
@@ -1262,9 +1334,15 @@ export function Grid({
   }
 
   const inApp = shell().inApp();
-  const header = (name: string) => {
+  const header = (name: string, index: number) => {
     const meta = byName.get(name);
     const plan = plans.get(name)!;
+    const headLabel = labels?.[name] ?? columnLabel(table?.id, name) ?? name;
+    /* The width this head's column is actually drawn at: its fitted width
+       in a fitted grid, its dragged width in a scrolled one once it has
+       one — a scrolled column with no dragged width is drawn by its
+       content, so it has no width to say. */
+    const appliedWidth = sizing === 'fit' ? colWidths[index] : columnWidths[name];
     /* Sorting from the header is offered only on columns the database can
        sort cheaply: indexed, or small enough that it does not matter. Over an
        API, only on the columns its documented sort values name (`sortable`). */
@@ -1283,6 +1361,15 @@ export function Grid({
         scope="col"
         className={`align-${plan.align}${explicit ? ' sorted' : ''}${implied ? ' sorted-default' : ''}${pin !== undefined ? ` pinned${name === lastPinned ? ' pinned-edge' : ''}` : ''}`}
         style={pin !== undefined ? { left: `${pin}px` } : undefined}
+        /* Alt+arrows move the column, as they move a field in the
+           arranger (FieldArranger.tsx): the head already owns its click
+           for sorting, so a drag would fight it, and a drag's drop target
+           is geometry a test cannot see. */
+        onKeyDown={(e) => {
+          if (!interactive || !e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+          e.preventDefault();
+          stepColumn(name, e.key === 'ArrowLeft' ? 'left' : 'right');
+        }}
         aria-sort={explicit ? (explicit === 'desc' ? 'descending' : 'ascending') : undefined}
         title={
           implied
@@ -1315,21 +1402,54 @@ export function Grid({
               else sortBy(name);
             }}
           >
-            <span className="th-label">{labels?.[name] ?? columnLabel(table?.id, name) ?? name}</span>
+            <span className="th-label">{headLabel}</span>
             {meta?.primaryKey && <span className="pk">{say('common.key')}</span>}
             {meta?.references && <span className="fk">→</span>}
             {sorted && <span className="th-arrow">{sorted === 'desc' ? '↓' : '↑'}</span>}
           </button>
+          {/* The column's own order, beside its sort: one step at a time,
+             at either edge — and at the edge of the pinned block — the
+             step that way is not offered. Quiet until the head is hovered
+             or holds focus, and out of the head's flow there (style.css),
+             as the filter caret is — a row of marks down every head
+             otherwise. The arrows are drawn by the stylesheet, so the
+             head's text stays its label. */}
+          {interactive && (
+            <span className="th-moves">
+              <button
+                type="button"
+                className="th-move th-move-left"
+                disabled={!canMove(name, 'left')}
+                title={say('moveColumnLeft', { name: headLabel })}
+                aria-label={say('moveColumnLeft', { name: headLabel })}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  stepColumn(name, 'left');
+                }}
+              />
+              <button
+                type="button"
+                className="th-move th-move-right"
+                disabled={!canMove(name, 'right')}
+                title={say('moveColumnRight', { name: headLabel })}
+                aria-label={say('moveColumnRight', { name: headLabel })}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  stepColumn(name, 'right');
+                }}
+              />
+            </span>
+          )}
           {language && appMenu && (
             <AppColumnMenuButton
               host={appMenu}
               name={name}
-              label={labels?.[name] ?? columnLabel(table?.id, name) ?? name}
+              label={headLabel}
               kind={plan.kind}
               meta={meta}
               sortable={sortable}
               current={sorted}
-              columns={drawn}
+              columns={ordered}
               drawnBy={referenceLabels?.[name]}
             />
           )}
@@ -1349,24 +1469,88 @@ export function Grid({
             </button>
           )}
         </span>
+        {/* The column's width, on its trailing edge: dragged with a
+            pointer, stepped with arrow keys, restored with a double-click
+            or Alt+Backspace. No transition and no slide: a width lands
+            where it is put, so reduced motion needs nothing special. */}
+        {interactive && (
+          <span
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={say('resizeColumn', { name: headLabel })}
+            title={say('resizeColumnHint', { name: headLabel })}
+            tabIndex={0}
+            className="th-resizer"
+            {...(appliedWidth !== undefined ? { 'aria-valuenow': appliedWidth, 'aria-valuemin': MIN_COLUMN_WIDTH } : {})}
+            onPointerDown={(e) => {
+              if (e.pointerType === 'mouse' && e.button !== 0) return;
+              resizeDrag.current = {
+                name,
+                startX: e.clientX,
+                startWidth: appliedWidth ?? colWidths[index] ?? 0,
+                hadOverride: name in columnWidths,
+                prevWidth: columnWidths[name],
+              };
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+              } catch {
+                /* A renderer without capture still delivers the moves to the handle. */
+              }
+            }}
+            onPointerMove={(e) => {
+              const drag = resizeDrag.current;
+              if (!drag || drag.name !== name) return;
+              /* The pointer speaks screen pixels; the column's width
+                 speaks layout pixels (ruler.ts), so the drag is divided
+                 by the root's zoom before it becomes a width. */
+              setColumnWidth(name, drag.startWidth + (e.clientX - drag.startX) / viewportScale());
+            }}
+            onPointerUp={() => {
+              if (resizeDrag.current?.name === name) resizeDrag.current = null;
+            }}
+            onPointerCancel={() => {
+              const drag = resizeDrag.current;
+              if (drag?.name !== name) return;
+              resizeDrag.current = null;
+              setColumnWidths((current) => {
+                const next = { ...current };
+                if (drag.hadOverride && drag.prevWidth !== undefined) next[name] = drag.prevWidth;
+                else delete next[name];
+                return next;
+              });
+            }}
+            onKeyDown={(e) => {
+              if (e.altKey && e.key === 'Backspace') {
+                e.preventDefault();
+                resetColumnWidth(name);
+                return;
+              }
+              if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+              e.preventDefault();
+              const current = appliedWidth ?? colWidths[index] ?? 0;
+              setColumnWidth(name, current + (e.key === 'ArrowRight' ? 1 : -1) * columnResizeStep(e.shiftKey));
+            }}
+            onDoubleClick={() => resetColumnWidth(name)}
+          />
+        )}
       </th>
     );
   };
 
-  const colSpan = drawn.length + shift + (trailing ? 1 : 0);
+  const colSpan = ordered.length + shift + (trailing ? 1 : 0);
   return (
     <div className={`table-wrap${compact ? ' grid-compact' : ''}${density === 'compact' ? ' grid-dense' : ''}`} ref={wrap}>
       <table
         ref={tableRef}
         onMouseOver={onMouseOver}
-        className={sizing === 'fit' ? 'grid-fit' : undefined}
-        style={sizing === 'fit' ? { width: fit.width } : undefined}
+        className={useColgroup ? 'grid-fit' : undefined}
+        style={useColgroup ? { width: tableWidth } : undefined}
       >
-        {sizing === 'fit' && (
+        {useColgroup && (
           <colgroup>
             {slotted && <col style={{ width: GRID_EXPANDER_WIDTH }} />}
-            {drawn.map((name, index) => (
-              <col key={name} style={{ width: fit.columns[index] }} />
+            {ordered.map((name, index) => (
+              <col key={name} style={{ width: colWidths[index] }} />
             ))}
             {trailing && <col style={{ width: GRID_TRAIL_WIDTH }} />}
           </colgroup>
@@ -1392,7 +1576,7 @@ export function Grid({
                 )}
               </th>
             )}
-            {drawn.map(header)}
+            {ordered.map((name, index) => header(name, index))}
             {trailing && (
               <th className="row-trail">
                 <span className="visually-hidden">{say('actions')}</span>
@@ -1470,7 +1654,7 @@ export function Grid({
           <tfoot>
             <tr className="grid-totals">
               {slotted && <td className="expander-cell" />}
-              {drawn.map((name, index) => {
+              {ordered.map((name, index) => {
                 if (!Object.hasOwn(totals, name))
                   return <td key={name}>{index === 0 && <span className="grid-totals-label">{totalsLabel}</span>}</td>;
                 return (

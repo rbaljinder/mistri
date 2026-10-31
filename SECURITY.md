@@ -297,4 +297,4 @@ Credit is given in the release notes unless you would rather it were not.
   file, and never reach the browser in any response.
 
 The full account is in the README under *Read-only, and meant* and *What it
-will and will not answer*, and in DEPLOY.md for containers.
+will and will not answer*, and in docs/deploy.md for containers.

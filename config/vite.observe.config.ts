@@ -8,11 +8,12 @@
  */
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { jsMayBeTs, ownSourcesOnly } from './vite.config.js';
+import { jsMayBeTs, ownSourcesOnly } from '../vite.config.js';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+/* The repository root, whatever directory this file sits in. */
+const HERE = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 export default defineConfig({
   root: resolve(HERE, 'packages/mistri/src/client'),

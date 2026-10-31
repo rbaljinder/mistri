@@ -40,8 +40,8 @@ const job = (key: string) => ({
 test('the package maps and builds the maintenance entry, and it exports the operator steps', () => {
   const pkg = published(JSON.parse(readFileSync(new URL('../packages/mistri/package.json', import.meta.url), 'utf8')));
   assert.deepEqual(pkg.exports['./maintenance'], { types: './dist/server/maintenance.d.ts', default: './dist/server/maintenance.js' });
-  const commands = JSON.parse(readFileSync(new URL('../tsconfig.commands.json', import.meta.url), 'utf8'));
-  assert.ok(commands.include.includes('packages/mistri/src/server/maintenance.ts'));
+  const commands = JSON.parse(readFileSync(new URL('../config/tsconfig.commands.json', import.meta.url), 'utf8'));
+  assert.ok(commands.include.includes('../packages/mistri/src/server/maintenance.ts'));
   assert.deepEqual(Object.keys(maintenance).sort(), [
     'TenantMaintenanceRefusal',
     'applyMigrations',

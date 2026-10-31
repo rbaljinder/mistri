@@ -52,6 +52,30 @@ test.describe('Commons', () => {
     await sample?.stop();
   });
 
+  test("the front list's heads are whole: a figure's label is not covered or cut by controls", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${sample.origin}/latest`);
+    await expect(page.locator('th .th-label').first()).toBeVisible();
+    const heads = await page.evaluate(() =>
+      [...document.querySelectorAll('th')]
+        .filter((th) => th.querySelector('.th-label'))
+        .map((th) => {
+          const label = th.querySelector('.th-label') as HTMLElement;
+          const box = label.getBoundingClientRect();
+          const y = box.top + box.height / 2;
+          const owner = (x: number) => !!document.elementFromPoint(x, y)?.closest('.th-label, .th-sort');
+          return {
+            name: label.textContent,
+            left: owner(box.left + 2),
+            right: owner(box.right - 2),
+            cut: label.scrollWidth > label.clientWidth,
+          };
+        }),
+    );
+    expect(heads.length).toBeGreaterThan(1);
+    for (const h of heads) expect(h, `${h.name} head`).toMatchObject({ left: true, right: true, cut: false });
+  });
+
   test('a signed-out reader reads the front page, a thread and a post, and sees no moderation', async ({ page }) => {
     await page.goto(`${sample.origin}/`);
     await expect(page.getByRole('heading', { name: 'Where makers show their work' })).toBeVisible();

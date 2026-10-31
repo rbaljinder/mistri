@@ -275,13 +275,21 @@ export function schemaSql(brief: Brief): string {
   return `-- The schema this App wants, from BRIEF.md. Change it here, then write the migration that gets a database there.\n${[...tables, ...(indexes.length ? [indexes.join('\n')] : [])].join('\n\n')}\n`;
 }
 
-/** commands.ts: one stub per command the brief names, each a working change that the person's rules still have to refine. */
+/** commands.ts: one stub per command the brief names, each a working change, refused until the person's rules are written. */
 export function commandsModule(brief: Brief, connection: string): string {
   const stubs = brief.commands.map((command) => {
     const update = Object.entries(command.set)
       .map(([column, value]) => `${column}: ${/^-?\d+(\.\d+)?$/.test(value) ? value : quote(value)}`)
       .join(', ');
-    const todo = command.refuse.map((rule) => `    // TODO refuse(${JSON.stringify(rule)}) when the rule holds.`);
+    /* Fails closed: a command whose refusals are still TODO lines refuses until they are written, so a scaffold that
+       runs before its rules cannot make the change they were meant to stop. */
+    const todo = command.refuse.length
+      ? [
+          ...command.refuse.map((rule) => `    // TODO refuse(${JSON.stringify(rule)}) when the rule holds.`),
+          `    const rulesWritten = false; // Once the refusals above are written, delete this guard.`,
+          `    if (!rulesWritten) refuse(${JSON.stringify(`${command.label} is not ready: its rules are not written yet.`)});`,
+        ]
+      : [];
     return [
       `export const ${command.id} = defineCommand({`,
       `  source: home,`,
@@ -298,9 +306,10 @@ export function commandsModule(brief: Brief, connection: string): string {
   });
   const names = brief.commands.map((c) => c.id).join(', ');
   return [
-    `// The business rules the brief named, as commands. Each is a working stub: it makes its one change, and its TODO`,
-    `// lines are the refusals the brief asked for, to write where the rule can be read from the record. Server-only.`,
-    `import { defineCommand, defineCommands, defineSource, shape, text } from '@mistriwork/mistri/commands';`,
+    `// The business rules the brief named, as commands. Each stub makes its one change; its TODO lines are the refusals`,
+    `// the brief asked for, to write where the rule can be read from the record, and until they are written it refuses.`,
+    `// Server-only.`,
+    `import { defineCommand, defineCommands, defineSource, ${brief.commands.some((c) => c.refuse.length) ? 'refuse, ' : ''}shape, text } from '@mistriwork/mistri/commands';`,
     `import type { Rows } from './mistri-schema.d.ts';`,
     '',
     `const home = defineSource<Rows>('${connection}');`,

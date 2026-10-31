@@ -1,0 +1,1 @@
+{"description":"Postgres tsvector as a mistri App's search provider. Unpublished until after 1.0.","license":"MIT","main":"./src/index.ts","name":"@mistriwork/search-postgres","private":true,"type":"module","version":"0.0.0"}

@@ -121,6 +121,7 @@ test('the gate opens the landing signed out, answers content only, and opens not
     const whoami = await (await call('/api/whoami')).json();
     assert.equal(whoami.signedIn, false);
     assert.equal(whoami.home, 'welcome', 'the signed-out home is the landing, named by its view key');
+    assert.equal(whoami.landingView, 'welcome', 'who-am-I names the landing view, so the signed-out home need not probe for it');
   });
 });
 
@@ -143,6 +144,13 @@ test('an App without a landing opens none of it', { timeout: 8000 }, async () =>
     const refused = await call('/api/landing');
     assert.equal(refused.status, 401);
     assert.equal((await refused.json()).error, 'Sign in to continue.');
+    /* And who-am-I names no landing view, so a signed-out home that is a
+       public form is drawn without probing `/api/landing` at all: the
+       401 above is the gate's answer to a direct ask, never a probe the
+       client fires on its way to a form home. */
+    const whoami = await (await call('/api/whoami')).json();
+    assert.equal(whoami.home, undefined, 'no signed-out home rule names a view here');
+    assert.equal(whoami.landingView, undefined);
   });
   await serve(
     app({ landing: false }),

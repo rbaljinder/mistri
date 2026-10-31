@@ -9,7 +9,7 @@ npm test              # tsc, oxlint, the client type/geometry checks, and the te
 
 Node 24.22.1 or newer. tablewalk uses `node:sqlite`, which is built into Node — there
 is no native module to compile and no install step that can fail on your
-platform.
+platform. `.node-version` names that minimum for nvm, fnm, mise and asdf.
 
 ---
 

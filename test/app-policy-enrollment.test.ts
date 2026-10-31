@@ -139,8 +139,8 @@ test('published policy declaration graph supports consumer types without exposin
     types: './dist/server/policy.d.ts',
     default: './dist/server/policy.js',
   });
-  const config = JSON.parse(readFileSync(join(root, 'tsconfig.commands.json'), 'utf8')) as { include: string[] };
-  assert.ok(config.include.includes('packages/mistri/src/server/policy.ts'));
+  const config = JSON.parse(readFileSync(join(root, 'config/tsconfig.commands.json'), 'utf8')) as { include: string[] };
+  assert.ok(config.include.includes('../packages/mistri/src/server/policy.ts'));
   const { report, exports } = publishedDeclarations(
     `
     import { type AppConfig, type TypedAppConfig } from '@mistriwork/mistri/app';

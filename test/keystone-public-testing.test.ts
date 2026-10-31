@@ -8,7 +8,7 @@ import { createKeystoneFixture } from '../test/keystone-acceptance/keystone-fixt
 // The unit layer needs no database, so it runs wherever the suite does.
 test('Lender and Dealer load with the production loader and match their authority.lock', async () => {
   for (const [id, name] of [
-    ['lender', 'Keystone'],
+    ['lender', 'Keystone Lending'],
     ['dealer', 'Keystone for Dealers'],
   ])
     assert.deepEqual(await validateTestApp(fileURLToPath(new URL(`../test/fixtures/apps/keystone/${id}`, import.meta.url))), { id, name });

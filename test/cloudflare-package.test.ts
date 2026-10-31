@@ -164,8 +164,29 @@ test('the mail forwarder signs <timestamp>.<body> with HMAC-SHA-256 and maps the
   status = 413;
   await forwardEmail(message, env, options);
   assert.deepEqual(rejected, ['No such mailbox', 'Message too large']);
-  status = 503;
-  await assert.rejects(forwardEmail(message, env, options), /answered 503/);
+  rejected.length = 0;
+  // Taken, dropped and logged, and a replay of a delivery already taken finish quietly.
+  for (const done of [200, 202, 204, 409]) {
+    status = done;
+    await forwardEmail(message, env, options);
+  }
+  assert.deepEqual(rejected, []);
+  // The message's own fault is rejected with a reason; nothing else finishes quietly.
+  for (const [refused, why] of [
+    [400, 'Message could not be processed'],
+    [422, 'Message could not be processed'],
+  ] as const) {
+    status = refused;
+    await forwardEmail(message, env, options);
+    assert.equal(rejected.pop(), why);
+  }
+  for (const failed of [301, 401, 403, 408, 429, 500, 503]) {
+    status = failed;
+    await assert.rejects(forwardEmail(message, env, options), new RegExp(`answered ${failed}`));
+  }
+  status = 401;
+  await assert.rejects(forwardEmail(message, env, options), /signing secret/);
+  assert.deepEqual(rejected, []);
   await assert.rejects(forwardEmail(message, { ...env, MAIL_SECRET: undefined }, options), /MAIL_SECRET is not set/);
 });
 

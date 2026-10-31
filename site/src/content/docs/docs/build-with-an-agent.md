@@ -124,7 +124,8 @@ npx @mistriwork/mistri new --brief BRIEF.md ./my-app
 
 drafts the App from it: the schema and first migration, a SQLite database, the
 lists, record pages and dashboard, the roles, a stub per command (its refusals
-left as TODO lines for the agent to write) and the look. For a database that
+left as TODO lines for the agent to write; until they are, the command refuses)
+and the look. For a database that
 already exists, the agent drafts with `--scaffold-app` and carries the brief's
 roles and commands in by hand.
 

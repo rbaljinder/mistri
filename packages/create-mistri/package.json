@@ -1,6 +1,6 @@
 {
   "name": "create-mistri",
-  "version": "1.0.0-rc.7",
+  "version": "1.0.0-rc.8",
   "description": "npm create mistri: scaffold a mistri App, the same as `mistri new`.",
   "keywords": [
     "create",
@@ -33,7 +33,7 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/mistri": "1.0.0-rc.7"
+    "@mistriwork/mistri": "1.0.0-rc.8"
   },
   "engines": {
     "node": ">=24.22.1"

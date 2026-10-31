@@ -1,4 +1,4 @@
-/* The embed build's generated modules (vite.embed.config.ts). */
+/* The embed build's generated modules (config/vite.embed.config.ts). */
 declare module 'virtual:mistri-skeleton' {
   /** index.html's body: the shell's bar, panes and regions, as the served page has them. */
   export const skeleton: string;
