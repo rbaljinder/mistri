@@ -68,8 +68,14 @@ export interface Bound {
   allowedHosts?: readonly string[];
   /** See `--auth-proxy-header`. */
   identityHeader?: string;
-  /** See `--trust-proxy`: proxies the public form rate limit may believe about who they forwarded for. */
+  /** See `--trust-proxy`: proxies the public form rate limit may believe about who they forwarded for. Never identity. */
   trustedProxies?: readonly ProxyRange[];
+  /**
+   * See `--auth-proxy-from`: the peers, beside loopback, whose `identityHeader` value `identityFor` believes. A list of
+   * its own, because `--trust-proxy` is usually a wide range (a pod network, Docker's gateway) that is right for
+   * "which client is this" and wrong for "who is signed in".
+   */
+  identityProxies?: readonly ProxyRange[];
   /**
    * A mounting host's `embed.origins` (embed/handler.ts): browser origins
    * other than this one that may call it (CORS) and frame its pages
@@ -121,7 +127,7 @@ function addressGroups(address: string): number[] | undefined {
   return ipv6Groups(address);
 }
 
-/** One `--trust-proxy` entry: an address or CIDR range, as written and as groups and a prefix. */
+/** One `--trust-proxy` or `--auth-proxy-from` entry: an address or CIDR range, as written and as groups and a prefix. */
 export interface ProxyRange {
   readonly text: string;
   readonly groups: readonly number[];
@@ -129,7 +135,7 @@ export interface ProxyRange {
 }
 
 /**
- * Read `--trust-proxy` values: each an IPv4 or IPv6 address or CIDR range,
+ * Read `--trust-proxy` and `--auth-proxy-from` values: each an IPv4 or IPv6 address or CIDR range,
  * several to a value when separated by commas or spaces. What is not one is
  * returned by name, for startup to refuse — a list that silently dropped an
  * entry would collapse that proxy's clients into one budget with no word.
@@ -170,10 +176,10 @@ function inRange(groups: readonly number[], range: ProxyRange): boolean {
 }
 
 /**
- * A peer whose `X-Forwarded-For` the limiter may read: on this machine
- * (`loopbackPeer`, always), or inside a range the operator listed with
- * `--trust-proxy`. The same list says whose `--auth-proxy-header` value
- * `identityFor` believes.
+ * A peer on this machine (`loopbackPeer`, always), or inside a range in the list given. With the `--trust-proxy` list
+ * it is a peer whose `X-Forwarded-For` the limiter may read; with the `--auth-proxy-from` list (`Bound.identityProxies`)
+ * it is a peer whose `--auth-proxy-header` value `identityFor` believes. The two lists are never swapped: one
+ * grants a client address, the other a person.
  */
 export function trustedProxyPeer(address: string | undefined, trusted: readonly ProxyRange[] = []): boolean {
   if (loopbackPeer(address)) return true;
@@ -316,7 +322,7 @@ function forwardedHops(raw: string | string[] | undefined): string[] | undefined
  * one that is misconfigured — and is refused with the header named. So is
  * a request that carries it from a peer that is not the proxy: the header
  * is only a name anyone can type, so a value from an address neither on
- * loopback nor in `--trust-proxy` is a forgery, not a sign-in. Loopback is
+ * loopback nor in `--auth-proxy-from` is a forgery, not a sign-in. Loopback is
  * exempt: the container's own health check, a curl on the box, the
  * operator's terminal. Nothing here is authentication; it is the proxy's
  * decision, carried to the journal.
@@ -329,12 +335,12 @@ export function identityFor(
   const raw = req.headers[bound.identityHeader.toLowerCase()];
   const who = (Array.isArray(raw) ? raw[0] : raw)?.trim();
   const peer = req.socket?.remoteAddress;
-  if (who && trustedProxyPeer(peer, bound.trustedProxies)) return { who };
+  if (who && trustedProxyPeer(peer, bound.identityProxies)) return { who };
   if (loopbackPeer(peer)) return { who: 'local' };
   return {
     refusal: who
       ? `This server expects ${bound.identityHeader} only from its proxy, and this request did not come from the trusted proxy. ` +
-        "Reach it through the proxy that signs you in; the proxy's address belongs in --trust-proxy."
+        "Reach it through the proxy that signs you in; the proxy's address belongs in --auth-proxy-from."
       : `This server expects ${bound.identityHeader} from its proxy, and this request carried none. ` +
         'Reach it through the proxy that signs you in.',
   };

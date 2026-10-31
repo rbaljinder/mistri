@@ -437,7 +437,7 @@ for (const { dialect, skip } of ENGINES)
           ],
         },
       });
-      assert.equal(refused.status, 200, refused.text);
+      assert.equal(refused.status, 422, refused.text);
       assert.equal(refused.body.outcome, 'rejected');
       /* The author's own sentence crosses with the line's field; the rule's condition and the values do not. */
       assert.deepEqual(firstFields(refused), [{ field: 'order_line[1].quantity', message: 'Order at least one.' }]);

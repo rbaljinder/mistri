@@ -238,7 +238,7 @@ load balancer on another host — must be named, or every applicant behind it
 counts as the proxy's one address and shares one budget:
 
 ```
-TABLEWALK_TRUST_PROXY=172.18.0.0/16        # or --trust-proxy 172.18.0.0/16, repeatable
+TABLEWALK_TRUST_PROXY=172.18.0.5          # or --trust-proxy 172.18.0.5, repeatable
 ```
 
 Addresses and CIDR ranges, IPv4 or IPv6 (`10.0.0.5`, `10.0.0.0/8`,
@@ -318,6 +318,7 @@ constraints explicitly for exactly this reason.
 | `TABLEWALK_HOST` | `0.0.0.0` | Interface to bind. Container-only default; see above. |
 | `TABLEWALK_TRUST_PROXY` | unset | Proxies beyond loopback (addresses or CIDR ranges, commas or spaces) whose `X-Forwarded-For` the public forms' rate limit reads; see *Behind a proxy*. Not sign-in. |
 | `TABLEWALK_AUTH_PROXY_HEADER` | unset | The header a signing-in proxy sets with the user; see *Behind a proxy that signs people in*. |
+| `TABLEWALK_AUTH_PROXY_FROM` | unset | The peers beyond loopback whose auth proxy header is believed (addresses or CIDR ranges); name the proxy itself. Separate from `TABLEWALK_TRUST_PROXY`. |
 | `BETTER_AUTH_SECRET` | unset | Required by an app with `auth`: 32+ characters, `openssl rand -base64 32`, kept for the life of the sessions. |
 | `MISTRI_PUBLIC_URL` | first `--allowed-host` as https, else loopback | The address an app with `auth` mints cookies and OAuth callbacks for. |
 | `MISTRI_AUTH_ADMIN_EMAIL` / `_PASSWORD` | unset | Creates the first admin account for an app with `auth`, once. |
@@ -411,7 +412,11 @@ exempt, so the container's own health check keeps working. This carries
 the proxy's decision into the process; it is not a login of its own.
 `--trust-proxy` (no `-header`) is a different setting — which proxies the
 public forms' rate limit believes about client addresses — and naming a
-proxy there exempts nothing here.
+proxy there exempts nothing here. The header is believed only from loopback
+and from the peers `--auth-proxy-from` names (or `TABLEWALK_AUTH_PROXY_FROM`),
+which takes the same addresses and ranges: give it the proxy's own address,
+because every peer in a range can then say who is signed in, and startup warns
+when a range is wider than one host.
 
 ## Desktop app
 

@@ -284,6 +284,11 @@ test('HTTP payloads refuse forged app/source fields, partial keys and unpinned v
     assert.equal(changed.status, 409);
     assert.equal(changed.body.code, 'command_version_mismatch');
     assert.equal(changed.body.outcome, 'unknown');
+    // `app` is the one stray member that says why: resource routes take it in the body, command routes in the query.
+    const named = await post(f.base, 'execute', request({ app: 'loans' }));
+    assert.equal(named.status, 400);
+    assert.match(named.body.message, /takes app in the query string/);
+    assert.doesNotMatch((await post(f.base, 'execute', request({ actor: account }))).body.message, /query string/);
     assert.equal((await post(f.base, 'execute?app=other', request())).status, 403);
     assert.equal((await post(f.base, 'execute?conn=private-db', request())).status, 403);
     assert.equal(f.control.calls, 0);
@@ -439,7 +444,7 @@ test('startup validates registry metadata and the durable command capability wit
     const resources = await loadAppRuntimeResources(f.registry, f.host.app.app, 'private-db');
     await assert.rejects(
       validateBusinessCommandStartup(f.host.app.app, f.commands, resources, () => true),
-      /command journal on connection "private-db" is unavailable: it is provisioned once, never on startup\. Run `mistri migrate stores up --app <the App's directory>` with the server stopped \(or migrateSqliteCommandJournal\(path\) from @mistriwork\/mistri\/commands\)/,
+      /command journal on connection "private-db" is unavailable: it is provisioned once, never on startup\. Run `mistri migrate stores up --app <the App's directory>` with the server stopped \(or migrateSqliteCommandJournal\(path\) from @mistriwork\/mistri\/maintenance\)/,
     );
     assert.equal(f.db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name LIKE '__mistri_command_%'").get()!.n, 0);
   }, false);
@@ -508,7 +513,7 @@ test('CLI commands startup requires one explicit app, matching references and an
     assert.equal(missing.status, 1);
     assert.match(
       missing.stderr,
-      /Run `mistri migrate stores up --app <the App's directory>` with the server stopped \(or migrateSqliteCommandJournal\(path\) from @mistriwork\/mistri\/commands\)/,
+      /Run `mistri migrate stores up --app <the App's directory>` with the server stopped \(or migrateSqliteCommandJournal\(path\) from @mistriwork\/mistri\/maintenance\)/,
     );
     migrateSqliteCommandJournal(database);
     const ready = run(['--app', directory, '--commands', module, VALIDATE]);

@@ -47,6 +47,7 @@ export async function serveBrowser(opts: Options, registry: Registry, config: St
       allowedHosts: opts.allowedHosts,
       identityHeader: opts.authProxyHeader,
       trustedProxies: opts.trustedProxies,
+      identityProxies: opts.authProxies,
     },
     addresses: { base },
     /* The operator's request log (`TABLEWALK_DIAGNOSTICS`): the engine's, so a plain start keeps it. */
@@ -161,7 +162,7 @@ export async function serveBrowser(opts: Options, registry: Registry, config: St
     for (const line of exposureLines(opts.host, [], opts.authProxyHeader)) console.log(line);
     // Each relaxes a check, and a relaxed check nobody can see in the log is one nobody remembers turning on.
     if (opts.allowedHosts.length) console.log(`tablewalk: also answering writes for host ${opts.allowedHosts.join(', ')}`);
-    for (const line of proxyIdentityLines(opts.host, opts.authProxyHeader, opts.trustedProxies)) console.log(line);
+    for (const line of proxyIdentityLines(opts.host, opts.authProxyHeader, opts.authProxies)) console.log(line);
     if (opts.trustProxyHops !== undefined) {
       console.log(
         `tablewalk: the client address is ${opts.trustProxyHops} place(s) from the right of X-Forwarded-For, for rate limits and sign-in lockout`,

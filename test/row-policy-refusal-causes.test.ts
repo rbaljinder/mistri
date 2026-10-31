@@ -85,3 +85,22 @@ test('a refused write under a row policy names its rule, to the caller and on th
     /POST \/api\/update refused \(403 forbidden\): The App's row policy does not let this account change this "job" record\./,
   );
 });
+
+/* A key the database refused under a row policy was a 400 `validation_failed` saying "unavailable under the current
+   permissions" — a rule the person could do nothing about, at a status that read as the request's shape. It is a 409
+   `duplicate_value` in the fixed sentence (a live load test), and the same, word for word, whether the id it met is a
+   row the policy shows this account or one it hides: the code alone picks the answer, so it says nothing of the row. */
+test('a key the database refused under a row policy is a 409, the same for a row the policy hides', { timeout: 60_000 }, async (t) => {
+  const rider = { label: 'Rider', read: true, write: ['job'], fields: { job: { write: ['id', 'title', 'bench_id'] } } };
+  const server = await policyServer(t, {
+    app: { ...APP, auth: { ...APP.auth, roles: { ...APP.auth.roles, rider } } },
+    policy: POLICY,
+    sql: SQL,
+  });
+  const account = await server.signUp('rider');
+  const seen = await server.api('insert', { table: 'job', values: { id: 1, title: 'Again', bench_id: 1 } }, account);
+  const hidden = await server.api('insert', { table: 'job', values: { id: 2, title: 'Again', bench_id: 1 } }, account);
+  for (const reply of [seen, hidden])
+    refusedWith(reply, 409, 'duplicate_value', /^A record with these unique values already exists\. Use different values and try again\.$/);
+  assert.deepEqual(hidden.body, seen.body);
+});

@@ -96,7 +96,8 @@ unknown statuses remain separately visible. Summaries are cumulative: compare
 successive snapshots from the same instance for interval counts; do not sum them.
 They reset on process/instance restart, have no durable history or instance ID,
 and give coarse latency ranges rather than exact percentiles or request rates.
-An HTTP 200 with a business validation error remains `2xx`.
+A refused write is a `4xx` (409 or 422, `outcome: 'rejected'`); a write whose
+outcome is unknown can still arrive as a `2xx`.
 
 ## Delivery and Limits
 

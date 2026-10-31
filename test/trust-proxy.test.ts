@@ -4,8 +4,9 @@
  * addresses and CIDR ranges the operator named, IPv4, IPv6 and IPv4-mapped
  * alike. The header is walked from the right past every trusted hop to the
  * first that is not; from an untrusted peer it is not read at all, and a
- * malformed one is ignored whole. The same list says whose
- * `--auth-proxy-header` value is believed. Startup refuses an entry that is not an address.
+ * malformed one is ignored whole. That list never says whose `--auth-proxy-header`
+ * value is believed: `--auth-proxy-from` does, and defaults to loopback only.
+ * Startup refuses an entry that is not an address.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -165,12 +166,12 @@ describe('forwardedClient with --trust-proxy', () => {
     }
   });
 
-  test('sign-in trust reads the list: a forged identity header is believed only from loopback or a listed proxy', () => {
+  test('identity trust reads --auth-proxy-from: a forged header is believed only from loopback or a listed identity proxy', () => {
     const bound = {
       host: '0.0.0.0',
       port: 4111,
       identityHeader: 'X-Forwarded-User',
-      trustedProxies: list,
+      identityProxies: list,
     };
     const from = (peer: string, headers: Record<string, string> = {}) => identityFor({ headers, socket: { remoteAddress: peer } }, bound);
     const forged = { 'x-forwarded-user': 'admin@example.org' };
@@ -181,6 +182,24 @@ describe('forwardedClient with --trust-proxy', () => {
     assert.match(from('203.0.113.9').refusal ?? '', /carried none/);
     assert.ok(from('10.0.0.5').refusal, 'a listed proxy that sent no header is still refused');
     assert.deepEqual(from('127.0.0.1'), { who: 'local' });
+  });
+
+  test('a --trust-proxy peer is not an identity proxy: its header is refused, and loopback is believed by default', () => {
+    const forged = { 'x-forwarded-user': 'admin@example.org' };
+    const from = (peer: string, bound: { identityProxies?: readonly ProxyRange[] }) =>
+      identityFor(
+        { headers: forged, socket: { remoteAddress: peer } },
+        { host: '0.0.0.0', port: 4111, identityHeader: 'X-Forwarded-User', trustedProxies: list, ...bound },
+      );
+    // 10.0.0.5 is in --trust-proxy, so its X-Forwarded-For is read, but with no --auth-proxy-from it cannot name anyone.
+    const refused = from('10.0.0.5', {});
+    assert.match(refused.refusal ?? '', /only from its proxy.*--auth-proxy-from/);
+    assert.ok(refused.who === undefined, 'a forgery names no one');
+    // Listing it for identity elsewhere does not help a different peer in the same trusted range.
+    assert.ok(from('10.0.0.6', { identityProxies: ranges('10.0.0.5') }).refusal);
+    assert.deepEqual(from('10.0.0.5', { identityProxies: ranges('10.0.0.5') }), { who: 'admin@example.org' });
+    assert.deepEqual(from('127.0.0.1', {}), { who: 'admin@example.org' }, 'loopback needs no list');
+    assert.ok(from('203.0.113.9', { identityProxies: ranges('10.0.0.5') }).refusal);
   });
 });
 
@@ -208,6 +227,42 @@ describe('the --trust-proxy flag at startup', () => {
     const env = start([], { TABLEWALK_TRUST_PROXY: 'fd00::/8 10.0.0.0/33' });
     assert.equal(env.status, 1, env.stderr);
     assert.match(env.stderr, /"10\.0\.0\.0\/33" is not one\. It comes from the flag or TABLEWALK_TRUST_PROXY\./);
+  });
+});
+
+describe('the --auth-proxy-from flag at startup', () => {
+  const start = (args: string[], env: Record<string, string> = {}) =>
+    spawnSync(process.execPath, ['--import', 'tsx', 'packages/tablewalk/src/server/index.ts', '--no-config', ...args], {
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: { ...process.env, TABLEWALK_AUTH_PROXY_FROM: '', TABLEWALK_TRUST_PROXY: '', DATABASE_URL: '', ...env },
+    });
+
+  test('an entry that is not an address or range stops startup, named', () => {
+    const flag = start(['--auth-proxy-from', '10.0.0.7,proxy.internal']);
+    assert.equal(flag.status, 1, flag.stderr);
+    assert.match(flag.stderr, /--auth-proxy-from takes an IPv4 or IPv6 address or CIDR range/);
+    assert.match(flag.stderr, /"proxy\.internal" is not one/);
+    const env = start([], { TABLEWALK_AUTH_PROXY_FROM: '10.0.0.0/33' });
+    assert.equal(env.status, 1, env.stderr);
+    assert.match(env.stderr, /"10\.0\.0\.0\/33" is not one\. It comes from the flag or TABLEWALK_AUTH_PROXY_FROM\./);
+  });
+
+  test('the flag and the variable are read into their own list, apart from --trust-proxy', async () => {
+    const { parseArgs } = await import('../packages/engine/src/server/cli/args.js');
+    const { setProduct } = await import('../packages/engine/src/server/product.js');
+    setProduct('tablewalk');
+    const before = process.env.TABLEWALK_AUTH_PROXY_FROM;
+    try {
+      const parsed = parseArgs(['--auth-proxy-from', '10.0.0.7', '--trust-proxy', '10.0.0.0/8']);
+      assert.deepEqual(parsed.authProxyFrom, ['10.0.0.7']);
+      assert.deepEqual(parsed.trustProxy, ['10.0.0.0/8']);
+      process.env.TABLEWALK_AUTH_PROXY_FROM = '10.0.0.8,fd00::7';
+      assert.deepEqual(parseArgs([]).authProxyFrom, ['10.0.0.8', 'fd00::7']);
+    } finally {
+      if (before === undefined) delete process.env.TABLEWALK_AUTH_PROXY_FROM;
+      else process.env.TABLEWALK_AUTH_PROXY_FROM = before;
+    }
   });
 });
 
@@ -389,15 +444,31 @@ describe('the startup lines name who may set --auth-proxy-header', () => {
     assert.match(lines[0], /X-Forwarded-User .*from loopback only/);
   });
 
-  test('beyond loopback with no --trust-proxy warns that an off-box proxy is refused', () => {
+  test('beyond loopback with no --auth-proxy-from warns that an off-box proxy is refused', () => {
     const lines = proxyIdentityLines('0.0.0.0', 'X-Forwarded-User');
     assert.equal(lines.length, 2);
-    assert.match(lines[1], /^Warning: .*no --trust-proxy.*Name its address with --trust-proxy/);
+    assert.match(lines[1], /^Warning: .*no --auth-proxy-from.*Name its address with --auth-proxy-from/);
   });
 
-  test('the listed ranges are named, and the warning goes', () => {
-    const lines = proxyIdentityLines('0.0.0.0', 'X-Forwarded-User', ranges('10.0.0.0/8'));
+  test('a single listed host is named, and neither warning appears', () => {
+    const lines = proxyIdentityLines('0.0.0.0', 'X-Forwarded-User', ranges('10.0.0.7', '2001:db8::7/128', '192.0.2.4/32'));
     assert.deepEqual(lines.length, 1);
-    assert.match(lines[0], /from loopback and 10\.0\.0\.0\/8/);
+    assert.match(lines[0], /from loopback and 10\.0\.0\.7, 2001:db8::7\/128, 192\.0\.2\.4\/32/);
+  });
+
+  test('a range wider than one host warns that every peer in it can assert identity', () => {
+    for (const wide of ['10.0.0.0/8', '192.0.2.0/31', 'fd00::/8', '2001:db8::/127']) {
+      const lines = proxyIdentityLines('0.0.0.0', 'X-Forwarded-User', ranges('10.0.0.7', wide));
+      assert.equal(lines.length, 2, wide);
+      assert.match(
+        lines[1],
+        new RegExp(
+          `^Warning: --auth-proxy-from ${wide.replace(/[./]/g, '\\$&')} is wider than one host: every peer in it can assert who is signed in`,
+        ),
+      );
+    }
+    // It is a warning, and it is said on loopback too: the range is the exposure, not the bind address.
+    assert.equal(proxyIdentityLines('127.0.0.1', 'X-Forwarded-User', ranges('10.0.0.0/8')).length, 2);
+    assert.deepEqual(proxyIdentityLines('0.0.0.0', undefined, ranges('10.0.0.0/8')), []);
   });
 });

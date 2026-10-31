@@ -17,6 +17,7 @@ Size PostgreSQL pools for a deployment, read the meters when it is slow, and run
 - People arriving at a tenant App at once (`/api/tenant/enter`, `/api/tenant/bootstrap`) are let in half as many at a time as there are readers, in order; one that has waited 20 seconds is answered 503, `Retry-After: 1`, code `tenant_temporarily_unavailable`.
 - A write that waits more than five seconds for a lock is refused with nothing applied: 503, `Retry-After: 1`, code `row_locked`.
 - A request that finds every reader or writer busy queues for at most two seconds, and at most sixty-four per connection may queue. Past either it is refused at once: 503, `Retry-After: 1`, code `server_busy`, with nothing run (a write says `not_applied`). The page asks a busy read again a few times and shows a write's refusal.
+- One person's saves in a tenant App, sent together (a form's fields saved at once, two tabs), run one after another in the order they arrived, each waiting without holding a connection. One that would wait past 30 seconds, or behind 64 of theirs, is refused as a busy pool refuses it: 503, `Retry-After: 1`, code `server_busy`, `not_applied`.
 - Readiness reports `pool_saturated` while a checkout queues; the support bundle's [capacity section](/docs/observe/#the-capacity-section) says why.
 
 ## When to use it

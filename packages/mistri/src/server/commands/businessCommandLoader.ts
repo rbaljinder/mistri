@@ -382,9 +382,9 @@ function journalUnavailable(connection: string, dialect: string): string {
   const once =
     "it is provisioned once, never on startup. Run `mistri migrate stores up --app <the App's directory>` with the server stopped";
   if (dialect === 'sqlite')
-    return `${at}: ${once} (or migrateSqliteCommandJournal(path) from @mistriwork/mistri/commands), then start again.`;
+    return `${at}: ${once} (or migrateSqliteCommandJournal(path) from @mistriwork/mistri/maintenance), then start again.`;
   if (dialect === 'postgres') {
-    return `${at}: ${once}, as a role that may create tables (or migratePostgresCommandJournal(url) from @mistriwork/mistri/commands), then start again.`;
+    return `${at}: ${once}, as a role that may create tables (or migratePostgresCommandJournal(url) from @mistriwork/mistri/maintenance), then start again.`;
   }
   return `${at}: commands keep their journal in SQLite or PostgreSQL, and this connection is ${dialect}.`;
 }

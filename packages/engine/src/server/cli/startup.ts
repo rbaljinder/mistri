@@ -80,12 +80,21 @@ export function configureProcess(opts: Options, bin: Product['bin']): void {
   const proxies = parseTrustedProxies(opts.trustProxy);
   if (proxies.invalid.length) {
     console.error(
-      `${bin}: --trust-proxy takes an IPv4 or IPv6 address or CIDR range (10.0.0.0/8, 172.17.0.1, fd00::/8); ` +
+      `${bin}: --trust-proxy takes an IPv4 or IPv6 address or CIDR range (172.17.0.1, 10.0.0.0/8, fd00::/8); ` +
         `${proxies.invalid.map((entry) => `"${entry}"`).join(', ')} is not one. It comes from the flag or ${envName('TRUST_PROXY')}.`,
     );
     process.exit(1);
   }
   opts.trustedProxies = proxies.ranges;
+  const identity = parseTrustedProxies(opts.authProxyFrom);
+  if (identity.invalid.length) {
+    console.error(
+      `${bin}: --auth-proxy-from takes an IPv4 or IPv6 address or CIDR range (10.0.0.7, fd00::7); ` +
+        `${identity.invalid.map((entry) => `"${entry}"`).join(', ')} is not one. It comes from the flag or ${envName('AUTH_PROXY_FROM')}.`,
+    );
+    process.exit(1);
+  }
+  opts.authProxies = identity.ranges;
   const client = parseClientAddressPolicy({ hops: opts.trustProxyHops, cloudflare: opts.trustProxyCloudflare });
   if ('error' in client) {
     console.error(`${bin}: ${client.error}`);

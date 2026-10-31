@@ -2,7 +2,7 @@ import { Refusal, WriteConflict } from '@mistriwork/engine/adapters/adapter.js';
 import { PathError } from '@mistriwork/engine/shared/view.js';
 import { AppAccessDenied } from './appAccess.js';
 import { AppValidationDenied, ConsumesRefused } from './appValidationDenied.js';
-import { constraintColumns, wrongTypeValue } from '@mistriwork/engine/server/constraints.js';
+import { constraintColumns, dataException, wrongTypeValue } from '@mistriwork/engine/server/constraints.js';
 
 interface AppError {
   code:
@@ -104,6 +104,10 @@ export function appError(
       code: 'validation_failed',
       message: 'A value given is not one its column holds: a number column takes a number, a date column a date. Change it and try again.',
     };
+  /* Any other value PostgreSQL could not take as given (class 22: text past its length, a NUL, a number out of its
+     range): refused for good and the request's to change, never "unconfirmed" — nothing was written. */
+  if (operation === 'write' && dataException(error))
+    return { code: 'validation_failed', message: 'A value given does not fit its field. Change it and try again.' };
   return operation === 'write' ? unconfirmed() : { code: 'data_unavailable', message: 'The data could not be loaded. Try again shortly.' };
 }
 

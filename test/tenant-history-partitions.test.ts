@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { PoolBusy } from '../packages/engine/src/adapters/poolMetrics.js';
 import { test, type TestContext } from 'node:test';
 import { clearJournal, history, latestRevertible, recordWrite } from '../packages/engine/src/server/journal.js';
 import type { HistoryDraft } from '../packages/engine/src/server/recordHistoryOperations.js';
@@ -66,7 +67,7 @@ test('frozen private lease reuses the existing journal with opaque bucket and ca
   assert.ok(Object.isFrozen(f.owner));
   assert.ok(Object.isFrozen(lease));
   assert.match(lease.id, /^tenant-history:[0-9a-f-]{36}$/);
-  assert.deepEqual(Object.keys(f.owner).sort(), ['dispose', 'enter']);
+  assert.deepEqual(Object.keys(f.owner).sort(), ['acquire', 'dispose', 'enter']);
   assert.deepEqual(Object.keys(lease).sort(), [
     'beginUndo',
     'failUndo',
@@ -205,6 +206,40 @@ test('same partition is busy until idempotent release; stale handles cannot chan
     assert.throws(call, safe);
   assert.doesNotThrow(lease.quarantine);
   assert.equal(next.history()[0].revertible, true);
+});
+
+/* A lease asked for while the partition is held waits for it, in arrival order, and is refused only as a busy
+   pool refuses: past the wait's bound or the queue's length, with nothing begun. */
+test('acquire waits for a held partition, hands it over in order and is bounded as busy', async (t) => {
+  const owner = createTenantHistoryPartitions(plain(identity), 'deployment', { waitMs: 50, waitingMost: 2 });
+  t.after(() => owner.dispose());
+  const first = await owner.acquire(plain(principal));
+  const order: string[] = [];
+  const second = owner.acquire(plain(principal)).then((lease) => (order.push('second'), lease));
+  const third = owner.acquire(plain(principal)).then((lease) => (order.push('third'), lease));
+  await assert.rejects(owner.acquire(plain(principal)), (error) => error instanceof PoolBusy && error.why === 'queue_full');
+  assert.throws(() => owner.enter(plain(principal)), TenantHistoryBusy);
+  const entry = first.publish(draft('First'));
+  first.release();
+  const next = await second;
+  assert.deepEqual(order, ['second']);
+  // The same partition, handed over: what the first lease published is the second's history.
+  assert.equal(next.id, first.id);
+  assert.equal(next.history()[0].id, entry.id);
+  next.release();
+  const last = await third;
+  assert.deepEqual(order, ['second', 'third']);
+  const late = owner.acquire(plain(principal));
+  await assert.rejects(late, (error) => error instanceof PoolBusy && error.why === 'queue_timeout');
+  last.release();
+  // Another account's partition never waits on this one.
+  const other = await owner.acquire({ ...plain(principal), accountId: 'bob', membershipId: 'bob-grant' });
+  other.release();
+  const held = await owner.acquire(plain(principal));
+  const waiting = owner.acquire(plain(principal));
+  owner.dispose();
+  await assert.rejects(waiting, safe);
+  held.release();
 });
 
 test('Undo marks canonical newest entry pending, known rollback clears it and committed finish forgets it', (t) => {

@@ -87,8 +87,8 @@ export interface Options {
   /**
    * The header a reverse proxy sets with the signed-in user's identity
    * (`X-Forwarded-User`, `Cf-Access-Authenticated-User-Email`). Set, every
-   * request from beyond loopback must carry it and come from a
-   * `--trust-proxy` address, and every write is journaled with it. Not authentication — the proxy did that — but the
+   * request from beyond loopback must carry it and come from an
+   * `--auth-proxy-from` address, and every write is journaled with it. Not authentication — the proxy did that — but the
    * line that lets the proxy's decision reach this process.
    */
   authProxyHeader?: string;
@@ -97,9 +97,16 @@ export interface Options {
   /**
    * `--trust-proxy` values as given, then (after startup validates them) the
    * ranges: proxies whose X-Forwarded-For the public form rate limit may believe.
-   * Loopback is trusted without them. Nothing to do with sign-in.
+   * Loopback is trusted without them. Nothing to do with sign-in: identity is `authProxyFrom`.
    */
   trustProxy: string[];
+  /**
+   * `--auth-proxy-from` values as given, then (after startup validates them) `authProxies`: the peers, beside
+   * loopback, whose `--auth-proxy-header` value is believed. Its own list so that a wide `--trust-proxy` never
+   * makes every peer in it able to name the signed-in person.
+   */
+  authProxyFrom: string[];
+  authProxies?: ProxyRange[];
   /** `--trust-proxy-hops` as given; startup validates it (parseClientAddressPolicy). */
   trustProxyHops?: string;
   /** `--trust-proxy-cloudflare`: read CF-Connecting-IP. */
@@ -154,6 +161,7 @@ export function parseArgs(argv: string[]): Options {
     noConfig: false,
     allowedHosts: [],
     trustProxy: [],
+    authProxyFrom: [],
     trustProxyCloudflare: false,
     mcp: false,
     outputSchema: false,
@@ -173,6 +181,7 @@ export function parseArgs(argv: string[]): Options {
     else if (arg === '--host') opts.host = argv[++i] ?? '127.0.0.1';
     else if (arg === '--allowed-host') opts.allowedHosts.push(argv[++i] ?? '');
     else if (arg === '--trust-proxy') opts.trustProxy.push(argv[++i] ?? '');
+    else if (arg === '--auth-proxy-from') opts.authProxyFrom.push(argv[++i] ?? '');
     else if (arg === '--trust-proxy-hops') opts.trustProxyHops = argv[++i] ?? '';
     else if (arg === '--trust-proxy-cloudflare') opts.trustProxyCloudflare = true;
     else if (arg === '--insecure-http-sign-in') opts.insecureHttpSignIn = true;
@@ -282,6 +291,7 @@ export function parseArgs(argv: string[]): Options {
   // Added to the flags, like MISTRI_ALLOWED_HOSTS: a compose file names
   // its network's proxy once and the image's CMD stays untouched.
   opts.trustProxy.push(...parseHostList(productEnv('TRUST_PROXY')));
+  opts.authProxyFrom.push(...parseHostList(productEnv('AUTH_PROXY_FROM')));
   if (opts.trustProxyHops === undefined && productEnv('TRUST_PROXY_HOPS')?.trim()) {
     opts.trustProxyHops = productEnv('TRUST_PROXY_HOPS')!.trim();
   }

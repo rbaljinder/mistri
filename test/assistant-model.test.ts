@@ -187,7 +187,10 @@ test('a store of another layout version says which way to go, and only a missing
   const app = { name: 'Leads' } as AppDef;
   const missing = join(directory, 'missing.db');
   new DatabaseSync(missing).close();
-  await assert.rejects(assistantStoreAt(app, { path: missing }), /Provision it once with provisionStores/);
+  await assert.rejects(
+    assistantStoreAt(app, { path: missing }),
+    /Provision it once with `mistri migrate stores up --app .*provisionStores/,
+  );
   const newer = join(directory, 'newer.db');
   new DatabaseSync(newer).close();
   provisionSqliteAssistant(newer);

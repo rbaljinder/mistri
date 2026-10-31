@@ -565,7 +565,7 @@ for (const { dialect, skip } of ENGINES)
         table: 'ticket_flow_step',
         values: { id: 'bad', flow_id: 'nf', position: 9, kind: 'teleport' },
       });
-      assert.equal(bad.status, 200, bad.text);
+      assert.equal(bad.status, 422, bad.text);
       assert.deepEqual(bad.body, {
         errors: [
           {

@@ -877,6 +877,9 @@ resource ceilings and role grants, `POST /api/update` supports generic Save,
 inline edits and fixed `set` actions on existing rows, and `POST /api/insert`
 supports creation. `POST /api/delete` requires the separate policy below. An App
 has no Undo: `POST /api/revert` answers 404.
+The two kinds of write route name the App differently: a resource route (`/api/update`, `/api/insert`, `/api/delete`)
+takes `app` in the JSON body, and a command route (`/api/commands/execute`, `prepare`, `status`) takes it in the query
+string, `?app=<id>`, and refuses a body that carries `app` with a 400 that says so.
 No extra CLI flag is needed. Startup validates the scoped transaction
 capability (SQLite or PostgreSQL) for every granted source across all roles,
 including inactive roles; read-only or unsupported sources refuse without an
@@ -953,11 +956,15 @@ and after removal. Success returns `{ impact: [], deleted: true, affected: 1 }`.
 ### Outcomes
 
 A successful UPDATE returns `affected` and `applied`. Recognized
-update/insert/delete refusals report `outcome: 'rejected'` (a line's `consumes`
-refusing, `consumes_refused`, also answers HTTP 422); a write that waited
-out another transaction's lock reports `row_locked` with 503 and `Retry-After`;
-unconfirmed failures report `unknown`. Inspect the response body: uncertainty
-can arrive with HTTP 200. There are no durable generic-write receipts or safe
+update/insert/delete refusals report `outcome: 'rejected'` and are never a 2xx:
+a key already taken or a reference to nothing answers HTTP 409
+(`duplicate_value`, `reference_conflict`); the App's validation, a line's
+`consumes` (`consumes_refused`), a required value, a check or a value its column
+cannot hold answer 422. A tenant App answers the same codes in their fixed
+sentences, the same whether the key it met is its own tenant's or another's. A
+write that waited out another transaction's lock reports `row_locked` with 503
+and `Retry-After`; unconfirmed failures report `unknown`. Inspect the response
+body: uncertainty can arrive with HTTP 200. There are no durable generic-write receipts or safe
 automatic retries. Refresh and reconcile the record after uncertainty; the
 record's history, not an Undo, is the account of what changed.
 

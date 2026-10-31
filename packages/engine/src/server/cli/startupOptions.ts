@@ -114,17 +114,26 @@ export function exposureLines(
 }
 
 /**
- * Who may set `--auth-proxy-header`, said once it listens: loopback and the `--trust-proxy` ranges, nobody else
- * (`identityFor`). A server beyond loopback with no range listed believes the header only from this machine, so a proxy
- * on another one has every request refused; that is said at start rather than learned from the first refusal.
+ * Who may set `--auth-proxy-header`, said once it listens: loopback and the `--auth-proxy-from` peers, nobody else
+ * (`identityFor`); `--trust-proxy` is a different question (which client) and never answers this one. A server beyond
+ * loopback with no peer listed believes the header only from this machine, so a proxy on another one has every request
+ * refused; that is said at start rather than learned from the first refusal. A range wider than one host is warned
+ * about, not refused: it is sometimes the only address a proxy has, but every peer in it can then name the person.
  */
-export function proxyIdentityLines(host: string, header: string | undefined, trusted: readonly ProxyRange[] = []): string[] {
+export function proxyIdentityLines(host: string, header: string | undefined, from: readonly ProxyRange[] = []): string[] {
   if (!header) return [];
-  const from = trusted.length ? `loopback and ${trusted.map((range) => range.text).join(', ')}` : 'loopback only';
-  const lines = [`${product()}: trusting ${header} for who is asking, from ${from}; a request from anywhere else is refused`];
-  if (!trusted.length && !/^(localhost|127\.0\.0\.1|::1)$/i.test(host))
+  const source = from.length ? `loopback and ${from.map((range) => range.text).join(', ')}` : 'loopback only';
+  const lines = [`${product()}: trusting ${header} for who is asking, from ${source}; a request from anywhere else is refused`];
+  if (!from.length && !/^(localhost|127\.0\.0\.1|::1)$/i.test(host))
     lines.push(
-      `Warning: bound to ${host} with --auth-proxy-header and no --trust-proxy: a proxy on another machine is refused on every request. Name its address with --trust-proxy.`,
+      `Warning: bound to ${host} with --auth-proxy-header and no --auth-proxy-from: a proxy on another machine is refused on every request. Name its address with --auth-proxy-from.`,
+    );
+  /* IPv4 is held mapped (parseTrustedProxies), so /32 is 128 and a single host is 128 in both families.
+     This module imports types only, so the test is here rather than a helper in trust.ts. */
+  const wide = from.filter((range) => range.prefix < 128);
+  if (wide.length)
+    lines.push(
+      `Warning: --auth-proxy-from ${wide.map((range) => range.text).join(', ')} is wider than one host: every peer in it can assert who is signed in through ${header}. Name the proxy's own address.`,
     );
   return lines;
 }

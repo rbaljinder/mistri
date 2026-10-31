@@ -15,7 +15,7 @@ import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedRea
 import { inRecordLane } from '@mistriwork/engine/adapters/writeLanes.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
-import { refusalSaid, sayRefusal } from '@mistriwork/engine/shared/refusal.js';
+import { recordRefusalCause, refusalSaid, sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import type { AppPolicyContext } from './appPolicyContext.js';
 import { writeFailureOutcome } from '@mistriwork/engine/server/constraints.js';
 import { writeLines, type LineCollection, type LineWriter } from '@mistriwork/engine/server/recordWriteOperations.js';
@@ -208,9 +208,12 @@ export function createHttpPolicyUpdates(
         return { impact: [], deleted: true as const, affected: 1 };
       } catch (error) {
         if (!(error instanceof TransactionOutcomeUnknown) && writeFailureOutcome(error) === 'rejected') {
-          throw sayRefusal(
-            new Refusal('Deletion was rejected under the current record constraints.'),
-            'Deletion was rejected under the current record constraints.',
+          throw recordRefusalCause(
+            sayRefusal(
+              new Refusal('Deletion was rejected under the current record constraints.'),
+              'Deletion was rejected under the current record constraints.',
+            ),
+            error,
           );
         }
         throw error;
@@ -256,9 +259,12 @@ export function createHttpPolicyUpdates(
         // rollback. Failed rollback/COMMIT instead carries explicit uncertainty;
         // never inspect that wrapper's cause to infer safe rejection.
         if (!(error instanceof TransactionOutcomeUnknown) && writeFailureOutcome(error) === 'rejected') {
-          throw sayRefusal(
-            new Refusal('Creation was rejected under the current record constraints.'),
-            'Creation was rejected under the current record constraints.',
+          throw recordRefusalCause(
+            sayRefusal(
+              new Refusal('Creation was rejected under the current record constraints.'),
+              'Creation was rejected under the current record constraints.',
+            ),
+            error,
           );
         }
         throw error;
@@ -296,9 +302,12 @@ export function createHttpPolicyUpdates(
         return { keys };
       } catch (error) {
         if (!(error instanceof TransactionOutcomeUnknown) && writeFailureOutcome(error) === 'rejected') {
-          throw sayRefusal(
-            new Refusal('Creation was rejected under the current record constraints.'),
-            'Creation was rejected under the current record constraints.',
+          throw recordRefusalCause(
+            sayRefusal(
+              new Refusal('Creation was rejected under the current record constraints.'),
+              'Creation was rejected under the current record constraints.',
+            ),
+            error,
           );
         }
         throw error;

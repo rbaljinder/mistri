@@ -19,9 +19,9 @@ import { lockTimedOut } from '../../adapters/writeLanes.js';
 import { deletionDependents, recordedDelete, recordedInsert, recordedUpdate, type LineCollection } from '../recordWriteOperations.js';
 import { AppAccessDenied } from '../columnGrants.js';
 import { deleteImpact } from '../impact.js';
-import { explainWriteFailure, writeFailureOutcome } from '../constraints.js';
+import { explainWriteFailure, writeFailureOutcome, writeRefusalStatus } from '../constraints.js';
 import { findTable } from '../../shared/schema.js';
-import { FILE_UPLOAD_PATH, send, sendBusy, sendResource, sendRowLocked } from './reply.js';
+import { FILE_UPLOAD_PATH, bytesLabelled, send, sendBusy, sendResource, sendRowLocked } from './reply.js';
 import type { PostContext } from './context.js';
 
 type Values = Record<string, string | number | boolean | null>;
@@ -85,6 +85,12 @@ export interface RecordHooks {
   readonly rules?: RecordRules;
 }
 
+/* A failed insert or update's status. The database refusing it for good — a key taken, a reference to nothing, a
+   value its column cannot hold — is 409 or 422 (constraints.ts writeRefusalStatus); it was a 200 whose body alone
+   said `rejected`, and a client that read the status took a refused write for a saved one (a live load test). One
+   that may have landed, or that nothing recognizes as refused, keeps the 200 and its `unknown` outcome. */
+const refusedStatus = (err: unknown, completed: boolean): number => (completed ? 200 : (writeRefusalStatus(err) ?? 200));
+
 /**
  * What every write on this request shares: the options the recorded
  * operations take — the source's own adapter, and whether the write is
@@ -120,7 +126,7 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
       : record;
   const sendData = (value: Record<string, unknown>) => {
     const reply: Record<string, unknown> = { ...value };
-    if (internal) for (const field of ['applied', 'row', 'before']) if (field in reply) reply[field] = shown(reply[field]);
+    for (const field of ['applied', 'row', 'before']) if (field in reply) reply[field] = bytesLabelled(shown(reply[field]));
     send(res, 200, rules ? rules.reply(reply, 'write') : reply);
   };
   const failureOf = async (err: unknown, completed: boolean, values: Values) =>
@@ -183,7 +189,10 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
       /* Pointing an existing row at a row that is not there is the same
          mistake as inserting one, and gets the same answer. */
       const failure = await failureOf(err, completed, values);
-      sendResource(res, path, 200, { errors: [failure], outcome: completed ? 'unknown' : writeFailureOutcome(err) });
+      sendResource(res, path, refusedStatus(err, completed), {
+        errors: [failure],
+        outcome: completed ? 'unknown' : writeFailureOutcome(err),
+      });
       return true;
     }
   }
@@ -192,10 +201,12 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
    * Add a row. The same gate as /api/update, because it is the same act one
    * tense earlier. Refusals — a column that does not exist, null into NOT
    * NULL — are 400s the adapter words; a constraint the *database* enforces
-   * comes back as 200 with its own message, because a UNIQUE violation is
-   * the user's to fix and the engine names the constraint better than a
-   * paraphrase would. The outcome distinguishes recognized constraint
-   * rejections from unconfirmed failures that must not invite a blind retry.
+   * comes back with its own message in the `rejected` envelope, because a
+   * UNIQUE violation is the user's to fix and the engine names the constraint
+   * better than a paraphrase would — at 409 or 422 (refusedStatus), never a
+   * 2xx a client reading only the status would take for a save. The outcome
+   * distinguishes recognized constraint rejections from unconfirmed failures
+   * that must not invite a blind retry.
    */
   if (path === '/api/insert' || path === FILE_UPLOAD_PATH) {
     const tableId = findTable(schema, String(body.table ?? ''))?.id;
@@ -269,7 +280,10 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
          is right here, and one lookup on the failure path turns it into the
          column, the value and the row that is missing. */
       const failure = await failureOf(err, completed, values);
-      sendResource(res, '/api/insert', 200, { errors: [failure], outcome: completed ? 'unknown' : writeFailureOutcome(err) });
+      sendResource(res, '/api/insert', refusedStatus(err, completed), {
+        errors: [failure],
+        outcome: completed ? 'unknown' : writeFailureOutcome(err),
+      });
       return true;
     }
   }
@@ -355,7 +369,7 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
       sendResource(
         res,
         path,
-        200,
+        outcome === 'unknown' ? 200 : (writeRefusalStatus(err) ?? 400),
         outcome === 'unknown' ? { impact, deleted: null, outcome, errors } : { impact, deleted: false, outcome, errors },
       );
       return true;

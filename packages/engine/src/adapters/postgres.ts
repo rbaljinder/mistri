@@ -118,7 +118,7 @@ import { scopedCommandInvoker } from './scoped/scopedCommandOperations.js';
 import { postgresPrivileges } from './rolePrivileges.js';
 import { RESERVED_SCHEMAS, refusePostgresReserved, refuseReservedPlan, refuseReservedText } from './reservedSql.js';
 import { statementCap } from './statementControl.js';
-import { WriteLanes, keyedLane } from './writeLanes.js';
+import { WriteLanes, keyedLane, lockTimedOut } from './writeLanes.js';
 import { primaryReads } from './replicas.js';
 import { readSnapshotOn, type PostgresReadSnapshot } from './postgresReadSnapshot.js';
 
@@ -167,6 +167,18 @@ export function sharedPostgresAdapter(url: string, label: string, shape: SharedP
   return new PostgresAdapter(url, label, [], sharedPgConnections(url, shape, keepDatesAsText));
 }
 
+/**
+ * Whether a statement sent ahead behind a write's BEGIN (writeAhead.ts) failed, so the transaction must begin again
+ * without them. Not when one waited out its lock (55P03): begun again, the transaction asked for the same lock and
+ * waited for it a second time, so a held row was answered `row_locked` after twice the lock timeout, ten seconds
+ * where five are documented (a live load test). That wait is the transaction's own answer, and it is thrown.
+ */
+async function aheadsFailed(aheads: readonly Promise<unknown>[]): Promise<boolean> {
+  const settled = await Promise.allSettled(aheads);
+  const waited = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected' && lockTimedOut(outcome.reason));
+  if (waited) throw waited.reason;
+  return settled.some((outcome) => outcome.status === 'rejected');
+}
 export class PostgresAdapter implements Adapter {
   readonly dialect = 'postgres' as const;
   private connections: PgConnectionManager;
@@ -1316,7 +1328,7 @@ export class PostgresAdapter implements Adapter {
       schema && hint ? { sent: () => void (aheads = this.sendPlainAhead(write, schema, keyRows, journal, hint)) } : {},
       began,
     );
-    if (aheads.length && (await Promise.allSettled(aheads)).some((outcome) => outcome.status === 'rejected')) {
+    if (aheads.length && (await aheadsFailed(aheads))) {
       redoWithoutAhead(write);
       keyRows.forget();
       // Its ROLLBACK lets go of every lock it held.
@@ -1714,7 +1726,7 @@ export class PostgresAdapter implements Adapter {
               began = true;
             },
           );
-          if (aheads.length && (await Promise.allSettled(aheads)).some((outcome) => outcome.status === 'rejected')) {
+          if (aheads.length && (await aheadsFailed(aheads))) {
             /* One failed, which aborted the transaction before anything took
                an answer: it begins again without them. Rare, and counted. */
             lockedAhead.clear();

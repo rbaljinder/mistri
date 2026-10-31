@@ -107,6 +107,8 @@ const PASSED: Record<string, boolean> = {
   '--schema': true,
   '--app-entry': true,
   '--policy': true,
+  /* The App's commands module, where it is not the commands.ts beside the manifest: its journal is a store. */
+  '--commands': true,
 };
 
 const shown = (path: string) => {

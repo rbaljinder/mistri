@@ -4238,6 +4238,7 @@
         "flag --app-mcp",
         "flag --append",
         "flag --as",
+        "flag --auth-proxy-from",
         "flag --auth-proxy-header",
         "flag --backup-check",
         "flag --base-path",

@@ -13,11 +13,25 @@ import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import type { AppDef, AppFileRule } from '../../shared/app.js';
 import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import type { Bucket } from '../files/bucket.js';
+import { bytesLabelled } from '@mistriwork/engine/server/http/reply.js';
 import { serverRequest } from '@mistriwork/engine/server/serverRequests.js';
 import { bucketOf, objectBelongs, type FileScope } from '../files/fileStorage.js';
 import { pregenerateVariants, type SharedVariants } from './imageVariants.js';
 
 const megabytes = (bytes: number) => `${Math.ceil((bytes / 1024 / 1024) * 10) / 10} MB`;
+/* A file and its ceiling, in megabytes, unless that prints the same for both (2,000,001 and 2,000,000 bytes are both
+   "2 MB"): then in bytes, so the sentence never says "is 2 MB; takes up to 2 MB". */
+const sizes = (size: number, ceiling: number): [string, string] =>
+  megabytes(size) === megabytes(ceiling)
+    ? [`${size.toLocaleString('en-US')} bytes`, `${ceiling.toLocaleString('en-US')} bytes`]
+    : [megabytes(size), megabytes(ceiling)];
+
+/**
+ * A file's name as it is stored and shown. A control character (a NUL, a line break) or a bidi override, which makes
+ * "invoice\u202Etxt.exe" read as "invoiceexe.txt", becomes "_" rather than vanishing: removing a NUL made
+ * "evil.png\0.html" the different name "evil.png.html". The download's ASCII filename does the same (appFileRead.ts).
+ */
+const fileName = (name: string): string => name.replace(/[\p{Cc}\u202A-\u202E\u2066-\u2069]/gu, '_').trim();
 
 /**
  * An upload's row: the values the list sends (the parent the file belongs to)
@@ -66,10 +80,12 @@ export function fileValues(
   given: unknown,
 ): { values: Record<string, unknown>; stored?: () => void } | { status: number; error: string } {
   const { name, type, bytes } = file;
-  const named = typeof name === 'string' ? name.replace(/\p{Cc}/gu, '').trim() : '';
+  const named = typeof name === 'string' ? fileName(name) : '';
   if (!named || named.length > 255) return { status: 400, error: 'A file needs a name of at most 255 characters.' };
-  if (bytes.byteLength > rule.maxBytes)
-    return { status: 413, error: `"${named}" is ${megabytes(bytes.byteLength)}; this App takes files up to ${megabytes(rule.maxBytes)}.` };
+  if (bytes.byteLength > rule.maxBytes) {
+    const [size, ceiling] = sizes(bytes.byteLength, rule.maxBytes);
+    return { status: 413, error: `"${named}" is ${size}; this App takes files up to ${ceiling}.` };
+  }
   if (!given || typeof given !== 'object' || Array.isArray(given)) return { status: 400, error: 'Upload values must be an object.' };
   /* The thumbnail too: a copy set beside an upload would be a second picture
      under the file's name, drawn on every card in its place. */
@@ -201,9 +217,12 @@ export async function readStoredFile(
 /**
  * A written row as its writer is shown it: a file resource's object and hash
  * are the server's (appAccess.ts withFileColumns), written for the writer and
- * never sent back. Anything that is not a record passes as it is.
+ * never sent back, and the file's bytes are a label, never the bytes. Anything that is not a record passes as it is.
  */
 export function shownWrite<T>(app: AppDef, table: unknown, record: T): T {
+  return bytesLabelled(withoutServerColumns(app, table, record));
+}
+function withoutServerColumns<T>(app: AppDef, table: unknown, record: T): T {
   const file = typeof table === 'string' && Object.hasOwn(app.resources ?? {}, table) ? app.resources![table].file : undefined;
   const internal = [file?.object, file?.hash].filter(Boolean);
   if (!internal.length || !record || typeof record !== 'object' || Array.isArray(record)) return record;

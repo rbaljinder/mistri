@@ -266,6 +266,20 @@ export async function sendStream(
   await pipeline(Readable.fromWeb(body as import('node:stream/web').ReadableStream<Uint8Array>), res).catch(() => res.destroy());
 }
 
+/**
+ * A written record as its reply shows it: a file's bytes as the `<n bytes>` label every read gives a blob (adapters/
+ * postgresValues.ts), never the bytes. An upload's reply otherwise echoed the file back as a JSON Buffer, three times
+ * its size. Anything that is not a record passes as it is.
+ */
+export function bytesLabelled<T>(record: T): T {
+  if (!record || typeof record !== 'object' || Array.isArray(record) || record instanceof Uint8Array) return record;
+  const entries = Object.entries(record);
+  if (!entries.some(([, value]) => value instanceof Uint8Array)) return record;
+  return Object.fromEntries(
+    entries.map(([column, value]) => [column, value instanceof Uint8Array ? `<${value.byteLength} bytes>` : value]),
+  ) as T;
+}
+
 /** Bounded, because an unbounded request body is a denial of service. */
 const MAX_BODY = 1024 * 256;
 /** A file upload, the one body allowed past that: base64 of the largest file an App may accept, and room for the rest. */
@@ -333,22 +347,42 @@ export function refuse(res: ServerResponse, status: number, messages: string[]):
   });
 }
 
-export async function readJson(req: IncomingMessage, limit = MAX_BODY): Promise<Record<string, unknown>> {
+/** How much of a body past its limit is still read off the wire, to be dropped (readBounded). */
+const OVERSIZE_DRAIN_MOST = 16 * 1024 * 1024;
+
+/**
+ * A request body, at most `limit` bytes; undefined when it is longer. The rest of a longer body is still read, to be
+ * dropped: a reader that stopped at the limit left it on a keep-alive connection, where the server read the next
+ * request out of its leftovers, and that request hung or was reset (a live load test). So the 413 goes out on a
+ * connection that is clean. Not unboundedly: past OVERSIZE_DRAIN_MOST beyond the limit the connection is closed
+ * instead, which is what a client sending that much to a bounded route gets.
+ */
+export async function readBounded(req: IncomingMessage, limit: number): Promise<Buffer | undefined> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > limit) throw new HttpError(413, 'Request body too large.');
-    chunks.push(chunk as Buffer);
+  for await (const part of req) {
+    const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part as Uint8Array);
+    size += chunk.length;
+    if (size <= limit) chunks.push(chunk);
+    else if (size > limit + OVERSIZE_DRAIN_MOST) {
+      req.socket?.destroy();
+      return undefined;
+    } else chunks.length = 0;
   }
-  if (!chunks.length) return {};
+  return size > limit ? undefined : Buffer.concat(chunks);
+}
+
+export async function readJson(req: IncomingMessage, limit = MAX_BODY): Promise<Record<string, unknown>> {
+  const read = await readBounded(req, limit);
+  if (!read) throw new HttpError(413, 'Request body too large.');
+  if (!read.length) return {};
   try {
     /* JSON.parse itself preserves literal keys safely. Some downstream maps
        still use keyed assignment on ordinary objects, though, so admitting
        these names would not preserve their values end to end. Refuse the
        whole request rather than silently deleting an intended write. Literal
        column support needs those consumers hardened before this can relax. */
-    const body: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'), (key, value: unknown) => {
+    const body: unknown = JSON.parse(read.toString('utf8'), (key, value: unknown) => {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
         throw new HttpError(400, `Request body property "${key}" is not supported.`);
       }

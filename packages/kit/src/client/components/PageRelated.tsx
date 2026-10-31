@@ -38,7 +38,7 @@ import type { FormCuration } from './newRecordModel.js';
 import { formShownFields } from '@mistriwork/engine/shared/form.js';
 import { pinnedBy, sectionClass } from './pageModel.js';
 import { CurrentCard } from './PageCurrent.js';
-import { PageRenderContext, recordReadNames, usePageApi, type RecordActions, type SlotProps } from './pageContext.js';
+import { PageRenderContext, recordReadNames, spoken, usePageApi, type RecordActions, type SlotProps } from './pageContext.js';
 import { Loading, SectionBox } from './PageSectionBox.js';
 import { ListEmpty } from './ListEmpty.js';
 import { Empty } from './Notes.js';
@@ -358,7 +358,7 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed }: Slot
                 : andQuery(section.filter, `${section.path} = ${quoteValue(heldKey[0])}`),
           },
           actions: undefined,
-          listLabel: section.title ?? table.name,
+          listLabel: section.title ?? spoken(table.name),
           referenceLabels: labelColumns,
           interactive: !preview,
           recordNavigation: true,
@@ -812,7 +812,7 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed }: Slot
                   rows={cardRows}
                   spec={custom}
                   interactive={!preview}
-                  label={section.title ?? table.name}
+                  label={section.title ?? spoken(table.name)}
                   page={{ index: Math.floor(offset / Math.max(1, limit)), size: limit }}
                 />
               ) : (
@@ -820,7 +820,7 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed }: Slot
               )
             ) : cards && table ? (
               cardRows.length ? (
-                <CardsList table={table} rows={cardRows} spec={cards} label={section.title ?? table.name} />
+                <CardsList table={table} rows={cardRows} spec={cards} label={section.title ?? spoken(table.name)} />
               ) : (
                 <Empty className="page-group-empty" text={nothingYet} />
               )

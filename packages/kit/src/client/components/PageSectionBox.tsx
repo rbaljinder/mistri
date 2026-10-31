@@ -19,6 +19,10 @@ import { Problem } from './Notes.js';
 import { useListNavigation } from './listNavigation.js';
 import { say } from '../copy/record/components/PageSectionBox.js';
 
+/* A suggested page titles a related list by its table's name (`visit_attachment`), which an App says as words, as
+   every untitled list's head already is. An authored title has words or capitals of its own and is left as written. */
+const titled = (title: string) => (/^[a-z][a-z0-9_.]*$/.test(title) ? spoken(title) : title);
+
 /** A section's box: its heading, or a fold when it is a later group of fields. */
 export function SectionBox({
   section,
@@ -50,7 +54,7 @@ export function SectionBox({
     body
   );
   const heading =
-    section.title ??
+    (section.title === undefined ? undefined : titled(section.title)) ??
     (section.kind === 'history'
       ? say('history')
       : section.kind === 'flows'
@@ -124,7 +128,7 @@ export function SectionBox({
 export function Loading({ section }: { section: PageSection }) {
   return (
     <section className={`${sectionClass(section)} loading`}>
-      {section.title && <h2 className="page-section-head">{section.title}</h2>}
+      {section.title && <h2 className="page-section-head">{titled(section.title)}</h2>}
       {section.kind === 'list' ? <GridSkeleton columns={4} rows={3} /> : <div className="sk-bar" />}
     </section>
   );

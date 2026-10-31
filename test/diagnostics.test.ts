@@ -151,7 +151,7 @@ test('HTTP diagnostics correlate generated IDs, timings and statuses without ret
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ table: 'item', values: { name: SECRET } }),
     });
-    assert.equal(rejected.status, 200);
+    assert.equal(rejected.status, 409);
     assert.ok((await rejected.json()).errors.length > 0);
     const unknown = await request(`${app.base}/api/${SECRET}?q=${SECRET}`);
     await unknown.text();
@@ -173,7 +173,7 @@ test('HTTP diagnostics correlate generated IDs, timings and statuses without ret
     );
     assert.deepEqual(
       events.map((event) => event.status),
-      [200, 404, 400, 200, unknown.status, page.status],
+      [200, 404, 400, 409, unknown.status, page.status],
     );
     assert.equal(events[0].requestId, first.headers.get('x-request-id'));
     assert.equal(events[1].requestId, second.headers.get('x-request-id'));
@@ -197,7 +197,7 @@ test('HTTP diagnostics correlate generated IDs, timings and statuses without ret
     assert.equal(summary.completed, 6);
     assert.equal(summary.aborted, 0);
     assert.equal(summary.inFlight, 0);
-    assert.equal(summary.series.find((series) => series.route === 'api.insert')!.statusClass, '2xx');
+    assert.equal(summary.series.find((series) => series.route === 'api.insert')!.statusClass, '4xx');
     assert.equal(summary.series.find((series) => series.route === 'api.update')!.statusClass, '4xx');
     assert.equal(summary.health.droppedTotal, 0);
     assert.equal(log.summaries().length, 1);

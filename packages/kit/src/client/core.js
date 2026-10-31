@@ -310,10 +310,12 @@ async function request(path, body, headers) {
   }
 
   if (!bootstrap) assertSessionCurrent(identity);
-  /* A write the App's rules refused answers its envelope — `errors` and a `rejected` outcome — and a line's
-     `consumes` says it at 422 (server http/dataWriteRoutes.ts). The form reads it as it reads any refused
-     write, the field marked and the draft kept, so it is an answer here, not a failure. */
-  if (res.status === 422 && Array.isArray(data?.errors) && data.errors.length && data.outcome === 'rejected') return data;
+  /* A refused write answers its envelope — `errors` and a `rejected` outcome — at 422 when the App's rules or a
+     value refused it and 409 when the database's keys did (server constraints.ts writeRefusalStatus). The form
+     reads it as it reads any refused write, the field marked and the draft kept, so it is an answer here, not a
+     failure. */
+  if ((res.status === 409 || res.status === 422) && Array.isArray(data?.errors) && data.errors.length && data.outcome === 'rejected')
+    return data;
   if (!res.ok) {
     /* The status travels with the message. Callers have always had to guess
        the kind of failure from the text of it, which is how "No connection is

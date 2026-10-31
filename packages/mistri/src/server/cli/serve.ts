@@ -185,6 +185,7 @@ export async function startServing(
       allowedHosts: opts.allowedHosts,
       identityHeader: opts.authProxyHeader,
       trustedProxies: opts.trustedProxies,
+      identityProxies: opts.authProxies,
       ...(opts.embedded?.origins?.length ? { embedOrigins: opts.embedded.origins } : {}),
     },
     /* The Apps' places as startup settled them; an App keeps its place through a reload. */
@@ -1097,7 +1098,7 @@ export async function startServing(
         // nobody can see in the log is one nobody remembers turning on.
         console.log(`mistri: also answering writes for host ${opts.allowedHosts.join(', ')}`);
       }
-      for (const line of proxyIdentityLines(opts.host, opts.authProxyHeader, opts.trustedProxies)) console.log(line);
+      for (const line of proxyIdentityLines(opts.host, opts.authProxyHeader, opts.authProxies)) console.log(line);
       if (opts.trustProxyHops !== undefined) {
         console.log(
           `mistri: the client address is ${opts.trustProxyHops} place(s) from the right of X-Forwarded-For, for rate limits and sign-in lockout`,

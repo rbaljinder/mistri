@@ -36,6 +36,7 @@ import { whenRefusalSentence } from './commandSaying.js';
 import { bindRecord, readsRecord, type BoundCondition } from '../../shared/commandDraft.js';
 import { mayReadTargetColumn } from './commandActorColumns.js';
 import { rowRevision } from './commandRevision.js';
+import { NO_OUTPUT } from './commandShapes.js';
 import { preparesInitial } from './commandPrepareNeeds.js';
 import { nowStamp, written, zoneDay } from '../app/appStamps.js';
 import { stampColumn } from '../../shared/appStamps.js';
@@ -1237,9 +1238,11 @@ async function executeUntraced(
             } catch (error) {
               throw recordRefusalCause(
                 new BusinessCommandExecutionError('invalid_result'),
-                error instanceof CommandInputError && error.field
-                  ? `Command "${request.command}" returned a result its output declaration refuses at "${error.field}".`
-                  : `Command "${request.command}" returned a result that is not its declared output, or is over 16 KiB of JSON.`,
+                command.output === NO_OUTPUT
+                  ? `Command "${request.command}" returned a value but declares no output. Declare \`output: shape({ … })\` naming what it returns, or return nothing.`
+                  : error instanceof CommandInputError && error.field
+                    ? `Command "${request.command}" returned a result its output declaration refuses at "${error.field}".`
+                    : `Command "${request.command}" returned a result that is not its declared output, or is over 16 KiB of JSON.`,
               );
             }
             const result = immutableResult(resultJson);

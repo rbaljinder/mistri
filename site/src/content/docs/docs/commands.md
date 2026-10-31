@@ -262,8 +262,13 @@ that record events keep a receipt and a full audit. A declared `track` never
 goes below what the caller needs. `defineApp({ track: 'audit' })` sets it for
 every command.
 
-The same idempotency key with the same input replays the receipt; with
-anything else it is `idempotency_conflict`. An `unknown` outcome means
+Where a receipt is kept, the same idempotency key with the same input replays
+it (`replayed: true`); with anything else it is `idempotency_conflict`. The
+`idempotencyKey` every request body carries does not ask for one: a browser
+action's `/api/commands/execute` without `track` keeps nothing, so the same
+body sent twice runs twice, and the second is usually `stale_record`. To be
+answered from the receipt on a retry, send the key as an `Idempotency-Key`
+header too, or declare `track: 'receipts'`. An `unknown` outcome means
 completion is uncertain: keep the request and its key, and ask its status;
 never retry under a new key. There is no Undo and there are no Save hooks: a
 Save followed by a command is two operations.
@@ -277,7 +282,7 @@ receipts are kept, `mistri check` names a contract change as breaking, and
 
 - `[outside-ceiling]`: the command's target or a `write` table has no `access: 'write'` → add it to the resource; a target is always written. `[command-unreadable]`: the footprint reads a table the role does not read, so its button never shows → grant the role that table.
 - `[command-and-edit]`: a role edits in place a table a command writes → say which columns it edits in a `fields` rule, or give the table a machine.
-- Under a row policy or in a tenant App, a command answers `invalid_result` and the terminal says `Command "…" set job.bench_id, which points at a "bench" row, and "bench" is not in the command's footprint` → add that table to the command's `read`. Only a reference the write sets is judged; one a row already holds is not.
+- Under a row policy or in a tenant App, a command answers `invalid_result` and the terminal says `Command "…" set job.bench_id, which points at a "bench" row, and "bench" is not in the command's footprint` → add that table to the command's `read`. Only a reference the write sets is judged; one a row already holds is not. A handler that returns a value without declaring `output` answers `invalid_result` too (an omitted `output` means it returns nothing, and `mistri check` cannot see a return value): the terminal says `returned a value but declares no output` → declare `output: shape({ … })`, or return nothing.
 - A form says the record changed (`stale_record`) → it moved since the form opened; reopen it. A record's `version` column, where there is one, is the revision.
 
 ## Related

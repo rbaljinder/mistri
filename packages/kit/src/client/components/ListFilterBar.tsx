@@ -118,7 +118,17 @@ export function ListFilterBar(props: ListFilterBarProps) {
     /* The list's tabs give way after the filters (structure.css): told here when the filters have nothing left to give. */
     row.toggleAttribute('data-filters-spent', !phone && folded >= idle.length);
     if (phone) return;
-    if (row.scrollWidth > row.clientWidth + 1 && folded < idle.length) setFolded(folded + 1);
+    const over = row.scrollWidth - row.clientWidth;
+    if (over < 2 || folded >= idle.length) return;
+    /* As many more of the shown pickers, from the end, as the room they stand in (their widths and the gaps before
+       them, in layout pixels as scrollWidth is) covers: every one that starts past where the row would have to end,
+       and the one before them. Never more than are needed — the "+ Filter" that folding brings takes room of its own —
+       so a row still too wide folds again on its next render. One a render, it was a render and a measure of the whole
+       row per picker, in every sort, filter and tab (test/built-client-vitals.mjs). */
+    const slots = [...row.querySelectorAll<HTMLElement>('.applist-slot[data-column]')];
+    const end = (node?: Node | null) => (node ? (node as HTMLElement).offsetLeft + (node as HTMLElement).offsetWidth : 0);
+    const limit = end(slots.at(-1)) - over;
+    setFolded(folded + 1 + slots.filter((slot) => end(slot.previousSibling) > limit).length);
   });
   useEffect(() => {
     const row = mark.current?.closest<HTMLElement>('.applist-controls');

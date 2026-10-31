@@ -767,6 +767,45 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     assert.deepEqual({ ...(await item('bob-fresh')) }, { id: 'bob-fresh', tenant_id: 'south', business_id: 'fresh', name: 'Fresh' });
   });
 
+  /* A write the database refused for good — a key already taken, a value its column cannot hold — was answered as the
+     database not answering: 503 with Retry-After, inviting the retry that can never work (a live load test). It is the
+     record's to fix, said as a single-database App says it. And a key is global while rows are a tenant's: the answer
+     for an id another tenant holds is the answer for one this tenant holds, word for word, so it says nothing of
+     another tenant's rows. */
+  test('a duplicate key is a 409 and a value its column cannot hold a 422, the same for an id another tenant holds', async (t) => {
+    const f = await fixture(t),
+      ada = await f.signup('Ada');
+    await f.grant(ada, 'north');
+    const north = await f.open(ada, 'north');
+    const before = await items();
+    const own = await f.data('/api/insert', north, { table: 'item', values: { id: 'north-item', business_id: 'own', name: 'Own' } });
+    const foreign = await f.data('/api/insert', north, {
+      table: 'item',
+      values: { id: 'south-item', business_id: 'own', name: 'Own' },
+    });
+    for (const reply of [own, foreign]) {
+      assert.equal(reply.status, 409, reply.text);
+      assert.equal(reply.headers.get('retry-after'), null);
+      sealed(reply);
+      assert.equal(reply.body.outcome, 'rejected');
+      assert.equal(object((reply.body.errors as unknown[])[0]).code, 'duplicate_value');
+    }
+    assert.equal(foreign.text, own.text);
+    const business = await f.data('/api/insert', north, { table: 'item', values: { id: 'fresh', business_id: 'same', name: 'Same' } });
+    assert.equal(business.status, 409, business.text);
+    // A NUL, which no PostgreSQL text value can hold: class 22, the value's own fault.
+    const typed = await f.data('/api/insert', north, {
+      table: 'item',
+      values: { id: 'typed', business_id: 'typed', name: 'Nul \u0000 here' },
+    });
+    assert.equal(typed.status, 422, typed.text);
+    assert.equal(typed.headers.get('retry-after'), null);
+    sealed(typed);
+    assert.equal(typed.body.outcome, 'rejected');
+    assert.equal(object((typed.body.errors as unknown[])[0]).code, 'validation_failed');
+    assert.deepEqual(await items(), before);
+  });
+
   test('a command idempotency key replays inside its tenant and never across tenants', async (t) => {
     const f = await fixture(t),
       cy = await f.signup('Cy');

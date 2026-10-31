@@ -108,9 +108,34 @@ export function wrongTypeValue(error: unknown): boolean {
   return code === '22P02' || code === '22003' || code === '22007' || code === '22008';
 }
 
-/** Only recognized constraint codes acknowledge rejection; error text is not proof. */
+/**
+ * A value PostgreSQL could not take as given — a word where a number goes, a date that is no date, text past its
+ * column's length: SQLSTATE class 22, a data exception, which the statement it failed rolled back. Permanent for
+ * this input, like a constraint, and never the database failing to answer. By the server's code only (a pg error
+ * carries its `severity`); SQLite takes any value in any column, so it has none.
+ */
+export function dataException(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { code, severity } = error as { code?: unknown; severity?: unknown };
+  return typeof severity === 'string' && typeof code === 'string' && /^22[0-9A-Z]{3}$/.test(code);
+}
+
+/** Only recognized constraint codes and data exceptions acknowledge rejection; error text is not proof. */
 export function writeFailureOutcome(error: unknown): 'rejected' | 'unknown' {
-  return writeFailureKind(error) ? 'rejected' : 'unknown';
+  return writeFailureKind(error) || dataException(error) ? 'rejected' : 'unknown';
+}
+
+/**
+ * The status a write the database refused for good is answered with, by what it refused: a row already there or
+ * one that is not there conflicts with what is stored (409, as a command's `duplicate_record` and `ineligible_state`
+ * are); a value missing, outside a check or not of its column's type is the request's to change (422). Undefined for
+ * anything else, which is not a refusal this recognizes. A rejected write is never a 2xx: a client that reads only
+ * the status must not take it for a save, and one that reads the body finds the same envelope at either.
+ */
+export function writeRefusalStatus(error: unknown): 409 | 422 | undefined {
+  const kind = writeFailureKind(error);
+  if (kind === 'unique' || kind === 'reference') return 409;
+  return kind || dataException(error) ? 422 : undefined;
 }
 
 export const insertFailureOutcome = writeFailureOutcome;

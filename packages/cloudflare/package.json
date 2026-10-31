@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/cloudflare",
-  "version": "1.0.0-rc.6",
+  "version": "1.0.0-rc.7",
   "description": "A mistri App on Cloudflare Containers: the Container class and Worker handlers `mistri deploy init cloudflare` writes against, so a fix to the glue is a package upgrade.",
   "keywords": [
     "cloudflare",

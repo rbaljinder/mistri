@@ -15,7 +15,7 @@
  */
 import { serveClient, shellEgress, type SocialHead } from '@mistriwork/engine/server/clientHttp.js';
 import { CLIENT_FILES } from '../clientFiles.js';
-import { AppValidationDenied, ConsumesRefused } from '../app/appValidationDenied.js';
+import { AppValidationDenied } from '../app/appValidationDenied.js';
 import { appError } from '../app/appErrors.js';
 import {
   appFaceHead,
@@ -54,7 +54,7 @@ import { attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js
 import { AppAccessDenied } from '@mistriwork/engine/server/columnGrants.js';
 import { httpRowPolicyAllows, type HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import type { AppPolicyContext } from '../policy/appPolicyContext.js';
-import { writeFailureOutcome } from '@mistriwork/engine/server/constraints.js';
+import { writeFailureOutcome, writeRefusalStatus } from '@mistriwork/engine/server/constraints.js';
 import { PathError, type ViewDef } from '@mistriwork/engine/shared/view.js';
 import type { SavedQuery } from '@mistriwork/engine/shared/sqlsaved.js';
 import type { RequestDiagnostics } from '@mistriwork/engine/server/operations/diagnostics.js';
@@ -90,7 +90,7 @@ import { readFreshness } from '@mistriwork/engine/server/http/readRouting.js';
 import { readsAs } from '@mistriwork/engine/adapters/replicas.js';
 import { noteAuthorRequest, reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { administersAccounts } from '../../shared/accountAdministration.js';
-import { recordRefusalCause, refusalSaid } from '@mistriwork/engine/shared/refusal.js';
+import { recordRefusalCause, refusalCause, refusalSaid } from '@mistriwork/engine/shared/refusal.js';
 import { currentSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
 import { observerHome, observerMounted } from '../observe/mount.js';
 import type { GatedContext, RequestContext } from '@mistriwork/engine/server/http/context.js';
@@ -487,7 +487,7 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
          with the rule's own sentence, as the single-App host and a tenant lease say it (appErrors.ts). */
       if (error instanceof AppValidationDenied && (path === '/api/insert' || path === '/api/update')) {
         const failure = appError(error, 'write');
-        return send(res, error instanceof ConsumesRefused ? 422 : 200, {
+        return send(res, 422, {
           code: failure.code,
           message: failure.message,
           error: failure.message,
@@ -504,7 +504,7 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
         error instanceof HttpError ||
         (!(error instanceof TransactionOutcomeUnknown) && writeFailureOutcome(error) === 'rejected');
       const outcome = rejected ? (path === '/api/revert' ? 'not_applied' : 'rejected') : 'unknown';
-      const failure = rejected
+      const refused = rejected
         ? {
             code: conflict ? 'record_conflict' : denied ? 'forbidden' : 'validation_failed',
             /* The rule that refused, where the code that refused said it (sayRefusal): the role, a column, the row
@@ -517,7 +517,16 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
             code: 'write_unconfirmed',
             message: 'The change could not be confirmed. Refresh and reconcile the record before trying again.',
           };
-      const status = denied ? 403 : conflict ? 409 : rejected ? 400 : 200;
+      /* The database refusing the write for good (a key taken, a reference to nothing, a value its column cannot
+         hold): 409 or 422 by what it refused (constraints.ts), in appError's fixed sentence for its code. Its codes
+         alone reach appError, so no column, constraint or value of a row the policy hides is said. The policy's
+         writer keeps the refusal it met beneath its own (appPolicyUpdates.ts). */
+      const broke = error instanceof Refusal ? refusalCause(error) : error;
+      const refusedBy = rejected && !conflict && !denied ? writeRefusalStatus(broke) : undefined;
+      const { code, errcode, severity } = (refusedBy ? broke : {}) as { code?: unknown; errcode?: unknown; severity?: unknown };
+      const said = refusedBy && appError({ code, errcode, severity }, 'write');
+      const failure = said ? { code: said.code, message: said.message } : refused;
+      const status = denied ? 403 : conflict ? 409 : (refusedBy ?? (rejected ? 400 : 200));
       const cause = reportRefusal(req, rejected ? status : 503, failure.code, failure.message, error);
       /* One refusal body for every route: the code and message at the top, as a command's say them, and errors[]
          for the readers of a write's per-field list. */

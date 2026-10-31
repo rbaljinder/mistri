@@ -147,7 +147,7 @@ test('a column the machine owns is refused in a cell, for every role', async () 
 test("a value the resource's validation refuses is refused, naming the field", async () =>
   fixture(async ({ update, db }) => {
     const reply = await update({ note: null }, { note: 'kept' });
-    assert.equal(reply.status, 200);
+    assert.equal(reply.status, 422);
     assert.equal(reply.body.outcome, 'rejected');
     assert.ok(JSON.stringify(reply.body.errors).includes('note'), JSON.stringify(reply.body));
     assert.equal(row(db).note, 'kept');

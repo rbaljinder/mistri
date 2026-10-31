@@ -44,7 +44,7 @@ test('a handler writes now, today and me in each column’s own format', { timeo
         ui: { timezone: 'America/Los_Angeles' },
         sources: { desk: { connection: 'desk-db' } },
         resources: { ticket: { access: 'write' }, staff: {} },
-        auth: { me: { from: 'staff', column: 'email' }, roles: { agent: { read: true, commands: ['close', 'scribble'] } } },
+        auth: { me: { from: 'staff', column: 'email' }, roles: { agent: { read: true, commands: ['close', 'scribble', 'stray'] } } },
         views: { tickets: { kind: 'list', from: 'ticket' } },
         home: 'tickets',
       },
@@ -69,6 +69,15 @@ test('a handler writes now, today and me in each column’s own format', { timeo
             day_said: context.today(),
           });
           return { ok: true as const };
+        },
+      }),
+      // Returns a value and declares no output: refused at run time, and the owner is told what to declare.
+      stray: defineCommand({
+        source: 'desk',
+        target: 'ticket',
+        input: {},
+        async handle() {
+          return { ok: true } as never;
         },
       }),
       scribble: defineCommand({
@@ -115,6 +124,10 @@ test('a handler writes now, today and me in each column’s own format', { timeo
     await assert.rejects(
       run('scribble', { id: 'a', appId: 'desk', roles: ['agent'], email: 'ada@example.test' }, 0),
       said(/"note" is TEXT, and the constant now/, 'temporarily_unavailable'),
+    );
+    await assert.rejects(
+      run('stray', { id: 'a', appId: 'desk', roles: ['agent'], email: 'ada@example.test' }, 0),
+      said(/returned a value but declares no output\. Declare `output: shape/, 'invalid_result'),
     );
     await run('close', { id: 'a', appId: 'desk', roles: ['agent'], email: 'ada@example.test' }, 0);
     assert.deepEqual(

@@ -60,7 +60,7 @@ starters: ['Which tickets are mine?', { text: 'Summarize this ticket', records: 
 
 It reads and proposes only what the signed-in person may: their roles, fields and verbs. The server needs
 `ANTHROPIC_API_KEY` in its environment, never in the App, and the database needs its store
-(`provisionStores(<the database>, { app: { definition } })` from `@mistriwork/mistri/maintenance`, which makes every store the App declares; `only: ['assistant']` names it alone and is refused for an App with no `assistant`; `mistri migrate stores up --app` does not create it, so a script calls `provisionStores` once).
+(its conversations, turns and token counts, in the database beside the App's records; a tenant App's, beside its tenant source). Serving never creates or alters it. `mistri migrate stores up --app <dir>` makes it, `mistri migrate stores status` lists it, and a script can call `provisionStores(<the database>, { app: { definition } })` from `@mistriwork/mistri/maintenance` instead (`only: ['assistant']` names it alone and is refused for an App with no `assistant`).
 What it reads to answer (rows, fields, the open record) is sent to the model provider (Anthropic) with each turn;
 offer it (`roles`) only to people whose reads may leave your server. A conversation answers one question at a time,
 and a person has at most two answers under way at once.
@@ -72,7 +72,7 @@ for that customer in **Account → Manage tenants**.
 
 - No button in the bar → set `ANTHROPIC_API_KEY` for the server. In a tenant App, the platform owner also turns it
   on for that customer in Manage tenants.
-- The server refuses to start, naming the assistant store → provision it once, then start again.
+- The server refuses to start, naming the assistant store → run `mistri migrate stores up --app <dir>` once, then start again.
 - A verb it should never propose → name it in `exclude`; a role that may not run it is never offered it anyway.
 - `nav: ['assistant']` refused → add `'page'` to `placement`; the menu names the page only when there is one.
 

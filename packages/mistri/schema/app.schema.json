@@ -2665,7 +2665,7 @@
         },
         "store": {
           "type": "string",
-          "description": "Where accounts and sessions live: a SQLite file, or a postgres:// URL (name its password, or the whole URL, by a ${NAME} reference; migratePostgresAuthStore from @mistriwork/mistri/commands makes its schema before the first start). Never a business database, which a tenant App refuses at startup. Default: a SQLite file in the mistri config directory, named for the app."
+          "description": "Where accounts and sessions live: a SQLite file, or a postgres:// URL (name its password, or the whole URL, by a ${NAME} reference; migratePostgresAuthStore from @mistriwork/mistri/maintenance makes its schema before the first start). Never a business database, which a tenant App refuses at startup. Default: a SQLite file in the mistri config directory, named for the app."
         },
         "defaultRole": {
           "type": "string",

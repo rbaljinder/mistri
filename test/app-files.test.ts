@@ -98,6 +98,9 @@ test('a file uploads as one ordinary insert and comes back as the same bytes, al
       file: { name: 'notes "v2" ✓.txt', type: 'text/plain', data: bytes.toString('base64') },
     });
     assert.equal(sent.status, 200, JSON.stringify(sent.body));
+    // The reply names the file, never echoes it: the bytes are a label, as every read gives a blob.
+    assert.equal((sent.body.applied as Record<string, unknown>).data, `<${bytes.byteLength} bytes>`);
+    assert.ok(JSON.stringify(sent.body).length < 1000, JSON.stringify(sent.body));
     const stored = db
       .prepare('SELECT issue_id, file_name, content_type, byte_size, typeof(data) AS kind, hex(data) AS hex FROM attachment')
       .get() as Record<string, unknown>;
@@ -133,6 +136,20 @@ test('a file uploads as one ordinary insert and comes back as the same bytes, al
   });
 });
 
+test('control characters and bidi overrides in a file name become underscores, never vanish', async () => {
+  await fixture(async ({ upload, db }) => {
+    for (const name of ['evil.png\u0000.html', 'invoice\u202etxt.exe', 'a\r\nb.txt']) {
+      const sent = await upload({ table: 'attachment', values: { issue_id: 1 }, file: { name, data: 'aGk=' } });
+      assert.equal(sent.status, 200, JSON.stringify(sent.body));
+    }
+    const names = db
+      .prepare('SELECT file_name FROM attachment ORDER BY id')
+      .all()
+      .map((row) => row.file_name);
+    assert.deepEqual(names, ['evil.png_.html', 'invoice_txt.exe', 'a__b.txt']);
+  });
+});
+
 test('an upload past the cap, into a resource that holds no files, or naming the file columns writes nothing', async () => {
   await fixture(async ({ upload, db }) => {
     const over = await upload({
@@ -142,6 +159,8 @@ test('an upload past the cap, into a resource that holds no files, or naming the
     });
     assert.equal(over.status, 413);
     assert.match(over.body.error, /"big\.bin" is .* this App takes files up to/);
+    // 1,025 and 1,024 bytes are both "0.1 MB": the two numbers must differ.
+    assert.equal(over.body.error, '"big.bin" is 1,025 bytes; this App takes files up to 1,024 bytes.');
     assert.equal((await upload({ table: 'note', values: {}, file: { name: 'a.txt', data: 'aGk=' } })).status, 404);
     assert.equal(
       (await upload({ table: 'attachment', values: { issue_id: 1, file_name: 'forged' }, file: { name: 'a.txt', data: 'aGk=' } })).status,

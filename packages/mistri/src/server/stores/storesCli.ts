@@ -24,7 +24,7 @@ import type { ProvisionStoresOptions } from '../maintenance.js';
 import type { AppTenantPolicy } from '../policy/appTenantPolicy.js';
 
 export const STORES_USAGE =
-  'mistri migrate stores <status | up> [--suite <suite.json>] [--app <dir> [--jobs <file>] [--policy <file>]] [<db> | --db <target> | --config <path>] [--connection <name>]';
+  'mistri migrate stores <status | up> [--suite <suite.json>] [--app <dir> [--commands <file>] [--jobs <file>] [--policy <file>]] [<db> | --db <target> | --config <path>] [--connection <name>]';
 
 /** A database to read: what to call it, and its address. */
 interface StoreLocation {
@@ -307,7 +307,7 @@ export async function runStores(sub: string, input: Parameters<typeof storeLocat
  * With `--app`, `up` also creates every store the App uses and the database
  * lacks, on the connection each belongs on: the notification store beside
  * the resources that notify, the record history beside the resources a page
- * shows the history of, the command journal on each connection its commands
+ * shows the history of, the assistant's conversations where the App declares an assistant, the command journal on each connection its commands
  * run on, and, when a command records events, posts effects or `--jobs`
  * names a module, the App's event store, their delivery destinations, the
  * job, workflow and integrations stores beside them. The App is the binding
@@ -443,6 +443,8 @@ async function provisionAppStores(
     if (Object.values(app.resources ?? {}).some((resource) => resource.clone !== undefined))
       add(home, unbound('tenant-sandboxes', 'sandbox store'));
     if (historyRules(app, loaded.pages).size) add(home, unbound('record-history', 'record history'));
+    /* The assistant's conversations, beside the tenant source (tenantAssistant.ts), where its start looks for them. */
+    if (app.assistant) add(home, unbound('assistant', 'assistant store'));
     /* Live sync's change store, where every tenant's writes are told to the pages that show them. */
     add(home, unbound('live-change', 'live sync store'));
     /* What a production build's start last validated (tenantValidationRecord.ts): PostgreSQL's only, and never
@@ -470,6 +472,8 @@ async function provisionAppStores(
     add(connection, unbound('integrations', 'integrations store'));
   for (const connection of new Set([...historyRules(app, loaded.pages).keys()].map((id) => connectionOf(sourceOfResource(id)))))
     add(connection, unbound('record-history', 'record history'));
+  /* The assistant's conversations, on the connection the App's entry point names (assistantStores.ts), where serving looks. */
+  if (app.assistant) add(connectionOf(undefined), unbound('assistant', 'assistant store'));
   /* Live sync's change store, on every database a resource is read from: a page showing any of them is told of its writes. */
   for (const connection of new Set(Object.keys(app.resources ?? {}).map((id) => connectionOf(sourceOfResource(id)))))
     add(connection, unbound('live-change', 'live sync store'));
