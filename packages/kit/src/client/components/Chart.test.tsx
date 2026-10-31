@@ -413,8 +413,39 @@ describe('the donut', () => {
     const items = screen.getAllByRole('listitem');
     expect(items[6]).toHaveTextContent('others (2)');
     expect(items[6].querySelector('button')).toBeNull();
-    await user.click(screen.getAllByRole('button')[0]);
+    await user.click(container.querySelector('.chart-legend-drill')!);
     expect(picked).toEqual(['a']);
+  });
+
+  test('a slice itself drills, by click and by keyboard, and others stays a picture', async () => {
+    const user = userEvent.setup();
+    const picked: unknown[] = [];
+    const rows = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((key, i) => ({ key, value: 8 - i }));
+    const { container } = render(<DonutChart rows={rows} say={money} onPick={(v) => picked.push(v)} />);
+    const slices = screen.getAllByRole('button', { name: /: \$/ });
+    expect(slices).toHaveLength(6);
+    await user.click(slices[1]);
+    expect(picked).toEqual(['b']);
+    fireEvent.keyDown(slices[0], { key: 'Enter' });
+    expect(picked).toEqual(['b', 'a']);
+    expect(container.querySelectorAll('.chart-slice')).toHaveLength(7);
+    expect(container.querySelectorAll('.chart-slice-drill')).toHaveLength(6);
+    /* The figure holding buttons is a group, not an image: a button
+       inside role="img" fails axe's nested-interactive. */
+    expect(container.querySelector('.chart-donut')).toHaveAttribute('role', 'group');
+  });
+
+  test('a donut with nothing to drill stays an image', () => {
+    const { container } = render(
+      <DonutChart
+        rows={[
+          { key: 'a', value: 30 },
+          { key: 'b', value: 10 },
+        ]}
+        say={money}
+      />,
+    );
+    expect(container.querySelector('.chart-donut')).toHaveAttribute('role', 'img');
   });
 
   test('a total label sits under the summed figure, and the legend says each share', () => {

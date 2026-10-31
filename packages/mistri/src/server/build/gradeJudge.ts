@@ -6,9 +6,10 @@
 import type { ContrastReading, Probe } from './gradeProbe.js';
 import { promiseOf, type ContractPromise } from './themeContract.js';
 
-/** The windows each page is measured in: a desk, a phone, the narrowest phone, and a phone in the dark. */
+/** The windows each page is measured in: a desk, a tablet, a phone, the narrowest phone, and a phone in the dark. */
 export const WINDOWS = [
   { label: '1280', width: 1280, height: 900, dark: false },
+  { label: '768', width: 768, height: 1024, dark: false },
   { label: '390', width: 390, height: 844, dark: false },
   { label: '320', width: 320, height: 640, dark: false },
   { label: '390-dark', width: 390, height: 844, dark: true },

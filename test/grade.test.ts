@@ -524,10 +524,10 @@ describe('the grade matrix: every theme, palette and role', () => {
   ];
   test('a row per theme, palette and role, a column per window: ✓ or the count, and a palette row only where it was graded', () => {
     assert.deepEqual(matrixTable(rows), [
-      '                          1280  390  320  390-dark',
-      'lumen/default/manager        ✓    ✓    ✓         ✓',
-      'cadence/default/manager      1    1    2         ✓',
-      'cadence/dusk/manager         ·    ✓    ·         ✓',
+      '                          1280  768  390  320  390-dark',
+      'lumen/default/manager        ✓    ·    ✓    ✓         ✓',
+      'cadence/default/manager      1    ·    1    2         ✓',
+      'cadence/dusk/manager         ·    ·    ✓    ·         ✓',
     ]);
   });
   test("each failing cell's first finding: promise, code, row, window, page, and the token with a value that passes", () => {

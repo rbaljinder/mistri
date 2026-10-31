@@ -306,9 +306,9 @@ test('mistri grade on Tick: every view and a record, each finding a line with it
       findings: Array<{ code: string; severity: string; page: string; windows: string[]; file?: string; line?: number; fix: string }>;
     };
     expect(report.app).toBe('tick');
-    // The list and a task's page (the home is the list, measured once), each in four windows.
+    // The list and a task's page (the home is the list, measured once), each in five windows.
     expect(report.pages).toBe(2);
-    expect(report.captures).toBe(8);
+    expect(report.captures).toBe(10);
     expect(report.ok).toBe(ran.code === 0);
     expect(report.score).toBeGreaterThan(50);
     /* What Tick is clean of: it throws nothing, asks for nothing that fails, never scrolls sideways, cuts no figure,

@@ -182,3 +182,7 @@ textarea.field-control { min-height: 72px; resize: vertical; }
 
 /* An icon (Icon.tsx). */
 .tw-icon { display: inline-block; flex: none; vertical-align: middle; }
+
+/* The newer standalone primitives' rules live in standalone.css, not
+   here: the kit imports this sheet into every first paint, and none of
+   them is drawn by the kit. */

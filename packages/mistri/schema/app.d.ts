@@ -777,7 +777,9 @@ export interface AppResource<Column extends string = string, Page extends string
       they do without it. Needs a single-column primary key. On a tenant App each document keeps its
       tenant and a search asks within the member's tenant. Search providers are packs (Typesense is
       `@mistriwork/search-typesense`), which ship after 1.0; until one is plugged in, an App that
-      declares `search` is refused at startup. */
+      declares `search` is refused at startup — except through the built-in connection `memory`,
+      which searches an in-memory index in the server process (lost on restart until the next
+      reindex, and suited to moderate tables, not a large catalog). */
   search?: { connection: string; fields: readonly (Column | `${Column}.${string}`)[] };
   /** The record's states and the verbs that move it between them: `machine('status', { … })`. The column changes
       only along the graph, on every door — a form, a list, an import, a command, the App API — and the page's

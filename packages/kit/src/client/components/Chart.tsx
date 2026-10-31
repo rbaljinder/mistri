@@ -1064,16 +1064,35 @@ export function DonutChart({
   const rings = slices.map((p, i) => {
     const share = (100 * p.value) / whole;
     const drawn = share > GAP * 2 ? share - GAP : share;
+    /* A slice is a door where the legend's button is: the same raw value,
+       the same "others" exclusion. A circle is not a button by itself, so
+       a drillable slice carries the button's role, name and keyboard
+       behaviour, and the legend button stays as the second way in. */
+    const drillable = onPick && p.raw != null && !(rest.length && i === slices.length - 1);
     const ring = (
       <circle
         key={i}
-        className="chart-slice"
+        className={`chart-slice${drillable ? ' chart-slice-drill' : ''}`}
         cx={C}
         cy={C}
         r={R}
         strokeDasharray={`${drawn.toFixed(2)} ${(100 - drawn).toFixed(2)}`}
         strokeDashoffset={at.toFixed(2)}
         style={{ ...ramp(i), stroke: color(i), opacity: opacity(i) }}
+        {...(drillable
+          ? {
+              role: 'button',
+              tabIndex: 0,
+              'aria-label': `${p.key}: ${say(p.value)} (${formatPercent(share, { maximumFractionDigits: 0 })})`,
+              onClick: () => onPick!(p.raw),
+              onKeyDown: (event: React.KeyboardEvent) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onPick!(p.raw);
+                }
+              },
+            }
+          : {})}
       >
         <title>{`${p.key}: ${say(p.value)} (${formatPercent(share, { maximumFractionDigits: 0 })})`}</title>
       </circle>
@@ -1081,12 +1100,18 @@ export function DonutChart({
     at -= share;
     return ring;
   });
+  /* A picture must not hold buttons: where any slice drills, the figure
+     is a group holding buttons, not an image — axe's nested-interactive
+     fails a button inside role="img", and a screen reader would meet the
+     slices as the picture's unnamed parts. Where nothing drills it stays
+     an image, as before. */
+  const anyDrillable = onPick && slices.some((p, i) => p.raw != null && !(rest.length && i === slices.length - 1));
   return (
     <div className={`chart-donut-wrap${ordered ? ' is-ordered' : ''}`}>
       <svg
         className="chart-donut"
         viewBox={`0 0 ${C * 2} ${C * 2}`}
-        role="img"
+        role={anyDrillable ? 'group' : 'img'}
         aria-label={sayCopy('inAll', { whole: say(whole), map: slices.map((p) => `${p.key} ${say(p.value)}`).join(', ') })}
       >
         {rings}

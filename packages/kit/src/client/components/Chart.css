@@ -102,6 +102,11 @@
 .chart-donut-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-5); max-width: 46rem; }
 .chart-donut { width: 120px; height: 120px; flex: none; transform: rotate(0); }
 .chart-slice { fill: none; stroke: var(--accent); stroke-width: 7; }
+/* A slice that drills: the pointer says it goes somewhere, and the
+   focus ring is the stroke itself, widened, so a keyboard reader sees
+   which slice holds focus. */
+.chart-slice-drill { cursor: pointer; }
+.chart-slice-drill:focus-visible { stroke-width: 11; outline: none; }
 .chart-donut-total { font: 600 calc(5px * var(--type-k)) var(--mono); fill: var(--ink); }
 .chart-legend { list-style: none; margin: 0; padding: 0; min-width: 0; flex: 1; }
 /* A donut's legend is a short list: its values stay within reach of their names, not a half-width away. */

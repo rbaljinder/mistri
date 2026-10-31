@@ -888,6 +888,10 @@ button.ghost.dash-open:hover { color: var(--ink); background: none; }
 .tone {
   display: inline-block; padding: 0 var(--space-3); border-radius: 999px;
   font-size: var(--text-sm); line-height: 1.7; font-family: var(--mono);
+  /* A pill must never clip its own label with a dangling marker: inside a
+     narrow grid cell it truncates inside the pill, with its full text in
+     the title, instead of spilling a ".." past the pill's edge. */
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;
 }
 /* The word sits on its own tint, which costs a status ink its margin: a
    plain red read 4.0:1 there. A fifth of the text ink deepens it (lightens it, by
@@ -1157,7 +1161,7 @@ body.app-mobile-nav .brand-name { overflow: hidden; text-overflow: ellipsis; whi
 .mobile-nav-list .nav-icon + .nav-label { flex: 1; min-width: 0; }
 .mobile-nav-list .rows { color: var(--ink-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .mobile-nav-list .view-tag { color: var(--status-info); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; }
-.mobile-nav-list li.nav-group { padding: var(--space-4) var(--space-3) var(--space-1h) calc(8px + var(--nav-group-inset, 0px)); color: var(--ink-muted); font: var(--text-xs) var(--sans); text-transform: uppercase; letter-spacing: 0.06em; }
+.mobile-nav-list li.nav-group { padding: var(--space-4) var(--space-3) var(--space-1h) calc(8px + var(--nav-group-inset, 0px)); color: var(--nav-muted); font: var(--text-xs) var(--sans); text-transform: uppercase; letter-spacing: 0.06em; }
 .mobile-nav-list li.nav-group .nav-group-fold { position: relative; min-height: 0; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; }
 /* The heading's geometry stays the plain one's; the touch target reaches into its own padding (style.css). */
 .mobile-nav-list li.nav-group .nav-group-fold::before { content: ''; position: absolute; inset: -10px -8px -3px; }

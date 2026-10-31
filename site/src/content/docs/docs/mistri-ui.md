@@ -57,6 +57,12 @@ A primitive reads no data, no address and no message catalog: its words, its ico
 | `DateField` | A date and its calendar, in the `words` it is given |
 | `Icon`, `registerIcons` | Draws the glyphs you register, by name |
 | `Badge`, `PhotoTiles`, `IconRows` | A landing hero's parts (Preview): a short pill over a heading; two to four photos in one 4:3 mosaic; up to four rows of an icon and a line |
+| `Switch` | One on/off choice as a switch (`checked`/`onCheckedChange`, or `defaultChecked`), with an optional `label` and `description`; `busy` refuses a press while keeping focus |
+| `Tabs` | One panel at a time from a row (`tabs` of `value`, `label`, `children`); arrow keys walk the row, a disabled tab is skipped |
+| `Drawer` | A sheet from an edge (`side` `left` or `right`, at most 420px, full width on a phone); controlled with `open`/`onOpenChange`, `closeDisabled` refuses a dismissal |
+| `Popover` | A small layer anchored to a `trigger` element; Escape and a click outside dismiss it, focus returns on close |
+| `Avatar` | A person's picture, or their initials where there is none (`name` → `AL`, `A`); sizes `sm`, `md`, `lg` |
+| `Pagination` | The pages of a list as buttons (`page`, `pages`, `onPageChange`); the current page is `aria-current`, never a button to itself, steps disable at the ends, long runs shorten with an ellipsis |
 
 `style.css` is the tokens and the primitives' rules in a `mistri-ui` cascade layer, so any rule of your page's own wins. To place them in a layer of your own, import the two files it joins: `@import '@mistriwork/ui/tokens.css' layer(base);` and `@mistriwork/ui/primitives.css` the same way.
 

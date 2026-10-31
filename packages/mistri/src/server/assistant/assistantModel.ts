@@ -3,10 +3,12 @@
  * text streamed out as it is written, and the whole reply — the content
  * exactly as the provider returned it, why it stopped, what it cost.
  *
- * One provider: Anthropic's Messages API over plain `fetch`, streaming. No
- * SDK, so the image carries nothing new; this interface is where one would
- * sit. The operator's key comes from the server's environment
- * (`ANTHROPIC_API_KEY`), never from an App and never to a browser.
+ * Two providers behind this one interface, each over plain `fetch`,
+ * streaming, no SDK, so the image carries nothing new: Anthropic's
+ * Messages API (assistantModel.ts here) and OpenAI's Chat Completions API
+ * (assistantOpenAI.ts). The operator's key comes from the server's
+ * environment (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`), never from an App
+ * and never to a browser.
  *
  * The stable prefix — tools, then the system prompt — carries a cache
  * breakpoint, and the conversation's last block another, so each step of a
@@ -14,6 +16,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { scriptedModel, type AssistantScript } from './assistantScripted.js';
+import { openaiModel } from './assistantOpenAI.js';
 
 export interface ModelUsage {
   input: number;
@@ -229,14 +232,24 @@ export function setAssistantModel(factory: (() => AssistantModel | undefined) | 
 /**
  * The model this server reaches, or none: a test's, then a scripted one the
  * operator names (`MISTRI_ASSISTANT_SCRIPT`, a JSON file — for a demo or a
- * browser test, never a network call), then Anthropic's with the operator's key.
- * Under NODE_ENV=production a script is not read: a deployment's assistant is
- * the model, never a canned answer left in its environment.
+ * browser test, never a network call), then the provider the operator names
+ * (`MISTRI_ASSISTANT_PROVIDER`, `anthropic` or `openai`; Anthropic unless the
+ * operator says otherwise and only Anthropic's key is set), with that
+ * provider's key. Under NODE_ENV=production a script is not read: a
+ * deployment's assistant is the model, never a canned answer left in its
+ * environment.
  */
 export function assistantModel(): AssistantModel | undefined {
   if (chosen) return chosen();
   const script = process.env.NODE_ENV === 'production' ? undefined : process.env.MISTRI_ASSISTANT_SCRIPT;
   if (script) return scriptedModel(JSON.parse(readFileSync(script, 'utf8')) as AssistantScript);
+  const provider = process.env.MISTRI_ASSISTANT_PROVIDER;
+  if (provider === 'openai') {
+    const key = process.env.OPENAI_API_KEY;
+    return key ? openaiModel(key) : undefined;
+  }
   const key = process.env.ANTHROPIC_API_KEY;
-  return key ? anthropicModel(key) : undefined;
+  if (key) return anthropicModel(key);
+  const openaiKey = process.env.OPENAI_API_KEY;
+  return openaiKey ? openaiModel(openaiKey) : undefined;
 }

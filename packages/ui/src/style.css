@@ -6,6 +6,7 @@
 @layer mistri-ui;
 @import './tokens.css' layer(mistri-ui);
 @import './primitives.css' layer(mistri-ui);
+@import './standalone.css' layer(mistri-ui);
 @import './forms.css' layer(mistri-ui);
 @import './hero.css' layer(mistri-ui);
 @import './preferences.css' layer(mistri-ui);
