@@ -235,3 +235,175 @@
   padding: 0 var(--space-1);
   color: var(--ink-subtle);
 }
+
+/* The Carousel primitive (Carousel.tsx): one slide in a viewport, the
+   rest off to the side on a track that slides — only under
+   `no-preference`, so a reader who asked for stillness gets a cut. */
+.ui-carousel {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.ui-carousel-viewport {
+  overflow: hidden;
+  min-width: 0;
+}
+.ui-carousel-track {
+  display: flex;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ui-carousel-track {
+    transition: transform 200ms ease;
+  }
+}
+.ui-carousel-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+.ui-carousel-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.ui-carousel-step {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .ui-carousel-step:hover:not(:disabled) {
+    background: var(--raised);
+  }
+}
+.ui-carousel-step:disabled {
+  color: var(--ink-subtle);
+  cursor: not-allowed;
+}
+.ui-carousel-step:focus-visible,
+.ui-carousel-dot:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: 2px;
+}
+.ui-carousel-dots {
+  display: flex;
+  gap: var(--space-2);
+}
+.ui-carousel-dot {
+  width: var(--space-4);
+  height: var(--space-4);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--line-control);
+  cursor: pointer;
+}
+.ui-carousel-dot[aria-current] {
+  background: var(--accent);
+}
+.ui-carousel-status {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+/* The Resizable primitive (Resizable.tsx): panes on a flex row (or
+   column), a handle between each pair that the reader drags or walks. */
+.ui-resizable-horizontal {
+  display: flex;
+  flex-direction: row;
+  min-width: 0;
+}
+.ui-resizable-vertical {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ui-resizable-panel {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.ui-resizable-handle {
+  flex: none;
+  background: var(--raised);
+  border: 1px solid var(--line);
+}
+.ui-resizable-horizontal .ui-resizable-handle {
+  width: var(--space-4);
+  cursor: col-resize;
+}
+.ui-resizable-vertical .ui-resizable-handle {
+  height: var(--space-4);
+  cursor: row-resize;
+}
+@media (hover: hover) {
+  .ui-resizable-handle:hover {
+    background: var(--line-control);
+  }
+}
+.ui-resizable-handle:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The ScrollArea primitive (ScrollArea.tsx): Base UI draws no chrome of
+   its own, so the viewport hides the native bar and the thumb below is
+   the bar the reader drags. */
+.ui-scroll-area {
+  position: relative;
+  min-width: 0;
+}
+.ui-scroll-area-viewport {
+  overflow: auto;
+  scrollbar-width: none;
+}
+.ui-scroll-area-viewport::-webkit-scrollbar {
+  display: none;
+}
+.ui-scroll-area-viewport:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: 2px;
+}
+.ui-scroll-area-scrollbar {
+  position: absolute;
+  display: flex;
+  background: transparent;
+}
+.ui-scroll-area-scrollbar-vertical {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--space-3);
+}
+.ui-scroll-area-scrollbar-horizontal {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--space-3);
+}
+.ui-scroll-area-thumb {
+  flex: 1;
+  background: var(--line-control);
+  border-radius: var(--radius);
+}
+.ui-scroll-area-corner {
+  background: var(--surface);
+}
+
+/* The Tooltip primitive (Tooltip.tsx): a short note on the ink, never a
+   second control — the trigger keeps its own look, so it has no rule. */
+.ui-tooltip {
+  max-width: min(28rem, calc(100vw - 16px));
+  padding: var(--space-2) var(--space-3);
+  background: var(--ink);
+  color: var(--surface);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}

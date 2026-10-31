@@ -208,6 +208,9 @@ export interface Probe {
   themeBytes?: number;
   /** The first line where the accessibility tree differs from the App's own look's (C13). */
   changed?: string;
+  /** Every vertical scroll container in the room that is not a deliberate one: the room's own pane, plus any
+      second box that scrolls the same way. One is the policy; two are a finding. */
+  scrolls?: string[];
 }
 
 /**
@@ -278,6 +281,30 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
 
   // Sideways scroll: the document wider than its window.
   const sideways = Math.max(0, document.documentElement.scrollWidth - view.width, document.body.scrollWidth - view.width);
+
+  /* Vertical scroll containers in the room: one is the room's own pane.
+     A second box scrolling the same way is the double scrollbar the
+     policy forbids (docs/design.md, Standing layout rules). Deliberate
+     ones say so with `data-scrolls` — a board's lanes, a heat map past
+     its cells' floor — and overlays (a dialog, a menu, a listbox, a
+     glance panel) scroll inside themselves, so neither counts here. */
+  const room = document.querySelector('#content, .content, .page-body, .public-page') ?? document.body;
+  const inOverlay = (el: Element) => {
+    for (let e: Element | null = el; e && e !== room; e = e.parentElement) {
+      if (e.closest('[role="dialog"], [role="menu"], [role="listbox"], .peekpanel')) return true;
+      if (getComputedStyle(e).position === 'fixed') return true;
+    }
+    return false;
+  };
+  const scrolls: string[] = [];
+  for (const el of room.querySelectorAll('*')) {
+    if (!(el instanceof HTMLElement) || !shown(el)) continue;
+    if (el.closest('[data-scrolls]') || inOverlay(el)) continue;
+    const style = getComputedStyle(el);
+    if (style.overflowY !== 'auto' && style.overflowY !== 'scroll') continue;
+    if (el.clientHeight === 0 || el.scrollHeight - el.clientHeight <= 1) continue;
+    scrolls.push(say(el));
+  }
 
   // Clipped text: an element whose own words run past its box, where the box hides the rest.
   const clipped: Probe['clipped'] = [];
@@ -527,6 +554,7 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
     axes,
     ...(title ? { title } : {}),
     shift: Math.round(Math.max(...windows) * 1000) / 1000,
+    scrolls,
   };
 }
 

@@ -51,7 +51,7 @@ for (const [label, entry, message] of [
   [
     'a search engine, which is a pack and not part of tablewalk',
     { kind: 'search', url: 'https://s.internal:8108', auth: { apiKey: '${TYPESENSE_API_KEY}' } },
-    /has "kind": "search"\. Search providers are not part of mistri: they are packs \(Typesense is @mistriwork\/search-typesense\)/,
+    /has "kind": "search"\. Search providers are not part of mistri: they are packs \(Typesense is @mistriwork\/search-typesense, SQLite FTS5 is @mistriwork\/search-sqlite\)/,
   ],
   ['an unknown kind', { kind: 'queue', url: 'x' }, /The kinds are "http", "cache" and "webhook"/],
   [

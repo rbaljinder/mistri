@@ -735,6 +735,12 @@
     },
     { "id": "timezone", "surface": ["dsl: app: ui.timezone"], "tests": [{ "file": "test/app-timezone-projection.test.ts" }] },
     {
+      "id": "pwa",
+      "surface": ["dsl: app: ui.pwa"],
+      "tests": [{ "file": "test/app-pwa.test.ts" }],
+      "note": "Preview: installable plus shell-offline, not offline data; no browser spec, the worker's rules are asserted on its generated text."
+    },
+    {
       "id": "phone-layout",
       "surface": [],
       "tests": [

@@ -163,6 +163,7 @@ export function ChartFigure({
             dots={dots}
             seriesLabel={seriesLabel}
             seriesVocabulary={seriesVocabulary}
+            onPick={onPick}
           />
         ))}
     </div>

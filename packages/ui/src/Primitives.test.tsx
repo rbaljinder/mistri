@@ -9,6 +9,10 @@ import { Drawer } from './Drawer.js';
 import { Popover } from './Popover.js';
 import { Avatar, initialsOf } from './Avatar.js';
 import { Pagination, paginationItems } from './Pagination.js';
+import { Carousel } from './Carousel.js';
+import { Resizable } from './Resizable.js';
+import { ScrollArea } from './ScrollArea.js';
+import { Tooltip } from './Tooltip.js';
 
 afterEach(cleanup);
 
@@ -109,4 +113,105 @@ test('a switch without a label still renders, and fireEvent toggles an uncontrol
 test('switch props type-check: controlled props are accepted', () => {
   const props: SwitchProps = { checked: true, onCheckedChange: () => {} };
   expect(props.checked).toBe(true);
+});
+
+test('a carousel shows one slide, steps and dots move it, and the ends disable', async () => {
+  const onIndexChange = vi.fn();
+  const slides = [
+    { label: 'Studio', children: 'Studio slide' },
+    { label: 'Work', children: 'Work slide' },
+    { label: 'Wall', children: 'Wall slide' },
+  ];
+  render(<Carousel slides={slides} label="Project photos" onIndexChange={onIndexChange} />);
+  expect(screen.getByRole('region', { name: 'Project photos' })).toBeInTheDocument();
+  expect(screen.getByText('Slide 1 of 3: Studio')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Previous slide' })).toBeDisabled();
+  await userEvent.click(screen.getByRole('button', { name: 'Next slide' }));
+  expect(onIndexChange).toHaveBeenCalledWith(1);
+  expect(screen.getByText('Slide 2 of 3: Work')).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: 'Go to slide 3: Wall' }));
+  expect(screen.getByText('Slide 3 of 3: Wall')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Next slide' })).toBeDisabled();
+  expect(screen.getByRole('group', { name: '3 of 3: Wall' })).toHaveAttribute('aria-roledescription', 'slide');
+});
+
+test('a carousel moves on arrow keys and Home/End', async () => {
+  const slides = [{ children: 'One' }, { children: 'Two' }];
+  render(<Carousel slides={slides} />);
+  const region = screen.getByRole('region', { name: 'Carousel' });
+  region.focus();
+  await userEvent.keyboard('{ArrowRight}');
+  expect(screen.getByText('Slide 2 of 2')).toBeVisible();
+  await userEvent.keyboard('{Home}');
+  expect(screen.getByText('Slide 1 of 2')).toBeVisible();
+  await userEvent.keyboard('{End}');
+  expect(screen.getByText('Slide 2 of 2')).toBeVisible();
+});
+
+test('a carousel renders nothing for no slides', () => {
+  const { container } = render(<Carousel slides={[]} />);
+  expect(container).toBeEmptyDOMElement();
+});
+
+test('resizable panes start at their shares, and the handle walks on arrow keys within its minimums', async () => {
+  const onSizesChange = vi.fn();
+  render(
+    <Resizable
+      label="Record and detail"
+      panels={[
+        { label: 'Record', defaultSize: 60, children: 'Record pane' },
+        { label: 'Detail', defaultSize: 40, children: 'Detail pane' },
+      ]}
+      onSizesChange={onSizesChange}
+    />,
+  );
+  const handle = screen.getByRole('separator', { name: 'Resize Record and Detail' });
+  expect(handle).toHaveAttribute('aria-valuenow', '60');
+  expect(handle).toHaveAttribute('aria-orientation', 'horizontal');
+  handle.focus();
+  await userEvent.keyboard('{ArrowRight}');
+  expect(onSizesChange).toHaveBeenLastCalledWith([65, 35]);
+  await userEvent.keyboard('{Home}');
+  expect(onSizesChange).toHaveBeenLastCalledWith([10, 90]);
+  await userEvent.keyboard('{End}');
+  expect(onSizesChange).toHaveBeenLastCalledWith([90, 10]);
+});
+
+test('resizable panes scale shares that do not add to 100, and refuse fewer than two panes', () => {
+  const { container, rerender } = render(
+    <Resizable
+      panels={[
+        { defaultSize: 1, children: 'A' },
+        { defaultSize: 2, children: 'B' },
+      ]}
+    />,
+  );
+  const panels = container.querySelectorAll('.ui-resizable-panel');
+  expect(panels[0]?.getAttribute('style')).toContain('33.333');
+  expect(panels[1]?.getAttribute('style')).toContain('66.666');
+  rerender(<Resizable panels={[{ children: 'Only' }]} />);
+  expect(container).toBeEmptyDOMElement();
+});
+
+test('a scroll area is a labelled tab stop holding its content', () => {
+  render(
+    <ScrollArea label="Recent activity" maxHeight="320px">
+      <p>First row</p>
+      <p>Second row</p>
+    </ScrollArea>,
+  );
+  const region = screen.getByRole('region', { name: 'Recent activity' });
+  expect(region).toHaveAttribute('tabindex', '0');
+  expect(screen.getByText('Second row')).toBeVisible();
+});
+
+test('a tooltip says its note on hover and on focus, and names it from the trigger', async () => {
+  render(<Tooltip trigger={<button>Save</button>}>Saves the record without leaving the page.</Tooltip>);
+  const trigger = screen.getByRole('button', { name: 'Save' });
+  await userEvent.hover(trigger);
+  /* Base UI waits out its open delay before the note appears. */
+  const note = await screen.findByRole('tooltip', {}, { timeout: 3000 });
+  expect(note).toHaveTextContent('Saves the record without leaving the page.');
+  expect(trigger).toHaveAttribute('aria-describedby', note.id);
+  await userEvent.unhover(trigger);
 });

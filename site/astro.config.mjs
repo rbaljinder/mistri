@@ -210,6 +210,7 @@ export default defineConfig({
             { label: 'Build and deploy', slug: 'docs/build-and-deploy' },
             { label: 'Move from tablewalk 0.9', slug: 'docs/upgrade-from-0-9' },
             { label: 'Connections and services', slug: 'docs/services' },
+            { label: 'Installable PWAs', slug: 'docs/pwa' },
             { label: 'Several Apps in one server', slug: 'docs/suites' },
             { label: 'Observe and operate', slug: 'docs/observe' },
             { label: 'Incident runbook', slug: 'docs/incident-runbook' },

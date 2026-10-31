@@ -995,7 +995,13 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
             : undefined
         }
         sayLegend={stacked ? (totals) => legendSayer(section, totals) : undefined}
-        onPick={donut ? drillFor(section) : stacked && !/\s/.test(firstKey) ? drillFor({ ...section, by: firstKey }) : null}
+        onPick={
+          donut || section.shape === 'line'
+            ? drillFor(section)
+            : stacked && !/\s/.test(firstKey)
+              ? drillFor({ ...section, by: firstKey })
+              : null
+        }
         empty={empty}
         curve={section.curve}
         total={section.total}

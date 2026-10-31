@@ -63,6 +63,10 @@ A primitive reads no data, no address and no message catalog: its words, its ico
 | `Popover` | A small layer anchored to a `trigger` element; Escape and a click outside dismiss it, focus returns on close |
 | `Avatar` | A person's picture, or their initials where there is none (`name` → `AL`, `A`); sizes `sm`, `md`, `lg` |
 | `Pagination` | The pages of a list as buttons (`page`, `pages`, `onPageChange`); the current page is `aria-current`, never a button to itself, steps disable at the ends, long runs shorten with an ellipsis |
+| `Carousel` | One slide at a time from a row (`slides` of `label`, `children`); Previous/Next disable at the ends, dots jump to a slide, arrow keys move, Home/End go first/last |
+| `Resizable` | Two or more panes on a handle (`panels` of `label`, `defaultSize`, `minSize`); the handle is a separator with `aria-valuenow` in percent, walked by arrows, Home/End, or dragged by pointer |
+| `ScrollArea` | A region that scrolls inside itself (`label`, `orientation`, `maxHeight`); the viewport is a labeled tab stop with its own thumb |
+| `Tooltip` | A short supplementary note on a `trigger` element, said on hover and on focus alike; the note carries `role="tooltip"` and the trigger names it while open |
 
 `style.css` is the tokens and the primitives' rules in a `mistri-ui` cascade layer, so any rule of your page's own wins. To place them in a layer of your own, import the two files it joins: `@import '@mistriwork/ui/tokens.css' layer(base);` and `@mistriwork/ui/primitives.css` the same way.
 

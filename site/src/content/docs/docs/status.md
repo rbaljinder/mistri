@@ -24,8 +24,8 @@ enforced on the server as documented, but its shape may change in any 1.x releas
 outside the compatibility promise; `mistri check` lists the Preview features
 an App uses, as information. At 1.0 these stay Preview: feature flags,
 audiences and `@mistriwork/mistri/openfeature`, experiments, the Suite Console, behavior
-analytics, SCIM, the Gantt presentation, and a resource's `search` (its packs ship
-after 1.0). The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
+analytics, SCIM, the Gantt presentation, a resource's `search` (its packs ship
+after 1.0), and an App's installable PWA (`ui.pwa`, [installable PWAs](/docs/pwa/)). The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
 flows and machines, the assistant, integrations and durable workflows are
 stable.
 
@@ -45,7 +45,8 @@ stable.
 | Rollups (`count`, `sum`, `min`, `max`) | Stable |
 | Editing, autosave, lists edited in place (`editable`) and **Set field…** | Stable |
 | Files and attachments (`file`), tags (`tags`), CSV import (`import`) | Stable |
-| A resource's `search` and `mistri --reindex`: they need a search pack, which ships after 1.0, so nothing can be plugged in before then | Preview |
+| A resource's `search` and `mistri --reindex`: they need a search pack, which ships after 1.0, so nothing can be plugged in before then; the packs are the SQLite FTS pack (`@mistriwork/search-sqlite`, no external engine) and the Typesense pack | Preview |
+| An installable PWA (`ui.pwa`): the App's manifest, worker, painted icons and offline page for failed navigations — installable plus shell-offline, not offline data | Preview |
 | Resource `validation`, transitions (`machine`) and an action's `reason` | Stable |
 | A machine state's `after` and a resource's `at` timers, which run through the jobs, and a machine's service-only moves (`by`) | Stable |
 | Dashboards: metrics, charts, breakdowns, `rows`, `activity()`, section `windows`, interactive `embed`, `firstRun()` | Stable |

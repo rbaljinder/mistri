@@ -345,12 +345,12 @@ export function ChartSection({ section, plan, base }: SlotProps) {
   const firstLabel = labelFor(first);
   /* The column a category order reads rides after the figures (page.ts, chartOrder): it is no series of the drawing. */
   const drawn = { ...got, columns: got.columns.slice(0, (second ? 2 : 1) + 1) };
-  /* A slice is a way into its rows where the key is a plain column, as a breakdown's group is. */
+  /* A slice — or a line's point — is a way into its rows where the key is a plain column, as a breakdown's group is. */
   const conds = plan.breakdown.filter?.groups?.length === 1 ? plan.breakdown.filter.groups[0] : null;
   const anchor = conds?.find((c) => c.path === section.path && c.op === '=' && c.value != null);
   const plainKey = !/\s/.test((section.by ?? '').split(',')[0].trim());
   const drill =
-    anchor && plainKey && section.shape === 'donut'
+    anchor && plainKey && (section.shape === 'donut' || section.shape === 'line')
       ? (value: unknown) => {
           if (value == null) return;
           const where = andQuery(`${anchor.path} = ${quote(String(anchor.value))}`, section.filter, `${first} = ${quote(String(value))}`);
