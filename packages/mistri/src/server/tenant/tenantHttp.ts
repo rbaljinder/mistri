@@ -90,6 +90,7 @@ import {
   TENANT_READ_ROUTES as reads,
   TENANT_ROUTE_FIELDS as fields,
   TENANT_WRITE_ROUTES as writes,
+  tenantRouteBody,
 } from './tenantHttpRoutes.js';
 import { servedBaseOf, tenantServedSchema, withRequestInstant } from './tenantServedSchema.js';
 import { lookupTenantPerson } from '../app/appMe.js';
@@ -811,7 +812,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                         ? BRANDING_SAVE_BODY
                         : 262144,
             );
-      if (!get && !flagExposures) tenantRecord(input, fields[path]);
+      if (!get && !flagExposures) tenantRouteBody(path, input);
       assertActive();
       if (req.aborted || res.destroyed) return denyTenant();
       if (path === TENANT_ENTER_PATH || path === '/api/tenant/bootstrap') {

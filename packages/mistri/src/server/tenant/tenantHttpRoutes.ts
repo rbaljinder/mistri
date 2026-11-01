@@ -4,7 +4,9 @@
  * each one's body may carry: a body naming any other field is refused before
  * anything reads it.
  */
+import { recordRefusalCause, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { FILE_READ_PATH, FILE_UPLOAD_PATH } from '@mistriwork/engine/server/http/reply.js';
+import { PAGE_STEP_FIELDS } from '@mistriwork/engine/shared/keysetPage.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { IMPORT_LIMITS } from '../../shared/appImportDeclaration.js';
 import { TENANT_BOOT_PATH, TENANT_ENTER_PATH } from '../../shared/tenantBoot.js';
@@ -101,7 +103,9 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/query': ['table', 'filter', 'columns', 'orderBy', 'limit', 'offset'],
   '/api/count': ['table', 'filter', 'exactCount', 'countLimit'],
   '/api/counts': ['items', 'countLimit'],
-  '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset'],
+  /* `after`, `before` and `end` are a list's page step (shared/keysetPage.ts): without them every pager's Next
+     page was refused as a forged context, and the page locked. */
+  '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset', ...PAGE_STEP_FIELDS],
   '/api/view/run': ['view', 'text', 'query', 'count', 'limit', 'offset'],
   '/api/breakdown': ['def', 'text', 'limit', 'offset'],
   '/api/breakdowns': ['items'],
@@ -124,3 +128,23 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/commands/execute': ['command', 'commandVersion', 'key', 'expectedVersion', 'idempotencyKey', 'input'],
   '/api/commands/status': ['command', 'commandVersion', 'key', 'expectedVersion', 'idempotencyKey', 'input'],
 };
+
+/** Hold a body to the fields its route takes. The caller hears the one fixed
+ * denial; the operator hears which field it was (refusalReport.ts), since a
+ * field the client sends and this list forgot denies every such request with
+ * nothing else to go on. */
+export function tenantRouteBody(path: string, input: unknown): asserts input is Record<string, unknown> {
+  const allowed = TENANT_ROUTE_FIELDS[path];
+  try {
+    tenantRecord(input, allowed);
+  } catch (error) {
+    const extra =
+      input && typeof input === 'object' && !Array.isArray(input) ? Object.keys(input).find((key) => !allowed?.includes(key)) : undefined;
+    throw recordRefusalCause(
+      error as object,
+      extra === undefined
+        ? `A ${path} body was not a JSON object.`
+        : `A ${path} body named ${JSON.stringify(extra.slice(0, 64))}, a field that route does not take.`,
+    );
+  }
+}

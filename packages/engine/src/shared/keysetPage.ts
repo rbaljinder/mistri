@@ -56,9 +56,12 @@ export function keysetOrder(table: TableMeta, order: readonly Order[], dialect: 
   });
 }
 
+/** The body fields a step is said in: a route that names the fields its body may carry names these too. */
+export const PAGE_STEP_FIELDS = ['after', 'before', 'end'] as const;
+
 /** Read a step from a request body: absent, one of the three, or malformed. */
 export function readPageStep(body: Record<string, unknown>): PageStep | undefined | 'invalid' {
-  const given = ['after', 'before', 'end'].filter((key) => body[key] !== undefined);
+  const given = PAGE_STEP_FIELDS.filter((key) => body[key] !== undefined);
   if (!given.length) return undefined;
   if (given.length > 1) return 'invalid';
   if (given[0] === 'end') return body.end === true ? { end: true } : 'invalid';

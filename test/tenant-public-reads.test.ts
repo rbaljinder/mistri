@@ -690,3 +690,31 @@ test("a visitor with a Spanish browser is said the App's Spanish words, by its a
   });
   assert.equal(picked.body.app.views.listings.label, 'Anuncios');
 });
+
+/* A visitor's list pages by key as a member's does (shared/keysetPage.ts): `after` and `before` were not fields
+   the public lane's /api/run took, so every Next page on a published list was refused. */
+test('a visitor’s list pages by key, within the placed tenant’s published rows', async (t) => {
+  const f = await fixture(t);
+  const q = 'listing sort title show title';
+  const first = await f.call(via(NORTH, '/api/run'), { q, limit: 1, offset: 0, count: 'none' });
+  assert.equal(first.status, 200, first.text);
+  assert.deepEqual(
+    rows(first).map((row) => row.title),
+    ['North Corolla'],
+  );
+  const next = await f.call(via(NORTH, '/api/run'), { q, limit: 5, offset: 1, count: 'none', after: first.body.bounds.last });
+  assert.equal(next.status, 200, next.text);
+  assert.equal(next.body.keyset, true);
+  // The draft between them is unpublished and West's sorts last: neither is past the boundary for this visitor.
+  assert.deepEqual(
+    rows(next).map((row) => row.title),
+    ['North Secret Make'],
+  );
+  assert.doesNotMatch(next.text, /West|Draft|11111|33333/);
+  const back = await f.call(via(NORTH, '/api/run'), { q, limit: 5, offset: 0, count: 'none', before: next.body.bounds.first });
+  assert.equal(back.status, 200, back.text);
+  assert.deepEqual(
+    rows(back).map((row) => row.title),
+    ['North Corolla'],
+  );
+});

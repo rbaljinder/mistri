@@ -41,6 +41,7 @@ import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { FILE_READ_PATH } from '@mistriwork/engine/server/http/reply.js';
 import { doorRefusal, type Bound } from '@mistriwork/engine/server/http/trust.js';
 import { dispatchResourceReadHttp } from '@mistriwork/engine/server/resourceReadHttp.js';
+import { PAGE_STEP_FIELDS } from '@mistriwork/engine/shared/keysetPage.js';
 import { APP_READS } from '../app/appReads.js';
 import { composeInputValid, composeTenantRecordPage } from './tenantCompose.js';
 import { readAdapter, tenantFileRead } from './tenantHttp.js';
@@ -59,7 +60,7 @@ const fields: Record<string, readonly string[]> = {
   '/api/query': ['table', 'filter', 'columns', 'orderBy', 'limit', 'offset'],
   '/api/count': ['table', 'filter', 'exactCount', 'countLimit'],
   '/api/counts': ['items', 'countLimit'],
-  '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset'],
+  '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset', ...PAGE_STEP_FIELDS],
   '/api/view/run': ['view', 'text', 'query', 'count', 'limit', 'offset'],
   '/api/breakdown': ['def', 'text', 'limit', 'offset'],
   '/api/breakdowns': ['items'],
