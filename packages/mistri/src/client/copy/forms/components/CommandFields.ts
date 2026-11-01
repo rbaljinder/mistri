@@ -33,6 +33,7 @@ export const say = defineMessages({
   mustBeADateAndTime: '{label} must be a date and time.',
   isNotInAForm: '{label} is not in a form it takes.',
   choosePlaceholder: 'Choose {label}',
+  chooseOne: 'Choose one',
   groupRow: '{label}, row {index}',
   rowLabel: 'Row',
   removeRow: 'Remove row {index} of {label}',

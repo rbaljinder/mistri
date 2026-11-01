@@ -27,5 +27,6 @@ export const say = defineMessages({
   requiredMark: 'required',
   optionalWord: '(optional)',
   choosePlaceholder: 'Choose {label}',
+  chooseOne: 'Choose one',
   addAtLeastLines: 'Add at least {min} lines.',
 });

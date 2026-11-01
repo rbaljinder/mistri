@@ -213,6 +213,31 @@ describe('the accounts screen', () => {
     assert.equal(stored('root@example.org')!.role, 'admin');
   });
 
+  test('an administrator can demote or deactivate another while an active one remains', async () => {
+    const root = (await signIn('root@example.org', 'root-password-1')).cookie;
+    const second = await change(root, {
+      operation: 'create',
+      email: 'second@example.org',
+      name: 'Second',
+      roles: ['admin'],
+      password: 'second-password-1',
+    });
+    assert.equal(second.status, 200, second.text);
+    const third = await change(root, {
+      operation: 'create',
+      email: 'third@example.org',
+      name: 'Third',
+      roles: ['admin', 'agent'],
+      password: 'third-password-1',
+    });
+    const secondId = (second.json.account as { id: string }).id;
+    const thirdId = (third.json.account as { id: string }).id;
+    assert.equal((await change(root, { operation: 'setRoles', accountId: secondId, roles: ['manager'] })).status, 200);
+    assert.equal(stored('second@example.org')!.role, 'manager');
+    assert.equal((await change(root, { operation: 'deactivate', accountId: thirdId })).status, 200);
+    assert.equal(stored('third@example.org')!.banned, 1);
+  });
+
   test('nobody else reaches it, whatever the request says', async () => {
     const root = (await signIn('root@example.org', 'root-password-1')).cookie;
     await change(root, { operation: 'create', email: 'mo@example.org', name: 'Mo', roles: ['manager'], password: 'mo-password-1' });

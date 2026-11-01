@@ -278,6 +278,9 @@
 /* Figures in a record's fields line up as a table's do. */
 :root[data-visual-theme] .page-field > dd { font-family: var(--mono); font-size: var(--text-md); min-height: 24px; font-variant-numeric: tabular-nums; }
 :root[data-visual-theme] .page-field-edit .cell-edit { min-height: 36px; border-radius: var(--field-radius); padding: var(--space-3) var(--space-3h); box-shadow: var(--shadow-control); }
+/* Opened in place, the input keeps the 32px box its value stood in (features.css): the look's 36px field height would
+   push every row below it down 4px on opening and back on closing. */
+:root[data-visual-theme] .page-field-edit .inline-field-open input.cell-edit { min-height: 32px; padding-block: 0; }
 :root[data-visual-theme] .page-field-edit .cell-edit:focus-visible { outline-offset: 0; border-color: var(--focus); }
 /* A field shows focus with the house ring, not a border colour: the looks
    draw every field's border in their own hairline, which outranked the

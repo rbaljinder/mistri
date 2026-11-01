@@ -140,15 +140,8 @@ export interface ExperimentEpoch {
     readonly rollout: number;
     /** Each named audience's definition as it stood at registration: editing an
      * audience changes the epoch's fingerprint, so it needs a new version.
-     * Absent only in an epoch a 0.8 release registered. */
+     * Every registered epoch carries them (an empty set admits everyone). */
     readonly audiences?: Readonly<Record<string, AudienceDefinition>>;
-    /** Only in an epoch a 0.8 release registered, which said who directly and
-     * named no audience (its segments are always empty: nothing ever supplied
-     * a segment value). Kept as stored, since its fingerprint is a digest of
-     * exactly this shape; a 1.0 epoch says who only through audiences. */
-    readonly roles?: readonly string[];
-    readonly tenants?: readonly string[];
-    readonly segments?: Readonly<Record<string, never>>;
   };
   readonly startsAtMs: number;
   readonly endsAtMs: number;
@@ -177,11 +170,6 @@ export function normalizeBinding(input: unknown): ExperimentBinding {
 function percentage(value: unknown): number {
   ensure(typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100);
   return value;
-}
-function identifiers(value: unknown): readonly string[] {
-  const values = list(value, 128).map(identifier).sort();
-  ensure(new Set(values).size === values.length);
-  return Object.freeze(values);
 }
 function metric(input: unknown, guardrail: boolean) {
   const raw = record(input, ['id', 'event', 'eventVersion', 'unitField', ...(guardrail ? ['maxIncrease'] : [])]);
@@ -232,14 +220,13 @@ export function normalizeEpoch(input: unknown): ExperimentEpoch {
   ensure(arms.reduce((total, arm) => total + arm.weight, 0) === 100);
   const control = identifier(raw.control);
   ensure(arms.some((arm) => arm.id === control));
-  const legacy = raw.eligibility !== null && typeof raw.eligibility === 'object' && Object.hasOwn(raw.eligibility, 'segments');
-  const e = record(raw.eligibility, legacy ? ['rollout', 'roles', 'tenants', 'segments'] : ['rollout', 'audiences']);
-  if (legacy) {
-    ensure(e.segments !== null && typeof e.segments === 'object');
-    ensure(Object.keys(e.segments).length === 0, 'Experiment segments are retired; name an audience.');
-    record(e.segments, []);
-  } else ensure(e.audiences !== null && typeof e.audiences === 'object');
-  const audiences = legacy ? {} : record(e.audiences, Object.keys(e.audiences as object));
+  /* Experiment segments are retired (nothing ever supplied a segment value): any `segments` key, even an empty one, is
+     refused with the way forward, instead of being read as a second shape. */
+  if (raw.eligibility !== null && typeof raw.eligibility === 'object' && Object.hasOwn(raw.eligibility, 'segments'))
+    ensure(false, 'Experiment segments are retired; name an audience.');
+  const e = record(raw.eligibility, ['rollout', 'audiences']);
+  ensure(e.audiences !== null && typeof e.audiences === 'object');
+  const audiences = record(e.audiences, Object.keys(e.audiences as object));
   ensure(Object.keys(audiences).length <= 64);
   const normalizedAudiences: Record<string, AudienceDefinition> = Object.create(null);
   for (const key of Object.keys(audiences).sort()) {
@@ -283,9 +270,7 @@ export function normalizeEpoch(input: unknown): ExperimentEpoch {
     arms: Object.freeze(arms),
     eligibility: Object.freeze({
       rollout: percentage(e.rollout),
-      ...(legacy
-        ? { roles: identifiers(e.roles), tenants: identifiers(e.tenants), segments: Object.freeze({}) }
-        : { audiences: Object.freeze(normalizedAudiences) }),
+      audiences: Object.freeze(normalizedAudiences),
     }),
     startsAtMs,
     endsAtMs,

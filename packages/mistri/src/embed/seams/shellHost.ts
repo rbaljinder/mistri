@@ -5,8 +5,8 @@
  * shell imports that one; test/embed-seams.test.ts holds the two to the same
  * exports.
  */
-import { drawPopupsIn } from '@mistriwork/ui/popups.js';
-import { measureFrom } from '@mistriwork/ui/ruler.js';
+import { drawPopupsIn } from '@mistriwork/ui/internal/popups.js';
+import { measureFrom } from '@mistriwork/ui/internal/ruler.js';
 import { announceNavigation, binding, onEmbedNavigation } from '../binding.js';
 
 export const shellRoot = (): HTMLElement => binding().root;

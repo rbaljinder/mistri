@@ -59,7 +59,7 @@ The App-shaped HTTP API an App can opt into. Every key here is stable ([status](
 | `api.resources.*.create` |  | Stable |  One of `true`. Used in `examples/apps/lintel/app.ts`. |
 | `api.resources.*.delete` |  | Stable |  One of `true`. Used in `examples/apps/tick/app.ts`. |
 | `api.resources.*.description` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `api.resources.*.fields` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
+| `api.resources.*.fields` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `api.resources.*.filters` | array | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `api.resources.*.sorts` | array | Stable |  |
 | `api.resources.*.update` |  | Stable |  One of `true`. |

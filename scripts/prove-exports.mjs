@@ -116,7 +116,12 @@ function isOptionalPeerOfInstalled(project, name) {
       const file = join(base, entry, 'package.json');
       if (!existsSync(file)) continue;
       const manifest = JSON.parse(readFileSync(file, 'utf8'));
-      if (!['tablewalk', '@mistriwork/mistri'].includes(manifest.name) && !manifest.name?.startsWith('@mistriwork/')) continue;
+      if (
+        !['tablewalk', '@mistriwork/mistri'].includes(manifest.name) &&
+        !manifest.name?.startsWith('@mistriwork/') &&
+        manifest.name !== '@mistriwork/ui'
+      )
+        continue;
       if (manifest.peerDependenciesMeta?.[name]?.optional) return true;
     }
   }

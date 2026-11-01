@@ -47,8 +47,9 @@ class MemorySearchIndex implements SearchIndex {
     target.docs.set(document.id, document);
   }
 
-  async remove(collection: string, id: string): Promise<void> {
-    this.collections.get(collection)?.docs.delete(id);
+  async remove(collection: string, id: string, scope?: SearchScope): Promise<void> {
+    const docs = this.collections.get(collection)?.docs;
+    if (!scope || docs?.get(id)?.[scope.field] === scope.value) docs?.delete(id);
   }
 
   async search(collection: string, phrase: string, fields: readonly string[], limit: number, scope?: SearchScope): Promise<string[]> {

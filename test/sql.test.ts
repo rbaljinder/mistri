@@ -12,7 +12,7 @@
  */
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
@@ -70,7 +70,6 @@ describe('refusing a second statement', () => {
     'select 1;',
     "select 'a; b'",
     'select "a; b"',
-    'select `a; b`',
     'select 1 -- ; drop table customer',
     'select 1 /* ; drop */ , 2',
     'select $$ ; drop table customer $$',
@@ -85,6 +84,12 @@ describe('refusing a second statement', () => {
     test(`one statement: ${sql}`, () => assert.equal(refuseStacked(sql), null));
   }
 
+  test('a backquote quotes a name in SQLite and nothing in Postgres', () => {
+    assert.equal(refuseStacked('select `a; b`', 'sqlite'), null);
+    // Postgres reads a backquote as an operator character, so this `;` is a real one.
+    assert.match(refuseStacked('select `a; b`', 'postgres') ?? '', /One statement at a time/);
+  });
+
   test('a real second statement is refused', () => {
     assert.match(refuseStacked('select 1; drop table customer') ?? '', /One statement at a time/);
   });
@@ -97,6 +102,62 @@ describe('refusing a second statement', () => {
     assert.equal(refuseStacked("select '\\'"), null);
   });
 
+  test('a $ inside a name opens no dollar-quote', () => {
+    /* Postgres reads `x$$` and `a$b$` as names. Read as dollar-quote openers
+       with no closer, they hid everything after them — the stacked COMMIT
+       and the write behind it among it. */
+    const stacked = [
+      'select 1 as x$$; commit; begin read write; delete from t where id = 1; commit; select 1 as y$$',
+      'select 1 as a$b$; delete from t; select 1 as c$b$',
+      'select 1 as x$tag$; delete from t; select $tag$',
+    ];
+    for (const sql of stacked) assert.match(refuseStacked(sql) ?? '', /One statement at a time/, sql);
+    assert.equal(refuseStacked('select 1 as x$$'), null);
+    assert.equal(refuseStacked('select a$b$ from t'), null);
+  });
+
+  test("an E'…' string ends where Postgres ends it", () => {
+    /* E'…' honours backslash escapes: `E'\''` is a whole string holding a
+       quote, so the `;` after it is a real one. */
+    const stacked = [
+      "select E'\\''; commit; set transaction read write; delete from t where id = 11; -- '",
+      "select e'\\''; delete from t; -- '",
+      "select E'\\\\'; delete from t; -- '",
+      // A string continued on the next line is still an E'…' string.
+      "select E'a'\n'\\''; delete from t; -- '",
+    ];
+    for (const sql of stacked) assert.match(refuseStacked(sql) ?? '', /One statement at a time/, sql);
+    assert.equal(refuseStacked("select E'it\\'s; fine'"), null);
+    assert.equal(refuseStacked("select E'a\\\\'"), null);
+    // A name ending in e before a quote is not an E string: `'\'` is a whole string there.
+    assert.match(refuseStacked("select type'\\'; delete from t; -- '") ?? '', /One statement at a time/);
+  });
+
+  test('Postgres block comments nest', () => {
+    // The inner close does not end the outer comment, so the quote after it is comment, not a string.
+    assert.match(refuseStacked("select 1 /* /* */ ' */; delete from t; -- '") ?? '', /One statement at a time/);
+    assert.equal(refuseStacked('select 1 /* a /* b */ ; c */'), null);
+  });
+
+  test('the dollar-quote bodies a function carries still read as one statement', () => {
+    const bodies = [
+      'create function f() returns int language sql as $$ select 1; $$',
+      'create function f() returns int language plpgsql as $body$ begin return 1; end; $body$',
+      'do $$ begin perform 1; end $$;',
+      'select 1 = $$a;b$$',
+      "select 1, $q$it's; fine$q$",
+    ];
+    for (const sql of bodies) assert.equal(refuseStacked(sql), null, sql);
+  });
+
+  test('SQLite has no dollar-quotes or E strings, and quotes names in brackets', () => {
+    // SQLite reads `$$` as a parameter and would compile only the first statement.
+    assert.match(refuseStacked('select $$ ; delete from t; select $$', 'sqlite') ?? '', /One statement at a time/);
+    assert.equal(refuseStacked('select [a;b] from t', 'sqlite'), null);
+    assert.equal(refuseStacked('select `a;b` from t', 'sqlite'), null);
+    assert.equal(refuseStacked("select '\\'", 'sqlite'), null);
+  });
+
   test('the refusal names the fix', () => {
     // An error that only says no sends you looking; this one says what to do.
     assert.match(refuseStacked('select 1; select 2') ?? '', /Remove the semicolon|run them separately/);
@@ -107,6 +168,23 @@ describe('refusing a second statement', () => {
        refusing both: two things were asked for and neither reported. */
     await assert.rejects(() => adapter.runSql({ text: 'select 1; drop table customer', limit: 5 }), /One statement at a time/);
     assert.equal(await adapter.count('customer'), 5, 'the table is still there');
+  });
+
+  test('a read cannot reach past its file with VACUUM INTO or ATTACH', async () => {
+    /* `readOnly: true` stops writes to this file only: VACUUM INTO wrote a
+       full copy to the path it named, and ATTACH opened another database on
+       the shared handle. */
+    const copy = join(DB_DIR, 'copy.db');
+    for (const text of [`VACUUM INTO '${copy}'`, `/* a note */ vacuum main into '${copy}'`, 'vacuum']) {
+      await assert.rejects(() => adapter.runSql({ text, limit: 5 }), /VACUUM reaches past this database file/, text);
+      await assert.rejects(() => adapter.runSql({ text, limit: 5, refuseReserved: true }), /VACUUM reaches past/, text);
+    }
+    assert.equal(existsSync(copy), false, 'no copy was written');
+    await assert.rejects(() => adapter.runSql({ text: `attach '${DB}' as other`, limit: 5 }), /ATTACH reaches past/);
+    await assert.rejects(() => adapter.runSql({ text: 'select * from other.customer', limit: 5 }), /no such table|unknown database/);
+    await assert.rejects(() => adapter.runSql({ text: 'DETACH main', limit: 5 }), /DETACH reaches past/);
+    // A read that merely mentions the words still runs.
+    assert.equal((await adapter.runSql({ text: "select 'vacuum into attach' as said", limit: 5 })).rows[0][0], 'vacuum into attach');
   });
 });
 

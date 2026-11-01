@@ -585,7 +585,10 @@ describe('the sign-in screen', () => {
     await user.type(screen.getByLabelText('Email'), 'ada@example.org');
     await user.type(screen.getByLabelText('Password'), 'wrong-horse');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Invalid email or password');
+    // Above the button that was pressed, with the fields: it arrives in a held line, so nothing below it moves.
+    expect(alert.compareDocumentPosition(screen.getByRole('button', { name: 'Sign in' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(window.location.reload).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
     // Busy while asking, never disabled: the focus stays on the button rather than falling to the page.
@@ -728,6 +731,11 @@ describe('the sign-in screen', () => {
     expect(replaced).toEqual(['/crm']);
   });
 
+  test('opens with the email field focused, so the first keystroke lands', () => {
+    draw(<SignIn info={info} />);
+    expect(screen.getByLabelText('Email')).toHaveFocus();
+  });
+
   test('says what is wrong beside each field, focuses the first, and asks nothing', async () => {
     const user = userEvent.setup();
     draw(<SignIn info={info} />);
@@ -756,7 +764,8 @@ describe('the sign-in screen', () => {
     const email = screen.getByLabelText('Email');
     await vi.waitFor(() => expect(email).toHaveAttribute('aria-invalid', 'true'));
     expect(email).toHaveAccessibleDescription(/already uses this email address/);
-    expect(screen.getByRole('alert', { hidden: true })).not.toBeVisible();
+    // The form-level line is held but empty: the field's own problem is said at the field.
+    expect(screen.getByRole('alert')).toBeEmptyDOMElement();
   });
 
   test('a forgotten password asks for a link that comes back to this page, and says the same whatever the address', async () => {

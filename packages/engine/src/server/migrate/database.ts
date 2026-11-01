@@ -114,6 +114,8 @@ export async function openMigrationDb(url: string, schemas: readonly string[], c
   const Client = pg.Client ?? pg.default?.Client;
   if (!Client) throw new Error('Could not find a Client export in the "pg" package.');
   const client = new Client({ ...pgConnectionOptions(url), connectionTimeoutMillis: 15_000 });
+  // An idle connection that drops is an 'error' event; unheard it ends the process. The next statement rejects with the loss.
+  client.on('error', () => {});
   await client.connect().catch(() => {
     throw new Error('the PostgreSQL database could not be opened');
   });
@@ -198,6 +200,7 @@ type PgClientClass = new (options: unknown) => {
   connect(): Promise<void>;
   query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }>;
   end(): Promise<void>;
+  on(event: 'error', listener: (error: Error) => void): unknown;
 };
 
 /**

@@ -382,6 +382,7 @@ async function registerPages() {
           go(pageView(page.id, page.base), 'reset');
         },
       })),
+      'page',
     );
   } catch {
     /* A connection whose pages cannot be read is a connection with no pages

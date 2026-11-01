@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { createRef, useState, type Ref } from 'react';
 
-vi.mock('./ruler.js', () => ({
+vi.mock('./internal/ruler.js', () => ({
   viewportBox: (element: Element) => element.getBoundingClientRect(),
   viewportSize: () => ({ width: 1000, height: 800 }),
 }));

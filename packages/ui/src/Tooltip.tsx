@@ -29,14 +29,18 @@ export interface TooltipProps {
   className?: string;
 }
 
-export function TooltipLayer({ trigger, children, open, defaultOpen, onOpenChange, className }: TooltipProps) {
+export function Tooltip({ trigger, children, open, defaultOpen, onOpenChange, className }: TooltipProps) {
   const tooltipId = useId();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen ?? false);
   const isOpen = open ?? uncontrolledOpen;
   const base = isValidElement(trigger) ? trigger : <button type="button">{trigger}</button>;
   /* The description wire exists only while the note is open, so a closed
-     tooltip never points at an id that is not in the tree. */
-  const triggerElement = isOpen ? cloneElement(base, { 'aria-describedby': tooltipId } as Record<string, unknown>) : base;
+     tooltip never points at an id that is not in the tree. It joins the
+     trigger's own description (a field's hint) rather than replacing it. */
+  const existing = (base.props as { 'aria-describedby'?: string })['aria-describedby'];
+  const triggerElement = isOpen
+    ? cloneElement(base, { 'aria-describedby': [existing, tooltipId].filter(Boolean).join(' ') } as Record<string, unknown>)
+    : base;
   return (
     <BaseTooltip.Root
       open={open}
@@ -58,6 +62,3 @@ export function TooltipLayer({ trigger, children, open, defaultOpen, onOpenChang
     </BaseTooltip.Root>
   );
 }
-
-/** The short name, as the other primitives export theirs. */
-export const Tooltip = TooltipLayer;

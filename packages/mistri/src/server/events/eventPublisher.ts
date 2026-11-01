@@ -1,7 +1,13 @@
 import { isProxy } from 'node:util/types';
 import { inSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
 import type { EventDeliveryStore } from '../../adapters/events/eventDeliveryContract.js';
-import { deliveryFail, type EventDeliveryCode, type EventDeliveryOutcome } from '../../adapters/events/eventDeliveryTypes.js';
+import {
+  deliveryFail,
+  type EventDeliveryClaim,
+  type EventDeliveryCode,
+  type EventDeliveryOutcome,
+  type EventDiscovery,
+} from '../../adapters/events/eventDeliveryTypes.js';
 import type { CommandEventEnvelope } from '../../adapters/events/commandEventTypes.js';
 
 export interface EventPublication {
@@ -45,18 +51,38 @@ export function createEventPublisher(store: EventDeliveryStore, transport: Event
   let active: Promise<PublicationTick> | undefined;
   let abort: (() => void) | undefined;
   let stopping: Promise<void> | undefined;
+  // The latest time this publisher offered a claim: a clock that then reads
+  // earlier is not a store that failed to answer, and the store refuses it
+  // with the same unavailable.
+  let lastClaimAt = -Infinity;
   const halt = () => {
     if (state !== 'stopping') state = 'halted';
   };
   type Completion = { outcome: EventDeliveryOutcome; code: EventDeliveryCode };
   async function work(): Promise<PublicationTick> {
+    if (state !== 'running') return { status: state, pressure: false };
+    let discovery: EventDiscovery, claimedAt: number, claim: EventDeliveryClaim | undefined;
     try {
-      if (state !== 'running') return { status: state, pressure: false };
-      const discovery = await store.discover();
+      discovery = await store.discover();
       // This host's clock before the claim: the lease it measures is on the
       // store's clock, which on PostgreSQL is the database's.
-      const claimedAt = now();
-      const claim = await store.claim(claimedAt);
+      claimedAt = now();
+      const regressed = claimedAt < lastClaimAt;
+      lastClaimAt = Math.max(lastClaimAt, claimedAt);
+      if (regressed) {
+        // Stops publication rather than shortening a backoff or lease.
+        halt();
+        return { status: 'unavailable', pressure: false };
+      }
+      claim = await store.claim(claimedAt);
+    } catch {
+      /* Nothing was sent and nothing is leased that this publisher knows of —
+         a claim whose answer was lost is a lease no one holds, which expiry
+         returns. A failover here is a cycle that did not happen; the next
+         one tries again, where halting stopped delivery until a restart. */
+      return { status: 'unavailable', pressure: false };
+    }
+    try {
       if (!claim) return { status: 'idle', pressure: discovery.pressure };
       const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;

@@ -7,7 +7,7 @@ import { SensitiveField } from '@mistriwork/ui/SensitiveField.js';
 import { MultiSelect, Select } from '@mistriwork/ui/Select.js';
 import { Slider } from '@mistriwork/ui/Slider.js';
 import { MaskedField, MoneyField, TextField } from '@mistriwork/ui/TextField.js';
-import { masks } from '@mistriwork/ui/masks.js';
+import { masks } from '@mistriwork/ui';
 
 /* The form controls (Preview): props only, so each story is the control drawn with its states in one column, which the
    visual matrix then sees in every look. Words are written here because the controls hold none. */

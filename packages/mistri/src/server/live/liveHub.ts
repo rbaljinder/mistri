@@ -441,6 +441,8 @@ export class LiveHub {
   private async replicasBehind(): Promise<boolean> {
     const host = storeHostOf(this.adapter);
     if (host?.dialect !== 'postgres') return false;
+    // With no replica to be behind, the primary's position is a question nobody asks: one round trip saved per pass.
+    if (!host.hasReplicas()) return false;
     try {
       const lsn = await host.withReadClient(
         async (client) => (await client.query('SELECT pg_current_wal_lsn()::text AS lsn')).rows[0]?.lsn as string | undefined,

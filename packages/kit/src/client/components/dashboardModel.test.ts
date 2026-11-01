@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { windowed } from '../../../../engine/src/shared/dashboardAsks.js';
+import { chartLimit, windowed } from '../../../../engine/src/shared/dashboardAsks.js';
 import { CurrencyFigures, figureSayer, namedGroups, ownWindow, sayer, type Section } from './dashboardModel.js';
 
 describe('ownWindow', () => {
@@ -112,4 +112,11 @@ test("a window picked replaces the author's on a metric and on the whole it is a
   const out = windowed(section, 'this month');
   expect(out.query).toBe('status = approved and decided_on = this month');
   expect(typeof out.target === 'object' && out.target.query).toBe('decided_on = this month');
+});
+
+test("a line over two keys asks for every period of every series, not the server's twenty-row default", () => {
+  // `month created_on, source` is a row per month per source: twenty rows ended at March and every line fell to zero.
+  expect(chartLimit({ shape: 'line', by: 'created_on, source' })).toBe(400);
+  // One key keeps the section's own limit.
+  expect(chartLimit({ shape: 'line', by: 'created_on', limit: 12 })).toBe(12);
 });

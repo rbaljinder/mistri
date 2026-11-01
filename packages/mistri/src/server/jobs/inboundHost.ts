@@ -43,6 +43,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { inSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
+import { readBounded } from '@mistriwork/engine/server/http/reply.js';
 import { asBackgroundWork } from '@mistriwork/engine/adapters/writeLanes.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { businessCommandHttpError } from '../commands/businessCommandHttp.js';
@@ -171,21 +172,6 @@ export function verifyDelivery(
   return at !== undefined && Math.abs(now - at) <= verify.windowMs;
 }
 
-/** The whole body, or null when it is past the limit; the rest of an oversized one is not read. */
-async function readBody(req: IncomingMessage): Promise<Buffer | null> {
-  const declared = Number(req.headers['content-length']);
-  if (Number.isFinite(declared) && declared > INBOUND_MAX_BYTES) return null;
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  for await (const part of req) {
-    const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part);
-    bytes += chunk.length;
-    if (bytes > INBOUND_MAX_BYTES) return null;
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-}
-
 /** The command's receipt key: the sender's id, namespaced by endpoint, in the shape a receipt takes. */
 export const inboundCommandKey = (name: string, key: string): string =>
   `inbound-${createHash('sha256').update(`${name}\n${key}`).digest('hex')}`;
@@ -301,7 +287,7 @@ export function createInboundHost(
     res: ServerResponse,
     outcome: (value: string) => void,
   ): Promise<void> {
-    const body = await readBody(req);
+    const body = await readBounded(req, INBOUND_MAX_BYTES);
     if (!body) {
       outcome('too_large');
       return status(res, 413);

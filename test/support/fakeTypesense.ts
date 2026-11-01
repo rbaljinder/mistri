@@ -81,6 +81,16 @@ export async function startFakeTypesense(apiKey: string): Promise<FakeTypesense>
       if (!found.documents.delete(parts[3])) return reply(res, 404, { message: 'Not Found' });
       return reply(res, 200, { id: parts[3] });
     }
+    // A delete by filter: `field:=\`value\` && field:=\`value\``, every clause an exact match.
+    if (parts[2] === 'documents' && req.method === 'DELETE' && !parts[3]) {
+      const clauses = (url.searchParams.get('filter_by') ?? '').split(' && ').map((clause) => /^(\w+):=`([^`]*)`$/.exec(clause));
+      if (!clauses.length || clauses.some((clause) => !clause)) return reply(res, 400, { message: 'Bad filter' });
+      let removed = 0;
+      for (const [id, doc] of found.documents) {
+        if (clauses.every((clause) => doc[clause![1]] === clause![2])) removed += found.documents.delete(id) ? 1 : 0;
+      }
+      return reply(res, 200, { num_deleted: removed });
+    }
     return reply(res, 404, { message: 'Not Found' });
   });
   server.listen(0, '127.0.0.1');

@@ -11,7 +11,7 @@
  */
 import { useState, type AriaAttributes, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Dropdown } from '@mistriwork/kit/client/components/Dropdown.js';
+import { Dropdown, readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
 import { CheckCards } from '@mistriwork/ui/Choices.js';
 import { run, type ChoiceSource } from './CommandReference.js';
 import '@mistriwork/kit/client/formControls.css';
@@ -159,7 +159,14 @@ function SourcedControl(props: IntakeControlProps) {
         value={chosen < 0 ? '' : String(chosen)}
         valueClassName={chosen < 0 ? 'is-empty' : undefined}
         items={[
-          ...(chosen < 0 ? [{ value: '', label: say('choosePlaceholder', { label: field.label.toLowerCase() }) }] : []),
+          ...(chosen < 0
+            ? [
+                {
+                  value: '',
+                  label: readsAsName(field.label) ? say('choosePlaceholder', { label: field.label.toLowerCase() }) : say('chooseOne'),
+                },
+              ]
+            : []),
           ...options.map((option, index) => ({ value: String(index), label: option.label })),
         ]}
         onChange={(next) => {

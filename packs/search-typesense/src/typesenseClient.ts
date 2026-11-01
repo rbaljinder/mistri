@@ -85,8 +85,16 @@ export class TypesenseClient implements SearchIndex {
     this.expect(reply, `index a record in "${collection}"`);
   }
 
-  /** Gone from the index; a document that was never there is gone already. */
-  async remove(collection: string, id: string): Promise<void> {
+  /** Gone from the index; a document that was never there is gone already. With `scope`, only if it is that tenant's (a delete by filter, so it is one step). */
+  async remove(collection: string, id: string, scope?: SearchScope): Promise<void> {
+    if (scope) {
+      if (id.includes('`')) throw new SearchUnavailable('the record cannot be named to the engine.');
+      const query = new URLSearchParams({ filter_by: `id:=\`${id}\` && ${filterBy(scope)}` });
+      const scoped = await this.call('DELETE', `collections/${encodeURIComponent(collection)}/documents`, query);
+      if (scoped.status === 404) return;
+      this.expect(scoped, `remove a record from "${collection}"`);
+      return;
+    }
     const reply = await this.call('DELETE', `collections/${encodeURIComponent(collection)}/documents/${encodeURIComponent(id)}`);
     if (reply.status === 404) return;
     this.expect(reply, `remove a record from "${collection}"`);

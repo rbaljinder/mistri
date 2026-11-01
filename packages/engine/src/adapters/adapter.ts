@@ -313,10 +313,17 @@ export interface ProfileLimits {
  * Not a SQL parser and not trying to be one — it answers exactly one question,
  * "is there a second statement here", and it answers it by scanning for a
  * semicolon that has something after it. Everything that can contain a
- * semicolon harmlessly is skipped: single- and double-quoted strings,
- * backquoted identifiers, line comments, block comments, and Postgres's
- * dollar-quoted bodies, which is how a function definition carries semicolons
- * without being several statements.
+ * semicolon harmlessly is skipped: quoted strings and names, line comments,
+ * block comments, and Postgres's dollar-quoted bodies, which is how a function
+ * definition carries semicolons without being several statements.
+ *
+ * Each of those is read the way the dialect's own lexer reads it, because a
+ * scanner that ends a string or a comment somewhere other than where the
+ * database does can hide a real `;`: Postgres nests block comments, honours
+ * backslash escapes in an E'…' string, and reads `x$$` as one identifier
+ * rather than an opening dollar-quote. It is not the only line: Postgres runs
+ * user text on the extended protocol (postgres.ts runSql), which carries one
+ * statement, and SQLite's prepare compiles only the first.
  *
  * Stacking is refused rather than truncated. Running the first half of what
  * someone typed and discarding the rest is worse than refusing both: they
@@ -324,9 +331,34 @@ export interface ProfileLimits {
  *
  * Returns null when the text is a single statement, or the reason it is not.
  */
-export function refuseStacked(text: string): string | null {
+export function refuseStacked(text: string, dialect: DatabaseSchema['dialect'] = 'postgres'): string | null {
+  const postgres = dialect === 'postgres';
   let i = 0;
   const n = text.length;
+  /* A quoted run that starts at `i`, read to just past its close. A doubled
+     close is an escaped close; a backslash escapes only where the dialect
+     says so (Postgres's E'…'). Everywhere else a backslash is a character:
+     Postgres (standard-conforming strings, the default since 9.1) and SQLite
+     both read `'\'` as a one-character string, and reading it as an escape
+     would scan `'\'; drop table x; --'` as one long string. */
+  const quoted = (close: string, backslash: boolean): void => {
+    i += 1;
+    while (i < n) {
+      if (backslash && text[i] === '\\') {
+        i += 2;
+        continue;
+      }
+      if (text[i] === close && text[i + 1] === close) {
+        i += 2;
+        continue;
+      }
+      if (text[i] === close) {
+        i += 1;
+        return;
+      }
+      i += 1;
+    }
+  };
 
   while (i < n) {
     const ch = text[i];
@@ -337,15 +369,48 @@ export function refuseStacked(text: string): string | null {
       i = nl < 0 ? n : nl + 1;
       continue;
     }
-    // Block comment. Not nested: no dialect here nests them.
+    // Block comment. Postgres nests them; SQLite ends at the first close.
     if (ch === '/' && text[i + 1] === '*') {
-      const end = text.indexOf('*/', i + 2);
-      i = end < 0 ? n : end + 2;
+      let depth = 1;
+      i += 2;
+      while (i < n && depth) {
+        if (postgres && text[i] === '/' && text[i + 1] === '*') {
+          depth += 1;
+          i += 2;
+        } else if (text[i] === '*' && text[i + 1] === '/') {
+          depth -= 1;
+          i += 2;
+        } else i += 1;
+      }
       continue;
     }
-    // Dollar-quoted body: $$…$$ or $tag$…$tag$. Postgres only, harmless
-    // elsewhere because the opening tag simply will not match.
-    if (ch === '$') {
+    /* A name or keyword, read whole: `$` continues one in both dialects, so
+       the `$$` of `x$$` belongs to the name and opens nothing. */
+    IDENTIFIER.lastIndex = i;
+    const word = IDENTIFIER.exec(text)?.[0];
+    if (word) {
+      i += word.length;
+      if (postgres && (word === 'E' || word === 'e') && text[i] === "'") {
+        quoted("'", true);
+        /* A string continued on the next line is still an E'…' string. */
+        for (let more = CONTINUED.exec(text.slice(i)); more; more = CONTINUED.exec(text.slice(i))) {
+          i += more[0].length - 1;
+          quoted("'", true);
+        }
+      }
+      continue;
+    }
+    /* A number, read whole, so `1x$$` is the number and the name `x$$`. A
+       number directly before `$$` leaves the `$` to open a quote, as the
+       Postgres releases that still allow trailing junk read it. */
+    NUMBER.lastIndex = i;
+    const number = NUMBER.exec(text)?.[0];
+    if (number) {
+      i += number.length;
+      continue;
+    }
+    // Dollar-quoted body: $$…$$ or $tag$…$tag$. Postgres only.
+    if (ch === '$' && postgres) {
       const tag = /^\$[A-Za-z_]\w*\$|^\$\$/.exec(text.slice(i))?.[0];
       if (tag) {
         const end = text.indexOf(tag, i + tag.length);
@@ -353,30 +418,13 @@ export function refuseStacked(text: string): string | null {
         continue;
       }
     }
-    if (ch === "'" || ch === '"' || ch === '`') {
-      i += 1;
-      while (i < n) {
-        /* A backslash is a character, not an escape. Postgres (standard-
-           conforming strings, the default since 9.1) and SQLite both read
-           `'\'` as a one-character string; some other engines treat `\'` as an
-           escaped quote. Reading it as an escape here meant a Postgres
-           statement `'\'; drop table x; --'` scanned as one long string and
-           the second statement walked past this check — the driver's own
-           refusal of multi-statement text caught it, but the first line of
-           defence had a hole. Reading it literally errs toward refusing: a
-           string holding an escaped `\'` may now be cut short, and the worst
-           that does is refuse a statement that was fine. */
-        // A doubled quote is an escaped quote, not the end of the string.
-        if (text[i] === ch && text[i + 1] === ch) {
-          i += 2;
-          continue;
-        }
-        if (text[i] === ch) {
-          i += 1;
-          break;
-        }
-        i += 1;
-      }
+    // A backquote quotes a name in SQLite and is an operator character in Postgres.
+    if (ch === "'" || ch === '"' || (ch === '`' && !postgres)) {
+      quoted(ch, false);
+      continue;
+    }
+    if (ch === '[' && !postgres) {
+      quoted(']', false);
       continue;
     }
     if (ch === ';') {
@@ -388,6 +436,14 @@ export function refuseStacked(text: string): string | null {
   }
   return null;
 }
+
+/* An identifier as both dialects lex one: a letter, underscore or non-ASCII
+   character, then any of those, digits or `$`. */
+const IDENTIFIER = /[A-Za-z_\u0080-\uffff][\w$\u0080-\uffff]*/y;
+const NUMBER = /\d+(?:\.\d*)?(?:[eE][+-]?\d+)?/y;
+/* Postgres's quote continuation: a newline (and any further space or line
+   comments) between two quoted runs joins them into one string. */
+const CONTINUED = /^[ \t\f]*[\n\r](?:[ \t\n\r\f\v]|--[^\n\r]*[\n\r])*'/;
 
 /**
  * Output column names, with collisions given a suffix.

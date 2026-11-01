@@ -16,8 +16,8 @@
  */
 import { useEffect, useRef, useState, type Ref } from 'react';
 import { Select } from '@base-ui/react/select';
-import { layoutViewport, zoomAnchor } from './anchor.js';
-import { popupContainer } from './popups.js';
+import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { popupContainer } from './internal/popups.js';
 
 export interface DropdownItem {
   value: string;

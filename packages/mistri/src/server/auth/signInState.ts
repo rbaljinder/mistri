@@ -15,6 +15,11 @@
 import { CacheUnavailable, MemoryCacheStore, scopedCache, type CacheStore } from '@mistriwork/engine/adapters/cache/cacheStore.js';
 
 let local = new MemoryCacheStore(50_000);
+/** The OAuth server's pending requests and consent nonces, apart from the lockouts and request budgets in `local`: the
+    memory store drops its oldest entries when full, so a flood of unauthenticated authorize requests must only be able to
+    push out other pending requests, never a sign-in lock or a counter. */
+let pending = new MemoryCacheStore(10_000);
+const PENDING_KINDS = new Set(['oauth-request', 'oauth-consent']);
 let shared: CacheStore | undefined;
 
 /** Keep sign-in state in `cache` (a Valkey the config names) under `namespace`; `undefined` or a memory cache keeps it here. */
@@ -25,9 +30,10 @@ export function configureSignInState(cache: CacheStore | undefined, namespace: s
 /** Forget everything this process holds: tests use it. A configured cache is kept; `configureSignInState(undefined, …)` lets it go. */
 export function resetSignInState(): void {
   local = new MemoryCacheStore(50_000);
+  pending = new MemoryCacheStore(10_000);
 }
 
-async function on<T>(work: (store: CacheStore) => Promise<T>): Promise<T> {
+async function on<T>(work: (store: CacheStore) => Promise<T>, kind?: string): Promise<T> {
   if (shared) {
     try {
       return await work(shared);
@@ -35,7 +41,7 @@ async function on<T>(work: (store: CacheStore) => Promise<T>): Promise<T> {
       if (!(error instanceof CacheUnavailable)) throw error;
     }
   }
-  return work(local);
+  return work(kind !== undefined && PENDING_KINDS.has(kind) ? pending : local);
 }
 
 /** Bounded so a crafted key cannot make an entry outlive the cache's own ceiling. */
@@ -65,9 +71,9 @@ export const signInState = {
     }),
   /** A JSON record that lives until `until` (epoch ms). */
   put: (kind: string, key: string, value: unknown, until: number, now = Date.now()): Promise<void> =>
-    until <= now ? Promise.resolve() : on((store) => store.set(`${kind}:${key}`, JSON.stringify(value), ttl(until - now))),
+    until <= now ? Promise.resolve() : on((store) => store.set(`${kind}:${key}`, JSON.stringify(value), ttl(until - now)), kind),
   read: async <T>(kind: string, key: string): Promise<T | undefined> => {
-    const text = await on((store) => store.get(`${kind}:${key}`));
+    const text = await on((store) => store.get(`${kind}:${key}`), kind);
     if (text === undefined) return undefined;
     try {
       return JSON.parse(text) as T;
@@ -75,5 +81,5 @@ export const signInState = {
       return undefined;
     }
   },
-  remove: (kind: string, key: string): Promise<void> => on((store) => store.delete(`${kind}:${key}`)),
+  remove: (kind: string, key: string): Promise<void> => on((store) => store.delete(`${kind}:${key}`), kind),
 };

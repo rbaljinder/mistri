@@ -529,7 +529,12 @@ export async function advance(env: EngineEnvironment, id: string): Promise<Advan
 
   /** The end of the advance: what the instance became, or why this advance stopped. Never awaited from user code. */
   const end = (outcome: Parameters<WorkflowStore['finish']>[2]): Promise<Advance> => {
-    void finish(outcome);
+    /* A store that cannot record the end — a dropped connection, a failover —
+       rejects here, where nothing awaits it: left alone that is an unhandled
+       rejection, which ends the process, and an advance that never returns.
+       Aborted is the host's word for "try this advance again", and the
+       instance replays to the same end. */
+    finish(outcome).catch(() => stop({ status: 'aborted' }));
     return control;
   };
   let start: unknown;

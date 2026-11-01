@@ -260,8 +260,7 @@ sections follow the period, and say "now" figures in their `query` without it.
 - A hex color outside a `defineTheme`, a font file or a stylesheet; a custom
   component draws with `@mistriwork/mistri/ui` and the look's tokens only.
 - Motion for decoration, pulsing, anything that moves on hover.
-- Fields grouped by type (Dates, Links); group by the noun in the form's `groups` —
-  [tick/app.ts:38](../../../examples/apps/tick/app.ts#L38).
+- Fields grouped by type (Dates, Links); group by the noun in the form's `groups` (`mistri docs forms`).
 - A metric card alone on a row; more than two columns in an aside; a summary
   wider than a row (`check --design` measures it).
 - Every new chart shape on one dashboard: pick the one the question asks for.

@@ -83,17 +83,23 @@ test('canonical epoch freezes declaration and fingerprints every authority/alloc
   assert.equal('id' in prepareExposure(reference, epoch, fact, 1600), false);
 });
 
-test('an epoch a 0.8 release stored keeps its fingerprint and its direct roles and tenants; a 1.0 epoch has only audiences', () => {
-  const legacy = { rollout: 100, roles: ['member'], tenants: ['tenant'], segments: {} };
-  const stored = identifyEpoch(binding, { ...epoch, eligibility: legacy } as never);
-  assert.deepEqual(stored.declaration.eligibility, legacy);
+test('an epoch says who only through audiences: the retired segments, roles and tenants shapes are refused', () => {
+  const stored = identifyEpoch(binding, epoch);
   assert.equal(identifyEpoch(binding, stored.declaration).fingerprint, stored.fingerprint);
-  assert.equal(epochAdmits(stored.declaration, { roles: ['member'] }, 'tenant'), true);
-  assert.equal(epochAdmits(stored.declaration, { roles: ['member'] }, 'other'), false);
-  assert.equal(epochAdmits(stored.declaration, { roles: ['reader'] }, 'tenant'), false);
+  assert.equal(
+    epochAdmits({ ...stored.declaration, eligibility: { rollout: 100, audiences: {} } }, { roles: ['reader'] }, 'other'),
+    true,
+    'no audience named admits everyone',
+  );
+  assert.throws(() =>
+    identifyEpoch(binding, { ...epoch, eligibility: { rollout: 100, roles: ['member'], tenants: ['tenant'], segments: {} } } as never),
+  );
+  assert.throws(
+    () => identifyEpoch(binding, { ...epoch, eligibility: { rollout: 100, audiences: {}, segments: {} } } as never),
+    /Experiment segments are retired; name an audience\./,
+  );
   for (const eligibility of [
-    { ...legacy, segments: { region: ['east'] } },
-    { ...legacy, audiences: {} },
+    { rollout: 100, audiences: {}, segments: { region: ['east'] } },
     { rollout: 100, roles: ['member'], audiences: {} },
     { rollout: 100, tenants: ['tenant'], audiences: {} },
   ])

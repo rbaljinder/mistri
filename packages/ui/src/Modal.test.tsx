@@ -2,14 +2,14 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { createRef } from 'react';
-import { ComponentStyleScope } from './ComponentStyleScope.js';
+import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { Modal, type ModalHandle } from './Modal.js';
 
 afterEach(cleanup);
 
 test.each([true, 'mobile'] as const)('fullscreen %s preserves modal semantics', (fullscreen) => {
   render(
-    <Modal className="confirm" aria-label="Overlay" fullscreen={fullscreen} onClose={vi.fn()}>
+    <Modal className="confirm" ariaLabel="Overlay" fullscreen={fullscreen} onClose={vi.fn()}>
       <button>Close</button>
     </Modal>,
   );
@@ -23,7 +23,7 @@ test('a rejected close request leaves the modal open and can later be accepted',
   const beforeClose = vi.fn().mockReturnValue(false);
   const onClose = vi.fn();
   render(
-    <Modal className="confirm" aria-label="Guarded" onClose={onClose} beforeClose={beforeClose}>
+    <Modal className="confirm" ariaLabel="Guarded" onClose={onClose} beforeClose={beforeClose}>
       <button>Inside</button>
     </Modal>,
   );
@@ -64,7 +64,7 @@ test('imperative close respects the same guard and accepted close is reported on
 test('portalled dialogs preserve only their owning component stylesheet scope', () => {
   const { rerender } = render(
     <ComponentStyleScope.Provider value="release-editor">
-      <Modal className="confirm" aria-label="Scoped" onClose={vi.fn()}>
+      <Modal className="confirm" ariaLabel="Scoped" onClose={vi.fn()}>
         <p>Scoped editor</p>
       </Modal>
     </ComponentStyleScope.Provider>,
@@ -72,14 +72,14 @@ test('portalled dialogs preserve only their owning component stylesheet scope', 
   expect(screen.getByRole('dialog')).toHaveAttribute('data-component', 'release-editor');
   rerender(
     <ComponentStyleScope.Provider value="other-editor">
-      <Modal className="confirm" aria-label="Scoped" onClose={vi.fn()}>
+      <Modal className="confirm" ariaLabel="Scoped" onClose={vi.fn()}>
         <p>Other editor</p>
       </Modal>
     </ComponentStyleScope.Provider>,
   );
   expect(screen.getByRole('dialog')).toHaveAttribute('data-component', 'other-editor');
   rerender(
-    <Modal className="confirm" aria-label="Platform" onClose={vi.fn()}>
+    <Modal className="confirm" ariaLabel="Platform" onClose={vi.fn()}>
       <p>Platform dialog</p>
     </Modal>,
   );
@@ -98,10 +98,21 @@ test('a dialog with no label of its own is named by its first heading', async ()
 
 test('an explicit label wins over the heading', async () => {
   render(
-    <Modal className="confirm" aria-label="Own name" onClose={vi.fn()}>
+    <Modal className="confirm" ariaLabel="Own name" onClose={vi.fn()}>
       <h2>Heading</h2>
     </Modal>,
   );
   const dialog = await screen.findByRole('dialog', { name: 'Own name' });
   expect(dialog).not.toHaveAttribute('aria-labelledby');
+});
+
+test('a modal needs no class: the box is placed by `modal` alone and the scrim is the plain one', () => {
+  render(
+    <Modal ariaLabel="Bare" onClose={vi.fn()}>
+      <p>Body</p>
+    </Modal>,
+  );
+  const dialog = screen.getByRole('dialog', { name: 'Bare' });
+  expect(dialog.className.split(' ')).toContain('modal');
+  expect(document.querySelector('.modal-backdrop')?.className).toBe('modal-backdrop');
 });

@@ -106,7 +106,7 @@ export function SupportScreen(props: SupportScreenProps) {
         <p>{say('exitToReturn', { platformLabel })}</p>
       </section>
       {over && (
-        <Modal className="support-ended" aria-label={say('supportSessionEnded')} closeDisabled onClose={() => {}} initialFocus={returning}>
+        <Modal className="support-ended" ariaLabel={say('supportSessionEnded')} closeDisabled onClose={() => {}} initialFocus={returning}>
           <h2>{say('supportSessionEnded')}</h2>
           <p>
             {say('yourSession')} <bdi>{dealer}</bdi>{' '}

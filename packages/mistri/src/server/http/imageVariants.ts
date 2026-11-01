@@ -344,12 +344,28 @@ export async function imageVariant(
   const current = store;
   const found = await kept(current, name, options.shared);
   if (found) return { bytes: found, type, etag, hash };
-  const made = await make(bytes, type, width, options.background);
+  /* Forty visitors asking one uncached picture at once make it once: the rest wait on the same promise, instead of
+     each taking a turn and resizing the same bytes. Keyed by the kept name (hash, width, format) and by the store, so
+     a swapped store never answers from another's flight. */
+  const flightKey = `${current.dir ?? ''}\0${name}`;
+  let flight = making.get(flightKey);
+  if (!flight) {
+    flight = (async () => {
+      const made = await make(bytes, type, width, options.background);
+      if (!made) return undefined;
+      await keep(current, name, made);
+      if (options.shared) await options.shared.bucket.put(sharedKey(options.shared, name), made, type).catch(() => {});
+      return made;
+    })().finally(() => making.delete(flightKey));
+    making.set(flightKey, flight);
+  }
+  const made = await flight;
   if (!made) return asIs;
-  await keep(current, name, made);
-  if (options.shared) await options.shared.bucket.put(sharedKey(options.shared, name), made, type).catch(() => {});
   return { bytes: made, type, etag, hash };
 }
+
+/** Variants being made now, so a second request for one joins the first. */
+const making = new Map<string, Promise<Uint8Array | undefined>>();
 
 /**
  * The widths and formats a public picture is made at the moment it is stored:

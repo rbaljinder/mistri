@@ -52,10 +52,10 @@ test('required says so to assistive technology, and its star is not part of the 
 test('the optional word stands beside the label of a field that is not required, and the label keeps its name', () => {
   const { container } = render(
     <>
-      <Field label="Phone" optionalWord="(optional)">
+      <Field label="Phone" optional="(optional)">
         <input className="field-control" />
       </Field>
-      <Field label="Name" required optionalWord="(optional)">
+      <Field label="Name" required optional="(optional)">
         <input className="field-control" />
       </Field>
     </>,

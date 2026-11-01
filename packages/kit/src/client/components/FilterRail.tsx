@@ -29,7 +29,7 @@ import { defaultCurrency, formatLocale, formatNumber, formatTimezone } from '../
 import { DateField } from './DateField.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
-import { isPickerDate } from '@mistriwork/ui/datePickerModel.js';
+import { isPickerDate } from '@mistriwork/ui/internal/datePickerModel.js';
 import { columnKind, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { vocabularyWord } from '@mistriwork/engine/shared/model.js';
@@ -956,7 +956,7 @@ export function FilterSheet({ refinement, onApply, onClose, ...rail }: SheetProp
   const [draft, setDraft] = useState(refinement);
   const n = useDraftCount(rail.table, rail.standing ?? '', draft);
   return (
-    <Modal className="filter-sheet" fullscreen="mobile" aria-label={say('common.filtersButton')} onClose={onClose}>
+    <Modal className="filter-sheet" fullscreen="mobile" ariaLabel={say('common.filtersButton')} onClose={onClose}>
       <FilterRail {...rail} refinement={draft} onChange={setDraft} status={typeof n === 'number' ? `${counted(n)} match` : undefined} />
       <div className="filter-sheet-foot">
         <Button onClick={onClose}>{say('common.cancel')}</Button>

@@ -13,16 +13,17 @@
  * supply, and a backdrop named after the first class for its scrim.
  */
 import { useCallback, useContext, useId, useImperativeHandle, useRef, useState, type ReactNode, type Ref, type RefObject } from 'react';
-import { ComponentStyleScope } from './ComponentStyleScope.js';
+import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { Dialog } from '@base-ui/react/dialog';
-import { popupContainer } from './popups.js';
+import { popupContainer } from './internal/popups.js';
 
 export interface ModalHandle {
   close: () => void;
 }
 
 interface ModalProps {
-  className: string;
+  /** The classes the stylesheet knows the box by (`confirm`, `prefs`); the first also names the scrim (`confirm-backdrop`). Optional: a bare modal is centered and sized by `modal` alone. */
+  className?: string;
   /** Told once, however the dialog closed. */
   onClose: () => void;
   /** A non-cancellable operation is awaiting acknowledgement. */
@@ -34,12 +35,12 @@ interface ModalProps {
   initialFocus?: RefObject<HTMLElement | null> | false;
   /** Where focus goes on close, once the page is no longer inert; the element focused at open otherwise. */
   finalFocus?: RefObject<HTMLElement | null>;
-  'aria-label'?: string;
+  /** The dialog's name; absent, its first heading names it. */
+  ariaLabel?: string;
   /** The box places itself — a panel that is its own scrim, a box the stylesheet already centres — so the `modal` placement is left off. */
   plain?: boolean;
   /** No scrim element: the box covers the screen itself. */
   backdrop?: boolean;
-  /** Cover the viewport always, or only on narrow screens. Keeps dialog ownership. */
   /** `'mobile'` — the default — takes the whole screen under 640px, because a
       dialog that leaves a sliver of the page around it on a phone reads as a
       mistake rather than as a layer. `true` takes the whole screen at every
@@ -50,14 +51,14 @@ interface ModalProps {
 }
 
 export function Modal({
-  className,
+  className = '',
   onClose,
   closeDisabled = false,
   beforeClose,
   children,
   initialFocus,
   finalFocus,
-  'aria-label': ariaLabel,
+  ariaLabel,
   plain = false,
   backdrop = true,
   fullscreen = 'mobile',
@@ -89,7 +90,8 @@ export function Modal({
     },
     [ariaLabel, headingId],
   );
-  const scrim = `modal-backdrop ${className.split(/\s+/)[0]}-backdrop`;
+  const first = className.split(/\s+/)[0];
+  const scrim = first ? `modal-backdrop ${first}-backdrop` : 'modal-backdrop';
   const size = fullscreen ? ` modal-fullscreen${fullscreen === 'mobile' ? '-mobile' : ''}` : '';
   return (
     <Dialog.Root
@@ -104,7 +106,7 @@ export function Modal({
         {backdrop ? <Dialog.Backdrop className={plain ? scrim.replace('modal-backdrop ', '') : scrim} /> : null}
         <Dialog.Popup
           data-component={componentScope}
-          className={`${plain ? className : `modal ${className}`}${size}`}
+          className={`${plain ? className : `modal ${className}`.trim()}${size}`}
           initialFocus={initialFocus}
           {...(finalFocus ? { finalFocus } : {})}
           ref={popup}

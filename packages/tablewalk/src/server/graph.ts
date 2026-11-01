@@ -14,6 +14,10 @@
  * question becomes what happens when a client disappears holding one. Taking
  * the graph whole makes that question disappear rather than answering it.
  *
+ * Neither direction is journaled: a graph is not one recorded write, so `revert`
+ * cannot undo it and no `undoId` comes back. `insertGraph` hands back its own
+ * inverse (`teardown`) instead; a `deleteGraph` cannot be taken back.
+ *
  * ## Rows that point at rows
  *
  * The rows a fixture needs mostly do not know their own keys — `id` is the

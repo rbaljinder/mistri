@@ -137,7 +137,7 @@ export function PeekPanel({ tableId, recordKey, label, onClose, records, list }:
       plain
       onClose={onClose}
       initialFocus={title}
-      aria-label={current.label ? say('aGlance', { label: current.label }) : say('aGlanceAtTheRecord')}
+      ariaLabel={current.label ? say('aGlance', { label: current.label }) : say('aGlanceAtTheRecord')}
     >
       <Glance table={table} recordKey={current.key} label={current.label} onClose={onClose} steps={steps} title={title} />
     </Modal>

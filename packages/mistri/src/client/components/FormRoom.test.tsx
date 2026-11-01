@@ -4,12 +4,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const calls: Array<[string, Record<string, unknown>]> = [];
+let answered: unknown = { reference: 'CALL-7' };
 vi.mock('../../../../kit/src/client/core.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../kit/src/client/core.js')>()),
   api: vi.fn(async (path: string, body: Record<string, unknown>) => {
     calls.push([path, body]);
     if (path === '/api/commands/prepare') return { expectedVersion: 0, initial: { subject: 'Evening window', minutes: 30 } };
-    return { status: 'applied', receiptId: 'r1', command: 'logCall', commandVersion: 2, result: { reference: 'CALL-7' } };
+    return { status: 'applied', receiptId: 'r1', command: 'logCall', commandVersion: 2, result: answered };
   }),
 }));
 const { FormBody, formPresentation } = await import('./FormRoom.js');
@@ -42,6 +43,7 @@ function draw(served: Omit<typeof form, 'command'> & { command: typeof form.comm
 afterEach(() => {
   cleanup();
   calls.length = 0;
+  answered = { reference: 'CALL-7' };
 });
 
 test('steps and a done screen, submitted as the signed-in command envelope that names no record', async () => {
@@ -90,4 +92,14 @@ test('a command that starts its form is prepared over no record first, and its v
   expect(calls[0]).toEqual(['/api/commands/prepare', expect.objectContaining({ command: 'logCall', commandVersion: 2, key: {} })]);
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
   await waitFor(() => expect(screen.getByLabelText('Minutes')).toHaveValue(30));
+});
+
+test('what the command said it did is the done message, and an action with nothing to fill in offers no second run', async () => {
+  answered = { message: 'Posted 55 rent charges for October 2026.' };
+  draw({ id: 'post-rent', label: 'Post rent', command: { id: 'postRent', version: 1, input: [] } } as unknown as Parameters<
+    typeof draw
+  >[0]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+  expect(await screen.findByText('Posted 55 rent charges for October 2026.')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Fill in another' })).toBeNull();
 });

@@ -94,7 +94,7 @@ export const InDialog: StoryObj = {
       <>
         <button onClick={() => setOpen(true)}>Edit teammate</button>
         {open && (
-          <Modal className="confirm" aria-label="Edit teammate" onClose={() => setOpen(false)}>
+          <Modal className="confirm" ariaLabel="Edit teammate" onClose={() => setOpen(false)}>
             <h2>Edit teammate</h2>
             <Controls />
             <div className="confirm-actions">

@@ -5,7 +5,90 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
-## 1.0.0-rc.8 (unreleased)
+## 1.0.0-rc.9
+
+- **`@mistriwork/ui`'s API is one name per thing.** The `Control`/`Layer`/`Disc`/`Sheet` spellings (`SwitchControl`,
+  `TabsControl`, `PopoverLayer`, `AvatarDisc`, `CarouselControl`, `ResizablePanels`, `ScrollAreaControl`,
+  `TooltipLayer`, `DrawerSheet`) are gone; use `Switch`, `Tabs`, `Popover`, `Avatar`, `Carousel`, `Resizable`,
+  `ScrollArea`, `Tooltip`, `Drawer`. The helpers (`anchor`, `ruler`, `popups`, `datePickerModel`,
+  `ComponentStyleScope`) moved under `@mistriwork/ui/internal/` and are not API; `./masks.js` is reached from `@mistriwork/ui`.
+  `Modal` and `DropMenu` no longer need CSS class names (`className`, `popupClassName` are optional with the
+  package's own defaults). `Field` takes one `optional` prop (the word shown beside the label), replacing
+  `optionalMark` and `optionalWord`, and `FieldFrame` uses the same name. A name no one sees is `ariaLabel` on every
+  primitive (`Modal`'s `aria-label`, and `label` on Tabs, Popover, Carousel, Resizable, ScrollArea and Pagination,
+  changed), and Carousel, Resizable and Pagination take a `words` object instead of hard-coded English.
+  `Avatar` initials split by grapheme, `Tooltip` keeps a trigger's own `aria-describedby`, `Drawer` requires a
+  `title` or `ariaLabel`, and `Tabs` opens on its first enabled tab.
+- **Client fixes from the rc.8 review.** A link with a broken percent escape (`/%zz/leads`) opens the page it names
+  instead of throwing. Resizing a column in a `sizing: 'scroll'` grid no longer collapses the others or jumps, and
+  cancelling leaves the grid as it was. The carousel's arrow keys act only on the carousel and its own controls, and the
+  column-arrange buttons add no tab stops (Alt+Arrow on the head still moves a column). The command palette badge
+  says a Page, View, Table, Action and so on from the entry's kind, not from an English group name. A multi-series line
+  chart that would drop months at the 20-row cap is refused with the real limit. A signed-in command form shows the
+  command's own message after it runs, not a generic "Received". Opening a field for inline edit no longer moves the
+  page 4px (8px on the record's name). The sign-in error has its own reserved line above the button, so the card does
+  not jump. Tick's New form drops the empty section gap and no longer asks for "Completed" on a new task. The
+  Workbench record page has no band of page ground under its panels. A record id that matches nothing says so
+  ("No invoice row has the id 99999") and draws no actions or related rail. `total >> 5` reports the stray operator,
+  not a missing quote. A select whose label is a question or a sentence reads "Choose one" rather than "Choose what
+  would you like to know?". The Workbench `···` menu hides "Undo the last edit" until there is something to undo, and
+  its hints keep a gap from the label.
+- **A read-only connection can no longer be written through raw SQL.** On PostgreSQL, a statement written to stack
+  `COMMIT; BEGIN READ WRITE; DELETE …` behind a name like `x$$` or a string like `E'\''` got past the one-statement
+  check, and node-postgres sent it on the simple protocol, which ran every statement: the `sql` and `explain` tools
+  and the SQL editor deleted rows on a connection that was not `"writable": true`, wherever the role could write. User
+  SQL now goes on the extended protocol, where PostgreSQL itself refuses a second statement, and the check reads
+  dollar signs in names, E'' strings and nested comments as PostgreSQL does. On SQLite, `VACUUM INTO` (which wrote a
+  full copy of the database to a path of the caller's choosing) and `ATTACH`/`DETACH` are refused on the read-only
+  path.
+- **A tenant App keeps saving after a thousand people have.** Each writer's history partition was kept for the life of
+  the process, and the 1,025th distinct writer (or role or membership change) was refused every save until a restart.
+  The partition used longest ago and idle now makes room; a save is refused only while all 1,024 are in use.
+- **A workflow whose end cannot be recorded no longer ends the process.** A dropped connection or failover while
+  an advance wrote its end was an unhandled rejection, which terminated the server, and the advance never returned.
+  The advance is now aborted, and the host retries it.
+- **One database hiccup no longer stops background work for good.** A failover or dropped connection while the job
+  runner or an event publisher polled for work halted it until a restart, though nothing had been claimed or sent:
+  jobs, timers, workflow wake-ups and event delivery stopped while the web side kept serving. That cycle now reports
+  unavailable and the next poll tries again; a halt is kept for an outcome in doubt, such as a lost acknowledgement.
+- **A big number typed into a form is stored as typed.** A bigint past 2^53 (an id, a foreign key) went through
+  `Number()` on every insert and update and was written as its neighbor, pointing at a different row, and a numeric
+  wider than fifteen digits was rounded. Only a number a double holds exactly is converted now; the rest goes to the
+  database as text, as do `0x1A` and `1e3`, which `Number()` read as 26 and 1000. `interval` and `point` columns are
+  no longer treated as numbers.
+- **Sign-in and OAuth state can no longer be flushed out by a flood.** The OAuth server's authorize, consent and token
+  doors are budgeted per address, and its pending requests live in their own bounded store, so sixty thousand
+  unauthenticated `authorize` calls no longer evict a lockout counter or a sign-in in progress.
+- **Accounts, embedding and logout fail closed.** The last active administrator cannot be demoted or deactivated (two
+  administrators acting at once included). An embed session's roles are stored with its mark and an unreadable record
+  ends the session instead of guessing. A back-channel logout whose deletion fails releases its token id so the retry
+  is not refused as a replay.
+- **A credential file that cannot be read is no longer overwritten.** `writeCredential` refuses a corrupt or
+  group-readable file, writes through a temporary file and a rename, and the macOS keychain write no longer passes the
+  secret on a command line. `tablewalk` opens the Windows browser without a shell.
+- **A search document is removed from the right tenant only.** A tenant App's index removal carries the tenant, so two
+  tenants sharing an id no longer lose each other's document; a removal whose tenant is unknown is skipped. The
+  PostgreSQL search pack refuses a collection name too long for its table names instead of colliding.
+- **The assistant keeps a conversation whose retry is refused**, and the Postgres maintenance and migration clients no
+  longer hang on a dead connection or wait forever for the advisory lock.
+- **MCP deletes always ask the person.** With an elicitation-capable client, `delete` and `delete_graph` ask every
+  time and ignore a `confirm: true` the model supplies; `confirm` is the fallback only when the client cannot ask.
+  Graph writes are not journaled: no `undoId`, and `revert` cannot undo them (said in the tool descriptions and docs).
+- **Faster under load.** Sitemaps are cached for five minutes (`MISTRI_SITEMAP_CACHE_SECONDS`, 0 disables), forty
+  visitors asking one uncached picture size make it once, JSON over 32 KB is compressed off the event loop, the effect
+  host backs off when idle, the live hub stops asking the primary for its log position when no replica is named, and a
+  live stream re-verifies its authority every 30 seconds, not every 60. A busy tenant context answers `429` with
+  `Retry-After`.
+- **One body reader, a tidier public surface.** Mail, MCP-over-HTTP, inbound and embed bodies share the engine's
+  bounded reader (and the embed exchange sends `nosniff`). `inspectFunnel`, `FunnelResult` and `AnalyticsLocation` are
+  marked Preview, the `StoreTarget` alias is gone (`MaintenanceTarget`), `/testing` exports named names rather than
+  `export *`, and an experiment epoch with a `segments` key is refused ("name an audience").
+- **Docs say what is true.** The Preview list in the compatibility page includes `ui.pwa`, `@mistriwork/ui`, `mistri
+  deploy` and `roundTrips`; versions are gone from the status page and the npm README; the Tick Compose section names
+  `mistri-tick` and `MISTRI_ALLOWED_HOSTS`; the never-emitted `app-on-mysql` code is removed; `SECURITY.md` states the
+  24-hour public picture cache and how to purge it.
+
+## 1.0.0-rc.8
 
 - **The remainder of the showcase review lands as code.** `@mistriwork/ui` gains four more standalone Preview primitives (Carousel, Resizable, ScrollArea, Tooltip) with tests and Storybook stories, and the kit files that lacked dedicated tests gain them; a line chart's points drill like a donut's slices (single-series lines only, gap-filled buckets are not doors, and a drillable point's hit disc is 12px, not 44px, so grade's `small-target` may warn on phone windows); `grade` gains a `double-scroll` error for a room with two vertical scroll containers and the scrollbar policy is stated in docs (one scroll container per room, lists paginate, drawers/modals scroll internally with focus trapped); the signed-out home no longer probes `/api/landing` when whoami already names the landing view, so the 401 on a form home is gone (the signed-in shell's probe and its 404 residual remain); search gains a SQLite FTS5 pack (`@mistriwork/search-sqlite`, private, unpublished until after 1.0) beside the Typesense pack, while a Postgres-backed provider is still not shipped for want of a live-Postgres run; an App opts into being an installable PWA (`ui.pwa`, Preview) with a generated manifest, worker, painted icons and offline page — installable plus shell-offline, not offline data; and the Atelier showcase theme is reworked to one persimmon accent, raised dark-mode sidebar contrast, and multi-colour colour-blind-safe chart palettes, with an icon on every view, Messages out of MONEY, and Studio wall in a footer group.
 - **`mistri new --brief` stubs fail closed.** A generated command whose refusals are still TODO lines refuses ("… is not ready: its rules are not written yet.") until the guard beside them is deleted, so a scaffold run before its rules are written cannot make the change they were meant to stop.
@@ -48,7 +131,7 @@ desktop app has its own version in `desktop/package.json`.
   fixture guides name current paths, the load smoke finds its issue through the list's search, and `.node-version`
   names the minimum Node.
 
-## 1.0.0-rc.7 (unreleased)
+## 1.0.0-rc.7
 
 - **The showcase review's UI work lands as code.** A pill no longer spills a dangling ".." past its edge in a narrow grid cell (it truncates inside itself, full text in `title`); every board lane head uses one treatment (word and dot, never a pill background); the sidebar's muted ink is the nav's own, measured against the menu ground, and the current entry on an inverted menu carries an accent edge; `mistri grade` measures a 768px tablet window beside desk, phone and dark; `grade` and `shot` reap their server on every exit path; an App loaded outside the checkout no longer fails its own commands with "must be created with defineCommand" (a command from another copy of the module is adopted); search through the built-in `memory` connection needs no pack plugged in; `@mistriwork/ui` gains standalone Preview primitives (Switch, Tabs, Drawer, Popover, Avatar, Pagination) whose rules live in `standalone.css`, not in the kit's first paint; the assistant gains an OpenAI provider behind `MISTRI_ASSISTANT_PROVIDER`; and a donut slice drills like its legend button — as a group holding buttons, not buttons inside an image, so the accessibility audit stays clean.
 - **`mistri --help` says where the pool and lock flags are.** `--read-pool`, `--write-pool` and the lock timeouts are
@@ -160,7 +243,7 @@ desktop app has its own version in `desktop/package.json`.
   now the transaction's answer, on a plain App's saves and a scoped or tenant App's alike.
   `test/postgres-writers-live.test.ts` holds it.
 
-## 1.0.0-rc.6 (unreleased)
+## 1.0.0-rc.6
 
 - **A record page's actions are one round trip fewer.** Which verbs a record offers is checked in the request's one
   read snapshot, each command reading its target rows and then asserting each target visible by reading it again: a
@@ -184,7 +267,7 @@ desktop app has its own version in `desktop/package.json`.
   in the shared one, beside wrong details: five wrong tries of either lock the reference for an hour on every
   instance, and only a right code takes its count away.
 
-## 1.0.0-rc.5 (unreleased)
+## 1.0.0-rc.5
 
 - **A tenant App's start describes each PostgreSQL catalog once.** Startup's two checks, its trial enrollment and the
   host's, each read source, the first scoped transaction and each platform source's snapshots each described the
@@ -263,7 +346,7 @@ desktop app has its own version in `desktop/package.json`.
   page shared one visitor's eight and the ninth had no live updates. A visitor is now the client the rate limits name
   (`--trust-proxy`, `--trust-proxy-hops`, `--trust-proxy-cloudflare`).
 
-## 1.0.0-rc.4 (unreleased)
+## 1.0.0-rc.4
 
 - **A Cloudflare deploy rolls in under forty seconds, not five to eight minutes.** Under the `durable_object`
   scheduling policy `wrangler deploy` replaces no container, and the platform moved a running Durable Object onto the

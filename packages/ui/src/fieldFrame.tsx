@@ -14,7 +14,7 @@ export interface FieldFrame {
   required?: boolean;
   /** The label is read to assistive technology but not drawn. */
   labelHidden?: boolean;
-  /** The word that marks a field as optional ("(optional)"), in the caller's language. */
+  /** The word that says a field may be left empty ("(optional)"), in the caller's language; Field draws it where the worn theme asks. */
   optional?: ReactNode;
   /** A help tip beside the label. */
   tip?: HelpTipProps;
@@ -34,7 +34,7 @@ export function frameOf(p: FieldFrame) {
     labelHidden: p.labelHidden,
     id: p.id,
     className: p.className,
-    optionalMark: p.optional,
+    optional: p.optional,
     labelAside: p.tip ? <HelpTip {...p.tip} /> : undefined,
     reserve: p.reserve ?? true,
   };

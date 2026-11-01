@@ -125,11 +125,11 @@ export function entries() {
      offered in two, so nothing can be in the menu and missing from here. */
   for (const action of menuItems()) {
     items.push({
-      /* A page is a page, not an "action". The registry groups what it holds,
-         and the group is the closest thing to a kind that a registered
-         command has — a row labelled ACTION beside three labelled TABLE told
-         the reader nothing about what they were about to open. */
-      kind: action.group === 'Pages' ? 'page' : 'action',
+      /* A page is a page, not an "action": a row labelled ACTION beside three
+         labelled TABLE told the reader nothing about what they were about to
+         open. The registrant says so (`setMenuGroup`'s kind) — the group's
+         display name is said in the reader's language and is no key. */
+      kind: action.kind ?? 'action',
       label: action.label.replace(/…$/, ''),
       search: `${action.label} ${detailOf(action) ?? ''}`.trim(),
       detail: detailOf(action),

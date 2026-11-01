@@ -371,7 +371,6 @@ export function effectDeliveryPolicies(
 /* ---------- provisioning: one entry over the store list ---------- */
 
 /** A database provisionStores works on: a SQLite file or a PostgreSQL URL. */
-export type StoreTarget = MaintenanceTarget;
 
 /** The App the bound stores belong to, as the server binds them at startup. */
 export interface StoresApp {
@@ -426,7 +425,7 @@ const storesFail = (why: string): never => {
   throw new TypeError(`provisionStores: ${why}`);
 };
 
-function storeTarget(value: StoreTarget): Readonly<{ dialect: Dialect; address: string }> {
+function storeTarget(value: MaintenanceTarget): Readonly<{ dialect: Dialect; address: string }> {
   if (value && typeof value === 'object' && 'mysql' in value) return storesFail(MYSQL_REFUSAL);
   const at = target(value, () => storesFail('the target is { sqlite: <path> } or { postgres: <url> }.'));
   return Object.freeze('sqlite' in at ? { dialect: 'sqlite', address: at.sqlite } : { dialect: 'postgres', address: at.postgres });
@@ -442,7 +441,7 @@ function storeTarget(value: StoreTarget): Readonly<{ dialect: Dialect; address: 
  * (`migrateSqliteCommandJournal` / `migratePostgresCommandJournal`, below). A tenant App's stores (`only: ['tenant-store', …]`) take
  * its binding as `app: { tenant }`.
  */
-export async function provisionStores(where: StoreTarget, options: ProvisionStoresOptions = {}): Promise<StoresProvisioned> {
+export async function provisionStores(where: MaintenanceTarget, options: ProvisionStoresOptions = {}): Promise<StoresProvisioned> {
   const { dialect, address } = storeTarget(where);
   const { app, jobs, only = [] } = options ?? {};
   if (!Array.isArray(only) || only.some((id) => typeof id !== 'string')) storesFail('`only` is a list of store ids.');
@@ -1052,10 +1051,13 @@ export type { MembershipResult, TenantAnchorResult, TenantMaintenanceTarget } fr
 
 /* ---------- behavior analytics (src/server/analytics/) ---------- */
 
-type AnalyticsLocation = Readonly<{ url: string; binding: AnalyticsBinding }>;
+/** @preview Where an analytics store lives: its URL and the binding that names its tables. */
+export type AnalyticsLocation = Readonly<{ url: string; binding: AnalyticsBinding }>;
 /**
  * A funnel the App declares, counted over `[from, to)` (a Date, or milliseconds) from the analytics store. A tenant's
  * own is `tenantId`; without one, every tenant's.
+ *
+ * @preview Analytics is a Preview feature (docs/status.md).
  */
 export async function inspectFunnel(
   where: AnalyticsLocation,
@@ -1075,6 +1077,8 @@ export async function inspectFunnel(
 }
 /**
  * Events older than `before` that every sink has already been given; returns how many.
+ *
+ * @preview Analytics is a Preview feature (docs/status.md).
  */
 export async function pruneAnalyticsEvents(where: AnalyticsLocation, request: Readonly<{ before: number | Date }>): Promise<number> {
   return pruneStoredAnalyticsEvents(where.url, { binding: where.binding, before: request.before });

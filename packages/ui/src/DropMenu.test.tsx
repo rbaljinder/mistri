@@ -55,3 +55,17 @@ test('an item runs and closes the menu; Escape closes it and hands focus back to
   expect(screen.queryByRole('menu')).toBeNull();
   expect(trigger).toHaveFocus();
 });
+
+test('a menu given no classes still draws: the house trigger, surface and items are the defaults', async () => {
+  const user = userEvent.setup();
+  render(
+    <DropMenu label="More">
+      <DropItem onClick={() => {}}>Rename</DropItem>
+      <DropSeparator />
+    </DropMenu>,
+  );
+  expect(screen.getByRole('button', { name: 'More' })).toHaveClass('btn');
+  await user.click(screen.getByRole('button', { name: 'More' }));
+  expect(screen.getByRole('menuitem', { name: 'Rename' })).toHaveClass('dd-option');
+  expect(screen.getByRole('menu')).toHaveClass('dd-list');
+});

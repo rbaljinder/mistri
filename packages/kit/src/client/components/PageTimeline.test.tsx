@@ -24,7 +24,10 @@ const threeRows = [
 ];
 
 const asked: unknown[] = [];
-vi.mock('@mistriwork/ui/anchor.js', () => ({ zoomAnchor: () => null, layoutViewport: () => ({ x: 0, y: 0, width: 1200, height: 900 }) }));
+vi.mock('@mistriwork/ui/internal/anchor.js', () => ({
+  zoomAnchor: () => null,
+  layoutViewport: () => ({ x: 0, y: 0, width: 1200, height: 900 }),
+}));
 vi.mock('../core.js', () => ({
   findTable: () => undefined,
   state: { schema: null },

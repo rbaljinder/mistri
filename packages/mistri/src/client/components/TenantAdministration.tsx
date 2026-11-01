@@ -56,7 +56,7 @@ export function TenantAdministration({ controller, onClose }: { controller: Tena
     if (controller.current() && !controller.locked()) onClose();
   };
   return (
-    <Modal className="tenant-administration" aria-label={say('manageTenants')} fullscreen="mobile" onClose={close} closeDisabled={locked}>
+    <Modal className="tenant-administration" ariaLabel={say('manageTenants')} fullscreen="mobile" onClose={close} closeDisabled={locked}>
       <header>
         <h2>{say('manageTenants')}</h2>
         <button type="button" className="ghost" aria-label={say('closeTenantAdministration')} onClick={close} disabled={locked}>

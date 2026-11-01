@@ -95,7 +95,7 @@ export function AccountAdministration({ onClose }: { onClose: () => void }) {
     setSaid({ tone: 'alert', text: error instanceof Error ? error.message : say('theChangeCouldNotBeMade') });
 
   return (
-    <Modal className="account-administration" aria-label={say('accounts')} onClose={onClose} fullscreen="mobile">
+    <Modal className="account-administration" ariaLabel={say('accounts')} onClose={onClose} fullscreen="mobile">
       <header>
         {place.kind === 'list' ? (
           <h2 ref={heading} tabIndex={-1}>

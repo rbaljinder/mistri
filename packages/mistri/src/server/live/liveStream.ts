@@ -187,7 +187,11 @@ class LiveStream {
   /** The authority, resolved again once stale; a failure ends the stream. */
   private current(): Promise<readonly LiveAuthority[]> {
     if (this.ended) return Promise.reject(new Error('ended'));
-    if (this.now() - this.resolvedAt < this.limits.authorityMs) return Promise.resolve(this.authority);
+    /* The refresher fires one interval after the last resolve, and a timer wakes a hair early or the clock reads a few
+       milliseconds short, so a strict comparison found the authority "fresh" and a stream was re-verified only every
+       second tick (60 s). A tenth of the interval (a second at 30 s) keeps the stated 30 s. */
+    if (this.now() - this.resolvedAt < this.limits.authorityMs - Math.min(1_000, this.limits.authorityMs / 10))
+      return Promise.resolve(this.authority);
     this.resolving ??= this.options
       .resolve()
       .then(

@@ -95,7 +95,7 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
     }
   };
   return (
-    <Modal className="api-tokens" aria-label={say('title')} fullscreen="mobile" onClose={onClose}>
+    <Modal className="api-tokens" ariaLabel={say('title')} fullscreen="mobile" onClose={onClose}>
       <header>
         <h2>{say('title')}</h2>
         <button type="button" className="ghost" aria-label={say('close')} onClick={onClose}>

@@ -115,7 +115,7 @@ function WhyThis({ suggestion, table, onClose }: { suggestion: FieldSuggestion; 
     meta?.columns.find((each) => each.name === name) ?? ({ name, type: 'TEXT', nullable: true, primaryKey: false } as ColumnMeta);
   const reason = asked.data;
   return (
-    <Modal className="decision-why" aria-label={say('whyTitle', { value: suggestion.label })} onClose={onClose} fullscreen={false}>
+    <Modal className="decision-why" ariaLabel={say('whyTitle', { value: suggestion.label })} onClose={onClose} fullscreen={false}>
       <h2>{say('whyTitle', { value: suggestion.label })}</h2>
       {!reason ? (
         <p className="note">{say('reading')}</p>

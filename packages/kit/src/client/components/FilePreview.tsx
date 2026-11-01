@@ -210,7 +210,7 @@ export function FilePreview({
       className="lightbox file-preview"
       plain
       ref={modal}
-      aria-label={say('previewOf', { name: file.name })}
+      ariaLabel={say('previewOf', { name: file.name })}
       initialFocus={closer}
       onClose={onClose}
       {...(finalFocus ? { finalFocus } : {})}

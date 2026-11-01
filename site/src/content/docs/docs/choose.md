@@ -66,7 +66,7 @@ From the lightest to the heaviest: Save, a fixed action, a machine, a command. E
 | When | Use | Not when | In a sample |
 | --- | --- | --- | --- |
 | Create or edit a record's own columns | the resource's [`form`](/docs/forms/) and `access: 'write'` | a rule must hold against stored state as it runs | `examples/apps/lintel/resources.ts:82` |
-| Move a record to a fixed state: start, mark done | a fixed [action](/docs/actions/) with `set` and `when` | `when` meant as a permission: it only draws the button | `examples/apps/tick/app.ts:47` |
+| Move a record to a fixed state: start, mark done | a fixed [action](/docs/actions/) with `set` and `when` | `when` meant as a permission: it only draws the button | `examples/apps/tick/app.ts:43` |
 | A record's states and the only moves between them | a `machine` on the resource: buttons, stepper, board lanes and the server's refusal | the column is edited freely | `examples/apps/lintel/resources.ts:140`, `examples/apps/lintel/resources.ts:171` |
 | Two fields must agree | `validation`: `{ must, when?, message }` | the check reads other rows (a command) | `examples/apps/lintel/resources.ts:78`, `examples/apps/lintel/resources.ts:148` |
 | A decision checked against stored state, who acts, or several tables in one transaction | a [command](/docs/commands/): `defineCommand` in the server-only commands module, named by an `action` | a plain `set` would do | `examples/apps/lintel/commands/leasing.ts:11` |

@@ -198,6 +198,10 @@ async function send(
   const server = options.server ?? s;
   let body: string | undefined;
   const headers: Record<string, string> = { ...options.headers };
+  /* The three OAuth doors are budgeted per address (oauthServer.ts), and this suite makes far more than a minute's worth
+     from one: each request comes from an address of its own unless the test names one, as `register` already does. */
+  if (/\/api\/auth\/oauth\/(authorize|consent|token)/.test(path) && !headers['x-forwarded-for'])
+    headers['x-forwarded-for'] = `10.8.${Math.floor(++addresses / 250)}.${addresses % 250}`;
   if (options.json !== undefined) {
     body = JSON.stringify(options.json);
     headers['content-type'] ??= 'application/json';
@@ -651,6 +655,22 @@ test('registration: every rejected redirect class, and the per-address budget', 
   const preflight = await send('/api/auth/oauth/token', { method: 'OPTIONS' });
   assert.equal(preflight.status, 204);
   assert.equal(preflight.headers.get('access-control-allow-origin'), '*');
+});
+
+test('authorize, consent view and token are budgeted per address before anything is written', async () => {
+  const clientId = await client();
+  const { challenge } = pkce();
+  const flood = { 'x-forwarded-for': '10.201.0.1' };
+  let refused: Reply | undefined;
+  for (let i = 0; i < 40 && !refused; i++) {
+    const reply = await send(authorizeUrl(clientId, challenge), { headers: flood });
+    if (reply.status === 429) refused = reply;
+    else assert.equal(reply.status, 303, String(i));
+  }
+  assert.ok(refused, 'the flood is refused');
+  assert.ok(Number(refused.headers.get('retry-after') ?? 0) >= 0);
+  const other = await send(authorizeUrl(clientId, challenge), { headers: { 'x-forwarded-for': '10.201.0.2' } });
+  assert.equal(other.status, 303, 'another address keeps its own budget');
 });
 
 test('consent: no nonce, a cross-origin form, a replayed nonce and a stranger are refused; the pages cannot be framed', async () => {

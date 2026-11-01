@@ -27,6 +27,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import type { Bound } from '@mistriwork/engine/server/http/trust.js';
+import { readBounded } from '@mistriwork/engine/server/http/reply.js';
 import { admitApiRequest, API_PENDING_LIMIT, ApiAdmission, apiTransportBound } from './apiHttpAdmission.js';
 import { readApiBearerHeader } from './apiBearerHeader.js';
 import { createAppMcpSession } from './appMcpSession.js';
@@ -49,20 +50,6 @@ const answer = (res: ServerResponse, status: number, body?: unknown, headers: Re
   res.end(text);
 };
 const rpcError = (code: number, message: string) => ({ jsonrpc: '2.0', id: null, error: { code, message } });
-
-async function readBody(req: IncomingMessage): Promise<Buffer | null> {
-  const declared = Number(req.headers['content-length']);
-  if (Number.isFinite(declared) && declared > MCP_BODY_LIMIT) return null;
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const part of req) {
-    const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part);
-    size += chunk.length;
-    if (size > MCP_BODY_LIMIT) return null;
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-}
 
 export function createAppMcpHttp(
   options: Readonly<{
@@ -126,7 +113,7 @@ export function createAppMcpHttp(
       answer(res, 415, rpcError(-32600, 'The body is one JSON-RPC message, application/json.'));
       return true;
     }
-    const body = await readBody(req);
+    const body = await readBounded(req, MCP_BODY_LIMIT);
     if (!body) {
       answer(res, 413, rpcError(-32600, 'The message is too large.'));
       return true;

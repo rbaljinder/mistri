@@ -7,27 +7,28 @@
  * while that runs), so nothing inside it is read while it is shut.
  * `side` is the edge it comes from, right by default,
  * and the panel is at most 420px wide (a left drawer the same), full
- * width on a phone. A title is required where the sheet needs one: the
- * sheet's accessible name, never a decorative heading alone.
+ * width on a phone. The sheet is named by its `title` or, where it draws
+ * none, by `ariaLabel`; one of the two is required.
  */
 import type { ReactNode } from 'react';
 import { Drawer as BaseDrawer } from '@base-ui/react/drawer';
 
 export type DrawerSide = 'left' | 'right';
 
-export interface DrawerProps {
+interface DrawerBase {
   open: boolean;
   onOpenChange?: (open: boolean) => void;
   side?: DrawerSide;
-  /** The sheet's accessible name. */
-  title?: ReactNode;
   children: ReactNode;
   className?: string;
   /** A non-cancellable operation is awaiting acknowledgement. */
   closeDisabled?: boolean;
 }
 
-export function DrawerSheet({ open, onOpenChange, side = 'right', title, children, className, closeDisabled = false }: DrawerProps) {
+/** A sheet is named by a title it draws or by an `ariaLabel` it does not; one of the two is required, so none is announced unnamed. */
+export type DrawerProps = DrawerBase & ({ title: ReactNode; ariaLabel?: string } | { title?: undefined; ariaLabel: string });
+
+export function Drawer({ open, onOpenChange, side = 'right', title, ariaLabel, children, className, closeDisabled = false }: DrawerProps) {
   return (
     <BaseDrawer.Root
       open={open}
@@ -43,7 +44,7 @@ export function DrawerSheet({ open, onOpenChange, side = 'right', title, childre
       <BaseDrawer.Portal>
         <BaseDrawer.Backdrop className="ui-drawer-backdrop" />
         <BaseDrawer.Viewport className={['ui-drawer-viewport', `ui-drawer-${side}`, className].filter(Boolean).join(' ')}>
-          <BaseDrawer.Popup className="ui-drawer" aria-label={typeof title === 'string' ? title : undefined}>
+          <BaseDrawer.Popup className="ui-drawer" aria-label={ariaLabel ?? (typeof title === 'string' ? title : undefined)}>
             {title !== undefined ? <BaseDrawer.Title className="ui-drawer-title">{title}</BaseDrawer.Title> : null}
             {children}
           </BaseDrawer.Popup>
@@ -52,6 +53,3 @@ export function DrawerSheet({ open, onOpenChange, side = 'right', title, childre
     </BaseDrawer.Root>
   );
 }
-
-/** The short name, as the other primitives export theirs. */
-export const Drawer = DrawerSheet;

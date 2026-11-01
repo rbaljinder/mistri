@@ -55,6 +55,9 @@ test('Tick seed is deterministic, writable and validates against its real manife
     const schema = await adapter.introspect();
     const loaded = await loadApp(app);
     assert.deepEqual(appProblems(loaded, schema), []);
+    // A new task is open: the form asks its name and day, and `completed` is defaulted rather than asked.
+    assert.deepEqual(loaded.app.resources?.task?.form?.show, ['name', 'due_on']);
+    assert.deepEqual(loaded.app.resources?.task?.form?.defaults, { completed: false });
     assert.deepEqual(appCeilingWarnings(loaded.app, schema), []);
     assert.equal(loaded.app?.name, 'Tick');
     assert.deepEqual(loaded.app?.ui.editing, { save: 'blur' });

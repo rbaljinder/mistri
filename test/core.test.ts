@@ -251,6 +251,13 @@ describe('the WHERE builder', () => {
 describe('the query language', () => {
   const parse = (input: string) => parseQuery(input, { schema, now: NOW });
 
+  test('a doubled comparison is named as a second operator, not as a missing quote', () => {
+    const { errors } = parse('invoice total >> 500');
+    assert.equal(errors.length, 1);
+    assert.match(errors[0].message, /is not an operator/);
+    assert.doesNotMatch(errors[0].message, /quote it/);
+  });
+
   test('a bare table name is a valid query', () => {
     const { query, errors } = parse('customer');
     assert.deepEqual(errors, []);
@@ -1280,6 +1287,32 @@ describe('multi-column writes and type coercion', () => {
     assert.equal(coerceForColumn('REAL', 12.5), 12.5);
   });
 
+  test('a number a double cannot hold exactly stays the text it was typed as', () => {
+    /* Through Number(), a bigint past 2^53 was written as its neighbor — a
+       foreign key pointing at a different row — and a wide numeric was rounded. */
+    assert.equal(coerceForColumn('bigint', '9007199254740993'), '9007199254740993');
+    assert.equal(coerceForColumn('bigint', '9007199254740991'), 9007199254740991);
+    assert.equal(coerceForColumn('INTEGER', ' 42 '), 42);
+    assert.equal(coerceForColumn('INTEGER', '-7'), -7);
+    assert.equal(coerceForColumn('INTEGER', '007'), '007', 'the database reads it; Number() would too, as a different text');
+    const wide = '123456789012345678901234567.891';
+    assert.equal(coerceForColumn('numeric(30,3)', wide), wide);
+    assert.equal(coerceForColumn('numeric(30,10)', '12345678901234567.89'), '12345678901234567.89');
+    assert.equal(coerceForColumn('numeric(12,2)', '1234.50'), 1234.5);
+    assert.equal(coerceForColumn('REAL', '0.000123'), 0.000123);
+    assert.equal(coerceForColumn('double precision', '123456789012345.6'), '123456789012345.6');
+    // Only plain decimal text is read as a number; the rest is the database's to read.
+    assert.equal(coerceForColumn('INTEGER', '0x1A'), '0x1A');
+    assert.equal(coerceForColumn('INTEGER', '1e3'), '1e3');
+    assert.equal(coerceForColumn('REAL', 'Infinity'), 'Infinity');
+    assert.equal(coerceForColumn('INTEGER', '1_000'), '1_000');
+    // An interval or a point holds "int" in its name and is not a number.
+    assert.equal(columnKind('interval'), 'other');
+    assert.equal(columnKind('point'), 'other');
+    assert.equal(coerceForColumn('interval', '5'), '5');
+    assert.equal(columnKind('integer'), 'number');
+  });
+
   test('emptying a NOT NULL column is refused before it reaches SQL', async () => {
     await assert.rejects(
       () => adapter.update({ table: 'customer', key: { id: 1 }, values: { name: null } }),
@@ -2192,6 +2225,22 @@ describe('credentials', () => {
        write and the chmod there is a window where the secret is readable. */
     assert.equal(statSync(target).mode & 0o777, 0o600);
     assert.deepEqual(await readCredentials(target), { newconn: 'topsecret' });
+  });
+
+  test('writing a credential keeps the others, and refuses a file it cannot read instead of wiping it', async () => {
+    const target = join(dir, 'kept.json');
+    await writeCredential('one', '1', target);
+    await writeCredential('two', '2', target);
+    assert.deepEqual(await readCredentials(target), { one: '1', two: '2' });
+    // A backup tool left it wide open: the write refuses, and the passwords are still there.
+    chmodSync(target, 0o644);
+    await assert.rejects(writeCredential('three', '3', target), /chmod 600/);
+    chmodSync(target, 0o600);
+    assert.deepEqual(await readCredentials(target), { one: '1', two: '2' });
+    // A stray comma: refused, untouched.
+    writeFileSync(target, '{"one": "1",}', { mode: 0o600 });
+    await assert.rejects(writeCredential('three', '3', target), /could not be read/);
+    assert.equal(readFileSync(target, 'utf8'), '{"one": "1",}');
   });
 });
 

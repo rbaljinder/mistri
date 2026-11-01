@@ -7,7 +7,7 @@ export const say = defineMessages({
   theRowsKeyItsShape: 'The row’s key, its shape and how to read it over MCP — not its values',
   copyForAgent: 'Copy for agent',
   thatRecordCouldNotBeRead: 'That record could not be read.',
-  thatRowIsNoLonger: 'That row is no longer there.',
+  noRowWithKey: 'No {table} row has the id {key}.',
   required: 'required',
   thisLayoutHasNoRelated: 'This layout has no related tables. Add one under Layout.',
   nothingPointsAtThisRow: 'Nothing points at this row.',

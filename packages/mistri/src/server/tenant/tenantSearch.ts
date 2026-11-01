@@ -73,7 +73,14 @@ export function openTenantSearch(
       const physical = ownership.resources[write.table];
       if (physical === undefined) continue;
       // Its own document when it is searched, and the documents that copy it through a path (`requester.name`).
-      indexer.touched(app, { connection, resource: write.table, physical }, write.key, tenantColumns[write.table], tenantColumns);
+      indexer.touched(
+        app,
+        { connection, resource: write.table, physical },
+        write.key,
+        tenantColumns[write.table],
+        tenantColumns,
+        write.tenant,
+      );
     }
   });
   return Object.freeze({

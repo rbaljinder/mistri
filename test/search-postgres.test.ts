@@ -74,6 +74,19 @@ describe('the Postgres search pack, without a server', () => {
     await provider.close();
   });
 
+  test('a collection name past what Postgres keeps (with room for the rebuild table) is refused by name, never truncated', async () => {
+    const provider = postgresSearch([{ name: 'pgsearch', url: 'postgres://localhost/mistri' }]);
+    const index = provider.index('pgsearch')!;
+    const long = `${index.collectionPrefix}_${'a'.repeat(40)}_${'customer_support_tickets'}`;
+    assert.ok(long.length > 57);
+    await assert.rejects(
+      () => index.ensureCollection(long, ['name']),
+      (error: Error) => error.message.includes(long) && /prefix/.test(error.message),
+    );
+    await assert.rejects(() => index.search(long, 'stone', ['name'], 10), /could not be asked/);
+    await provider.close();
+  });
+
   test('a field that would collide with a vector column is refused', async () => {
     const provider = postgresSearch([{ name: 'pgsearch', url: 'postgres://localhost/mistri' }]);
     const index = provider.index('pgsearch')!;

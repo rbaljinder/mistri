@@ -23,11 +23,11 @@
  * the single point that produces it and there are tests asserting no password
  * survives the trip.
  */
-import { readFile, writeFile, chmod, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, chmod, mkdir, rename, rm } from 'node:fs/promises';
 import { statSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { dirname, join } from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { product } from '../product.js';
 
@@ -120,9 +120,19 @@ async function keychainGet(account: string): Promise<string | undefined> {
 export async function keychainSet(account: string, secret: string): Promise<boolean> {
   if (platform() !== 'darwin' || keychainOff()) return false;
   try {
-    // -U updates in place rather than erroring when the item already exists.
-    await run('security', ['add-generic-password', '-U', '-s', keychainService(), '-a', account, '-w', secret]);
-    return true;
+    /* The secret goes in on stdin, to `security -i`, as hex: `-w <secret>` on the command line is visible to every
+       local user in `ps` for as long as the command runs, and `-w` with no value reads a tty, not a pipe. `-U`
+       updates in place rather than erroring when the item already exists. */
+    if (/[\0\r\n]/.test(account)) return false;
+    const quoted = (text: string) => `"${text.replace(/[\\"]/g, '\\$&')}"`;
+    const command = `add-generic-password -U -s ${quoted(keychainService())} -a ${quoted(account)} -X ${Buffer.from(secret, 'utf8').toString('hex')}\n`;
+    return await new Promise<boolean>((done) => {
+      const child = spawn('security', ['-i'], { stdio: ['pipe', 'ignore', 'ignore'] });
+      child.once('error', () => done(false));
+      child.once('close', (code) => done(code === 0));
+      child.stdin.on('error', () => {});
+      child.stdin.end(command);
+    });
   } catch {
     return false;
   }
@@ -158,8 +168,10 @@ export async function readCredentials(path = credentialsPath()): Promise<Credent
   let mode: number;
   try {
     mode = statSync(path).mode & 0o777;
-  } catch {
-    return {}; // No file is the normal case, not an error.
+  } catch (err) {
+    // No file is the normal case, not an error. Any other failure is: it must not read as "nothing saved".
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    throw new Error(`${path} could not be read: ${(err as Error).message}`);
   }
   if (mode & 0o077) {
     throw new Error(`${path} is readable by others (mode ${mode.toString(8)}). ` + `Run: chmod 600 ${path}`);
@@ -174,13 +186,23 @@ export async function readCredentials(path = credentialsPath()): Promise<Credent
 }
 
 export async function writeCredential(name: string, secret: string, path = credentialsPath()): Promise<void> {
-  const existing = await readCredentials(path).catch(() => ({}));
+  /* A file that cannot be read (too wide a mode, a stray comma) refuses the write: rewriting it from nothing would
+     delete every other saved password, and the chmod after would hide the one sign that something was wrong. */
+  const existing = await readCredentials(path);
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   /* Written with the restrictive mode from the start rather than chmod-ed
      afterwards — between a default-mode write and the chmod there is a window
-     where the secret is world-readable. */
-  await writeFile(path, `${JSON.stringify({ ...existing, [name]: secret }, null, 2)}\n`, { mode: 0o600 });
-  await chmod(path, 0o600);
+     where the secret is world-readable. Through a temporary file and a rename, so a crash cannot leave the
+     whole file half-written. */
+  const staged = `${path}.${process.pid}.tmp`;
+  try {
+    await writeFile(staged, `${JSON.stringify({ ...existing, [name]: secret }, null, 2)}\n`, { mode: 0o600 });
+    await chmod(staged, 0o600);
+    await rename(staged, path);
+  } catch (err) {
+    await rm(staged, { force: true });
+    throw err;
+  }
 }
 
 /* ---------- resolution ---------- */

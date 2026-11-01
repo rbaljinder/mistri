@@ -14,8 +14,8 @@ Lintel's Report a problem are the worked examples.
 - **Always**, give the form a `description`: one sentence of what a new
   record is for — `examples/apps/lintel/views.ts:39`.
 - **When it asks for six or more fields**, use `groups` of 3–7 fields under
-  nouns (Person, Lead), not types (Dates, Links) —
-  `examples/apps/tick/app.ts:38`.
+  nouns (Person, Lead), not types (Dates, Links), as the
+  [Forms](/docs/forms/) options show.
 - **When a required field has an obvious value**, put it in `defaults`:
   the first state where the column has no DEFAULT, `today` on a created-on date, `now` on a timestamp,
   `me` on an owner (constants from `@mistriwork/mistri/app`) — `examples/apps/lintel/resources.ts:305`.

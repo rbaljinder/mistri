@@ -17,7 +17,7 @@ import { Menu } from '@base-ui/react/menu';
 import { message, messageLanguage, subscribeMessages } from '@mistriwork/kit/client/messages.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { NavGlyph } from '@mistriwork/kit/client/components/NavGlyph.js';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/anchor.js';
+import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
 import { go, pageView, subscribeWalk, tableView, toast, state } from '@mistriwork/kit/client/core.js';
 import { openPalette } from '@mistriwork/kit/client/palette.js';
 import { appListQuery, currentNavIndex } from '@mistriwork/kit/client/components/appListModel.js';

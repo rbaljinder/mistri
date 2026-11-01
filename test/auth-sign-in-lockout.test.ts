@@ -14,7 +14,7 @@ import { createApp } from './support/createApp.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { loadApp, type AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
-import { resetSignInState } from '../packages/mistri/src/server/auth/signInState.js';
+import { resetSignInState, signInState } from '../packages/mistri/src/server/auth/signInState.js';
 import { ATTEMPTS, LOCKED_MESSAGE } from '../packages/mistri/src/server/auth/signInLockout.js';
 import { makeDemoDatabase, seedDemoDatabase } from './make-demo-db.js';
 
@@ -124,4 +124,16 @@ describe('sign-in lockout and the client address', () => {
     );
     assert.ok(!sessions.some((session) => session.ipAddress === '198.51.100.66'));
   });
+});
+
+test('a flood of pending OAuth requests cannot evict a sign-in lock or a counter', async () => {
+  resetSignInState();
+  const until = Date.now() + 600_000;
+  await signInState.put('signin-lock', 'ada@example.org', { until }, until);
+  await signInState.fail('signin:ada@example.org', 600_000);
+  for (let i = 0; i < 60_000; i++) await signInState.put('oauth-request', `r${i}`, { n: i }, until);
+  assert.deepEqual(await signInState.read('signin-lock', 'ada@example.org'), { until });
+  assert.equal(await signInState.failures('signin:ada@example.org'), 1);
+  assert.equal(await signInState.read('oauth-request', 'r0'), undefined, 'only other pending requests are pushed out');
+  resetSignInState();
 });

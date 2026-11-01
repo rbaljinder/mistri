@@ -1161,7 +1161,7 @@ function Confirm({ move, lane, onAnswer }: { move: Move; lane: string; onAnswer:
   };
   const label = move.action!.label;
   return (
-    <Modal className="confirm action-confirm" aria-label={`${label}?`} onClose={() => answer(false)}>
+    <Modal className="confirm action-confirm" ariaLabel={`${label}?`} onClose={() => answer(false)}>
       <h2>{label}?</h2>
       <p>{say('moveTitleToLane', { title: move.card.title, lane })}</p>
       <div className="confirm-actions">

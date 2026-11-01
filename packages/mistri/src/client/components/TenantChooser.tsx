@@ -220,7 +220,7 @@ export function TenantControl({ actions = [], ...props }: TenantChooserProps & {
       {open && (
         <Modal
           className="tenant-chooser-dialog"
-          aria-label={wordsFor(props.tenantLabel).choose}
+          ariaLabel={wordsFor(props.tenantLabel).choose}
           closeDisabled={props.busy}
           onClose={() => setOpen(false)}
         >

@@ -73,7 +73,13 @@ async function pgModule(): Promise<PgModule> {
   return (pg.Client ? pg : pg.default) as PgModule;
 }
 async function client(url: string): Promise<Control> {
-  const created = new (await pgModule()).Client({ connectionString: url, statement_timeout: 10_000 });
+  // Bounded like tenantDialects' pgClient: a stalled connect fails rather than holding the file open.
+  const created = new (await pgModule()).Client({
+    connectionString: url,
+    statement_timeout: 10_000,
+    connectionTimeoutMillis: 10_000,
+    query_timeout: 30_000,
+  });
   await created.connect();
   return created;
 }

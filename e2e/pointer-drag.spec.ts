@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from './support/harness';
 import { startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { CRM_CLOCK } from './support/fixtures';
 
 /**
  * Dragging with a pointer, as a reader does it: a mouse, and a finger that
@@ -312,6 +313,8 @@ test.describe('Thread project plan: rows moved between cycles and to their place
 test.describe('Compass task calendar by finger', () => {
   test.use({ hasTouch: true });
   test('a finger carries a task to the next day, and Alt+← brings it back', async ({ page }) => {
+    // The seeded tasks are around the fixture's day; the calendar opens on the browser's month.
+    await page.clock.setFixedTime(CRM_CLOCK);
     await page.goto(CRM);
     await page
       .getByRole('button', { name: /^Activity/ })

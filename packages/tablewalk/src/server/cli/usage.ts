@@ -238,8 +238,9 @@ and generated X-Request-ID response headers. Disabled by default. These records
 omit URLs, bodies, identities, SQL and error messages; existing human CLI logs
 are separate.
 
-Browsing is read-only. Editing is off by default, per connection: its
-"writable": true in tablewalk.json, enforced at the adapter, not the UI.
+Browsing is read-only, held by the adapter: a read runs one statement in a
+read-only transaction. Editing is off by default, per connection: its
+"writable": true in tablewalk.json, checked by the server, not the UI.
 `.trim();
 
 /**

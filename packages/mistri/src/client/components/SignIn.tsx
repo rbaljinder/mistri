@@ -468,6 +468,11 @@ export function SignIn({
                 </span>
               )}
             </Field>
+            {/* The refusal stands with the fields it is about, above the button that was just pressed, in a line held
+                even while empty: below the links it arrived after the button and pushed "Create an account" down. */}
+            <p className="signin-problem signin-problem-held" role="alert">
+              {formProblem && !credentials.isPending ? formProblem : null}
+            </p>
             {/* Busy, not disabled: a disabled button drops the focus it holds, and a
                 refused sign-in left the reader on the page itself. submit refuses a second press. */}
             <Button intent="primary" size="large" block type="submit" className="signin-submit" busy={credentials.isPending}>
@@ -585,7 +590,7 @@ export function SignIn({
             )}
           </div>
         )}
-        {mode !== 'claim' && (
+        {mode !== 'claim' && !(email && (mode === 'in' || mode === 'up')) && (
           <p className="signin-problem" role="alert" hidden={!formProblem || pending}>
             {formProblem}
           </p>

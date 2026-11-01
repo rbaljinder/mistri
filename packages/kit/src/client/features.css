@@ -1777,6 +1777,8 @@ body.app-mode .insert-form-app .insert-field > .form-field-label-row > label { f
 .signin-social-row { display: grid; gap: var(--space-3); }
 .signin-social .signin-mark { flex: none; width: 18px; height: 18px; margin-right: var(--space-2); }
 .signin-problem { margin: 0; font: var(--text-base) var(--sans); color: var(--status-critical); }
+/* The credentials form's line is held while empty, so a refusal arriving there moves nothing. */
+.signin-problem-held { min-height: calc(var(--text-base) * 1.4); line-height: 1.4; }
 .signin-lede { margin: 0; color: var(--ink-muted); font: var(--text-md)/1.5 var(--sans); }
 /* Switching mode, Forgot password? and Back to sign in are links in words, not
    more outlined buttons beside Sign in: quiet Buttons, drawn as the link they read as. */
@@ -1848,6 +1850,9 @@ body.session-locked > :not(#session-lock) { display: none !important; }
 .inline-edit-button:hover { border-color: var(--line); color: var(--accent-ink); }
 .inline-edit-value:focus-visible, .inline-edit-button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
 .inline-field-open .cell-edit, .inline-field-open .cell-edit-control { min-width: 0; width: 100%; }
+/* The input takes the box the value's button stood in (32px: its 4px pad inside a 1px edge), not the control's own
+   padding on top of that floor, which made it 4px taller and moved every row below it on opening and again on closing. */
+.inline-field-open input.cell-edit { padding-block: 0; }
 
 /* A list's cell edited in place (GridCellEditor.tsx). The value is the
    button, drawn as the cell drew it and aligned as the column is, so an

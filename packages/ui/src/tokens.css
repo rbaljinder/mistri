@@ -1,5 +1,5 @@
 /* @mistriwork/ui's tokens: every colour, size, space, radius, shadow and time the primitives and the pages drawn with them
-   name. Unlayered here, so whoever takes them names the layer: style.css takes them into `mistri-ui`, the kit's
+   name. Unlayered here, so whoever takes them names the layer: style.css takes them into `@mistriwork/ui`, the kit's
    stylesheet into its `base`. */
 /* Light is the bare :root; dark is redefined twice — once for the
    OS preference (guarded so an explicit light choice still wins) and once for

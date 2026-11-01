@@ -34,14 +34,10 @@ export default defineApp({
       // Worked out in the statement, never stored: an open task whose day has passed.
       computed: { is_overdue: computed.boolean('due_on < today and not completed') },
       form: {
+        // A new task is open and asks for its name and, if it has one, its day: whether it is completed
+        // is not a question when adding, so it is defaulted and left out of what the form shows.
+        show: ['name', 'due_on'],
         defaults: { completed: false },
-        groups: [
-          { label: 'What', fields: ['name', 'completed'] },
-          { label: 'When', fields: ['due_on'] },
-        ],
-        // A task created already done has no date to ask for. Visibility reads
-        // the draft's shown fields, so `completed` is shown, not only defaulted.
-        when: { due_on: 'completed = false' },
       },
       actions: {
         complete: action('Complete', { set: { completed: true }, when: 'completed = false' }),

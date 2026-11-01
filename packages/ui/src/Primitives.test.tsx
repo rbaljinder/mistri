@@ -122,7 +122,7 @@ test('a carousel shows one slide, steps and dots move it, and the ends disable',
     { label: 'Work', children: 'Work slide' },
     { label: 'Wall', children: 'Wall slide' },
   ];
-  render(<Carousel slides={slides} label="Project photos" onIndexChange={onIndexChange} />);
+  render(<Carousel slides={slides} ariaLabel="Project photos" onIndexChange={onIndexChange} />);
   expect(screen.getByRole('region', { name: 'Project photos' })).toBeInTheDocument();
   expect(screen.getByText('Slide 1 of 3: Studio')).toBeVisible();
   // The slide change is announced politely, not left for a reader to find.
@@ -181,7 +181,7 @@ test('resizable panes start at their shares, and the handle walks on arrow keys 
   const onSizesChange = vi.fn();
   render(
     <Resizable
-      label="Record and detail"
+      ariaLabel="Record and detail"
       panels={[
         { label: 'Record', defaultSize: 60, children: 'Record pane' },
         { label: 'Detail', defaultSize: 40, children: 'Detail pane' },
@@ -237,7 +237,7 @@ test('resizable panes scale shares that do not add to 100, and refuse fewer than
 
 test('a scroll area is a labelled region, a tab stop only while its content overflows', () => {
   const { rerender } = render(
-    <ScrollArea label="Recent activity" maxHeight="320px">
+    <ScrollArea ariaLabel="Recent activity" maxHeight="320px">
       <p>First row</p>
       <p>Second row</p>
     </ScrollArea>,
@@ -254,7 +254,7 @@ test('a scroll area is a labelled region, a tab stop only while its content over
   Object.defineProperty(region, 'scrollHeight', { configurable: true, value: 600 });
   Object.defineProperty(region, 'clientHeight', { configurable: true, value: 320 });
   rerender(
-    <ScrollArea label="Recent activity" maxHeight="320px">
+    <ScrollArea ariaLabel="Recent activity" maxHeight="320px">
       <p>First row</p>
       <p>Second row</p>
     </ScrollArea>,
@@ -271,4 +271,87 @@ test('a tooltip says its note on hover and on focus, and names it from the trigg
   expect(note).toHaveTextContent('Saves the record without leaving the page.');
   expect(trigger).toHaveAttribute('aria-describedby', note.id);
   await userEvent.unhover(trigger);
+});
+
+test('a carousel leaves its keys to a slider or a portal inside a slide, and answers only to itself and its own controls', async () => {
+  const slides = [{ children: <div role="slider" tabIndex={0} aria-label="Zoom" aria-valuenow={1} /> }, { children: 'Two' }];
+  render(<Carousel slides={slides} />);
+  screen.getByRole('slider', { name: 'Zoom' }).focus();
+  await userEvent.keyboard('{ArrowRight}{End}');
+  expect(screen.getByText('Slide 1 of 2')).toBeVisible();
+  // A step button is the carousel's own control; its arrow still moves the slide.
+  screen.getByRole('button', { name: 'Next slide' }).focus();
+  await userEvent.keyboard('{ArrowRight}');
+  expect(screen.getByText('Slide 2 of 2')).toBeVisible();
+});
+
+test("a carousel, a pager and a resizable group say their words in the caller's language", () => {
+  render(
+    <>
+      <Carousel
+        slides={[{ children: 'Uno' }, { children: 'Dos', label: 'Segunda' }]}
+        words={{
+          region: 'Carrusel',
+          next: 'Siguiente',
+          chooseSlide: 'Elegir una diapositiva',
+          goToSlide: (n) => `Ir a la diapositiva ${n}`,
+          slide: (n, total) => `${n} de ${total}`,
+          status: (n, total) => `Diapositiva ${n} de ${total}`,
+        }}
+      />
+      <Pagination page={1} pages={3} onPageChange={() => {}} words={{ pages: 'Páginas', next: 'Siguiente página' }} />
+      <Resizable
+        panels={[{ children: 'A', label: 'Lista' }, { children: 'B' }]}
+        words={{ resize: (a, b) => `Cambiar ${a} y ${b}`, panel: (n) => `panel ${n} (es)` }}
+      />
+    </>,
+  );
+  expect(screen.getByRole('region', { name: 'Carrusel' })).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: 'Elegir una diapositiva' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Ir a la diapositiva 2' })).toBeInTheDocument();
+  expect(screen.getByText('Diapositiva 1 de 2')).toBeVisible();
+  expect(screen.getByRole('navigation', { name: 'Páginas' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Siguiente página' })).toBeInTheDocument();
+  expect(screen.getByRole('separator', { name: 'Cambiar Lista y panel 2 (es)' })).toBeInTheDocument();
+});
+
+test('initials split by letter, not by UTF-16 unit', () => {
+  expect(initialsOf('𠮷野 Taro')).toBe('𠮷T');
+  expect(initialsOf('😀 Smile')).toBe('😀S');
+  expect(initialsOf('Zoë')).toBe('Z');
+});
+
+test("a tooltip joins the trigger's own description instead of replacing it", () => {
+  render(
+    <>
+      <p id="own-hint">Required.</p>
+      <Tooltip trigger={<button aria-describedby="own-hint">Save</button>} defaultOpen>
+        Saves it.
+      </Tooltip>
+    </>,
+  );
+  const described = screen.getByRole('button', { name: 'Save' }).getAttribute('aria-describedby')!.split(' ');
+  expect(described).toContain('own-hint');
+  expect(described).toHaveLength(2);
+});
+
+test('a drawer without a title is named by its ariaLabel', () => {
+  render(
+    <Drawer open ariaLabel="Filters">
+      <p>Body</p>
+    </Drawer>,
+  );
+  expect(screen.getByRole('dialog', { name: 'Filters' })).toBeInTheDocument();
+});
+
+test('tabs start on the first tab that is not disabled', () => {
+  render(
+    <Tabs
+      tabs={[
+        { value: 'one', label: 'One', disabled: true, children: 'First panel' },
+        { value: 'two', label: 'Two', children: 'Second panel' },
+      ]}
+    />,
+  );
+  expect(screen.getByRole('tab', { name: 'Two' })).toHaveAttribute('aria-selected', 'true');
 });

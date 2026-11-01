@@ -35,13 +35,11 @@ interface FieldProps {
   group?: boolean;
   /** A checkbox: the control first and its label beside it, on one line, the label checking it. */
   check?: boolean;
-  /** The word that says a field may be left empty ("(optional)"), drawn quietly after the label; the caller's, in its language. */
-  optionalMark?: ReactNode;
-  /** The word that says an optional field may be left empty ("(optional)"), in the caller's language. Given on every
-      field that is not required, it is drawn only where the worn theme asks for it (`recipes.required:
-      'optional-word'`, the stylesheet's to decide) and replaces the star. It stands beside the label, not in it, so
-      the label's name is the same either way; `aria-required` is untouched. */
-  optionalWord?: ReactNode;
+  /** The word that says a field may be left empty ("(optional)"), in the caller's language. Given on every field that is
+      not required, it is drawn only where the worn theme asks for it (`recipes.required: 'optional-word'`, the
+      stylesheet's to decide) and replaces the star. It stands beside the label, not in it, so the label's name is the
+      same either way; `aria-required` is untouched. */
+  optional?: ReactNode;
   /** The label is read, not drawn: a group whose question is the heading above it. */
   labelHidden?: boolean;
   /** Something beside the label on its row: a help tip. */
@@ -63,8 +61,7 @@ export function Field({
   group = false,
   check = false,
   size = 'default',
-  optionalMark,
-  optionalWord,
+  optional,
   labelAside,
   labelHidden = false,
   reserve = false,
@@ -81,16 +78,13 @@ export function Field({
   const caption = group ? (
     <span id={labelId} className={labelClass}>
       {label}
-      {optionalMark ? <span className="form-field-optional"> {optionalMark}</span> : null}
     </span>
   ) : (
     <label id={labelId} htmlFor={controlId} className={labelClass}>
       {label}
-      {optionalMark ? <span className="form-field-optional"> {optionalMark}</span> : null}
     </label>
   );
-  const word = optionalWord && !required ? <span className="form-field-optional-word">{optionalWord}</span> : null;
-  const optional = optionalMark ? <span className="form-field-optional"> {optionalMark}</span> : null;
+  const word = optional && !required ? <span className="form-field-optional-word">{optional}</span> : null;
   const control: FieldControlProps = {
     id: controlId,
     ...(hintId || holdsProblem ? { 'aria-describedby': [hintId, holdsProblem ? problemId : undefined].filter(Boolean).join(' ') } : {}),
@@ -126,7 +120,6 @@ export function Field({
           {drawn}
           <label id={labelId} htmlFor={controlId} className="form-field-label">
             {label}
-            {optional}
           </label>
           {word}
         </div>

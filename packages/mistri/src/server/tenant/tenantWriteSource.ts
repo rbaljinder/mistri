@@ -110,10 +110,11 @@ export interface TenantWriteSource extends TenantWriteMethods {
   writeBranding(write: BrandingWrite): Promise<number>;
   close(): Promise<void>;
 }
-/** One record a committed transaction wrote: its logical table and its key. */
+/** One record a committed transaction wrote: its logical table and its key; a removal also names the tenant the row belonged to, which can no longer be read from it. */
 interface TenantCommittedWrite {
   readonly table: string;
   readonly key: Readonly<Record<string, string | number>>;
+  readonly tenant?: string;
 }
 type CommitObserver = (writes: readonly TenantCommittedWrite[]) => void;
 const commitObservers = new Map<string, Set<CommitObserver>>();
@@ -180,7 +181,15 @@ export function observeTenantCommits(
 function committed(owner: { readonly appId: string; readonly source: { readonly id: string } }, writes: TenantCommittedWrite[]) {
   const observers = writes.length ? commitObservers.get(observerKey(owner)) : undefined;
   if (!observers) return;
-  const frozen = Object.freeze(writes.map((write) => Object.freeze({ table: write.table, key: Object.freeze({ ...write.key }) })));
+  const frozen = Object.freeze(
+    writes.map((write) =>
+      Object.freeze({
+        table: write.table,
+        key: Object.freeze({ ...write.key }),
+        ...(write.tenant === undefined ? {} : { tenant: write.tenant }),
+      }),
+    ),
+  );
   for (const observer of observers) {
     try {
       observer(frozen);
@@ -190,7 +199,7 @@ function committed(owner: { readonly appId: string; readonly source: { readonly 
   }
 }
 /* The records one transaction's operations name, in the order they ran. */
-function recording(records: WriteTransaction, wrote: TenantCommittedWrite[]): WriteTransaction {
+function recording(records: WriteTransaction, wrote: TenantCommittedWrite[], owned: TenantOwnershipSnapshot): WriteTransaction {
   return Object.freeze<WriteTransaction>({
     query: (request) => records.query(request),
     count: (table, filter) => records.count(table, filter),
@@ -205,8 +214,23 @@ function recording(records: WriteTransaction, wrote: TenantCommittedWrite[]): Wr
       return result;
     },
     remove: async (request) => {
+      /* Read before the row goes: whoever follows this commit (a search index, tenantSearch.ts) removes the record's
+         copy within its tenant, and the row can no longer say whose it was. */
+      const rule = owned.ownership[request.table];
+      let tenant: string | undefined;
+      if (rule && rule.kind === 'tenant' && typeof rule.column === 'string') {
+        const read = await records.query({
+          table: request.table,
+          columns: [rule.column],
+          filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
+          limit: 1,
+          offset: 0,
+        });
+        const value = read.rows[0]?.[rule.column];
+        if (typeof value === 'string' || typeof value === 'number') tenant = String(value);
+      }
       const result = await records.remove(request);
-      wrote.push({ table: request.table, key: request.key });
+      wrote.push({ table: request.table, key: request.key, ...(tenant === undefined ? {} : { tenant }) });
       return result;
     },
     // A notice writes no record of the App's, so nothing follows it.
@@ -522,7 +546,7 @@ export async function openSqliteTenantWriteSource(
             const outcome = await kind.run(
               owned,
               input.evidence,
-              recording(logical, wrote),
+              recording(logical, wrote, owned),
               journal && noted(journal),
               command,
               run,
@@ -913,7 +937,16 @@ export async function openPostgresTenantWriteSource(
                     }
                   : {}),
               });
-            const outcome = await kind.run(owned, input.evidence, recording(logical, wrote), receipts, command, run, sink, operation);
+            const outcome = await kind.run(
+              owned,
+              input.evidence,
+              recording(logical, wrote, owned),
+              receipts,
+              command,
+              run,
+              sink,
+              operation,
+            );
             // Before COMMIT, as on SQLite: a failed or unfinished append fails
             // the write instead of escaping the record.
             if (sinkQueue) await sinkQueue.finish();

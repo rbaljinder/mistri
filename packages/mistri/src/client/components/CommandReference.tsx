@@ -14,6 +14,7 @@ import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import type { CommandValue } from '../commandState.js';
 import { Typeahead } from '@mistriwork/ui/Typeahead.js';
 import { offeredChoices } from '@mistriwork/kit/client/components/pickerStaleness.js';
+import { readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
 import { say as sayField } from '../copy/forms/components/CommandFields.js';
 import { say } from '../copy/forms/components/CommandReference.js';
 import { andQuery, splitClauseTail } from '@mistriwork/engine/shared/query.js';
@@ -155,7 +156,9 @@ export function CommandReferenceField({
           required: field.required,
           disabled,
           className: 'picker-input',
-          placeholder: sayField('choosePlaceholder', { label: field.label.toLowerCase() }),
+          placeholder: readsAsName(field.label)
+            ? sayField('choosePlaceholder', { label: field.label.toLowerCase() })
+            : sayField('chooseOne'),
         }}
         fit="width"
         popupClassName="picker-popup"

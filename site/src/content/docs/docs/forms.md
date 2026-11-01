@@ -8,19 +8,16 @@ Curate the New form and record editing of a table, which fields in which groups,
 
 ```ts title="examples/apps/tick/app.ts"
       form: {
+        // A new task is open and asks for its name and, if it has one, its day: whether it is completed
+        // is not a question when adding, so it is defaulted and left out of what the form shows.
+        show: ['name', 'due_on'],
         defaults: { completed: false },
-        groups: [
-          { label: 'What', fields: ['name', 'completed'] },
-          { label: 'When', fields: ['due_on'] },
-        ],
-        // …
-        when: { due_on: 'completed = false' },
       },
 ```
 
 See it in the sample (`examples/apps/tick/app.ts:36`). The resource says `access: 'write'`; a form without a `form` key is drawn from the schema all the same.
 
-![Tick's New task: a drawer over the task list, a What group of name and completed, a When group with the due date, Cancel and Add.](../../../assets/guide/forms.webp)
+![Tick's New task: a drawer over the task list, the name and the due date, Cancel and Add.](../../../assets/guide/forms.webp)
 
 ## What you'll see
 

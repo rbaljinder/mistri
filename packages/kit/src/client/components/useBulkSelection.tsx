@@ -563,7 +563,7 @@ function Confirm({ asking, onAnswer }: { asking: Asking; onAnswer: (yes: boolean
     onAnswer(yes);
   };
   return (
-    <Modal className="confirm action-confirm" aria-label={`${action.label}?`} onClose={() => answer(false)}>
+    <Modal className="confirm action-confirm" ariaLabel={`${action.label}?`} onClose={() => answer(false)}>
       <h2>{action.label}?</h2>
       <p>
         {say('applyToSelectedRecords', { count })}

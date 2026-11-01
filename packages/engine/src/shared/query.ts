@@ -946,6 +946,11 @@ function compileClause(raw: string, ctx: CompileContext): { conditions?: Conditi
        whole condition quoted, because an author (or an agent) copies the fix
        rather than reading it; a date phrase is offered only where the column
        holds dates, since on a status column it sent people looking for one. */
+    /* `total >> 5` leaves the value `> 5`. Telling an author to quote that, as the message below would, sends
+       them to search for a literal "> 5" and match nothing; the mistake is a second operator, so say so. */
+    if (!quoted && /^[<>=!]/.test(value)) {
+      return { error: `${opRaw}${value.match(/^[<>=!]+/)![0]} is not an operator; use one of =, !=, >, >=, < or <= before the value.` };
+    }
     if (!quoted && /\s/.test(value)) {
       const dated = column && columnKind(column.type) === 'date';
       return {

@@ -34,10 +34,10 @@ import { columnKind, isFlagColumn, type ColumnMeta, type TableMeta } from '@mist
 import { humanName, vocabularyWord } from '@mistriwork/engine/shared/model.js';
 import { inferredFormDefaults } from '@mistriwork/engine/shared/formValues.js';
 import { sessionIdentity } from '../sessionIdentity.js';
-import { Dropdown } from './Dropdown.js';
+import { Dropdown, readsAsName } from './Dropdown.js';
 import { RecordPicker } from './RecordPicker.js';
 import { DateField } from './DateField.js';
-import { isPickerDate } from '@mistriwork/ui/datePickerModel.js';
+import { isPickerDate } from '@mistriwork/ui/internal/datePickerModel.js';
 import { formatLocale, formatTimezone } from '../locale.js';
 import { InputSlot, columnInput } from './inputRenderers.js';
 import { autoKey, isRequired } from '@mistriwork/engine/shared/form.js';
@@ -48,7 +48,7 @@ import { Icon } from './Icon.js';
 import { isAppIcon, type AppIconName } from '@mistriwork/engine/shared/appIcons.js';
 import { onDemand, useArrived } from './onDemand.js';
 import type { FormScalar } from '@mistriwork/engine/shared/formValues.js';
-import { isPickerDateTime } from '@mistriwork/ui/datePickerModel.js';
+import { isPickerDateTime } from '@mistriwork/ui/internal/datePickerModel.js';
 import { defaultCurrency } from '../locale.js';
 import { wordFor, type DisplayRule } from './valueModel.js';
 import { rowCurrency } from '@mistriwork/engine/shared/money.js';
@@ -977,7 +977,8 @@ export function PlatformControl({
             : '';
   const said = placeholder ?? hint;
   /* An App's listbox with nothing chosen asks, quietly, as a command form's does; the workbench keeps its dash. */
-  const unchosen = hint || (app ? say('choosePlaceholder', { label: spoken.toLowerCase() }) : '—');
+  const unchosen =
+    hint || (app ? (readsAsName(spoken) ? say('choosePlaceholder', { label: spoken.toLowerCase() }) : say('chooseOne')) : '—');
   const quietWhenEmpty = value === '' ? 'is-empty' : undefined;
 
   /* The author's word over the default the kind and the size pick (formRules.ts says which columns may take one). */
@@ -1409,7 +1410,7 @@ export function NewRecordDialog(props: NewRecordProps) {
       onClose={props.onCancel}
       closeDisabled={dismissal.pending}
       beforeClose={dismissal.beforeClose}
-      aria-label={title}
+      ariaLabel={title}
     >
       <h2>{title}</h2>
       <NewRecordForm

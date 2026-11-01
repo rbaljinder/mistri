@@ -23,18 +23,18 @@ export interface TabsProps {
   onValueChange?: (value: string) => void;
   className?: string;
   /** The tablist's accessible name, where the tabs need one ("Settings sections"). */
-  label?: string;
+  ariaLabel?: string;
 }
 
-export function TabsControl({ tabs, value, defaultValue, onValueChange, className, label }: TabsProps) {
+export function Tabs({ tabs, value, defaultValue, onValueChange, className, ariaLabel }: TabsProps) {
   return (
     <BaseTabs.Root
       className={['ui-tabs', className].filter(Boolean).join(' ')}
       value={value}
-      defaultValue={defaultValue ?? tabs[0]?.value}
+      defaultValue={defaultValue ?? tabs.find((tab) => !tab.disabled)?.value}
       onValueChange={onValueChange}
     >
-      <BaseTabs.List className="ui-tabs-list" aria-label={label}>
+      <BaseTabs.List className="ui-tabs-list" aria-label={ariaLabel}>
         {tabs.map((tab) => (
           <BaseTabs.Tab key={tab.value} className="ui-tab" value={tab.value} disabled={tab.disabled}>
             {tab.label}
@@ -49,6 +49,3 @@ export function TabsControl({ tabs, value, defaultValue, onValueChange, classNam
     </BaseTabs.Root>
   );
 }
-
-/** The short name, as the other primitives export theirs. */
-export const Tabs = TabsControl;

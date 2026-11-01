@@ -21,9 +21,12 @@
  * PostgreSQL doing nothing; its readiness snapshot inspected pages of waiting
  * rows, each verified against its attempt history, every five seconds.
  *
- * A publisher or runner that halts stays halted; readiness says so, and a
- * restart is the recovery. Recreating one in-process would evade the bounds
- * that halted it. Shutdown runs in one order: stop claiming, halt the runner
+ * A store that fails before anything is claimed or sent costs a cycle, not
+ * the worker: the cycle reports unavailable and the next poll tries again.
+ * A publisher or runner halts only where the outcome is in doubt — a lost
+ * acknowledgement, a handler that outlived its lease — and then stays
+ * halted; readiness says so, and a restart is the recovery. Recreating one
+ * in-process would evade the bounds that halted it. Shutdown runs in one order: stop claiming, halt the runner
  * (aborting in-flight command signals), stop the publishers, close the
  * stores; the caller then closes the adapters.
  */

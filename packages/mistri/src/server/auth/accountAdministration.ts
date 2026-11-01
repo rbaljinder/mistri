@@ -42,6 +42,9 @@ export interface AccountAdminApi {
       searchValue?: string;
       searchField?: 'email';
       searchOperator?: 'contains';
+      filterField?: 'role';
+      filterValue?: string;
+      filterOperator?: 'contains';
     };
   }): Promise<unknown>;
   getUser(input: { headers: Headers; query: { id: string } }): Promise<unknown>;
@@ -177,6 +180,42 @@ export function createAccountAdministration(
     }
     return summary(found);
   };
+  /** The active accounts that hold the administrator role, as the store has them now. */
+  const administrators = async (headers: Headers): Promise<string[]> => {
+    const found: string[] = [];
+    // A page at a time, bounded: an App with thousands of administrators has bigger problems than this check.
+    for (let offset = 0; offset < ACCOUNTS_PAGE * 50; offset += ACCOUNTS_PAGE) {
+      const answer = (await api.listUsers({
+        headers,
+        query: {
+          limit: ACCOUNTS_PAGE,
+          offset,
+          sortBy: 'email',
+          sortDirection: 'asc',
+          filterField: 'role',
+          filterValue: ADMIN_ROLE,
+          filterOperator: 'contains',
+        },
+      })) as { users?: unknown };
+      if (!answer || !Array.isArray(answer.users)) throw new Error('Invalid account list');
+      for (const user of answer.users) {
+        const one = summary(user);
+        if (one.active && one.roles.includes(ADMIN_ROLE)) found.push(one.id);
+      }
+      if (answer.users.length < ACCOUNTS_PAGE) break;
+    }
+    return found;
+  };
+  /* "There is always an administrator", for changes by two administrators at once: the other administrators' rows are
+     locked (in a fixed order, so two changes cannot wait on each other) before they are counted, so a second change
+     waits for the first to commit and then counts what it left. The check on one's own account alone cannot see that
+     the other administrator is, in the same moment, being removed by this one's target. */
+  const keepAnAdministrator = async (headers: Headers, leaving: string): Promise<void> => {
+    await audit.lock([...(await administrators(headers))].sort());
+    if (!(await administrators(headers)).some((id) => id !== leaving)) {
+      refuse(409, 'That would leave no active administrator. Make another account an administrator first.');
+    }
+  };
   const administration: AccountAdministration = {
     async list(headers, { search, offset = 0 }, roles) {
       const from = pageFrom(offset);
@@ -239,9 +278,12 @@ export function createAccountAdministration(
           case 'setRoles': {
             const account = await find(headers, change.accountId),
               given = rolesFor(change.roles, roles);
-            // The one account that cannot lose it: whoever is asking. So there is always an administrator.
+            // The one account that cannot lose it: whoever is asking; and no change may leave the App with none (keepAnAdministrator).
             if (account.id === actor.id && !given.includes(ADMIN_ROLE))
               refuse(409, 'You cannot remove your own administrator role. Ask another administrator.');
+            if (account.roles.includes(ADMIN_ROLE) && account.active && !given.includes(ADMIN_ROLE)) {
+              await keepAnAdministrator(headers, account.id);
+            }
             await api.setRole({ headers, body: { userId: account.id, role: given } });
             await record({ targetId: account.id, targetEmail: account.email, before: { roles: account.roles }, after: { roles: given } });
             line = `set the roles of ${account.email} to ${given.join(', ')} (were ${account.roles.join(', ') || 'none'})`;
@@ -250,6 +292,7 @@ export function createAccountAdministration(
           case 'deactivate': {
             const account = await find(headers, change.accountId);
             if (account.id === actor.id) refuse(409, 'You cannot deactivate your own account.');
+            if (account.roles.includes(ADMIN_ROLE) && account.active) await keepAnAdministrator(headers, account.id);
             // Better Auth ends every session of a banned account; the reason says who, on the account itself.
             await api.banUser({ headers, body: { userId: account.id, banReason: `Deactivated by ${actor.who}` } });
             // A ban refuses its tokens while it lasts; revoked, they stay refused after a reactivation, as a directory's are.

@@ -36,6 +36,7 @@ import {
 import { activateEventProducer, type EventProducer } from '../events/eventProducer.js';
 import type { ReadinessCheckInput, ReadinessCode } from '../operations/operations.js';
 import { deliveryQueueOperator, type DeliveryQueueOperator } from '../operations/queueOperator.js';
+import { nextIdleWait } from '../jobs/jobHost.js';
 
 const EFFECT_SERVICE_ID = 'mistri.effects';
 /* A webhook destination's bounds, part of its identity like its routes. A
@@ -151,11 +152,14 @@ export async function openEffectHost(
     channels?: (destination: string, routed: ReadonlySet<string>) => EventPublicationTransport | undefined;
     now?: () => number;
     idleMs?: number;
+    /** The longest wait between idle cycles; the wait doubles from `idleMs` while nothing is due. */
+    maxIdleMs?: number;
   }>,
 ): Promise<EffectHost> {
   const { deployment, target, webhooks } = options;
   const now = options.now ?? Date.now,
-    idleMs = options.idleMs ?? 1_000;
+    idleMs = options.idleMs ?? 1_000,
+    maxIdleMs = options.maxIdleMs ?? idleMs * 8;
   const clock = options.now ? ('caller' as const) : ('database' as const);
   const pg = 'postgres' in target ? sharedPgConnections(target.postgres, RUNTIME_STORE_POOL) : undefined;
   const deliveries: Array<{ webhook: string; store: EventDeliveryStore; producer: EventProducer }> = [];
@@ -251,13 +255,18 @@ export async function openEffectHost(
       : (active ??= cycle().finally(() => {
           active = undefined;
         }));
+  /* An idle destination costs a claim transaction per cycle, which keeps a scale-to-zero database awake: so the wait
+     backs off while nothing is due (as the job host's does), and a cycle that delivered something looks again at once.
+     The ceiling bounds how late a first delivery after a quiet spell can be. */
+  let lastIdle: number | undefined;
   const schedule = (delay: number): void => {
     if (stopping) return;
     timer = setTimeout(() => {
       timer = undefined;
+      const idle = (worked: boolean) => (lastIdle = nextIdleWait(lastIdle, worked, idleMs, maxIdleMs));
       void tick().then(
-        (worked) => schedule(worked ? 0 : idleMs),
-        () => schedule(idleMs),
+        (worked) => schedule(idle(worked)),
+        () => schedule(idle(false)),
       );
     }, delay);
     timer.unref?.();

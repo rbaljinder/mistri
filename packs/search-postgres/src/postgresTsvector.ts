@@ -77,9 +77,10 @@
  * Identifiers are never interpolated unchecked: a collection name and
  * every field name must be word characters, and anything else is refused
  * rather than quoted. Postgres's 63-byte identifier limit applies to the
- * table and index names this file derives; a collection whose rebuild
- * table would pass it is refused with that reason, not truncated into a
- * name that collides with another table.
+ * table and index names this file derives; a collection whose name, with
+ * the rebuild table's `__next`, would pass it is refused with that reason —
+ * on the first statement for it, in `collectionTable` — not truncated into a
+ * name that collides with another table or that nothing finds again.
  */
 import { createHash } from 'node:crypto';
 import {
@@ -100,6 +101,21 @@ const isIdentifier = (name: string): boolean => /^[A-Za-z0-9_]+$/.test(name);
 
 const identifier = (name: string, what: string): string => {
   if (!isIdentifier(name)) throw new Error(`${what} "${name}" is not a name of letters, digits and underscores.`);
+  return name;
+};
+
+/** Postgres truncates an identifier past 63 bytes, with only a NOTICE: the table would exist under a name no later statement uses. The rebuild table adds `__next`, so a collection that may ever grow is held to what leaves room for it. */
+const MAX_COLLECTION_BYTES = 63 - '__next'.length;
+
+/** A collection's table name, or a refusal that names the collection and says what to shorten: truncating it would index into a table nothing can find. */
+const collectionTable = (name: string, prefix: string): string => {
+  identifier(name, 'A search collection');
+  if (Buffer.byteLength(name) > MAX_COLLECTION_BYTES) {
+    throw new Error(
+      `A search collection "${name}" is ${Buffer.byteLength(name)} bytes; Postgres allows 63 and the rebuild table needs 6 of them, so at most ${MAX_COLLECTION_BYTES}. ` +
+        `Shorten the App id or the resource name, or the collection prefix ("${prefix}").`,
+    );
+  }
   return name;
 };
 
@@ -232,7 +248,7 @@ export class PostgresTsvectorIndex implements SearchIndex {
 
   /** The collection exists and holds every field named; a field added later rebuilds the table to hold it. */
   async ensureCollection(name: string, fields: readonly string[]): Promise<void> {
-    const table = identifier(name, 'A search collection');
+    const table = collectionTable(name, this.collectionPrefix);
     const wanted = searchableFields(fields);
     const pool = await this.db();
     let held = await this.readFields(table);
@@ -247,9 +263,6 @@ export class PostgresTsvectorIndex implements SearchIndex {
     }
     if (wanted.every((field) => held!.includes(field))) return;
     const temp = `${table}__next`;
-    if (temp.length > 63) {
-      throw new Error(`A search collection "${table}" cannot grow: its rebuild table would pass Postgres's 63-byte identifier limit.`);
-    }
     /* The whole rebuild on one client: BEGIN, the DDL and COMMIT through the pool would land on different
        connections. The advisory lock, keyed by the table, makes a second process wait here and then find the
        table already wide enough, so two processes never rebuild it at once. */
@@ -291,7 +304,7 @@ export class PostgresTsvectorIndex implements SearchIndex {
 
   /** The record's document, replacing the document its tenant and key already had; a document whose collection was never ensured is ensured from its own fields. */
   async upsert(collection: string, document: SearchDocument): Promise<void> {
-    const table = identifier(collection, 'A search collection');
+    const table = collectionTable(collection, this.collectionPrefix);
     const fields = Object.keys(document).filter((key) => key !== 'id' && key !== TENANT_FIELD);
     await this.ensureCollection(table, fields);
     const pool = await this.db();
@@ -314,10 +327,10 @@ export class PostgresTsvectorIndex implements SearchIndex {
   /**
    * Gone from the index; a document that was never there is gone already, and a collection never ensured holds
    * nothing — as does a name the index cannot hold. With a tenant scope only that tenant's document goes; without
-   * one, every tenant's document under that key does (core's removal names no tenant yet).
+   * one, every tenant's document under that key does; core names the tenant of a tenant-owned row's removal (appSearchRuntime.ts).
    */
   async remove(collection: string, id: string, scope?: SearchScope): Promise<void> {
-    if (!isIdentifier(collection)) return;
+    if (!isIdentifier(collection) || Buffer.byteLength(collection) > MAX_COLLECTION_BYTES) return;
     if (!(await this.readFields(collection))) return;
     const pool = await this.db();
     if (scope?.field === TENANT_FIELD)
@@ -329,7 +342,7 @@ export class PostgresTsvectorIndex implements SearchIndex {
   async search(collection: string, phrase: string, fields: readonly string[], limit: number, scope?: SearchScope): Promise<string[]> {
     if (limit <= 0 || !isIdentifier(collection)) return [];
     try {
-      const table = collection;
+      const table = collectionTable(collection, this.collectionPrefix);
       return await this.afresh((fresh) => this.ask(table, phrase, fields, limit, scope, fresh));
     } catch (error) {
       throw new SearchUnavailable(`search "${collection}" could not be asked: ${(error as Error).message}`);

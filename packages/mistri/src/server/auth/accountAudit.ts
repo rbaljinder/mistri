@@ -79,6 +79,7 @@ export interface AuditAdapter {
     sortBy: { field: string; direction: 'desc' };
   }): Promise<unknown[]>;
   count(input: { model: string; where?: Where }): Promise<number>;
+  update(input: { model: string; where: Where; update: Record<string, unknown> }): Promise<unknown>;
 }
 /** Better Auth's transaction context (`@better-auth/core/context`): the adapter the current transaction holds. */
 export interface AuditTransactions {
@@ -94,6 +95,8 @@ export interface AccountAuditStore {
   transaction<T>(work: () => Promise<T>): Promise<T>;
   /** Inside `transaction` only, so the row commits or rolls back with the change. */
   write(row: AccountAuditWrite): Promise<void>;
+  /** Inside `transaction` only: take the accounts' rows (touching them), so a concurrent change to the same accounts waits for this one's commit. Pass the ids in one fixed order. */
+  lock(accountIds: readonly string[]): Promise<void>;
   /** Newest first; one account's rows when `accountId` is given. */
   read(options: { offset: number; accountId?: string }): Promise<AccountAuditPage>;
 }
@@ -150,6 +153,12 @@ export function createAccountAuditStore(base: AuditAdapter, context: AuditTransa
           after: snapshotText(row.after),
         },
       });
+    },
+    async lock(accountIds: readonly string[]) {
+      const adapter = (await context.getCurrentAdapter(base)) as AuditAdapter;
+      if (adapter === base) throw new Error("Accounts are locked inside their change's transaction.");
+      for (const id of accountIds)
+        await adapter.update({ model: 'user', where: [{ field: 'id', value: id }], update: { updatedAt: new Date() } });
     },
     async read({ offset, accountId }: { offset: number; accountId?: string }) {
       const where = accountId ? [{ field: 'targetId', value: accountId }] : undefined;

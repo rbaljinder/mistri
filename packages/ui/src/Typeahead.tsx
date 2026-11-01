@@ -20,9 +20,9 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type InputHTMLAttributes, type ReactNode, type Ref, type RefObject } from 'react';
 import { Autocomplete } from '@base-ui/react/autocomplete';
-import { viewportBox } from './ruler.js';
-import { layoutViewport, zoomAnchor } from './anchor.js';
-import { popupContainer } from './popups.js';
+import { viewportBox } from './internal/ruler.js';
+import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { popupContainer } from './internal/popups.js';
 
 interface TypeaheadProps<T> {
   text: string;

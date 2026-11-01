@@ -71,6 +71,7 @@
  "e2e/ignition-public-form.spec.ts": 5,
  "e2e/ignition-tenancy.spec.ts": 5,
  "e2e/ignition-workflow.spec.ts": 5,
+ "e2e/inline-edit-shift.spec.ts": 8,
  "e2e/inline-edit.spec.ts": 9.1,
  "e2e/insert-reliability.spec.ts": 15.5,
  "e2e/intake-form.spec.ts": 175,

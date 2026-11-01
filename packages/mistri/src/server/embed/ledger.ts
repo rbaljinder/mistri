@@ -97,8 +97,8 @@ const markId = (sessionId: string) => `embed-session-${createHash('sha256').upda
 export function embedSessionMarks(adapter: () => Promise<LedgerAdapter>, now: () => number = Date.now) {
   let swept = 0;
   return {
-    /** Mark `sessionId` until it expires; throws when the store cannot say it did. */
-    async mark(sessionId: string, until: number): Promise<void> {
+    /** Mark `sessionId` until it expires, keeping `record` (the roles the host's assertion gave it) beside the mark; throws when the store cannot say it did. */
+    async mark(sessionId: string, until: number, record?: string): Promise<void> {
       const db = await adapter();
       if (now() - swept >= SWEEP_EVERY_MS) {
         swept = now();
@@ -117,7 +117,7 @@ export function embedSessionMarks(adapter: () => Promise<LedgerAdapter>, now: ()
         data: {
           id: markId(sessionId),
           identifier: EMBED_SESSION,
-          value: 'embed',
+          value: record ?? 'embed',
           expiresAt: new Date(until),
           createdAt: new Date(now()),
           updatedAt: new Date(now()),
@@ -127,8 +127,13 @@ export function embedSessionMarks(adapter: () => Promise<LedgerAdapter>, now: ()
     },
     /** Whether a host's assertion opened `sessionId`; throws when the store cannot say. */
     async marked(sessionId: string): Promise<boolean> {
+      return (await this.recorded(sessionId)) !== null;
+    },
+    /** What was kept with `sessionId`'s mark (`'embed'` when nothing was), or `null` when the session is not a host's; throws when the store cannot say. */
+    async recorded(sessionId: string): Promise<string | null> {
       const db = await adapter();
-      return (await db.findOne({ model: 'verification', where: [{ field: 'id', value: markId(sessionId) }] })) !== null;
+      const row = await db.findOne<{ value?: unknown }>({ model: 'verification', where: [{ field: 'id', value: markId(sessionId) }] });
+      return row === null ? null : typeof row.value === 'string' ? row.value : '';
     },
   };
 }

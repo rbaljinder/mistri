@@ -13,7 +13,7 @@ actions: {
 },
 ```
 
-See it in the sample (`examples/apps/tick/app.ts:46`).
+See it in the sample (`examples/apps/tick/app.ts:42`).
 
 ![A Tick task's head: its name, with Complete and More beside it.](../../../assets/guide/actions.webp)
 

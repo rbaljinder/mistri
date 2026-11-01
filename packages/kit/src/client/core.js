@@ -426,10 +426,10 @@ export { columnKind, labelColumn, primaryKey };
 /** Whether a column should be treated as a date for presentation. */
 export const looksLikeDateColumn = (col) => Boolean(col) && looksLikeDate(col);
 
-/* The zoom-aware ruler is the ui package's (packages/ui/src/ruler.ts says why
+/* The zoom-aware ruler is the ui package's (packages/ui/src/internal/ruler.ts says why
    every overlay is measured with it); the client reaches it here, under the
    names it always had. */
-export { viewportScale, refreshViewportScale, viewportBox, viewportSize } from '@mistriwork/ui/ruler.js';
+export { viewportScale, refreshViewportScale, viewportBox, viewportSize } from '@mistriwork/ui/internal/ruler.js';
 
 /** Where a row's name lives, as a view path — see labelPath in shared/schema.ts. */
 export const labelPath = (table) => sharedLabelPath(state.schema, table, recordLabel(table));

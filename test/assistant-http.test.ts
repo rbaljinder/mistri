@@ -404,6 +404,30 @@ test("an App that names no limit still caps each person's day, and a named figur
   );
 });
 
+test('a retry or an edit that is refused cuts nothing: the old turn and its answer are still there', async () => {
+  await fixture(
+    async ({ turn, get }) => {
+      const first = await turn({ text: 'hello' });
+      const id = of(first.events, 'conversation')[0].id;
+      const items = async () =>
+        (await get(`/api/assistant/conversation?app=${appId}&id=${id}`)).body.items.map((item: { type: string }) => item.type);
+      assert.deepEqual(await items(), ['person', 'text']);
+      // Her role is taken away between the turn and the retry: the request is refused where the grants are read.
+      const role = people.ann.role;
+      people.ann.role = 'viewer';
+      try {
+        assert.equal((await turn({ conversation: id, retry: true })).status, 403);
+      } finally {
+        people.ann.role = role;
+      }
+      assert.deepEqual(await items(), ['person', 'text']);
+      assert.equal((await turn({ conversation: id, retry: true })).status, 200);
+      assert.deepEqual(await items(), ['person', 'text']);
+    },
+    { assistant: { roles: ['rep'] }, script: { turns: [], otherwise: 'Hi.' } },
+  );
+});
+
 test('offered only where it can answer, and only to the roles it names', async () => {
   await fixture(
     async ({ get, turn }) => {

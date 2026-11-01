@@ -186,7 +186,7 @@ export function ImportDialog({
   const mapped = mapping.map((name, index) => ({ name, index })).filter((item) => item.name !== null);
 
   return (
-    <Modal className="confirm import-dialog" aria-label={title} onClose={onClose} closeDisabled={busy}>
+    <Modal className="confirm import-dialog" ariaLabel={title} onClose={onClose} closeDisabled={busy}>
       <h2>{title}</h2>
       <nav className="multi-step-nav import-steps" aria-label={say('importSteps')}>
         <ol>

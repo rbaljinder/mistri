@@ -62,7 +62,7 @@ export function FindValueDialog({ initial = '', onClose }: { initial?: string; o
       ref={dialog}
       onClose={onClose}
       initialFocus={input}
-      aria-label={say('findAValue')}
+      ariaLabel={say('findAValue')}
       plain
       backdrop={false}
     >

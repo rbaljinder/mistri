@@ -2182,7 +2182,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
            never let them. */
         if (error instanceof TenantContextsBusy) {
           reportRefusal(req, 429, error.code, error.message, error, true);
-          return send(req, res, 429, { error: error.message, code: error.code });
+          /* A tab closing frees a context within seconds: say when to ask again instead of leaving a client to guess. */
+          return send(req, res, 429, { error: error.message, code: error.code }, { 'retry-after': '5' });
         }
         if (error instanceof TenantRequestFault) {
           reportRefusal(req, error.status, error.code, error.message, error);

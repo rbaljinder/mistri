@@ -1,9 +1,15 @@
-import { COMPASS, expect, test } from './support/ownServers';
+import { COMPASS, CRM_CLOCK, expect, test } from './support/ownServers';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
 test.use({ servers: ['crm'] });
 
 const CRM = COMPASS;
+
+/* The fixture's tasks fall within weeks of its seeded day (CRM_CLOCK, the server's clock too), but the calendar opens
+   on the browser's month: left on the real clock it is a month with no tasks once the seed ages out. */
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(CRM_CLOCK);
+});
 
 /* Compass's Task calendar: the tasks list asked again for the month in view,
    each task on its due date, opened like a board card. */

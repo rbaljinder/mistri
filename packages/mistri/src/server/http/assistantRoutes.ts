@@ -257,6 +257,7 @@ export async function answerAssistant(
     const events = conversation ? await store.events(owner, conversation.id) : [];
     const waiting = pendingProposal(events);
     let text: string | undefined;
+    let cutFrom: number | undefined;
     let context = body.context as { resource?: unknown; key?: unknown } | undefined;
     if (path === '/api/assistant/turn') {
       if (waiting) throw new HttpError(409, 'Confirm or decline the proposed change first.');
@@ -270,12 +271,12 @@ export async function answerAssistant(
       if ((body.retry === true || body.edit !== undefined) && !from) throw new HttpError(400, 'There is nothing to retry or edit there.');
       text = body.retry === true ? String((from!.body as { text: string }).text) : typeof body.text === 'string' ? body.text.trim() : '';
       if (!text || text.length > MAX_TEXT) throw new HttpError(400, `Say something, in at most ${MAX_TEXT} characters.`);
-      /* A retry or an edit continues from the prefix the model already saw:
-         the person's words there, and everything after them, are cut. */
-      if (from) {
-        if (body.retry === true) context = undefined;
-        await store.truncate(owner, conversation!.id, from.seq, at);
-      }
+      /* A retry or an edit continues from the prefix the model already saw: the person's words there, and
+         everything after them, are cut. The cut itself waits (below) until the grants and the catalog have been
+         read, the last things in this request that can refuse it: a refusal must not leave the old turn gone and no
+         new one written. */
+      if (from && body.retry === true) context = undefined;
+      cutFrom = from?.seq;
       if (!conversation) {
         conversation = await store.create(owner, text, at);
         hold(conversation.id);
@@ -301,9 +302,12 @@ export async function answerAssistant(
     const payload = await servedTo(loop(), app.id, controller.signal);
     const catalog = catalogFromPayload(payload, assistant, await tablesOf(loop(), app.id, controller.signal));
     const session: ToolSession = { loop: loop(), app: app.id, payload, assistant, catalog, signal: controller.signal };
+    const line =
+      text !== undefined && context && assistant.placement.includes('record')
+        ? await recordContext(session, context.resource, context.key)
+        : undefined;
+    if (cutFrom !== undefined) await store.truncate(owner, conversation!.id, cutFrom, at);
     if (text !== undefined) {
-      const line =
-        context && assistant.placement.includes('record') ? await recordContext(session, context.resource, context.key) : undefined;
       // A fresh conversation's first words, or an edited or retried turn's again (the cut above removed them).
       await store.append(owner, conversation!.id, [{ kind: 'person', body: { text, ...(line ? { context: line } : {}) } }], 'idle', at);
     }

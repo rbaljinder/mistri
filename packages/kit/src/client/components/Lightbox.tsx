@@ -69,7 +69,7 @@ export function Lightbox({ images, start, onClose, label, finalFocus }: Lightbox
       className="lightbox"
       plain
       ref={modal}
-      aria-label={label}
+      ariaLabel={label}
       initialFocus={closer}
       onClose={() => onClose(shown.current)}
       {...(finalFocus ? { finalFocus } : {})}

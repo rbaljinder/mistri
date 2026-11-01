@@ -9,6 +9,7 @@ import { after, before, test } from 'node:test';
 import { createWorkflowDriver } from '@mistriwork/mistri/testing';
 import { rentPosted } from '../events.ts';
 import { graceEnds, lateFees } from '../late-fees.ts';
+import { day, period as periodOf } from '../source.ts';
 import { startLintel, type Lintel } from './start.ts';
 
 let lintel: Lintel;
@@ -57,7 +58,9 @@ test('the rent poster posts this month at its slot, as its service, and a second
   assert.equal(run.state, 'succeeded', JSON.stringify(run));
   const again = await lintel.host.runJob('postRent');
   assert.equal(again.state, 'succeeded', JSON.stringify(again));
-  const period = new Date().toISOString().slice(0, 7);
+  // The poster reads "this month" on Denver's wall clock (its job's zone), which is still the old month for
+  // the first hours of a UTC month; the test must read it the same way.
+  const period = periodOf(day(() => new Date()));
   const [{ n, leases }] = lintel.rows<{ n: number; leases: number }>(
     `SELECT COUNT(*) AS n, COUNT(DISTINCT lease_id) AS leases FROM charge WHERE kind = 'rent' AND period = ?`,
     period,

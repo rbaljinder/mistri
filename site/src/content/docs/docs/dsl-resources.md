@@ -326,7 +326,7 @@ resource.
 | `resources.*.display.*.mentions` | object | Stable | With format richText: who an @ names — the resource of people, the column stored as the handle, the column shown or a template of their columns ('{first_name} {last_name}') — and the teams an @ may name as well. |
 | `resources.*.display.*.mentions.by` | string | Stable |  Used in `examples/apps/lintel/pages/resident.ts`. |
 | `resources.*.display.*.mentions.from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `resources.*.display.*.mentions.groups` | object | Stable | The teams an @ names as well, each told as its members: their resource, handle and shown column, and the resource of link rows that puts a person in a team (absent: the people resource references the team). Used in `examples/apps/tick/app.ts`. |
+| `resources.*.display.*.mentions.groups` | object | Stable | The teams an @ names as well, each told as its members: their resource, handle and shown column, and the resource of link rows that puts a person in a team (absent: the people resource references the team). Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.display.*.mentions.groups.by` | string | Stable |  Used in `examples/apps/lintel/pages/resident.ts`. |
 | `resources.*.display.*.mentions.groups.from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.display.*.mentions.groups.labelColumn` | string | Stable |  |
@@ -356,7 +356,7 @@ resource.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `resources.*.fields` | object | Stable | Column ceiling for signed-in roles: needs auth with auth.roles; write needs access 'write'. To keep a column from every reader, use hidden. Used in `examples/apps/tick/app.ts`. |
+| `resources.*.fields` | object | Stable | Column ceiling for signed-in roles: needs auth with auth.roles; write needs access 'write'. To keep a column from every reader, use hidden. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.fields.read` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.fields.write` | array | Stable | Needs the resource's access 'write'. Used in `examples/apps/lintel/app.ts`. |
 
@@ -406,16 +406,16 @@ resource.
 | `resources.*.form.defaults.*.auto` | `"today"` · `"now"` · `"me"` | Stable |  One of `me`, `now`, `today`. |
 | `resources.*.form.defaults.*.from` | string | Stable | One reference of this table, then a column of the table it names: service_id.price. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.form.description` | string | Stable | One sentence under the form's heading. Used in `examples/apps/lintel/app.ts`. |
-| `resources.*.form.fields` | object | Stable | Each shown field's own dress on this form: caption, help, placeholder, lines and, for a reference, the choices it narrows to. Used in `examples/apps/tick/app.ts`. |
+| `resources.*.form.fields` | object | Stable | Each shown field's own dress on this form: caption, help, placeholder, lines and, for a reference, the choices it narrows to. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.form.fields.*.as` | `"cards"` · `"buttons"` · `"radios"` · `"select"` | Stable | A vocabulary or a flag drawn as icon-less cards, a row of buttons, radios or a listbox, over the default its size and kind pick. A flag is buttons or select. One of `buttons`, `cards`, `radios`, `select`. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.form.fields.*.help` | string | Stable | Static plain text. No row-value interpolation. |
 | `resources.*.form.fields.*.label` | string | Stable | Static plain text. No row-value interpolation. |
 | `resources.*.form.fields.*.multiline` | boolean | Stable | A text column: true draws several lines, false one, whatever its type says. |
 | `resources.*.form.fields.*.placeholder` | string | Stable | Static plain text. No row-value interpolation. |
 | `resources.*.form.fields.*.where` | object | Stable | A reference: offer only the records whose column (the key) equals this form's field (the value): { project_id: 'project_id' }. Enforced on every write. |
-| `resources.*.form.groups` | array | Stable | Semantic presentation groups. The App checker also rejects duplicate members across groups and members excluded by show or read access. Ungrouped shown fields remain shown. Groups never grant access. Used in `examples/apps/tick/app.ts`. |
+| `resources.*.form.groups` | array | Stable | Semantic presentation groups. The App checker also rejects duplicate members across groups and members excluded by show or read access. Ungrouped shown fields remain shown. Groups never grant access. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.form.groups[].description` | string | Stable | Static plain text. No row-value interpolation. Used in `examples/apps/lintel/app.ts`. |
-| `resources.*.form.groups[].fields` |  | Stable |  Used in `examples/apps/tick/app.ts`. |
+| `resources.*.form.groups[].fields` |  | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.form.groups[].label` | string | Stable | Static plain text. No row-value interpolation. |
 | `resources.*.form.lines` | array | Stable | Child rows asked with the record and inserted with it in one transaction, each collection a grid of inputs: { label: 'Lines', from: 'order_line', whose: 'order_id', show: ['product_id', 'quantity'], order: 'position' }. Used in `examples/apps/tick/app.ts`. |
 | `resources.*.form.lines[].from` | string | Stable | The child resource; the App writes it. Used in `examples/apps/lintel/app.ts`. |
@@ -429,7 +429,7 @@ resource.
 | `resources.*.form.open` | `"drawer"` · `"page"` | Stable | 'drawer': over the list, which stays in sight. 'page': a centered page in the content pane. Absent: a drawer for up to 8 fields without steps, a page for more or with steps. One of `drawer`, `page`. Used in `examples/apps/tick/app.ts`. |
 | `resources.*.form.show` | array | Stable | The fields in order. An inner list is a row, drawn side by side (one column on a narrow form): [["email", "phone"], "company"]. At most 3 to a row; each field once. |
 | `resources.*.form.steps` | array | Stable | Finite presentation steps. When show is omitted, the steps select the fields in step order. Every field is owned by exactly one step; steps never grant access or execute hooks. |
-| `resources.*.form.steps[].fields` | array | Stable | The fields in order. An inner list is a row, drawn side by side: [["first_name", "last_name"], "dob"]. At most 3 to a row. Used in `examples/apps/tick/app.ts`. |
+| `resources.*.form.steps[].fields` | array | Stable | The fields in order. An inner list is a row, drawn side by side: [["first_name", "last_name"], "dob"]. At most 3 to a row. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.form.steps[].id` | string | Stable | Unique within the form. Absent, the label's slug, as step() makes it. |
 | `resources.*.form.steps[].label` | string | Stable | Static plain text. No row-value interpolation. |
 | `resources.*.form.steps[].lead` | string | Stable | One sentence under the title. Used in `examples/apps/lintel/views.ts`. |
@@ -479,7 +479,7 @@ resource.
 | `resources.*.machine` | object | Stable | The record's states and the verbs that move it between them, in the record's order. A verb that names one of the App's commands runs it; any other word is a fixed move that sets the column. The column changes only along the graph, on every door. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.machine.column` | string | Stable | The column its states are. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.machine.entry` | array | Stable | The states a command may insert a new record in besides the first, such as a converted lead's deal opening past qualification. A form's New record still starts in the first state. |
-| `resources.*.machine.groups` | object | Stable | Named sets of states the query language reads as it reads `status is open`: `status is onBench` means the group's states, `status is not onBench` the others. A group is never named like a state, nor `open`, which `status is open` says (every state that is not final). Used in `examples/apps/tick/app.ts`. |
+| `resources.*.machine.groups` | object | Stable | Named sets of states the query language reads as it reads `status is open`: `status is onBench` means the group's states, `status is not onBench` the others. A group is never named like a state, nor `open`, which `status is open` says (every state that is not final). Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.machine.since` | string | Stable | A timestamp column the server stamps when the state changes; `after` timers count from it. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.machine.states` | object | Stable |  |
 | `resources.*.machine.states.*.after` | object | Stable | How long the record may stay, and the command run through the jobs then. |
@@ -608,7 +608,7 @@ resource.
 | --- | --- | --- | --- |
 | `resources.*.search` | object | Preview | Search through a search provider: fields are the columns the index holds, or one step along a reference (requester.name) whose value each document copies and follows; connection names the provider's connection. The list's filter box, reference pickers and the palette ask it and re-read the rows under the reader's grants; while it is down they search the database. Needs a single-column primary key. On a tenant App each document keeps its tenant and a search asks within the member's tenant. Search providers are packs (Typesense is @mistriwork/search-typesense, SQLite FTS5 is @mistriwork/search-sqlite, Postgres tsvector is @mistriwork/search-postgres), which ship after 1.0; until one is plugged in, an App that declares search is refused at startup — except through the built-in connection memory, which searches an in-memory index in the server process (lost on restart until the next reindex, and suited to moderate tables, not a large catalog). Used in `examples/apps/tick/app.ts`. |
 | `resources.*.search.connection` | string | Preview |  Used in `examples/apps/tick/app.ts`. |
-| `resources.*.search.fields` | array | Preview |  Used in `examples/apps/tick/app.ts`. |
+| `resources.*.search.fields` | array | Preview |  Used in `examples/apps/lintel/app.ts`. |
 
 ## `resources.*.segments`
 

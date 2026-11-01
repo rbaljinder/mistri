@@ -9,7 +9,7 @@
  * heights — live in layout pixels. Mixing the two puts an overlay a room
  * away from its anchor, or makes a virtualised scrollbar disagree with its
  * rows by 12% per row. There is one ruler (`viewportScale`, `viewportBox`,
- * `viewportSize`: packages/ui/src/ruler.ts, which core.js re-exports); this check makes using it the default
+ * `viewportSize`: packages/ui/src/internal/ruler.ts, which core.js re-exports); this check makes using it the default
  * rather than the remembered extra. The rule lived in prose first, and the
  * same commit that wrote it down missed two files — which is exactly the
  * kind of mistake these checks exist for.

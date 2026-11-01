@@ -19,7 +19,7 @@ export function AppIssues({ name, problems }: { name: string; problems: string[]
         <span>{say('issues', { problemsCount: problems.length })}</span>
       </button>
       {open ? (
-        <Modal className="app-issues-dialog" ref={dialog} onClose={() => setOpen(false)} aria-label={say('problemsIn', { name })}>
+        <Modal className="app-issues-dialog" ref={dialog} onClose={() => setOpen(false)} ariaLabel={say('problemsIn', { name })}>
           <h2>{`${say('problems', { count: problems.length })} in ${name}`}</h2>
           <ol className="app-issues-list">
             {problems.map((p, i) => (

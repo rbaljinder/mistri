@@ -30,7 +30,7 @@ export function SignedInFormDialog({
   onClose: () => void;
 }) {
   return (
-    <Modal className="form-dialog" onClose={onClose} aria-label={form.label}>
+    <Modal className="form-dialog" onClose={onClose} ariaLabel={form.label}>
       <FormBody form={form} appName={appName} prefill={prefill} onDismiss={onClose} />
     </Modal>
   );

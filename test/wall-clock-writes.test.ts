@@ -23,7 +23,7 @@ import { executeBusinessCommand } from '../packages/mistri/src/server/commands/b
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { clearJournal } from '../packages/engine/src/server/journal.js';
-import { createTestClock } from '../packages/mistri/src/server/testing/index.js';
+import { createTestClock } from '../packages/mistri/src/server/testing.js';
 import { clockDefault } from '../packages/kit/src/client/components/newRecordModel.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { servedUi } from '../packages/mistri/src/shared/appPayload.js';

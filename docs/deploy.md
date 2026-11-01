@@ -16,7 +16,7 @@ anything.
   - [Two things to get right](#two-things-to-get-right)
   - [When it does not start](#when-it-does-not-start)
   - [Reference](#reference)
-- [Three samples with Docker Compose](#three-samples-with-docker-compose)
+- [Tick with Docker Compose](#tick-with-docker-compose)
 - [Desktop app](#desktop-app)
   - [Tauri or Electron](#tauri-or-electron)
   - [Running it](#running-it)
@@ -44,7 +44,7 @@ Then open <http://localhost:4111>.
 working one to copy (its `examples/postgres-seed.sql` is the schema it
 expects, for a Postgres you bring). There is no compose file at the root any
 more; the one compose setup in the repository is three of the sample Apps, below
-under [Three samples with Docker Compose](#three-samples-with-docker-compose).
+under [Tick with Docker Compose](#tick-with-docker-compose).
 
 ### Configuration is a mount, not a rebuild
 
@@ -168,7 +168,7 @@ loopback by default and still warns when `--host` widens it.
 
 #### 2. Trusting the name people reach it by
 
-`hostRefusal()` in `packages/tablewalk/src/server/index.ts` refuses any request whose `Host`
+`hostRefusal()` in `packages/engine/src/server/http/trust.ts` refuses any request whose `Host`
 header is neither a loopback name nor the exact interface bound. That is the
 DNS-rebinding defence, and it is worth keeping.
 
@@ -367,15 +367,15 @@ docker compose -f examples/docker/docker-compose.yml up --build
 
 | App | Open | Container |
 | --- | --- | --- |
-| Tick | <http://localhost:4741/tick> | `tablewalk-tick` |
+| Tick | <http://localhost:4741/tick> | `mistri-tick` |
 
 The image is built once from `examples/docker/Dockerfile`, which is the
-quick start's with a builder stage in front: it compiles tablewalk, runs
-`tablewalk build` for the App — typecheck, validation, bundle —
+quick start's with a builder stage in front: it compiles the packages, runs
+`mistri build` for the App — typecheck, validation, bundle —
 and ships the builds with the runtime, never the Apps' TypeScript. It follows
 both of the rules above: the container binds `0.0.0.0`, every port is
 published to `127.0.0.1` only, and each service lists its own compose service
-name in `TABLEWALK_ALLOWED_HOSTS` so another container on the network can
+name in `MISTRI_ALLOWED_HOSTS` so another container on the network can
 reach it by name — `localhost` needs nothing, any other name is refused until
 it is added. The server starts from the App's build under `/app/builds`,
 served as built: nothing is mounted from the checkout and nothing reloads, so
@@ -524,7 +524,7 @@ npm run dist:dir     # unpacked app, no signing — good for a smoke test
 npm run dist         # installers
 ```
 
-`npm run dist` runs `scripts/stage.mjs` first, which builds the server, copies
+`npm run dist` runs `desktop/scripts/stage.mjs` first, which builds the server, copies
 `dist/` and installs production-only dependencies into `desktop/build/server/`.
 That staging exists because the root `node_modules` holds tsx, typescript and
 esbuild — a build toolchain that is larger than the app and has no business in

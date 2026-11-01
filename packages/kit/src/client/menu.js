@@ -24,7 +24,7 @@ import { commandsForMode } from './menuScope.js';
    a word registered at boot is said in the language the reader has by then
    (a visitor's arrives with the App's payload, after the shell registers). */
 /** @typedef {string | (() => string)} Said */
-/** @type {Array<{label: Said, onSelect: () => void, checked?: () => boolean, available?: () => boolean, detail?: Said, group?: string, category?: Said, scope?: import('./menuScope.js').MenuScope}>} */
+/** @type {Array<{label: Said, onSelect: () => void, checked?: () => boolean, available?: () => boolean, detail?: Said, group?: string, kind?: string, category?: Said, scope?: import('./menuScope.js').MenuScope}>} */
 const items = [];
 /** @type {import('./menuScope.js').MenuMode} */
 let mode = 'workbench';
@@ -106,11 +106,12 @@ export function whenMenuChanges(run) {
   return () => watchers.delete(run);
 }
 
-export function setMenuGroup(group, entries) {
+/** @param {string} group @param {Array<object>} entries @param {string} [kind] What the palette calls these entries (`page`); `action` when absent. */
+export function setMenuGroup(group, entries, kind) {
   for (let i = items.length - 1; i >= 0; i -= 1) {
     if (items[i].group === group) items.splice(i, 1);
   }
-  items.push(...entries.map((entry) => ({ ...entry, group })));
+  items.push(...entries.map((entry) => /** @type {(typeof items)[number]} */ ({ ...entry, group, ...(kind ? { kind } : {}) })));
   changed();
 }
 

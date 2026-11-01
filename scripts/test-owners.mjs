@@ -71,7 +71,7 @@ function reach(file, seen = new Set()) {
 function reached(text) {
   const found = new Set();
   for (const [, name] of text.matchAll(/packages\/(engine|ui|kit|mistri|tablewalk)\//g)) found.add(name);
-  for (const [, name] of text.matchAll(/'@mistriwork\/(engine|ui|kit)[/']/g)) found.add(name);
+  for (const [, scoped, ui] of text.matchAll(/'(?:@mistriwork\/(engine|kit)|mistri-(ui))[/']/g)) found.add(scoped ?? ui);
   if (/'@mistriwork\/mistri[/']/.test(text)) found.add('mistri');
   if (/--app\b|fixtures\/apps\/|examples\/apps\/|TABLEWALK_E2E_(?:APP|CRM)_PORT/.test(text)) found.add('mistri');
   /* The App servers support/ownServers.ts and support/fixtures.ts start or describe, by the names a spec uses. */

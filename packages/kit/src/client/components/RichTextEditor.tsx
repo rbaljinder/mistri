@@ -31,7 +31,7 @@ import { Popover } from '@base-ui/react/popover';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 import { MENTION_QUERY_WORDS, richTextHref, richTextPlain } from '@mistriwork/engine/shared/richText.js';
 import { viewportScale } from '../core.js';
-import { layoutViewport } from '@mistriwork/ui/anchor.js';
+import { layoutViewport } from '@mistriwork/ui/internal/anchor.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { say } from '../copy/forms/components/RichTextEditor.js';
 import './RichTextEditor.css';

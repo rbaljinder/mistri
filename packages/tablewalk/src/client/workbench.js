@@ -250,7 +250,10 @@ function menu(at) {
       label: say('undoTheLastEdit'),
       scope: 'workbench',
       category: say('common.records'),
-      available: () => !sessionIdentity().tenantRequired,
+      /* Nothing to undo before editing is on or an edit has been made: a permanent "nothing to undo" row on a
+         read-only connection was a write control on a read-only product. (Editing enabled stays: it is how
+         the Workbench's writes are switched on at all.) */
+      available: () => !sessionIdentity().tenantRequired && (state.canWrite || Boolean(undoDescription())),
       // A function, so it describes the last edit rather than the state at boot.
       detail: () => undoDescription() ?? say('nothingToUndoHint'),
       onSelect: () => void undoLast(),

@@ -411,6 +411,8 @@ interface IndexJob extends IndexTarget {
   attempt: number;
   /** A tenant-owned resource's tenant column, physical: its value goes in each document. */
   tenantColumn?: string;
+  /** The tenant the write belonged to, when it named one: a deleted row's document is removed within it. */
+  tenant?: string;
   /** Not this record's document but the documents that copy it: every searched row whose path points at it. */
   dependents?: true;
   /** A tenant App's resource → tenant column, for those dependents' documents. */
@@ -485,10 +487,19 @@ class SearchIndexer {
     tenantColumn?: string,
     /** A tenant App's resource → tenant column: the documents that copy this record keep their own tenant. */
     tenantColumns?: Readonly<Record<string, string>>,
+    /** The tenant the write belonged to: a row that was deleted cannot be read for it. */
+    tenant?: string,
   ): void {
     if (!searches(app)) return;
     if (app.resources?.[target.resource]?.search)
-      this.enqueue({ app, ...target, key, attempt: 0, ...(tenantColumn === undefined ? {} : { tenantColumn }) });
+      this.enqueue({
+        app,
+        ...target,
+        key,
+        attempt: 0,
+        ...(tenantColumn === undefined ? {} : { tenantColumn }),
+        ...(tenant === undefined ? {} : { tenant }),
+      });
     // A row another resource's search copies a value of (`requester.name`): its copies follow it.
     if (pathSearches(app)) this.enqueue({ app, ...target, key, attempt: 0, dependents: true, ...(tenantColumns ? { tenantColumns } : {}) });
   }
@@ -577,7 +588,8 @@ class SearchIndexer {
   }
 
   private enqueue(job: IndexJob): void {
-    this.queue.set(JSON.stringify([job.app.id, job.resource, job.key, job.dependents ?? false]), job);
+    // The tenant is part of the identity: a later write to another tenant's row of the same key must not replace this removal.
+    this.queue.set(JSON.stringify([job.app.id, job.resource, job.key, job.dependents ?? false, job.tenant ?? null]), job);
     this.draining ??= this.drain().finally(() => {
       this.draining = undefined;
     });
@@ -626,7 +638,11 @@ class SearchIndexer {
     });
     const row = result.rows[0];
     if (row) await index.upsert(collection, documentOf(row, found, job.tenantColumn, await followPaths(adapter, found, [row])));
-    else await index.remove(collection, String(key));
+    else if (job.tenantColumn === undefined) await index.remove(collection, String(key));
+    /* Tenants may share a key, and the row is gone, so its tenant cannot be read back: the write named it. A removal
+       that cannot say whose it was leaves the document (a search hit whose row is not there shows nothing; the reindex
+       drops it) rather than delete another tenant's. */
+    else if (job.tenant !== undefined) await index.remove(collection, String(key), tenantScope(job.tenant));
   }
 
   /**

@@ -899,8 +899,12 @@
       content: none;
     }
   }
+  /* The heading's closed value has no padding and no minimum (above); an input with the control's 4px and 32px floor
+     was 8px taller than the name it replaced, and the page moved under the cursor. */
   .root-current .inline-field-open .cell-edit {
     font: inherit;
+    min-height: 0;
+    padding-block: 0;
   }
 
   .page-empty {

@@ -12,7 +12,7 @@
  * would have asked for; the query is the server's to judge, so the rows a
  * fixture gives are the rows it answered.
  */
-import { ComponentStyleScope } from '@mistriwork/ui/ComponentStyleScope.js';
+import { ComponentStyleScope } from '@mistriwork/ui/internal/ComponentStyleScope.js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { authoredDisplay, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';

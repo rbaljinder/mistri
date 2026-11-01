@@ -130,7 +130,7 @@ export function PrefsDialog({ onClose }: { onClose: () => void }) {
   /* Which of a suite's Apps opens first is the App framework's (SuiteAppPreference.tsx), drawn through the shell's slot. */
   const { SuitePreference } = shell().slots;
   return (
-    <Modal className="prefs" ref={dialog} onClose={onClose} aria-label={message('preferences.title')}>
+    <Modal className="prefs" ref={dialog} onClose={onClose} ariaLabel={message('preferences.title')}>
       <h2 className="prefs-title">{message('preferences.title')}</h2>
       {SuitePreference && <SuitePreference />}
       <LanguageRow language={language} />

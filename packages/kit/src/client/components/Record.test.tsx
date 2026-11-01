@@ -257,7 +257,7 @@ describe('the record', () => {
     recordReply = { errors: [{ message: 'Unknown record path.' }] };
     const { onLabel } = draw();
     expect(await screen.findByText('Unknown record path.')).toBeInTheDocument();
-    expect(screen.queryByText('That row is no longer there.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/row has the id/)).not.toBeInTheDocument();
     expect(document.querySelector('.field-groups')).toBeNull();
     expect(document.querySelector('.child-panel')).toBeNull();
     expect(onLabel).not.toHaveBeenCalled();
@@ -279,7 +279,7 @@ describe('the record', () => {
 
   test('unusable key values never reach row or child resource requests', async () => {
     draw({ entry: { kind: 'row', table: 'customer', key: { id: {} } } });
-    await screen.findByText('That row is no longer there.');
+    await screen.findByText(/No customer row has the id/);
     expect(calls.filter((c) => c.path === '/api/view/run' || c.path === '/api/query')).toEqual([]);
   });
 
@@ -332,7 +332,7 @@ describe('the record', () => {
     expect(head.closest('.field-group')).toHaveClass('collapsed');
   });
 
-  test('says when the row is no longer there', async () => {
+  test('names the id that matched nothing and draws no actions or related rail', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const core = vi.mocked(await import('../core.js'));
     const real = core.api;
@@ -352,7 +352,9 @@ describe('the record', () => {
           />,
         ),
       );
-      expect(await screen.findByText('That row is no longer there.')).toBeInTheDocument();
+      expect(await screen.findByText('No customer row has the id 99.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'As a page →' })).toBeNull();
+      expect(screen.queryByRole('tablist')).toBeNull();
     } finally {
       core.api = real;
     }

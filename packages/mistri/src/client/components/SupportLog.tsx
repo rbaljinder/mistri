@@ -135,7 +135,7 @@ export function SupportLog({ onClose }: { onClose: () => void }) {
     };
   }, []);
   return (
-    <Modal className="support-log" aria-label={say('supportVisits')} fullscreen="mobile" onClose={onClose}>
+    <Modal className="support-log" ariaLabel={say('supportVisits')} fullscreen="mobile" onClose={onClose}>
       <header>
         <h2>{say('supportVisits')}</h2>
         <button type="button" className="ghost" aria-label={say('closeSupportVisits')} onClick={onClose}>

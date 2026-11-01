@@ -13,7 +13,7 @@
 import { useRef, useState, useSyncExternalStore } from 'react';
 import { Menu } from '@base-ui/react/menu';
 import { detailOf, menuItems, menuMode, menuVersion, settingsInAccount, whenMenuChanges } from '../menu.js';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/anchor.js';
+import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
 import { Icon } from './Icon.js';
 import { say } from '../copy/shell/components/OverflowMenu.js';
 import { popupContainer } from '../shellHost.js';
