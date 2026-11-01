@@ -239,7 +239,15 @@ export function refusePostgresReserved(sql: string, write = false): void {
  * and CTEs resolve as they will there.
  */
 export async function refuseReservedPlan(db: PgQuery, sql: string, params: unknown[]): Promise<void> {
-  const planned = await db.query({ text: `EXPLAIN (VERBOSE, FORMAT JSON) ${trimStatement(sql)}`, values: params, rowMode: 'array' });
+  /* On the extended protocol even with no parameters: on the simple one,
+     Postgres would run a statement stacked behind the EXPLAIN before any
+     plan came back to read. */
+  const planned = await db.query({
+    text: `EXPLAIN (VERBOSE, FORMAT JSON) ${trimStatement(sql)}`,
+    values: params,
+    rowMode: 'array',
+    queryMode: 'extended',
+  });
   const found = reservedInPlan(planned.rows[0]?.[0]);
   if (found) throw reservedRefusal(found);
 }

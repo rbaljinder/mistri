@@ -26,7 +26,7 @@ import { Popover } from '@base-ui/react/popover';
 import { WHOLE, canonicalize, conditionTail, mentionsColumn, ownedTails, squeeze, stripCondition, withCondition } from '../filterbar.js';
 import { formatNumber } from '../locale.js';
 import { columnKind, type TableMeta } from '@mistriwork/engine/shared/schema.js';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/anchor.js';
+import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
 import { RefBox, boxTail, boxText, wrongForNumber, type Box, type BoxEdit } from './FilterBoxes.js';
 import { useConditionWords } from './useConditionWords.js';
 import { useArrived } from './onDemand.js';

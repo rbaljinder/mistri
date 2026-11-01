@@ -3,6 +3,7 @@ import { defineMessages } from '@mistriwork/kit/client/messages.js';
 
 export const say = defineMessages({
   choosePlaceholder: 'Choose {label}',
+  chooseOne: 'Choose one',
   showValue: 'Show',
   hideValue: 'Hide',
   yesWord: 'Yes',

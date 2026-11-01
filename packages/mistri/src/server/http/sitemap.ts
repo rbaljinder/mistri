@@ -37,6 +37,7 @@ import { requestOrigin } from '@mistriwork/engine/server/http/requestOrigin.js';
 import { ROBOTS_PATH, SITEMAP_PATH, crawlerAsks, sendText as crawlerText } from '@mistriwork/engine/server/http/crawlerText.js';
 import { resolveSource } from './source.js';
 import { SHARE_CARD_PATH } from './shareCard.js';
+import { shortLived } from './sitemapCache.js';
 
 /* The protocol allows 50,000 a file; a smaller part is one quick read. MISTRI_SITEMAP_URLS sets it (a test sets it low). */
 const perFile = () => Math.min(50_000, Math.max(1, Math.trunc(Number(process.env.MISTRI_SITEMAP_URLS)) || 10_000));
@@ -50,6 +51,15 @@ const escapeXml = (text: string) =>
   text.replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c]!);
 
 const sendText = (ctx: Ctx, status: number, type: string, body: string) => crawlerText(ctx.req, ctx.res, status, type, body);
+
+/* How long a built answer is kept (sitemapCache.ts). MISTRI_SITEMAP_CACHE_SECONDS sets it; 0 keeps nothing (a test sets it so). */
+const kept = shortLived<string | null | undefined>({
+  ttlMs: () => {
+    const seconds = Number(process.env.MISTRI_SITEMAP_CACHE_SECONDS);
+    return (Number.isFinite(seconds) && seconds >= 0 ? seconds : 300) * 1000;
+  },
+  kept: 64,
+});
 
 /** The App a signed-out visitor may browse (`auth.public`), if this server serves one. */
 const publicApp = (ctx: Ctx) => (ctx.signedIn?.auth && ctx.signedIn.app.app.auth?.public ? ctx.signedIn.app.app : undefined);
@@ -82,7 +92,10 @@ export async function seoRoutes(ctx: Ctx): Promise<boolean> {
     );
   }
   if (!app || !origin) return sendText(ctx, 404, 'text/plain', 'Nothing here is public.\n');
-  const xml = await asPublic(ctx, (visitor) => sitemap(visitor, origin)).catch(() => undefined);
+  // The public answer is the same for whoever asks, so it is kept by what makes it differ: the App, the host and the part.
+  const xml = await kept(ctx.signedIn!.app.app, `${origin}${ctx.mount}${ctx.url.search}`, () =>
+    asPublic(ctx, (visitor) => sitemap(visitor, origin)).catch(() => undefined),
+  );
   if (xml === undefined) return sendText(ctx, 503, 'text/plain', 'The sitemap could not be read just now.\n');
   if (xml === null) return sendText(ctx, 404, 'text/plain', 'No such part of the sitemap.\n');
   return sendText(ctx, 200, 'application/xml', xml);

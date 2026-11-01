@@ -71,7 +71,7 @@ neither lists roles or tenants itself.
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `analytics.events` | object | Preview | Custom events a component emits through useAnalytics().emit, each with the only fields it may carry. |
-| `analytics.events.*.fields` | array | Preview |  Used in `examples/apps/tick/app.ts`. |
+| `analytics.events.*.fields` | array | Preview |  Used in `examples/apps/lintel/app.ts`. |
 
 ## `analytics.funnels`
 

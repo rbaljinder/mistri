@@ -200,7 +200,7 @@ describe('the compile', () => {
   });
 
   test("the App framework's own SDK name is the same page module, served as the same file", async () => {
-    const at = dir('mistri-ui', {
+    const at = dir('@mistriwork/ui', {
       'widgets/Hello.jsx': HELLO.replace("from '@mistriwork/mistri/ui'", "from '@mistriwork/mistri/ui'").replace(
         "import './hello.css';\n",
         '',

@@ -17,7 +17,7 @@ export function WriteConfirmDialog({ label, onDone }: { label: string; onDone: (
     onDone(ok);
   };
   return (
-    <Modal className="confirm" ref={dialog} onClose={() => finish(false)} aria-label={say('enableWriteMode')}>
+    <Modal className="confirm" ref={dialog} onClose={() => finish(false)} ariaLabel={say('enableWriteMode')}>
       <h2>{say('enableWriteMode')}</h2>
       <p>
         {say('enableEditingOfExisting')} <strong>{label}</strong>?

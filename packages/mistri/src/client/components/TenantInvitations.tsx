@@ -62,7 +62,7 @@ export function TenantInvitations({
   };
   const title = mode === 'issuer' ? say('manageInvitations') : say('acceptInvitation');
   return (
-    <Modal className="tenant-administration" aria-label={title} fullscreen="mobile" onClose={close} closeDisabled={locked}>
+    <Modal className="tenant-administration" ariaLabel={title} fullscreen="mobile" onClose={close} closeDisabled={locked}>
       <header>
         <h2>{title}</h2>
         <button type="button" className="ghost" aria-label={say('closeInvitations')} onClick={close} disabled={locked}>

@@ -8,8 +8,9 @@
  * slide and Next on the last, so the row keeps its shape and a reader is
  * never spun back to the start without asking. Only the current slide is
  * exposed to assistive tech (the rest are `aria-hidden`); the arrow keys
- * on the region move, Home goes first, End goes last — except where
- * focus sits inside an input, where the keys stay the input's own — and
+ * on the region move, Home goes first, End goes last — only while focus
+ * is on the carousel or its own controls, so a widget inside a slide
+ * keeps its keys — and
  * the slide's movement is silenced for a reader who asked for reduced
  * motion (the track's transition lives under `no-preference` in
  * standalone.css). A step button that disables under a focused finger
@@ -29,26 +30,45 @@ export interface CarouselProps {
   defaultIndex?: number;
   onIndexChange?: (index: number) => void;
   /** The region's accessible name, where the carousel needs one ("Project photos"). */
-  label?: string;
-  previousLabel?: ReactNode;
-  nextLabel?: ReactNode;
+  ariaLabel?: string;
+  /** Every word the carousel says, in the caller's language; any left out are English. */
+  words?: Partial<CarouselWords>;
   className?: string;
 }
 
-export function CarouselControl({
-  slides,
-  index,
-  defaultIndex = 0,
-  onIndexChange,
-  label,
-  previousLabel = 'Previous slide',
-  nextLabel = 'Next slide',
-  className,
-}: CarouselProps) {
+interface CarouselWords {
+  /** The region's name when `ariaLabel` is not given. */
+  region: string;
+  /** The step buttons' visible words. */
+  previous: ReactNode;
+  next: ReactNode;
+  /** The dot row's name. */
+  chooseSlide: string;
+  /** A slide's name: "1 of 3: Studio". */
+  slide: (number: number, total: number, label?: string) => string;
+  /** A dot's name: "Go to slide 2: Studio". */
+  goToSlide: (number: number, label?: string) => string;
+  /** The polite status line read as the slide changes. */
+  status: (number: number, total: number, label?: string) => string;
+}
+
+const ENGLISH: CarouselWords = {
+  region: 'Carousel',
+  previous: 'Previous slide',
+  next: 'Next slide',
+  chooseSlide: 'Choose a slide',
+  slide: (n, total, label) => `${n} of ${total}${label ? `: ${label}` : ''}`,
+  goToSlide: (n, label) => `Go to slide ${n}${label ? `: ${label}` : ''}`,
+  status: (n, total, label) => `Slide ${n} of ${total}${label ? `: ${label}` : ''}`,
+};
+
+export function Carousel({ slides, index, defaultIndex = 0, onIndexChange, ariaLabel, words: given, className }: CarouselProps) {
+  const words = { ...ENGLISH, ...given };
   const [uncontrolled, setUncontrolled] = useState(defaultIndex);
   const prevRef = useRef<HTMLButtonElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const regionRef = useRef<HTMLElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
   /* The step last focused, so a step that disables under it is rescued
      even where the browser already moved focus to the body on disable. */
   const lastStepRef = useRef<'prev' | 'next' | null>(null);
@@ -85,16 +105,11 @@ export function CarouselControl({
   }, [current, slides.length]);
   if (!slides.length) return null;
   const onRegionKeyDown = (event: React.KeyboardEvent) => {
-    /* Inside an input the keys are the input's: arrows move its caret,
-       Home and End its ends, and the region must not hijack them. */
-    const target = event.target as HTMLElement | null;
-    if (
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement ||
-      target?.isContentEditable
-    )
-      return;
+    /* The keys are the carousel's only while focus is on the carousel itself or its own controls. A widget inside a
+       slide (an input's caret, a slider, a tab list, a menu) owns them, and so does anything drawn in a portal: React
+       delivers a portal's events up through this tree, so the DOM, not the React tree, says whose they are. */
+    const target = event.target as Node | null;
+    if (target !== regionRef.current && !(target && controlsRef.current?.contains(target))) return;
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
       go(current - 1);
@@ -114,7 +129,7 @@ export function CarouselControl({
       ref={regionRef}
       className={['ui-carousel', className].filter(Boolean).join(' ')}
       aria-roledescription="carousel"
-      aria-label={label ?? 'Carousel'}
+      aria-label={ariaLabel ?? words.region}
       /* Programmatic focus only, for the step-disable rescue above:
          -1 is no tab stop. */
       tabIndex={-1}
@@ -128,7 +143,7 @@ export function CarouselControl({
               className="ui-carousel-slide"
               role="group"
               aria-roledescription="slide"
-              aria-label={`${i + 1} of ${slides.length}${slide.label ? `: ${slide.label}` : ''}`}
+              aria-label={words.slide(i + 1, slides.length, slide.label)}
               aria-hidden={i !== current || undefined}
               inert={i !== current || undefined}
             >
@@ -137,7 +152,7 @@ export function CarouselControl({
           ))}
         </div>
       </div>
-      <div className="ui-carousel-controls">
+      <div className="ui-carousel-controls" ref={controlsRef}>
         <button
           ref={prevRef}
           type="button"
@@ -148,15 +163,15 @@ export function CarouselControl({
           }}
           onClick={() => go(current - 1)}
         >
-          {previousLabel}
+          {words.previous}
         </button>
-        <span className="ui-carousel-dots" role="group" aria-label="Choose a slide">
+        <span className="ui-carousel-dots" role="group" aria-label={words.chooseSlide}>
           {slides.map((slide, i) => (
             <button
               key={i}
               type="button"
               className="ui-carousel-dot"
-              aria-label={`Go to slide ${i + 1}${slide.label ? `: ${slide.label}` : ''}`}
+              aria-label={words.goToSlide(i + 1, slide.label)}
               aria-current={i === current || undefined}
               onClick={() => go(i)}
             />
@@ -172,16 +187,12 @@ export function CarouselControl({
           }}
           onClick={() => go(current + 1)}
         >
-          {nextLabel}
+          {words.next}
         </button>
       </div>
       <p className="ui-carousel-status" aria-live="polite">
-        Slide {current + 1} of {slides.length}
-        {slides[current]?.label ? `: ${slides[current]?.label}` : ''}
+        {words.status(current + 1, slides.length, slides[current]?.label)}
       </p>
     </section>
   );
 }
-
-/** The short name, as the other primitives export theirs. */
-export const Carousel = CarouselControl;

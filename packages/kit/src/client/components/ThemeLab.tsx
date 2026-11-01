@@ -56,7 +56,7 @@ export function ThemeLab({ onDone }: { onDone: () => void }) {
     };
   }, []);
   return (
-    <Modal className="theme-lab" aria-label={say('themeLab')} ref={modal} onClose={onDone}>
+    <Modal className="theme-lab" ariaLabel={say('themeLab')} ref={modal} onClose={onDone}>
       <header className="theme-lab-head">
         <h2>{say('themeLab')}</h2>
         <button type="button" className="ghost" onClick={() => modal.current?.close()}>
@@ -230,7 +230,7 @@ export function ThemeLab({ onDone }: { onDone: () => void }) {
         </section>
       </div>
       {confirmation && (
-        <Modal className="confirm" aria-label={say('confirmSample')} onClose={() => setConfirmation(false)}>
+        <Modal className="confirm" ariaLabel={say('confirmSample')} onClose={() => setConfirmation(false)}>
           <h2>{say('confirmSample')}</h2>
           <p>{name || say('common.untitled')}</p>
           <div className="theme-lab-actions">

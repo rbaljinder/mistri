@@ -390,7 +390,7 @@ test('explicit empty values stores defaults on one scoped transaction and journa
 test('explicit null, empty text and numeric coercion preserve actual stored values', async (t) => {
   const f = await fixture(t);
   const added = inserted(
-    await f.request('/api/insert', insert({ values: { name: '', status: null, note: '', quantity: '0042', reviewer_id: null } })),
+    await f.request('/api/insert', insert({ values: { name: '', status: null, note: '', quantity: ' 42 ', reviewer_id: null } })),
   );
   assert.deepEqual(added.applied, { name: '', status: null, note: '', quantity: 42, reviewer_id: null });
   assert.equal(added.row.status, null);

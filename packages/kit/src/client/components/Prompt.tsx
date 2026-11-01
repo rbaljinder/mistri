@@ -8,7 +8,7 @@ import { Modal, type ModalHandle } from '@mistriwork/ui/Modal.js';
 import { DateField } from './DateField.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
-import { isPickerDate, isPickerDateTime } from '@mistriwork/ui/datePickerModel.js';
+import { isPickerDate, isPickerDateTime } from '@mistriwork/ui/internal/datePickerModel.js';
 import { formatLocale, formatTimezone } from '../locale.js';
 import { say } from '../copy/shell/components/Prompt.js';
 
@@ -254,7 +254,7 @@ export function ConfirmDialog({ title, body, confirmLabel = 'OK', cancelLabel = 
   };
   const dialog = useRef<ModalHandle>(null);
   return (
-    <Modal className="confirm" ref={dialog} onClose={() => finish(false)} aria-label={title}>
+    <Modal className="confirm" ref={dialog} onClose={() => finish(false)} ariaLabel={title}>
       <form
         onSubmit={(e) => {
           e.preventDefault();

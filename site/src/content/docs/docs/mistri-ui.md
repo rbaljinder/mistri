@@ -22,7 +22,7 @@ export function Invite() {
     <>
       <Button intent="primary" onClick={() => setOpen(true)}>Invite</Button>
       {open && (
-        <Modal className="invite" aria-label="Invite a teammate" onClose={() => setOpen(false)}>
+        <Modal className="invite" ariaLabel="Invite a teammate" onClose={() => setOpen(false)}>
           <Field label="Email" hint="They get a link to sign in.">
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
@@ -36,7 +36,7 @@ export function Invite() {
 
 <!-- no picture: the component library draws every primitive, in every look. -->
 
-A primitive reads no data, no address and no message catalog: its words, its icons and its answers are props. React, React DOM and Base UI are peers, so your project installs them. An App does not need this package: mistri brings it.
+A primitive reads no data, no address and no message catalog: its words, its icons and its answers are props. A name no one sees is `ariaLabel` on every primitive, and `label` is only text drawn on the page; the primitives that carry a few built-in words (Carousel, Resizable, Pagination, DateField) take a `words` object over English defaults. React, React DOM and Base UI are peers, so your project installs them. An App does not need this package: mistri brings it.
 
 ## What you'll see
 

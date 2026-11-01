@@ -1,16 +1,16 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.3 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.9 scope, stable and preview features, current limitations and planned work.
 ---
 
-The 1.0.0-rc.3 scope, stable and preview features, current limitations and planned work.
+The scope of this release, stable and preview features, current limitations and planned work.
 
 ```sh
 npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.3**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.9**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -25,7 +25,7 @@ outside the compatibility promise; `mistri check` lists the Preview features
 an App uses, as information. At 1.0 these stay Preview: feature flags,
 audiences and `@mistriwork/mistri/openfeature`, experiments, the Suite Console, behavior
 analytics, SCIM, the Gantt presentation, a resource's `search` (its packs ship
-after 1.0), and an App's installable PWA (`ui.pwa`, [installable PWAs](/docs/pwa/)). The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
+after 1.0), an App's installable PWA (`ui.pwa`, [installable PWAs](/docs/pwa/)), `@mistriwork/ui`, `mistri deploy` with `@mistriwork/cloudflare`, and `roundTrips` in the testing entry. The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
 flows and machines, the assistant, integrations and durable workflows are
 stable.
 
@@ -117,8 +117,8 @@ stable.
 | `@mistriwork/engine`, `@mistriwork/kit` | The engine and the shared client both install; internal, with no promise to an App's author | Internal |
 
 The database browser (SQLite, PostgreSQL) is read-only by
-default; writes are opt-in per connection with `"writable": true`, enforced at
-the adapter. Apps run on PostgreSQL and SQLite; MySQL and MariaDB are not supported.
+default, held by the adapter; writes are opt-in per connection with
+`"writable": true`, checked by the server before a statement reaches it. Apps run on PostgreSQL and SQLite; MySQL and MariaDB are not supported.
 
 ## Still refused
 
@@ -135,7 +135,7 @@ the adapter. Apps run on PostgreSQL and SQLite; MySQL and MariaDB are not suppor
 - A tenant App's saved form with `statusCheck` or `link`.
 - A second tenant App on a database that already holds one: a tenant store is
   one App's tenants and memberships. Give each its own database.
-- Apps on MySQL/MariaDB (`app-on-mysql`, at `check` and at startup): an App
+- Apps on MySQL/MariaDB: the connection is refused ("MySQL is not supported; use PostgreSQL or SQLite."); an App
   runs on PostgreSQL or SQLite.
 - An App over the database browser's MCP server (`--mcp`), and a Workbench
   inside an App: an App serves only its declared resources; the standalone
@@ -147,7 +147,7 @@ the adapter. Apps run on PostgreSQL and SQLite; MySQL and MariaDB are not suppor
 
 ## Roadmap
 
-Release candidates are shipping: 1.0.0-rc.3 is the current one, and the compatibility
+Release candidates are shipping, and the compatibility
 promise takes effect at 1.0.0. None of what remains has a date.
 
 A field deployment has run on Cloudflare Containers against PlanetScale

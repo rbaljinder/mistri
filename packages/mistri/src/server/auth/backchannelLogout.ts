@@ -42,6 +42,7 @@ export interface LogoutContext {
   };
   internalAdapter: {
     reserveVerificationValue(data: { identifier: string; value: string; expiresAt: Date }): Promise<unknown>;
+    deleteVerificationByIdentifier(identifier: string): Promise<unknown>;
     deleteSession(token: string): Promise<unknown>;
   };
 }
@@ -92,8 +93,9 @@ export function backchannelLogout(options: {
     const sub = typeof claims.sub === 'string' ? claims.sub : undefined;
     const context = await options.context();
     const iat = typeof claims.iat === 'number' ? claims.iat : Math.floor(Date.now() / 1000);
+    const reservation = `oidc-logout:${name}:${String(claims.jti)}`;
     const reserved = await context.internalAdapter.reserveVerificationValue({
-      identifier: `oidc-logout:${name}:${String(claims.jti)}`,
+      identifier: reservation,
       value: JSON.stringify({ provider: name, at: Date.now() }),
       expiresAt: new Date((iat + REMEMBER_S) * 1000),
     });
@@ -107,12 +109,20 @@ export function backchannelLogout(options: {
       ...(sid !== undefined ? [{ field: 'sid', value: sid }] : []),
       ...(sub !== undefined ? [{ field: 'subject', value: sub }] : []),
     ];
-    const rows = await context.adapter.findMany({ model: IDP_SESSION_MODEL, where });
-    for (const row of rows) {
-      const sessionId = String(row.sessionId);
-      const session = await context.adapter.findOne({ model: 'session', where: [{ field: 'id', value: sessionId }] });
-      if (session && typeof session.token === 'string') await context.internalAdapter.deleteSession(session.token);
-      await context.adapter.delete({ model: IDP_SESSION_MODEL, where: [{ field: 'id', value: String(row.id) }] });
+    try {
+      const rows = await context.adapter.findMany({ model: IDP_SESSION_MODEL, where });
+      for (const row of rows) {
+        const sessionId = String(row.sessionId);
+        const session = await context.adapter.findOne({ model: 'session', where: [{ field: 'id', value: sessionId }] });
+        if (session && typeof session.token === 'string') await context.internalAdapter.deleteSession(session.token);
+        await context.adapter.delete({ model: IDP_SESSION_MODEL, where: [{ field: 'id', value: String(row.id) }] });
+      }
+    } catch (error) {
+      /* The token's jti was reserved before the sessions were touched, to refuse a replay. A store error part-way
+         must not turn the provider's retry into "sent a logout token twice" while sessions are still open: release
+         it, so the retry ends the rest. (Deleting a session twice is harmless.) */
+      await context.internalAdapter.deleteVerificationByIdentifier(reservation).catch(() => undefined);
+      throw error;
     }
     send(200);
   };

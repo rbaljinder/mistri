@@ -17,6 +17,10 @@ import { RUNTIME_CONTROL_PREFIXES, RUNTIME_SCHEMA, RUNTIME_SCHEMA_FUNCTIONS } fr
    application's own advisory locks. */
 export const MIGRATION_LOCK = '7431627679384207';
 
+const CONNECT_TIMEOUT_MS = 15_000;
+/** How long a maintenance transaction waits for the shared migration lock before it says who it is waiting for: a holder that never lets go must not stall a boot forever. */
+const LOCK_WAIT_MS = 60_000;
+
 /** One private client for `run`, ended after it: a store's few statements outside any pool (the validation record's). */
 export async function withPostgresClient<T>(url: string, run: (client: PgQuery) => Promise<T>): Promise<T> {
   return withClient(url, run);
@@ -28,10 +32,19 @@ async function withClient<T>(url: string, run: (client: PgQuery) => Promise<T>):
   const specifier = 'pg';
   const pg = (await import(specifier).catch(() => {
     throw new Error('Postgres support needs the "pg" package. Install it with: npm install pg');
-  })) as { Client?: new (options: unknown) => PgQuery & { connect(): Promise<void>; end(): Promise<void> } };
+  })) as {
+    Client?: new (
+      options: unknown,
+    ) => PgQuery & { connect(): Promise<void>; end(): Promise<void>; on(event: 'error', listener: (error: Error) => void): unknown };
+  };
   const Client = pg.Client ?? (pg as { default?: typeof pg }).default?.Client;
   if (!Client) throw new Error('Could not find a Client export in the "pg" package.');
-  const client = new Client({ ...pgConnectionOptions(url) });
+  /* A host that does not answer fails the connect instead of stalling a boot. */
+  const client = new Client({ ...pgConnectionOptions(url), connectionTimeoutMillis: CONNECT_TIMEOUT_MS });
+  /* pg emits 'error' on a connection that drops while it is idle between statements (a failover, a proxy reset); with
+     no listener that is an uncaught exception and takes the server down. A statement running on it, or the next one,
+     rejects with the same loss, so nothing is swallowed that the caller would not see. */
+  client.on('error', () => {});
   await client.connect();
   try {
     return await run(client);
@@ -47,7 +60,18 @@ export async function withPostgresMaintenanceTransaction<T>(url: string, run: (c
   return withClient(url, async (client) => {
     await client.query('BEGIN');
     try {
-      await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [MIGRATION_LOCK]);
+      // lock_timeout bounds an advisory-lock wait too; it ends with this transaction.
+      await client.query(`SET LOCAL lock_timeout = '${LOCK_WAIT_MS}ms'`);
+      try {
+        await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [MIGRATION_LOCK]);
+      } catch (error) {
+        if ((error as { code?: string }).code === '55P03') {
+          throw new Refusal(
+            `Another migration or maintenance step has held the shared migration lock for ${LOCK_WAIT_MS / 1000}s. Try again when it has finished.`,
+          );
+        }
+        throw error;
+      }
       // Every store this runs provisions into the runtime schema; a refusal rolls the schema back with the rest.
       await ensurePostgresRuntimeSchema(client);
       const result = await run(client);

@@ -30,7 +30,8 @@
  * Transaction edges are read off each statement's first keyword. That is
  * sound here: every BEGIN, COMMIT and ROLLBACK this codebase sends is a
  * literal of its own, and user-authored SQL is one statement at a time
- * (refuseStacked) on a lease that is discarded afterwards.
+ * (the extended protocol, behind refuseStacked) on a lease that is discarded
+ * afterwards.
  */
 import { trimStatement } from './adapter.js';
 import type { PgQuery } from './postgresPool.js';

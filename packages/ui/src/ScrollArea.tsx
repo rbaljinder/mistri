@@ -22,14 +22,14 @@ import { ScrollArea as BaseScrollArea } from '@base-ui/react/scroll-area';
 export interface ScrollAreaProps {
   children: ReactNode;
   /** The scrollable region's accessible name ("Recent activity"). */
-  label?: string;
+  ariaLabel?: string;
   orientation?: 'vertical' | 'horizontal' | 'both';
   /** A cap on the region's height, as a CSS length (for example "320px"). */
   maxHeight?: string;
   className?: string;
 }
 
-export function ScrollAreaControl({ children, label, orientation = 'vertical', maxHeight, className }: ScrollAreaProps) {
+export function ScrollArea({ children, ariaLabel, orientation = 'vertical', maxHeight, className }: ScrollAreaProps) {
   const vertical = orientation === 'vertical' || orientation === 'both';
   const horizontal = orientation === 'horizontal' || orientation === 'both';
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -71,7 +71,7 @@ export function ScrollAreaControl({ children, label, orientation = 'vertical', m
         /* Base UI renders its viewport as presentation; a named scroll
            region needs the region role, or the label is dropped with it. */
         role="region"
-        aria-label={label}
+        aria-label={ariaLabel}
         /* A deliberate scroller: the double-scroll probe (gradeProbe.ts) reads this and leaves it alone. */
         data-scrolls=""
         style={maxHeight ? { maxHeight } : undefined}
@@ -96,6 +96,3 @@ export function ScrollAreaControl({ children, label, orientation = 'vertical', m
     </BaseScrollArea.Root>
   );
 }
-
-/** The short name, as the other primitives export theirs. */
-export const ScrollArea = ScrollAreaControl;

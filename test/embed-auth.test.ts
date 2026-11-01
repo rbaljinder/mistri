@@ -419,6 +419,25 @@ test("roles come from the account; an assertion's roles count only through the i
   assert.deepEqual(await tables(notGiven.cookie), ['incident']);
 });
 
+test("a mapped host session whose record of the roles it was given is lost fails closed, never to the account's stored roles", async () => {
+  const kept = await exchange(craft(claims({ iss: 'https://mapped.example', roles: ['sales-lead'] })));
+  const lost = await exchange(craft(claims({ iss: 'https://mapped.example', roles: ['sales-lead'] })));
+  assert.equal(kept.status, 200);
+  assert.equal(lost.status, 200);
+  assert.deepEqual(await tables(kept.cookie), ['incident', 'service']);
+  // Nothing this process holds in a cache is what keeps the mapping: the record is in the auth store, beside the mark.
+  resetSignInState();
+  assert.deepEqual(await tables(kept.cookie), ['incident', 'service']);
+  // A record the store holds but the issuer's mapping cannot read: no session, never the account's own roles.
+  const edit = new DatabaseSync(store);
+  try {
+    edit.prepare(`UPDATE verification SET value = 'garbled' WHERE identifier = 'mistri-embed-session'`).run();
+  } finally {
+    edit.close();
+  }
+  assert.equal(await tables(lost.cookie), 401);
+});
+
 test('accounts are separate by default; an email links only where both sides verified it, and only where the issuer says so', async () => {
   const admin = await call('/api/auth/sign-in/email', {
     body: { email: environment.MISTRI_AUTH_ADMIN_EMAIL, password: environment.MISTRI_AUTH_ADMIN_PASSWORD },

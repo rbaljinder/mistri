@@ -205,12 +205,24 @@ function stripPrefix(link) {
     .replace(/^\//, '');
 }
 
+/* A segment as the person typed it. A link pasted through a mailer or a linkifier arrives with a lone `%` or a cut
+   escape (`%zz`, `%E0%A4%A`), and `decodeURIComponent` throws on those: at boot that stops the App from starting at
+   all, and in a click it kills the navigation. The raw segment is returned instead, which names nothing and so lands on
+   the same not-found as any other address nobody made. */
+function unescapeSegment(segment) {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export function connectionFromHash(hash) {
   // A public list's address carries its question after `?`; the connection is before it.
   const raw = stripPrefix(hash).split('?')[0];
   if (!raw) return null;
   const first = raw.split('/').filter(Boolean)[0];
-  return first ? decodeURIComponent(first) : null;
+  return first ? unescapeSegment(first) : null;
 }
 
 /**
@@ -235,7 +247,7 @@ export function fromHash(hash, findTableById, options = {}) {
   const segments = raw.split('/').filter(Boolean);
   if (!segments.length) return null;
 
-  const connection = decodeURIComponent(segments[0]);
+  const connection = unescapeSegment(segments[0]);
   const stack = [];
   /* A bare view key — a list said in words, its key and the New drawer if
      it is open — is the caller's to read. A table of that name wins, so no
@@ -262,10 +274,10 @@ export function fromHash(hash, findTableById, options = {}) {
       /* Page first, then the tab: split on the first `!`, which a page token
          cannot contain and a tab name is encoded past. */
       const bang = head.indexOf('!');
-      const pageId = decodeURIComponent(bang === -1 ? head : head.slice(0, bang));
-      const tab = bang === -1 ? undefined : decodeURIComponent(head.slice(bang + 1)) || undefined;
+      const pageId = unescapeSegment(bang === -1 ? head : head.slice(0, bang));
+      const tab = bang === -1 ? undefined : unescapeSegment(head.slice(bang + 1)) || undefined;
       if (!pageId) continue;
-      const body = keyPart === undefined ? undefined : decodeURIComponent(keyPart);
+      const body = keyPart === undefined ? undefined : unescapeSegment(keyPart);
       /* Carried as text, not resolved here. A single-column key is written as
          a bare value, and turning `1181` back into `{ id: 1181 }` needs the
          page's base table — which the link deliberately does not name, since
@@ -277,8 +289,8 @@ export function fromHash(hash, findTableById, options = {}) {
     if (segment.startsWith('~')) {
       const rest = segment.slice(1);
       const bang = rest.indexOf('!');
-      const tab = bang === -1 ? undefined : decodeURIComponent(rest.slice(bang + 1)) || undefined;
-      let body = decodeURIComponent(bang === -1 ? rest : rest.slice(0, bang));
+      const tab = bang === -1 ? undefined : unescapeSegment(rest.slice(bang + 1)) || undefined;
+      let body = unescapeSegment(bang === -1 ? rest : rest.slice(0, bang));
       /* An explicit `table:` prefix wins. It is only written when the table
          changed, so its absence means "same as the entry before". The colon
          is found from the left and only counts before any `=`, so a composite
@@ -333,7 +345,7 @@ export function fromHash(hash, findTableById, options = {}) {
        never mistaken for a prefix, the way a row's `table:` is checked. */
     let view;
     const marked = /^([a-z0-9][a-z0-9-]*):(.+)$/.exec(segment);
-    if (marked && findTableById(decodeURIComponent(marked[2].split('!')[0]).trim().split(/\s+/)[0])) {
+    if (marked && findTableById(unescapeSegment(marked[2].split('!')[0]).trim().split(/\s+/)[0])) {
       view = marked[1];
       segment = marked[2];
     }
@@ -349,7 +361,7 @@ export function fromHash(hash, findTableById, options = {}) {
     const suffix = bang > 0 ? segment.slice(bang + 1) : '';
     const hasTab = isTableTab(suffix);
     const tab = hasTab ? suffix : 'rows';
-    const query = decodeURIComponent(hasTab ? segment.slice(0, bang) : segment);
+    const query = unescapeSegment(hasTab ? segment.slice(0, bang) : segment);
     const name = query.trim().split(/\s+/)[0];
     const table = findTableById(name);
     /* A breakdown is written into the link exactly as a table query is — it is

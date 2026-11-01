@@ -67,6 +67,9 @@ import { oauthIssuer, oauthResources } from './oauthResource.js';
 const REQUEST_SECONDS = 600;
 /** Registrations one address may make in an hour. */
 const REGISTRATIONS_PER_HOUR = 10;
+/** What one address may ask of the authorize, consent-view and token doors in a minute. Generous for a person and their
+    client, small for a flood: each authorize writes a ten-minute record, so an unbudgeted door is a way to fill the store. */
+const REQUESTS_PER_MINUTE = { authorize: 30, consent: 60, token: 120 } as const;
 const BODY_LIMIT = 64 * 1024;
 const CONSENT_BODY_LIMIT = 16 * 1024;
 const CLIENT_NAME_LENGTH = 100;
@@ -294,6 +297,19 @@ export function createOAuthServer(input: {
     }
   };
 
+  /** Spend one request of `door`'s minute budget for this address before the door writes or reads anything. */
+  async function spend(req: IncomingMessage, door: keyof typeof REQUESTS_PER_MINUTE) {
+    const address = limitKey(clientAddress(req, input.trustedProxies));
+    return signInState.consume(`oauth-${door}:${address}`, { window: 60, max: REQUESTS_PER_MINUTE[door] });
+  }
+  const tooMany = (res: ServerResponse, retryAfter: number | null) =>
+    json(
+      res,
+      429,
+      { error: 'too_many_requests', error_description: 'Too many requests from this address. Wait a moment and try again.' },
+      { ...open, 'retry-after': String(retryAfter ?? 60) },
+    );
+
   async function register(req: IncomingMessage, res: ServerResponse) {
     const address = limitKey(clientAddress(req, input.trustedProxies));
     const budget = await signInState.consume(`oauth-register:${address}`, { window: 3600, max: REGISTRATIONS_PER_HOUR });
@@ -379,7 +395,9 @@ export function createOAuthServer(input: {
     );
   }
 
-  async function authorize(res: ServerResponse, url: URL) {
+  async function authorize(req: IncomingMessage, res: ServerResponse, url: URL) {
+    const budget = await spend(req, 'authorize');
+    if (!budget.allowed) return page(res, 429, 'Too many requests from this address. Wait a moment and try again.');
     let params: Map<string, string>;
     try {
       params = single(url.searchParams);
@@ -422,6 +440,8 @@ export function createOAuthServer(input: {
 
   /** What the consent page shows, to the person signed in: never anything the client could choose for them. */
   async function consentView(req: IncomingMessage, res: ServerResponse, url: URL) {
+    const budget = await spend(req, 'consent');
+    if (!budget.allowed) return tooMany(res, budget.retryAfter);
     const proof = await signedIn(req);
     if (!proof) return json(res, 401, { error: 'unauthenticated', error_description: 'Sign in to answer this request.' });
     const request = url.searchParams.get('request');
@@ -542,6 +562,8 @@ export function createOAuthServer(input: {
   }
 
   async function token(req: IncomingMessage, res: ServerResponse) {
+    const budget = await spend(req, 'token');
+    if (!budget.allowed) return tooMany(res, budget.retryAfter);
     const fields = single(await formParams(req, BODY_LIMIT));
     const clientId = fields.get('client_id') ?? '';
     const client = /^twc1\.[0-9a-f-]{36}$/.test(clientId) ? await store((t) => readClient(t, clientId)) : null;
@@ -651,7 +673,7 @@ export function createOAuthServer(input: {
           res.end();
           return;
         }
-        if (route === '/authorize' && method === 'GET') return await authorize(res, url);
+        if (route === '/authorize' && method === 'GET') return await authorize(req, res, url);
         if (route === '/consent' && method === 'GET') return await consentView(req, res, url);
         if (route === '/consent' && method === 'POST') return await consent(req, res);
         if (route === '/register' && method === 'POST') return await register(req, res);

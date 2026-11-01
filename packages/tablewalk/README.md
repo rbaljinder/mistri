@@ -244,8 +244,8 @@ read-only server does not list tools it would refuse.
 |---|---|
 | `insert` | one row; answers with what the database stored, defaults filled and key assigned |
 | `update` | one row, by its primary key |
-| `delete` | reports its impact first — every table pointing at the row, counts, `ON DELETE` rules — and removes nothing until called again with `confirm: true` |
-| `insert_graph` / `delete_graph` | several related rows in one all-or-nothing transaction |
+| `delete` | reports its impact first — every table pointing at the row, counts, `ON DELETE` rules — and removes nothing until the person says yes: a client that supports elicitation asks them every time (a model-supplied `confirm: true` is ignored); otherwise call it again with `confirm: true` |
+| `insert_graph` / `delete_graph` | several related rows in one all-or-nothing transaction. `delete_graph` asks the same way `delete` does. Graph writes are not journaled: they return no `undoId` and `revert` cannot undo them |
 | `revert` | preview the last write, then confirm with `confirm: true` and that preview's `next.id` as `expectedId`; raw `sql` writes have no general inverse |
 
 Write answers carry `rowsInserted` / `rowsWritten` / `rowsDeleted`.
@@ -268,7 +268,7 @@ know its parent's key names it by label —
 
 — and `{"ref": "c1"}` resolves to that row's key *as the database assigned it*.
 The answer carries a `teardown` list, reversed, for `delete_graph`, which
-removes it the same way: one transaction, all or nothing. `fixture`'s output
+removes it the same way: one transaction, all or nothing. Neither is journaled, so a graph write cannot be reverted; `delete_graph` is the way back for an `insert_graph`. `fixture`'s output
 can be passed straight in as `tables`, which is the loop worth having — take a
 real row out of development, put it into a test database, tear it down after.
 
@@ -530,7 +530,7 @@ zero rows *and leaves the table standing*.
 | Dialect | Status | Notes |
 |---|---|---|
 | SQLite | Built in | Uses Node's own `node:sqlite`. No native module to compile. Reads and writes. |
-| Postgres | Supported | Needs `pg` (`npm install pg`). Reads `pg_catalog` for keys and row estimates. Reads and writes. Business commands with durable receipts after `migratePostgresCommandJournal`; an App's sign-in store in its own `tablewalk_auth` schema after `migratePostgresAuthStore` (an older one moves forward with `mistri migrate stores up`). Pools and the pooler mode: [performance](https://tablewalk.dev/docs/performance/#postgresql-pools); the command journal and the authentication store: `docs/postgresql.md`. |
+| Postgres | Supported | The `pg` driver is an optional dependency of the engine and installs by default (if your install omits optional dependencies, `npm install pg`). Reads `pg_catalog` for keys and row estimates. Reads and writes. Business commands with durable receipts after `migratePostgresCommandJournal`; an App's sign-in store in its own `tablewalk_auth` schema after `migratePostgresAuthStore` (an older one moves forward with `mistri migrate stores up`). Pools and the pooler mode: [performance](https://tablewalk.dev/docs/performance/#postgresql-pools); the command journal and the authentication store: `docs/postgresql.md`. |
 | HTTP API | Built in | An API with an OpenAPI 3 spec: `--from-openapi` drafts a description of its lists and items, and a `"kind": "http"` connection reads through it. Filters, sort and paging only as the API documents them; no totals. Read-only. `docs/http-sources.md`. |
 
 Adding another is one file implementing `Adapter` — `introspect`, `query`,

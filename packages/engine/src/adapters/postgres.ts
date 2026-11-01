@@ -235,6 +235,7 @@ export class PostgresAdapter implements Adapter {
       verifiedSource: () => this.verifiedSource(),
       journalTransaction: (journal, run, options) => this.journalTransaction(journal, run, options),
       readSnapshot: (run) => this.readSnapshot(run, true),
+      hasReplicas: () => this.connections.hasReplicas(),
       onHealthyReplicas: (work) => this.connections.onHealthyReplicas(work),
     });
   }
@@ -267,10 +268,15 @@ export class PostgresAdapter implements Adapter {
    * default_transaction_read_only = off` is itself a statement, and a user who
    * typed it followed by a `DELETE` would get both.
    *
-   * `BEGIN READ ONLY` is the version that holds. A transaction opened read-only
-   * cannot be promoted from inside it — Postgres refuses `SET TRANSACTION READ
-   * WRITE` once the transaction has begun — so the guarantee stops depending on
-   * what the statement does or does not contain. The `ROLLBACK` afterwards also
+   * `BEGIN READ ONLY` is the version that holds, for one statement. Postgres
+   * refuses `SET TRANSACTION READ WRITE` once the transaction has taken its
+   * first snapshot, and one statement takes it before it runs. It does not hold
+   * against several: `COMMIT; BEGIN READ WRITE; DELETE …` ends the read-only
+   * transaction and opens a writable one. So the text goes on the extended
+   * protocol (`queryMode: 'extended'`), where Postgres itself refuses a second
+   * statement; refuseStacked is the earlier, clearer refusal, not the guard.
+   * (node-postgres sends a query with an empty `values` on the simple protocol,
+   * which runs every statement in the string.) The `ROLLBACK` afterwards also
    * discards any session state the statement set, so one run cannot change what
    * the next one means.
    *
@@ -284,7 +290,7 @@ export class PostgresAdapter implements Adapter {
    * The two paths share the statement text and nothing else.
    */
   async runSql(request: SqlRequest): Promise<SqlResult> {
-    const stacked = refuseStacked(request.text);
+    const stacked = refuseStacked(request.text, 'postgres');
     if (stacked) throw new Error(stacked);
     if (request.refuseReserved) refusePostgresReserved(request.text, request.write);
     const limit = clampLimit(request.limit);
@@ -307,12 +313,14 @@ export class PostgresAdapter implements Adapter {
       return this.writes.run('all', () =>
         this.connections.withWriteClient(async (write) => {
           const started = performance.now();
-          const result = await write.query(text, []);
+          // Extended protocol: one statement, as on the read path below.
+          const result = await write.query({ text, values: [], rowMode: 'array', queryMode: 'extended' });
           return {
             /* A write that returns rows — `RETURNING` — is worth showing, and one
-             that does not returns an empty grid rather than a fabricated one. */
+             that does not returns an empty grid rather than a fabricated one.
+             Array rows, so two columns of one name keep both values. */
             columns: dedupe(result.fields?.map((f) => f.name) ?? []),
-            rows: (result.rows ?? []).map((row) => Object.values(toJsonSafe(row)).map(valueSafe)),
+            rows: (result.rows ?? []).map((row) => row.map(valueSafe)),
             ms: Math.round(performance.now() - started),
             truncated: false,
             bounded: false,
@@ -335,11 +343,11 @@ export class PostgresAdapter implements Adapter {
         if (request.refuseReserved) await refuseReservedPlan(db, request.text, []);
         /* `rowMode: 'array'` so two output columns of the same name keep both
            values; the default object rows would let the second overwrite the
-           first. `values: []` keeps this on the extended protocol, which carries
-           exactly one statement — a second line of defence behind the stacking
-           check above. */
+           first. `queryMode: 'extended'` is what carries exactly one statement:
+           an empty `values` alone leaves node-postgres on the simple protocol,
+           which would run a stacked COMMIT and a write after it. */
         let wrapped = bounded;
-        const result = await db.query({ text, values: [], rowMode: 'array' }).catch(async (err: Error) => {
+        const result = await db.query({ text, values: [], rowMode: 'array', queryMode: 'extended' }).catch(async (err: Error) => {
           /* The wrap is an optimisation that is allowed to fail — not every
                legal statement survives being made a derived table. Run as
                written and reported as unbounded. The transaction has to be
@@ -351,7 +359,7 @@ export class PostgresAdapter implements Adapter {
           wrapped = false;
           await db.query('ROLLBACK');
           await begin();
-          return db.query({ text: trimStatement(request.text), values: [], rowMode: 'array' });
+          return db.query({ text: trimStatement(request.text), values: [], rowMode: 'array', queryMode: 'extended' });
         });
         const truncated = result.rows.length > limit;
         return {
@@ -382,7 +390,7 @@ export class PostgresAdapter implements Adapter {
    * string check's.
    */
   async explainSql(request: ExplainRequest): Promise<ExplainResult> {
-    const stacked = refuseStacked(request.text);
+    const stacked = refuseStacked(request.text, 'postgres');
     if (stacked) throw new Error(stacked);
     const analyze = refuseAnalyze(request.text);
     if (analyze) throw new Error(analyze);
@@ -398,6 +406,8 @@ export class PostgresAdapter implements Adapter {
           text: `EXPLAIN ${trimStatement(request.text)}`,
           values: (request.params ?? []) as unknown[],
           rowMode: 'array',
+          // One statement, whether or not there are parameters: see runSql.
+          queryMode: 'extended',
         });
         return {
           plan: result.rows.map((r) => String(r[0])),

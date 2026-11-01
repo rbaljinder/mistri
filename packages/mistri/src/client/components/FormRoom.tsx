@@ -41,8 +41,12 @@ async function submitSignedInForm(
     ...ownedBy(connection),
   })) as { receiptId: string; status: string; result?: unknown };
   const reference = answer.result && typeof answer.result === 'object' ? (answer.result as { reference?: unknown }).reference : undefined;
+  /* What the handler said it did ("Posted 55 rent charges for October 2026."): the page is the only place a person who
+     ran it learns whether it did anything, and "Received" alone cannot tell a run that posted from one that found nothing to. */
+  const said = answer.result && typeof answer.result === 'object' ? (answer.result as { message?: unknown }).message : undefined;
   return {
     ...(typeof reference === 'string' && reference.trim() ? { reference } : {}),
+    ...(typeof said === 'string' && said.trim() ? { message: said.trim() } : {}),
     receipt: { id: answer.receiptId, status: answer.status },
   };
 }

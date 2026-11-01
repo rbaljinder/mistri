@@ -11,7 +11,7 @@ import {
   createTestClock,
   startTestApp,
   assertPermissions,
-} from '../packages/mistri/src/server/testing/index.js';
+} from '../packages/mistri/src/server/testing.js';
 
 test('workspaces isolate data, reject escapes and clean up in reverse order after failures', async () => {
   const a = await createTestWorkspace(),

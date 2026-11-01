@@ -65,7 +65,7 @@ export interface PgResult<Row> {
 
 export interface PgQuery {
   query(text: string, params?: unknown[]): Promise<PgResult<Record<string, unknown>>>;
-  query(config: { text: string; values?: unknown[]; rowMode?: string }): Promise<PgResult<unknown[]>>;
+  query(config: { text: string; values?: unknown[]; rowMode?: string; queryMode?: 'extended' }): Promise<PgResult<unknown[]>>;
 }
 
 export interface PgClient extends PgQuery {
@@ -406,6 +406,11 @@ export class PgConnectionManager {
       })),
     );
     return [...own, ...replicas];
+  }
+
+  /** Whether this database names any replica. */
+  hasReplicas(): boolean {
+    return this.replicas !== undefined;
   }
 
   /**

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import type { EventDeliveryStore } from '../packages/mistri/src/adapters/events/eventDeliveryContract.js';
 import { EVENT_DELIVERY_TABLES as tables } from '../packages/mistri/src/adapters/events/eventDeliverySchema.js';
 import { createEventPublisher, type EventPublication } from '../packages/mistri/src/server/events/eventPublisher.js';
 import { eventDeliveryFixture, eventDeliveryPolicy } from './support/eventDeliveryFixture.js';
@@ -285,8 +286,12 @@ test('source corruption after publisher open refuses before transport and retain
   );
   f.db.exec('ALTER TABLE __mistri_command_receipt ADD COLUMN unexpected TEXT');
   try {
+    /* Refused at discovery, before anything is claimed: a cycle that did not
+       happen, not a halt (readiness reads the store as unknown meanwhile). Every
+       later cycle refuses the same way, and none reaches the transport. */
     assert.equal((await publisher.tick()).status, 'unavailable');
-    assert.equal(publisher.status(), 'halted');
+    assert.equal(publisher.status(), 'running');
+    assert.equal((await publisher.tick()).status, 'unavailable');
   } finally {
     await publisher.stop();
   }
@@ -315,5 +320,42 @@ test('transport rejection retries with unchanged identity and bounded backoff', 
     assert.equal(ids[0], ids[1]);
   } finally {
     await publisher.stop();
+  }
+});
+
+test('a store that fails before anything is claimed costs one cycle, not the publisher', async (t) => {
+  /* A failover under discover or claim halted delivery until a restart,
+     though nothing had been sent and nothing was leased. */
+  for (const failing of ['discover', 'claim'] as const) {
+    const f = eventDeliveryFixture(t);
+    await f.seed();
+    const real = f.open();
+    let fail = true;
+    const store: EventDeliveryStore = {
+      ...real,
+      [failing]: (...args: never[]) => {
+        if (!fail) return (real[failing] as (...a: never[]) => unknown)(...args);
+        fail = false;
+        return Promise.reject(new Error('Connection terminated unexpectedly'));
+      },
+    };
+    let sent = 0;
+    const publisher = createEventPublisher(
+      store,
+      async () => {
+        sent += 1;
+        return 'accepted';
+      },
+      () => 1000,
+    );
+    try {
+      assert.equal((await publisher.tick()).status, 'unavailable', failing);
+      assert.equal(publisher.status(), 'running', failing);
+      assert.equal(sent, 0, failing);
+      assert.equal((await publisher.tick()).status, 'accepted', failing);
+      assert.equal(sent, 1, failing);
+    } finally {
+      await publisher.stop();
+    }
   }
 });

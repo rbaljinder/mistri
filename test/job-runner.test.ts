@@ -560,6 +560,40 @@ for (const engine of jobEngines)
       await assert.rejects(store.inspect(), JobStoreUnavailable);
     });
 
+    test('a store that fails before anything is claimed costs one cycle, not the runner', async (t) => {
+      /* A failover under the poll halted the runner for good, and with it
+         every job until a restart. Nothing had run, and nothing was leased. */
+      const f = await fixture(t, engine);
+      const real = await f.open();
+      let calls = 0;
+      for (const failing of ['expireLeases', 'claim'] as const) {
+        await real.enqueue(request({ idempotencyKey: `idempotency-key-${failing}` }), f.clock.now);
+        let fail = true;
+        const store: JobStore = {
+          ...real,
+          [failing]: (...args: never[]) => {
+            if (!fail) return (real[failing] as (...a: never[]) => unknown)(...args);
+            fail = false;
+            return Promise.reject(new JobStoreUnavailable());
+          },
+        };
+        const runner = f.runner(store, () => {
+          calls++;
+        });
+        assert.equal((await runner.tick()).status, 'unavailable', failing);
+        assert.equal(runner.status(), 'running', failing);
+        const next = await runner.tick();
+        assert.equal(next.status, 'ran', failing);
+        assert.deepEqual(
+          next.outcomes.map((o) => o.code),
+          ['succeeded'],
+          failing,
+        );
+        await runner.halt();
+      }
+      assert.equal(calls, 2);
+    });
+
     test('definitions and runner options are validated without invoking handlers', async (t) => {
       const f = await fixture(t, engine);
       assert.throws(() => defineJobHandler({ version: 0, input: { parse }, handle() {} }), JobDefinitionError);

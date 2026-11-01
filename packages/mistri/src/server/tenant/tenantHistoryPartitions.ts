@@ -41,6 +41,8 @@ interface Waiter {
   reject(error: unknown): void;
   timer: ReturnType<typeof setTimeout>;
 }
+/** Partitions one owner keeps in memory at once (bucketOf). */
+const PARTITIONS_MOST = 1024;
 interface Bucket {
   id: string;
   busy: boolean;
@@ -151,13 +153,32 @@ export function createTenantHistoryPartitions(
     ]);
     return { key, principal };
   };
+  /* The map is kept in order of last use, so the first idle bucket in it is
+     the one used longest ago. A partition's history has to outlive the save
+     that wrote it — Undo comes later, in another lease — so a released bucket
+     is kept, and only dropped to make room: refusing every writer not seen
+     before once 1024 had written once turned a busy day into refused saves
+     until a restart. A bucket that is held, waited for or mid-undo is never
+     dropped, so the bound refuses only when every partition is in use. */
   const bucketOf = (key: string): Bucket => {
     let bucket = buckets.get(key);
-    if (!bucket) {
-      if (buckets.size >= 1024) return denyTenant();
-      bucket = { id: `tenant-history:${randomUUID()}`, busy: false, waiting: [], tokens: new Map(), ids: new Map() };
+    if (bucket) {
+      buckets.delete(key);
       buckets.set(key, bucket);
+      return bucket;
     }
+    if (buckets.size >= PARTITIONS_MOST) {
+      let evicted = false;
+      for (const [idleKey, idle] of buckets)
+        if (!idle.busy && idle.waiting.length === 0 && idle.pending === undefined) {
+          remove(idleKey, idle);
+          evicted = true;
+          break;
+        }
+      if (!evicted) return denyTenant();
+    }
+    bucket = { id: `tenant-history:${randomUUID()}`, busy: false, waiting: [], tokens: new Map(), ids: new Map() };
+    buckets.set(key, bucket);
     return bucket;
   };
   /* A partition is held by one lease at a time, from before its transaction

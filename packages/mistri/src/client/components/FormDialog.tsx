@@ -61,7 +61,7 @@ export function FormDialog({
      rule the form's own page follows (publicForm.js). */
   const via = new URLSearchParams(window.location.search).get('via') ?? undefined;
   return (
-    <Modal className="form-dialog" onClose={onClose} aria-label={form?.label ?? say('form')}>
+    <Modal className="form-dialog" onClose={onClose} ariaLabel={form?.label ?? say('form')}>
       {asked.isPending && <p className="form-dialog-waiting">{say('common.loading')}</p>}
       {asked.isError && <p className="form-dialog-failed">{(asked.error as Error).message}</p>}
       {asked.isSuccess && !form && <p className="form-dialog-failed">{say('thereIsNoSuch')}</p>}

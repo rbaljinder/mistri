@@ -69,7 +69,7 @@ import { fillMailBrand, mailLinkPage, mailLinkPolicy, type MailLinkPage } from '
 import type { TenantBrandingService } from './tenantBranding.js';
 import { fieldLabel } from '../../shared/command.js';
 import { uploadValues } from '../http/fileRows.js';
-import { TENANT_FILE_MOST } from '@mistriwork/engine/server/http/reply.js';
+import { readBounded, TENANT_FILE_MOST } from '@mistriwork/engine/server/http/reply.js';
 import { FILE_MAX_BYTES_DEFAULT } from '../../shared/appModel.js';
 import { inboundCommandKey, verifyDelivery } from '../jobs/inboundHost.js';
 import { serviceActor } from '../jobs/jobAuthorization.js';
@@ -148,20 +148,6 @@ const json = (res: ServerResponse, code: number, body: unknown): void => {
   });
   res.end(text);
 };
-
-async function readBody(req: IncomingMessage, most: number): Promise<Buffer | null> {
-  const declared = Number(req.headers['content-length']);
-  if (Number.isFinite(declared) && declared > most) return null;
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  for await (const part of req) {
-    const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part);
-    bytes += chunk.length;
-    if (bytes > most) return null;
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-}
 
 const toList = (value: unknown): string[] | undefined =>
   value === undefined || value === null
@@ -303,7 +289,7 @@ export async function openTenantMail(options: TenantMailOptions): Promise<Tenant
 
   async function receive(req: IncomingMessage, res: ServerResponse, outcome: (value: string) => void): Promise<void> {
     // Base64 is four bytes for three, and the JSON around it is small.
-    const body = await readBody(req, Math.ceil((maxBytes * 4) / 3) + 256 * 1024);
+    const body = await readBounded(req, Math.ceil((maxBytes * 4) / 3) + 256 * 1024);
     if (!body) {
       outcome('too_large');
       return status(res, 413);
@@ -524,8 +510,8 @@ export async function openTenantMail(options: TenantMailOptions): Promise<Tenant
 
   /* The reply box: a form post of `body` to the link's own address, run as the link's principal on its record. */
   async function replyLink(req: IncomingMessage, url: URL, res: ServerResponse): Promise<void> {
-    const raw = await readBody(req, 64 * 1024);
-    if (raw === null) return status(res, 413);
+    const raw = await readBounded(req, 64 * 1024);
+    if (raw === undefined) return status(res, 413);
     const type = String(req.headers['content-type'] ?? '')
       .split(';')[0]
       .trim()

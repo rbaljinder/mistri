@@ -65,7 +65,7 @@ export function PagePreview({ onClose, ...props }: PagePreviewProps) {
     setTarget(doc.body);
   };
   return (
-    <Modal className="page-preview" aria-label={say('unsavedPagePreview')} onClose={onClose}>
+    <Modal className="page-preview" ariaLabel={say('unsavedPagePreview')} onClose={onClose}>
       <div className="page-preview-head">
         <h2>{say('pagePreview')}</h2>
         <div className="page-preview-modes" role="group" aria-label={say('previewViewport')}>

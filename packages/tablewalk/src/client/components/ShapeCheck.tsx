@@ -52,7 +52,7 @@ export function ShapeCheckDialog({ onClose }: { onClose: () => void }) {
     return [...groups];
   };
   return (
-    <Modal className="conn-manager shape-check" ref={dialog} onClose={onClose} aria-label={say('checkTheShape')} plain backdrop={false}>
+    <Modal className="conn-manager shape-check" ref={dialog} onClose={onClose} ariaLabel={say('checkTheShape')} plain backdrop={false}>
       <div className="conn-inner">
         {lint.isPending ? (
           <p className="loading">{say('readingTheCatalog')}</p>

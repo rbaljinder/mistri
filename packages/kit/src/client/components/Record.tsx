@@ -209,7 +209,17 @@ export function RecordView({ entry, table, template, onLabel, onChooseTab }: Rec
   }, [row.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const label = entry.label ?? '';
-  const heading = (
+  /* A key that matches nothing has no page to act on: no "as a page", no
+     delete, no layout, and no related rail of zero-row relationships. */
+  const missing = row.isError || (data && !record);
+  const heading = missing ? (
+    <h1 className="record-heading">
+      <span>
+        {entry.table} · {label}
+      </span>
+      <RecordTrailNav entry={entry} />
+    </h1>
+  ) : (
     <h1 className="record-heading">
       <span>
         {entry.table} · {label}
@@ -249,14 +259,14 @@ export function RecordView({ entry, table, template, onLabel, onChooseTab }: Rec
         )}
         {row.data && !('view' in row.data) ? (
           <p className="note">{row.data.errors[0]?.message ?? say('thatRecordCouldNotBeRead')}</p>
-        ) : row.isError || (data && !record) ? (
-          <p className="note">{say('thatRowIsNoLonger')}</p>
+        ) : missing ? (
+          <p className="note">{say('noRowWithKey', { table: entry.table, key: label || Object.values(entry.key).join(', ') })}</p>
         ) : record && data ? (
           <Fields table={table} entry={entry} record={record} resolved={data.resolved} sections={fieldSections} />
         ) : null}
-        {data && related.panel}
+        {data && !missing && related.panel}
       </div>
-      {related.rail}
+      {!missing && related.rail}
     </>
   );
 }

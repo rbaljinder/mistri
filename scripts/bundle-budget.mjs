@@ -616,7 +616,15 @@ export const BUDGET = {
        (+2,804 / +362), App style 390,513 / 52,395 (+1,088 / +70); the Workbench wears the same sheet, style
        375,835 / 51,192 (+535 / +67). Each ceiling keeps about 250 bytes of room raw, about 100 in brotli for the
        styles and 400 for the App script. */
-    public: { script: { raw: 669_950, br: 187_330 }, style: { raw: 391_100, br: 52_500 } },
+    /* The rc.9 review fixes (client UX): about 0.5 KB of rules on every first page's sheet (the inline edit's pinned
+       height, the sign-in problem's reserved line, the Workbench record's ground, the menu hint's gap) and a few
+       hundred bytes of script (the palette badge's kind, the missing-record page, the placeholder guard). Measured
+       over the ceilings above: public script +0.2 KB raw, style +0.7 KB raw / +0.1 KB br; App script +0.8 KB raw,
+       style +0.5 KB / +0.05 KB br; Workbench style +0.6 KB / +0.1 KB br. The ceilings keep about 250 bytes of room. Merged with the grid heads' 200 raw bytes (see the Workbench note), the public and Workbench style raw ceilings carry both. */
+    /* rc.9 as published (@mistriwork/ui named again): public script 670,119 / 187,172 on a desk. CI's Linux build
+       packed the App script past a brotli ceiling the desk had 43 bytes under, so both script brotli ceilings get back
+       the 400 bytes of room kept for the compressor that packs worst. */
+    public: { script: { raw: 670_250, br: 187_575 }, style: { raw: 392_000, br: 52_650 } },
     /* A one-click command's revision asked as the pointer or focus reaches its button (commandSend.ts readyCommand,
        Actions.tsx), so the click sends only the execute: about 500 raw bytes, 1335.1 KiB measured. The App script's
        raw ceiling moves to 1_367_400 and keeps about 250 bytes of room; its brotli did not move past its ceiling. */
@@ -664,14 +672,18 @@ export const BUDGET = {
        text stays its label) and the out-of-flow placement beside the filter caret (style.css). App style 390,720 /
        52,437, +444 / +91 over the measure above; the script is unchanged in kind (1,395,747 / 382,832). The style ceilings
        keep about 280 bytes of room raw and 110 in brotli. */
-    app: { script: { raw: 1_395_950, br: 382_950 }, style: { raw: 391_000, br: 52_550 } },
+    /* rc.9 as published: App script 1,396,687 / 383,107 on a desk, 43 bytes under the brotli ceiling that CI's Linux
+       build went past. Its brotli ceiling keeps 400 bytes of room again (see the public note). */
+    app: { script: { raw: 1_397_000, br: 383_500 }, style: { raw: 391_700, br: 52_650 } },
   },
   tablewalk: {
     /* The follow-up's grid head rules, as above. */
     /* The grid head's controls placed inside their own head (style.css; they lay over the neighbour's label): about
        130 raw bytes over the follow-up, so the public and Workbench style ceilings move by 200 raw and the Workbench's
        brotli by 150. */
-    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 376_300, br: 51_450 } },
+    /* rc.9 merged: the grid heads and the client review fixes together put the Workbench style past its brotli
+       ceiling by under 0.1 KB (50.3 KB measured); the brotli ceiling moves to 51_800, a few hundred bytes of room. */
+    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 377_100, br: 51_800 } },
   },
 };
 

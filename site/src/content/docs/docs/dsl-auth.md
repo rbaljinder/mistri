@@ -75,7 +75,7 @@ tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `auth.public` | object | Stable | What a signed-out visitor reads: each resource named, read-only, optionally narrowed by fields; the rest of the App still needs a session. Needs roles, and rows 'all'. Used in `examples/apps/lintel/app.ts`. |
-| `auth.public.fields` | object | Stable |  Used in `examples/apps/tick/app.ts`. |
+| `auth.public.fields` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `auth.public.fields.*.read` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `auth.public.read` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 
@@ -96,7 +96,7 @@ tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).
 | `auth.roles.*.experiments[].owners` | array | Preview |  |
 | `auth.roles.*.export` | array | Stable | Tables the role may export (the whole matching list as a CSV or JSON file) beyond those it writes, which it always may. Of what it reads. A signed-out visitor never may. An App without role grants keeps its one switch, ui.export. Used in `examples/apps/lintel/app.ts`. |
 | `auth.roles.*.extends` | string | Stable | Another role whose grants this one holds too: { manager: { extends: 'mechanic', commands: ['approveQuote'] } }. A chain is followed; a loop is refused. Only grants pass down, each the union of both; never label, claims or service, and only within one realm. A view's or page's roles open to a role that extends one they name; a row policy's principal.roles still match by name. Used in `examples/apps/lintel/app.ts`. |
-| `auth.roles.*.fields` | object | Stable | Column narrowing per resource, within the resource's own fields. Omit read to narrow only write. Used in `examples/apps/tick/app.ts`. |
+| `auth.roles.*.fields` | object | Stable | Column narrowing per resource, within the resource's own fields. Omit read to narrow only write. Used in `examples/apps/lintel/app.ts`. |
 | `auth.roles.*.fields.*.read` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `auth.roles.*.fields.*.write` | array | Stable | Needs the resource's access 'write'. Used in `examples/apps/lintel/app.ts`. |
 | `auth.roles.*.flags` | array | Preview |  |

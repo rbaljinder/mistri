@@ -35,9 +35,23 @@ export interface ResizableProps {
   sizes?: readonly number[];
   onSizesChange?: (sizes: number[]) => void;
   /** The group's accessible name, where the panes need one ("Record and detail"). */
-  label?: string;
+  ariaLabel?: string;
+  /** Every word the handles say, in the caller's language; any left out are English. */
+  words?: Partial<ResizableWords>;
   className?: string;
 }
+
+interface ResizableWords {
+  /** A handle's name, from the names of the two panes it parts (`before`, `after`). */
+  resize: (before: string, after: string) => string;
+  /** A pane's stand-in name when it has no `label`: "panel 2". */
+  panel: (number: number) => string;
+}
+
+const ENGLISH: ResizableWords = {
+  resize: (before, after) => `Resize ${before} and ${after}`,
+  panel: (number) => `panel ${number}`,
+};
 
 function initialSizes(panels: readonly ResizablePanel[]): number[] {
   const given = panels.map((panel) => panel.defaultSize ?? 0);
@@ -55,7 +69,8 @@ function clampSizes(panels: readonly ResizablePanel[], sizes: readonly number[])
   return total ? clamped.map((size) => (size / total) * 100) : clamped;
 }
 
-export function ResizablePanels({ panels, direction = 'horizontal', sizes, onSizesChange, label, className }: ResizableProps) {
+export function Resizable({ panels, direction = 'horizontal', sizes, onSizesChange, ariaLabel, words: given, className }: ResizableProps) {
+  const words = { ...ENGLISH, ...given };
   const [uncontrolled, setUncontrolled] = useState(() => initialSizes(panels));
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ handle: number; start: number; sizes: number[] } | null>(null);
@@ -133,7 +148,7 @@ export function ResizablePanels({ panels, direction = 'horizontal', sizes, onSiz
         .filter(Boolean)
         .join(' ')}
       role="group"
-      aria-label={label}
+      aria-label={ariaLabel}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
@@ -170,7 +185,7 @@ export function ResizablePanels({ panels, direction = 'horizontal', sizes, onSiz
               aria-valuemin={mins[i]}
               aria-valuemax={100 - mins[i + 1]!}
               aria-controls={`${baseId}-panel-${i} ${baseId}-panel-${i + 1}`}
-              aria-label={`Resize ${panels[i]?.label ?? `panel ${i + 1}`} and ${panels[i + 1]?.label ?? `panel ${i + 2}`}`}
+              aria-label={words.resize(panels[i]?.label ?? words.panel(i + 1), panels[i + 1]?.label ?? words.panel(i + 2))}
               tabIndex={0}
               onKeyDown={onHandleKeyDown(i)}
               onPointerDown={onPointerDown(i)}
@@ -181,6 +196,3 @@ export function ResizablePanels({ panels, direction = 'horizontal', sizes, onSiz
     </div>
   );
 }
-
-/** The short name, as the other primitives export theirs. */
-export const Resizable = ResizablePanels;

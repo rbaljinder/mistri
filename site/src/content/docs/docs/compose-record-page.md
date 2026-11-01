@@ -63,7 +63,7 @@ A record page follows one skeleton: a head, its figures, its children as tabs, a
   `examples/apps/lintel/pages/unit.ts:43`.
 - **When the record is read** (a task, a policy), say `layout: 'article'`: one
   column at a reading measure, with no aside —
-  `examples/apps/tick/app.ts:73`.
+  `examples/apps/tick/app.ts:69`.
 - **A page that names no layout is drawn in the one its sections make**, chosen when the App is read, never from a row: a `gallery` first is a showcase, a `timeline` ending the main column with no list there a conversation, and the record's long text with at most 12 facts and nothing else an article; `mistri check --defaults` says which and why. A written layout refuses a section it cannot place where a chosen one falls back to the record, and `layout: 'record'` keeps the record's own.
 
 The aside is a third of the record, 256px to 320px: nothing in it wider than two columns. Beside it, four figures and tabs of four short columns fit in the top menu's shell (`shell: { placement: 'top' }`, the scaffold's); beside the side menu, at a desk, three figures do, so keep the summary to three or draw the menu on top (`mistri check --design` says which). Title the rail by what it holds, the record's noun, never "Details".

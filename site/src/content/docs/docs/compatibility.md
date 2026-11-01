@@ -17,7 +17,7 @@ A change to any of these is breaking, and does not happen before 2.0:
 
 - The App DSL: every non-preview key, helper and accepted value. A key may be
   added; its meaning, accepted values and default may not change.
-- The `@mistriwork/mistri/*` exports and their documented types.
+- The `@mistriwork/mistri/*` exports and their documented types, except the Preview names listed below.
 - The command line: commands, flags and the exit codes `mistri check` and the
   other commands document.
 - The HTTP and App API: routes, request and response shapes, error codes and a
@@ -55,6 +55,10 @@ At 1.0 these stay Preview:
 - SCIM provisioning.
 - The Gantt presentation.
 - A resource's `search` (its packs ship after 1.0).
+- An installable PWA (`ui.pwa`).
+- `@mistriwork/ui`, the React primitives.
+- `mistri deploy` and `@mistriwork/cloudflare`.
+- `roundTrips` in `@mistriwork/mistri/testing`.
 
 A feature added in a 1.x release may ship as Preview too. The
 [status page](/docs/status/) marks each one in its tables.

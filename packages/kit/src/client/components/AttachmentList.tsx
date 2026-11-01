@@ -354,7 +354,7 @@ function RemoveConfirm({ item, onClose }: { item: AttachmentItem; onClose: () =>
       fullscreen={false}
       initialFocus={keep}
       closeDisabled={busy}
-      aria-label={say('removeName', { name: item.name })}
+      ariaLabel={say('removeName', { name: item.name })}
       onClose={onClose}
     >
       <h2>{say('removeQuotedNameQuestion', { name: item.name })}</h2>

@@ -50,7 +50,7 @@ test('the mark is decorative, and its room is kept from the first draw, shown or
   expect(document.querySelector('.field-box')).not.toHaveClass('has-mark');
 });
 
-test('an optional word follows the label, and a tip rides beside it', async () => {
+test('an optional word stands beside the label, outside its name, and a tip rides beside it', async () => {
   const user = userEvent.setup();
   render(
     <TextField
@@ -61,7 +61,8 @@ test('an optional word follows the label, and a tip rides beside it', async () =
       onChange={() => {}}
     />,
   );
-  expect(screen.getByRole('textbox', { name: 'Employer (optional)' })).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Employer' })).toBeInTheDocument();
+  expect(document.querySelector('.form-field-optional-word')).toHaveTextContent('(optional)');
   await user.click(screen.getByRole('button', { name: 'More information' }));
   expect(screen.getByRole('tooltip')).toHaveTextContent('Who pays you.');
 });

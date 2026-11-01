@@ -18,10 +18,10 @@ export interface PopoverProps {
   onOpenChange?: (open: boolean) => void;
   className?: string;
   /** The popup's accessible name, where it needs one. */
-  label?: string;
+  ariaLabel?: string;
 }
 
-export function PopoverLayer({ trigger, children, open, defaultOpen, onOpenChange, className, label }: PopoverProps) {
+export function Popover({ trigger, children, open, defaultOpen, onOpenChange, className, ariaLabel }: PopoverProps) {
   /* The trigger is rendered as the trigger, not inside one: a button
      passed as a child nested inside Base UI's own button, giving two
      buttons for one control. The render prop merges onto the caller's
@@ -32,7 +32,7 @@ export function PopoverLayer({ trigger, children, open, defaultOpen, onOpenChang
       <BasePopover.Trigger className="ui-popover-trigger" render={triggerElement} />
       <BasePopover.Portal>
         <BasePopover.Positioner sideOffset={8}>
-          <BasePopover.Popup className={['ui-popover', className].filter(Boolean).join(' ')} aria-label={label}>
+          <BasePopover.Popup className={['ui-popover', className].filter(Boolean).join(' ')} aria-label={ariaLabel}>
             {children}
           </BasePopover.Popup>
         </BasePopover.Positioner>
@@ -40,6 +40,3 @@ export function PopoverLayer({ trigger, children, open, defaultOpen, onOpenChang
     </BasePopover.Root>
   );
 }
-
-/** The short name, as the other primitives export theirs. */
-export const Popover = PopoverLayer;

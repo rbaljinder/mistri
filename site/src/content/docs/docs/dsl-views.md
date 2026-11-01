@@ -552,7 +552,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=form].steps[].command` | string | Stable | A command, by its name in the App's commands module (defineCommands). The server fills in its input, target and version from the registration; mistri-commands.d.ts types the names. Used in `examples/apps/lintel/app.ts`. |
-| `views.*[kind=form].steps[].fields` | array | Stable | The fields in order. An inner list is a row, drawn side by side: [["first_name", "last_name"], "dob"]. At most 3 to a row. Used in `examples/apps/tick/app.ts`. |
+| `views.*[kind=form].steps[].fields` | array | Stable | The fields in order. An inner list is a row, drawn side by side: [["first_name", "last_name"], "dob"]. At most 3 to a row. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=form].steps[].id` | string | Stable | Unique within the form. Absent, the label's slug, as step() makes it. |
 | `views.*[kind=form].steps[].label` | string | Stable | Static plain text. No row-value interpolation. |
 | `views.*[kind=form].steps[].lead` | string | Stable | One sentence under the title. Used in `examples/apps/lintel/views.ts`. |

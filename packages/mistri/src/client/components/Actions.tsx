@@ -603,7 +603,7 @@ function Confirm({
     onAnswer(yes);
   };
   return (
-    <Modal className="confirm action-confirm" aria-label={`${action.label}?`} onClose={() => answer(false)}>
+    <Modal className="confirm action-confirm" ariaLabel={`${action.label}?`} onClose={() => answer(false)}>
       <h2>{action.label}?</h2>
       <p>{label}</p>
       <table className="confirm-diff">
@@ -669,7 +669,7 @@ export function ReasonForm({
   return (
     <Modal
       className="confirm action-confirm action-reason"
-      aria-label={say('labelReason', { label: action.label })}
+      ariaLabel={say('labelReason', { label: action.label })}
       onClose={() => answer(null)}
     >
       <form

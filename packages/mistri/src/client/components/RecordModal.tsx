@@ -119,7 +119,7 @@ export function RecordModal(props: RecordModalProps) {
       ref={dialog}
       className="peekpanel peekpanel-modal record-modal"
       fullscreen="mobile"
-      aria-label={title ? say('titleDetails', { title }) : say('recordDetails')}
+      ariaLabel={title ? say('titleDetails', { title }) : say('recordDetails')}
       onClose={onClose}
       beforeClose={() => {
         cancelEditInteractions();

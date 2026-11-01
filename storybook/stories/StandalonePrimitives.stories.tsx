@@ -39,7 +39,7 @@ export const Switches: StoryObj = {
 export const TabsPanels: StoryObj = {
   render: () => (
     <Tabs
-      label="Settings sections"
+      ariaLabel="Settings sections"
       tabs={[
         { value: 'general', label: 'General', children: <p style={{ margin: 0 }}>The studio's name, timezone and currency.</p> },
         { value: 'members', label: 'Members', children: <p style={{ margin: 0 }}>Who can sign in, and what each role may do.</p> },
@@ -98,8 +98,8 @@ export const PaginationRows: StoryObj = {
     const [middle, setMiddle] = useState(10);
     return (
       <div style={{ display: 'grid', gap: 20 }}>
-        <Pagination page={page} pages={20} label="Invoices, pages" onPageChange={setPage} />
-        <Pagination page={middle} pages={20} label="Invoices, pages" onPageChange={setMiddle} />
+        <Pagination page={page} pages={20} ariaLabel="Invoices, pages" onPageChange={setPage} />
+        <Pagination page={middle} pages={20} ariaLabel="Invoices, pages" onPageChange={setMiddle} />
       </div>
     );
   },
@@ -116,7 +116,7 @@ export const CarouselSlides: StoryObj = {
   render: () => (
     <div style={{ maxWidth: 560 }}>
       <Carousel
-        label="Project photos"
+        ariaLabel="Project photos"
         slides={[
           { label: 'Studio', children: slide('Studio', 'The north light room, before the shoot.') },
           { label: 'Work', children: slide('Work', 'Boards, proofs and the wall of type.') },
@@ -132,7 +132,7 @@ export const ResizablePanes: StoryObj = {
     <div style={{ display: 'grid', gap: 24 }}>
       <div style={{ height: 220, border: '1px solid var(--line)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
         <Resizable
-          label="Record and detail"
+          ariaLabel="Record and detail"
           panels={[
             { label: 'Record', defaultSize: 60, children: <div style={panel}>The record list, at sixty percent.</div> },
             {
@@ -146,7 +146,7 @@ export const ResizablePanes: StoryObj = {
       <div style={{ height: 220, border: '1px solid var(--line)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
         <Resizable
           direction="vertical"
-          label="Notes above preview"
+          ariaLabel="Notes above preview"
           panels={[
             { label: 'Notes', defaultSize: 50, children: <div style={panel}>Notes on top.</div> },
             { label: 'Preview', defaultSize: 50, children: <div style={panel}>Preview below, on a vertical handle.</div> },
@@ -160,7 +160,7 @@ export const ResizablePanes: StoryObj = {
 export const ScrollAreaRegion: StoryObj = {
   render: () => (
     <div style={{ maxWidth: 420 }}>
-      <ScrollArea label="Recent activity" maxHeight="240px">
+      <ScrollArea ariaLabel="Recent activity" maxHeight="240px">
         {Array.from({ length: 12 }, (_, i) => (
           <p key={i} style={{ margin: '0 0 12px' }}>
             Activity {i + 1}: a task moved, a note left, an invoice sent.

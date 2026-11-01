@@ -53,6 +53,8 @@ works for one database.
 | Refresh | `refresh` |
 | Write (writable only) | `insert`, `update`, `delete`, `insert_graph`, `delete_graph`, `revert` |
 
+A destructive tool (`delete`, `delete_graph`) shows its impact first and, in a client that supports elicitation, asks the person every time; a `confirm: true` the model supplies does not stand in for the answer. The graph tools are not journaled: they return no `undoId`, and `revert` cannot undo them.
+
 `query` and `breakdown` take the [query language](/docs/query/) verbatim.
 
 ## Options

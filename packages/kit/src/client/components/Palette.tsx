@@ -26,6 +26,32 @@ interface PaletteItem {
 }
 
 /** In app mode the App's lists name the tables worth searching and their label columns name the words people search by. */
+/** What a row opens, in words: the kinds are the registry's identifiers, not copy. */
+function kindWord(kind: string): string {
+  switch (kind) {
+    case 'page':
+      return say('kindPage');
+    case 'view':
+      return say('kindView');
+    case 'table':
+      return say('kindTable');
+    case 'filter':
+      return say('kindFilter');
+    case 'recent':
+      return say('kindRecent');
+    case 'action':
+      return say('kindAction');
+    case 'record':
+      return say('kindRecord');
+    case 'sql':
+      return say('kindSql');
+    case 'database':
+      return say('kindDatabase');
+    default:
+      return kind;
+  }
+}
+
 function recordTables(): Findable[] {
   const app = shell().inApp() ? shell().app() : null;
   return app ? findableTables(app) : [];
@@ -197,7 +223,7 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
                   onClick={() => choose(i)}
                   onMouseMove={() => setActive(i)}
                 >
-                  <span className={`palette-kind kind-${item.kind}`}>{item.kind}</span>
+                  <span className={`palette-kind kind-${item.kind}`}>{kindWord(item.kind)}</span>
                   <span className="palette-label">{item.label}</span>
                   {item.detail ? <span className="palette-detail">{item.detail}</span> : null}
                 </div>

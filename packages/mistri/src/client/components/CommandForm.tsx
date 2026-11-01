@@ -372,7 +372,7 @@ export function CommandForm({
             ? say('readyToSubmit', { count })
             : say('readyToSubmitOne'));
   return (
-    <Modal className="confirm command-form" aria-label={verb} onClose={close} closeDisabled={locked} finalFocus={finalFocus}>
+    <Modal className="confirm command-form" ariaLabel={verb} onClose={close} closeDisabled={locked} finalFocus={finalFocus}>
       <h2>{verb}</h2>
       <p className="insert-lede">{label}</p>
       {group && ineligible.length > 0 && !operation && (

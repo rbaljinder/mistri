@@ -22,7 +22,7 @@ import {
   type Ref,
 } from 'react';
 import { Popover } from '@base-ui/react/popover';
-import { layoutViewport, zoomAnchor } from './anchor.js';
+import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import {
   addDateDays,
   addDateMonths,
@@ -40,8 +40,8 @@ import {
   todayInZone,
   weekdayLabels,
   withDate,
-} from './datePickerModel.js';
-import { popupContainer } from './popups.js';
+} from './internal/datePickerModel.js';
+import { popupContainer } from './internal/popups.js';
 
 /** What a date field says. A `format` is the locale's numeric date pattern ("MM/DD/YYYY"). */
 export interface DateFieldWords {

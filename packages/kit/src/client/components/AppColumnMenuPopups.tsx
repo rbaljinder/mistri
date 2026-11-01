@@ -10,7 +10,7 @@
 import { Fragment, useRef, type RefObject } from 'react';
 import { Menu } from '@base-ui/react/menu';
 import { Popover } from '@base-ui/react/popover';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/anchor.js';
+import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
 import { columnDisplay, findTable, labelColumn } from '../core.js';
 import { nextSort, sortDirection } from '../clauses.js';
 import { mentionsColumn, ownedTails, withCondition } from '../filterbar.js';

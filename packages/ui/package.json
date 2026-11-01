@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/ui",
-  "version": "1.0.0-rc.8",
+  "version": "1.0.0-rc.9",
   "description": "The standalone React primitives both shells are drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, Switch, Tabs, Drawer, Popover, Avatar, Pagination, Carousel, Resizable, ScrollArea and Tooltip, the form controls built on them (text, masked, money and sensitive boxes, listboxes, choices, slider, progress and action bar; Preview), the landing hero's blocks (badge, photo tiles, icon rows; Preview), their tokens and stylesheet, and the zoom-aware ruler their popups are placed by.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -44,9 +44,9 @@
       "mistri-built": "./dist/Choices.js",
       "default": "./src/Choices.tsx"
     },
-    "./ComponentStyleScope.js": {
-      "mistri-built": "./dist/ComponentStyleScope.js",
-      "default": "./src/ComponentStyleScope.ts"
+    "./internal/ComponentStyleScope.js": {
+      "mistri-built": "./dist/internal/ComponentStyleScope.js",
+      "default": "./src/internal/ComponentStyleScope.ts"
     },
     "./DateField.js": {
       "mistri-built": "./dist/DateField.js",
@@ -132,13 +132,13 @@
       "mistri-built": "./dist/Tooltip.js",
       "default": "./src/Tooltip.tsx"
     },
-    "./anchor.js": {
-      "mistri-built": "./dist/anchor.js",
-      "default": "./src/anchor.ts"
+    "./internal/anchor.js": {
+      "mistri-built": "./dist/internal/anchor.js",
+      "default": "./src/internal/anchor.ts"
     },
-    "./datePickerModel.js": {
-      "mistri-built": "./dist/datePickerModel.js",
-      "default": "./src/datePickerModel.ts"
+    "./internal/datePickerModel.js": {
+      "mistri-built": "./dist/internal/datePickerModel.js",
+      "default": "./src/internal/datePickerModel.ts"
     },
     "./forms.css": {
       "mistri-built": "./dist/forms.css",
@@ -152,13 +152,9 @@
       "mistri-built": "./dist/preferences.css",
       "default": "./src/preferences.css"
     },
-    "./masks.js": {
-      "mistri-built": "./dist/masks.js",
-      "default": "./src/masks.ts"
-    },
-    "./popups.js": {
-      "mistri-built": "./dist/popups.js",
-      "default": "./src/popups.ts"
+    "./internal/popups.js": {
+      "mistri-built": "./dist/internal/popups.js",
+      "default": "./src/internal/popups.ts"
     },
     "./primitives.css": {
       "mistri-built": "./dist/primitives.css",
@@ -168,9 +164,9 @@
       "mistri-built": "./dist/standalone.css",
       "default": "./src/standalone.css"
     },
-    "./ruler.js": {
-      "mistri-built": "./dist/ruler.js",
-      "default": "./src/ruler.ts"
+    "./internal/ruler.js": {
+      "mistri-built": "./dist/internal/ruler.js",
+      "default": "./src/internal/ruler.ts"
     },
     "./style.css": {
       "mistri-built": "./dist/style.css",

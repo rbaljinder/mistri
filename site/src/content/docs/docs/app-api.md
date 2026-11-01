@@ -234,7 +234,7 @@ its member's wider ones. Nobody sees another tenant's. The operator provisions t
 
 ## Not yet
 
-Several sources, form commands, and an event stream on `$mcp`.
+On the MCP surface (`$mcp`) only: several sources, form commands (the HTTP API above exposes a signed-in form's command), and an event stream.
 
 ## Related
 

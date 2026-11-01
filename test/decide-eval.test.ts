@@ -13,7 +13,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { createTestWorkspace } from '../packages/mistri/src/server/testing.js';
-import { evaluateDecision } from '../packages/mistri/src/server/testing/index.js';
+import { evaluateDecision } from '../packages/mistri/src/server/testing.js';
 import { scoreDecision } from '../packages/mistri/src/server/decide/decisionEval.js';
 import { defineDecision } from '../packages/mistri/src/server/jobs.js';
 import { readDecisionLock } from '../packages/mistri/src/server/decide/decisionLock.js';

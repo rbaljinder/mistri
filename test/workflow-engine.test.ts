@@ -5,9 +5,16 @@
  * seams (jobs, receipts, delivery) are workflow-host.test.ts.
  */
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
 import type { WorkflowStore } from '../packages/mistri/src/adapters/workflows/workflowStoreContract.js';
-import { migratePostgresWorkflowStore } from '../packages/mistri/src/adapters/workflows/workflowStoreSchema.js';
+import {
+  migratePostgresWorkflowStore,
+  provisionSqliteWorkflowStore,
+} from '../packages/mistri/src/adapters/workflows/workflowStoreSchema.js';
+import { openSqliteWorkflowStore } from '../packages/mistri/src/adapters/workflows/workflowStore.js';
 import { openPostgresWorkflowStore } from '../packages/mistri/src/adapters/workflows/postgresWorkflowStore.js';
 import { PgConnectionManager } from '../packages/engine/src/adapters/postgresPool.js';
 import { defineEvent } from '../packages/mistri/src/server/commands/businessEvents.js';
@@ -378,4 +385,45 @@ suite('PostgreSQL', liveSkip('postgres', LIVE_PG), async () => {
       await manager.close();
     },
   };
+});
+
+test('a store that cannot record the end aborts the advance rather than ending the process', { timeout: 20_000 }, async (t) => {
+  /* The end of an advance is written where nothing awaits it. A rejected
+     write there — a dropped connection, a failover — was an unhandled
+     rejection, which ends a Node process, and the advance never returned. */
+  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-workflow-finish-'));
+  const file = join(directory, 'workflows.db');
+  writeFileSync(file, '');
+  provisionSqliteWorkflowStore(file);
+  const real = openSqliteWorkflowStore(file);
+  let refused = 0;
+  const store: WorkflowStore = {
+    ...real,
+    finish: async () => {
+      refused += 1;
+      throw new Error('Connection terminated unexpectedly');
+    },
+  };
+  const unhandled: unknown[] = [];
+  const note = (reason: unknown) => unhandled.push(reason);
+  process.on('unhandledRejection', note);
+  const driver = await createWorkflowDriver({
+    workflow: { loan: underwrite },
+    commands: commands(),
+    calls: { bureau: () => ({ score: 720 }) },
+    store,
+  });
+  t.after(async () => {
+    process.off('unhandledRejection', note);
+    await driver.close();
+    await real.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  // Resolving at all is the advance returning: it used to hang on a promise nothing settled.
+  await driver.emit(Applied, { id: 'L-finish', amount: 5_000 });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(refused >= 1, 'the end was attempted');
+  assert.deepEqual(unhandled, []);
+  const [instance] = await driver.instances();
+  assert.notEqual(instance.state, 'completed', 'an end the store refused is not recorded as one');
 });

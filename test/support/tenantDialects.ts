@@ -333,7 +333,14 @@ export async function pgClient(url: string): Promise<Control> {
   const specifier = 'pg';
   const pg = (await import(specifier)) as { default?: { Client: new (c: unknown) => Control }; Client?: new (c: unknown) => Control };
   const Client = (pg.Client ?? pg.default?.Client)!;
-  const created = new Client({ connectionString: url, statement_timeout: 10_000 });
+  // A connect or reply that never comes fails the test instead of keeping its process alive (a stalled file once
+  // held the whole gate for 42 minutes).
+  const created = new Client({
+    connectionString: url,
+    statement_timeout: 10_000,
+    connectionTimeoutMillis: 10_000,
+    query_timeout: 30_000,
+  });
   await created.connect();
   return created;
 }

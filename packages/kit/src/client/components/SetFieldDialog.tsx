@@ -57,7 +57,7 @@ export function SetFieldDialog({
   };
   const records = say('countSelectedRecords', { count });
   return (
-    <Modal className="confirm set-field-dialog" aria-label={say('setAField')} onClose={onClose}>
+    <Modal className="confirm set-field-dialog" ariaLabel={say('setAField')} onClose={onClose}>
       <h2>{say('setAField')}</h2>
       <p>{say('writesOneValueToEach', { records })}</p>
       {columns.length > 1 && (

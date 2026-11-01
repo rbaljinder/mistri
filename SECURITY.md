@@ -142,9 +142,17 @@ Credit is given in the release notes unless you would rather it were not.
   another. A picture drawn in place (`/api/file?inline=1`) is tagged by its
   bytes, but the read and its grants run before any 304; for anyone signed
   in it is `private, no-cache`, so a sign-out or the next account on a shared
-  browser holds at once. An App without sign-in, or a signed-out visitor to
-  a public one, may keep a picture for an hour: that reader is nobody in
-  particular, and the saving is the accepted trade.
+  browser holds at once. A picture a resource declares `public` is the other
+  case: any reader, a shared cache or a CDN may keep it for 24 hours and serve
+  it for up to seven more days while it revalidates
+  (`public, max-age=86400, stale-while-revalidate=604800`), and an address that
+  names the picture's bytes (`h=`) is kept for a year and never revalidated
+  (`immutable`). Deleting or replacing the file does not recall those copies:
+  purge the address at the cache or CDN in front of the App, and do not mark a
+  resource `public` for a picture that may need to be withdrawn. Any other
+  picture an anonymous reader may see is `private, max-age=3600` (an hour, in
+  that reader's own browser only): that reader is nobody in particular, and the
+  saving is the accepted trade.
 - **An App's accounts are its administrators'.** In an App that signs people
   in, an account holding the `admin` role manages the others from the account
   menu: adds them, sets their roles, deactivates them, sets a new password.

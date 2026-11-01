@@ -52,7 +52,7 @@ function MobileDrawerContents({
       initialFocus={close}
       finalFocus={finalFocus}
       fullscreen={false}
-      aria-label={say('navigation', { name })}
+      ariaLabel={say('navigation', { name })}
     >
       <nav id="mobile-app-navigation" className="mobile-nav-sidebar sidebar" aria-label={say('menu', { name })}>
         <header className="mobile-nav-head">

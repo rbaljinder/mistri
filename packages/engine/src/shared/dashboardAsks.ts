@@ -122,11 +122,14 @@ const GROUPS_ASKED = 200;
 export const groupsAskedFor = (section: Pick<AskedSection, 'limit'>): number => Math.max(section.limit ?? 0, GROUPS_ASKED);
 
 /** The groups a chart asks for: stacked bars cross two keys, and bars and a donut order their groups themselves. */
-export function chartLimit(section: Pick<AskedSection, 'shape' | 'limit'>): number | undefined {
+export function chartLimit(section: Pick<AskedSection, 'shape' | 'limit' | 'by'>): number | undefined {
   /* A heat map's grid is every cross of its keys: a week of hours is 168. */
   if (section.shape === 'stacked' || section.shape === 'heatmap') return 400;
   /* A waterfall's and a treemap's groups are all drawn, as a donut's slices: `limit` keeps the largest. */
   if (section.shape === 'waterfall' || section.shape === 'treemap' || section.shape === 'scatter') return groupsAskedFor(section);
+  /* A line (or the default chart) over two keys draws one line per second key: every period crossed with every series is a
+     row, and the server's twenty-row default dropped the later periods, so each line fell to zero where the rows ran out. */
+  if (section.shape === 'line' && (section.by ?? '').includes(',')) return 400;
   return section.shape === 'donut' || section.shape === 'bar' ? groupsAskedFor(section) : section.limit;
 }
 

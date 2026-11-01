@@ -5,7 +5,7 @@
  * stays in `thmenu.js`; this is the menu, and the rule for what it offers.
  */
 import { Menu } from '@base-ui/react/menu';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/anchor.js';
+import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
 import { go, quote, refine, render, tableView } from '../core.js';
 import { addSort, nextSort, sortCount, sortDirection } from '../clauses.js';
 import { SORT_SCAN_BELOW } from '../columns.js';

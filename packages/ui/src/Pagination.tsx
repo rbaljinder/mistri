@@ -18,9 +18,16 @@ export interface PaginationProps {
   pages: number;
   onPageChange: (page: number) => void;
   /** The list's accessible name, where the pager needs one ("Invoices, pages"). */
-  label?: string;
-  previousLabel?: ReactNode;
-  nextLabel?: ReactNode;
+  ariaLabel?: string;
+  /** Every word the pager says, in the caller's language; any left out are English. */
+  words?: Partial<PaginationWords>;
+}
+
+interface PaginationWords {
+  /** The nav's name when `ariaLabel` is not given. */
+  pages: string;
+  previous: ReactNode;
+  next: ReactNode;
 }
 
 /** The page numbers to draw: the first, the last, and a window of five around the current, with gaps as ellipses. */
@@ -37,13 +44,14 @@ export function paginationItems(page: number, pages: number): Array<number | 'â€
   return items;
 }
 
-export function Pagination({ page, pages, onPageChange, label, previousLabel = 'Previous', nextLabel = 'Next' }: PaginationProps) {
+export function Pagination({ page, pages, onPageChange, ariaLabel, words: given }: PaginationProps) {
+  const words: PaginationWords = { pages: 'Pages', previous: 'Previous', next: 'Next', ...given };
   if (pages <= 1) return null;
   const current = Math.min(Math.max(page, 1), pages);
   return (
-    <nav className="ui-pagination" aria-label={label ?? 'Pages'}>
+    <nav className="ui-pagination" aria-label={ariaLabel ?? words.pages}>
       <button type="button" className="ui-page ui-page-step" disabled={current === 1} onClick={() => onPageChange(current - 1)}>
-        {previousLabel}
+        {words.previous}
       </button>
       {paginationItems(current, pages).map((item, i) =>
         item === 'â€¦' ? (
@@ -63,7 +71,7 @@ export function Pagination({ page, pages, onPageChange, label, previousLabel = '
         ),
       )}
       <button type="button" className="ui-page ui-page-step" disabled={current === pages} onClick={() => onPageChange(current + 1)}>
-        {nextLabel}
+        {words.next}
       </button>
     </nav>
   );

@@ -7,6 +7,9 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: var(--space-4) 20px; max-height: none; overflow: visible; padding: 0;
 }
+/* Sections stand side by side here, on one grid: the gap between sections is the grid's, so the second one takes no
+   top margin of its own — it started 16px lower than the first, and its rule and heading with it. */
+.quick-add .insert-fields > .insert-group + .insert-group { margin-top: 0; }
 .quick-add .insert-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); align-content: start; }
 .quick-add .insert-field label, .quick-add .insert-input { font-family: var(--sans); }
 .quick-add .insert-input { border-radius: var(--radius); }

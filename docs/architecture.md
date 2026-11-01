@@ -98,7 +98,10 @@ reads, then `http/dataWriteRoutes.ts` (update, insert, SQL, revert, delete).
   `node:sqlite`) and PostgreSQL (`pg`) — plus
   `connect.ts`, which picks one. Reads run on a read-only handle for the
   life of the process; a write opens a second handle, only for a connection
-  marked `"writable": true`. Read-only is enforced here, not in the UI.
+  marked `"writable": true`. Read-only is enforced here, not in the UI: a
+  read is one statement in a read-only transaction (Postgres refuses a
+  second on the extended protocol) on a read-only handle. Whether a
+  connection may write at all is the server's check, before the adapter.
 - **The query language** compiles to a `Filter` structure, never to SQL
   text; the adapters turn that into a parameterised statement. Every read
   goes through `clampLimit`. Identifiers are checked against the catalog
@@ -246,7 +249,7 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   the kit supplies its catalog's where a caller names none (the kit's
   `Dropdown.tsx`). OverflowMenu, ThMenu and TopNav read the walk and stay with
   the shells. Popups are anchored through `anchor.ts`, which
-  measures on the zoom-aware ruler (`packages/ui/src/ruler.ts`, which core.js
+  measures on the zoom-aware ruler (`packages/ui/src/internal/ruler.ts`, which core.js
   re-exports) because Floating UI does not know about the
   density zoom on the root.
 - **A part that throws stays in its place.** Every page section, dashboard

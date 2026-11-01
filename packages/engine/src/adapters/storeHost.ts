@@ -91,6 +91,8 @@ export interface PostgresStoreHost {
     run: JournalRun<J, T>,
     options?: JournalTransactionOptions<PostgresTransactionVerifier>,
   ): Promise<T>;
+  /** Whether the connection names any replica: where it names none, `onHealthyReplicas` can only answer nothing, and a caller can skip the question that needs it. */
+  hasReplicas(): boolean;
   /** `work` on each healthy replica, failures left out; none where the connection names no replicas. */
   onHealthyReplicas<T>(work: (client: PgQuery) => Promise<T>): Promise<T[]>;
   /** One read-only snapshot on an observed reader (PostgresAdapter.readSnapshot). */

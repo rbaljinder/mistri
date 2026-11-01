@@ -154,3 +154,12 @@ test('written and read back, a walk in words is the same walk', () => {
     assert.equal(hashFor(parsed.connection, parsed.stack, { listParams }), address);
   }
 });
+
+test('an address with a malformed percent escape is read as a name nobody made, not thrown at', () => {
+  // A lone `%`, a bad pair and a cut multibyte escape: boot reads the first segment, navigation the rest.
+  assert.equal(connectionFromHash('/%zz/leads'), '%zz');
+  assert.equal(connectionFromHash('/%E0%A4%A'), '%E0%A4%A');
+  assert.doesNotThrow(() => fromHash('/compass/leads/foo%zz', find));
+  assert.doesNotThrow(() => fromHash('/%E0%A4%A/@page~5%', find));
+  assert.doesNotThrow(() => fromHash('/demo/vehicle%20total%20%3E%20%', find));
+});

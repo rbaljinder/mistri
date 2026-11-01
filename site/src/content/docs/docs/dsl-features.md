@@ -77,7 +77,7 @@ rewrite the lock.
 | `features[].api.resources.*.create` |  | Stable |  One of `true`. Used in `examples/apps/lintel/app.ts`. |
 | `features[].api.resources.*.delete` |  | Stable |  One of `true`. Used in `examples/apps/tick/app.ts`. |
 | `features[].api.resources.*.description` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `features[].api.resources.*.fields` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
+| `features[].api.resources.*.fields` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `features[].api.resources.*.filters` | array | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `features[].api.resources.*.sorts` | array | Stable |  |
 | `features[].api.resources.*.update` |  | Stable |  One of `true`. |
@@ -105,7 +105,7 @@ rewrite the lock.
 | `features[].auth.roles.*.experiments[].environments` | array | Preview |  |
 | `features[].auth.roles.*.experiments[].ids` | array | Preview |  |
 | `features[].auth.roles.*.experiments[].owners` | array | Preview |  |
-| `features[].auth.roles.*.fields` | object | Stable | Column narrowing per resource, within the resource's own fields. Omit read to narrow only write. Used in `examples/apps/tick/app.ts`. |
+| `features[].auth.roles.*.fields` | object | Stable | Column narrowing per resource, within the resource's own fields. Omit read to narrow only write. Used in `examples/apps/lintel/app.ts`. |
 | `features[].auth.roles.*.fields.*.read` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `features[].auth.roles.*.fields.*.write` | array | Stable | Needs the resource's access 'write'. Used in `examples/apps/lintel/app.ts`. |
 | `features[].auth.roles.*.flags` | array | Preview |  |

@@ -2,8 +2,11 @@
  * The write tools, and the gates in front of them: the connection must be
  * marked writable, an App's write scope narrows it further, a delete reports
  * its impact before it removes anything, and a client that can ask the
- * person is asked. Every write goes through the same recorded operations the
- * browser's edits do, so each one has an undo entry.
+ * person is asked. A single-row `insert`, `update` or `delete` goes through
+ * the same recorded operations the browser's edits do, so each has an undo
+ * entry. `insert_graph` and `delete_graph` do not: they run as one
+ * transaction (graph.ts) with no journal entry, so `revert` cannot take them
+ * back and their results carry no `undoId`. The tool descriptions say so.
  */
 import { history, lastRevertible, revert } from '@mistriwork/engine/server/journal.js';
 import { changingReferences, recordedDelete, recordedInsert, recordedUpdate } from '@mistriwork/engine/server/recordWriteOperations.js';
@@ -119,7 +122,8 @@ export const definitions = [
       'reports the impact: every table pointing at the row, with counts and ON DELETE ' +
       'rules, because the same three referencing rows are three deletions under cascade, ' +
       'three holes under set null, and a refusal under restrict. Read the impact, then ' +
-      'call again with `confirm: true`. The connection must be marked writable.',
+      'call again with `confirm: true`. A client that can ask the person asks them instead, ' +
+      'every time, and `confirm` is not read. The connection must be marked writable.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -168,7 +172,9 @@ export const definitions = [
       'resolves to the parent\u2019s new primary key, or to `{"ref": "c1", "column": "code"}` ' +
       'for any other column of the row as stored. `fixture`\u2019s `tables` can be passed ' +
       'straight through as `tables`. The answer carries a `teardown` list, in reverse ' +
-      'order, ready for `delete_graph`. The connection must be marked writable.',
+      'order, ready for `delete_graph`. The connection must be marked writable. A graph ' +
+      'insert is not journaled: `revert` cannot undo it, and the result carries no `undoId` — ' +
+      'the `teardown` list is the way back.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -245,10 +251,12 @@ export const definitions = [
       'the fixture is gone; a teardown that half-succeeded would leave exactly the mess ' +
       'the insert was careful not to. Each row still needs its whole primary key, and a ' +
       'key matching anything other than one row is refused. Two calls, like `delete`: ' +
-      'without `confirm: true` it reports what points at every row and removes nothing. ' +
-      'The rows are ones the caller listed, but what cascades off them is not — that is ' +
-      'the part worth seeing before a transaction takes it all at once. The connection ' +
-      'must be marked writable.',
+      'without `confirm: true` it reports what points at every row and removes nothing ' +
+      '(a client that can ask the person asks them instead, every time, and `confirm` is ' +
+      'not read). The rows are ones the caller listed, but what cascades off them is not — ' +
+      'that is the part worth seeing before a transaction takes it all at once. The ' +
+      'connection must be marked writable. A graph delete is not journaled: `revert` cannot ' +
+      'undo it, and the result carries no `undoId`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -373,9 +381,10 @@ type Name = (typeof definitions)[number]['name'];
  * Ask the person, through the client, when the client can (elicitation,
  * protocol 2025-06-18+). Set by the serve loop once the client's initialize
  * says it supports it; null means the two-call `confirm: true` gate stands
- * alone. The gate stays either way — an agent that answers its own question
- * is the failure elicitation exists to prevent, so what is asked here is
- * shown to the human by the client, not to the model.
+ * alone. With an elicitor the person is always asked and `confirm` is not
+ * read — an agent that answers its own question is the failure elicitation
+ * exists to prevent, so what is asked here is shown to the human by the
+ * client, not to the model.
  */
 type Elicitor = (message: string, title: string) => Promise<boolean>;
 let elicitor: Elicitor | null = null;
@@ -383,10 +392,9 @@ export function setElicitor(fn: Elicitor | null): void {
   elicitor = fn;
 }
 
-/** True when the call may go ahead: confirmed in the call, or by the person. */
+/** True when the call may go ahead: by the person where the client can ask, else by `confirm: true` in the call. */
 async function confirmedBy(args: Record<string, unknown>, message: string, title: string): Promise<boolean> {
-  if (args.confirm === true) return true;
-  if (!elicitor) return false;
+  if (!elicitor) return args.confirm === true;
   try {
     return await elicitor(message, title);
   } catch {
@@ -634,8 +642,8 @@ export const handlers = {
       table: string;
       key: Record<string, string | number>;
     }>;
-    /* The same two-call gate `delete` has, and for a stronger reason.
-    
+    /* The same gate `delete` has, and for a stronger reason.
+
        `delete` removes one row by key and refuses to proceed until the caller
        has seen what points at it. `delete_graph` removes a whole list of them
        inside one transaction, and had no gate at all — so the tool that could
@@ -643,27 +651,35 @@ export const handlers = {
        The gate was on the less dangerous of the two.
 
        Impact is read before the transaction opens, per row, so what comes
-       back is what `delete` would have said about each of them. */
-    if (args.confirm !== true) {
-      const impact = [];
-      for (const [i, row] of rows.entries()) {
-        const table = row?.table ? tableNamed(schema, row.table) : undefined;
-        if (!table || !row?.key || !Object.keys(row.key).length) {
-          return {
-            connection: id,
-            removed: [],
-            deleted: false,
-            errors: [`Row ${i + 1}${row?.table ? ` (${row.table})` : ''}: a delete needs a known table and a key.`],
-          };
-        }
-        impact.push({ table: table.id, key: row.key, impact: await deleteImpact(adapter, schema, table.id, row.key) });
+       back is what `delete` would have said about each of them — and what a
+       client that can ask the person puts to them. */
+    const impact = [];
+    for (const [i, row] of rows.entries()) {
+      const table = row?.table ? tableNamed(schema, row.table) : undefined;
+      if (!table || !row?.key || !Object.keys(row.key).length) {
+        return {
+          connection: id,
+          removed: [],
+          deleted: false,
+          errors: [`Row ${i + 1}${row?.table ? ` (${row.table})` : ''}: a delete needs a known table and a key.`],
+        };
       }
+      impact.push({ table: table.id, key: row.key, impact: await deleteImpact(adapter, schema, table.id, row.key) });
+    }
+    const referenced = impact.flatMap((row) => row.impact.map((i) => `${i.count} in ${i.table} (${i.onDelete})`));
+    const question =
+      `Delete ${rows.length} row${rows.length === 1 ? '' : 's'} in one transaction (${impact.map((row) => `${row.table} ${Object.values(row.key).join('/')}`).join(', ')})?` +
+      (referenced.length ? ` They are referenced: ${referenced.join(', ')}.` : '') +
+      ' This cannot be undone with revert.';
+    if (rows.length && !(await confirmedBy(args, question.slice(0, 2000), 'Delete rows'))) {
       return {
         connection: id,
         removed: [],
         deleted: false,
         rows: impact,
-        note: 'Nothing was removed. Read the impact of every row, then call again with confirm: true to delete them as one transaction.',
+        note: elicitor
+          ? 'Nothing was removed: the person declined, or did not answer.'
+          : 'Nothing was removed. Read the impact of every row, then call again with confirm: true to delete them as one transaction.',
       };
     }
     try {

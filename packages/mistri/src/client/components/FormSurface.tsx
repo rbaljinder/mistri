@@ -114,6 +114,8 @@ export interface FormPresentation {
 /** What a submission answers: the handler's reference when it gave one, and the receipt. */
 export interface FormReceipt {
   reference?: string;
+  /** What the command's own result said it did, where it said one: shown in place of the form's static description. */
+  message?: string;
   receipt: { id: string; status: string };
 }
 type SubmitForm = (submission: string, input: CommandInputValue, guard?: FormGuard) => Promise<FormReceipt>;
@@ -472,7 +474,7 @@ export function FormSurface({
   };
 
   if (receipt) {
-    const message = form.done?.description ?? (receipt.reference ? say('keepThisReference') : undefined);
+    const message = receipt.message ?? form.done?.description ?? (receipt.reference ? say('keepThisReference') : undefined);
     return (
       <section ref={surface} className="form-page form-page-done" aria-labelledby={`${id}-done`}>
         {!intake && <p className="eyebrow">{appName}</p>}
@@ -488,7 +490,7 @@ export function FormSurface({
           </>
         )}
         {message && <p className="form-page-done-message">{message}</p>}
-        {again && !attempt && (
+        {again && !attempt && form.input.length > 0 && (
           <p>
             <Button intent="secondary" onClick={startAgain}>
               {say('fillInAnother')}

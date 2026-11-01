@@ -639,7 +639,7 @@ export class SqliteAdapter implements Adapter {
    * the read-only handle, at that.
    */
   async explainSql(request: ExplainRequest): Promise<ExplainResult> {
-    const stacked = refuseStacked(request.text);
+    const stacked = refuseStacked(request.text, 'sqlite');
     if (stacked) throw new Error(stacked);
     const analyze = refuseAnalyze(request.text);
     if (analyze) throw new Error(analyze);
@@ -1047,8 +1047,12 @@ export class SqliteAdapter implements Adapter {
 
   private async runSqlNow(request: SqlRequest): Promise<SqlResult> {
     await roundTrip();
-    const stacked = refuseStacked(request.text);
+    const stacked = refuseStacked(request.text, 'sqlite');
     if (stacked) throw new Error(stacked);
+    if (!request.write) {
+      const outside = refuseOutsideTheFile(request.text);
+      if (outside) throw new Refusal(outside);
+    }
     if (request.refuseReserved) refuseReservedText(request.text, 'sqlite');
 
     const limit = clampLimit(request.limit);
@@ -1656,6 +1660,23 @@ export function sqliteParams(params: readonly unknown[]): SQLInputValue[] {
  * Blobs become `<n bytes>`: the grid has no use for the bytes and every use
  * for the size.
  */
+/**
+ * The statements a read-only handle still runs that reach past its file.
+ *
+ * `readOnly: true` stops writes to this database, not to others: `VACUUM
+ * INTO` writes a whole copy — runtime and sign-in tables included — to a path
+ * the statement names, and `ATTACH` opens another file (and, on the shared
+ * in-process handle, leaves it open for the next statement). SQLite's
+ * authorizer is told about an ATTACH but not about a VACUUM, so all three are
+ * refused here by their first keyword, the only place each can stand.
+ */
+function refuseOutsideTheFile(text: string): string | null {
+  const first = trimStatement(text).replace(/^\s*(?:--[^\n]*\n|\/\*[\s\S]*?\*\/|\s)+/g, '');
+  const verb = /^(attach|detach|vacuum)\b/i.exec(first)?.[1];
+  if (!verb) return null;
+  return `${verb.toUpperCase()} reaches past this database file, so a read-only connection refuses it.`;
+}
+
 function valueSafe(v: unknown): unknown {
   if (typeof v === 'bigint') {
     return v >= -9007199254740991n && v <= 9007199254740991n ? Number(v) : v.toString();

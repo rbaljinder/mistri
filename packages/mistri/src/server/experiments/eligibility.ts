@@ -8,13 +8,7 @@ export function epochAdmits(epoch: ExperimentEpoch, context: FlagContext, tenant
   const e = epoch.eligibility,
     audiences = e.audiences ?? {},
     names = Object.keys(audiences);
-  // A 0.8 epoch said who directly; a 1.0 one carries neither list.
-  const roles = e.roles ?? [],
-    tenants = e.tenants ?? [];
   return (
-    (!roles.length || roles.some((role) => context.roles?.includes(role))) &&
-    (!tenants.length || (tenantId !== null && tenants.includes(tenantId))) &&
-    (!names.length ||
-      inAnyAudience(names, audiences, { appId: epoch.scope.appId, environment: epoch.scope.environment, tenantId, context }))
+    !names.length || inAnyAudience(names, audiences, { appId: epoch.scope.appId, environment: epoch.scope.environment, tenantId, context })
   );
 }

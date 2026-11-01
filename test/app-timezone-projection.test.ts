@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { parseAppConfig, zonedNow } from '../packages/mistri/src/shared/app.js';
 import { authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
 import { servedApp, servedUi } from '../packages/mistri/src/shared/appPayload.js';
-import { todayInZone } from '../packages/ui/src/datePickerModel.js';
+import { todayInZone } from '../packages/ui/src/internal/datePickerModel.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
 const schema: DatabaseSchema = {

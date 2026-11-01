@@ -5,7 +5,7 @@
  * `ui.timezone`, the browser's own without one), and the handler receives the
  * UTC instant. A starting value comes back the other way.
  */
-import { dateFormat, isPickerDateTime, splitDateTime } from '@mistriwork/ui/datePickerModel.js';
+import { dateFormat, isPickerDateTime, splitDateTime } from '@mistriwork/ui/internal/datePickerModel.js';
 
 const PARTS = {
   calendar: 'gregory',

@@ -140,8 +140,9 @@ export function sendRevalidated(res: ServerResponse, body: unknown, principal: s
  * it the header costs more than the saving. */
 const COMPRESS_FROM = 1024;
 /** Past this a body is compressed off the event loop: brotli at quality 4 is
- * about 4 ms for a wide schema's 349 KB, and a 100,000-row read is far more. */
-const COMPRESS_INLINE_BELOW = 256 * 1024;
+ * about 4 ms for a wide schema's 349 KB, and a 100,000-row read is far more;
+ * 32 KB is roughly a millisecond, the most a request should hold the loop for. */
+const COMPRESS_INLINE_BELOW = 32 * 1024;
 /** Compressed metadata, by tag and encoding: a revisit that is not a 304 (a
  * new tab, a cleared cache) is sent the bytes compressed the first time. */
 const compressed = new Map<string, Buffer>();

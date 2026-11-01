@@ -310,6 +310,10 @@ jobs:
       # it gives for a missing one names the tarball rather than the folder.
       - run: npm run build
       - run: mkdir -p /tmp/pack && npm pack --workspaces --pack-destination /tmp/pack
+      # What each tarball must carry, read by the release's preflight as well (scripts/check-tarballs.mjs): run
+      # here too, so a package that stops shipping a file is caught on the change, not on the tag.
+      - name: The tarballs have what they need and nothing they should not
+        run: npm pack --workspaces --dry-run --json > /tmp/pack.json && node scripts/check-tarballs.mjs /tmp/pack.json
 
       - name: It installs, serves, and speaks MCP
         run: |

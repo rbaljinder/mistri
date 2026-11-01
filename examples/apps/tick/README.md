@@ -57,14 +57,12 @@ chooses the shared checklist presentation; `quickAdd: true` puts the task's New
 form directly above the list. Neither requires a custom renderer or write API.
 A due date reads from today ("in 3 days", "yesterday") in the list and on
 the record without a word from the App: the platform says a date named like a
-due date that way, and the date itself is the tooltip. The New form's `groups` (What: name, completed; When: due date)
-are presentation only, and `when: { due_on: 'completed = false' }` — a
-condition in the same query language as the actions' `when` — hides the date while
-the draft's completed box is ticked — a task created already done has no
-date to ask for. Visibility reads the draft's shown fields, which is why
-`completed` is in `form.show` and not only in `defaults`; it never changes
-what the server accepts. Both apply to the New form (inline and in the modal),
-not to editing an existing task.
+due date that way, and the date itself is the tooltip. The New form's
+`show: ['name', 'due_on']` asks for the task's name and its day and nothing else:
+whether a task is completed is not a question when adding one, so `completed` is
+defaulted (`defaults: { completed: false }`) and left out of what the form shows.
+`show` and `defaults` apply to the New form (inline and in the modal), not to
+editing an existing task, and they never change what the server accepts.
 Today means due today; Upcoming means later than today. Undated and overdue
 tasks remain in Open. The date phrases are evaluated by Tablewalk, not fixed
 dates embedded in this manifest.

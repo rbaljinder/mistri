@@ -14,18 +14,21 @@
  */
 import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import { Menu } from '@base-ui/react/menu';
-import { layoutViewport, zoomAnchor } from './anchor.js';
-import { popupContainer } from './popups.js';
+import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { popupContainer } from './internal/popups.js';
+import { buttonClass } from './Button.js';
 
 interface DropMenuProps {
   /** The wrapper's class — where the stylesheet places the control. */
-  className: string;
-  triggerClassName: string;
+  className?: string;
+  /** The trigger's classes; a secondary button's by default. */
+  triggerClassName?: string;
   triggerTitle?: string;
   /** The trigger's accessible name, when its visible label is shared with another menu on the page. */
   triggerLabel?: string;
   label: ReactNode;
-  popupClassName: string;
+  /** The popup's classes; the house listbox surface (`dd-list`) by default. */
+  popupClassName?: string;
   side?: 'top' | 'bottom';
   align?: 'start' | 'end';
   sideOffset?: number;
@@ -38,11 +41,11 @@ interface DropMenuProps {
 
 export function DropMenu({
   className,
-  triggerClassName,
+  triggerClassName = buttonClass(),
   triggerTitle,
   triggerLabel,
   label,
-  popupClassName,
+  popupClassName = 'dd-list',
   side = 'bottom',
   align = 'end',
   sideOffset = 4,
@@ -68,7 +71,7 @@ export function DropMenu({
     onOpenChange?.(next);
   };
   return (
-    <div className={className}>
+    <div className={className || undefined}>
       <Menu.Root open={isOpen} onOpenChange={change}>
         <Menu.Trigger
           render={<button type="button" className={triggerClassName} title={triggerTitle} aria-label={triggerLabel} ref={trigger} />}
@@ -117,13 +120,13 @@ export function DropGroup({
 }
 
 /** A rule between two runs of items, a separator to a screen reader. */
-export function DropSeparator({ className }: { className: string }) {
+export function DropSeparator({ className = 'dd-divider' }: { className?: string }) {
   return <Menu.Separator className={className} />;
 }
 
 /** An item drawn as a button, so `disabled` and the button styles hold. Closes the menu unless told not to. */
 export function DropItem({
-  className,
+  className = 'dd-option',
   disabled,
   closeOnClick,
   onClick,
@@ -131,7 +134,7 @@ export function DropItem({
   children,
   ref,
 }: {
-  className: string;
+  className?: string;
   disabled?: boolean;
   closeOnClick?: boolean;
   onClick: () => void;

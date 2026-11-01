@@ -1548,15 +1548,14 @@ export async function createAppAuth(
                counts as a recent one (opening support, issuing an API token). A mark that cannot be written ends the
                session rather than hand out one that would. */
             try {
-              await embedSessions.mark(response.sessionId, response.expiresAt);
+              /* The roles the issuer's mapping gave, for this session alone (embedRole), are kept in the same row:
+                 the account keeps what an administrator set, and a record that lived only in a cache would be lost to
+                 an eviction or a restart, handing back the roles the host withheld. */
+              const roles = config.roles ? JSON.stringify({ issuer: config.name, roles: [...assertion.roles] }) : undefined;
+              await embedSessions.mark(response.sessionId, response.expiresAt, roles);
             } catch (error) {
               await (auth.api as unknown as EmbedApi).mistriEmbedEnd({ body: { token } }).catch(() => {});
               throw error;
-            }
-            /* The roles the issuer's mapping gave, for this session alone
-               (embedRole): the account keeps what an administrator set. */
-            if (config.roles) {
-              await signInState.put('embed', response.sessionId, { issuer: config.name, roles: [...assertion.roles] }, response.expiresAt);
             }
             return { accountId: response.accountId, sessionId: response.sessionId, expiresAt: response.expiresAt, cookies, token };
           },
@@ -1584,12 +1583,37 @@ export async function createAppAuth(
     const roleMappings = new Map(
       embedded.flatMap((issuer) => (issuer.config.roles ? [[issuer.config.name, issuer.config.roles] as const] : [])),
     );
-    const embedRole = async (sessionId: string | undefined, role: string | null | undefined): Promise<string | undefined> => {
+    /* What the store kept with a session's host mark (ledger.ts), once per session in this process: the mark is written
+       before the session is handed out, so an answer holds for the session's life. Bounded as a cache is. */
+    const embedRecords = new Map<string, string | null>();
+    const embedRecordOf = async (sessionId: string): Promise<string | null> => {
+      const known = embedRecords.get(sessionId);
+      if (known !== undefined) return known;
+      const kept = await embedSessions.recorded(sessionId);
+      if (embedRecords.size >= 10_000) embedRecords.delete(embedRecords.keys().next().value!);
+      embedRecords.set(sessionId, kept);
+      return kept;
+    };
+    /** The roles the session holds, or `null` for no session at all: a host's session whose record of what it gave cannot be read fails closed, never to the account's stored roles. */
+    const embedRole = async (sessionId: string | undefined, role: string | null | undefined): Promise<string | undefined | null> => {
       if (!roleMappings.size || !sessionId) return role ?? undefined;
-      const kept = await signInState.read<{ issuer?: unknown; roles?: unknown }>('embed', sessionId);
-      const mapping = typeof kept?.issuer === 'string' ? roleMappings.get(kept.issuer) : undefined;
-      if (!mapping || !Array.isArray(kept!.roles)) return role ?? undefined;
-      const given = kept!.roles.filter((held): held is string => typeof held === 'string' && Object.hasOwn(mapping, held));
+      let kept: string | null;
+      try {
+        kept = await embedRecordOf(sessionId);
+      } catch {
+        return null;
+      }
+      // Not a host's session, or the host's issuer maps nothing: the account's roles, unchanged.
+      if (kept === null || kept === 'embed') return role ?? undefined;
+      let record: { issuer?: unknown; roles?: unknown } | undefined;
+      try {
+        record = JSON.parse(kept) as typeof record;
+      } catch {
+        return null;
+      }
+      const mapping = typeof record?.issuer === 'string' ? roleMappings.get(record.issuer) : undefined;
+      if (!mapping || !Array.isArray(record!.roles)) return null;
+      const given = record!.roles.filter((held): held is string => typeof held === 'string' && Object.hasOwn(mapping, held));
       const next = [...new Set([...rolesOf(role).filter((held) => !Object.hasOwn(mapping, held)), ...given])];
       return next.length ? next.join(',') : undefined;
     };
@@ -1678,6 +1702,7 @@ export async function createAppAuth(
                   ? federation.rolesFor(user.role, (await federation.stepUp.evidence(got.session?.id ?? ''))?.provider)
                   : user.role,
               );
+              if (role === null) return null;
               const verified = (user.emailVerified === true || user.emailVerified === 1) && Boolean(user.email);
               return {
                 id: user.id,
@@ -1714,6 +1739,7 @@ export async function createAppAuth(
               : (user.role as string | null | undefined),
           );
           if (closed) return denyTenant();
+          if (role === null) return null;
           const identity = captureTenantData({ id: user.id, who: user.email ?? user.name ?? user.id, ...(role ? { role } : {}) });
           tenantIdentifier(identity.id, 1024);
           tenantIdentifier(session.id, 1024);

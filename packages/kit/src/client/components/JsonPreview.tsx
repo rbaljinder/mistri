@@ -35,7 +35,7 @@ export function JsonPreview({ value, name, type }: { value: object; name: string
         {previewOf(value)}
       </button>
       {open && here && (
-        <Modal ref={modal} className="confirm json-overlay" aria-label={`${name} (JSON)`} onClose={() => setOpen(false)}>
+        <Modal ref={modal} className="confirm json-overlay" ariaLabel={`${name} (JSON)`} onClose={() => setOpen(false)}>
           <header className="json-overlay-head">
             <h2>{name}</h2>
             {type && <span className="json-overlay-type">{type.toLowerCase()}</span>}

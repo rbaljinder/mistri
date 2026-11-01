@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { publishedDeclarations } from './support/installedTablewalk.js';
 import * as commands from '../packages/mistri/src/server/commands.js';
 import * as maintenance from '../packages/mistri/src/server/maintenance.js';
-import { provisionStores, type StoreTarget } from '../packages/mistri/src/server/maintenance.js';
+import { provisionStores, type MaintenanceTarget } from '../packages/mistri/src/server/maintenance.js';
 import { send } from '../packages/mistri/src/server/commands/commandEffects.js';
 import type { LoadedApp } from '../packages/mistri/src/server/app/apps.js';
 import type { ConnectionConfig } from '../packages/engine/src/server/connections.js';
@@ -45,7 +45,7 @@ import { published } from '../scripts/pack-manifest.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const binding = { appId: 'app', source: { id: 'business', connection: 'business-db' }, storeId: 'public-store' };
-const at = (path: string): StoreTarget => ({ sqlite: path });
+const at = (path: string): MaintenanceTarget => ({ sqlite: path });
 const app = (tenant: typeof binding) => ({ tenant });
 const stores = (path: string, only: string[], tenant: typeof binding = binding) => provisionStores(at(path), { app: app(tenant), only });
 const denied = (error: unknown) => {

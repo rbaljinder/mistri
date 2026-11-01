@@ -739,7 +739,9 @@ export type ColumnKind = 'number' | 'boolean' | 'date' | 'text' | 'other';
 export function columnKind(type: string): ColumnKind {
   const t = (type ?? '').toLowerCase();
   if (/bool/.test(t)) return 'boolean';
-  if (/int|serial|numeric|decimal|real|double|float|money/.test(t)) return 'number';
+  /* Not interval or point, which hold "int" and are not numbers: read as one, a
+     filter compared an interval with an integer and a form refused "1 day". */
+  if (/int|serial|numeric|decimal|real|double|float|money/.test(t) && !/interval|point/.test(t)) return 'number';
   if (/date|time/.test(t)) return 'date';
   if (/char|text|uuid|json|enum|clob/.test(t)) return 'text';
   return 'other';
@@ -818,15 +820,28 @@ export function stateStampColumn(
  * Unparseable input is passed through unchanged rather than coerced to NaN or
  * 0. Letting the database reject "abc" for an integer column gives the user a
  * real error; silently storing 0 gives them a wrong number.
+ *
+ * Only a number a double holds exactly becomes one. An id past 2^53 or a
+ * numeric wider than fifteen digits stays the text it was typed as, and the
+ * database parses it exactly: through Number(), "9007199254740993" was
+ * written as …992, a different row. And only plain decimal text is read as
+ * a number at all — Number() also reads "0x1A" as 26 and "1e3" as 1000,
+ * which is not what was typed; those go to the database as given too.
  */
 export function coerceForColumn(declaredType: string, value: string | number | boolean | null): string | number | boolean | null {
   if (value === null || typeof value !== 'string') return value;
   const kind = columnKind(declaredType);
 
   if (kind === 'number') {
-    if (value.trim() === '') return null;
-    const n = Number(value);
-    return Number.isFinite(n) ? n : value;
+    const typed = value.trim();
+    if (typed === '') return null;
+    const plain = /^-?(\d+)(?:\.(\d+))?$/.exec(typed);
+    if (!plain) return value;
+    const n = Number(typed);
+    if (plain[2] === undefined) return Number.isSafeInteger(n) && String(n) === typed ? n : value;
+    // Fifteen significant digits is what every double carries back exactly.
+    const significant = `${plain[1]}${plain[2]}`.replace(/^0+/, '').replace(/0+$/, '').length;
+    return significant <= 15 ? n : value;
   }
   if (kind === 'boolean') {
     if (/^(true|yes|1|t)$/i.test(value)) return true;

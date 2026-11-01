@@ -35,7 +35,7 @@ export function SupportSessions({ onClose }: { onClose: () => void }) {
   }, []);
   const names = tenantNames();
   return (
-    <Modal className="support-log" aria-label={say('supportSessions')} fullscreen="mobile" onClose={onClose}>
+    <Modal className="support-log" ariaLabel={say('supportSessions')} fullscreen="mobile" onClose={onClose}>
       <header>
         <h2>{say('supportSessions')}</h2>
         <button type="button" className="ghost" aria-label={say('closeSupportSessions')} onClick={onClose}>

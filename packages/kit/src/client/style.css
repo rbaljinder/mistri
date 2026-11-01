@@ -656,7 +656,7 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
 :is(.dd-option, .palette-item, .picker-option, .ac-item).active:not(:focus) { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
 .more-item.no-tick { grid-template-columns: 1fr auto; }
 .more-tick { color: var(--accent-ink); font-size: var(--text-xs); }
-.more-detail { font-size: var(--text-xs); color: var(--ink-subtle); }
+.more-detail { font-size: var(--text-xs); color: var(--ink-subtle); min-width: 0; margin-inline-start: var(--space-3); text-align: end; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
   .more-item { grid-template-columns: 1.1rem minmax(0, 1fr); }
   .more-item.no-tick { grid-template-columns: minmax(0, 1fr); }
@@ -2458,8 +2458,14 @@ body.app-mode .page-head.has-record + .page-body { padding-bottom: calc(132px + 
 /* Room to breathe at the end. Content ending flush against the bottom edge
    reads as cut off rather than finished, and on a scrolled page there is no
    signal that you have reached the end of it. */
-.record { padding-bottom: 64px; }
+.record { padding-bottom: calc(var(--space-8) + var(--space-4)); }
 .record .panel { padding-bottom: var(--space-4); }
+/* The Workbench's record: the room at the end is the panels' own, not the record's. Padding on the record left a band
+   at the foot where the page's ground showed, with the columns' rule and the rail stopping 64px short of the pane. */
+body:not(.app-mode) .record { padding-bottom: 0; background: var(--surface); }
+body:not(.app-mode) .record .panel { padding-bottom: calc(var(--space-8) + var(--space-4)); }
+/* Stacked, the first panel is followed by the next, and a gap that wide between them is not room at the end. */
+@media (max-width: 900px) { body:not(.app-mode) .record .panel:not(:last-child) { padding-bottom: var(--space-4); } }
 
 /* A record has a measure; a table does not.
 

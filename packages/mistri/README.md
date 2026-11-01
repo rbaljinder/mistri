@@ -27,10 +27,10 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.3; the
+These App features ship in mistri 1.0.0-rc.9; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
-written for people and coding agents, then the authoring guide (`docs/authoring.md`).
+written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
 
 The reference ships in the package, so it reads offline: `npx @mistriwork/mistri docs`
 lists one-screen topics — what an App serves: its declared resources, and
@@ -50,7 +50,7 @@ a screen no view draws, a route that is not a command — the App sits inside
 it: a free-form page of the App's own, the handler mounted in your server, the
 App embedded in your React app ([the general path](https://mistriwork.dev/docs/general-path/)).
 
-What 0.8.1 builds, each shown once on the site:
+What it builds, each shown once on the site:
 
 | | |
 |---|---|
@@ -96,8 +96,8 @@ For independent per-App connections and sign-in on one local listener,
 [Local App suites](https://mistriwork.dev/docs/suites/) for configuration and
 the currently supported subset.
 
-For an opt-in local performance check, run `npm run test:load:smoke` from the
-installed checkout. The [load-testing section](https://mistriwork.dev/docs/performance/#load-testing)
+For an opt-in local performance check, run `npm run test:load:smoke` from a source
+checkout of the repository (the npm package does not ship the script). The [load-testing section](https://mistriwork.dev/docs/performance/#load-testing)
 describes concurrent HTTP traffic and real browser journeys against a fresh,
 isolated instance of a test fixture App; existing previews and databases are not load targets.
 
@@ -117,7 +117,7 @@ and business rules. Lintel's row policy and `authority.lock` show both.
 Two access models exist, both opt-in and both enforced on the server. A **row policy** (`auth.rows: 'policy'` plus
 `--policy <file>`) scopes what an authenticated App reads and, on a SQLite or
 PostgreSQL source, what it may update, insert, delete and undo; see
-row policies and Undo (`docs/authoring.md`). A **tenant
+row policies and Undo ([App DSL reference](https://mistriwork.dev/docs/app-dsl/)). A **tenant
 App** (`auth.rows: 'tenant'` plus `--policy <file>`) adds native sign-in,
 verified membership and per-tab tenant selection on one provisioned SQLite
 file or dedicated PostgreSQL database; see tenant startup (`docs/tenant-apps.md`)

@@ -4,7 +4,10 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { DateField } from './DateField.js';
 
-vi.mock('@mistriwork/ui/anchor.js', () => ({ zoomAnchor: () => null, layoutViewport: () => ({ x: 0, y: 0, width: 1200, height: 900 }) }));
+vi.mock('@mistriwork/ui/internal/anchor.js', () => ({
+  zoomAnchor: () => null,
+  layoutViewport: () => ({ x: 0, y: 0, width: 1200, height: 900 }),
+}));
 afterEach(cleanup);
 
 test("the field says the catalog's words and draws the kit's calendar icon", async () => {

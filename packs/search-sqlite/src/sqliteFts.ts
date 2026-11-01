@@ -232,7 +232,7 @@ export class SqliteFtsIndex implements SearchIndex {
   /**
    * Gone from the index; a document that was never there is gone already, and a collection never ensured holds
    * nothing — as does a name the index cannot hold. With a tenant scope only that tenant's document goes; without
-   * one, every tenant's document under that key does (core's removal names no tenant yet).
+   * one, every tenant's document under that key does; core names the tenant of a tenant-owned row's removal (appSearchRuntime.ts).
    */
   async remove(collection: string, id: string, scope?: SearchScope): Promise<void> {
     if (!isIdentifier(collection)) return;

@@ -40,8 +40,8 @@ export interface SearchIndex {
   /** The collection exists and holds every field named, each optional text; a field added later is added. */
   ensureCollection(name: string, fields: readonly string[]): Promise<void>;
   upsert(collection: string, document: SearchDocument): Promise<void>;
-  /** Gone from the index; a document that was never there is gone already. */
-  remove(collection: string, id: string): Promise<void>;
+  /** Gone from the index; a document that was never there is gone already. With `scope`, only the document of that tenant: tenants may share a key, and another's must stay. */
+  remove(collection: string, id: string, scope?: SearchScope): Promise<void>;
   /** The keys of the best matches for `phrase` across `fields`, best first, at most `limit`; a collection never indexed matches nothing. */
   search(collection: string, phrase: string, fields: readonly string[], limit: number, scope?: SearchScope): Promise<string[]>;
 }

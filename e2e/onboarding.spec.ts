@@ -313,6 +313,8 @@ test.describe('the tour', () => {
     /* Findable again. The one thing worse than a tour nobody asked for is one
        that cannot be reopened by somebody who now wants it. */
     await page.locator('#more-button').click();
+    /* Nothing has been edited, so a standing "nothing to undo" row would only be a write control on a read-only start. */
+    await expect(page.getByRole('menuitem', { name: /Undo the last edit/ })).toHaveCount(0);
     await page.getByRole('menuitem', { name: /Take the tour/ }).click();
     await expect(page.locator('.tour-card')).toBeVisible();
     await expect(page.locator('.tour-step')).toHaveText('1 of 6');

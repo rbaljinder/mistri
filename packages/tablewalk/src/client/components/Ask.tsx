@@ -28,7 +28,7 @@ export function AskDialog({ initial = '', onRun, onClose }: { initial?: string; 
     onRun?.(text);
   };
   return (
-    <Modal className="ask" ref={dialog} onClose={onClose} initialFocus={input} aria-label={say('writeAQuery')} plain>
+    <Modal className="ask" ref={dialog} onClose={onClose} initialFocus={input} ariaLabel={say('writeAQuery')} plain>
       {/* Arrives selected, so typing replaces it and an arrow key keeps it. */}
       <textarea
         ref={input}

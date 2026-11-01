@@ -20,14 +20,22 @@ export interface AvatarProps {
   className?: string;
 }
 
+const graphemes = typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+
+/* A letter is a grapheme, not a UTF-16 unit: `slice(0, 1)` splits an emoji or an astral letter into a lone surrogate. */
+function firstLetter(word: string): string {
+  const first = graphemes ? graphemes.segment(word)[Symbol.iterator]().next().value?.segment : Array.from(word)[0];
+  return (first ?? '').toUpperCase();
+}
+
 export function initialsOf(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (!words.length) return '';
-  if (words.length === 1) return words[0]!.slice(0, 1).toUpperCase();
-  return (words[0]!.slice(0, 1) + words[1]!.slice(0, 1)).toUpperCase();
+  if (words.length === 1) return firstLetter(words[0]!);
+  return firstLetter(words[0]!) + firstLetter(words[1]!);
 }
 
-export function AvatarDisc({ name, src, size = 'md', className }: AvatarProps) {
+export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
   return (
     <BaseAvatar.Root className={['ui-avatar', `ui-avatar-${size}`, className].filter(Boolean).join(' ')}>
       {src ? <BaseAvatar.Image className="ui-avatar-image" src={src} alt="" /> : null}
@@ -37,6 +45,3 @@ export function AvatarDisc({ name, src, size = 'md', className }: AvatarProps) {
     </BaseAvatar.Root>
   );
 }
-
-/** The short name, as the other primitives export theirs. */
-export const Avatar = AvatarDisc;

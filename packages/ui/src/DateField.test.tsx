@@ -5,7 +5,7 @@ import { userEvent } from '@testing-library/user-event';
 import { DateField as Drawn, type DateFieldProps, type DateFieldWords } from './DateField.js';
 import { Modal } from './Modal.js';
 
-vi.mock('./anchor.js', () => ({ zoomAnchor: () => null, layoutViewport: () => ({ x: 0, y: 0, width: 1200, height: 900 }) }));
+vi.mock('./internal/anchor.js', () => ({ zoomAnchor: () => null, layoutViewport: () => ({ x: 0, y: 0, width: 1200, height: 900 }) }));
 afterEach(cleanup);
 
 /* The words a host lends (the kit lends its catalog's): these are the ones the assertions read. */
@@ -117,7 +117,7 @@ test('calendar lives inside enclosing dialog; Escape closes only the calendar fi
   const user = userEvent.setup(),
     close = vi.fn();
   render(
-    <Modal className="test-dialog" aria-label="Edit task" onClose={close}>
+    <Modal className="test-dialog" ariaLabel="Edit task" onClose={close}>
       <Field />
     </Modal>,
   );

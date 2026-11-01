@@ -116,7 +116,7 @@ export function AccountProfile({ onClose, title = say('yourProfile') }: { onClos
   if (identity !== owner || owner.mode !== 'authenticated') return null;
   const uncertain = phase === 'unknown' || phase === 'checking';
   return (
-    <Modal className="account-profile" aria-label={title} onClose={onClose} closeDisabled={phase === 'saving'} initialFocus={input}>
+    <Modal className="account-profile" ariaLabel={title} onClose={onClose} closeDisabled={phase === 'saving'} initialFocus={input}>
       <header>
         <h2>{title}</h2>
         <Button intent="quiet" onClick={onClose} disabled={phase === 'saving'} aria-label={say('closeProfile')}>

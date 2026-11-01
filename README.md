@@ -85,7 +85,7 @@ Everything below is stable unless it says **Preview**. The
 - A testing kit: sign in as each role, run commands, assert a permissions matrix; `mistri test init` writes a first suite.
 - Traces to your collector over OpenTelemetry, readiness checks and a support bundle.
 - Mount an App in your own Node server, or embed it in your React app.
-- `mistri deploy` to Cloudflare Containers is **Preview**, as are feature flags, experiments, behavior analytics and the Suite Console.
+- `mistri deploy` to Cloudflare Containers is **Preview**, as are the installable PWA (`ui.pwa`), `@mistriwork/ui`, feature flags, experiments, behavior analytics and the Suite Console.
 
 ## Build an App with a coding agent
 

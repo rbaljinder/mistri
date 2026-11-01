@@ -28,7 +28,7 @@ export interface SwitchProps {
   ref?: Ref<HTMLButtonElement>;
 }
 
-export function SwitchControl({
+export function Switch({
   label,
   description,
   checked,
@@ -74,6 +74,3 @@ export function SwitchControl({
     </span>
   );
 }
-
-/** The short name, as the other primitives export theirs. */
-export const Switch = SwitchControl;

@@ -1047,15 +1047,32 @@ export function Grid({
       }),
     [],
   );
+  /* The widths a scrolled grid's columns are drawn at now. A scrolled grid is laid out by its content and holds no
+     width of its own, so the first one dragged would otherwise switch it to a fixed layout with every other column
+     at its estimated minimum, and the dragged one would start from the estimate rather than from what the reader
+     grabbed. The heads are measured instead, and the whole row becomes the first arrangement: the switch moves
+     nothing but the column being dragged. A head not laid out yet (no width) is left to its fitted width. */
+  const measureDrawn = useCallback((from: Element): Record<string, number> => {
+    const measured: Record<string, number> = {};
+    for (const th of from.closest('table')?.querySelectorAll<HTMLElement>('thead th[data-col]') ?? []) {
+      const width = th.getBoundingClientRect().width / viewportScale();
+      if (width > 0) measured[th.dataset.col!] = clampColumnWidth(width);
+    }
+    return measured;
+  }, []);
   /* One resizer drag at a time: where it started, the width it started
      from, and the override it started over, so a cancelled drag puts
-     back exactly what was there — including no override at all. */
+     back exactly what was there — including no override at all. `seed` is
+     the measured row of a scrolled grid not yet arranged, spent by the
+     first move (a press that never moves arranges nothing). */
   const resizeDrag = useRef<{
     name: string;
     startX: number;
     startWidth: number;
     hadOverride: boolean;
     prevWidth: number | undefined;
+    seed: Record<string, number> | null;
+    seeded: boolean;
   } | null>(null);
   const columns = useMemo(
     () => helper.columns(ordered.map((name) => helper.accessor((row: Row) => row[name], { id: name, header: name }))),
@@ -1361,6 +1378,7 @@ export function Grid({
         scope="col"
         className={`align-${plan.align}${explicit ? ' sorted' : ''}${implied ? ' sorted-default' : ''}${pin !== undefined ? ` pinned${name === lastPinned ? ' pinned-edge' : ''}` : ''}`}
         style={pin !== undefined ? { left: `${pin}px` } : undefined}
+        data-col={name}
         /* Alt+arrows move the column, as they move a field in the
            arranger (FieldArranger.tsx): the head already owns its click
            for sorting, so a drag would fight it, and a drag's drop target
@@ -1413,12 +1431,18 @@ export function Grid({
              or holds focus, and out of the head's flow there (style.css),
              as the filter caret is — a row of marks down every head
              otherwise. The arrows are drawn by the stylesheet, so the
-             head's text stays its label. */}
+             head's text stays its label. They are out of the tab order: a
+             head already costs a stop for its sort, one for its filter and
+             one for its resizer, and five per head is sixty Tabs across a
+             twelve-column grid. A keyboard moves a column with Alt+arrows
+             on the head (below); a pointer and a screen reader's cursor
+             still reach the buttons. */}
           {interactive && (
             <span className="th-moves">
               <button
                 type="button"
                 className="th-move th-move-left"
+                tabIndex={-1}
                 disabled={!canMove(name, 'left')}
                 title={say('moveColumnLeft', { name: headLabel })}
                 aria-label={say('moveColumnLeft', { name: headLabel })}
@@ -1430,6 +1454,7 @@ export function Grid({
               <button
                 type="button"
                 className="th-move th-move-right"
+                tabIndex={-1}
                 disabled={!canMove(name, 'right')}
                 title={say('moveColumnRight', { name: headLabel })}
                 aria-label={say('moveColumnRight', { name: headLabel })}
@@ -1484,12 +1509,15 @@ export function Grid({
             {...(appliedWidth !== undefined ? { 'aria-valuenow': appliedWidth, 'aria-valuemin': MIN_COLUMN_WIDTH } : {})}
             onPointerDown={(e) => {
               if (e.pointerType === 'mouse' && e.button !== 0) return;
+              const seed = sizing !== 'fit' && !hasWidthOverrides ? measureDrawn(e.currentTarget) : null;
               resizeDrag.current = {
                 name,
                 startX: e.clientX,
-                startWidth: appliedWidth ?? colWidths[index] ?? 0,
+                startWidth: seed?.[name] ?? appliedWidth ?? colWidths[index] ?? 0,
                 hadOverride: name in columnWidths,
                 prevWidth: columnWidths[name],
+                seed,
+                seeded: false,
               };
               try {
                 e.currentTarget.setPointerCapture(e.pointerId);
@@ -1503,7 +1531,15 @@ export function Grid({
               /* The pointer speaks screen pixels; the column's width
                  speaks layout pixels (ruler.ts), so the drag is divided
                  by the root's zoom before it becomes a width. */
-              setColumnWidth(name, drag.startWidth + (e.clientX - drag.startX) / viewportScale());
+              const width = drag.startWidth + (e.clientX - drag.startX) / viewportScale();
+              if (drag.seed) {
+                const seed = drag.seed;
+                drag.seed = null;
+                drag.seeded = true;
+                setColumnWidths({ ...seed, [name]: clampColumnWidth(width) });
+                return;
+              }
+              setColumnWidth(name, width);
             }}
             onPointerUp={() => {
               if (resizeDrag.current?.name === name) resizeDrag.current = null;
@@ -1512,6 +1548,11 @@ export function Grid({
               const drag = resizeDrag.current;
               if (drag?.name !== name) return;
               resizeDrag.current = null;
+              /* A drag that arranged a scrolled grid undoes all of it: the grid goes back to no arrangement. */
+              if (drag.seeded) {
+                setColumnWidths({});
+                return;
+              }
               setColumnWidths((current) => {
                 const next = { ...current };
                 if (drag.hadOverride && drag.prevWidth !== undefined) next[name] = drag.prevWidth;
@@ -1527,8 +1568,11 @@ export function Grid({
               }
               if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
               e.preventDefault();
-              const current = appliedWidth ?? colWidths[index] ?? 0;
-              setColumnWidth(name, current + (e.key === 'ArrowRight' ? 1 : -1) * columnResizeStep(e.shiftKey));
+              const seed = sizing !== 'fit' && !hasWidthOverrides ? measureDrawn(e.currentTarget) : null;
+              const current = seed?.[name] ?? appliedWidth ?? colWidths[index] ?? 0;
+              const width = current + (e.key === 'ArrowRight' ? 1 : -1) * columnResizeStep(e.shiftKey);
+              if (seed) setColumnWidths({ ...seed, [name]: clampColumnWidth(width) });
+              else setColumnWidth(name, width);
             }}
             onDoubleClick={() => resetColumnWidth(name)}
           />

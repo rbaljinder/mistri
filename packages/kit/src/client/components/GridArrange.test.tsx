@@ -144,6 +144,14 @@ test('move buttons reorder columns, and the cells follow the heads', async () =>
   expect(headerOrder()[1]).toMatch(/^name/);
 });
 
+test('the move buttons are not tab stops, so a head costs a keyboard no more than its sort, filter and resizer', () => {
+  draw();
+  for (const button of screen.getAllByRole('button', { name: /^Move .* (left|right)$/ })) expect(button).toHaveAttribute('tabindex', '-1');
+  // The keyboard path is still there: Alt+arrows on the head.
+  fireEvent.keyDown(screen.getByRole('button', { name: 'name' }), { key: 'ArrowLeft', altKey: true });
+  expect(headerOrder()[0]).toMatch(/^name/);
+});
+
 test('Alt+arrows move a column from its head', () => {
   draw();
   const sort = screen.getByRole('button', { name: 'name' });
@@ -190,6 +198,34 @@ test('a scrolled grid takes a colgroup only once a width is dragged', () => {
   expect(document.querySelector('table')).toHaveClass('grid-fit');
   expect(document.querySelector('colgroup')).not.toBeNull();
   expect(resizer).toHaveAttribute('aria-valuenow');
+});
+
+test('dragging a scrolled column keeps every other column at the width it was drawn at, and starts from the drawn width', () => {
+  draw({ sizing: 'scroll' });
+  // happy-dom lays nothing out, so the heads are given the widths a browser would have drawn.
+  const drawn: Record<string, number> = { id: 70, name: 310, active: 150 };
+  for (const th of document.querySelectorAll<HTMLElement>('thead th[data-col]')) {
+    th.getBoundingClientRect = () => ({ width: drawn[th.dataset.col!]! }) as DOMRect;
+  }
+  const resizer = screen.getByRole('separator', { name: 'Resize name column' });
+  fireEvent.pointerDown(resizer, { clientX: 100, button: 0, pointerType: 'mouse' });
+  // A press that never moves arranges nothing.
+  expect(document.querySelector('colgroup')).toBeNull();
+  fireEvent.pointerMove(resizer, { clientX: 130 });
+  expect(colWidths()).toEqual([70, 340, 150]);
+  fireEvent.pointerUp(resizer);
+});
+
+test('cancelling the first drag of a scrolled grid leaves it unarranged', () => {
+  draw({ sizing: 'scroll' });
+  for (const th of document.querySelectorAll<HTMLElement>('thead th[data-col]'))
+    th.getBoundingClientRect = () => ({ width: 120 }) as DOMRect;
+  const resizer = screen.getByRole('separator', { name: 'Resize name column' });
+  fireEvent.pointerDown(resizer, { clientX: 100, button: 0, pointerType: 'mouse' });
+  fireEvent.pointerMove(resizer, { clientX: 150 });
+  expect(document.querySelector('colgroup')).not.toBeNull();
+  fireEvent.pointerCancel(resizer);
+  expect(document.querySelector('colgroup')).toBeNull();
 });
 
 test('a grid that may not interact offers no arrangement controls', () => {

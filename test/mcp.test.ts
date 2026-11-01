@@ -1106,6 +1106,7 @@ describe('writing over MCP', () => {
     }>;
     assert.equal(inserted.length, 3);
     assert.equal((made.stats as { rowsWritten: number }).rowsWritten, 3);
+    assert.equal(made.undoId, undefined, 'a graph insert is not journaled: revert cannot undo it');
 
     const customerId = inserted[1].key.id;
     assert.equal(typeof customerId, 'number', 'the database assigned it');
@@ -1488,6 +1489,33 @@ describe('tool profiles', () => {
       send({ id: ask2.id, result: { action: 'accept', content: { confirm: true } } });
       const accepted = await next((l) => l.id === 4);
       assert.equal((accepted.result as { structuredContent: { deleted: boolean } }).structuredContent.deleted, true);
+      // A model that writes confirm:true itself is still asked, and a decline deletes nothing: delete and delete_graph.
+      send({
+        id: 5,
+        method: 'tools/call',
+        params: { name: 'insert', arguments: { connection: 'scratch', table: 'country', values: { code: 'EM', name: 'Emptia' } } },
+      });
+      await next((l) => l.id === 5);
+      const forced = (id: number, name: string, args: Record<string, unknown>) =>
+        send({ id, method: 'tools/call', params: { name, arguments: { connection: 'scratch', confirm: true, ...args } } });
+      forced(6, 'delete', { table: 'country', key: { code: 'EM' } });
+      const ask3 = await next((l) => l.method === 'elicitation/create' && l.id !== ask1.id && l.id !== ask2.id);
+      send({ id: ask3.id, result: { action: 'decline' } });
+      const refused = await next((l) => l.id === 6);
+      assert.equal((refused.result as { structuredContent: { deleted: boolean } }).structuredContent.deleted, false);
+      forced(7, 'delete_graph', { rows: [{ table: 'country', key: { code: 'EM' } }] });
+      const ask4 = await next((l) => l.method === 'elicitation/create' && ![ask1.id, ask2.id, ask3.id].includes(l.id as number));
+      assert.match(String((ask4.params as { message: string }).message), /Delete 1 row in one transaction/);
+      send({ id: ask4.id, result: { action: 'decline' } });
+      const graphRefused = await next((l) => l.id === 7);
+      assert.equal((graphRefused.result as { structuredContent: { deleted: boolean } }).structuredContent.deleted, false);
+      forced(8, 'delete_graph', { rows: [{ table: 'country', key: { code: 'EM' } }] });
+      const ask5 = await next((l) => l.method === 'elicitation/create' && ![ask1.id, ask2.id, ask3.id, ask4.id].includes(l.id as number));
+      send({ id: ask5.id, result: { action: 'accept', content: { confirm: true } } });
+      const graphDone = await next((l) => l.id === 8);
+      const graphResult = (graphDone.result as { structuredContent: { deleted: boolean; undoId?: number } }).structuredContent;
+      assert.equal(graphResult.deleted, true, 'the person said yes');
+      assert.equal(graphResult.undoId, undefined, 'a graph delete is not journaled');
     } finally {
       child.stdin.end();
       child.kill();

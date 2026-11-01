@@ -202,7 +202,7 @@ const events = (body: string) =>
 function stream(
   hub: LiveHub,
   db: DatabaseSync,
-  options: { account?: string; resolve?: () => Promise<readonly LiveAuthority[]>; limits?: object } = {},
+  options: { account?: string; resolve?: () => Promise<readonly LiveAuthority[]>; limits?: object; now?: () => number } = {},
 ) {
   const req = new EventEmitter() as unknown as IncomingMessage;
   const res = new FakeResponse();
@@ -215,6 +215,7 @@ function stream(
     authority: [authority(db, true, probes)],
     resolve: options.resolve ?? (async () => [authority(db, true, probes)]),
     limits: { coalesceMs: 20, ...options.limits },
+    ...(options.now ? { now: options.now } : {}),
   });
   return { res, opened };
 }
@@ -270,6 +271,26 @@ test('a stream is refused past the per-account cap, ends when its authority fail
   });
 });
 
+test('a stream re-verifies its authority at every interval even when the clock reads a few milliseconds short', async () => {
+  await fixture(async (_adapter, db, hub) => {
+    let resolved = 0;
+    // The stream's clock runs 3% slow, as a timer that wakes early reads: every interval then measures a hair under
+    // authorityMs. A strict comparison called that fresh and re-verified only every second tick (4 -> 2 in 450 ms).
+    const watched = stream(hub, db, {
+      now: () => Math.floor(Date.now() * 0.97),
+      limits: { authorityMs: 100 },
+      resolve: async () => {
+        resolved++;
+        return [authority(db, true, { count: 0 })];
+      },
+    });
+    await watched.opened;
+    await delay(450);
+    watched.res.destroy();
+    assert.ok(resolved >= 3, `re-verified ${resolved} times in 450 ms at a 100 ms interval`);
+  });
+});
+
 test('a flush that met a backlog is asked again, so a reader that catches up is told without a drain or a heartbeat', async () => {
   await fixture(async (adapter, db, hub) => {
     const slow = stream(hub, db, { account: 'ray', limits: { stalledMs: 60_000 } });
@@ -309,6 +330,7 @@ test('a change waits for every healthy replica to replay it, and past the wait i
   lendStoreHost(adapter, {
     dialect: 'postgres',
     withReadClient: async (work: (client: unknown) => Promise<unknown>) => work({ query: async () => ({ rows: [{ lsn: '0/10' }] }) }),
+    hasReplicas: () => true,
     onHealthyReplicas: async (work: (client: unknown) => Promise<unknown>) => [
       await work({ query: async () => ({ rows: [{ caught: true }] }) }),
       await work({ query: async () => ({ rows: [{ caught: replayed }] }) }),
@@ -348,6 +370,56 @@ test('a change waits for every healthy replica to replay it, and past the wait i
     rows = 2;
     await until(() => primaries.length === 2);
     assert.deepEqual(primaries, [true, false]);
+  } finally {
+    hub.detach(one);
+    await hub.close();
+  }
+});
+
+test('with no replica named, a change is told without asking the primary for its log position', async () => {
+  const asked: string[] = [];
+  const adapter = {} as Adapter;
+  lendStoreHost(adapter, {
+    dialect: 'postgres',
+    withReadClient: async (work: (client: unknown) => Promise<unknown>) =>
+      work({
+        query: async (text: string) => {
+          asked.push(text);
+          return { rows: [{ lsn: '0/10' }] };
+        },
+      }),
+    hasReplicas: () => false,
+    onHealthyReplicas: async () => [],
+  } as unknown as PostgresStoreHost);
+  let rows = 0;
+  const change = { id: '1', at: 0, actor: '', tenant: null, entries: [{ table: 'ticket', kind: 'update' as const, keys: [{ id: 1 }] }] };
+  const store: LiveStore = {
+    dialect: 'sqlite',
+    ready: async () => true,
+    head: async () => ({ id: '0' }),
+    read: async (from) => (rows > Number(from.id) ? [{ change: { ...change, id: String(rows) }, position: { id: String(rows) } }] : []),
+    locate: async (cursor) => ({ id: cursor }),
+    prune: async () => 0,
+  };
+  const hub = new LiveHub(adapter, store, { pollMs: 20 });
+  const primaries: boolean[] = [];
+  const one: LiveTap = {
+    authority: async () => ({
+      actor: '',
+      tables: new Map([['ticket', { id: 'ticket', key: ['id'], columns: 'all' as const, scope: true as const, fingerprint: '' }]]),
+      probe: async () => new Set<string>(),
+    }),
+    receive: (_delivery, _position, _replay, primary) => primaries.push(primary),
+    placed: () => {},
+    reset: () => assert.fail('reset'),
+    fail: () => assert.fail('failed'),
+  };
+  try {
+    await hub.attach(one);
+    rows = 1;
+    await until(() => primaries.length === 1);
+    assert.deepEqual(primaries, [false]);
+    assert.deepEqual(asked, [], 'no pg_current_wal_lsn() without a replica to compare it with');
   } finally {
     hub.detach(one);
     await hub.close();

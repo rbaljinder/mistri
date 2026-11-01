@@ -147,7 +147,7 @@ classes: `Modal.tsx` (every dialog), `DropMenu.tsx`/`OverflowMenu.tsx`/
 `ThMenu.tsx`/`TopNav.tsx` (every menu), `Dropdown.tsx` (the listbox) and
 `Typeahead.tsx` (every box-with-a-list); the walk-free ones are `@mistriwork/ui`'s
 (`packages/ui/src/`) and take their words as props. Popups are anchored through
-`anchor.ts`, which measures on the zoom-aware ruler (`packages/ui/src/ruler.ts`) — Floating UI does not
+`anchor.ts`, which measures on the zoom-aware ruler (`packages/ui/src/internal/ruler.ts`) — Floating UI does not
 know about the density zoom on the root — and are drawn inside the
 enclosing dialog when there is one. The assessment's step 4 says what was
 left by hand and why.
@@ -222,7 +222,9 @@ commands below remain the way to *see* the live values.
 
 - **The read-only / write-opt-in claim.** Browsing is read-only; editing is
   per-connection opt-in (`"writable": true`) and enforced on the server — in
-  every route and tool that writes — not the UI. Every place that describes writes should say so.
+  every route and tool that writes — not the UI; the adapter keeps a read to one statement in a read-only
+  transaction (`docs/architecture.md`), and the server checks the writable opt-in before it. Every place that
+  describes writes should say so.
 
 - **Values that are not JavaScript numbers.** Ids past 2^53 come back from the
   adapters as **strings** and must never be run through `Number()` for display

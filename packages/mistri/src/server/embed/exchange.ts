@@ -29,6 +29,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { readBounded } from '@mistriwork/engine/server/http/reply.js';
 import { ownOrigin, type ProxyRange } from '@mistriwork/engine/server/http/trust.js';
 import { clientAddress, limitKey } from '@mistriwork/engine/server/http/rateLimit.js';
 import { signInState } from '../auth/signInState.js';
@@ -84,22 +85,18 @@ const bearerKey = (token: string) => createHash('sha256').update(token).digest('
 
 function reply(res: ServerResponse, status: number, body: unknown, headers: Record<string, string | readonly string[]> = {}): void {
   res.statusCode = status;
-  res.setHeader('content-type', 'application/json');
+  res.setHeader('content-type', 'application/json; charset=utf-8');
+  res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('cache-control', 'no-store');
   for (const [name, value] of Object.entries(headers)) res.setHeader(name, value as string | string[]);
   res.end(JSON.stringify(body));
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > MAX_BODY) throw new EmbedRefusal(413, 'body_too_large', 'That is not one assertion.');
-    chunks.push(chunk as Buffer);
-  }
+  const read = await readBounded(req, MAX_BODY);
+  if (!read) throw new EmbedRefusal(413, 'body_too_large', 'That is not one assertion.');
   try {
-    const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+    const body = JSON.parse(read.toString('utf8')) as unknown;
     if (body && typeof body === 'object' && !Array.isArray(body)) return body as Record<string, unknown>;
   } catch {
     /* said below */

@@ -89,7 +89,7 @@ export function EnterDealerDialog({
     onSubmit({ tenantId: tenantId!, dealerRole: dealerRole!, reason: text, ...(signIn ? { password } : {}) });
   };
   return (
-    <Modal className="enter-dealer" aria-label={title} fullscreen="mobile" closeDisabled={busy} onClose={onClose}>
+    <Modal className="enter-dealer" ariaLabel={title} fullscreen="mobile" closeDisabled={busy} onClose={onClose}>
       <form onSubmit={submit} noValidate aria-labelledby={heading}>
         <h2 id={heading}>{title}</h2>
         <p className="note">{say('youSeeTheTenants', words)}</p>

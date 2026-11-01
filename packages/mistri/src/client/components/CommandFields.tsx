@@ -28,7 +28,7 @@ import { toast } from '@mistriwork/kit/client/core.js';
 import type { LineDraft } from './FormLines.js';
 import { RichTextField, mentionSearch, pictureKeeper } from '@mistriwork/kit/client/components/RichTextField.js';
 import type { CommandValue } from '../commandState.js';
-import { Dropdown } from '@mistriwork/kit/client/components/Dropdown.js';
+import { Dropdown, readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
 import { DateField } from '@mistriwork/kit/client/components/DateField.js';
 import { formatLocale, formatTimezone } from '@mistriwork/kit/client/locale.js';
 import { onDemand, useArrived } from '@mistriwork/kit/client/components/onDemand.js';
@@ -612,7 +612,14 @@ export function CommandFieldControl({
         value={chosen < 0 ? '' : String(chosen)}
         valueClassName={chosen < 0 ? 'is-empty' : undefined}
         items={[
-          ...(chosen < 0 ? [{ value: '', label: say('choosePlaceholder', { label: field.label.toLowerCase() }) }] : []),
+          ...(chosen < 0
+            ? [
+                {
+                  value: '',
+                  label: readsAsName(field.label) ? say('choosePlaceholder', { label: field.label.toLowerCase() }) : say('chooseOne'),
+                },
+              ]
+            : []),
           ...field.options.map((option, index) => ({ value: String(index), label: option.label })),
         ]}
         onChange={(next) => {
@@ -899,7 +906,7 @@ function FieldEntry({
     <Field
       label={label}
       required={needed === true}
-      optionalWord={isCheck(field) ? undefined : say('optionalWord')}
+      optional={isCheck(field) ? undefined : say('optionalWord')}
       id={id}
       hint={field.help}
       problem={problem}

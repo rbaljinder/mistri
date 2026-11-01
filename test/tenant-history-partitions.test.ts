@@ -354,15 +354,46 @@ test('journal keeps exactly the existing 50-entry depth and cannot Undo an evict
   assert.throws(() => lease.beginUndo(first.id), safe);
 });
 
-test('1024-partition bound refuses new ownership without evicting existing history', (t) => {
+test('1024-partition bound drops the idle partition used longest ago, never a recently used one', async (t) => {
+  /* Refusing every writer not seen before once 1024 had written once turned a
+     working day into refused saves until a restart. History still has to
+     outlive the save that wrote it, so only the least recently used idle
+     partition makes room. */
   const f = fixture(t),
     first = f.enter(),
     entry = first.publish(draft());
   first.release();
-  for (let i = 1; i < 1024; i++) f.enter({ ...principal, accountId: `account-${i}` }).release();
-  assert.throws(() => f.enter({ ...principal, accountId: 'overflow' }), safe);
-  const retained = f.enter();
-  assert.equal(retained.history()[0].id, entry.id);
+  const stale = f.enter({ ...principal, accountId: 'account-1' });
+  stale.publish(draft('Stale'));
+  stale.release();
+  for (let i = 2; i < 1024; i++) f.enter({ ...principal, accountId: `account-${i}` }).release();
+  const historyOf = (member = plain(principal)) => {
+    const lease = f.enter(member),
+      entries = lease.history();
+    lease.release();
+    return entries;
+  };
+  // Used again, so `first` is now the most recent and account-1 the oldest.
+  assert.equal(historyOf()[0].id, entry.id);
+  f.owner.enter({ ...principal, accountId: 'overflow' }).release();
+  assert.equal(historyOf({ ...principal, accountId: 'account-1' }).length, 0, 'the oldest idle history was dropped');
+  // Far more distinct writers than the bound, through the path a save takes.
+  const using = f.enter();
+  for (let i = 0; i < 2000; i++) (await f.owner.acquire({ ...principal, accountId: `writer-${i}` })).release();
+  assert.equal(using.history()[0].id, entry.id, 'the partition in use kept its history');
+});
+
+test('1024-partition bound refuses a new partition only while every partition is in use', (t) => {
+  const owner = createTenantHistoryPartitions(plain(identity), 'deployment'),
+    held: TenantHistoryLease[] = [];
+  t.after(() => {
+    for (const lease of held) lease.release();
+    owner.dispose();
+  });
+  for (let i = 0; i < 1024; i++) held.push(owner.enter({ ...principal, accountId: `held-${i}` }));
+  assert.throws(() => owner.enter({ ...principal, accountId: 'overflow' }), safe);
+  held.shift()!.release();
+  held.push(owner.enter({ ...principal, accountId: 'overflow' }));
 });
 
 const malformed: Array<Partial<TenantMembershipEvidence>> = [

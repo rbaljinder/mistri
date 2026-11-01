@@ -405,7 +405,7 @@ export function DeleteConversation({
       ref={dialog}
       onClose={onClose}
       fullscreen={false}
-      aria-label={say('deleteConversation', { title: conversation.title })}
+      ariaLabel={say('deleteConversation', { title: conversation.title })}
     >
       <h2>{say('deleteConversation', { title: conversation.title })}</h2>
       <p>{say('deleteConversationTerms')}</p>

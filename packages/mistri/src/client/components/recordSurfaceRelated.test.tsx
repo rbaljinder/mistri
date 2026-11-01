@@ -180,7 +180,7 @@ function draw(hosted = true) {
     <QueryClientProvider client={client}>
       <Modal
         className="record-modal"
-        aria-label="Parent issue"
+        ariaLabel="Parent issue"
         onClose={close}
         beforeClose={() => ![...model.probes].some((probe) => probe())}
       >

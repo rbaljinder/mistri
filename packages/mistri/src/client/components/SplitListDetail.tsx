@@ -141,7 +141,7 @@ export function SplitListDetail({
           <Modal
             className={`split-list-detail-modal${sentenceTitle ? ' split-list-detail-sentence' : ''}`}
             fullscreen="mobile"
-            aria-label={detailLabel}
+            ariaLabel={detailLabel}
             onClose={close}
           >
             <DetailContent title={detailTitle} detail={detail} actions={detailActions} onClose={close} />

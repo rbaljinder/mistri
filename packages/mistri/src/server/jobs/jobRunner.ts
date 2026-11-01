@@ -239,11 +239,21 @@ export function createJobRunner(options: {
   }
 
   async function work(limit: number | undefined): Promise<JobTick> {
+    if (state !== 'running') return { status: state, expired: 0, outcomes: Object.freeze([]) };
+    let expired: number, claimedAt: number, claims: readonly JobClaim[];
     try {
-      if (state !== 'running') return { status: state, expired: 0, outcomes: Object.freeze([]) };
-      const expired = await store.expireLeases(now());
-      const claimedAt = now();
-      const claims = await store.claim(claimedAt, limit ?? store.policy.maxInFlight);
+      expired = await store.expireLeases(now());
+      claimedAt = now();
+      claims = await store.claim(claimedAt, limit ?? store.policy.maxInFlight);
+    } catch {
+      /* Nothing ran and nothing is leased that this runner knows of — a claim
+         whose answer was lost is a lease no one holds, which expiry returns.
+         So a failover or a dropped connection here is a cycle that did not
+         happen, and the next one tries again; halting for it stopped every
+         job until a restart. */
+      return { status: 'unavailable', expired: 0, outcomes: Object.freeze([]) };
+    }
+    try {
       if (!claims.length) return { status: 'idle', expired, outcomes: Object.freeze([]) };
       /* Each attempt is a trace of its own: its job, version, attempt and
          outcome travel; its input stays local (adapters/telemetry/trace.ts). */

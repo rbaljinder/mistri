@@ -35,13 +35,17 @@ import { Button, Modal } from '@mistriwork/ui';
 own wins over them. A page with a layered stylesheet of its own can take the
 files into a layer it names instead (`@import '@mistriwork/ui/tokens.css'
 layer(base);`). An Icon draws the glyphs registered with `registerIcons`; a
-DateField says the `words` it is given.
+DateField says the `words` it is given, as do Carousel, Resizable and Pagination (a
+`words` object over English defaults). One rule names the rest: a name no one sees is
+`ariaLabel` (Modal, Tabs, Popover, Carousel, Resizable, ScrollArea, Pagination, Drawer),
+and `label` is only ever text drawn on the page. A Field's `optional` is the word drawn
+beside the label of a field that is not required.
 
 ## Exports
 
 Its exports are its public API, and nothing else is: `@mistriwork/ui` (every
 primitive), each module by its path (`@mistriwork/ui/Button.js`,
-`@mistriwork/ui/datePickerModel.js`, …), and the four stylesheets.
+`@mistriwork/ui/internal/datePickerModel.js`, …), and the four stylesheets.
 
 Part of [mistri](https://mistriwork.dev);
 [source](https://github.com/rbaljinder/mistri/tree/main/packages/ui).
