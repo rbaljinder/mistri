@@ -5,6 +5,14 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.10
+
+- **A tenant App's list pages again.** In a tenant App, every keyset-paged list's Next page locked the page with
+  "Session unavailable": the tenant routes' `/api/run` body allowlist never named the pager's `after`, `before` and
+  `end`, so the step was refused as a forged tenant context. A signed-out published list's Next page got a 400 for the
+  same reason. Both now take the step. A body field a route does not take, and the tenant read source's refusals, now
+  name their cause to the operator on stderr; the caller's answer is unchanged.
+
 ## 1.0.0-rc.9
 
 - **`@mistriwork/ui`'s API is one name per thing.** The `Control`/`Layer`/`Disc`/`Sheet` spellings (`SwitchControl`,

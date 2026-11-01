@@ -33,7 +33,14 @@ import { readSqliteReadCatalog } from '@mistriwork/engine/adapters/scoped/sqlite
 import { assertScopeCatalog, captureScopeCatalog, isFixedScopeCatalog, mapScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import { isRowScopeSnapshot, snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { mapAppScopedReads } from '../app/appResources.js';
-import { captureTenantData, denyTenant, denyTenantFor, TenantContextError, tenantRecord } from '@mistriwork/engine/server/evidence.js';
+import {
+  captureTenantData,
+  denyTenant,
+  denyTenantFor,
+  recordRefusalCause,
+  TenantContextError,
+  tenantRecord,
+} from '@mistriwork/engine/server/evidence.js';
 import {
   parseTenantSelector,
   type TenantMembershipEvidence,
@@ -354,6 +361,12 @@ export function advisoryRecords(reads: ScopedReads): WriteTransaction {
   });
 }
 
+/* A read refused before it ran — its arguments not plain data, the source
+   closed — is one fixed sentence to its caller, and keeps why for the
+   operator (refusalReport.ts), where a fresh denial in its place said
+   nothing on stderr at all. */
+const refusedBefore = (error: unknown): Promise<never> => Promise.reject(recordRefusalCause(new TenantContextError(), error));
+
 /** The reader a batch is handed (`withReads`): each operation's arguments
  * captured, run on the batch's snapshot as it is asked, and refused once the
  * batch has returned. Asked together, they leave together: the PostgreSQL
@@ -381,11 +394,11 @@ async function readBatch<T>(
   const run = <A extends unknown[], R>(args: A, call: (...captured: A) => Promise<R>): Promise<R> => {
     let captured: A;
     try {
-      if (!open) throw new TenantContextError();
+      if (!open) throw recordRefusalCause(new TenantContextError(), "A batch's read was asked after the batch had returned.");
       active();
       captured = captureTenantData(args);
-    } catch {
-      return Promise.reject(new TenantContextError());
+    } catch (error) {
+      return refusedBefore(error);
     }
     if (failure) return Promise.reject(failure.error);
     const operation = (async () => {
@@ -507,7 +520,7 @@ export function openSqliteTenantReadSource(
     let closing = false;
     let closed: Promise<void> | undefined;
     const active = () => {
-      if (closing) denyTenant();
+      if (closing) denyTenant('This tenant read source has closed.');
     };
     const close = (): Promise<void> => {
       if (!closed) {
@@ -549,8 +562,8 @@ export function openSqliteTenantReadSource(
       try {
         active();
         value = captureTenantData(input);
-      } catch {
-        return Promise.reject(new TenantContextError());
+      } catch (error) {
+        return refusedBefore(error);
       }
       return queue.run(async () => {
         try {
@@ -674,8 +687,8 @@ export function openSqliteTenantReadSource(
       try {
         active();
         return Promise.resolve(make(captureTenantData(input)));
-      } catch {
-        return Promise.reject(new TenantContextError());
+      } catch (error) {
+        return refusedBefore(error);
       }
     };
     const source: TenantReadSource = Object.freeze({
@@ -1028,7 +1041,7 @@ export async function openPostgresTenantReadSource(
     let closed: Promise<void> | undefined;
     const pending = new Set<Promise<void>>();
     const active = () => {
-      if (closing) denyTenant();
+      if (closing) denyTenant('This tenant read source has closed.');
     };
     const close = (): Promise<void> => {
       if (!closed) {
@@ -1360,8 +1373,8 @@ export async function openPostgresTenantReadSource(
       try {
         active();
         value = captureTenantData(input);
-      } catch {
-        return Promise.reject(new TenantContextError());
+      } catch (error) {
+        return refusedBefore(error);
       }
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
@@ -1552,8 +1565,8 @@ export async function openPostgresTenantReadSource(
       try {
         active();
         value = captureTenantData(input);
-      } catch {
-        return Promise.reject(new TenantContextError());
+      } catch (error) {
+        return refusedBefore(error);
       }
       const operation = (async () => {
         try {
@@ -1691,8 +1704,8 @@ export async function openPostgresTenantReadSource(
       try {
         active();
         return Promise.resolve(make(captureTenantData(input)));
-      } catch {
-        return Promise.reject(new TenantContextError());
+      } catch (error) {
+        return refusedBefore(error);
       }
     };
     const source: TenantReadSource = Object.freeze({
@@ -1752,8 +1765,8 @@ export async function openPostgresTenantReadSource(
         try {
           active();
           fence = captureTenantData(evidence);
-        } catch {
-          return Promise.reject(new TenantContextError());
+        } catch (error) {
+          return refusedBefore(error);
         }
         let end!: () => void;
         const shared: Shared = {
@@ -1783,8 +1796,8 @@ export async function openPostgresTenantReadSource(
         try {
           active();
           fence = captureTenantData(evidence);
-        } catch {
-          return Promise.reject(new TenantContextError());
+        } catch (error) {
+          return refusedBefore(error);
         }
         let end!: () => void;
         const shared: Shared = {

@@ -18,6 +18,8 @@ import type { VerifiedSessionInstance } from '../packages/mistri/src/server/auth
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { createTenantEnrollment } from '../packages/mistri/src/server/tenant/tenantEnrollment.js';
 import { createTenantHttpServer } from '../packages/mistri/src/server/tenant/tenantHttp.js';
+import { tenantRouteBody } from '../packages/mistri/src/server/tenant/tenantHttpRoutes.js';
+import { refusalReasons, TenantContextError } from '../packages/engine/src/server/evidence.js';
 import { withTenantApiRequests } from '../packages/mistri/src/server/tenant/tenantApiRequest.js';
 import { openTenantNoticeMail } from '../packages/mistri/src/server/tenant/tenantNoticeMail.js';
 import { createSqliteTenantAdministration, provisionSqliteTenantStore } from '../packages/mistri/src/server/tenant/tenantStore.js';
@@ -3080,4 +3082,72 @@ test("a tenant App's rich text column is sanitized on the lease's write, Markdow
   assert.equal(f.row('north').name, '<p>Hi there</p>');
   await f.data('/api/update', north, { table: 'item', key: { id: 'north-item' }, values: { name: '**Done** - [x] shipped' } });
   assert.equal(f.row('north').name, '<p><strong>Done</strong> - [x] shipped</p>');
+});
+
+/* A list's pager steps past the last row it showed (shared/keysetPage.ts). The body's `after` was not among the
+   fields /api/run takes on a tenant host, so every Next page was refused as a forged context — opaquely, with
+   nothing said to the operator — and the client locked the whole session. */
+test("a tenant list's pager steps by key, the plain query's and the view's, and stays the tenant's own", async (t) => {
+  const f = await fixture(t, { foreignKey: true }),
+    a = await f.open();
+  f.db.exec(
+    `INSERT INTO db_item VALUES ('north-item-2','north','second','North item two'),('north-item-3','north','third','North item three')`,
+  );
+  // The note's row scope is its secret (fixture `rowScope`): the step's filter is ANDed with it, never in its place.
+  f.db
+    .prepare(`INSERT INTO db_note VALUES ('north-note-2','north','North note two',?,'north-item-2'),('north-note-3','north','North note three',?,'north-item-3'),
+      ('north-note-hidden','north','North note hidden','other','north-item')`)
+    .run(privateValue, privateValue);
+  const walk = async (q: string, expected: string[]) => {
+    const seen: string[] = [];
+    let page = await f.data('/api/run', a, { q, limit: 1, offset: 0, exactCount: false, count: 'none' });
+    for (let offset = 1; ; offset++) {
+      owned(page, a);
+      seen.push(...rows(page).map((row) => String(row.name)));
+      const last = object(object(page.body.bounds).last);
+      // As the pager sends it (client pageStep.ts): the page it names, and the row it continues after.
+      page = await f.data('/api/run', a, { q, limit: 1, offset, exactCount: false, count: 'none', after: last });
+      owned(page, a);
+      assert.equal(page.body.keyset, true, page.text);
+      if (!rows(page).length) break;
+      assert.ok(offset < 10, 'the pager stops');
+    }
+    assert.deepEqual(seen, expected);
+    // Back from the end: the step before the last row, and the list's end.
+    const end = await f.data('/api/run', a, { q, limit: 1, offset: 0, count: 'none', end: true });
+    owned(end, a);
+    assert.deepEqual(
+      rows(end).map((row) => row.name),
+      expected.slice(-1),
+    );
+    const before = await f.data('/api/run', a, { q, limit: 1, offset: 0, count: 'none', before: object(object(end.body.bounds).first) });
+    owned(before, a);
+    assert.deepEqual(
+      rows(before).map((row) => row.name),
+      expected.slice(-2, -1),
+    );
+  };
+  // A plain query over the table's own columns pages as a table read (recordsPaging) ...
+  await walk('item sort name show name', ['North item', 'North item three', 'North item two']);
+  // ... and text that only reads as a view, through a reference, as a view (viewPaging).
+  await walk('note sort name show name, item_id.name', ['North note', 'North note three', 'North note two']);
+  // Past north's last item sort another tenant's rows (the alias row, south's): a step never reaches them.
+  const crossed = await f.data('/api/run', a, {
+    q: 'item sort name show name',
+    limit: 5,
+    offset: 1,
+    count: 'none',
+    after: { name: 'North item', id: 'north-item' },
+  });
+  assert.deepEqual(
+    rows(crossed).map((row) => row.name),
+    ['North item three', 'North item two'],
+  );
+  noPrivate(crossed);
+  // A field the route does not take is still refused, and the operator hears which (refusalReport.ts).
+  denied(await f.data('/api/run', a, { q: 'item', after: { id: 'north-item' }, stray: true }));
+  assert.throws(
+    () => tenantRouteBody('/api/run', { q: 'item', stray: true }),
+    (error: unknown) => error instanceof TenantContextError && refusalReasons(error).some((reason) => reason.includes('"stray"')),
+  );
 });

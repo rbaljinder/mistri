@@ -1,6 +1,6 @@
 {
   "name": "tablewalk-workspace",
-  "version": "1.0.0-rc.9",
+  "version": "1.0.0-rc.10",
   "private": true,
   "description": "The workspace root: the packages under packages/ (tablewalk, mistri, create-mistri, @mistriwork/cloudflare, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
