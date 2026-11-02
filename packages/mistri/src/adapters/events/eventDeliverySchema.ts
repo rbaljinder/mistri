@@ -7,6 +7,7 @@ import { attestEventDeliverySource } from './eventDeliverySource.js';
 import {
   captureEventDeliveryPolicy,
   deliveryFail,
+  EventDeliveryDestinationChanged,
   EventDeliveryUnavailable,
   EVENT_DELIVERY_ATTEMPT_OUTCOMES,
   EVENT_DELIVERY_CODES,
@@ -133,6 +134,14 @@ function catalog(db: DatabaseSync, schema: 'main' | 'temp'): Catalog[] {
     .all(prefix.length, prefix, prefix.length, prefix) as unknown as Catalog[];
 }
 const SQLITE_EVENT_DELIVERY_VERSION = 1;
+/** Rows of a destination still to deliver, or awaiting an operator's redrive: everything but `delivered`. */
+const undelivered = (db: DatabaseSync, id: string): number =>
+  Number(db.prepare(`SELECT count(*) AS n FROM main."${t.delivery}" WHERE destination_id=? AND state<>'delivered'`).get(id)!.n);
+/** A destination and everything kept for it, children first (the keys restrict). */
+function dropDestination(db: DatabaseSync, id: string): void {
+  for (const table of [t.attempt, t.delivery, t.receipt]) db.prepare(`DELETE FROM main."${table}" WHERE destination_id=?`).run(id);
+  db.prepare(`DELETE FROM main."${t.destination}" WHERE id=?`).run(id);
+}
 export function assertSqliteEventDeliveryStore(db: DatabaseSync, policy: EventDeliveryPolicy, allowNewDestination = false): void {
   try {
     attestEventDeliverySource(db, policy.source);
@@ -167,6 +176,14 @@ export function assertSqliteEventDeliveryStore(db: DatabaseSync, policy: EventDe
       .get(policy.destinationId);
     if (!destination && allowNewDestination && !db.prepare(`SELECT 1 FROM main."${t.destination}" WHERE id=?`).get(policy.destinationId))
       return;
+    /* A destination made for another policy: said as that, with its producer versions, and not as a store nobody can read. */
+    if (destination && destination.policy_json !== canonicalCommandJson(policy, 65_536))
+      throw new EventDeliveryDestinationChanged(
+        policy.destinationId,
+        destination.policy_json as string,
+        policy,
+        undelivered(db, policy.destinationId),
+      );
     if (
       !destination ||
       destination.policy_json !== canonicalCommandJson(policy, 65_536) ||
@@ -223,6 +240,58 @@ export function openEventDeliveryFile(existingPath: string): { db: DatabaseSync;
   }
 }
 
+/** What maintenance may do to destinations beside the one it adds (see the provisioning that passes them). */
+export interface EventDeliveryProvisionOptions {
+  /** Replace this destination when it exists under a different policy, nothing in it is undelivered, and no event
+   * delivered under the old policy could be delivered again. Otherwise the change is refused, with its cause. */
+  readonly replace?: boolean;
+  /** Retire the drained destinations whose id starts with `prefix` and is not in `keep`: the ones a producing command's
+   * version bump left behind, which would otherwise fill the store's sixteen. */
+  readonly retire?: Readonly<{ prefix: string; keep: readonly string[] }>;
+}
+/** The destinations among `policies` that the store holds under a different policy, read and changed by nothing:
+ * what `migrate status` and `check` say before a start finds them. A store with no such table holds none. */
+export function changedSqliteDestinations(path: string, policies: readonly EventDeliveryPolicy[]): EventDeliveryDestinationChanged[] {
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    if (!db.prepare(`SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name=?`).get(t.destination)) return [];
+    const changed: EventDeliveryDestinationChanged[] = [];
+    for (const policy of policies) {
+      const row = db.prepare(`SELECT policy_json FROM main."${t.destination}" WHERE id=?`).get(policy.destinationId);
+      if (row && typeof row.policy_json === 'string' && row.policy_json !== canonicalCommandJson(policy, 65_536))
+        changed.push(
+          new EventDeliveryDestinationChanged(policy.destinationId, row.policy_json, policy, undelivered(db, policy.destinationId)),
+        );
+    }
+    return changed;
+  } finally {
+    db.close();
+  }
+}
+function replaceChangedDestination(db: DatabaseSync, policy: EventDeliveryPolicy): boolean {
+  const row = db.prepare(`SELECT policy_json FROM main."${t.destination}" WHERE id=?`).get(policy.destinationId);
+  if (!row || row.policy_json === canonicalCommandJson(policy, 65_536)) return false;
+  const changed = new EventDeliveryDestinationChanged(
+    policy.destinationId,
+    String(row.policy_json),
+    policy,
+    undelivered(db, policy.destinationId),
+  );
+  if (!changed.replaceable || changed.undelivered) throw changed;
+  dropDestination(db, policy.destinationId);
+  return true;
+}
+function retireDrainedDestinations(db: DatabaseSync, retire: NonNullable<EventDeliveryProvisionOptions['retire']>): string[] {
+  const retired: string[] = [];
+  const rows = db.prepare(`SELECT id FROM main."${t.destination}" WHERE substr(id,1,?)=?`).all(retire.prefix.length, retire.prefix);
+  for (const { id } of rows as { id: string }[]) {
+    if (retire.keep.includes(id) || undelivered(db, id)) continue;
+    dropDestination(db, id);
+    retired.push(id);
+  }
+  return retired;
+}
+
 /** Only explicit maintenance on a stopped existing source. The caller owns
  * stopping other users; SQLite's writer lock is not proof of process shutdown.
  * No repair, source provisioning, startup hook or public activation. */
@@ -230,7 +299,8 @@ export function provisionSqliteEventDeliveryStore(
   existingPath: string,
   input: EventDeliveryPolicy,
   maintenance: { readonly stopped: true },
-): { version: 1; provisioned: boolean; destinationAdded: boolean } {
+  options: EventDeliveryProvisionOptions = {},
+): { version: 1; provisioned: boolean; destinationAdded: boolean; destinationReplaced: boolean; retired: readonly string[] } {
   const policy = captureEventDeliveryPolicy(input);
   if (canonicalCommandJson(maintenance) !== '{"stopped":true}') return deliveryFail();
   const file = openEventDeliveryFile(existingPath),
@@ -244,6 +314,12 @@ export function provisionSqliteEventDeliveryStore(
         db.exec(ddl.replace('CREATE TABLE ', 'CREATE TABLE main.').replace('CREATE INDEX ', 'CREATE INDEX main.'));
       db.prepare(`INSERT INTO main."${t.meta}" VALUES (1,1,?,0)`).run(canonicalCommandJson(policy.source));
     }
+    let destinationReplaced = false;
+    const retired: string[] = [];
+    if (!provisioned) {
+      destinationReplaced = options.replace === true && replaceChangedDestination(db, policy);
+      if (options.retire) retired.push(...retireDrainedDestinations(db, options.retire));
+    }
     assertSqliteEventDeliveryStore(db, policy, true);
     // Existing namespace may only be extended with a new, bounded destination;
     // full attestation below precedes commit and rolls back collision attempts.
@@ -256,13 +332,15 @@ export function provisionSqliteEventDeliveryStore(
     assertSqliteEventDeliveryStore(db, policy);
     file.verifyFile();
     db.exec('COMMIT');
-    return { version: 1, provisioned, destinationAdded: !present };
-  } catch {
+    return { version: 1, provisioned, destinationAdded: !present, destinationReplaced, retired };
+  } catch (error) {
     try {
       if (db.isTransaction) db.exec('ROLLBACK');
     } catch {
       /* Never reuse the handle. */
     }
+    /* The one refusal that names its cause: the others stay as unreadable as they were. */
+    if (error instanceof EventDeliveryDestinationChanged) throw error;
     return deliveryFail();
   } finally {
     db.close();

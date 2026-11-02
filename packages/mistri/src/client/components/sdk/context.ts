@@ -55,16 +55,27 @@ interface UiColumn {
 export type UiCommandRef = string;
 /**
  * How a command a component ran ended: applied, with what its handler returned (`output`, as the API's `result`), refused
- * (with the server's words), or a form closed with nothing sent.
+ * (with the server's words), a form closed with nothing sent, or not known: it was sent and no answer said whether it
+ * ran (the connection dropped, the server could not say). `check()` asks again under the same key, so it can never run
+ * twice, and resolves as the run would have.
  */
 export type UiCommandOutcome =
   | { status: 'applied'; message?: string; output?: unknown }
   | { status: 'refused'; message: string }
-  | { status: 'closed' };
+  | { status: 'closed' }
+  | {
+      status: 'unknown';
+      message: string;
+      /** Ask again under the same key. A public page with a human check hands it a fresh token (`{ challenge }`). */
+      check(options?: { challenge?: string }): Promise<UiCommandOutcome>;
+    };
 export interface UiCommandOptions {
   label?: string;
   /** A public page's human check: the token its widget gave, sent with the run (`auth.challenge`). */
   challenge?: string;
+  /** The key a run that names no record is sent under: a UUID the component made once for this intent and keeps (in
+      its address, say), so a run sent again after a reload is the same run. Made fresh per run when not given. */
+  attempt?: string;
 }
 
 /**

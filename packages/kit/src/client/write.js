@@ -308,6 +308,7 @@ export function subscribeStaged(fn) {
   };
 }
 export const stagedVersion = () => version + updateAttempts.version();
+/** @returns {import('./updateAttempts.js').UpdateAttempt | undefined} */
 export const stagedAttempt = (table, key) => updateAttempts.get({ connection: state.activeConnection ?? null, table, key });
 export const stagedFeedback = (table, key) => (sameRow(table, key) ? feedback.get(staged) : undefined);
 export const stagedDiscardVersion = (table, key) => (sameRow(table, key) ? (discards.get(staged) ?? 0) : 0);

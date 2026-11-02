@@ -31,6 +31,10 @@ const listeners = new Set<() => void>();
 let known = 0;
 let loader: (() => Promise<Readonly<Record<string, IconGlyph>> | undefined>) | undefined;
 let loading: Promise<void> | undefined;
+/* Every glyph there is has been asked for: a name still missing names none. */
+let everyGlyph = false;
+let unknown: ((name: string, names: readonly string[]) => string | undefined) | undefined;
+const answered = new Map<string, string | undefined>();
 const unweighted: IconWeighting = { weight: () => 'regular', drawing: () => undefined, subscribe: () => () => {}, version: () => 0 };
 let weighting = unweighted;
 
@@ -52,6 +56,14 @@ export function registerIcons(sent: Readonly<Record<string, IconGlyph>> | undefi
 export function loadIconsWith(load: () => Promise<Readonly<Record<string, IconGlyph>> | undefined>): void {
   loader = load;
   loading = undefined;
+  everyGlyph = false;
+}
+
+/** What a name that names no glyph, once every glyph is in, is told: once a name, with every name there is; it
+    answers the name to draw instead, or undefined to keep the empty box. */
+export function onUnknownIcon(answer: ((name: string, names: readonly string[]) => string | undefined) | undefined): void {
+  unknown = answer;
+  answered.clear();
 }
 
 /** The page's icon weight, from now on. */
@@ -62,7 +74,12 @@ export function weighIconsWith(weights: IconWeighting): void {
 function loadEveryGlyph(): void {
   if (!loader) return;
   loading ??= loader()
-    .then(registerIcons)
+    .then((sent) => {
+      registerIcons(sent);
+      everyGlyph = true;
+      known += 1;
+      for (const listener of listeners) listener();
+    })
     // A failed load is tried again by the next icon that asks.
     .catch(() => {
       loading = undefined;
@@ -92,12 +109,15 @@ export function Icon<Name extends string = string>({ name, label, size = '1em', 
   useSyncExternalStore(subscribe, version, version);
   const weights = weighting;
   useSyncExternalStore(weights.subscribe, weights.version, weights.version);
-  const glyph = glyphs.get(name);
+  const own = glyphs.get(name);
+  if (!own && everyGlyph && unknown && !answered.has(name)) answered.set(name, unknown(name, [...glyphs.keys()]));
+  const instead = own ? undefined : answered.get(name);
+  const glyph = own ?? (instead ? glyphs.get(instead) : undefined);
   const drawn = weight ?? weights.weight();
-  const drawing = (weight ? undefined : weights.drawing(name)) ?? glyph?.[drawn === 'bold' ? 1 : 0];
+  const drawing = (weight || instead ? undefined : weights.drawing(name)) ?? glyph?.[drawn === 'bold' ? 1 : 0];
   useEffect(() => {
-    if (!glyph) loadEveryGlyph();
-  }, [glyph]);
+    if (!own) loadEveryGlyph();
+  }, [own]);
   const accessibleLabel = label?.trim() || undefined;
   return (
     <svg

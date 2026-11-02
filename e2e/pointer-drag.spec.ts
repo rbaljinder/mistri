@@ -204,10 +204,10 @@ test.describe('Thread board: cards carried by a mouse and by a finger', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const board = page.getByRole('group', { name: 'Board', exact: true });
     await expect(lanes.first()).toBeVisible();
-    // The first lane starts at the page's gutter, where the list's crumbs do, not at the screen's edge.
+    // The first lane starts at the page's gutter, where the list's heading does, not at the screen's edge.
     const left = async (locator: Locator) => (await locator.boundingBox())!.x;
     await expect
-      .poll(async () => Math.abs((await left(lanes.first())) - (await left(page.locator('.crumbs > :first-child')))))
+      .poll(async () => Math.abs((await left(lanes.first())) - (await left(page.locator('.applist-head-row > :first-child')))))
       .toBeLessThanOrEqual(1);
     const card = lanes.first().locator('article.triage-card-wrap').first();
     const name = await nameOf(card);

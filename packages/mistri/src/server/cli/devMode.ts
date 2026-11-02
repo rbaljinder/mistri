@@ -232,6 +232,9 @@ async function tenantAccounts(opts: Options, loaded: LoadedApp, dev: DevFile, fi
     const made = await createAppAccounts(
       loaded.dir,
       missing.map((role) => ({ email: emailOf(role), name: `Dev ${role}`, password: dev.passwords[role] })),
+      /* The addresses are fictional ones this machine's operator owns: asserted verified, so a policy that matches an
+         account by its verified email can be tried in dev (field report). */
+      { verified: true },
     ).catch((error: Error) => {
       throw new Error(`${error.message} If ${file} was replaced after the accounts were made, delete ${join(file, '..')} and start again.`);
     });

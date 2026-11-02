@@ -72,6 +72,8 @@ import type { TriggerAcceptance, TriggerChange } from './scoped/triggerProof.js'
 import {
   attestPostgresTriggers,
   effectCatalogFacts,
+  hierarchyRecheck,
+  joinedHierarchy,
   readPostgresScopeCatalog,
   type PostgresScopeCatalog,
 } from './scoped/postgresScopeCatalog.js';
@@ -101,6 +103,7 @@ import { compileBreakdown, compileBreakdownCount, type BreakdownDef } from '../s
 import { PgConnectionManager, sharedPgConnections, type PgConnectionOptions, type PgQuery, type SharedPoolShape } from './postgresPool.js';
 import {
   aheadReport,
+  beforeCommit,
   behindWrite,
   generationOf,
   redoWithoutAhead,
@@ -1918,6 +1921,8 @@ export class PostgresAdapter implements Adapter {
           });
           // The tables whose validation-only triggers a write of this transaction fired: their proof is read again before COMMIT.
           const relied = new Set<string>();
+          // The tables this transaction's writes targeted: whether one joined a hierarchy is read again with the COMMIT.
+          const written = new Set<string>();
           attest = () => attestPostgresTriggers(write, catalog, relied);
           let records = createScopedTransaction(
             catalog,
@@ -1939,12 +1944,13 @@ export class PostgresAdapter implements Adapter {
               },
               together: sendsAhead(write),
               relied: (table) => void relied.add(table.id),
+              written: (table) => void written.add(table.id),
             },
             bound && {
               reads: scopedReads(true, bound),
               whole: wholeWithin(scope, bound),
               references: async (fk, key) => {
-                const statement = referencesStatement(catalog.schema, fk, key, POSTGRES_STYLE);
+                const statement = referencesStatement(catalog, fk, key, POSTGRES_STYLE);
                 return Number((await write.query(statement.text, statement.params)).rows[0]?.n ?? 0);
               },
             },
@@ -1992,10 +1998,35 @@ export class PostgresAdapter implements Adapter {
           await writes.finish();
           if (verify) await verify(write, catalog, described);
           await attestPostgresTriggers(write, catalog, relied);
+          /* A target's triggers may write any table the scope can write (triggerEffects.ts): where one ran, each of
+             those is read again too. */
+          const reached = [...written].some((id) => catalog.triggered?.has(id))
+            ? [...written, ...catalog.writable, ...(catalog.triggered?.keys() ?? [])]
+            : written;
+          /* And what they reference, for a parent that gained an inheritance child (ScopeCatalog.inheritanceParents):
+             one that was a parent when the catalog was read was judged by the parent checks, which refused a
+             reference to it. A table that became one is refused whether or not a reference to it was checked. */
+          const wrote = new Set(reached);
+          const recheck = hierarchyRecheck(
+            reached,
+            catalog.schema.foreignKeys
+              .filter((fk) => wrote.has(fk.from.table) && !catalog.inheritanceParents?.has(fk.to.table))
+              .map((fk) => fk.to.table),
+          );
+          if (recheck && !beforeCommit(write, [recheck]))
+            await write.query(recheck.text, recheck.values).catch((error: unknown) => {
+              throw joinedHierarchy(error) ?? error;
+            });
           commitAttempted = true;
           try {
             await write.query('COMMIT');
           } catch (error) {
+            // The recheck sent with the COMMIT found a hierarchy: the server answered the COMMIT as a ROLLBACK.
+            const joined = error instanceof RolledBackAtCommit ? joinedHierarchy(error.cause) : undefined;
+            if (joined) {
+              commitAttempted = false;
+              throw joined;
+            }
             /* A deferred foreign key the COMMIT found broken: the server answered, so nothing committed, and the
                refusal is a hidden parent's (foreignKeyRefusal). */
             if (!isForeignKeyViolation(error)) throw error;

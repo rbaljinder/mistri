@@ -36,7 +36,7 @@ rows are a grid.
 | --- | --- |
 | `checklist(primary, checked, { lines? })` | A card per row with a checkbox. |
 | `queue(primary, { lines?, facts?, badge?, openLabel? })` | A keyboard-first selection list; bulk actions apply to the selection. |
-| `board: { by, lanes?, order?, swimlanes?, limits?, primary, lines?, sum?, folded? }` | Lanes by one column; cards move by drag, Alt+arrows or ⋯. `limits` are shown, never enforced. A lane's head adds up `sum` (else the card's money) — "Discovery · 3 · $92.8K" — and `folded: ['won', 'lost']` draws closed stages as strips a reader opens. A reference as `primary`, a line or a footer fact says the record it names: `primary: 'sales_order_id'`. |
+| `board: { by, lanes?, order?, swimlanes?, limits?, primary, lines?, sum?, folded? }` | Lanes by one column; cards move by drag, Alt+arrows or ⋯. `limits` are shown, never enforced. A lane's head adds up `sum` (else the card's money) — "Discovery · 3 · $92.8K" — and `folded: ['won', 'lost']` draws closed stages as strips a reader opens. A reference as `primary`, a line or a footer fact says the record it names: `primary: 'sales_order_id'`. A card's title wraps rather than cutting; on a phone one lane fills the screen and snaps into view, the next lane's edge showing that more follow. |
 | `split: { detail?, limit? }` | The list beside the picked record, addressed `/inbox/2`. |
 | `calendar(date, primary, { end?, lines?, badge? })` | A month grid; with `end`, a bar across the days. |
 | `cards(primary, { value?, badge?, icon?, description?, lines?, facts?, image?, media? })` | A grid of cards; a page's related list takes the same. |
@@ -53,7 +53,7 @@ rows are a grid.
 | `rows(title, table, { show, sort?, limit? })` | Matching rows. |
 | `board(title, table, by, { lanes?, primary?, lines? })` | Lanes, full width. |
 | `note(text, opts)`, `firstRun(title, steps)`, `activity(title, resources)` | Guidance, a welcome until the tables have rows, recent changes. |
-| `embed(view, { tab?, limit?, interactive? })` | A list view inside the dashboard. |
+| `embed(view, { tab?, limit?, interactive?, empty? })` | A list view inside the dashboard; `empty` as a `rows` section's, else its tab's or the list's. |
 
 Every table section also takes `query`, `over` (the date column the window
 narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,

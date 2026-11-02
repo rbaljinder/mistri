@@ -25,7 +25,8 @@ import { after, before, describe, test } from 'node:test';
 import { doorRefusal, vouchForOrigin, type Bound, type DoorRule } from '../packages/engine/src/server/http/trust.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
-import { DISPATCHERS } from '../packages/engine/src/server/http/router.js';
+import { BROWSER_DISPATCHERS } from '../packages/tablewalk/src/server/http/dispatchers.js';
+import { APP_DISPATCHERS } from '../packages/mistri/src/server/http/dispatchers.js';
 import { createSuite } from '../packages/mistri/src/server/http/suite.js';
 import { createHandler } from '../packages/mistri/src/server/handler.js';
 import { createAnalyticsBeaconHttp } from '../packages/mistri/src/server/analytics/beaconHttp.js';
@@ -306,7 +307,7 @@ interface Row {
   refused?: number[];
   /** A provider's delivery: the Host is asked, the Origin and body are not, so another page's write is answered. */
   deliveries?: true;
-  /** The dispatchers (http/router.ts `DISPATCHERS`) this row's requests are held by. */
+  /** The dispatchers (each product's server/http/dispatchers.ts) this row's requests are held by. */
   dispatchers?: readonly string[];
 }
 
@@ -735,7 +736,7 @@ describe('the dispatchers', () => {
   const rows = ROWS.filter((row) => row.dispatchers);
 
   test('each the router names is stood up by a row here', () => {
-    const named = DISPATCHERS.map((each) => each.module).sort();
+    const named = [...BROWSER_DISPATCHERS, ...APP_DISPATCHERS].map((each) => each.module).sort();
     assert.deepEqual([...new Set(rows.flatMap((row) => row.dispatchers!))].sort(), named);
     for (const module of named) assert.ok(modules.has(module), module);
   });

@@ -12,6 +12,15 @@ store, a slug of `name` by default (`Help Desk` → `help-desk`); set it before
 accounts are created. `connection` names one configured connection, never a
 URL; [sources](/docs/sources/) bind several instead.
 
+A name longer than 16 characters is cut by a phone's bar and an installed
+icon; `shortName` (12 or fewer) is what they say instead, and the full `name`
+stays the bar's accessible name and the page's title:
+
+```ts
+name: 'Northwind Field Service',
+shortName: 'Northwind',
+```
+
 ## Home
 
 ```ts
@@ -64,7 +73,7 @@ views the person reading is served: the resource's `view` where they are
 served it, else the first plain list over it in menu order. A resident's
 repair is `/my-requests/12` and the office's the same record at `/repairs/12`;
 a mailed link is the recipient's own, and a signed-in person opening the
-other's address is sent on to theirs. Several Apps on one
+other's address is sent on to theirs. A record's id under any other list over its table opens at the canonical address, in the browser and in `mistri shot` and `grade`, which say which they shot. Several Apps on one
 server each keep their id (`/lintel/leases/12`), and `--base-path /tools`
 puts the whole server under a proxy's path. `new`, `api`, `assets`,
 `sign-in`, `welcome` and `form` are reserved segments. A query-language
@@ -249,6 +258,12 @@ redrive is never forgotten, however old.
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `retention.history` | string | Stable | A duration above zero ('30 days', '12 weeks') or 'forever'. |
+
+## `shortName`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `shortName` | string | Stable | The name a phone's bar and an installed icon say where the name does not fit (Northwind for Northwind Field Service). The full name stays the bar's accessible name and the page's title. |
 
 ## `sources`
 

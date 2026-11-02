@@ -42,7 +42,7 @@ import {
 import { parseSortText } from './sortText.js';
 
 /** A block of the base record's own fields, or of a to-one reference's. */
-interface FieldSection {
+export interface FieldSection {
   kind: 'fields';
   /** Shown above the block. Absent means no heading. */
   title?: string;

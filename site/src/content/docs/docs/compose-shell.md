@@ -38,6 +38,17 @@ the day runs. Lintel is the worked example.
   (`{ to, label: 'Today' }`) — `examples/apps/lintel/navigation.ts:9`.
 - **When roles start in different places**, `home` by role —
   `examples/apps/lintel/app.ts:161`.
+- **By default**, no trail over a room the menu opens: the room names
+  itself in its heading row, and the trail appears a step deeper, from that
+  room. **When readers move between rooms more by records than by the
+  menu**, the bar over every room, `shell: { breadcrumbs: { top: true } }`:
+
+  ```text
+  default        Leads  77                          + New lead   Export
+                 Leads › Ada Stone                        Back   More
+  { top: true }  Leads  77  (in the bar)            + New lead   Export
+  true           ⌂ › Leads  77                      + New lead   Export
+  ```
 
 The looks are in [Looks](/docs/looks/); the keys in
 [Navigation and the shell](/docs/nav-and-shell/).

@@ -110,6 +110,8 @@ test('pure metadata has frozen arrays, exact local mapping and no transaction or
     'catalog',
     'command',
     'connection',
+    // rc.12: the App's ui.currency (USD when it names none), what a field.money({ minor: true }) amount is typed in.
+    'currency',
     'keyColumns',
     'read',
     'resource',
@@ -122,6 +124,7 @@ test('pure metadata has frozen arrays, exact local mapping and no transaction or
   assert.deepEqual(authorized.write, ['item']);
   assert.deepEqual(authorized.keyColumns, ['id']);
   assert.equal(authorized.connection, 'private');
+  assert.equal(authorized.currency, 'USD');
   for (const value of [
     authorizer,
     authorized,

@@ -596,12 +596,32 @@ function compileBreakdownFresh(
   const prefix = relations.finish();
   const whenParams: unknown[] = [];
   for (const { at, name, where: held } of whens) {
-    const built = buildWhere(asFilter(held), style, prefix.params.length + whenParams.length + 1, qualify, qualify, membership, exists);
+    const built = buildWhere(
+      asFilter(held),
+      style,
+      prefix.params.length + whenParams.length + 1,
+      qualify,
+      qualify,
+      membership,
+      exists,
+      false,
+      paths.typeOf,
+    );
     whenParams.push(...built.params);
     /* COUNT, not SUM: a count of no rows is 0, where a sum of none is null. */
     select[at] = `COUNT(CASE WHEN ${built.text.replace(/^ WHERE /, '')} THEN 1 END) AS ${style.quote(name)}`;
   }
-  const where = buildWhere(conditions, style, prefix.params.length + whenParams.length + 1, qualify, qualify, membership, exists);
+  const where = buildWhere(
+    conditions,
+    style,
+    prefix.params.length + whenParams.length + 1,
+    qualify,
+    qualify,
+    membership,
+    exists,
+    false,
+    paths.typeOf,
+  );
 
   /* Sorted by output name, and only by output name.
 

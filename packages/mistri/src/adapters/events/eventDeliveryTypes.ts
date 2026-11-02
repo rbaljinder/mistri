@@ -14,6 +14,75 @@ export const deliveryFail = (message?: string): never => {
   throw new EventDeliveryUnavailable(message);
 };
 
+/** One route of a destination's policy, as `command@version`: all a diagnostic says of it. */
+const routeWords = (routes: unknown): string[] =>
+  Array.isArray(routes)
+    ? routes.flatMap((route) =>
+        route && typeof route === 'object' && typeof route.commandId === 'string' && Number.isSafeInteger(route.commandVersion)
+          ? [`${route.commandId}@${route.commandVersion}`]
+          : [],
+      )
+    : [];
+const routeKeys = (routes: unknown): string[] =>
+  Array.isArray(routes)
+    ? routes.flatMap((route) =>
+        route && typeof route === 'object' && typeof route.commandId === 'string'
+          ? [`${route.scope}/${route.tenantId ?? ''}/${route.commandId}@${route.commandVersion}`]
+          : [],
+      )
+    : [];
+
+/**
+ * A destination already in the store was made under a different policy than this deployment derives: in practice a
+ * producing command's version was bumped, and a job's or workflow's destination names that version in its routes
+ * while its own id does not (a job's id is `job:<id>@<job version>`). The cause, said instead of the generic
+ * "could not be verified": the destination, the producer versions it was made for and the versions now, and the two
+ * ways out. It carries no payload, key or provenance.
+ */
+export class EventDeliveryDestinationChanged extends EventDeliveryUnavailable {
+  /** The producer versions the stored destination takes (`close@1`), and the ones this deployment derives. */
+  readonly stored: readonly string[];
+  readonly current: readonly string[];
+  /** Whether no current route equals a stored one, so a replacement could not deliver an event a second time. */
+  readonly replaceable: boolean;
+  /** Rows of the stored destination not yet delivered; a replacement waits until there are none. */
+  undelivered: number;
+  /** One line for a plan: `job:archive@1 close@1 → close@2, 3 undelivered`. */
+  readonly summary: string;
+  constructor(
+    readonly destinationId: string,
+    storedPolicyJson: string,
+    current: EventDeliveryPolicy,
+    undelivered = 0,
+  ) {
+    let storedRoutes: unknown;
+    try {
+      storedRoutes = (JSON.parse(storedPolicyJson) as { routes?: unknown }).routes;
+    } catch {
+      /* Unreadable: the destination is still named, without the versions. */
+    }
+    const stored = routeWords(storedRoutes),
+      now = routeWords(current.routes);
+    const kept = new Set(routeKeys(storedRoutes));
+    const replaceable = !routeKeys(current.routes).some((key) => kept.has(key));
+    super(
+      `Delivery destination "${destinationId}" was made for ${stored.join(', ') || 'another policy'} and this App now derives ` +
+        `${now.join(', ') || 'another policy'}${replaceable ? '' : ' (its routes are the same, so something else in its policy changed)'}. ` +
+        `Either bump the version of the job or workflow that owns it, which makes a new destination beside the old one, or run ` +
+        `\`mistri migrate up --app <the App's directory>\` with the server stopped, which ${replaceable ? 'replaces it once nothing in it is undelivered' : 'does not replace it, because events already delivered would be delivered again'}.` +
+        `${undelivered ? ` ${undelivered} ${undelivered === 1 ? 'delivery is' : 'deliveries are'} still undelivered: let them drain, or redrive them, first.` : ''}`,
+    );
+    this.name = 'EventDeliveryDestinationChanged';
+    this.stored = stored;
+    this.current = now;
+    this.replaceable = replaceable;
+    this.undelivered = undelivered;
+    this.summary =
+      `${destinationId} ${stored.join(', ') || '?'} → ${now.join(', ') || '?'}` +
+      `${replaceable ? '' : ' (same routes)'}${undelivered ? `, ${undelivered} undelivered` : ''}`;
+  }
+}
+
 type EventDeliveryRefusalCode = 'not_found' | 'operator_invalid' | 'not_redrivable' | 'redrive_limit';
 /** A refused maintenance call that changed nothing. The code is the whole
  * diagnostic: no payload, key or provenance is ever echoed back. */

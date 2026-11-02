@@ -74,6 +74,8 @@ interface ServedApp {
   pages?: { id: string; base: string; path?: string }[];
   inbox?: boolean;
   assistant?: { page?: boolean };
+  /** The no-record commands a component runs by name, as a form's command is served. */
+  formCommands?: Record<string, { id: string; version: number }>;
 }
 interface ServedSchema {
   tables: Array<{
@@ -328,12 +330,39 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
     return readResult(await send('/api/update', { method: 'POST', json: updateBody(await app(), table, key, values, expected) }));
   }
 
-  /** The version of a command this session is served, from its record actions; else the first. */
-  async function versionOf(command: string): Promise<number> {
+  /* The version of a command as this session is served it: on a record action, a form view (its steps' too), or the
+     no-record commands a component runs by name. A no-record command at v2 was sent as v1, since only record actions
+     were read (a field report). Undefined for one this session is not served. */
+  async function versionOf(command: string): Promise<number | undefined> {
     const { app: payload } = await describe();
     for (const resource of Object.values(payload.resources ?? {}))
       for (const action of resource.actions ?? []) if (action.command?.id === command) return action.command.version;
-    return 1;
+    const served = payload.formCommands?.[command];
+    if (served) return served.version;
+    for (const view of Object.values(payload.views)) {
+      const steps = Array.isArray(view.steps) ? (view.steps as Array<{ command?: unknown }>) : [];
+      for (const reference of [view.command, ...steps.map((step) => step.command)])
+        if (reference && typeof reference === 'object' && (reference as { id?: unknown }).id === command)
+          return (reference as { version: number }).version;
+    }
+    return undefined;
+  }
+
+  /* A command this session is not served is still asked for, under the first version: the server's answer is the
+     test's (a refusal to someone not granted it is a 403 whatever the version). It is never guessed silently: when
+     the server says the version is wrong, the refusal says why, and how to name it. */
+  async function versioned<T extends TestResult<unknown>>(
+    name: string,
+    given: number | undefined,
+    send: (commandVersion: number) => Promise<T>,
+  ): Promise<T> {
+    const served = given ?? (await versionOf(name));
+    const result = await send(served ?? 1);
+    if (served !== undefined || result.ok || result.code !== 'command_version_mismatch') return result;
+    return {
+      ...result,
+      message: `"${name}" is not served to this session (no record action, form or component command names it), so its version is not known. Pass it: command('${name}', key, input, { version }).`,
+    };
   }
 
   /** Prepare, then execute, as the browser's form does (client/commandSend.ts). */
@@ -344,20 +373,21 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
     options: { version?: number } = {},
   ): Promise<TestCommandResult> {
     const id = await app();
-    const commandVersion = options.version ?? (await versionOf(name));
-    const prepared = await readResult<{ expectedVersion: number }>(
-      await send(commandPath('prepare', id), {
-        method: 'POST',
-        json: { command: name, commandVersion, key } satisfies Pick<CommandRequest, 'command' | 'commandVersion' | 'key'>,
-      }),
-    );
-    if (!prepared.ok) return prepared;
-    return readResult(
-      await send(commandPath('execute', id), {
-        method: 'POST',
-        json: commandEnvelope({ command: name, commandVersion, key, expectedVersion: prepared.value.expectedVersion, input }),
-      }),
-    );
+    return versioned(name, options.version, async (commandVersion): Promise<TestCommandResult> => {
+      const prepared = await readResult<{ expectedVersion: number }>(
+        await send(commandPath('prepare', id), {
+          method: 'POST',
+          json: { command: name, commandVersion, key } satisfies Pick<CommandRequest, 'command' | 'commandVersion' | 'key'>,
+        }),
+      );
+      if (!prepared.ok) return prepared;
+      return readResult(
+        await send(commandPath('execute', id), {
+          method: 'POST',
+          json: commandEnvelope({ command: name, commandVersion, key, expectedVersion: prepared.value.expectedVersion, input }),
+        }),
+      );
+    });
   }
 
   /** Whether this session may run a command on a record: the prepare the form makes first, which changes nothing. */
@@ -367,8 +397,11 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
     options: { version?: number } = {},
   ): Promise<TestResult<{ expectedVersion: number }>> {
     const id = await app();
-    const commandVersion = options.version ?? (await versionOf(name));
-    return readResult(await send(commandPath('prepare', id), { method: 'POST', json: { command: name, commandVersion, key } }));
+    return versioned(name, options.version, async (commandVersion) =>
+      readResult<{ expectedVersion: number }>(
+        await send(commandPath('prepare', id), { method: 'POST', json: { command: name, commandVersion, key } }),
+      ),
+    );
   }
 
   /**

@@ -607,7 +607,7 @@ describe('nothing is silently skipped', () => {
   test('at the top, the list view, the dashboard, the tab, the section and the show entry', () => {
     assert.throws(
       () => parseAppConfig({ ...START, name: 'x', navigation: [] }, WHERE),
-      /has no "navigation"\. It takes: id, name, connection, sources, resources, unions, auth, views, pages, features, home, nav, ui/,
+      /has no "navigation"\. It takes: id, name, shortName, connection, sources, resources, unions, auth, views, pages, features, home, nav, ui/,
     );
     assert.throws(
       () => listApp({ from: 't', lable: 'T' }),

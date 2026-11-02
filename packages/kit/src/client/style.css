@@ -106,6 +106,13 @@ body {
 }
 
 .brand-name { font-weight: 620; letter-spacing: -0.01em; color: var(--ink); font-size: var(--text-md); }
+/* An App's short name (`shortName`) is what a phone's bar says, where the full one was cut to "Northwind Fi…"; the
+   full name stays in the button, read, so it is still what the button is called. */
+.brand-short { display: none; }
+@media (max-width: 600px) {
+  .brand-name:has(.brand-short) .brand-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .brand-short { display: inline; }
+}
 /* The connection name, which is also the button that opens Connections.
    Quiet by default — it reads as the label it is — and only takes a box on
    hover, because a permanent button here would compete with the query bar
@@ -1704,10 +1711,11 @@ body.app-mode:has(.pending-dock.pending-uncertain) .toast { bottom: calc(35dvh +
   body.app-mode .toast-action { min-height: 44px; }
   body.app-mode .toast-dismiss { flex-basis: 44px; width: 44px; height: 44px; }
   /* A record room's verbs are a bar at the screen's foot here (page.css): a notice stands above the bar, never over
-     the verbs it reports on. A pointer resting on a notice holds it, so one over them kept them out of reach. */
-  body.app-mode:has(.page-head.has-record.is-room > .page-head-actions) .toast { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
-  body.app-mode:has(.page-head.has-record.is-room > .page-head-actions):has(.pending-dock) .toast { bottom: calc(132px + env(safe-area-inset-bottom, 0px)); }
-  body.app-mode:has(.page-head.has-record.is-room > .page-head-actions):has(.pending-dock.pending-uncertain) .toast {
+     the verbs it reports on. A pointer resting on a notice holds it, so one over them kept them out of reach. A
+     free-form page's own row of verbs at the foot says so (`<Row foot>`, data-foot-actions) and is treated alike. */
+  body.app-mode:has(.page-head.has-record.is-room > .page-head-actions, [data-foot-actions]) .toast { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  body.app-mode:has(.page-head.has-record.is-room > .page-head-actions, [data-foot-actions]):has(.pending-dock) .toast { bottom: calc(132px + env(safe-area-inset-bottom, 0px)); }
+  body.app-mode:has(.page-head.has-record.is-room > .page-head-actions, [data-foot-actions]):has(.pending-dock.pending-uncertain) .toast {
     bottom: calc(35dvh + 24px + env(safe-area-inset-bottom, 0px));
   }
 }

@@ -100,6 +100,18 @@ describe('the public surface', () => {
       assert.deepEqual(broken({ 'app: a': 'public', 'app: b2': 'public', 'app: p': 'preview' }).dsl.removed, ['app: b'], 'a rename');
       assert.deepEqual(broken({ 'app: a': 'public', 'app: b': 'preview', 'app: p': 'preview' }).dsl.changed, ['app: b'], 'a demotion');
     });
+
+    /* One more kind of section came to take `empty`, so the seven kinds' keys were said once as `[kind=*]`: every
+       kind still takes it, and the write refused it as twelve public names gone. */
+    test('a per-kind key restated for every kind is kept, not removed', () => {
+      const shared: Inventory = {
+        sections: { dsl: { 'app: sections[][kind=rows].empty': 'public', 'app: sections[][kind=view].kind': 'public' } },
+      };
+      const after = { sections: { dsl: { 'app: sections[][kind=*].empty': 'public', 'app: sections[][kind=view].kind': 'public' } } };
+      assert.deepEqual(breaks(diffSurface(shared, after), shared), {});
+      const gone = { sections: { dsl: { 'app: sections[][kind=view].kind': 'public' } } };
+      assert.deepEqual((breaks(diffSurface(shared, gone), shared) as Difference).dsl.removed, ['app: sections[][kind=rows].empty']);
+    });
   });
 
   describe('the inventory is compact and still guards', () => {

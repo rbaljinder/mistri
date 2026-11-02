@@ -334,3 +334,21 @@ describe('the Segmented, Stat and Columns blocks', () => {
     expect(container.querySelectorAll('.chart-data tbody tr')).toHaveLength(2);
   });
 });
+
+/* A free-form page's sticky row of verbs at a phone's foot was covered by the notice its own action raised: the row
+   now says what it is, and the stylesheet stands a notice above it as above a record's bar (style.css). */
+test("a row at the page's foot says so, and an ordinary row says nothing", () => {
+  const { container } = render(
+    <>
+      <ui.Row foot>
+        <button type="button">Submit</button>
+      </ui.Row>
+      <ui.Row>
+        <button type="button">Other</button>
+      </ui.Row>
+    </>,
+  );
+  const [foot, plain] = container.querySelectorAll('.kit-row');
+  expect(foot).toHaveAttribute('data-foot-actions', '');
+  expect(plain).not.toHaveAttribute('data-foot-actions');
+});

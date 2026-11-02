@@ -49,6 +49,62 @@ describe("a dashboard section's `empty`", () => {
   });
 });
 
+/* A list's tab could not say what it says while empty, and a dashboard's embed of a list could not either: check
+   refused `empty` on both, so an embed over an empty tab drew a bare "No deals right now". */
+describe("an embedded list's and a tab's `empty`", () => {
+  const listEmpty = { title: 'No deals yet', description: 'Deals you log land here.' };
+  const openEmpty = { title: 'Nothing open', description: 'Every deal is closed.' };
+  function embedding(section: object, list: object = {}) {
+    const parsed = parseAppConfig(
+      {
+        name: 'Sales',
+        resources: {
+          deal: { segments: { open: { query: 'status = open', label: 'Open' }, won: { query: 'status = won', label: 'Won' } } },
+        },
+        views: {
+          deals: {
+            kind: 'list',
+            from: 'deal',
+            empty: listEmpty,
+            tabs: [{ segment: 'open', empty: openEmpty }, 'won'],
+            ...list,
+          },
+          board: { kind: 'dashboard', label: 'Board', sections: [{ kind: 'view', view: 'deals', ...section }] },
+        },
+        home: 'board',
+        nav: ['board', 'deals'],
+      },
+      'empty',
+    );
+    return parsed;
+  }
+  const first = (parsed: ReturnType<typeof embedding>) =>
+    (parsed.views.board as unknown as AppDashboardView).sections[0] as { empty?: object; emptyMode?: string };
+
+  test('a tab keeps its own guidance', () => {
+    const tabs = (embedding({}).views.deals as { tabs?: Array<{ empty?: object }> }).tabs!;
+    assert.deepEqual(tabs[0].empty, openEmpty);
+    assert.equal(tabs[1].empty, undefined);
+  });
+
+  test("an embed says its own guidance, else its tab's, else on the first tab the list's", () => {
+    assert.deepEqual(first(embedding({ empty: { title: 'Quiet week' } })).empty, { title: 'Quiet week' });
+    assert.deepEqual(first(embedding({})).empty, openEmpty);
+    assert.deepEqual(first(embedding({}, { tabs: ['open'] })).empty, listEmpty);
+    assert.equal(first(embedding({ tab: 'won' })).empty, undefined);
+    const hidden = first(embedding({ empty: 'hide' }));
+    assert.equal(hidden.emptyMode, 'hide');
+    assert.equal(hidden.empty, undefined);
+  });
+
+  test("a board embed takes only hide, and a tab's guidance is checked as a list's", () => {
+    const board = { board: { by: 'status', primary: 'name' }, tabs: undefined };
+    assert.throws(() => embedding({ empty: { title: 'None' } }, board), /takes "empty: 'hide'"/);
+    assert.equal(first(embedding({ empty: 'hide' }, board)).emptyMode, 'hide');
+    assert.throws(() => embedding({}, { tabs: [{ segment: 'open', empty: { description: 'No title' } }] }), /title/);
+  });
+});
+
 describe('[empty-run]', () => {
   const schema = { label: 'Sales', dialect: 'sqlite', readAt: '', foreignKeys: [], tables: [] } as unknown as DatabaseSchema;
   const lists = (n: number, extra: object = {}) =>

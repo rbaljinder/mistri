@@ -168,10 +168,14 @@ import { resolveDisplay } from './appDisplayResolve.js';
 import { parseAppRetention } from './appRetention.js';
 export { resolveDisplay } from './appDisplayResolve.js';
 
+/** The longest `shortName`: what a phone's bar and a home screen's icon label show whole. */
+export const SHORT_NAME_MAX = 12;
+
 /** The root, by group: identity, data, auth, content, ui. */
 export const ROOT_KEYS = [
   'id',
   'name',
+  'shortName',
   'connection',
   'sources',
   'resources',
@@ -254,6 +258,13 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef): AppDef {
   allowKeys(a, ROOT_KEYS, where);
   if (typeof a.name !== 'string' || !a.name.trim()) throw new Error(`${where} has no "name". An app is named after what it is for.`);
   const name = a.name.trim();
+  /* A phone's bar cut a long name to "Northwind Fi…", and an installed icon's label to less: the short one is said
+     there instead, the full one kept as the bar's accessible name. */
+  const shortName = a.shortName === undefined ? undefined : typeof a.shortName === 'string' ? a.shortName.trim() : '';
+  if (shortName !== undefined && (!shortName || Array.from(shortName).length > SHORT_NAME_MAX))
+    throw new Error(
+      `${where} has a "shortName" that is not ${SHORT_NAME_MAX} characters or fewer of text: it is what a phone's bar and an installed icon say where "name" does not fit.`,
+    );
   if (a.id !== undefined && (typeof a.id !== 'string' || !a.id.trim()))
     throw new Error(`${where} has an "id" that is not a non-empty string.`);
   /* The id is the App's address (`/helpdesk`) and its account store's name,
@@ -432,6 +443,7 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef): AppDef {
   const app: AppDef = {
     id,
     name,
+    ...(shortName ? { shortName } : {}),
     ...(Object.hasOwn(a, 'flags') ? { flags: catalog.flags } : {}),
     ...(Object.hasOwn(a, 'audiences') ? { audiences: catalog.audiences } : {}),
     ...(Object.hasOwn(a, 'experiments') ? { experiments } : {}),

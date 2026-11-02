@@ -120,6 +120,14 @@ const rooms: Record<string, unknown> = {
   leads,
   inbox,
   workspace: { id: 'workspace', kind: 'dashboard', label: 'Workspace', sections: [] },
+  review: {
+    id: 'review',
+    kind: 'dashboard',
+    label: 'Review',
+    windows: ['last 7 days', 'last 90 days'],
+    window: 'last 90 days',
+    sections: [],
+  },
   application: { id: 'application', kind: 'form', label: 'Application', command: 'apply' },
 };
 const tables: Record<string, unknown> = { vehicle, lead, work_order: workOrder, account, opportunity };
@@ -144,7 +152,7 @@ vi.mock('../../../kit/src/client/core.js', () => ({
   state: { schema: { tables: [vehicle, lead, workOrder], foreignKeys: [] } },
 }));
 
-const { addressQuestion, listParams, tabSlug, viewEntryFromAddress } = await import('./publicAddress.js');
+const { addressQuestion, listParams, tabSlug, viewEntryFromAddress, dashboardEntry } = await import('./publicAddress.js');
 const { appListQuery, splitListSpec, wholeQuery } = await import('../../../kit/src/client/components/appListModel.js');
 const { squeeze } = await import('../../../kit/src/client/filterbar.js');
 
@@ -160,6 +168,15 @@ test('named dashboards and signed-in forms resolve to their rooms, never to tabl
   expect(viewEntryFromAddress('workspace', '')).toMatchObject({ kind: 'page', pageId: 'dash-workspace', label: 'Workspace' });
   expect(viewEntryFromAddress('application', '')).toMatchObject({ kind: 'page', pageId: 'form-application', label: 'Application' });
   expect(viewEntryFromAddress('missing', '')).toBeNull();
+});
+
+test('a dashboard that opens on a window reads `period=all` as all time, as it reads `period=all-time`', () => {
+  expect(dashboardEntry('review', 'period=all-time', false)).toMatchObject({ rootBody: 'all-time' });
+  // The word a person guesses (a field report's): the same entry, written as the address's own word.
+  expect(dashboardEntry('review', 'period=all', false)).toMatchObject({ rootBody: 'all-time' });
+  expect(dashboardEntry('review', 'period=last-7-days', false)).toMatchObject({ rootBody: 'last-7-days' });
+  // Where all time is what it opens on already, there is nothing to say.
+  expect(dashboardEntry('workspace', 'period=all', false)?.rootBody).toBeUndefined();
 });
 
 test('the view as it stands is its key alone', () => {

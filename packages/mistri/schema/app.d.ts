@@ -197,8 +197,12 @@ export type AppTab =
       /** The order this tab reads in, written as the query bar writes one — `'scheduled_at'`, `'created_on desc'`: an
           Upcoming tab soonest first where the list reads newest first. It wins over the view's own `sort`. */
       sort?: string;
+      /** What the tab says while nothing is under it: "No overdue jobs", and where to start. Without it the first tab
+          says the list's `empty`, and another tab names itself ("No work orders in Overdue right now."). A search or
+          filter past the tab keeps "No matches". */
+      empty?: AppListEmpty;
     }
-  | { label: string | AppMessageRef; sort?: string };
+  | { label: string | AppMessageRef; sort?: string; empty?: AppListEmpty };
 
 /** A named set of conditions on a resource — `overdue: 'open and due_on < today'` — read as one word wherever its
     table's rows are asked: a tab, a metric's source (`'work_order.overdue'`), a rollup's `segment`, a query bar. It may
@@ -1509,7 +1513,8 @@ export interface AppListView<Table extends string = string, Column extends strin
   count?: boolean;
   /** false draws the list without its title (it stays for a screen reader), where the room above already says where the reader is. */
   heading?: false;
-  /** Shown only when this list's base query has no rows; tabs and filters retain their ordinary no-matches message. */
+  /** Shown when the list as it opens (its first tab) has no rows; a tab says its own with its `empty`, and a search or
+      filter past the tab keeps its ordinary no-matches message. */
   empty?: AppListEmpty;
   tabs?: readonly AppTab[];
   /** Columns offered as quick filter boxes — a rollup or computed column too, a number's Min and Max (`'spent'`).
@@ -2011,6 +2016,9 @@ export interface AppViewDashSection<View extends string = Lowercase<string>> {
       bulk actions, authorized as the room is. Default false — a dashboard's list is a glance. Not in the aside, and
       not a board or a calendar. */
   interactive?: boolean;
+  /** What the embed says while it has no row, as a rows section's `empty`; or `'hide'`, which leaves it out while it
+      has none. Default: its tab's `empty`, and on the view's first tab the view's own. A board takes only `'hide'`. */
+  empty?: AppListEmpty | 'hide';
 }
 
 /** A screen of sections about whole tables. Its key in `views` is its address (`/{app}/{key}?period=last-30-days`). */
@@ -2918,8 +2926,12 @@ export interface AppShell {
    * visitor does not, having nothing of their own to search; 'everyone' offers it to a visitor as well,
    * and false hides it from everyone. Default 'members'. */
   search?: 'members' | 'everyone' | false;
-  /** false hides the crumb bar above each room. Default true. */
-  breadcrumbs?: boolean;
+  /** The crumb bar above a room. By default (`{ top: false, home: false }`) a room reached straight from the menu
+      (a list, a dashboard, a form, a page) draws its own heading row and no bar, and the bar appears once the walk
+      goes deeper (a record, a related list, a record's tab), starting at the first room's name. `top: true` draws it
+      above those first rooms too, and `home: true` starts it with the home mark. `true` is both, the whole trail
+      everywhere; `false` never draws it. */
+  breadcrumbs?: boolean | { top?: boolean; home?: boolean };
   /** false keeps each room's heading for a screen reader only, and drops a list's empty chip row and count. Default true. */
   heading?: boolean;
   width?: 'full' | 'wide' | 'narrow';
@@ -3269,6 +3281,9 @@ export interface AppConfig {
   /* identity */
   id?: string;
   name: string;
+  /** The name a phone's bar and an installed icon say where `name` does not fit: "Northwind" for "Northwind Field
+      Service". 12 characters or fewer. The full `name` stays the bar's accessible name and the page's title. */
+  shortName?: string;
   /* data */
   /** The one connection this App is for, by id or name. Absent means every connection. Not with `sources`. A name that is
       an identifier is also the App's one source's, as `sources: { <name>: { connection: '<name>', default: true } }` says

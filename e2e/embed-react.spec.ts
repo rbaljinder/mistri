@@ -181,7 +181,7 @@ const APP_PARTS = [
   '.tw-body h1',
   '.tw-body [role="tab"][aria-selected="true"]',
   '.tw-body tbody tr:first-child td',
-  '.tw-body button.crumb-home',
+  '.tw-body .applist-head-row button',
   '.tw-body input[placeholder^="Search leads"]',
   '.tw-body #home-button',
 ];

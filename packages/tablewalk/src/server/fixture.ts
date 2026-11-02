@@ -19,7 +19,7 @@
  */
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import { findTable, primaryKey, referencesFrom, referencesTo, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { insertOrder } from '@mistriwork/engine/shared/order.js';
+import { insertOrder } from '../shared/order.js';
 
 interface FixtureOptions {
   /** How many reference hops to follow away from the row. */

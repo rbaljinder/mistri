@@ -466,8 +466,9 @@ export interface AppShell {
       signed-out visitor does not, having nothing of their own to search; `{ signedOut: true }` offers it to a
       visitor too, for an App whose public pages are worth searching. */
   search?: 'members' | 'everyone' | false;
-  /** false hides the crumb bar above a room. Default true. */
-  breadcrumbs?: boolean;
+  /** The crumb bar: `true` everywhere with the home mark, `false` never; by default (`{ top: false, home: false }`)
+      not above a room reached straight from the menu, and without the home mark (Crumbs.tsx). */
+  breadcrumbs?: boolean | { top?: boolean; home?: boolean };
   /** false keeps a room's heading for a screen reader only. Default true. */
   heading?: boolean;
   width?: 'full' | 'wide' | 'narrow';
@@ -642,6 +643,8 @@ interface ServedAppUi {
 export interface ServedApp<View extends object = ServedDashboardView | ServedFormView | ({ table: string; label: string } & object)> {
   id: string;
   name: string;
+  /** What a phone's bar says where `name` does not fit (the App's `shortName`); `name` stays its accessible name. */
+  shortName?: string;
   views: Record<string, View>;
   nav: AppPayloadNavNode[];
   home?: string;

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { chartLimit, windowed } from '../../../../engine/src/shared/dashboardAsks.js';
-import { CurrencyFigures, EXACT, figureSayer, namedGroups, ownWindow, sayer, type Section } from './dashboardModel.js';
+import { CurrencyFigures, EXACT, figureSayer, legendSayer, namedGroups, ownWindow, sayer, type Section } from './dashboardModel.js';
+import { installShell } from '../shellMode.js';
 
 describe('ownWindow', () => {
   const won = {
@@ -132,4 +133,17 @@ test("a line over two keys asks for every period of every series, not the server
   expect(chartLimit({ shape: 'line', by: 'created_on, source' })).toBe(400);
   // One key keeps the section's own limit.
   expect(chartLimit({ shape: 'line', by: 'created_on', limit: 12 })).toBe(12);
+});
+
+test("a stacked chart's figures are one form, the compact threshold held in the major unit of money kept in cents", () => {
+  installShell({ display: () => ({ format: 'money', minor: true, currency: 'USD' }) });
+  const section = { kind: 'chart', table: 'invoice', measure: 'sum amount', by: 'due_on, status', shape: 'stacked' } as Section;
+  // $69,800 and $14,234.74, stored as cents: nothing reaches $100,000, so every figure is exact, as the bars are.
+  const exact = legendSayer(section, [6_980_000, 1_423_474]);
+  expect(exact(6_980_000)).toBe('$69,800.00');
+  expect(exact(1_423_474)).toBe('$14,234.74');
+  // One series past $100,000 puts every figure in the compact form, the small ones with it.
+  const compact = legendSayer(section, [20_000_000, 1_423_474]);
+  expect(compact(20_000_000)).toBe('$200K');
+  expect(compact(1_423_474)).toBe('$14.2K');
 });

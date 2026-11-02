@@ -15,9 +15,6 @@
  *     (`@mistriwork/engine/shared/query.js`, `@mistriwork/mistri/ui`) through that package's `exports`, as Node resolves it in a
  *     checkout. Type-only imports count — a package has to resolve its types too — but are reported apart, because
  *     their fix is cheap;
- *   - a bin is a module that names both products' mains (the server's, and the page's entry): scripts/boundary/bins.json
- *     names each, its mains and why. Its `import()` of a main it declares is not a crossing; a static import of one,
- *     a main it no longer imports, or any other import it makes the wrong way still is;
  *   - an import the wrong way fails unless scripts/boundary/allow.json lists it. That list has been empty since 0.9.8
  *     and only shrinks: an entry the tree no longer has fails too;
  *   - a workspace package's name that its `exports` does not answer fails, with no list to excuse it: the engine, the
@@ -38,13 +35,14 @@
  *
  * `--root <dir>` reads another tree (the tests' fixtures).
  */
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, posix, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as ts from 'typescript/unstable/ast';
 import { API } from 'typescript/unstable/sync';
 import { readEntries, splitName, workspaceProblems, ENTRIES } from './boundary/entries.mjs';
+import { published } from './pack-manifest.mjs';
 
 export const LAYERS = ['engine', 'ui', 'kit', 'browser', 'mistri', 'cloudflare'];
 /** What each layer may import. */
@@ -57,7 +55,6 @@ const MAY = {
   /* The Workers-side glue `mistri deploy` writes a Worker against: it imports nothing of the repository. */
   cloudflare: ['cloudflare'],
 };
-export const BINS = 'scripts/boundary/bins.json';
 export const ALLOW = 'scripts/boundary/allow.json';
 const WRITE = 'node scripts/check-boundary.mjs --write';
 
@@ -206,15 +203,30 @@ function resolveSpecifier(from, specifier, known, packages, unexported = () => {
   return target ? fileFor(posix.normalize(posix.join(owner.dir, target)), known) : null;
 }
 
-/** Every module and, for each, the modules it imports: `{ type, lazy }` per target, each true only when every reference is. */
-export function graphOf(root, packages = packagesOf(root)) {
+/**
+ * Every module and, for each, the modules it imports: `{ type, lazy }` per target, each true only when every reference
+ * is. And for each module, and each of `extra` (files read for their imports that are no package's module, such as a
+ * build config), the names of packages it imports (`named`).
+ */
+export function graphOf(root, packages = packagesOf(root), extra = []) {
   const modules = modulesOf(root, packages);
   const known = new Set(modules);
+  /* An importer named by its folder is read for every script in it. */
+  const others = extra
+    .filter((path) => existsSync(join(root, path)))
+    .flatMap((path) =>
+      statSync(join(root, path)).isDirectory()
+        ? readdirSync(join(root, path), { recursive: true, encoding: 'utf8' })
+            .filter((file) => /\.(?:[cm]?[jt]s|tsx)$/.test(file) && !file.split('/').includes('node_modules'))
+            .map((file) => `${path}/${file}`)
+        : [path],
+    )
+    .filter((file) => !known.has(file));
   const directory = mkdtempSync(join(tmpdir(), 'tablewalk-boundary-'));
   const api = new API({ cwd: root });
   try {
     const config = join(directory, 'tsconfig.json');
-    const absolute = modules.map((file) => resolve(root, file));
+    const absolute = [...modules, ...others].map((file) => resolve(root, file));
     writeFileSync(
       config,
       JSON.stringify({
@@ -225,11 +237,15 @@ export function graphOf(root, packages = packagesOf(root)) {
     const program = api.updateSnapshot({ openProject: config }).getProject(config).program;
     const edges = new Map();
     const unexported = [];
-    modules.forEach((file, index) => {
+    const named = new Map();
+    [...modules, ...others].forEach((file, index) => {
       const source = program.getSourceFile(absolute[index]);
       if (!source) throw new Error(`check-boundary: typescript did not parse ${file}`);
+      const specifiers = specifiersOf(source, readFileSync(absolute[index], 'utf8'));
+      named.set(file, [...new Set(specifiers.map(({ specifier }) => specifier).filter((specifier) => !specifier.startsWith('.')))]);
+      if (index >= modules.length) return;
       const out = new Map();
-      for (const { specifier, type, lazy } of specifiersOf(source, readFileSync(absolute[index], 'utf8'))) {
+      for (const { specifier, type, lazy } of specifiers) {
         const target = resolveSpecifier(file, specifier, known, packages, (pkg) => unexported.push({ from: file, specifier, pkg }));
         if (!target || target === file) continue;
         const before = out.get(target);
@@ -237,7 +253,7 @@ export function graphOf(root, packages = packagesOf(root)) {
       }
       edges.set(file, out);
     });
-    return { modules, edges, unexported };
+    return { modules, edges, unexported, named };
   } finally {
     api.close();
     rmSync(directory, { recursive: true, force: true });
@@ -254,40 +270,56 @@ export function ownersOf(packages, modules) {
   return { owner, problems };
 }
 
-/* ---- the bin ---- */
+/* ---- the host list ---- */
 
 /**
- * A module that is run rather than imported, and the mains it may name across the line (bins.json
- * `{ file: { mains: [...], reason } }`). The server's bin answers `tablewalk` whichever product is installed, and the
- * page's entry (the kit's shellStart.js) starts whichever product sent the page, so each names both products' mains —
- * by `import()`, which a package without one of them answers with ERR_MODULE_NOT_FOUND. That is the reviewed
- * exception, written down, not an import hidden from this check: each main it declares must be a module the bin loads
- * on demand, and nothing else the bin imports is excused.
+ * What a product outside this repository imports of the engine, the kit and ui, held to the host list
+ * (entries.json `host`): it builds from the packages as published, so each name it imports must be on the list and in
+ * its package's manifest as an install reads it (scripts/pack-manifest.mjs `published`), never a module the package
+ * does not export to an install. A name on the list must be published, and imported by the host: a name nothing
+ * imports any more is taken off, in a release that says so. An importer the tree does not have (a fixture's) is not
+ * read.
  */
-export function binOf(manifest, modules, edges) {
+export function hostProblems(root, host, packages, named) {
+  if (!host) return [];
   const problems = [];
-  const exempt = new Set();
-  for (const [file, entry] of Object.entries(manifest.bin ?? {})) {
-    const { mains, reason } = entry ?? {};
-    if (!modules.includes(file)) problems.push(`${BINS}: bin ${file} is not a module any more; remove it.`);
-    if (!reason) problems.push(`${BINS}: bin ${file} needs the reason it names more than one product's main.`);
-    if (!Array.isArray(mains) || !mains.length) {
-      problems.push(`${BINS}: bin ${file} names no mains.`);
-      continue;
-    }
-    const imports = edges.get(file) ?? new Map();
-    for (const main of mains) {
-      const edge = imports.get(main);
-      if (!modules.includes(main)) problems.push(`${BINS}: bin ${file} names ${main}, which is not a module.`);
-      else if (!edge) problems.push(`${BINS}: bin ${file} no longer imports ${main}; remove it from its mains.`);
-      else if (!edge.lazy)
-        problems.push(
-          `${BINS}: bin ${file} imports ${main} statically; a bin loads its mains with import(), so a package without one still starts.`,
-        );
-      else exempt.add(key(file, main));
+  const at = `${ENTRIES} host`;
+  const listed = Object.fromEntries(Object.entries(host.exports ?? {}).map(([name, subpaths]) => [name, new Set(subpaths)]));
+  const shipped = new Map(packages.map(({ name, manifest }) => [name, published(manifest, listed).exports ?? {}]));
+  const used = new Set();
+  let reading = false;
+  for (const [importer, paths] of Object.entries(host.importers ?? {})) {
+    const present = paths.filter((path) => existsSync(join(root, path)));
+    if (!present.length) continue;
+    reading = true;
+    for (const [file, specifiers] of named) {
+      if (!present.some((path) => file === path || file.startsWith(`${path}/`))) continue;
+      for (const specifier of specifiers) {
+        const { pkg, subpath } = splitName(specifier);
+        if (!listed[pkg]) continue;
+        used.add(`${pkg}\0${subpath}`);
+        if (!listed[pkg].has(subpath))
+          problems.push(
+            `${file} imports ${specifier}, which is not on the host list: ${importer} builds from the published ` +
+              `packages, so each name it imports of ${pkg} is reviewed. Import a name on it, or add this one to ${at}.exports.`,
+          );
+      }
     }
   }
-  return { exempt, problems };
+  for (const [pkg, subpaths] of Object.entries(listed)) {
+    if (!shipped.has(pkg)) {
+      problems.push(`${at}.exports names ${pkg}, which is not a package the table names.`);
+      continue;
+    }
+    for (const subpath of subpaths) {
+      const name = subpath === '.' ? pkg : `${pkg}/${subpath.slice(2)}`;
+      if (!Object.hasOwn(shipped.get(pkg), subpath))
+        problems.push(`${at}.exports names ${name}, which ${pkg} as published does not export.`);
+      else if (reading && !used.has(`${pkg}\0${subpath}`))
+        problems.push(`${at}.exports names ${name}, which no importer imports any more: take it off, in a release that says so.`);
+    }
+  }
+  return problems;
 }
 
 /* ---- the fix each crossing waits for ---- */
@@ -362,14 +394,14 @@ const fixText = (fix) => FIXES.find(([name]) => name === fix)[1];
 const key = (from, to) => `${from} -> ${to}`;
 
 /** Every import that goes the wrong way: `{ from, to, pair, type, lazy, fix }`. */
-export function crossingsOf(edges, owner, exempt = new Set()) {
+export function crossingsOf(edges, owner) {
   const out = [];
   for (const [from, targets] of edges) {
     const a = owner.get(from);
     if (!MAY[a]) continue;
     for (const [to, { type, lazy }] of targets) {
       const b = owner.get(to);
-      if (!MAY[b] || MAY[a].includes(b) || exempt.has(key(from, to))) continue;
+      if (!MAY[b] || MAY[a].includes(b)) continue;
       out.push({ from, to, pair: `${a} -> ${b}`, type, lazy, fix: fixFor(from, to, a, b) });
     }
   }
@@ -381,18 +413,17 @@ const allowValue = (crossing) => crossing.fix + (crossing.type ? ', type-only' :
 /** The whole check over one tree: the problems, and what the report needs. */
 export function check(root) {
   const packages = packagesOf(root);
-  const bins = existsSync(join(root, BINS)) ? readJson(root, BINS) : {};
-  const { modules, edges, unexported } = graphOf(root, packages);
+  const host = readEntries(root).host;
+  const { modules, edges, unexported, named } = graphOf(root, packages, Object.values(host?.importers ?? {}).flat());
   const { owner, problems: owned } = ownersOf(packages, modules);
-  const bin = binOf(bins, modules, edges);
-  const placement = [...owned, ...bin.problems];
-  const problems = [...placement];
+  const placement = [...owned];
+  const problems = [...placement, ...hostProblems(root, host, packages, named)];
   for (const { from, specifier, pkg } of unexported)
     problems.push(
       `${from} imports ${specifier}, which ${pkg}'s exports do not name: import a name it exports, or add the module to ` +
         `its package.json "exports" by its path.`,
     );
-  const crossings = crossingsOf(edges, owner, bin.exempt);
+  const crossings = crossingsOf(edges, owner);
   const allowPath = join(root, ALLOW);
   const allow = existsSync(allowPath) ? readJson(root, ALLOW) : null;
   const fresh = [];
@@ -430,8 +461,6 @@ export function check(root) {
     modules,
     edges,
     owner,
-    bin: bins.bin ?? {},
-    exempt: bin.exempt,
     crossings,
     allow,
     fresh,
@@ -446,10 +475,9 @@ export function check(root) {
 /**
  * Everything one entry reaches, by every kind of import, from its source and its types: the modules, the
  * allowlisted crossings on the way (not followed), and each module of a layer the entry's layer may not import,
- * with the shortest path to it. A bin's declared main of another layer is not followed: the bin loads it only when
- * that product is installed.
+ * with the shortest path to it.
  */
-export function closureOf(entry, { edges, owner, allow, exempt }) {
+export function closureOf(entry, { edges, owner, allow }) {
   const may = MAY[entry.layer] ?? [];
   const start = [...new Set([entry.source, entry.types].filter((file) => file && edges.has(file)))];
   const parent = new Map(start.map((file) => [file, null]));
@@ -467,7 +495,6 @@ export function closureOf(entry, { edges, owner, allow, exempt }) {
       const edge = key(from, to);
       const layer = owner.get(to);
       if (!may.includes(layer)) {
-        if (exempt?.has(edge)) continue;
         if (allow && Object.hasOwn(allow, edge)) allowed.add(edge);
         else if (!wrong.has(to)) wrong.set(to, { layer, path: [...pathTo(from), to] });
         continue;
@@ -623,14 +650,12 @@ export function allowText(crossings) {
 }
 
 function report(result) {
-  const { modules, owner, bin, crossings, allow } = result;
+  const { modules, owner, crossings, allow } = result;
   const count = (items, keyOf) => items.reduce((map, item) => map.set(keyOf(item), (map.get(keyOf(item)) ?? 0) + 1), new Map());
   const byLayer = count(modules, (file) => owner.get(file) ?? 'none');
   console.log(`modules: ${modules.length}`);
   for (const layer of [...LAYERS, 'none'])
     if (byLayer.get(layer)) console.log(`  ${layer.padEnd(8)} ${String(byLayer.get(layer)).padStart(5)}`);
-  for (const [file, { mains = [] }] of Object.entries(bin))
-    console.log(`  bin      ${file} names ${mains.map((main) => `${main} (${owner.get(main)})`).join(' and ')}`);
   console.log(`\ncrossings: ${crossings.length} (allowlisted ${allow ? Object.keys(allow).length : 0})`);
   const pairs = count(crossings, (crossing) => crossing.pair);
   for (const [pair, n] of [...pairs].sort((a, b) => b[1] - a[1])) {

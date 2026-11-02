@@ -41,6 +41,7 @@ import { captureCounters } from '../packages/engine/src/server/evidence.js';
 import { rowScopeCounters } from '../packages/engine/src/shared/rowScope.js';
 import { setServerTiming } from '../packages/engine/src/adapters/telemetry/serverTiming.js';
 import { allocationMeter } from './support/allocationMeter.js';
+import { withoutQualified } from './support/statements.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 /* A pooled connection's session SETs are the pool's, paid once per physical
@@ -259,7 +260,10 @@ const purposeOf = (statement: string): Purpose =>
       ? 'pin'
       : /mistri\."tenant_(tenant|membership)"/.test(statement)
         ? 'membership'
-        : /\b(information_schema|pg_catalog|pg_class|pg_attribute|pg_namespace|pg_constraint)\b/.test(statement)
+        : /\b(information_schema|pg_catalog|pg_class|pg_attribute|pg_namespace|pg_constraint)\b/.test(
+              /* A scoped read names the operator it compares with (`OPERATOR(pg_catalog.=)`): not a catalog read. */
+              withoutQualified(statement),
+            )
           ? 'catalog'
           : /\bmistri\.|pg_advisory/.test(statement)
             ? 'store'

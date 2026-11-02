@@ -1258,10 +1258,22 @@ export async function findAppAccount(appDir: string, email: string): Promise<str
  * already has an account refuses the whole call before any is made. A
  * failure part-way (the store went away) is `unknown` and names how many were
  * made. Passwords are never logged, returned or repeated in a refusal.
+ *
+ * The accounts are unverified: nothing proved their addresses, and a row policy that matches an account by a verified
+ * email will not match them. `{ verified: true }` is the operator's assertion that the addresses are theirs to
+ * vouch for (a development store's throwaway ones): the accounts are made verified, and the account trail's row
+ * for each says `verified: true`.
  */
-export async function createAppAccounts(appDir: string, accounts: readonly NativeAccountInput[]): Promise<readonly string[]> {
+export async function createAppAccounts(
+  appDir: string,
+  accounts: readonly NativeAccountInput[],
+  options: { readonly verified?: true } = {},
+): Promise<readonly string[]> {
   if (!Array.isArray(accounts) || !accounts.length || accounts.length > 256)
     return refuse('accounts is a list of 1 to 256 { email, name, password }.');
+  if (options === null || typeof options !== 'object' || (options.verified !== undefined && options.verified !== true))
+    return refuse('options is { verified: true } or nothing: verified is an assertion, and only ever true.');
+  const verified = options.verified === true;
   const inputs = accounts.map((account, index) => {
     try {
       return nativeAccountInput(account);
@@ -1281,7 +1293,7 @@ export async function createAppAccounts(appDir: string, accounts: readonly Nativ
     const ids: string[] = [];
     for (const input of inputs) {
       try {
-        ids.push(await createNativeAccount(runtime, input, { by: 'maintenance' }));
+        ids.push(await createNativeAccount(runtime, input, verified ? { by: 'maintenance', verified: true } : { by: 'maintenance' }));
       } catch (error) {
         // Refused before anything went out, and nothing made yet: nothing to look for.
         if (error instanceof NativeAccountRefusal && error.reason !== 'unavailable' && !ids.length)

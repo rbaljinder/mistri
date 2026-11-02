@@ -1,6 +1,6 @@
 {
   "name": "tablewalk-workspace",
-  "version": "1.0.0-rc.11",
+  "version": "1.0.0-rc.12",
   "private": true,
   "description": "The workspace root: the packages under packages/ (tablewalk, mistri, create-mistri, @mistriwork/cloudflare, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
@@ -120,7 +120,8 @@
           "storybook/**/*.{ts,tsx,mjs}",
           "site/astro.config.mjs",
           "vite*.config.ts",
-          "config/vite*.config.ts"
+          "config/vite*.config.ts",
+          "scripts/browser-from-tarballs/vite.config.ts"
         ],
         "project": [
           "scripts/**",
@@ -141,7 +142,20 @@
           "next",
           "react-router",
           "@tanstack/react-router",
-          "postcss"
+          "postcss",
+          "@tanstack/react-form",
+          "@tanstack/react-table",
+          "@tanstack/react-virtual",
+          "@tiptap/core",
+          "@tiptap/extension-image",
+          "@tiptap/extension-list",
+          "@tiptap/extension-mention",
+          "@tiptap/extension-table",
+          "@tiptap/extensions",
+          "@tiptap/pm",
+          "@tiptap/react",
+          "@tiptap/starter-kit",
+          "@tiptap/suggestion"
         ]
       },
       "packages/engine": {
@@ -165,14 +179,30 @@
       },
       "packages/kit": {
         "entry": [
-          "src/client/index.html"
+          "src/client/index.html",
+          "src/client/devtoolsEventClient.js"
         ],
         "project": [
           "src/**"
         ],
         "ignoreDependencies": [
-          "tablewalk",
-          "@mistriwork/mistri"
+          "@base-ui/react",
+          "@tanstack/react-form",
+          "@tanstack/react-query",
+          "@tanstack/react-table",
+          "@tanstack/react-virtual",
+          "@tiptap/extension-image",
+          "@tiptap/extension-list",
+          "@tiptap/extension-mention",
+          "@tiptap/extension-table",
+          "@tiptap/extensions",
+          "@tiptap/react",
+          "@tiptap/starter-kit",
+          "@tiptap/suggestion",
+          "@vitejs/plugin-react",
+          "react",
+          "react-dom",
+          "vite"
         ],
         "includeEntryExports": true
       },
@@ -190,7 +220,6 @@
         "entry": [
           "src/server/{commands,policy,openfeature,maintenance,jobs,workflows,handler,integration}.ts",
           "src/client/observe/main.tsx",
-          "src/client/devtoolsEventClient.js",
           "src/client/observe/index.html",
           "src/client/components/sdk/{index.ts,testing.tsx,page.tsx}",
           "src/embed/{index.tsx,next.ts,react-router.ts,tanstack-router.ts}",
@@ -208,6 +237,9 @@
         "includeEntryExports": true
       },
       "packages/tablewalk": {
+        "entry": [
+          "src/client/workbenchShell.js"
+        ],
         "project": [
           "src/**"
         ],
@@ -234,7 +266,10 @@
       "packages/mistri/src/client/components/console/*Room.tsx": [
         "exports"
       ],
-      "packages/mistri/src/client/devtoolsEventClient.js": [
+      "packages/kit/src/client/devtoolsEventClient.js": [
+        "exports"
+      ],
+      "packages/tablewalk/src/client/workbenchShell.js": [
         "exports"
       ],
       "packages/mistri/src/client/ssr/render.tsx": [

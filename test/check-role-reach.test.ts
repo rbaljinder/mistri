@@ -572,6 +572,20 @@ describe('an action some role sees and cannot follow', () => {
     ]);
   });
 
+  // A tab's own empty opens a room as the list's does, and was not looked at.
+  test("a tab's empty action is judged as the list's", () => {
+    const { empty: _listEmpty, ...garage } = raw.views.garage;
+    const views = {
+      ...raw.views,
+      garage: { ...garage, tabs: [{ label: 'All', empty: { title: 'Nothing saved', action: { label: 'Look around', to: 'stock' } } }] },
+    };
+    const said = appDestinationWarnings(loadedOf({ ...raw, views, pages: {} }), schema);
+    assert.ok(
+      said.some((line) => line.startsWith('app.ts: views "garage", tab 1, empty action "Look around" [destination-unreachable]')),
+      said.join('\n'),
+    );
+  });
+
   test('says nothing where every role that sees the action can follow it', () => {
     const roles = {
       customer: { read: ['vehicle', 'saved'], commands: ['save'] },

@@ -23,7 +23,7 @@
  * shorter one: an order that changes between runs makes a fixture that
  * "sometimes works", which is the failure this exists to prevent.
  */
-import { findTable, type DatabaseSchema } from './schema.js';
+import { findTable, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 
 interface Requirement {
   /** The table that must have the row already. */

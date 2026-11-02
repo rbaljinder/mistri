@@ -14,7 +14,7 @@ import type { BootstrapInput, PlanPhase } from '@mistriwork/engine/server/migrat
 import { openMigrationDb } from '@mistriwork/engine/server/migrate/database.js';
 import type { LoadedApp } from '../app/apps.js';
 import { homeSourceOf, isTenantApp } from '../../shared/appModel.js';
-import { appStoresPlan, migrateUpCommand, runStores, storeWords, type StoresPlan } from './storesCli.js';
+import { appStoresPlan, migrateUpCommand, plannedStoreWords, runStores, storeWords, type StoresPlan } from './storesCli.js';
 
 const shown = (path: string) => {
   const near = relative(process.cwd(), path);
@@ -39,10 +39,7 @@ const needsPolicy = (loaded: LoadedApp) => loaded.app.auth?.rows === 'policy' ||
 function missingWords(plan: StoresPlan): string[] {
   const missing = plan.stores.filter((store) => store.state !== 'present');
   const many = new Set(plan.stores.map((store) => store.connection)).size > 1;
-  return missing.map(
-    (store) =>
-      `${storeWords(store.id)}${store.state === 'behind' ? ' (behind its layout)' : store.state === 'refused' ? ` (refused: ${store.refused})` : ''}${many ? ` on ${store.connection}` : ''}`,
-  );
+  return missing.map((store) => `${plannedStoreWords(store)}${many ? ` on ${store.connection}` : ''}`);
 }
 
 export async function bootstrapPhases(

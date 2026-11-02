@@ -27,7 +27,8 @@ test('themed calendar header masks scrolling filters in both modes', async ({ pa
   await page.route(/\/api\/app(?:\?|$)/, async (route) => {
     const response = await route.fetch();
     const payload = await response.json();
-    payload.app.ui.shell = { ...payload.app.ui.shell, placement: 'side' };
+    // The trail over a room of the menu (shell.breadcrumbs), whose ground is what masks the scrolling filters.
+    payload.app.ui.shell = { ...payload.app.ui.shell, placement: 'side', breadcrumbs: true };
     await route.fulfill({ response, json: payload });
   });
   for (const mode of ['light', 'dark']) {

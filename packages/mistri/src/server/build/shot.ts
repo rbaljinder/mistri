@@ -41,7 +41,7 @@ import { parseArgs } from '@mistriwork/engine/server/cli/args.js';
 import { appHome, inward, outward, settingsMount, type AddressMount } from '@mistriwork/engine/shared/mount.js';
 import { readStartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import { selfInvocation } from './build.js';
-import { namesAccount, personEmails, shotAccount, shotRoleAccount } from './shotAccount.js';
+import { namesAccount, personEmails, shotAccount, shotRoleAccount, splitRoleEmail } from './shotAccount.js';
 import type { TenantShotAccount } from './shotTenant.js';
 import { asRoleRefusal, peopleRoles } from './shotRoles.js';
 import { readPage, sayPage } from './shotText.js';
@@ -389,23 +389,40 @@ export function installedChromiums(
 /**
  * The browser shot opens: the one named (`--browser`, else `CHROME`) and nothing else; else Playwright's own, the
  * machine's Chrome, and then any Chromium another Playwright installed here.
+ *
+ * Every attempt is made over `scratch`, a temporary folder of the run's own that it deletes once the browser is
+ * closed. Playwright makes a profile and an artifacts folder in the temporary folder before it finds the browser it
+ * was asked for is not installed, and leaves both there when it is not: on a machine with Chrome and no Playwright
+ * shell, each shot left two folders in /tmp for good. Chrome on Linux leaves one of its own
+ * (`com.google.Chrome.chrome_url_fetcher_…`). Playwright reads the temporary folder in this process and Chrome
+ * inherits it, so the environment says `scratch` while the attempts are made.
  */
-async function launch(chromium: BrowserType, named?: string): Promise<Browser> {
-  if (named) return chromium.launch({ executablePath: named });
+async function launch(chromium: BrowserType, scratch: string, named?: string): Promise<Browser> {
+  mkdirSync(scratch, { recursive: true });
+  const kept = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP };
+  process.env.TMPDIR = process.env.TMP = process.env.TEMP = scratch;
   try {
-    return await chromium.launch();
-  } catch (first) {
+    if (named) return await chromium.launch({ executablePath: named });
     try {
-      return await chromium.launch({ channel: 'chrome' });
-    } catch {
-      for (const executablePath of installedChromiums()) {
-        try {
-          return await chromium.launch({ executablePath });
-        } catch {
-          /* another build; the next */
+      return await chromium.launch();
+    } catch (first) {
+      try {
+        return await chromium.launch({ channel: 'chrome' });
+      } catch {
+        for (const executablePath of installedChromiums()) {
+          try {
+            return await chromium.launch({ executablePath });
+          } catch {
+            /* another build; the next */
+          }
         }
+        throw first;
       }
-      throw first;
+    }
+  } finally {
+    for (const [name, value] of Object.entries(kept)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
   }
 }
@@ -451,6 +468,8 @@ export async function addresses(
   realm: 'tenant' | 'platform' | undefined,
   mount: AddressMount,
   skipped: Unshot[] = [],
+  /** Each address opened under another, as the browser rewrites it, said so the run's reader can see which one was shot. */
+  rewritten: string[] = [],
 ): Promise<Shot[]> {
   const app = encodeURIComponent(loaded.app.id);
   if (asked.length) {
@@ -478,6 +497,16 @@ export async function addresses(
       if (deeper.length && target && !form && ![...book.records.values()].some((route) => route.segment === segment)) {
         const table = 'table' in target ? target.table : undefined;
         const home = table ? book.records.get(table) : undefined;
+        /* The browser opens a record under any list over its table and lands on the table's canonical address
+           (shared/appAddress.ts: the resource's `view`, else the first plain list in menu order); so does this. */
+        if (home && (target.kind === 'list' || target.kind === 'table')) {
+          const canonical = `/${app}/${encodeURIComponent(home.segment)}/${deeper.map(encodeURIComponent).join('/')}`;
+          const query = path.includes('?') ? path.slice(path.indexOf('?')) : '';
+          rewritten.push(
+            `"${said}" is a record of "${book.tables.get(home.table)?.name ?? home.table}", which the App addresses ${outward(mount, canonical)}: shot that.`,
+          );
+          return { path: canonical + query, name: slug(canonical.slice(app.length + 1)) };
+        }
         throw new Refusal(
           `"${said}": ${outward(mount, `/${app}/${segment}`)} has no records under it` +
             (home
@@ -626,6 +655,8 @@ async function signIn(
   admin: { email: string; password: string },
   role: string,
   made = false,
+  /** `--as <role>:<email>`: the address the account of the role is made with. */
+  address?: string,
 ) {
   const context = await browser.newContext();
   const post = async (path: string, data: Record<string, unknown>) => {
@@ -634,8 +665,9 @@ async function signIn(
   };
   await post('/api/auth/sign-in/email', admin);
   if (role !== 'admin' && !made) {
-    const account = { email: `shot-${role}@example.invalid`, password: randomBytes(18).toString('base64url') };
-    /* Through the accounts screen's door, which checks the role is the App's and records the account it makes. */
+    const account = { email: address ?? `shot-${role}@example.invalid`, password: randomBytes(18).toString('base64url') };
+    /* Through the accounts screen's door, which checks the role is the App's, records the account it makes and
+       verifies it: an address named for a row policy to find is the person it names. */
     await post('/api/accounts', { app, operation: 'create', ...account, name: `A ${role}`, roles: [role] });
     await context.clearCookies();
     await post('/api/auth/sign-in/email', account);
@@ -1352,6 +1384,7 @@ class ShotRun {
       const auth = loaded.app.auth;
       let admin: { email: string; password: string } | undefined;
       let account: { email: string; password: string } | undefined;
+      let asAddress: string | undefined;
       if (options.tenant && !(options.as && isTenantApp(loaded.app))) {
         throw new Refusal(
           isTenantApp(loaded.app)
@@ -1377,6 +1410,19 @@ class ShotRun {
         (auth.providers ?? ['email']).includes('email') &&
         !auth.store;
       if (chosen) options.as = widestRole(loaded.app);
+      /* `--as <role>:<email>`: an account of that role made with that address, so a policy that finds rows by email
+         has a household to show. A role and an address, not an existing account (that is `--as <email>`). */
+      const given = options.as ? splitRoleEmail(options.as) : undefined;
+      if (given) {
+        if (isTenantApp(loaded.app))
+          throw new Refusal(`--as ${options.as}: a tenant App's shot signs in as --as <role> --tenant <id>, an account it makes.`);
+        if (given.role === 'admin')
+          throw new Refusal(
+            `--as ${options.as}: the administrator the run starts with has its own address; name a role of the App's people.`,
+          );
+        options.as = given.role;
+        asAddress = given.email;
+      }
       if (options.as && namesAccount(options.as) && isTenantApp(loaded.app))
         throw new Refusal(`--as ${options.as}: a tenant App's shot signs in as --as <role> --tenant <id>, an account it makes.`);
       if (options.as && isTenantApp(loaded.app)) {
@@ -1411,8 +1457,13 @@ class ShotRun {
         if (refused) throw new Refusal(refused);
         /* An account of the role the App's own accounts hold (AG5), signed in over a copy of its store: its rows,
            its name. A fresh account owns nothing, so the pictures would show an empty person; that is the fallback. */
-        account = await shotRoleAccount(loaded, options.as, this.xdg, process.env, await personEmails(loaded.app, adapter));
-        if (account)
+        account = asAddress
+          ? undefined
+          : await shotRoleAccount(loaded, options.as, this.xdg, process.env, await personEmails(loaded.app, adapter));
+        if (asAddress) {
+          admin = { email: 'shot-admin@example.invalid', password: randomBytes(18).toString('base64url') };
+          warn(`note: signed in as ${asAddress}, a new "${options.as}" account made with that address, verified.`);
+        } else if (account)
           warn(`note: signed in as ${account.email}, the earliest "${options.as}" account, in a copy of ${loaded.app.name}'s accounts.`);
         else {
           admin = { email: 'shot-admin@example.invalid', password: randomBytes(18).toString('base64url') };
@@ -1440,13 +1491,15 @@ class ShotRun {
          a tenant App's too, unless the flags say otherwise. */
       const mount = settingsMount([loaded.app.id], opts, config);
       const skipped: Unshot[] = [];
-      const shots = (await addresses(options.routes, loaded, appRoutes(loaded, schema), firstKey, this.member?.realm, mount, skipped)).map(
-        (shot) => ({
-          ...shot,
-          path: outward(mount, shot.path),
-        }),
-      );
+      const rewritten: string[] = [];
+      const shots = (
+        await addresses(options.routes, loaded, appRoutes(loaded, schema), firstKey, this.member?.realm, mount, skipped, rewritten)
+      ).map((shot) => ({
+        ...shot,
+        path: outward(mount, shot.path),
+      }));
       for (const unshot of skipped) if (unshot.what.startsWith('/')) unshot.what = outward(mount, unshot.what);
+      for (const line of rewritten) warn(line);
 
       const started = await serve(
         [...options.rest, ...(config.configPath && !opts.config ? ['--config', config.configPath] : []), '--app', appDir],
@@ -1457,7 +1510,7 @@ class ShotRun {
         },
       );
       this.child = started.child;
-      const browser = (this.browser = await launch(chromium, options.browser).catch((error) => {
+      const browser = (this.browser = await launch(chromium, join(this.xdg, 'tmp'), options.browser).catch((error) => {
         if (error instanceof Refusal) throw error;
         const said = (error as Error).message.split('\n')[0];
         /* Playwright is there and its browser is not: the one line that installs it, not the package again. */
@@ -1478,7 +1531,7 @@ class ShotRun {
       const session = options.everyRole
         ? undefined
         : admin
-          ? await signIn(browser, started.origin, loaded.app.id, admin, options.as!)
+          ? await signIn(browser, started.origin, loaded.app.id, admin, options.as!, false, asAddress)
           : account
             ? await signIn(browser, started.origin, loaded.app.id, account, options.as!, true)
             : this.member

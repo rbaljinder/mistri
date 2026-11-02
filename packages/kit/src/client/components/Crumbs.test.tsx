@@ -37,7 +37,7 @@ vi.mock('./appListModel.js', () => ({
   splitOf: (spec?: { presentation?: { kind: string } }) => (spec?.presentation?.kind === 'split' ? spec.presentation : undefined),
 }));
 
-const { Crumbs } = await import('./Crumbs.js');
+const { Crumbs, crumbBarShown } = await import('./Crumbs.js');
 
 function tickWalk() {
   tick += 1;
@@ -85,7 +85,8 @@ test("a room's pushed place is one crumb, and Back returns to the place before i
   ];
   render(<Crumbs onHome={() => {}} />);
   expect(screen.getAllByText('Pick walk')).toHaveLength(1);
-  expect(document.querySelectorAll('.crumbs .sep')).toHaveLength(2);
+  // Two crumbs, one separator: by default the trail starts at its first room, with no house before it.
+  expect(document.querySelectorAll('.crumbs .sep')).toHaveLength(1);
   expect(document.querySelector('.crumbs .current')).toHaveTextContent('Pick walk');
   const back = screen.getByRole('button', { name: /Back/ });
   expect(back).toHaveAttribute('title', 'Back to Pick walk');
@@ -172,7 +173,7 @@ describe('the trail', () => {
 
 test('in an App the home crumb is the App\'s home, never "Schema"', () => {
   appMode = true;
-  app = { name: 'Marketplace', views: {}, resources: {} };
+  app = { name: 'Marketplace', views: {}, resources: {}, ui: { shell: { breadcrumbs: { home: true } } } };
   walk.stack = [{ kind: 'row', table: 'vehicle', key: { id: 3 }, label: '2024 Corolla' }];
   render(<Crumbs onHome={() => {}} />);
   expect(screen.getByRole('button', { name: 'Marketplace home' })).toBeInTheDocument();
@@ -189,8 +190,93 @@ test('a row crumb in an App gives its table a step of its own, said in the resou
 
 test("a dashboard's trail is the home mark and its title, with no empty step for a table it does not have", () => {
   appMode = true;
+  app = { views: {}, resources: {}, ui: { shell: { breadcrumbs: true } } };
   walk.stack = [{ kind: 'page', pageId: 'service-desk', label: 'Service desk' }];
   const { container } = render(<Crumbs onHome={() => {}} />);
   expect(container.querySelector('.crumb-table-step')).toBeNull();
   expect(container.querySelectorAll('.sep')).toHaveLength(1);
+});
+
+describe('what the App asks of its trail (ui.shell.breadcrumbs)', () => {
+  const list = { kind: 'table', table: 'lead', query: 'lead', view: 'leads' };
+  const lead = { kind: 'row', table: 'lead', key: { id: 127 }, label: 'Ada Stone', view: 'leads' };
+  const dashboard = { kind: 'page', pageId: 'dash-sales', label: 'Sales' };
+  const form = { kind: 'page', pageId: 'form-intake', label: 'Intake' };
+  const page = { kind: 'page', pageId: 'pipeline', table: 'lead', label: 'Pipeline' };
+  const recordPage = { kind: 'page', pageId: 'lead', table: 'lead', key: { id: 127 }, label: 'Ada Stone' };
+  const shown = (breadcrumbs: unknown, stack: unknown[]) => {
+    app = { views: {}, resources: {}, ui: { shell: breadcrumbs === undefined ? {} : { breadcrumbs } } };
+    return crumbBarShown(stack as never);
+  };
+
+  test('by default a room reached from the menu has no bar, and a deeper one has', () => {
+    appMode = true;
+    for (const top of [list, dashboard, form, page]) expect(shown(undefined, [top])).toBe(false);
+    // A record, however it was reached; a step past the menu's room; a record's tab.
+    expect(shown(undefined, [lead])).toBe(true);
+    expect(shown(undefined, [recordPage])).toBe(true);
+    expect(shown(undefined, [list, lead])).toBe(true);
+    expect(shown(undefined, [dashboard, list])).toBe(true);
+    expect(shown(undefined, [list, { ...lead, tab: 'activity' }])).toBe(true);
+    // A split's selected record is its list's selection: one room, still the menu's.
+    expect(
+      shown(undefined, [
+        { ...list, view: 'inbox' },
+        { ...lead, view: 'inbox' },
+      ]),
+    ).toBe(false);
+    // The New form is a drawer over the list it was opened from.
+    expect(shown(undefined, [{ ...list, tab: 'new' }])).toBe(false);
+  });
+
+  test('top: true draws it over the first rooms too; false never draws it; true always', () => {
+    appMode = true;
+    expect(shown({ top: true }, [list])).toBe(true);
+    expect(shown({ home: true }, [list])).toBe(false);
+    expect(shown({ home: true }, [list, lead])).toBe(true);
+    expect(shown(true, [list])).toBe(true);
+    expect(shown(true, [dashboard])).toBe(true);
+    expect(shown(false, [list, lead])).toBe(false);
+    expect(shown(false, [lead])).toBe(false);
+  });
+
+  test('the Workbench keeps its whole trail, whatever an App says', () => {
+    appMode = false;
+    expect(shown(false, [{ kind: 'table', table: 'invoice', query: 'invoice' }])).toBe(true);
+  });
+
+  test('by default the trail starts at the first room, with no house and nothing before it', () => {
+    appMode = true;
+    app = { name: 'Compass', views: {}, resources: {}, ui: {} };
+    walk.stack = [list, lead];
+    const { container } = render(<Crumbs onHome={() => {}} />);
+    expect(container.querySelector('.crumb-home')).toBeNull();
+    const nav = container.querySelector('.crumbs')!;
+    expect(nav.firstElementChild).toHaveTextContent('Leads · lead');
+    expect(nav.firstElementChild?.tagName).toBe('BUTTON');
+    expect(container.querySelectorAll('.sep')).toHaveLength(1);
+    expect(screen.getByText('Ada Stone')).toHaveClass('current');
+  });
+
+  test('a record reached straight, with no list before it, starts at its table without a separator first', () => {
+    appMode = true;
+    app = { views: {}, resources: {}, ui: {} };
+    walk.stack = [{ kind: 'row', table: 'billing.order_line', key: { id: 7 }, label: 'Line 7' }];
+    const { container } = render(<Crumbs onHome={() => {}} />);
+    const nav = container.querySelector('.crumbs')!;
+    expect(nav.firstElementChild).toHaveClass('crumb-table-step');
+    expect(container.querySelectorAll('.sep')).toHaveLength(1);
+  });
+
+  test('home: true and true start with the house', () => {
+    appMode = true;
+    for (const breadcrumbs of [true, { home: true }]) {
+      app = { name: 'Compass', views: {}, resources: {}, ui: { shell: { breadcrumbs } } };
+      walk.stack = [list, lead];
+      const { container } = render(<Crumbs onHome={() => {}} />);
+      expect(container.querySelector('.crumbs')!.firstElementChild).toHaveClass('crumb-home');
+      expect(container.querySelectorAll('.sep')).toHaveLength(2);
+      cleanup();
+    }
+  });
 });

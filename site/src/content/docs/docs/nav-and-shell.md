@@ -30,16 +30,18 @@ See it in the sample (`examples/apps/lintel/navigation.ts:8`) (the other entries
 
 ![Lintel at a narrow desk, signed in as a manager: Today and Homes to let, then the Leasing, Books and Maintenance groups in the side menu, Repairs current, each entry with its view's icon.](../../../assets/guide/nav.webp)
 
+## The trail over a room
+
+A room opened from the menu names itself in its own heading row, its count, New and Export beside the title, where a bar over it once said `⌂ › Leads 77`; the trail appears once the reader goes deeper and starts at the room they came from, `Leads › Ada Stone`. `ui.shell.breadcrumbs: true` is the whole trail with its home mark over every room, `{ top: true }` or `{ home: true }` one part of it, and `false` none ([when to choose which](/docs/compose-shell/)).
+
 ## What you'll see
 
-- The menu in the groups' order, each entry with its view's `icon`, the current one marked; a group's heading folds its section, remembered per person; ⌘B or « folds the menu to a rail of icons.
-- A visitor lands on `home`; the breadcrumb's home and the logo lead back to it, and ⌘K finds any view, in the menu or not.
-- On a phone the menu folds into the bar, and dialogs fill the screen.
+- The menu in the groups' order, each entry with its view's `icon`, the current one marked; a group's heading folds its section, remembered per person; ⌘B or « folds the menu to a rail of icons. On a phone the menu folds into the bar, and dialogs fill the screen.
+- A visitor lands on `home` (rules, as above, where roles start in different places); the logo leads back to it (and the trail's home mark, with `breadcrumbs: { home: true }`), and ⌘K finds any view, in the menu or not.
 
 ## When to use it, and when not
 
 - Use `navGroup` once the menu has more than about six entries, in the order the day runs, with `{ folded: true }` on a section used rarely; fewer, list the view ids.
-- Use `home` as a list of rules when roles start in different places, as above.
 - Use [access](/docs/access-model/) and [roles](/docs/roles/), never the menu, to decide what a reader may open: a view left out of `nav` is still served at its address.
 
 ## Options
@@ -52,8 +54,8 @@ See it in the sample (`examples/apps/lintel/navigation.ts:8`) (the other entries
 | `ui.logo`, a view's `icon` | One of the curated Phosphor names (`AppIcon` in `schema/app.d.ts`, all listed in [the icons](/docs/icons/)): `house`, `kanban`, `chart-line`, `package`…; `ui.logo` may instead be the App's own picture, `{ src, dark, mark }` ([themes](/docs/themes/#a-logo-of-your-own)) | none | Stable |
 | `ui.shell.placement`, `rail` | `'side'` or `'top'`; a folded sidebar's rail of icons | `'side'`, a rail | Stable |
 | `ui.shell.counts`, `menuSearch` | Live row counts beside lists; a filter box over the menu | off | Stable |
-| `ui.shell.search`, `breadcrumbs`, `heading` | `false` leaves each out, for a focused App; an App with no `nav` has no menu | shown | Stable |
-| `ui.shell.search: 'everyone'` | Offers the header's search to a signed-out visitor as well | members only | Stable |
+| `ui.shell.breadcrumbs` | The trail: `true` everywhere with the home mark, `false` never, or `{ top, home }` | `{ top: false, home: false }` | Stable |
+| `ui.shell.search`, `heading` | `false` leaves each out, for a focused App (an App with no `nav` has no menu); `search: 'everyone'` offers the header's search to a signed-out visitor as well | shown, to members | Stable |
 | `ui.shell.width`, `gutter` | `'full'`, `'wide'` or `'narrow'`; the side gutter | `'full'` | Stable |
 | `ui.footer` | One footer, drawn by every room and the landing | none | Stable |
 | `ui.shell.new` | A "+ New" button beside the bell listing every way to make something: `{ view }` (a list's New form, or a signed-in form) or `{ command }` (the signed-in form that runs it), each with an optional `label` and `icon`. A reader sees only the lines they may use; none, no button. A long menu groups its lines under headings as a nav group does: `{ label: 'Service desk', children: [{ view: 'tickets' }] }` | no button | Stable |
@@ -72,4 +74,3 @@ With `notify` rules on a resource, a bell in the bar counts unread notices and `
 - [Design the navigation and shell](/docs/compose-shell/): how many groups, which placement, and what to leave out.
 - [Looks](/docs/looks/): the four built-in looks and your own.
 - [Public pages](/docs/landing-pages/): the front door a signed-out visitor's `home` opens.
-- [ui reference](/docs/dsl-ui/): every shell key, generated from the schema.

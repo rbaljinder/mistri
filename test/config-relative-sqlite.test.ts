@@ -194,11 +194,7 @@ test('every command reads a config from another folder the same way: the file be
 test('shot and grade read a config from another folder the same way', { timeout: 180_000 }, async (t) => {
   const root = project('browser');
   const here = join(root, 'elsewhere');
-  /* Chromium leaves its profile and fetcher folders in TMPDIR after it closes; given the project's own, they go
-     with the project instead of reading to the gate as a case that never cleaned up. */
-  const browserTmp = join(root, 'tmp');
-  mkdirSync(browserTmp);
-  const shot = await run(['shot', '--app', '../app', '--config', '../mistri.json', '--text'], here, { TMPDIR: browserTmp });
+  const shot = await run(['shot', '--app', '../app', '--config', '../mistri.json', '--text'], here);
   if (/install --only-shell chromium/i.test(shot.err)) {
     t.skip('no Chromium here');
     return;
@@ -206,7 +202,7 @@ test('shot and grade read a config from another folder the same way', { timeout:
   assert.equal(shot.code, 0, `${shot.out}\n${shot.err}`);
   // The one row of the file beside the config: an empty file opened here would have no table at all.
   assert.match(shot.out, /table: .*Name — 1 row/);
-  const grade = await run(['grade', '../app', '--config', '../mistri.json'], here, { TMPDIR: browserTmp });
+  const grade = await run(['grade', '../app', '--config', '../mistri.json'], here);
   assert.equal(grade.code, 0, `${grade.out}\n${grade.err}`);
   assert.match(grade.out, /^grade: .*; score \d+\/100$/m);
   assert.deepEqual(readdirSync(here), [], 'nothing was opened where the commands ran');

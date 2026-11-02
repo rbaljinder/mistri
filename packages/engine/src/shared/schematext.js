@@ -7,7 +7,12 @@
  * way shape.js is pure — a schema in, text out, importable from anywhere.
  */
 
-/** The tables to export, and the keys wholly between them. */
+/**
+ * The tables to export, and the keys wholly between them.
+ *
+ * @param {any} schema
+ * @param {ReadonlySet<string> | null} [only] the tables to export, by id; every table when absent or empty
+ */
 export function selection(schema, only) {
   const wanted = only?.size ? schema.tables.filter((t) => only.has(t.id)) : schema.tables;
   const ids = new Set(wanted.map((t) => t.id));
@@ -33,6 +38,9 @@ export function selection(schema, only) {
  * `app_invoice`. Said in a comment at the top of the output rather than
  * silently, because someone comparing the diagram to their database will
  * notice.
+ *
+ * @param {any} schema
+ * @param {ReadonlySet<string> | null} [only] the tables to export, by id; every table when absent or empty
  */
 export function toMermaid(schema, only) {
   const { tables, keys } = selection(schema, only);
@@ -60,7 +68,12 @@ export function toMermaid(schema, only) {
   );
 }
 
-/** A readable reference document, of the kind that belongs in a repository. */
+/**
+ * A readable reference document, of the kind that belongs in a repository.
+ *
+ * @param {any} schema
+ * @param {ReadonlySet<string> | null} [only] the tables to export, by id; every table when absent or empty
+ */
 export function toMarkdown(schema, only) {
   const { tables, keys } = selection(schema, only);
   const out = [`# ${schema.label}`, ''];
@@ -98,6 +111,9 @@ export function toMarkdown(schema, only) {
  * Deliberately the shape tablewalk itself uses rather than a format invented
  * for export — anything that reads it is reading the same model the tool
  * reasons about, and there is no second definition to keep in step.
+ *
+ * @param {any} schema
+ * @param {ReadonlySet<string> | null} [only] the tables to export, by id; every table when absent or empty
  */
 export function toSchemaJson(schema, only) {
   const { tables, keys } = selection(schema, only);

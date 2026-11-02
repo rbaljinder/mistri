@@ -739,9 +739,15 @@
         "dsl: app: ui.export",
         "dsl: app: ui.editing",
         "dsl: app: id",
-        "dsl: app: name"
+        "dsl: app: name",
+        "dsl: app: shortName"
       ],
-      "tests": [{ "file": "test/app-shell.test.ts" }, { "file": "e2e/auth-shell.spec.ts" }],
+      "tests": [
+        { "file": "test/app-shell.test.ts" },
+        { "file": "test/app-short-name.test.ts" },
+        { "file": "e2e/auth-shell.spec.ts" },
+        { "file": "e2e/app-short-name.spec.ts" }
+      ],
       "browser": true
     },
     { "id": "timezone", "surface": ["dsl: app: ui.timezone"], "tests": [{ "file": "test/app-timezone-projection.test.ts" }] },

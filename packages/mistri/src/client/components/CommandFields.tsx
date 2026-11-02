@@ -30,7 +30,7 @@ import { RichTextField, mentionSearch, pictureKeeper } from '@mistriwork/kit/cli
 import type { CommandValue } from '../commandState.js';
 import { Dropdown, readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
 import { DateField } from '@mistriwork/kit/client/components/DateField.js';
-import { formatLocale, formatTimezone } from '@mistriwork/kit/client/locale.js';
+import { defaultCurrency, formatLocale, formatTimezone } from '@mistriwork/kit/client/locale.js';
 import { onDemand, useArrived } from '@mistriwork/kit/client/components/onDemand.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
@@ -94,8 +94,25 @@ export const loadLines = () =>
     return module;
   });
 const CommandLines = onDemand(loadLines, 'CommandLines');
+
+const asksLines = (fields: readonly AppCommandField[]): boolean =>
+  fields.some((field) => field.type === 'lines' || (field.type === 'group' && asksLines(field.fields)));
+/**
+ * What judging an input with no form drawn needs first: the draft's logic where a `when` or a rule asks it, and the
+ * lines module where a field is a grid. A component's run judges an input before any form is drawn, and before these
+ * have landed nothing is hidden: a question its condition hides was asked for, and its default sent (a field report).
+ */
+export function readyToJudge(fields: readonly AppCommandField[], rules?: readonly unknown[]): Promise<unknown> | undefined {
+  const logic = asksDraftLogic(fields, rules) && !draftLogic.here();
+  const lines = asksLines(fields) && !lining;
+  // Nothing to wait for is no wait at all: a run that asks neither sends in the turn it was asked (its prepare first).
+  if (!logic && !lines) return undefined;
+  return Promise.all([logic ? draftLogic.ready() : undefined, lines ? loadLines().catch(() => {}) : undefined]);
+}
 const lineAt = (fields: readonly AppCommandField[], path: string) => lining?.lineAt(fields, path);
-const cellReading = () => (lining ? { cell: lining.lineCellOf } : {});
+/* A typed amount is judged in the App's currency (a field's own `currency` first) and kept as typed, in its major units:
+   the server reads it into the minor ones a handler receives. */
+const cellReading = () => ({ currency: defaultCurrency(), wire: true, ...(lining ? { cell: lining.lineCellOf } : {}) });
 
 /* A grid line's own name, kept across moves (FormLines' blankLine, without loading the grid to make one). */
 let lastLine = 0;
@@ -265,7 +282,7 @@ function submitted(fields: readonly AppCommandField[], values: CommandValues, wh
       result[field.name] = field.repeat
         ? (Array.isArray(value) ? value : []).map((row) => submitted(field.fields, isValues(row) ? row : {}))
         : submitted(field.fields, isValues(value) ? value : {});
-    } else if ((field.type === 'number' || field.type === 'money') && typeof value === 'string')
+    } else if ((field.type === 'number' || field.type === 'money') && typeof value === 'string' && !(field.type === 'money' && field.minor))
       result[field.name] = value.trim() ? Number(value) : '';
     else if (value !== undefined) result[field.name] = value;
   }
@@ -326,6 +343,8 @@ function sentence(fields: readonly AppCommandField[], path: string, reason: Comm
       return say('hasCharactersAForm', { label });
     case 'integer':
       return say('mustBeASafe', { label });
+    case 'precision':
+      return say('hasMoreDecimalsThanTheCurrency', { label });
     case 'below_min':
       return date
         ? say('mustBeOnOrAfter', { label, min: bound((field as { min?: string }).min) })

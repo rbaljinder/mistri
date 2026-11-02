@@ -64,6 +64,9 @@ function reach(file, seen = new Set()) {
     const at = relative(ROOT, target).split('\\').join('/');
     if (at.startsWith('test/') || at.startsWith('e2e/')) all += reach(at.endsWith('.ts') || at.endsWith('.tsx') ? at : `${at}.ts`, seen);
   }
+  /* A helper started by its path rather than imported (`spawn(node, ['--import', 'tsx', 'e2e/support/ladleHost.ts'])`)
+     is reached as an import is: it is the server the test drives. */
+  for (const [, at] of code(text).matchAll(/'((?:test|e2e)\/[\w./-]+\.tsx?)'/g)) all += reach(at, seen);
   return all;
 }
 

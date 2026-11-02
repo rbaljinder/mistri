@@ -97,13 +97,13 @@ the TypeScript under `src/shared/` directly — one rule for what a row is
 called, how a record's columns group, where a condition ends, on both sides.
 That is runnable because of `vite.config.ts`: `npm run build` bundles the
 client once per product (`config/vite.tablewalk.config.ts`, `config/vite.mistri.config.ts`)
-into that product's `dist/client`, each without the other's main, with a
+into that product's `dist/client` through the kit's preset (`@mistriwork/kit/vite`), each with only its own main, with a
 first-paint budget per binary (`scripts/bundle-budget.mjs`) — minified, content-named and precompressed, with its source
-maps shipped beside it. The entry (`boot.js`, `shellStart.js`) starts one
-of two mains: the App framework's (`appShell.js`, in the entry's chunk) or the
-database browser's (`workbenchShell.js`, its `workbench` chunk, where the page
+maps shipped beside it. The entry (`boot.js`, `shellStart.js`) starts the
+main its product's build names (`virtual:mistri/shell-main`), one of two: the App framework's (`appShell.js`, in the entry's chunk) or the
+database browser's (`workbenchShell.js`, its `workbench` chunk; from source, where the page
 carries the `mistri-shell` meta). A first page is the entry and its
-surface's chunks (`surfaces` in `vite.config.ts`): `public` (a public form,
+surface's chunks (`surfaces` in the preset): `public` (a public form,
 the landing, the sign-in screen); an App's the kit's shell (`shell`,
 `app.js`) and the App's chrome (`chrome`, `appnav.js`); the Workbench's the
 shell and its main, never the chrome. A tenant's flows (`tenantShell.js`)

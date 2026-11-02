@@ -13,7 +13,18 @@
  */
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { formatDate, formatDateTime, formatMoney, formatNumber, formatPercent, formatRelativeDay } from '@mistriwork/kit/client/locale.js';
+import {
+  defaultCurrency,
+  formatAbsolute,
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatRelativeDay,
+  formatWholeMoney,
+} from '@mistriwork/kit/client/locale.js';
+import { minorFigure } from '@mistriwork/engine/shared/money.js';
 import {
   UiPageContext,
   UiSizeContext,
@@ -376,14 +387,45 @@ export function useMessage(key: string, args?: Readonly<Record<string, string | 
   return host.message(key, args);
 }
 
+/** How `useFormat().money` says a figure: as a column's display rule says one (`format: 'money'`). */
+interface UiMoneyFormat {
+  /** An ISO 4217 code; the App's `ui.currency` when not given. */
+  currency?: string;
+  /** The value is kept in minor units: 1999 is said as 19.99, exactly. */
+  minor?: boolean;
+  /** Without the minor digits where they are all zero: "$24,495", and "$24,495.50" still. */
+  whole?: boolean;
+  /** Compact from a thousand ("$27.9K"), for a figure meant to be glanced at; put the exact one in its title. */
+  compact?: boolean;
+}
+
+/* Where a compact figure starts, as a metric card's (dashboardModel.ts CARD_COMPACT). */
+const COMPACT_FROM = 1000;
+
+/**
+ * Money said as the display rules say it: exact to the currency's minor digits, a decimal string past 2^53 digit for
+ * digit (never through Number()), minor units read exactly. A currency code alone is `{ currency }`.
+ */
+function sayMoney(value: number | string, options: string | UiMoneyFormat = {}): string {
+  const { currency, minor, whole, compact } = typeof options === 'string' ? { currency: options } : options;
+  const code = currency || defaultCurrency();
+  const major = minor ? minorFigure(value, code) : value;
+  if (major === undefined) return String(value);
+  if (compact && Math.abs(Number(major)) >= COMPACT_FROM)
+    return formatMoney(Number(major), code, { notation: 'compact', maximumFractionDigits: 1 });
+  return whole ? formatWholeMoney(major, code) : formatMoney(major, code);
+}
+
 /** Figures in the App's locale, currency and timezone (`ui.locale`, `ui.currency`, `ui.timezone`), as every built-in section says them. */
 export function useFormat() {
   return {
     number: (value: number | string, options?: Intl.NumberFormatOptions) => formatNumber(value, options),
-    money: (value: number, currency?: string) => formatMoney(value, currency),
+    money: (value: number | string, options?: string | UiMoneyFormat) => sayMoney(value, options),
     percent: (value: number) => formatPercent(value),
     date: (value: string) => formatDate(value),
-    dateTime: (value: string) => formatDateTime(value),
+    /** A moment as the App's clock says it; with `timezone`, the instant said in that zone with its name ("2:30 PM PDT"). */
+    dateTime: (value: string, options?: { timezone?: string }) =>
+      options?.timezone ? formatAbsolute(value, { time: true, zone: options.timezone }) : formatDateTime(value),
     /** "in 3 days", "yesterday"; undefined for a value that is not a date. */
     relative: (value: string) => formatRelativeDay(value) ?? undefined,
   };

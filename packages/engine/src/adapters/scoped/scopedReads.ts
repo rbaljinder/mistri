@@ -12,7 +12,7 @@ import {
   type SqlFragment,
   type SqlStyle,
 } from '../adapter.js';
-import { findTable, type DatabaseSchema } from '../../shared/schema.js';
+import { findTable, type DatabaseSchema, type TableMeta } from '../../shared/schema.js';
 import { COUNT_EACH_MAX, countEachRows } from '../../shared/reads.js';
 import { isCapturedScopeCatalog } from '../../shared/scopeCatalog.js';
 import { ScopedRelations, snapshotRowScope, type RowScope } from '../../shared/rowScope.js';
@@ -102,6 +102,8 @@ export function createScopedReads(
     if (!table) throw new Refusal('Unknown resource in scoped read.');
     return table;
   };
+  /* Each column's type, so a comparison names the database's own operator for it (SqlStyle.builtin). */
+  const typeIn = (table: TableMeta) => (name: string) => table.columns.find((column) => column.name === name)?.type;
   const from = (id: string, filter?: Filter) => {
     const table = tableFor(id);
     const column = (name: string): string => {
@@ -111,7 +113,7 @@ export function createScopedReads(
     const relations = new ScopedRelations(schema, style, scope);
     const relation = relations.table(id);
     const prefix = relations.finish();
-    const where = buildWhere(filter, style, prefix.params.length + 1, column, undefined, undefined, undefined, references);
+    const where = buildWhere(filter, style, prefix.params.length + 1, column, undefined, undefined, undefined, references, typeIn(table));
     return { table, column, relation, prefix, where, params: [...prefix.params, ...where.params] };
   };
   /* A SQLite sum that cannot be exact says so in its cell (decimals.ts); PostgreSQL's numeric always is. */
@@ -162,12 +164,12 @@ export function createScopedReads(
           if (!table.columns.some((column) => column.name === name)) throw new RequestFault('Unknown column in scoped read.');
           return style.quote(name);
         };
-        return { relation: relations.table(item.table), column, filter: item.filter };
+        return { relation: relations.table(item.table), column, filter: item.filter, types: typeIn(table) };
       });
       const prefix = relations.finish();
       const params = [...prefix.params];
-      const branches = planned.map(({ relation, column, filter }, i) => {
-        const where = buildWhere(filter, style, params.length + 1, column);
+      const branches = planned.map(({ relation, column, filter, types }, i) => {
+        const where = buildWhere(filter, style, params.length + 1, column, undefined, undefined, undefined, false, types);
         params.push(...where.params);
         const counted = countStatement(`${relation}${where.text}`, limit);
         return counted.replace(/^SELECT COUNT\(\*\) AS n/, `SELECT ${i} AS i, COUNT(*) AS n`);

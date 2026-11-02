@@ -652,6 +652,26 @@ describe('stacked bars', () => {
     expect(bars[0]).toHaveTextContent('won $6, lost $2');
   });
 
+  test("the legend, each bar's total and the target are said by one sayer, given all of those figures; the titles stay exact", () => {
+    const given: (readonly number[])[] = [];
+    const sayLegend = (figures: readonly number[]) => {
+      given.push(figures);
+      return (v: unknown) => `~${Number(v)}`;
+    };
+    const { container } = render(<StackedBars rows={rows} say={money} sayLegend={sayLegend} target={20} />);
+    expect(given).toEqual([[7, 5, 4, 8, 8, 20]]);
+    expect([...container.querySelectorAll('.chart-stacked-legend .chart-legend-value')].map((n) => n.textContent)).toEqual([
+      '~7',
+      '~5',
+      '~4',
+      '~20',
+    ]);
+    expect([...container.querySelectorAll('.chart-stacked-total')].map((n) => n.textContent)).toEqual(['~8', '~8']);
+    // The hover title and the text a screen reader hears are exact, as ever.
+    expect(container.querySelector('.chart-stacked-part')?.getAttribute('title')).toBe('won: $6');
+    expect(container.querySelector('.chart-stacked-row')).toHaveTextContent('won $6, lost $2');
+  });
+
   test('bars over days stand in time order, the latest ones kept, each said as a date', () => {
     const days = ['2026-09-10', '2026-09-14', '2026-08-27', '2026-09-02'].flatMap((key, i) => [
       { key, series: 'pick', value: 40 - i * 5 },

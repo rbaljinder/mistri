@@ -366,15 +366,18 @@ function unfoldTabs(tabs: readonly unknown[], book: SegmentBook, resource: strin
     if (named === undefined) return tab;
     knownSegment(book, resource, named, here);
     if (isRecord(tab)) {
-      const extra = Object.keys(tab).find((key) => key !== 'segment' && key !== 'sort');
+      const extra = Object.keys(tab).find((key) => key !== 'segment' && key !== 'sort' && key !== 'empty');
       if (extra)
-        throw new Error(`${here} names a segment and has "${extra}": its label is the segment's, and a "sort" is the one key of its own.`);
+        throw new Error(
+          `${here} names a segment and has "${extra}": its label is the segment's, and a "sort" and an "empty" are the keys of its own.`,
+        );
     }
     return {
       label: book[resource][named],
       query: named,
       segment: named,
       ...(isRecord(tab) && tab.sort !== undefined ? { sort: tab.sort } : {}),
+      ...(isRecord(tab) && tab.empty !== undefined ? { empty: tab.empty } : {}),
     };
   });
 }

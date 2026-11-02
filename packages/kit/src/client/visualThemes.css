@@ -180,7 +180,7 @@
 :root[data-visual-theme] .applist-head.dash-head:has(> .applist-title.visually-hidden:only-child) { margin: 0; padding: 0; min-height: 0; }
 :root[data-visual-theme] .applist-head-row { align-items: center; }
 :root[data-visual-theme] .applist-head-row .applist-new { min-height: 34px; padding-inline: var(--space-4h); font-weight: 600; }
-:root[data-visual-theme] .applist-head-row .applist-import { min-height: 34px; padding-inline: var(--space-4h); }
+:root[data-visual-theme] .applist-head-row :is(.applist-import, .export-summary) { min-height: 34px; padding-inline: var(--space-4h); }
 :root[data-visual-theme] .applist-field-label,
 :root[data-visual-theme] .page-field > dt { font: 500 var(--text-sm) var(--sans); text-transform: none; letter-spacing: normal; }
 :root[data-visual-theme] .applist-filterbar { margin-block: var(--space-5) var(--space-4); }

@@ -26,8 +26,7 @@ import { createElement } from 'react';
 import type { AppCommandAction } from '../../../shared/app.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import type { AppCommandField, AppFormCommandReference } from '../../../shared/command.js';
-import { api, findTable, go, pageView, primaryKey, state, toast } from '@mistriwork/kit/client/core.js';
-import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
+import { findTable, go, pageView, primaryKey, state, toast } from '@mistriwork/kit/client/core.js';
 import { commandOperations, type CommandOperation, type CommandOwner } from '../../commandState.js';
 import { sendCommand } from '../../commandSend.js';
 import { commandAvailable, useCommandAvailability } from '../../commandAvailability.js';
@@ -39,7 +38,7 @@ import type { AppPayloadApp } from '../../../shared/appPayload.js';
 /** A signed-in form as the App serves it: the whole form, which the kit's room type reads only part of. */
 type ServedForm = RoomForm<AppPayloadApp>;
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
-import { commandInput, prefilledCommandValues } from '../CommandFields.js';
+import { commandInput, prefilledCommandValues, readyToJudge } from '../CommandFields.js';
 import { mount, queryClient } from '@mistriwork/kit/client/components/mount.js';
 import type { UiChoice, UiCommandHandle, UiCommandOptions, UiCommandOutcome, UiCommandRef } from './context.js';
 import { say } from '../../copy/components/components/sdk/commands.js';
@@ -88,65 +87,26 @@ function unformedOf(id: UiCommandRef): { form: ServedForm; appName: string } | u
 const labelled = (served: { form: ServedForm; appName: string }, options?: UiCommandOptions) =>
   options?.label ? { ...served, form: { ...served.form, label: options.label } } : served;
 
-/**
- * A form's command run as its form's submit would: checked by the form's own
- * rules (an incomplete or invalid input opens the form instead, filled with
- * it), then sent once, with no record and so nothing to prepare. A refusal
- * is said in the server's words.
- */
-async function runFormCommand(
-  served: { form: ServedForm; appName: string },
-  input: Readonly<Record<string, unknown>> | undefined,
-): Promise<UiCommandOutcome> {
-  const fields = served.form.command.input;
-  let values: Record<string, unknown>;
-  try {
-    values = commandInput(fields, prefilledCommandValues(fields, input ?? {}));
-  } catch {
-    return openFormCommand(served, input);
-  }
-  try {
-    // As the form's own submit sends it (FormRoom.tsx): no record, so no key and no version to expect.
-    const connection = state.activeConnection ?? '';
-    const sent = (await api('/api/commands/execute', {
-      command: served.form.command.id,
-      commandVersion: served.form.command.version,
-      key: {},
-      expectedVersion: 0,
-      idempotencyKey: crypto.randomUUID(),
-      input: values,
-      ...ownedBy(connection),
-    })) as { result?: unknown } | null;
-    void queryClient.invalidateQueries();
-    return { status: 'applied', ...(sent?.result !== undefined ? { output: sent.result } : {}) };
-  } catch (error) {
-    const message = (error as Error).message || say('isNotSomethingYouCanDo', { label: served.form.label });
-    toast(message, 'error');
-    return { status: 'refused', message };
-  }
-}
+/* A form's command run as its form's submit would (formCommandRun.ts): fetched as the handle is made, so the App's
+   first paint does not carry it. */
+const formRun = () => import('./formCommandRun.js');
 
 /** The form itself over the page, filled with what was given; it settles as closed, its own Done saying what it sent. */
 async function openFormCommand(
   served: { form: ServedForm; appName: string },
   input: Readonly<Record<string, unknown>> | undefined,
 ): Promise<UiCommandOutcome> {
-  const prefill = Object.fromEntries(
-    Object.entries(input ?? {}).filter(
-      (entry): entry is [string, string | number] => typeof entry[1] === 'string' || typeof entry[1] === 'number',
-    ),
-  );
   const { SignedInFormDialog } = await import('../SignedInFormDialog.js');
   return new Promise((resolve) => {
     const host = document.createElement('div');
     portalRoot().append(host);
-    const query = new URLSearchParams(Object.entries(prefill).map(([name, value]) => [name, String(value)])).toString();
     const take = mount(
       host,
       createElement(SignedInFormDialog, {
         form: served.form,
         appName: served.appName,
-        prefill: query,
+        // Every field the component gave, as typed values: not an address, which only a `prefillable` field reads.
+        ...(input ? { initial: input } : {}),
         onClose: () => {
           take();
           host.remove();
@@ -256,6 +216,8 @@ async function runCommand(
   options: UiCommandOptions,
 ): Promise<UiCommandOutcome> {
   const fields = action.command.input;
+  const judging = readyToJudge(fields);
+  if (judging) await judging;
   let values: Record<string, unknown>;
   try {
     values = commandInput(fields, prefilledCommandValues(fields, input ?? {}));
@@ -390,12 +352,16 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
       toast(message, 'error');
       return Promise.resolve({ status: 'refused', message });
     };
+    if (granted) void formRun();
     // No record to ask about: granted is available, and the record a caller hands in is not read.
     return {
       label: served.form.label,
       granted,
       available: async () => granted,
-      run: (_record, input, options) => (granted ? runFormCommand(labelled(served, options), input) : refuse()),
+      run: (_record, input, options) =>
+        granted
+          ? formRun().then(({ runFormCommand }) => runFormCommand(labelled(served, options), input, options, openFormCommand))
+          : refuse(),
       open: (_record, input, options) => (granted ? openFormCommand(labelled(served, options), input) : refuse()),
       choices: (field) => servedChoices(served.form.command.input, field),
     };

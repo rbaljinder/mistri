@@ -25,6 +25,23 @@ export const shellQuery = <E extends Element = HTMLElement>(selector: string): E
 export const shellQueryAll = <E extends Element = HTMLElement>(selector: string): NodeListOf<E> =>
   binding().root.querySelectorAll<E>(selector);
 
+/* The brand is the shell's own element, found under the binding's root, so its words are said as served. */
+export function sayBrandName(brand: Element | null, name: string, short?: string): void {
+  if (!brand) return;
+  if (!short || short === name) {
+    if (brand.childElementCount || brand.textContent !== name) brand.textContent = name;
+    return;
+  }
+  const long = document.createElement('span');
+  long.className = 'brand-long';
+  long.textContent = name;
+  const said = document.createElement('span');
+  said.className = 'brand-short';
+  said.setAttribute('aria-hidden', 'true');
+  said.textContent = short;
+  brand.replaceChildren(long, said);
+}
+
 export function setTabTitle(title: string): void {
   binding().title(title);
 }

@@ -23,6 +23,12 @@
       "minLength": 1,
       "description": "An app is named after what it is for."
     },
+    "shortName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 12,
+      "description": "The name a phone's bar and an installed icon say where the name does not fit (Northwind for Northwind Field Service). The full name stays the bar's accessible name and the page's title."
+    },
     "connection": {
       "type": "string",
       "description": "The one connection this App is for, by id or name. Absent means every connection. Not with sources. A name that is an identifier is also the App's one source's: commands name it in defineSource."
@@ -3637,7 +3643,7 @@
               }
             }
           },
-          "description": "Copy for an empty base list, with an optional link to another App list, dashboard or signed-in form. Tabs and filters retain the ordinary no-matches message."
+          "description": "Copy for an empty list, with an optional link to another App list, dashboard or signed-in form. The first tab says it too unless the tab has its own; a search or filter past the tab keeps the ordinary no-matches message."
         },
         "tabs": {
           "type": "array",
@@ -3655,7 +3661,8 @@
                     "type": "string",
                     "minLength": 1,
                     "description": "The order this tab reads in, as the query bar writes one (\"scheduled_at\", \"created_on desc\"); wins over the view's own sort."
-                  }
+                  },
+                  "empty": { "$ref": "#/$defs/listView/properties/empty", "description": "What the tab says while it holds no row and nothing narrows it further; default: on the first tab the list's own empty, else No {tab}." }
                 }
               },
               {
@@ -3663,7 +3670,11 @@
                 "additionalProperties": false,
                 "required": ["label"],
                 "description": "Every row, called label.",
-                "properties": { "label": { "type": "string", "minLength": 1 }, "sort": { "type": "string", "minLength": 1 } }
+                "properties": {
+                  "label": { "type": "string", "minLength": 1 },
+                  "sort": { "type": "string", "minLength": 1 },
+                  "empty": { "$ref": "#/$defs/listView/properties/empty" }
+                }
               }
             ]
           }
@@ -5073,6 +5084,10 @@
         "interactive": {
           "type": "boolean",
           "description": "The list works as its room does: its search, its filters and, for a reader offered one, its selection with bulk actions. Not in the aside, a board or a calendar."
+        },
+        "empty": {
+          "description": "What the section says while the list has no row, as a rows section's; or hide, which leaves it out while it has none. Default: its tab's empty, then the list's on its first tab. Not on a board.",
+          "anyOf": [{ "$ref": "#/$defs/listView/properties/empty" }, { "const": "hide" }]
         }
       }
     },
@@ -6676,9 +6691,27 @@
               "description": "The header's search: its box and its button, on a phone too. 'members' (the default) shows it to a member and not to a signed-out visitor; 'everyone' offers it to a visitor as well, and false hides it from everyone."
             },
             "breadcrumbs": {
-              "type": "boolean",
-              "default": true,
-              "description": "false hides the crumb bar above each room."
+              "anyOf": [
+                { "type": "boolean" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "top": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Draw the bar above a room reached straight from the menu (a list, a dashboard, a form, a page) too."
+                    },
+                    "home": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Start the trail with the home mark."
+                    }
+                  }
+                }
+              ],
+              "default": { "top": false, "home": false },
+              "description": "The crumb bar above a room. By default a room reached straight from the menu draws its own heading row and no bar, and the bar appears once the walk goes deeper (a record, a related list, a record's tab), starting at the first room's name. true is the whole trail everywhere, with the home mark; false never draws it."
             },
             "heading": {
               "type": "boolean",

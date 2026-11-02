@@ -67,7 +67,7 @@ authored types: a section those types refuse still fails to compile. The
 kit reaches the App framework's parts the same way at run time, through the
 shell's answers (`packages/kit/src/client/shellMode.ts`, `slots` and `rooms`).
 
-## The bins
+## The mains
 
 Each product is a binary of its own. `tablewalk`
 (`packages/tablewalk/src/server/index.ts`) runs the database browser's main,
@@ -79,24 +79,17 @@ other's is refused with the other's command (`npx @mistriwork/mistri --app <dir>
 or installs the other. Both entries are the engine's `runBin`
 (`cli/bin.ts`) with their own main.
 
-One module still names both products, because one client source serves
-either: the page's entry, `packages/kit/src/client/shellStart.js`, wears the
-kit's look and starts the main of the product that sent the page — the
-database browser's (`workbenchShell.js`) where the page carries the
-`mistri-shell` meta, the App framework's (`appShell.js`) otherwise. Each
-product's build (`config/vite.tablewalk.config.ts`, `config/vite.mistri.config.ts`) puts the
-other's main out of its bundle; from source, Vite serves both. Each main hands
-the kit's shell (`app.js`) its chrome, and the Workbench its tools, through the
-shell API in `shells.ts`; neither the kit nor one product imports the other.
-`scripts/boundary/bins.json` declares that bin — the file, its mains and the
-reason — and that declaration is the whole exception:
-
-- the bin's `import()` of a main it declares is not a crossing;
-- a static import of one fails, because a build without that product
-  could no longer start;
-- a declared main the bin no longer imports fails, so the list stays true;
-- anything else the bin imports across the line is a crossing like any
-  other.
+The page names neither product either. Its entry, `packages/kit/src/client/shellStart.js`, wears the
+kit's look and starts `virtual:mistri/shell-main`, a name no file of the kit's answers: each product's build
+answers it with its own main through the kit's Vite preset (`@mistriwork/kit/vite`, `shellMain`) — the
+database browser's `workbenchShell.js` (`config/vite.tablewalk.config.ts`), the App framework's `appShell.js`
+(`config/vite.mistri.config.ts`) — so a product's bundle holds only its own main and builds over the published
+kit. Each main hands the kit's shell (`app.js`) its chrome, and the Workbench its tools, through the shell API in
+`shells.ts`; neither the kit nor one product imports the other. This repository serves both products from one
+source tree, so its own `vite.config.ts` answers the name with a module that picks by the page (the
+`mistri-shell` meta the database browser's pages carry). That module is the server's configuration, not a
+module of any package, and the check holds every module to its layer with no exception: an `import()` of
+another layer's main is a crossing like any other.
 
 ## Entries
 
@@ -128,9 +121,7 @@ runs) checks, beside everything above:
 - every other name a package exports is one of its modules by its path
   (`@mistriwork/engine/shared/schema.js` from `src/shared/schema.ts`, built to
   `dist/shared/schema.js`), and no package exports a
-  pattern (`./*`) but `@mistriwork/mistri/schema/*`'s shipped schemas: each names every module another package imports
-  (the two products' mains, `client/appShell.js` and `client/workbenchShell.js`, are named for the kit's page entry and
-  left out of an install's manifest);
+  pattern (`./*`) but `@mistriwork/mistri/schema/*`'s shipped schemas: each names every module another package imports;
 - the stubs and workspaces are the ones the table generates.
 
 Without `--entries`, the check refuses any import of a workspace package's
@@ -145,6 +136,41 @@ public API.
 workspace link, and `test/fixtures/entries/consumer.ts` imports the client
 ones under `tsc`. A new `mistri/*` export is a new entry, a stub
 (`--write`), and a line in that fixture.
+
+## The host list
+
+The database browser is to build from the published engine, kit and ui, in a
+repository of its own. What it imports of them is the host list,
+`host` in `scripts/boundary/entries.json`: `importers` are where its imports
+are read from (`packages/tablewalk/src`, and the Vite config such a checkout
+builds with, `scripts/browser-from-tarballs/vite.config.ts`), and `exports`
+are the names, by package, each reviewed.
+
+The kit's client modules are for a bundler, not for Node: they import their
+stylesheets. The build writes them one by one, with their declarations,
+stylesheets, fonts and `index.html` (`config/tsconfig.kit-client.json`), into
+the kit's `dist/client`, and a product bundles them with the kit's Vite
+preset (`@mistriwork/kit/vite`), which declares what the client needs —
+React, TanStack, Base UI, tiptap, Vite — as optional peers. An install of the
+kit names only the client modules on the host list
+(`scripts/pack-manifest.mjs`, `BUNDLER_ONLY`); the others are in the tarball
+for the listed ones to import, never by name. Its server modules and the
+preset are exported as before.
+
+`node scripts/check-boundary.mjs` refuses an importer's name of the engine,
+the kit or ui that is not on the list, or that the package as published does
+not export, and a name on the list that nothing imports any more.
+`scripts/audit-exports.mjs` counts every name a listed module exports as used:
+the host's files are not always here to mention it. Adding a name is a line
+in review; removing one breaks the host, so it waits for a release that says
+so in `CHANGELOG.md`.
+
+`node scripts/prove-browser-from-tarballs.mjs` is the proof: it packs the
+four packages, installs the tarballs into a fresh project with the
+database browser's sources, compiles its server and builds its page there,
+then serves a SQLite file and loads a table's rows in Chromium — once with
+that build and once with the installed `tablewalk` package. CI's `built` job
+runs it on the tarballs it packs.
 
 ## The allowlist is empty
 

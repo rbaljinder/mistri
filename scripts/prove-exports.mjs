@@ -9,7 +9,9 @@
  * at the first import. A pattern (`./*`) names no file of its own, so it is listed, not proven. An import that
  * fails only for a peer the package declares (React for a component module, the Containers class for the Cloudflare
  * glue) is said as such: the project that uses that subpath installs the peer. Each JavaScript subpath must also be typed by a declaration file the package
- * ships (scripts/export-types.mjs).
+ * ships (scripts/export-types.mjs). A subpath only a bundler reads (the kit's client modules, scripts/pack-manifest.mjs
+ * `BUNDLER_ONLY`: they import stylesheets) is proven by its files and types, not imported; the tarball proof
+ * (scripts/prove-browser-from-tarballs.mjs) bundles them.
  *
  *   node scripts/prove-exports.mjs                 pack every workspace package (run `npm run build` first)
  *   node scripts/prove-exports.mjs <tarball>…      prove those tarballs instead
@@ -20,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { targetsOf, untypedExports } from './export-types.mjs';
+import { BUNDLER_ONLY } from './pack-manifest.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const scratch = mkdtempSync(join(tmpdir(), 'mistri-prove-exports-'));
@@ -50,6 +53,7 @@ try {
   let proven = 0;
   const patterns = [];
   const peerOnly = [];
+  let bundled = 0;
   for (const tarball of tarballs) {
     /* The name is the tarball's manifest's, read back from the install. */
     const name = JSON.parse(execFileSync('tar', ['-xOzf', tarball, 'package/package.json'], { encoding: 'utf8' })).name;
@@ -69,6 +73,11 @@ try {
       }
       const runtime = targetsOf(target).find(([condition]) => !condition.split('.').includes('types'));
       if (!runtime || !/\.(m?js)$/.test(runtime[1])) {
+        proven += 1;
+        continue;
+      }
+      if (BUNDLER_ONLY[name]?.(subpath)) {
+        bundled += 1;
         proven += 1;
         continue;
       }
@@ -97,6 +106,7 @@ try {
     }
   }
   console.log(`prove-exports: ${proven} subpaths of ${tarballs.length} packages resolve to files they ship and import.`);
+  if (bundled) console.log(`  ${bundled} of them for a bundler, proven by their files and types, not imported`);
   for (const line of peerOnly) console.log(`  ${line}`);
   if (patterns.length) console.log(`  patterns, listed not proven: ${patterns.join(', ')}`);
   if (problems.length) {

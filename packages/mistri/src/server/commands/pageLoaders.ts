@@ -75,7 +75,8 @@ const LOADER_KEYS = new Set(['reads', 'source', 'timeout', 'load']);
 const NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
 /**
- * A page's loader: the resources it reads (each one the page reads too), an
+ * A page's loader: the resources it reads (each one the page reads too; none,
+ * `reads: []`, for a loader that hands the page only what the server knows), an
  * optional timeout (`'2 seconds'`, at most ten), and `load`, which reads
  * through `db` and returns what the page's component is handed as `data`.
  */
@@ -92,8 +93,10 @@ export function defineLoader<
   if (!definition || typeof definition !== 'object') throw new TypeError('defineLoader takes { reads, load }.');
   for (const key of Object.keys(definition)) if (!LOADER_KEYS.has(key)) throw new TypeError(`defineLoader has no "${key}".`);
   const reads = definition.reads as unknown;
-  if (!Array.isArray(reads) || !reads.length || reads.some((name) => typeof name !== 'string' || !name))
-    throw new TypeError("A loader's reads are the resources it reads: reads: ['pick_list'].");
+  /* `reads: []` reads nothing: a page's configuration (a program's name, its limits, words its brand uses) handed from
+     the server's own settings. Its `db` holds no table; everything else bounds it as any loader. */
+  if (!Array.isArray(reads) || reads.some((name) => typeof name !== 'string' || !name))
+    throw new TypeError("A loader's reads are the resources it reads: reads: ['pick_list'], or reads: [] for none.");
   if (typeof definition.load !== 'function') throw new TypeError("A loader's load is the function that reads for the page.");
   const timeout = definition.timeout === undefined ? LOADER_TIMEOUT_DEFAULT : parseDuration(definition.timeout);
   if (timeout === undefined || timeout < 1000 || timeout > LOADER_TIMEOUT_MOST)

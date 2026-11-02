@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/kit",
-  "version": "1.0.0-rc.11",
+  "version": "1.0.0-rc.12",
   "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -172,10 +172,6 @@
     "./client/components/PageHistory.js": {
       "mistri-built": "./dist/client/components/PageHistory.js",
       "default": "./src/client/components/PageHistory.tsx"
-    },
-    "./client/components/PagePreview.js": {
-      "mistri-built": "./dist/client/components/PagePreview.js",
-      "default": "./src/client/components/PagePreview.tsx"
     },
     "./client/components/PageSections.js": {
       "mistri-built": "./dist/client/components/PageSections.js",
@@ -681,6 +677,10 @@
       "mistri-built": "./dist/clientFiles.js",
       "default": "./src/clientFiles.ts"
     },
+    "./vite": {
+      "mistri-built": "./dist/vite.js",
+      "default": "./src/vite.ts"
+    },
     "./shared/uiTokens.js": {
       "mistri-built": "./dist/shared/uiTokens.js",
       "default": "./src/shared/uiTokens.ts"
@@ -693,10 +693,94 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.11",
-    "@mistriwork/ui": "1.0.0-rc.11",
+    "@mistriwork/engine": "1.0.0-rc.12",
+    "@mistriwork/ui": "1.0.0-rc.12",
     "intl-messageformat": "12.1.2",
     "qrcode-generator": "^2.0.4"
+  },
+  "peerDependencies": {
+    "@base-ui/react": "^1.8.0",
+    "@tanstack/react-form": "^1.33.5",
+    "@tanstack/react-query": "^5.102.8",
+    "@tanstack/react-table": "^9.2.4",
+    "@tanstack/react-virtual": "^3.14.10",
+    "@tiptap/core": "^3.31.4",
+    "@tiptap/extension-image": "^3.31.4",
+    "@tiptap/extension-list": "^3.31.4",
+    "@tiptap/extension-mention": "^3.31.4",
+    "@tiptap/extension-table": "^3.31.4",
+    "@tiptap/extensions": "^3.31.4",
+    "@tiptap/pm": "^3.31.4",
+    "@tiptap/react": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
+    "@tiptap/suggestion": "^3.31.4",
+    "@vitejs/plugin-react": "^6.1.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "rolldown": "^1.2.0",
+    "vite": "^8.2.4"
+  },
+  "peerDependenciesMeta": {
+    "@base-ui/react": {
+      "optional": true
+    },
+    "@tanstack/react-form": {
+      "optional": true
+    },
+    "@tanstack/react-query": {
+      "optional": true
+    },
+    "@tanstack/react-table": {
+      "optional": true
+    },
+    "@tanstack/react-virtual": {
+      "optional": true
+    },
+    "@tiptap/core": {
+      "optional": true
+    },
+    "@tiptap/extension-image": {
+      "optional": true
+    },
+    "@tiptap/extension-list": {
+      "optional": true
+    },
+    "@tiptap/extension-mention": {
+      "optional": true
+    },
+    "@tiptap/extension-table": {
+      "optional": true
+    },
+    "@tiptap/extensions": {
+      "optional": true
+    },
+    "@tiptap/pm": {
+      "optional": true
+    },
+    "@tiptap/react": {
+      "optional": true
+    },
+    "@tiptap/starter-kit": {
+      "optional": true
+    },
+    "@tiptap/suggestion": {
+      "optional": true
+    },
+    "@vitejs/plugin-react": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "rolldown": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=24.22.1"

@@ -28,8 +28,8 @@
  */
 import type * as ReactTypes from 'react';
 import type { AppIcon, AppMessageRef, CommandName, Register } from './app.js';
-import type { CommandOutcome, CommandUnavailable, UiQuery, UiRow } from './ui.js';
-export { Button, Card, Columns, Empty, Heading, Row, Stack, Stat, Value } from './ui.js';
+import type { CommandOutcome, CommandRunOptions, CommandUnavailable, UiQuery, UiRow } from './ui.js';
+export { Button, Card, Columns, Empty, Heading, Loaded, Row, Stack, Stat, Value } from './ui.js';
 
 /* ---------- what the App's generated types register ---------- */
 
@@ -72,8 +72,8 @@ export interface PageCommand {
   /** Run it. On a public page, a public command is run through the page's own door as the public principal, whoever
       is signed in: `run({}, input)` — its `output` is `{ reference, receipt }` — and `challenge` carries the token the
       page's human check gave, where the App names one (`auth.challenge`). */
-  run(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: { label?: string; challenge?: string }): Promise<CommandOutcome>;
-  open(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: { label?: string; challenge?: string }): Promise<CommandOutcome>;
+  run(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: CommandRunOptions): Promise<CommandOutcome>;
+  open(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: CommandRunOptions): Promise<CommandOutcome>;
   /** The choices one of its inputs offers, as served with the command. On a public page a choice from a table
       (`field.choice({ from })`) comes with its rows, read as the public reads them and kept until one changes, so the
       page draws its own select with no read of its own: `enrol.choices('make')`. Undefined for an input that offers none. */

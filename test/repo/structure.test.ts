@@ -711,4 +711,9 @@ test('every test belongs to exactly one package, and the owner map reads the fil
   /* Each product walks its own rooms: the smoke walk is one spec per binary, not one spec that needs both. */
   assert.equal(ownerOf('e2e/smoke-tablewalk.spec.ts').owner, 'tablewalk');
   assert.equal(ownerOf('e2e/smoke-mistri.spec.ts').owner, 'mistri');
+  /* So is a phone's width: the Workbench's half and an App's. And a helper a spec starts by its path (Ladle's host,
+     an App embedded in a site) is the server it is about, as an imported one is. */
+  assert.equal(ownerOf('e2e/workbench-responsive.spec.ts').owner, 'tablewalk');
+  assert.equal(ownerOf('e2e/app-responsive.spec.ts').owner, 'mistri');
+  assert.equal(ownerOf('e2e/ladle.spec.ts').owner, 'mistri');
 });

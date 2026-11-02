@@ -63,3 +63,50 @@ test("a command's form: its references and its choices take a finger", async ({ 
     await sample.stop();
   }
 });
+
+/* A tree's rows and a record's value links were the two targets left under a finger: a tree row 32px tall and a
+   phone or mail link 18px, which a field report's grade found on the account tree and on every lead. Each takes a
+   44px hit area on a coarse pointer, the link's no taller than its field's row, so it never reaches into the next. */
+test("a tree's rows and a record's value links take a finger", async ({ page }) => {
+  await page.goto(`${COMPASS}/account-tree`);
+  await expect(page.locator('li.tree-item').first()).toBeVisible();
+  expect(await small(page)).toEqual([]);
+  await page.goto(`${COMPASS}/leads/1`);
+  const link = page.locator('a.value-link').first();
+  await expect(link).toBeVisible();
+  expect(await small(page)).toEqual([]);
+  const row = await link.evaluate((el) => {
+    const field = el.closest('.page-field, .page-card-fact')!.getBoundingClientRect();
+    const reach = getComputedStyle(el, '::before');
+    const own = el.getBoundingClientRect();
+    const tall = parseFloat(reach.height) || 0;
+    const top = own.top + own.height / 2 - tall / 2;
+    return { fieldTop: field.top, fieldBottom: field.bottom, top, bottom: top + tall };
+  });
+  expect(row.top).toBeGreaterThanOrEqual(row.fieldTop - 0.5);
+  expect(row.bottom).toBeLessThanOrEqual(row.fieldBottom + 0.5);
+});
+
+/* A notice stood over a free-form page's row of verbs at the screen's foot, which a pointer resting on it held out of
+   reach. `<Row foot>` marks the row (data-foot-actions), and a notice stands above it as above a record's bar. */
+test("a notice stands above a page's row of verbs at the foot", async ({ page }) => {
+  await page.goto(`${COMPASS}/leads`);
+  await expect(page.locator('.applist-title')).toBeVisible();
+  const bottom = () =>
+    page.evaluate(() => {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      document.body.append(toast);
+      const said = parseFloat(getComputedStyle(toast).bottom);
+      toast.remove();
+      return said;
+    });
+  const bare = await bottom();
+  await page.evaluate(() => {
+    const row = document.createElement('div');
+    row.className = 'kit-row';
+    row.setAttribute('data-foot-actions', '');
+    document.querySelector('#content')!.append(row);
+  });
+  expect(await bottom()).toBeGreaterThanOrEqual(bare + 60);
+});

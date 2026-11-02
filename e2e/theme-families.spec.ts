@@ -224,6 +224,14 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
         if (look === 'meridian') localStorage.removeItem('mistri.visual-theme');
         else localStorage.setItem('mistri.visual-theme', look);
       }, id);
+      /* The trail over the list too (shell.breadcrumbs: true), whose ground and title every look shares below; by
+         default a room of the menu has none (smoke-mistri.spec.ts holds that heading). */
+      await page.route(/\/api\/app(?:\?|$)/, async (route) => {
+        const response = await route.fetch();
+        const payload = await response.json();
+        payload.app.ui = { ...payload.app.ui, shell: { ...payload.app.ui?.shell, breadcrumbs: true } };
+        await route.fulfill({ response, json: payload });
+      });
       await page.emulateMedia({ colorScheme: mode });
       await page.setViewportSize({ width: 1440, height: 924 });
       // The server's pinned day, so the calendar below opens on a month with days either side of it.
@@ -417,7 +425,7 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
    look; its fields draw the same 3:1 edge — the query bar, the table
    filter, a list's filter boxes, the pager's page box. */
 /* Lumen's table, held: the row anchored on the record's name, the head small and faint, a neutral status a grey
-   dot and its word, placeholder rows the real rows' height, and a head that stays under the trail once the page
+   dot and its word, placeholder rows the real rows' height, and a head that stays in view once the page
    scrolls past it (useStickyHead.ts). */
 test('lumen: a table anchors on its name, keeps its head in view, and its placeholders are its rows', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('mistri.visual-theme', 'lumen'));
@@ -451,11 +459,13 @@ test('lumen: a table anchors on its name, keeps its head in view, and its placeh
   await expect(wrap).not.toHaveAttribute('data-stuck');
   await page.locator('.content').evaluate((node) => node.scrollBy(0, 600));
   await expect(wrap).toHaveAttribute('data-stuck', '');
-  const [trail, head] = await Promise.all([
-    page.locator('.crumbs').first().boundingBox(),
+  // A list from the menu has no trail over it, so the head stays at the top of the scrolling content.
+  await expect(page.locator('.crumbs')).toHaveCount(0);
+  const [content, head] = await Promise.all([
+    page.locator('.content').first().boundingBox(),
     page.locator('.table-wrap thead th').first().boundingBox(),
   ]);
-  expect(Math.abs(head!.y - (trail!.y + trail!.height))).toBeLessThan(2);
+  expect(Math.abs(head!.y - content!.y)).toBeLessThan(2);
 
   /* A row of one line each (a lead's name carries its email under it) is what a placeholder row stands for. */
   await page.goto(`${CRM}/opportunity`);

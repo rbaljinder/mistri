@@ -10,17 +10,23 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { bridgeShell } from '../../../../../test/shellBridge.js';
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 
 const mounts: string[] = [];
+/* Whether the crumb bar was in the document when each room first laid out: before the paint, which is what a
+   reader sees first. A bar that came or went after it moved the room under it (CLS). */
+const barAtLayout: boolean[] = [];
 const synced = vi.fn();
 let appMode = false;
-let served: { views: Record<string, unknown> } | null = null;
+let served: { views: Record<string, unknown>; ui?: Record<string, unknown> } | null = null;
 
 function Probe({ name, entry }: { name: string; entry: { query?: string } }) {
   useEffect(() => {
     mounts.push(name);
   }, [name]);
+  useLayoutEffect(() => {
+    barAtLayout.push(Boolean(document.querySelector('.crumbs')));
+  }, []);
   return (
     <div data-testid="room" data-query={entry.query}>
       {name}
@@ -34,9 +40,18 @@ beforeEach(bridgeShell);
 vi.mock('../dashboard.js', () => ({ dashboardEntry: () => null }));
 vi.mock('../url.js', () => ({ syncHash: () => synced() }));
 vi.mock('../../../../mistri/src/client/components/AppLanding.js', () => ({ AppLanding: () => null }));
-vi.mock('./appListModel.js', () => ({ appListFor: (table: string) => ({ table }), appListQuery: () => '' }));
+vi.mock('./appListModel.js', () => ({
+  appListFor: (table: string) => ({ table }),
+  appListQuery: () => '',
+  appCrumbLabel: () => '',
+  splitOf: () => undefined,
+}));
 vi.mock('./BreakdownRoom.js', () => ({ BreakdownRoom: () => null }));
-vi.mock('./Crumbs.js', () => ({ Crumbs: () => null }));
+/* The real decision of whether a bar is drawn; the trail itself is a stand-in. */
+vi.mock('./Crumbs.js', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  Crumbs: () => <nav className="crumbs" />,
+}));
 vi.mock('./dashboardModel.js', () => ({}));
 vi.mock('./Landing.js', () => ({
   AppHomeLanding: () => null,
@@ -63,6 +78,7 @@ const draw = () => render(<Content onHome={() => {}} />);
 
 beforeEach(() => {
   mounts.length = 0;
+  barAtLayout.length = 0;
   synced.mockClear();
   appMode = false;
   served = null;
@@ -213,4 +229,39 @@ test("an App that grants this account nothing says so, and never draws the Workb
   core.render();
   draw();
   expect(room()).toHaveTextContent('nothing granted');
+});
+
+/* `ui.shell.breadcrumbs`: whether a bar stands over a room is read from the walk in the render that draws the room,
+   so the room lays out once, under the bar it keeps or with none. */
+describe('the crumb bar is decided before the first paint, in every mode', () => {
+  const lead = () => core.rowView('lead', { id: 127 }, 'Ada Stone');
+  test.each([
+    ['the default', undefined, false, true],
+    ['{ top: false, home: false }', { top: false, home: false }, false, true],
+    ['{ home: true }', { home: true }, false, true],
+    ['{ top: true }', { top: true }, true, true],
+    ['true', true, true, true],
+    ['false', false, false, false],
+  ])('%s: a list from the menu, then one of its records', (_name, breadcrumbs, overList, overRecord) => {
+    appMode = true;
+    served = { views: {}, ui: breadcrumbs === undefined ? {} : { shell: { breadcrumbs } } };
+    core.state.stack = [core.tableView('lead')];
+    core.render();
+    draw();
+    expect(Boolean(document.querySelector('.crumbs'))).toBe(overList);
+    act(() => core.go(lead()));
+    expect(Boolean(document.querySelector('.crumbs'))).toBe(overRecord);
+    expect(mounts).toEqual(['app list', 'record']);
+    // Each room found the bar it ends with already there, or already absent, when it first laid out.
+    expect(barAtLayout).toEqual([overList, overRecord]);
+  });
+
+  test('a record opened by a link straight to it has the bar by default, with no list before it', () => {
+    appMode = true;
+    served = { views: {}, ui: {} };
+    core.state.stack = [core.rowView('lead', { id: 127 }, 'Ada Stone')];
+    core.render();
+    draw();
+    expect(barAtLayout).toEqual([true]);
+  });
 });

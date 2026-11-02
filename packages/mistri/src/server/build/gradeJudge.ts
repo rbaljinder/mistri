@@ -465,7 +465,7 @@ function blameContrast(finding: Judged, low: readonly ContrastReading[], theme: 
 export interface GradeFinding extends Judged {
   /** The address, as the browser shows it. */
   page: string;
-  /** The windows it was seen in: 1280, 390, 320, 390-dark. */
+  /** The windows it was seen in: 1280, 768, 390, 320, 390-dark. */
   windows: string[];
   file?: string;
   line?: number;

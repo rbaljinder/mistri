@@ -31,6 +31,7 @@ export type CommandInputReason =
   | 'below_min'
   | 'above_max'
   | 'integer'
+  | 'precision'
   | 'not_below'
   | 'not_above'
   | 'choice'
@@ -76,6 +77,18 @@ interface ReadOptions {
    * value is judged by its shape alone, and the server judges it again.
    */
   sourced?: (field: { name: string; source: { from: string; by: string; labelColumn: string } }, value: string | number) => boolean;
+  /**
+   * The App's currency (`ui.currency`), which a `minor` money field without a `currency` of its own is typed in: the
+   * server's from the App, the browser's from the one it was served. Without one a minor amount is judged by its shape
+   * and bounds alone, as a line's cell is without a catalog.
+   */
+  currency?: string;
+  /**
+   * Keep a minor-unit amount as the major text a person types ("19.99"), validated and tidied, instead of reading it
+   * as the minor units a handler receives. What the browser sends, what an API caller sends, and what a form is served
+   * as its starting values; the server's own reading before a handler is the other one.
+   */
+  wire?: boolean;
 }
 
 interface State extends ReadOptions {
@@ -120,6 +133,41 @@ function refuse(state: State, path: string, reason: CommandInputReason): void {
   state.problems.push({ path, reason });
 }
 
+/** The decimals a currency is written with (Intl's, 2 when it does not know the code); money.ts's, kept out of the first paint. */
+const currencyPlaces = (currency: string): number => {
+  try {
+    return new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2;
+  } catch {
+    return 2;
+  }
+};
+
+/* An amount typed in major units and kept in minor ones, text to text: 19.99 USD is 1999, 1500 JPY is 1500, and a fraction
+   finer than the currency has is refused, not rounded. Past 2^53 the whole number is a string, as an id is. */
+function readMinorMoney(
+  field: Extract<AppCommandField, { type: 'money' }>,
+  value: unknown,
+  state: State,
+  problem: (reason: CommandInputReason) => { value?: unknown },
+): { value?: unknown } {
+  const m = /^(-?)(\d*)\.?(\d*)$/.exec(
+    typeof value === 'string' || typeof value === 'number' ? String(value).trim().replace(/^\+/, '') : '',
+  );
+  if (!m || !(m[2] || m[3])) return problem('type');
+  // A reading that is to hand a handler minor units always knows the currency: the App's, else dollars.
+  const currency = field.currency ?? state.currency ?? (state.wire ? undefined : 'USD');
+  const fraction = m[3].replace(/0+$/, '');
+  const digits = currency === undefined ? fraction.length : currencyPlaces(currency);
+  if (fraction.length > digits) return problem('precision');
+  const whole = m[2].replace(/^0+/, '') || '0';
+  const tidy = `${m[1] && (+whole || fraction) ? '-' : ''}${whole}${digits ? `.${fraction.padEnd(digits, '0')}` : ''}`;
+  if (field.min !== undefined && +tidy < field.min) return problem('below_min');
+  if (field.max !== undefined && +tidy > field.max) return problem('above_max');
+  if (state.wire || currency === undefined) return { value: tidy };
+  const minor = tidy.replace('.', '');
+  return { value: Number.isSafeInteger(+minor) ? +minor : minor };
+}
+
 function readValue(
   field: Exclude<AppCommandField, { type: 'group' | 'lines' }>,
   value: unknown,
@@ -159,6 +207,7 @@ function readValue(
     }
     case 'number':
     case 'money': {
+      if (field.type === 'money' && field.minor === true) return readMinorMoney(field, value, state, problem);
       if (typeof value !== 'number' || !Number.isFinite(value)) return problem('type');
       if (field.type === 'number' && field.integer && !Number.isSafeInteger(value)) return problem('integer');
       const stepped = field.step === undefined ? value : onStep(value, field.step);
@@ -334,11 +383,13 @@ function readList(fields: readonly AppCommandField[], raw: unknown, within: stri
       !Object.hasOwn(result, field.name)
     )
       continue;
-    const mine = result[field.name] as number | string;
-    if (field.below !== undefined && Object.hasOwn(result, field.below) && !(mine < (result[field.below] as number | string))) {
+    // A minor-unit amount may be text (major in a wire reading, a string past 2^53): compared as the number it is.
+    const compared = (name: string) => (field.type === 'money' ? Number(result[name]) : (result[name] as number | string));
+    const mine = compared(field.name);
+    if (field.below !== undefined && Object.hasOwn(result, field.below) && !(mine < compared(field.below))) {
       refuse(state, at(within, field.name), 'not_below');
     }
-    if (field.above !== undefined && Object.hasOwn(result, field.above) && !(mine > (result[field.above] as number | string))) {
+    if (field.above !== undefined && Object.hasOwn(result, field.above) && !(mine > compared(field.above))) {
       refuse(state, at(within, field.name), 'not_above');
     }
   }
@@ -397,7 +448,7 @@ export function readCommandInput(fields: readonly AppCommandField[], raw: unknow
 export function commandInputProblems(
   fields: readonly AppCommandField[],
   raw: unknown,
-  options: Pick<ReadOptions, 'cell' | 'sourced'> = {},
+  options: Pick<ReadOptions, 'cell' | 'sourced' | 'currency' | 'wire'> = {},
 ): Array<{ path: string; reason: CommandInputReason }> {
   const state: State = { ...options, problems: [] };
   if (!plain(raw)) return [{ path: '', reason: 'shape' }];

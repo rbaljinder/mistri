@@ -4,7 +4,7 @@
  * table and about one customer. The caller asks for the groups; this measures
  * the width it has, picks the shape and says what an empty answer means.
  */
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { viewportBox } from '../core.js';
 import { BarChart, DonutChart, LineChart, StackedBars } from './Chart.js';
 import { Empty } from './Notes.js';
@@ -52,6 +52,9 @@ interface ChartFigureProps {
   onPick?: ((value: unknown) => void) | null;
   /** What an answer with no groups says. */
   empty: string;
+  /** A second line and a way out under the empty sentence (a section over a window the reader can widen). */
+  emptyDetail?: ReactNode;
+  emptyAction?: ReactNode;
   /** A line's curve: smooth draws a monotone curve through its points. */
   curve?: 'smooth' | 'straight';
   /** A donut's words for the figure in its middle. */
@@ -82,6 +85,8 @@ export function ChartFigure({
   sayLegend,
   onPick,
   empty,
+  emptyDetail,
+  emptyAction,
   curve,
   total,
   dots,
@@ -126,7 +131,7 @@ export function ChartFigure({
     observer.observe(element);
     return () => observer.disconnect();
   }, [answer]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (answer && !rows.length) return <Empty text={empty} />;
+  if (answer && !rows.length) return <Empty text={empty} detail={emptyDetail} action={emptyAction} />;
   /* Before the answer, the chart's room at about the height it will draw at, ruled as its gridlines will be: an empty
      host was nothing tall, and the chart arriving pushed every section under it down. */
   if (!answer) return <ChartWait shape={stacked ? 'rows' : donut ? 'donut' : 'plot'} height={height} rows={limit} />;
@@ -184,10 +189,13 @@ interface ChartShapeFigureProps {
   target?: number;
   height?: number;
   empty: string;
+  /** A second line and a way out under the empty sentence (a section over a window the reader can widen). */
+  emptyDetail?: ReactNode;
+  emptyAction?: ReactNode;
 }
 
 /** One of the further shapes, measured as the others are and drawn by the part on demand. */
-export function ChartShapeFigure({ answer, empty, height, ...rest }: ChartShapeFigureProps) {
+export function ChartShapeFigure({ answer, empty, emptyDetail, emptyAction, height, ...rest }: ChartShapeFigureProps) {
   const host = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(0);
   const rows = answer?.rows ?? [];
@@ -200,7 +208,7 @@ export function ChartShapeFigure({ answer, empty, height, ...rest }: ChartShapeF
     observer.observe(element);
     return () => observer.disconnect();
   }, [answer]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (answer && !rows.length) return <Empty text={empty} />;
+  if (answer && !rows.length) return <Empty text={empty} detail={emptyDetail} action={emptyAction} />;
   if (!answer) return <ChartWait shape="plot" height={height} />;
   return (
     <div className="chart-host" ref={host}>

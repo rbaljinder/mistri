@@ -41,6 +41,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'nav',
       'resources',
       'retention',
+      // rc.12: what a phone's bar and a home screen's icon label say when the name is too long (shared/appModel.ts).
+      'shortName',
       'sources',
       'track',
       'ui',
@@ -173,6 +175,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       // rc.1: a public page's public commands, by name, which its door runs signed out (http/pageCommandRoutes.ts).
       'publicCommands',
       'resources',
+      'shortName',
       'supportAudit',
       'supportLog',
       'ui',

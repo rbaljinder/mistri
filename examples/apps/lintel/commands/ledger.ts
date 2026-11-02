@@ -9,7 +9,7 @@
    UNIQUE (lease_id, kind, period) is the last word. */
 import { defineCommand, field, literal, publicReference, refuse, shape, text, int } from '@mistriwork/mistri/commands';
 import { rentPosted } from '../events.ts';
-import { cents, day, dollars, lintel, period, plural, said } from '../source.ts';
+import { day, dollars, lintel, period, plural, said } from '../source.ts';
 
 /** Days after the first that rent may be paid without a fee. */
 export const GRACE_DAYS = 5;
@@ -182,7 +182,7 @@ export const addCharge = defineCommand({
       { label: 'What for' },
     ),
     description: field.text({ max: 120 }),
-    amount: field.money({ min: 1, max: 10_000 }),
+    amount: field.money({ minor: true, min: 1, max: 10_000 }),
     due_on: field.date({ label: 'Due' }),
   },
   when: 'status = active or status = notice',
@@ -191,16 +191,18 @@ export const addCharge = defineCommand({
     // The ledger keys a charge by its month and kind; a second one-off in a month gets its own day as the period.
     const at = day(now);
     const taken = await db.charge.find({ lease_id: record.id, kind: input.kind, period: period(input.due_on) });
+    // Typed in dollars, received in whole cents (a number here: the cap keeps it far below 2^53).
+    const amount = Number(input.amount);
     await db.charge.insert({
       lease_id: record.id,
       kind: input.kind,
       period: taken ? input.due_on : period(input.due_on),
       description: input.description,
       due_on: input.due_on,
-      amount: cents(input.amount),
+      amount,
       // Open, the charge machine's first state, by the column's default.
       posted_on: at,
     });
-    return { message: `${dollars(cents(input.amount))} charged: ${input.description}.` };
+    return { message: `${dollars(amount)} charged: ${input.description}.` };
   },
 });

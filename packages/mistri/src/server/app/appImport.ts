@@ -147,6 +147,7 @@ const REASONS: Record<CommandInputReason, string> = {
   below_min: 'This is below the smallest value allowed.',
   above_max: 'This is above the largest value allowed.',
   integer: 'This is not a whole number.',
+  precision: 'This has more decimals than the currency has.',
   not_below: 'This must be below its pair.',
   not_above: 'This must be above its pair.',
   choice: 'This is not one of the choices.',

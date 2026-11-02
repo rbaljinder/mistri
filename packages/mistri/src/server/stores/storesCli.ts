@@ -23,6 +23,7 @@ import { appBinding } from '../cli/appBinding.js';
 import { runsJobs, type JobModule } from '../jobs/jobModule.js';
 import type { ProvisionStoresOptions } from '../maintenance.js';
 import type { AppTenantPolicy } from '../policy/appTenantPolicy.js';
+import type { EventDeliveryPolicy } from '../../adapters/events/eventDeliveryTypes.js';
 
 export const STORES_USAGE =
   'mistri migrate stores <status | up> [--suite <suite.json>] [--app <dir> [--commands <file>] [--jobs <file>] [--policy <file>]] [<db> | --db <target> | --config <path>] [--connection <name>]';
@@ -345,6 +346,17 @@ const STORE_WORDS: Readonly<Record<string, string>> = {
   'validation-record': 'validation record',
 };
 export const storeWords = (id: string): string => STORE_WORDS[id] ?? id;
+/** A store a plan names, with what is wrong with it: behind its layout, refused, or holding a destination that changed. */
+export const plannedStoreWords = (store: Pick<PlannedStore, 'id' | 'state' | 'refused' | 'changed'>): string =>
+  `${storeWords(store.id)}${
+    store.state === 'behind'
+      ? ' (behind its layout)'
+      : store.state === 'refused'
+        ? ` (refused: ${store.refused})`
+        : store.state === 'changed'
+          ? ` (delivery destination changed: ${store.changed!.join('; ')})`
+          : ''
+  }`;
 
 type StoreTargetOf = Readonly<{ sqlite: string }> | Readonly<{ postgres: string }>;
 /* Where a step provisions: the connection's address, its engine, and the store target a SQLite or PostgreSQL one has. */
@@ -354,6 +366,8 @@ interface AppStoreStep {
   readonly connection: string;
   /** The stores this step makes, by their id in the store list: what a plan reads to say whether it is pending. */
   readonly ids: readonly string[];
+  /** The delivery destinations this step derives, which a plan reads against the ones the store holds. */
+  readonly deliveries?: readonly EventDeliveryPolicy[];
   run(where: StoreWhere): Promise<string | undefined>;
 }
 
@@ -406,8 +420,13 @@ async function appStoreSteps(
     return where.target;
   };
   const steps: AppStoreStep[] = [];
-  const add = (connection: string | undefined, ids: readonly string[], run: AppStoreStep['run']) => {
-    if (connection !== undefined) steps.push({ connection, ids, run });
+  const add = (
+    connection: string | undefined,
+    ids: readonly string[],
+    run: AppStoreStep['run'],
+    deliveries?: readonly EventDeliveryPolicy[],
+  ) => {
+    if (connection !== undefined) steps.push({ connection, ids, run, ...(deliveries ? { deliveries } : {}) });
   };
   const said = (what: string, outcome: { provisioned: boolean }) => `${what} ${outcome.provisioned ? 'provisioned' : 'present'}`;
   /* The store list's own provisioning (maintenance.ts provisionStores), on the database each store belongs in. */
@@ -514,26 +533,31 @@ async function appStoreSteps(
     const anchor =
       Object.entries(registryOf).find(([id, command]) => command.integrations || getCommandEffects(command) || inbound.has(id))?.[1] ??
       commands[0];
-    const sourceId =
-      jobs.jobs.size || jobs.workflows.size
-        ? jobLoader!.jobDeployment(jobs, { appId: app.id, commands: registryOf }).sourceId
-        : anchor?.source;
-    add(connectionOf(sourceId), jobStores, async (where) => {
-      kept(where, "the jobs' stores");
-      /* The module as the server runs it, its machine timers among its jobs: maintenance captures it again as it is. */
-      const made = await provision(where, { app: { id: app.id, commands: registryOf }, jobs: jobs as unknown as JobModule });
-      const store = (id: string) => made.stores[id];
-      const parts = [
-        /* Only a job store made is said: a module that needs none and one already there both leave it unsaid. */
-        store('jobs')?.provisioned ? 'job store provisioned' : undefined,
-        `${made.destinations.length} delivery destination(s), ${made.destinations.filter((each) => each.added).length} added`,
-        store('workflows') === undefined ? undefined : `workflow store ${store('workflows').provisioned ? 'provisioned' : 'present'}`,
-        store('integrations') === undefined
-          ? undefined
-          : `integrations store ${store('integrations').provisioned ? 'provisioned' : 'present'}`,
-      ];
-      return `jobs: ${parts.filter(Boolean).join(', ')}`;
-    });
+    const deployment =
+      jobs.jobs.size || jobs.workflows.size ? jobLoader!.jobDeployment(jobs, { appId: app.id, commands: registryOf }) : undefined;
+    const sourceId = deployment ? deployment.sourceId : anchor?.source;
+    const deliveries = deployment ? [...deployment.destinations, ...deployment.workflowDestinations].map(({ policy }) => policy) : [];
+    add(
+      connectionOf(sourceId),
+      jobStores,
+      async (where) => {
+        kept(where, "the jobs' stores");
+        /* The module as the server runs it, its machine timers among its jobs: maintenance captures it again as it is. */
+        const made = await provision(where, { app: { id: app.id, commands: registryOf }, jobs: jobs as unknown as JobModule });
+        const store = (id: string) => made.stores[id];
+        const parts = [
+          /* Only a job store made is said: a module that needs none and one already there both leave it unsaid. */
+          store('jobs')?.provisioned ? 'job store provisioned' : undefined,
+          `${made.destinations.length} delivery destination(s), ${made.destinations.filter((each) => each.added).length} added`,
+          store('workflows') === undefined ? undefined : `workflow store ${store('workflows').provisioned ? 'provisioned' : 'present'}`,
+          store('integrations') === undefined
+            ? undefined
+            : `integrations store ${store('integrations').provisioned ? 'provisioned' : 'present'}`,
+        ];
+        return `jobs: ${parts.filter(Boolean).join(', ')}`;
+      },
+      deliveries,
+    );
   }
   return { steps };
 }
@@ -599,8 +623,14 @@ interface PlannedStore {
    * `absent`: `up` makes it. `behind`: it is there at an older layout, and `up` brings it forward. `refused`: it is
    * there in a layout `up` will not touch (newer than this mistri, or with no upgrade from it), said in `refused`.
    */
-  readonly state: 'present' | 'absent' | 'behind' | 'refused';
+  readonly state: 'present' | 'absent' | 'behind' | 'refused' | 'changed';
   readonly refused?: string;
+  /**
+   * `changed`: the store is there, and holds a delivery destination made under a different policy than this App now
+   * derives (a producing command's version was bumped): each said with its producer versions, and what stands in the
+   * way of `up` replacing it. `up` replaces the ones with nothing undelivered.
+   */
+  readonly changed?: readonly string[];
 }
 
 /** What the bootstrap plan's stores phase reads: each store the App uses and whether the database has it. */
@@ -670,6 +700,18 @@ export async function appStoresPlan(input: { registry: Registry; loaded: LoadedA
         }
         stores.push({ connection: config.name, id, state });
       }
+      /* A destination made for another producer version: a start refuses it, and `up` replaces it. */
+      const deliveries = found.steps.filter((step) => step.connection === name).flatMap((step) => step.deliveries ?? []);
+      const target = storeTargetOf(url);
+      if (deliveries.length && target && statuses.get('event-delivery')?.found != null) {
+        const changed = (await changedDestinations(target, deliveries)).map((each) => each.summary);
+        if (changed.length) {
+          const held = stores.findIndex((store) => store.connection === config.name && store.id === 'event-delivery');
+          const entry: PlannedStore = { connection: config.name, id: 'event-delivery', state: 'changed', changed };
+          if (held >= 0) stores[held] = entry;
+          else stores.push(entry);
+        }
+      }
     } catch (error) {
       problems.push(`${config.name}: ${(error as Error).message}`);
     } finally {
@@ -677,6 +719,24 @@ export async function appStoresPlan(input: { registry: Registry; loaded: LoadedA
     }
   }
   return { stores, problems };
+}
+
+/** The delivery destinations among `policies` the store holds under a different policy, read and changed by nothing. */
+async function changedDestinations(target: StoreTargetOf, policies: readonly EventDeliveryPolicy[]) {
+  if ('sqlite' in target) {
+    const { changedSqliteDestinations } = await import('../../adapters/events/eventDeliverySchema.js');
+    return changedSqliteDestinations(target.sqlite, policies);
+  }
+  const [{ PgConnectionManager }, { changedPostgresDestinations }] = await Promise.all([
+    import('@mistriwork/engine/adapters/postgresPool.js'),
+    import('../../adapters/events/postgresEventDeliveryStore.js'),
+  ]);
+  const connection = new PgConnectionManager(target.postgres);
+  try {
+    return await connection.withReadClient((client) => changedPostgresDestinations(client, policies));
+  } finally {
+    await connection.close().catch(() => {});
+  }
 }
 
 /** Whether the database holds this App's own event store, read as a start attests it; never throws. */

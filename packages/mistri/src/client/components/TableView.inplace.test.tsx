@@ -119,7 +119,7 @@ vi.mock('../../../../kit/src/client/connectionScope.js', () => ({ canUseDatabase
 vi.mock('./AppLanding.js', () => ({ AppLanding: () => null }));
 vi.mock('../../../../kit/src/client/components/appListModel.js', () => ({ appListFor: () => null, appListQuery: () => '' }));
 vi.mock('../../../../kit/src/client/components/BreakdownRoom.js', () => ({ BreakdownRoom: () => null }));
-vi.mock('../../../../kit/src/client/components/Crumbs.js', () => ({ Crumbs: () => null }));
+vi.mock('../../../../kit/src/client/components/Crumbs.js', () => ({ Crumbs: () => null, crumbBarShown: () => false }));
 vi.mock('../../../../kit/src/client/components/dashboardModel.js', () => ({}));
 vi.mock('../../../../kit/src/client/components/Landing.js', () => ({
   AppHomeLanding: () => null,

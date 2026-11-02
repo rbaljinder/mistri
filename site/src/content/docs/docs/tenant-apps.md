@@ -350,22 +350,32 @@ A tenant reads its own addresses from `/api/app` (`addresses: { intake, public
 
 ### What a tenant keeps
 
-Each feature works inside the tenant whose rows it touches: record history,
-`activity()` feeds, notifications in that tenant's inbox, CSV import (the owner
-injected; a file cannot name a tenant), custom components, signed-in forms,
-jobs at times (`realm: 'tenant'` or `'platform'`), a machine's timers (each run
-in its row's tenant; startup refuses one on a global table), workflows keyed
-per tenant, and flows from rows (a change starts only its own tenant's flows).
-The [App API](/docs/app-api/) binds each token to one membership. A tenant link
+Where a feature is served, refused, or kept per tenant, in one table. The
+refusal quoted is the one the server gives; the file is where it lives.
+
+| Feature | In a tenant App | Where it is decided | Try it |
+| --- | --- | --- | --- |
+| Record history, `activity()` feeds, notifications and their mail | Per tenant: the tenant whose record it is | `tenant/tenantInbox.ts` | `mistri check --routes --app .` |
+| Command effects: `post(...)` and `send(...)` | Served; each delivery runs as the tenant it was written for | `tenant/tenantFeatureEffects.ts` | `mistri migrate status --app . --commands commands.ts` |
+| Hand-written `defineInbound` | Refused: "inbound endpoints are not served on a tenant App: a delivery has no tenant to act for." | `tenant/tenantJobs.ts` | `mistri check --app . --jobs jobs.mjs` |
+| An [integration's](/docs/integrations/) webhooks | Served at `/api/inbound/<name>/<tenant>`, verified with that tenant's secret | `tenant/tenantIntegrations.ts` | `mistri check --app . --jobs jobs.mjs` |
+| An integration's secrets | Per tenant, sealed under `MISTRI_SECRETS_KEY` | `tenant/tenantIntegrations.ts` | `mistri check --app . --jobs jobs.mjs` |
+| Mail in and out (`mail: { receive, send, links }`) | Served through the jobs module; each message in the tenant its address names ([tenant mail](/docs/tenant-mail/)) | `tenant/tenantJobs.ts` | `mistri check --app . --jobs jobs.mjs` |
+| Jobs at times, timers, workflows, flows from rows | Per tenant: `realm: 'tenant'` runs once per active tenant, `'platform'` once | `tenant/tenantJobs.ts` | `mistri check --app . --jobs jobs.mjs` |
+| The [App API](/docs/app-api/)'s event feed (`GET /$events`) | Refused, [`api-event-unsupported`](/docs/check-codes/#api-event-unsupported): "A tenant App delivers its events through webhooks." | `api/apiEventFeed.ts` | `mistri check --app .` |
+| The App API's generic writes | Not served by any App; commands only | `api/` | `mistri check --app .` |
+| The App's MCP (`--app-mcp`) | Served; each token binds one membership | `tenant/tenantAuthenticatedHttp.ts` | `mistri --app . --policy policy.mjs --app-mcp` |
+
+CSV import (the owner injected; a file cannot name a tenant), custom
+components and signed-in forms work inside the tenant whose rows they touch. A
+machine's timers run in their row's tenant, and startup refuses one on a
+global table; flows from rows start only their own tenant's flows. The
+[App API](/docs/app-api/) binds each token to one membership. A tenant link
 adds a hint after the App's own parameters (`/leads?tab=open&tenant=north`);
 the hint is not authority, and `mistri check --routes` prints each realm's
 addresses. A natural key may be unique within the tenant,
 `UNIQUE (tenant_id, number)`; another tenant's record address opens the
 ordinary not-found.
-
-Refused in a tenant App: email and mentions, webhook effects, inbound
-endpoints, the API's event feed and generic writes, and the database
-browser's `--mcp`.
 
 ### Sandboxes
 

@@ -18,7 +18,11 @@ import { runtimeTable } from '../../packages/engine/src/shared/runtimeTables.js'
 import { COMMAND_EVENT_TABLES } from '../../packages/mistri/src/adapters/events/commandEventSchema.js';
 import type { CommandEventEnvelope } from '../../packages/mistri/src/adapters/events/commandEventTypes.js';
 import type { EventDeliveryStore } from '../../packages/mistri/src/adapters/events/eventDeliveryContract.js';
-import { EVENT_DELIVERY_PREFIX, provisionSqliteEventDeliveryStore } from '../../packages/mistri/src/adapters/events/eventDeliverySchema.js';
+import {
+  EVENT_DELIVERY_PREFIX,
+  provisionSqliteEventDeliveryStore,
+  type EventDeliveryProvisionOptions,
+} from '../../packages/mistri/src/adapters/events/eventDeliverySchema.js';
 import { openSqliteEventDeliveryStore } from '../../packages/mistri/src/adapters/events/eventDeliveryStore.js';
 import type { EventDeliveryPolicy, EventDeliveryRoute } from '../../packages/mistri/src/adapters/events/eventDeliveryTypes.js';
 import { provisionPostgresCommandEventStore } from '../../packages/mistri/src/adapters/events/postgresCommandEventStore.js';
@@ -37,7 +41,10 @@ export interface DeliveryEngineFixture {
   readonly engine: DeliveryEngineName;
   readonly policy: EventDeliveryPolicy;
   open(policy?: EventDeliveryPolicy): Promise<EventDeliveryStore>;
-  provision(policy?: EventDeliveryPolicy): Promise<{ provisioned: boolean; destinationAdded: boolean }>;
+  provision(
+    policy?: EventDeliveryPolicy,
+    options?: EventDeliveryProvisionOptions,
+  ): Promise<{ provisioned: boolean; destinationAdded: boolean; destinationReplaced: boolean; retired: readonly string[] }>;
   seed(id?: string, route?: EventDeliveryRoute): Promise<CommandEventEnvelope[]>;
   /** One statement on a separate connection; `?` placeholders on both engines. */
   exec(sql: string, params?: unknown[]): Promise<void>;
@@ -64,7 +71,7 @@ const sqlite: DeliveryEngine = {
         if (input !== policy) t.after(() => store.close());
         return store;
       },
-      provision: async (input = policy) => provisionSqliteEventDeliveryStore(f.path, input, { stopped: true }),
+      provision: async (input = policy, options) => provisionSqliteEventDeliveryStore(f.path, input, { stopped: true }, options),
       seed: (id, route) => f.seed(id, route),
       exec: async (sql, params = []) => {
         if (params.length) f.db.prepare(sql).run(...(params as never[]));
@@ -200,10 +207,7 @@ const postgres: DeliveryEngine = {
         stores.push(store);
         return store;
       },
-      provision: async (input = policy) => {
-        const { provisioned, destinationAdded } = await provisionPostgresEventDeliveryStore(url, input);
-        return { provisioned, destinationAdded };
-      },
+      provision: async (input = policy, options) => provisionPostgresEventDeliveryStore(url, input, options),
       seed: async (id = 'receipt-001', route = policy.routes[0]) => (await beginPostgresSeed(policy, id, route)).commit(),
       exec: async (sql, params = []) => {
         await control.query(postgresRuntimeSql(params.length ? numbered(sql) : sql), params);

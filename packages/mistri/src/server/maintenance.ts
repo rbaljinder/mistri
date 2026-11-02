@@ -220,6 +220,16 @@ async function provisionPostgresTenantCommandEvents(
   return provisionPostgresCommandEventStore(url, tenantEventStore(binding));
 }
 
+/** A job's or workflow's destination made for another producer version is replaced when nothing in it is undelivered
+ * (the delivery store refuses it otherwise, naming the cause): `migrate up --app` is how a bumped command's jobs come back. */
+const REPLACE = Object.freeze({ replace: true });
+/** An effect's destination names its producers' versions in its id, so a bump makes a new one and leaves the old: the
+ * drained ones are retired as the new is added, or an App would meet the store's sixteen through upgrades alone. */
+const retiring = (destinations: readonly { policy: EventDeliveryPolicy }[]) =>
+  Object.freeze({
+    retire: Object.freeze({ prefix: 'effect:', keep: Object.freeze(destinations.map(({ policy }) => policy.destinationId)) }),
+  });
+
 /** What a jobs provisioning created: true where this call provisioned it. */
 interface JobsProvisioned {
   readonly events: boolean;
@@ -267,7 +277,10 @@ function provisionSqliteJobs(path: string, request: JobsProvisionRequest): JobsP
   const deployment = deploymentOf(request);
   const events = provisionSqliteCommandEventStore(path, deployment.events).provisioned;
   const destinations = [...deployment.destinations, ...deployment.workflowDestinations].map(({ policy }) =>
-    Object.freeze({ id: policy.destinationId, added: provisionSqliteEventDeliveryStore(path, policy, { stopped: true }).destinationAdded }),
+    Object.freeze({
+      id: policy.destinationId,
+      added: provisionSqliteEventDeliveryStore(path, policy, { stopped: true }, REPLACE).destinationAdded,
+    }),
   );
   const jobs = runsJobs(capturedJobModule(request.jobs)) && provisionSqliteJobStore(path, deployment.store).provisioned;
   return Object.freeze({
@@ -287,7 +300,10 @@ async function provisionPostgresJobs(url: string, request: JobsProvisionRequest)
   const destinations: Array<Readonly<{ id: string; added: boolean }>> = [];
   for (const { policy } of [...deployment.destinations, ...deployment.workflowDestinations]) {
     destinations.push(
-      Object.freeze({ id: policy.destinationId, added: (await provisionPostgresEventDeliveryStore(url, policy)).destinationAdded }),
+      Object.freeze({
+        id: policy.destinationId,
+        added: (await provisionPostgresEventDeliveryStore(url, policy, REPLACE)).destinationAdded,
+      }),
     );
   }
   const jobs = runsJobs(capturedJobModule(request.jobs)) && (await migratePostgresJobStore(url, deployment.store)).migrated;
@@ -340,7 +356,7 @@ function provisionSqliteEffects(path: string, request: EffectsProvisionRequest):
     Object.freeze({
       id: policy.destinationId,
       webhook,
-      added: provisionSqliteEventDeliveryStore(path, policy, { stopped: true }).destinationAdded,
+      added: provisionSqliteEventDeliveryStore(path, policy, { stopped: true }, retiring(deployment.destinations)).destinationAdded,
     }),
   );
   return Object.freeze({ events, destinations: Object.freeze(destinations) });
@@ -355,7 +371,7 @@ async function provisionPostgresEffects(url: string, request: EffectsProvisionRe
       Object.freeze({
         id: policy.destinationId,
         webhook,
-        added: (await provisionPostgresEventDeliveryStore(url, policy)).destinationAdded,
+        added: (await provisionPostgresEventDeliveryStore(url, policy, retiring(deployment.destinations))).destinationAdded,
       }),
     );
   }
@@ -953,7 +969,10 @@ function provisionSqliteTenantJobs(path: string, binding: TenantStoreBinding, re
     module = tenantModuleOf(request);
   const events = provisionSqliteCommandEventStore(path, deployment.events).provisioned;
   const destinations = [...deployment.destinations, ...deployment.workflowDestinations].map(({ policy }) =>
-    Object.freeze({ id: policy.destinationId, added: provisionSqliteEventDeliveryStore(path, policy, { stopped: true }).destinationAdded }),
+    Object.freeze({
+      id: policy.destinationId,
+      added: provisionSqliteEventDeliveryStore(path, policy, { stopped: true }, REPLACE).destinationAdded,
+    }),
   );
   return Object.freeze({
     events,
@@ -976,7 +995,10 @@ async function provisionPostgresTenantJobs(
   const destinations: Array<Readonly<{ id: string; added: boolean }>> = [];
   for (const { policy } of [...deployment.destinations, ...deployment.workflowDestinations]) {
     destinations.push(
-      Object.freeze({ id: policy.destinationId, added: (await provisionPostgresEventDeliveryStore(url, policy)).destinationAdded }),
+      Object.freeze({
+        id: policy.destinationId,
+        added: (await provisionPostgresEventDeliveryStore(url, policy, REPLACE)).destinationAdded,
+      }),
     );
   }
   return Object.freeze({

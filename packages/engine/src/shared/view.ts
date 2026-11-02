@@ -308,7 +308,7 @@ export function compileView(
   const baseRelation = relations.table(base.id);
   const plan = new JoinPlan(schema, base, style, relations.table);
 
-  const { resolve, qualify, membership, exists } = viewPaths(schema, view, plan, style, relations);
+  const { resolve, qualify, membership, exists, typeOf } = viewPaths(schema, view, plan, style, relations);
 
   /* An empty column list means the base table's own columns. Expanding it
      here rather than emitting `SELECT *` keeps the result's column list
@@ -477,7 +477,7 @@ export function compileView(
   /* The other side of a column comparison is a path like any other: resolved
      against this catalog, so a reader's pruned graph refuses one it may not
      read exactly as it refuses the left. */
-  const where = buildWhere(conditions, style, prefix.params.length + 1, qualify, qualify, membership, exists);
+  const where = buildWhere(conditions, style, prefix.params.length + 1, qualify, qualify, membership, exists, false, typeOf);
 
   /* Placeholder numbering continues across the whole statement, which is the
      one thing Postgres needs and SQLite does not — and the exact place a join
@@ -922,7 +922,7 @@ export function compileViewCount(schema: DatabaseSchema, view: ViewDef, style: S
   const relations = new ScopedRelations(schema, style, scope);
   const baseRelation = relations.table(base.id);
   const plan = new JoinPlan(schema, base, style, relations.table);
-  const { qualify, membership, exists } = viewPaths(schema, view, plan, style, relations);
+  const { qualify, membership, exists, typeOf } = viewPaths(schema, view, plan, style, relations);
 
   const conditions = viewConditions(view);
   for (const group of conditions?.groups ?? []) {
@@ -937,7 +937,7 @@ export function compileViewCount(schema: DatabaseSchema, view: ViewDef, style: S
   }
   const joins = plan.clauses();
   const prefix = relations.finish();
-  const where = buildWhere(conditions, style, prefix.params.length + 1, qualify, qualify, membership, exists);
+  const where = buildWhere(conditions, style, prefix.params.length + 1, qualify, qualify, membership, exists, false, typeOf);
 
   /* Only filter joins affect row count. Projection-only joins and scalar
      aggregates deliberately do not register relations in this statement. */

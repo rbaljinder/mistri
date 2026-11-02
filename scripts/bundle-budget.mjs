@@ -426,8 +426,8 @@ const EMBED = join(ROOT, 'packages/mistri/dist/embed/react');
    a CommonJS interop call in a part loaded on demand (LiveNotices) with or without its second argument, that part's
    name changes, and so does every chunk list that names it. Four builds measured 179,231 to 179,353 public, 375,780 to
    375,946 App and 359,426 to 359,575 Workbench; the brotli ceilings sit about 150 bytes above the highest.
-   At the binaries' split each product builds its own client, without the other's main (vite.config.ts,
-   `withoutOtherMain`), and its first pages are held here under its own name: the App framework's public and App
+   At the binaries' split each product builds its own client with only its own main (the kit's preset,
+   `@mistriwork/kit/vite` `shellMain`), and its first pages are held here under its own name: the App framework's public and App
    pages, the database browser's Workbench. The ceilings are the ones the one build was held to; a product's build
    that came in under them keeps them until it is measured again.
    A strip of tabs fits its row instead of scrolling (useTabFold.ts): a record's and a list's strip measure their
@@ -650,7 +650,23 @@ export const BUDGET = {
        The raw ceilings keep about 250 bytes of room, the App script's brotli about 400. */
     /* Merged with the touch targets and the donut's focus ring beside the documents and the form review: public script
        657.3 KiB raw, 183.4 KiB brotli. The raw ceiling keeps about 250 bytes. */
-    public: { script: { raw: 673_400, br: 188_200 }, style: { raw: 393_030, br: 52_820 } },
+    /* rc.12 money input (`field.money({ minor: true })`): the shared reader (commandInput.ts readMinorMoney) judges a typed
+       amount's precision in the browser before any request, and a form review says it by its currency's own places. A
+       form's reading on the first screen, so none can wait behind onDemand.tsx. Measured, against the same tree without
+       it: public script +1.0 KiB raw, +0.2 brotli (658.5 / 183.9 KiB); the ceilings move to 674_600 / 188_500, ~300 bytes of room. */
+    /* rc.12 shell: configurable breadcrumbs (a room from the menu heads itself, its verbs in its own heading row), the
+       App's shortName in a phone's bar, its name in the not-answering sentences, and 44px hit areas for a record's
+       value links, its inline pencil and a tree's rows. The trail's decision is made in the render that draws the
+       room and the heading row's verbs are its first screen, so none can wait behind onDemand.tsx; the phone hiding
+       rules and the two sentences were folded to one each first (-0.2 KiB raw). Measured: public script 675,121 /
+       188,544, style 393,442 / 52,868. The raw ceilings keep about 250 bytes of room, the script's brotli 400, the
+       style's 100. */
+    /* The three rc.12 branches merged: the chunk-failure handler a lazily loaded part reports through (appChrome.js
+       unloaded(), sayUnavailable) with its two catalog words, beside the money input and the shell above. Each is first
+       paint's own, so none can wait behind onDemand.tsx. Measured: public script 676,437 / 189,132 (+1,037 / +182 over
+       the ceilings above, nothing but our own modules in the added bytes). The script ceilings move to 678_500 / 189_700,
+       about 0.3% of room. */
+    public: { script: { raw: 678_500, br: 189_700 }, style: { raw: 393_700, br: 52_970 } },
     /* A one-click command's revision asked as the pointer or focus reaches its button (commandSend.ts readyCommand,
        Actions.tsx), so the click sends only the execute: about 500 raw bytes, 1335.1 KiB measured. The App script's
        raw ceiling moves to 1_367_400 and keeps about 250 bytes of room; its brotli did not move past its ceiling. */
@@ -709,7 +725,12 @@ export const BUDGET = {
     /* rc.11's accessibility round, as on the public first paint. */
     /* Merged, as on the public first paint: App script 1,367.5 KiB raw, 375.0 KiB brotli; the ceilings keep about
        300 bytes raw and 400 brotli. */
-    app: { script: { raw: 1_400_600, br: 384_400 }, style: { raw: 392_910, br: 52_800 } },
+    /* rc.12 money input, as on the public first paint: App script 1,368.7 KiB raw; the raw ceiling moves to 1_401_850,
+       ~300 bytes of room. */
+    /* rc.12 shell, as on the public first paint: App script 1,402,859 / 384,912, style 393,323 / 52,839. The same room. */
+    /* The three rc.12 branches merged, as on the public first paint: App script 1,404,304 / 385,633 (+1,154 / +333 over the
+       ceilings above). The script ceilings move to 1_408_550 / 386_800, about 0.3% of room. */
+    app: { script: { raw: 1_408_550, br: 386_800 }, style: { raw: 393_580, br: 52_940 } },
   },
   tablewalk: {
     /* The follow-up's grid head rules, as above. */
@@ -720,7 +741,8 @@ export const BUDGET = {
        ceiling by under 0.1 KB (50.3 KB measured); the brotli ceiling moves to 51_800, a few hundred bytes of room. */
     /* rc.11's touch targets and grid heads, as on the public first paint: the raw style ceiling moves; brotli holds. */
     /* rc.11's accessibility round, as on the public first paint: the raw style ceiling moves; brotli holds. */
-    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 378_190, br: 51_800 } },
+    /* rc.12 shell, as on the public first paint: style 378,607 / 51,684. The raw style ceiling moves; brotli holds. */
+    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 378_860, br: 51_800 } },
   },
 };
 
@@ -756,7 +778,9 @@ export const EMBED_BUDGET = {
   provider: { raw: 14_800, br: 5_250 },
   /* 0.9.9: the navigator reaches core.js, which now files each read's tables (liveReads.ts): 3,529 / 1,363. */
   adapter: { raw: 3_600, br: 1_400 },
-  shell: { raw: 594_400, br: 88_900 },
+  /* rc.12: the three branches merged put the shell at 595,255 / 88,146 (+855 raw over its ceiling): the chunk-failure
+     handler, the money input and the breadcrumbs. The raw ceiling moves to 597_050, about 0.3% of room. */
+  shell: { raw: 597_050, br: 88_900 },
 };
 
 /* The chrome's words in a language besides English (vite.config.ts LOCALE_GROUP, src/client/copy/<lang>.ts), one chunk

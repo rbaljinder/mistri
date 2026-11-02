@@ -1914,9 +1914,11 @@ body.app-mode th .pk { display: none; }
    bands of heading. */
 .crumbs { align-items: center; }
 .crumb-note { display: inline-flex; align-items: center; gap: var(--space-3); margin-left: var(--space-1); }
-.crumb-note:empty, .crumb-tools:empty { display: none; }
+.crumb-note:empty, .crumb-tools:empty, .applist-head-tools:empty { display: none; }
 .crumbs:has(.crumb-note:not(:empty)) > .current { display: none; }
-.crumb-tools { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); }
+.crumb-tools, .applist-head-tools { margin-left: auto; display: flex; align-items: center; gap: var(--space-3); }
+/* With no bar over it, a list's heading row ends in the same verbs (AppList): baseline-set beside its title. */
+.applist-head-tools { align-self: center; flex-shrink: 0; }
 /* Import's mark is drawn only where it stands for the word (structure.css, a phone's crumb bar). */
 .applist-import-mark { display: none; }
 .applist-count {

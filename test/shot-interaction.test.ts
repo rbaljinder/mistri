@@ -54,23 +54,12 @@ async function shootWith(t: TestContext, ui: object | undefined, ...flags: strin
   const out = join(fixture.directory, 'out');
   const said: string[] = [];
   const warned: string[] = [];
-  /* The browser's own scratch (Playwright's profile and artifacts, a system Chrome's fetcher) goes in the fixture's
-     directory, which the test removes: CI's Node legs run before Playwright installs its browser, so shot falls back
-     to the runner's Chrome, and what that leaves in the lane's TMPDIR failed the lane's leak check. */
-  const temp = mkdtempSync(join(fixture.directory, 'tmp-'));
-  const was = process.env.TMPDIR;
-  process.env.TMPDIR = temp;
-  try {
-    const code = await runShot(
-      ['--app', fixture.appDir, '--config', fixture.config, '--out', out, ...flags],
-      (line) => said.push(line),
-      (line) => warned.push(line),
-    );
-    return { code, said, warned, out };
-  } finally {
-    if (was === undefined) delete process.env.TMPDIR;
-    else process.env.TMPDIR = was;
-  }
+  const code = await runShot(
+    ['--app', fixture.appDir, '--config', fixture.config, '--out', out, ...flags],
+    (line) => said.push(line),
+    (line) => warned.push(line),
+  );
+  return { code, said, warned, out };
 }
 
 test('a click on a row is performed before the page is read', async (t) => {

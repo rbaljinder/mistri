@@ -27,7 +27,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.11; the
+These App features ship in mistri 1.0.0-rc.12; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -709,6 +709,10 @@ mistri shot --app <dir> [<route>…] [<db> | --db <target> | --config <path>]
                               already made (mistri dev or a local start),
                               with the password in MISTRI_AS_PASSWORD; its
                               store is copied, never written
+      --as <role>:<email>     with shot or grade: a new account of that role
+                              with that address, verified, in the run's own
+                              store: the household a row policy finds by
+                              email (not admin; not a tenant App)
       --tenant <id>           with shot --as on a tenant App: the tenant the
                               role is held in, a temporary membership in the
                               App's tenant store (journaled), revoked when the
@@ -742,7 +746,7 @@ mistri grade [<app-dir>] [<db> | --db <target> | --config <path>] [<route>…]
                 [--json] [--browser <path>]
                               serve the App as shot does and measure every
                               view, a record of each page and its documents
-                              at 1280, 390 and 320 wide and at 390 dark:
+                              at 1280, 768, 390 and 320 wide and at 390 dark:
                               sideways scroll, cut figures and words,
                               overlapping controls, targets
                               under 44px on a phone, contrast, layout shift,

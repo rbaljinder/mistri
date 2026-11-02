@@ -70,11 +70,12 @@ export function pwaUrls(mount: AddressMount, appId: string): PwaUrls {
 }
 
 /** The manifest, as JSON text: the App's name, its home, its look's light ground, its two icons. */
-export function pwaManifest(app: { name: string }, grounds: PwaGrounds, urls: PwaUrls): string {
+export function pwaManifest(app: { name: string; shortName?: string }, grounds: PwaGrounds, urls: PwaUrls): string {
   return JSON.stringify(
     {
       name: app.name,
-      short_name: app.name,
+      // A home screen cuts its icon's label at about twelve characters: the App's short name is the one it says.
+      short_name: app.shortName ?? app.name,
       start_url: urls.start,
       scope: urls.scope,
       display: 'standalone',

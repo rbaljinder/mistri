@@ -1612,7 +1612,7 @@ export class SqliteAdapter implements Adapter {
               reads: scopedReads(true, bound),
               whole: wholeWithin(scope, bound),
               references: async (fk, key) => {
-                const statement = referencesStatement(catalog.schema, fk, key, ANSI_STYLE);
+                const statement = referencesStatement(catalog, fk, key, ANSI_STYLE);
                 const [row] = await this.readRows(statement.text, statement.params, true, handle);
                 return Number(row?.n ?? 0);
               },

@@ -56,27 +56,35 @@ export function builtTarget(target) {
   return typeof built === 'string' ? { ...rest, default: built } : { ...rest, ...built };
 }
 
-/* Exports only a product's client build reads, in this checkout: the kit's client modules (`@mistriwork/kit`,
-   `@mistriwork/kit/client/…`) are bundled into each product's dist/client by Vite from the kit's sources, and the
-   kit's own dist holds none of them, so an install of the kit names only what it ships. */
-const CLIENT_SOURCES = {
+/* Exports for a bundler, not for Node: the kit's client modules (`@mistriwork/kit`, `@mistriwork/kit/client/…`), each
+   built on its own with its declarations into the kit's dist/client (config/tsconfig.kit-client.json), import their
+   stylesheets and run in a browser. This repository's products bundle them from source; a product outside it bundles
+   them from the installed kit with `@mistriwork/kit/vite`, and an install names only those the host list
+   (scripts/boundary/entries.json `host`) names, each reviewed. scripts/prove-exports.mjs proves their files and
+   types rather than importing them in Node. */
+export const BUNDLER_ONLY = {
   '@mistriwork/kit': (subpath) => subpath === '.' || subpath.startsWith('./client/'),
-  /* Each product's main, which the kit's page entry starts by name (`tablewalk/client/workbenchShell.js`,
-     `@mistriwork/mistri/client/appShell.js`, shellStart.js) and Vite bundles into that product's dist/client. */
-  '@mistriwork/mistri': (subpath) => subpath.startsWith('./client/'),
-  tablewalk: (subpath) => subpath.startsWith('./client/'),
+};
+
+/** The host list's names, by package (scripts/boundary/entries.json `host.exports`). */
+export const hostExports = (root = ROOT) => {
+  const table = JSON.parse(readFileSync(join(root, 'scripts/boundary/entries.json'), 'utf8'));
+  return Object.fromEntries(Object.entries(table.host?.exports ?? {}).map(([name, subpaths]) => [name, new Set(subpaths)]));
 };
 
 /**
  * @param {Record<string, any>} manifest
+ * @param {Record<string, Set<string>>} [host] the host list's names by package; the checkout's, unless given
  * @returns {Record<string, any>}
  */
-export function published(manifest) {
+export function published(manifest, host = hostExports()) {
   const kept = Object.fromEntries(Object.entries(manifest).filter(([key]) => !CHECKOUT_ONLY.includes(key)));
   if (kept.exports) {
     kept.exports = builtTarget(kept.exports);
-    const sourceOnly = CLIENT_SOURCES[manifest.name];
-    if (sourceOnly) kept.exports = Object.fromEntries(Object.entries(kept.exports).filter(([subpath]) => !sourceOnly(subpath)));
+    const bundlerOnly = BUNDLER_ONLY[manifest.name];
+    const listed = host[manifest.name] ?? new Set();
+    if (bundlerOnly)
+      kept.exports = Object.fromEntries(Object.entries(kept.exports).filter(([subpath]) => !bundlerOnly(subpath) || listed.has(subpath)));
   }
   return kept;
 }

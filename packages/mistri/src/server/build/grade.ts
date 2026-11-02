@@ -209,6 +209,8 @@ async function measure(
   const events: Events = { errors: [], failed: [] };
   try {
     await context.addInitScript(inPage(watchShifts, null));
+    // The page is told it is being written, as `mistri dev` tells it: an icon name that names none is said (appChrome.js).
+    await context.addInitScript('globalThis.__mistriAuthoring = true');
     const page = await context.newPage();
     watchEvents(page, events);
     /* A theme's own files (its faces, its logo), by the bytes a cold visit fetches. */

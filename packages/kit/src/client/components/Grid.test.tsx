@@ -400,6 +400,8 @@ describe('cells', () => {
     expect(second('customer_id')).not.toHaveAttribute('data-ref-table');
     // A value past 2^53 is shown as it arrived, grouped by hand — never rounded.
     expect(second('total')).toHaveTextContent('9,223,372,036,854,775,807');
+    // And on hover the digits as stored: the raw form, not a float's (9223372036854776000).
+    expect(second('total')).toHaveAttribute('title', '9223372036854775807');
     // A long text is drawn whole, with no tooltip repeating it: only a clamped
     // value, or one its column clips (decided on hover), gets a title.
     expect(first('memo')).toHaveTextContent(String(rows[0].memo));

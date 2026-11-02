@@ -103,6 +103,24 @@ test('a one-off charge goes on a current lease in cents, and never on an ended o
   );
   assert.deepEqual(row, [{ amount: 4550, status: 'open' }]);
 
+  // The form sends the amount as typed, exact text; the ledger gets whole cents, and a fraction of a cent is refused.
+  const typed = await accountant.command(
+    'addCharge',
+    { id: lease.id },
+    { kind: 'utility', description: 'Water, typed', amount: '19.99', due_on: '2030-02-15' },
+  );
+  assert.ok(typed.ok, JSON.stringify(typed));
+  assert.deepEqual(lintel.rows(`SELECT amount FROM charge WHERE lease_id = ? AND description = 'Water, typed'`, lease.id), [
+    { amount: 1999 },
+  ]);
+  const fraction = await accountant.command(
+    'addCharge',
+    { id: lease.id },
+    { kind: 'utility', description: 'Water, a fraction', amount: '19.999', due_on: '2030-02-15' },
+  );
+  assert.equal(fraction.ok, false);
+  assert.equal(lintel.rows(`SELECT id FROM charge WHERE description = 'Water, a fraction'`).length, 0);
+
   const ended = lintel.rows<{ id: number }>(`SELECT id FROM lease WHERE status = 'ended' ORDER BY id LIMIT 1`)[0];
   const refused = await accountant.command(
     'addCharge',

@@ -34,8 +34,9 @@ import { setAppConfigured } from '@mistriwork/kit/client/connectionScope.js';
 import { finishStartup } from '@mistriwork/kit/client/startup.js';
 import { lookSheetReady } from '@mistriwork/kit/client/visualTheme.js';
 import { settingsEntries } from './appSettings.js';
-import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+import { onDemand, sayUnavailable } from '@mistriwork/kit/client/components/onDemand.js';
 import { activeApp, appFollowsSaves, appLoadProblem, inAppMode } from './appState.js';
+import { sayUnknownIcons } from '@mistriwork/kit/client/components/Icon.js';
 import { applyAppTheme, retireAppTheme, shellPlacement } from './appTheme.js';
 import { loadSavedFilters } from './applist.js';
 import { headerSearchShown, isPublicVisitor } from './publicVisitor.js';
@@ -49,12 +50,17 @@ import {
   addHostListener,
   navReplace,
   onNavigate,
+  sayBrandName,
   setTabTitle,
   shellBody,
   shellById,
   shellQuery,
   shellRoot,
 } from '@mistriwork/kit/client/shellHost.js';
+
+/* An icon name that names none is said, and drawn as a house, while the App is being written: under `mistri dev`,
+   which follows its source, and under grade, which marks the page it measures (grade.ts). */
+sayUnknownIcons(() => appFollowsSaves() || /** @type {{ __mistriAuthoring?: boolean }} */ (globalThis).__mistriAuthoring === true);
 
 /* These controls belong only to a signed-in account or an authored top-bar
    layout. Keep their menus and styles with the control that actually draws. */
@@ -171,8 +177,8 @@ export function signedInStart(me, landingAt) {
 export function wearLook(me, look) {
   if (!look || typeof look.id !== 'string') return;
   applyAppTheme(true, { id: look.id, ui: { theme: look.theme, customThemes: look.customThemes } });
-  const brand = shellQuery('.brand-name');
-  if (brand && typeof me.appName === 'string') brand.textContent = me.appName;
+  if (typeof me.appName === 'string')
+    sayBrandName(shellQuery('.brand-name'), me.appName, typeof me.appShortName === 'string' ? me.appShortName : undefined);
   applyBrandLogo(shellQuery('.brand-mark'), look.logo, typeof me.appName === 'string' ? me.appName : undefined, look.icons);
 }
 
@@ -542,20 +548,33 @@ export function appSettingsCommands() {
 let liveModule;
 function followChanges() {
   if (inAppMode() && !isPublicVisitor()) {
-    void import('./liveSync.js').then((live) => {
-      liveModule = live;
-      live.startLiveSync({ connection: () => state.activeConnection, tenant: tenant !== null });
-    });
+    void import('./liveSync.js').then(
+      (live) => {
+        liveModule = live;
+        live.startLiveSync({ connection: () => state.activeConnection, tenant: tenant !== null });
+      },
+      unloaded(say('liveSync')),
+    );
   } else liveModule?.stopLiveSync();
 }
+
+/* A chunk loaded by hand that did not arrive (a deploy replaced it, the
+   network dropped) says so as onDemand.tsx does, rather than leaving an
+   unhandled rejection and a page that silently stopped following changes.
+   Only the load is caught: a throw inside the part is the part's own. */
+const unloaded = (part) => (error) => {
+  console.error(`The ${part} chunk did not load.`, error);
+  sayUnavailable();
+};
 
 /* Only when the server says it watches the App's source; the module and
    its overlay are a chunk of their own, which no first page fetches. */
 export function followSaves(reload) {
   followChanges();
   if (!appFollowsSaves()) return;
-  void import('./appLive.js').then(({ followAppSaves }) =>
-    followAppSaves({ connection: () => state.activeConnection, reload, problem: appLoadProblem }),
+  void import('./appLive.js').then(
+    ({ followAppSaves }) => followAppSaves({ connection: () => state.activeConnection, reload, problem: appLoadProblem }),
+    unloaded(say('appSourceWatcher')),
   );
 }
 

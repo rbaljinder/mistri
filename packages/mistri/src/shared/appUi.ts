@@ -384,11 +384,26 @@ function parseShell(raw: unknown, where: string): AppShell {
     }
     shell.search = input.search as AppShell['search'];
   }
-  for (const key of ['menuSearch', 'breadcrumbs', 'heading', 'counts'] as const) {
+  for (const key of ['menuSearch', 'heading', 'counts'] as const) {
     const value = input[key];
     if (value === undefined) continue;
     if (typeof value !== 'boolean') throw new Error(`${where}: ui.shell.${key} must be true or false.`);
     shell[key] = value;
+  }
+  /* The trail: true or false for all or nothing, or which of its two parts a room reached from the menu keeps. */
+  if (input.breadcrumbs !== undefined) {
+    const said = input.breadcrumbs;
+    if (isRecord(said) && Object.getPrototypeOf(said) === Object.prototype) {
+      allowKeys(said, ['top', 'home'], `${where}: ui.shell.breadcrumbs`);
+      const trail: { top?: boolean; home?: boolean } = {};
+      for (const part of ['top', 'home'] as const) {
+        if (said[part] === undefined) continue;
+        if (typeof said[part] !== 'boolean') throw new Error(`${where}: ui.shell.breadcrumbs.${part} must be true or false.`);
+        trail[part] = said[part];
+      }
+      shell.breadcrumbs = trail;
+    } else if (typeof said === 'boolean') shell.breadcrumbs = said;
+    else throw new Error(`${where}: ui.shell.breadcrumbs must be true or false, or { top, home } with each true or false.`);
   }
   for (const key of ['width', 'headerWidth', 'gutter'] as const) {
     const value = input[key];

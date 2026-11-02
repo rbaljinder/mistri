@@ -35,6 +35,7 @@ import type { FlagRequestRuntime } from '../flags/requestRuntime.js';
 import { onCommandEvents } from '../../adapters/events/commandEventSignal.js';
 import { listenForCommandEvents, wakeListenUrl, type CommandEventListener } from '../../adapters/events/postgresCommandEventWake.js';
 import { openSqliteEventDeliveryStore } from '../../adapters/events/eventDeliveryStore.js';
+import { EventDeliveryDestinationChanged } from '../../adapters/events/eventDeliveryTypes.js';
 import { openPostgresEventDeliveryStore } from '../../adapters/events/postgresEventDeliveryStore.js';
 import { openSqliteJobStore } from '../../adapters/jobs/jobStore.js';
 import type { JobStore } from '../../adapters/jobs/jobStoreContract.js';
@@ -386,6 +387,12 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       throw new JobDeclarationError(
         `Jobs: the database for source "${deployment.sourceId}" could not be reached (${unreachable}). The stores are not the problem; ` +
           'fix the connection (the server may be refusing connections, or out of them) and start again.',
+      );
+    }
+    /* A destination made for another producer version: the cause, with the two ways out, and not the generic line. */
+    if (error instanceof EventDeliveryDestinationChanged) {
+      throw new JobDeclarationError(
+        `Jobs: the delivery store on source "${deployment.sourceId}" holds a destination made under a different policy (store-destination-changed). ${error.message}`,
       );
     }
     throw new JobDeclarationError(

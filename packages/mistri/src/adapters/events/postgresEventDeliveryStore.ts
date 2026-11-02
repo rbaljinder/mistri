@@ -52,7 +52,7 @@ import {
   verifyDeliveryHistory,
   type DeliveryRow,
 } from './eventDeliveryRules.js';
-import { EVENT_DELIVERY_PREFIX, EVENT_DELIVERY_TABLES as t } from './eventDeliverySchema.js';
+import { EVENT_DELIVERY_PREFIX, EVENT_DELIVERY_TABLES as t, type EventDeliveryProvisionOptions } from './eventDeliverySchema.js';
 import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
 import { EVENT_DELIVERY_RECEIPT_BOUNDS, eventDeliveryReceiptContext, eventDeliveryRouteFor, firstTargetOf } from './eventDeliverySource.js';
 import { COMPLETED_AT } from '../commands/postgresCommandJournalSchema.js';
@@ -64,6 +64,7 @@ import {
   deliveryStanding,
   deliveryRefuse,
   deliveryText,
+  EventDeliveryDestinationChanged,
   EventDeliveryRefusal,
   EventDeliveryUnavailable,
   EVENT_DELIVERY_ATTEMPT_OUTCOMES,
@@ -343,6 +344,73 @@ const read = async (client: PgQuery, text: string, values: unknown[] = []): Prom
 const safe = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const canonical = (value: readonly PostgresRelationDescription[]) => canonicalCommandJson(foldRelations(value), 1_048_576);
 
+/** Rows of a destination still to deliver, or awaiting an operator's redrive: everything but `delivered`. */
+const undelivered = async (client: PgQuery, id: string): Promise<number> =>
+  Number(
+    (await client.query(`SELECT count(*)::int AS n FROM ${q(t.delivery)} WHERE destination_id = $1 AND state <> 'delivered'`, [id])).rows[0]
+      .n,
+  );
+/** A destination and everything kept for it, children first (the keys restrict). */
+async function dropDestination(client: PgQuery, id: string): Promise<void> {
+  for (const table of [t.attempt, t.delivery, t.receipt]) await client.query(`DELETE FROM ${q(table)} WHERE destination_id = $1`, [id]);
+  await client.query(`DELETE FROM ${q(t.destination)} WHERE id = $1`, [id]);
+}
+/** The destinations among `policies` that the store holds under a different policy, read and changed by nothing. */
+export async function changedPostgresDestinations(
+  client: PgQuery,
+  policies: readonly EventDeliveryPolicy[],
+): Promise<EventDeliveryDestinationChanged[]> {
+  const changed: EventDeliveryDestinationChanged[] = [];
+  if (!(await client.query(`SELECT to_regclass($1) AS r`, [q(t.destination)])).rows[0].r) return changed;
+  for (const policy of policies) {
+    const row = (await client.query(`SELECT policy_json FROM ${q(t.destination)} WHERE id = $1`, [policy.destinationId])).rows[0];
+    if (row && row.policy_json !== canonicalCommandJson(policy, 65_536))
+      changed.push(
+        new EventDeliveryDestinationChanged(
+          policy.destinationId,
+          String(row.policy_json),
+          policy,
+          await undelivered(client, policy.destinationId),
+        ),
+      );
+  }
+  return changed;
+}
+async function replaceChangedDestination(client: PgQuery, policy: EventDeliveryPolicy): Promise<boolean> {
+  const row = (await client.query(`SELECT policy_json FROM ${q(t.destination)} WHERE id = $1`, [policy.destinationId])).rows[0];
+  if (!row || row.policy_json === canonicalCommandJson(policy, 65_536)) return false;
+  const changed = new EventDeliveryDestinationChanged(
+    policy.destinationId,
+    String(row.policy_json),
+    policy,
+    await undelivered(client, policy.destinationId),
+  );
+  if (!changed.replaceable || changed.undelivered) throw changed;
+  await dropDestination(client, policy.destinationId);
+  return true;
+}
+async function retireDrainedDestinations(
+  client: PgQuery,
+  appId: string,
+  retire: NonNullable<EventDeliveryProvisionOptions['retire']>,
+): Promise<string[]> {
+  const retired: string[] = [];
+  // This App's own: another App's destinations on this database are not this one's to retire.
+  const rows = (
+    await client.query(`SELECT id FROM ${q(t.destination)} WHERE left(id, $1) = $2 AND (policy_json::json -> 'source' ->> 'appId') = $3`, [
+      retire.prefix.length,
+      retire.prefix,
+      appId,
+    ])
+  ).rows as { id: string }[];
+  for (const { id } of rows) {
+    if (retire.keep.includes(id) || (await undelivered(client, id))) continue;
+    await dropDestination(client, id);
+    retired.push(id);
+  }
+  return retired;
+}
+
 /** Exact layout, the source it is bound to, and this destination's own
  * immutable policy. Also attests the event store and the journal beneath.
  * A tenant enrollment attests it in its read snapshot too. */
@@ -372,6 +440,14 @@ export async function assertPostgresEventDeliveryStore(
       policy.destinationId,
     ]);
     if (!destination.length && allowNewDestination) return;
+    /* A destination made for another policy: said as that, with its producer versions, and not as a store nobody can read. */
+    if (destination.length === 1 && destination[0].policy_json !== canonicalCommandJson(policy, 65_536))
+      throw new EventDeliveryDestinationChanged(
+        policy.destinationId,
+        String(destination[0].policy_json),
+        policy,
+        await undelivered(client, policy.destinationId),
+      );
     if (
       destination.length !== 1 ||
       destination[0].policy_json !== canonicalCommandJson(policy, 65_536) ||
@@ -391,7 +467,8 @@ export async function assertPostgresEventDeliveryStore(
 export async function provisionPostgresEventDeliveryStore(
   url: string,
   input: EventDeliveryPolicy,
-): Promise<{ version: 1; provisioned: boolean; destinationAdded: boolean }> {
+  options: EventDeliveryProvisionOptions = {},
+): Promise<{ version: 1; provisioned: boolean; destinationAdded: boolean; destinationReplaced: boolean; retired: readonly string[] }> {
   const policy = captureEventDeliveryPolicy(input);
   try {
     return await withPostgresMaintenanceTransaction(url, async (client) => {
@@ -407,6 +484,8 @@ export async function provisionPostgresEventDeliveryStore(
             [policy.source.appId, VERSION, canonicalCommandJson(policy.source)],
           )
         ).rowCount === 1;
+      const destinationReplaced = options.replace === true && (await replaceChangedDestination(client, policy));
+      const retired = options.retire ? await retireDrainedDestinations(client, policy.source.appId, options.retire) : [];
       await assertPostgresEventDeliveryStore(client, policy, true);
       const present = (await client.query(`SELECT 1 FROM ${q(t.destination)} WHERE id = $1`, [policy.destinationId])).rows.length > 0;
       if (!present) {
@@ -427,9 +506,11 @@ export async function provisionPostgresEventDeliveryStore(
         ]);
       }
       await assertPostgresEventDeliveryStore(client, policy);
-      return { version: VERSION as 1, provisioned, destinationAdded: !present };
+      return { version: VERSION as 1, provisioned, destinationAdded: !present, destinationReplaced, retired };
     });
-  } catch {
+  } catch (error) {
+    /* The one refusal that names its cause: the others stay as unreadable as they were. */
+    if (error instanceof EventDeliveryDestinationChanged) throw error;
     return deliveryFail();
   }
 }

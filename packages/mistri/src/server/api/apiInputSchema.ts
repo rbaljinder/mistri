@@ -179,6 +179,18 @@ function scalarSchema(
     const schema = Object.freeze({ type: 'string', pattern: '^\\d{4}-(?:0[1-9]|1[0-2])$' });
     return described(required ? schema : optionalScalar(schema), notes);
   }
+  if (field.type === 'money' && field.minor) {
+    // The amount in major units as exact decimal text (a float would round it); the command receives the minor units.
+    notes.push(
+      `An amount of money in ${field.currency ?? 'the App currency'}'s major unit, as decimal text with at most the currency's own decimal places ("19.99").`,
+    );
+    if (field.min !== undefined) notes.push(`At least ${field.min}.`);
+    if (field.max !== undefined) notes.push(`At most ${field.max}.`);
+    sibling('below', field.below);
+    sibling('above', field.above);
+    const schema = Object.freeze({ type: 'string', pattern: '^[-+]?(?:\\d+\\.?\\d*|\\.\\d+)$' });
+    return described(required ? schema : optionalScalar(schema), notes);
+  }
   if (field.type === 'money') {
     notes.push(`An amount of money; rounded to a multiple of ${field.step ?? 0.01}.`);
     if (field.min !== undefined) notes.push(`At least ${field.min} once rounded.`);

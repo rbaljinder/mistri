@@ -29,8 +29,6 @@ export const author = (actor: { name?: string; email?: string }) => actor.name ?
 /** Cents said as dollars: 182500 → "$1,825.00". */
 export const dollars = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
-/** A dollar amount a form asked for, in the ledger's whole cents. */
-export const cents = (amount: number) => Math.round(amount * 100);
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export const said = shape({ message: text({ max: 300 }) });

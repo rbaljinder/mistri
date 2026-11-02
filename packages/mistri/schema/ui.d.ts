@@ -179,8 +179,11 @@ export type ValueDisplay = import('./app.js').Plain<import('./app.js').AppDispla
 export declare function Card(props: Children & { title?: ReactTypes.ReactNode; className?: string }): ReactTypes.ReactElement;
 /** Children one under another: a field's 20px apart (default), a section's 40px, or tight. */
 export declare function Stack(props: Children & { gap?: Gap; as?: 'div' | 'ul' | 'ol'; className?: string }): ReactTypes.ReactElement;
-/** Children side by side, wrapping where there is no room. */
-export declare function Row(props: Children & { gap?: Gap; align?: 'start' | 'center' | 'baseline' | 'end'; className?: string }): ReactTypes.ReactElement;
+/** Children side by side, wrapping where there is no room. `foot`: the page's actions at the screen's foot (a sticky
+    row of verbs on a phone), which a notice stands above instead of covering. */
+export declare function Row(
+  props: Children & { gap?: Gap; align?: 'start' | 'center' | 'baseline' | 'end'; foot?: boolean; className?: string },
+): ReactTypes.ReactElement;
 /** A heading inside a section, whose own title is its h2. */
 export declare function Heading(props: Children & { level?: 3 | 4; className?: string }): ReactTypes.ReactElement;
 /** The platform's one button. */
@@ -230,6 +233,16 @@ export declare function Tone(props: Children & { tone: ToneName }): ReactTypes.R
 export declare function Meter(props: { value: number; max?: number; tone?: ToneName; label?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** What a component says when it has nothing to draw. */
 export declare function Empty(props: { title: ReactTypes.ReactNode; description?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
+/** A read's states before its drawing, as every section says them: the platform's placeholder while it is asked (at
+    `height`, the size the drawing takes, so nothing moves when it lands), `empty` (or the house sentence) for no rows
+    or no record, and the house problem with Try again when it could not be read. Then `children(data)`:
+    `<Loaded query={useRows('payment')} empty={<Empty title="No payments yet" />}>{(rows) => …}</Loaded>`. */
+export declare function Loaded<T>(props: {
+  query: { data: T | undefined; isError: boolean; error: Error | null; refetch(): unknown };
+  empty?: ReactTypes.ReactNode;
+  height?: number | string;
+  children: (data: NonNullable<T>) => ReactTypes.ReactNode;
+}): ReactTypes.ReactElement;
 /** One of the App's curated marks: the names a view's `icon` takes. Decoration unless it has a label. */
 export declare function Icon(props: { name: AppIcon; label?: string; size?: number | string }): ReactTypes.ReactElement;
 /** A few exclusive choices as one row of words, the chosen one filled; arrows move the choice. A choice may carry a count. */
@@ -307,9 +320,19 @@ export declare function useFile(resource: string): (key: Readonly<Record<string,
 /** Who is reading: signed in or not, and the signed-in account's id. What a component knows of the reader; the server decides every request. */
 export declare function useViewer(): { signedIn: boolean; account?: string };
 /** How a command a component ran ended: applied, with what its handler returned as `output` (the new record's id, the
-    ticket it opened: read it as the shape your command returns), refused in the server's words, or a form closed with
-    nothing sent. */
-export type CommandOutcome = { status: 'applied'; message?: string; output?: unknown } | { status: 'refused'; message: string } | { status: 'closed' };
+    ticket it opened: read it as the shape your command returns), refused in the server's words, a form closed with
+    nothing sent, or `unknown`: it was sent and no answer said whether it ran (the connection dropped, the server could
+    not say). Never send it again under a new key: `check()` asks under the same one, so it cannot run twice, and
+    resolves as the run would have. A public page with a human check hands `check` a fresh token. */
+export type CommandOutcome =
+  | { status: 'applied'; message?: string; output?: unknown }
+  | { status: 'refused'; message: string }
+  | { status: 'closed' }
+  | { status: 'unknown'; message: string; check(options?: { challenge?: string }): Promise<CommandOutcome> };
+/** How a run is sent: the word its form says it by, a public page's human-check token, and the key a run that names no
+    record is sent under. `attempt` is a UUID the component makes once per intent and keeps (in its address, say): a
+    run sent again with it, after a reload, is the same run. A fresh key per run when not given. */
+export interface CommandRunOptions { label?: string; challenge?: string; attempt?: string }
 /** Why a command cannot be run on a record: signed out, the reader's role not granted it, or its `when` not holding for the record now. */
 export type CommandUnavailable = 'signed-out' | 'not-granted' | 'unavailable';
 /**
@@ -330,8 +353,8 @@ export declare function useCommand(command: import('./app.js').CommandName): {
   /** Why it cannot be run on this record; undefined while it can be, and until the server has said. */
   reason(record: Readonly<Record<string, unknown>>): CommandUnavailable | undefined;
   pending(record: Readonly<Record<string, unknown>>): boolean;
-  run(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: { label?: string; challenge?: string }): Promise<CommandOutcome>;
-  open(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: { label?: string; challenge?: string }): Promise<CommandOutcome>;
+  run(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: CommandRunOptions): Promise<CommandOutcome>;
+  open(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: CommandRunOptions): Promise<CommandOutcome>;
   /** The choices one of its inputs offers, as served with the command: a choice's options, or a table's rows
       (`field.choice({ from })`) where they come with it. Undefined for an input that offers none, or whose rows its own
       form reads. */
@@ -344,13 +367,27 @@ export declare function useMessage(
   key: import('./app.js').AppMessageKey,
   args?: Readonly<Record<string, string | number | boolean | Date | null | undefined>>,
 ): string;
-/** Figures in the App's locale, currency and timezone, as every built-in section says them. */
+/** How `useFormat().money` says a figure, as a column's display rule does (`format: 'money'`). */
+export interface MoneyFormat {
+  /** An ISO 4217 code; the App's `ui.currency` when not given. */
+  currency?: string;
+  /** The value is kept in minor units: 1999 is said as 19.99, exactly. */
+  minor?: boolean;
+  /** Without the minor digits where they are all zero: "$24,495", and "$24,495.50" still. */
+  whole?: boolean;
+  /** Compact from a thousand ("$27.9K"), for a figure meant to be glanced at; put the exact one in its title. */
+  compact?: boolean;
+}
+/** Figures in the App's locale, currency and timezone, as every built-in section says them. Money is exact: a decimal
+    string (as a database sends one) is said digit for digit, past 2^53 too, and minor units are read exactly. */
 export declare function useFormat(): {
   number(value: number | string, options?: Intl.NumberFormatOptions): string;
-  money(value: number, currency?: string): string;
+  /** `money('1999', { minor: true })` is "$19.99"; a currency code alone is `money(5, 'EUR')`. */
+  money(value: number | string, options?: string | MoneyFormat): string;
   percent(value: number): string;
   date(value: string): string;
-  dateTime(value: string): string;
+  /** A moment as the App's clock says it; with `timezone` (an IANA zone), the instant said there with the zone's name. */
+  dateTime(value: string, options?: { timezone?: string }): string;
   /** "in 3 days", "yesterday"; undefined for a value that is not a date. */
   relative(value: string): string | undefined;
 };

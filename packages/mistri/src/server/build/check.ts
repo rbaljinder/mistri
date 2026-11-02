@@ -464,7 +464,7 @@ export async function schemaTypes(registry: Registry, loaded: LoadedApp | undefi
 async function storesPendingStep(registry: Registry, loaded: LoadedApp, opts: Options, appDir: string): Promise<Step | undefined> {
   /* A build's stores are its deployment's, provisioned from the build's own entries (cli/appTargets.ts). */
   if (loaded.build) return undefined;
-  const { appStoresPlan, migrateUpCommand, storeWords } = await import('../stores/storesCli.js');
+  const { appStoresPlan, migrateUpCommand, plannedStoreWords } = await import('../stores/storesCli.js');
   const plan = await appStoresPlan({
     registry,
     loaded,
@@ -477,10 +477,7 @@ async function storesPendingStep(registry: Registry, loaded: LoadedApp, opts: Op
   if (!missing.length) return undefined;
   const byConnection = new Map<string, string[]>();
   for (const store of missing)
-    byConnection.set(store.connection, [
-      ...(byConnection.get(store.connection) ?? []),
-      `${storeWords(store.id)}${store.state === 'behind' ? ' (behind its layout)' : store.state === 'refused' ? ` (refused: ${store.refused})` : ''}`,
-    ]);
+    byConnection.set(store.connection, [...(byConnection.get(store.connection) ?? []), plannedStoreWords(store)]);
   const said = [...byConnection].map(([connection, stores]) => `${connection}: ${stores.join(', ')}`).join('; ');
   const fix = migrateUpCommand({
     app: shown(appDir),
@@ -490,17 +487,43 @@ async function storesPendingStep(registry: Registry, loaded: LoadedApp, opts: Op
     ...(opts.jobs !== undefined ? { jobs: opts.jobs } : {}),
     ...(opts.policy !== undefined ? { policy: opts.policy } : {}),
   });
+  /* A store that is there, holding a delivery destination made for another producer version, is its own finding: the
+     cause a start would otherwise hide behind "could not be opened and attested". */
+  const changed = missing.filter((store) => store.state === 'changed');
+  const absent = missing.filter((store) => store.state !== 'changed');
+  const saidAbsent = [
+    ...absent.reduce(
+      (by, store) => by.set(store.connection, [...(by.get(store.connection) ?? []), plannedStoreWords(store)]),
+      new Map<string, string[]>(),
+    ),
+  ]
+    .map(([connection, stores]) => `${connection}: ${stores.join(', ')}`)
+    .join('; ');
   return {
     name: 'stores',
     status: 'pending',
     detail: said,
     lines: [`made by: ${fix}`],
     problems: [
-      problem(
-        'stores',
-        'store-pending',
-        `The App uses stores its database does not have yet (${said}). The migrate step makes them; nothing in the App is wrong.`,
-        { fix },
+      ...(absent.length
+        ? [
+            problem(
+              'stores',
+              'store-pending',
+              `The App uses stores its database does not have yet (${saidAbsent}). The migrate step makes them; nothing in the App is wrong.`,
+              { fix },
+            ),
+          ]
+        : []),
+      ...changed.map((store) =>
+        problem(
+          'stores',
+          'store-destination-changed',
+          `${store.connection}: a delivery destination was made for another version of the command that produces its events ` +
+            `(${store.changed!.join('; ')}), so a start refuses it. Bump the version of the job or workflow that owns it, which makes a new destination ` +
+            'beside the old one, or run the migrate step with the server stopped, which replaces it once nothing in it is undelivered.',
+          { fix },
+        ),
       ),
     ],
   };

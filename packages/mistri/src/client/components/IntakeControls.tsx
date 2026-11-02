@@ -18,7 +18,8 @@ import '@mistriwork/kit/client/formControls.css';
 import './IntakeControls.css';
 import type { AppCommandField } from '../../shared/command.js';
 import type { CommandValue } from '../commandState.js';
-import { formatLocale } from '@mistriwork/kit/client/locale.js';
+import { defaultCurrency, formatLocale } from '@mistriwork/kit/client/locale.js';
+import { currencyDigits } from '@mistriwork/engine/shared/money.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { isAppIcon } from '@mistriwork/engine/shared/appIcons.js';
 import { say } from '../copy/forms/components/IntakeControls.js';
@@ -186,6 +187,26 @@ function amountShown(value: unknown): string {
   return raw.trim() && Number.isFinite(amount) ? amount.toLocaleString(formatLocale(), { maximumFractionDigits: 20 }) : raw;
 }
 
+/* A minor-unit amount as it is read once typed: grouped, and always to the currency's own places ($12.50, ¥1,500), the
+   decimal text handed to Intl whole so a figure past 2^53 is not rounded by a float on the way. */
+function minorShown(value: unknown, digits: number): string {
+  const raw = String(value ?? '');
+  if (!/^-?\d*\.?\d*$/.test(raw.trim()) || !/\d/.test(raw)) return raw;
+  try {
+    return new Intl.NumberFormat(formatLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(
+      raw.trim() as unknown as number,
+    );
+  } catch {
+    return raw;
+  }
+}
+
+/* What a person types into a minor-unit box: digits and one point, at most the currency's places after it. */
+function minorTyped(text: string, digits: number): string {
+  const [whole, ...rest] = text.replace(/[^\d.-]/g, '').split('.');
+  return digits && rest.length ? `${whole}.${rest.join('').slice(0, digits)}` : whole;
+}
+
 export function IntakeControl(props: IntakeControlProps) {
   const { field, id, value, disabled, onChange } = props;
   const aria = { 'aria-describedby': props['aria-describedby'], 'aria-invalid': props['aria-invalid'] };
@@ -195,7 +216,9 @@ export function IntakeControl(props: IntakeControlProps) {
   if (field.type === 'money' && field.as !== 'slider') {
     /* The symbol stands inside the box, over its start, hidden from a screen reader so it hears the amount alone; the
        box's words start after it, by the sign's length in the box's own digits (a "CHF" takes three). */
-    const symbol = moneySymbol(props.currency);
+    const currency = (field.currency || props.currency) ?? undefined;
+    const symbol = moneySymbol(currency);
+    const places = field.minor ? currencyDigits(currency || defaultCurrency()) : undefined;
     return (
       <div className="intake-money">
         <span className="intake-money-symbol" aria-hidden="true">
@@ -207,15 +230,19 @@ export function IntakeControl(props: IntakeControlProps) {
           className="field-control"
           style={{ paddingInlineStart: `calc(var(--money-pad) + ${symbol.length}ch + var(--space-2))` }}
           type="text"
-          inputMode={field.step !== undefined && Number.isInteger(field.step) ? 'numeric' : 'decimal'}
+          inputMode={
+            (places === undefined ? field.step !== undefined && Number.isInteger(field.step) : places === 0) ? 'numeric' : 'decimal'
+          }
           enterKeyHint="next"
           autoComplete="off"
           disabled={disabled}
           required={field.required}
-          value={typing ? String(value ?? '') : amountShown(value)}
+          value={typing ? String(value ?? '') : places === undefined ? amountShown(value) : minorShown(value, places)}
           onFocus={() => setTyping(true)}
           onBlur={() => setTyping(false)}
-          onChange={(event) => onChange(event.target.value.replace(/[^\d.-]/g, ''))}
+          onChange={(event) =>
+            onChange(places === undefined ? event.target.value.replace(/[^\d.-]/g, '') : minorTyped(event.target.value, places))
+          }
         />
       </div>
     );

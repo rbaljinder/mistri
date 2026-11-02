@@ -129,7 +129,8 @@ test('one statement on every dialect, the conditions bound in the order the text
     // Stage 2 binds nothing (is not empty), stage 3 binds docs_ok = 1, then the section's store, then the limit and offset.
     assert.deepEqual(compiled.params.slice(0, 2), [1, 'north'], dialect);
     assert.equal(compiled.params.length, 4, dialect);
-    if (dialect === 'postgres') assert.match(compiled.text, /"docs_ok" = \$1[\s\S]*"store" = \$2/);
+    if (dialect === 'postgres')
+      assert.match(compiled.text, /"docs_ok" OPERATOR\(pg_catalog\.=\) \$1[\s\S]*"store" OPERATOR\(pg_catalog\.=\) \$2/);
   }
 });
 

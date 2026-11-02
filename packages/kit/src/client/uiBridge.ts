@@ -18,7 +18,8 @@ type OpenPeek = (tableId: string, key: Record<string, unknown>, label: string, m
 type CommandOutcome =
   | { status: 'applied'; message?: string; output?: unknown }
   | { status: 'refused'; message: string }
-  | { status: 'closed' };
+  | { status: 'closed' }
+  | { status: 'unknown'; message: string; check(options?: { challenge?: string }): Promise<CommandOutcome> };
 
 /** What sdk/commands.tsx hands the SDK's host: a command as a component holds it, and a form over the page. */
 interface CommandHost {
@@ -33,12 +34,12 @@ interface CommandHost {
     run(
       key: Readonly<Record<string, unknown>>,
       input?: Readonly<Record<string, unknown>>,
-      options?: { label?: string; challenge?: string },
+      options?: { label?: string; challenge?: string; attempt?: string },
     ): Promise<CommandOutcome>;
     open(
       key: Readonly<Record<string, unknown>>,
       input?: Readonly<Record<string, unknown>>,
-      options?: { label?: string },
+      options?: { label?: string; attempt?: string },
     ): Promise<CommandOutcome>;
     choices?(field: string): ReadonlyArray<{ value: string | number | boolean; label: string }> | undefined;
   };

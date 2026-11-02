@@ -325,6 +325,21 @@ describe('a loader reads as the reader, never writes, and ends', () => {
     assert.deepEqual(reached, { keys: ['db', 'now', 'params', 'signal', 'viewer'], tables: ['ticket'], sql: false });
   });
 
+  /* A field report: a page handed its program's configuration had to declare a read it never made. */
+  test('a loader may read nothing: its db holds no table, and it still hands the page what it returns', async (t) => {
+    const at = await reader(t);
+    const settings = defineLoader({
+      reads: [],
+      load: ({ db, viewer }) => ({ program: 'Everyday Banking', limit: 2500, tables: Object.keys(db), roles: viewer.roles }),
+    }) as unknown as PageLoader;
+    assert.deepEqual(settings.reads, []);
+    assert.deepEqual(await run(settings, at), { program: 'Everyday Banking', limit: 2500, tables: [], roles: ['clerk'] });
+    // Held to the page as any loader is: one that reads nothing reads nothing past it.
+    const app = parse();
+    assert.doesNotThrow(() => checkPageLoaders(app, defineLoaders({ ...(LOADERS as object), board: settings }) as never, 'desk'));
+    assert.throws(() => defineLoader({ reads: [''] as never, load: () => null }), /reads: \[\] for none/);
+  });
+
   test("it reads only what its reader's catalog holds: a table the reader cannot read refuses the loader before it starts", async (t) => {
     const at = await reader(t);
     let started = false;

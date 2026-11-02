@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { BUILT, CHECKOUT_ONLY, builtTarget, published } from '../scripts/pack-manifest.mjs';
+import { BUILT, BUNDLER_ONLY, CHECKOUT_ONLY, builtTarget, hostExports, published } from '../scripts/pack-manifest.mjs';
 
 const read = (path: string) => JSON.parse(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')) as Record<string, any>;
 const manifests = readdirSync(new URL('../packages/', import.meta.url)).map((dir) => [dir, read(`packages/${dir}/package.json`)] as const);
@@ -76,4 +76,18 @@ test('the engine, the kit and ui name every export: no pattern, in the checkout 
         `${manifest.name} exports a pattern`,
       );
   }
+});
+
+test('an install of the kit names its client modules only where the host list does, and the rest of it whole', () => {
+  const kit = read('packages/kit/package.json');
+  const bundlerOnly = BUNDLER_ONLY['@mistriwork/kit'];
+  const shipped = Object.keys(published(kit).exports).filter(bundlerOnly);
+  assert.deepEqual(shipped, [...hostExports()['@mistriwork/kit']].filter(bundlerOnly));
+  assert.ok(shipped.length > 0, "the host list names some of the kit's client");
+  /* Off the list, none: the client's other modules are bundled into each product's page, never imported by name. */
+  assert.deepEqual(Object.keys(published(kit, {}).exports).filter(bundlerOnly), []);
+  assert.deepEqual(
+    Object.keys(published(kit, {}).exports),
+    Object.keys(kit.exports).filter((subpath) => !bundlerOnly(subpath)),
+  );
 });

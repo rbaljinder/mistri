@@ -121,6 +121,7 @@ rules: [{ must: 'confirm_email = email', message: 'The email addresses do not ma
 ```
 
 - `live` lines are worked out under a number as it is typed. They are never sent. An amount reads grouped (`2,500`) once it is typed. On a slider (`as: 'slider'`) it reads in the currency, with the two ends under the track.
+- `field.money({ minor: true })` is for a ledger that keeps cents. The reader types dollars, at the currency's own places (two in USD, none in JPY, three in KWD; a finer fraction is refused, never rounded), and the handler receives the exact whole number of minor units: `19.99` arrives as `1999`, a number, or a string past 2^53 as an id is. The amount travels as exact decimal text, never a float, and `min` and `max` stay in the typed unit. `currency: 'EUR'` puts one amount in a currency other than the App's `ui.currency`. A slider takes none of this.
 - A yes-or-no question reads as two buttons with `as: 'buttons'` on a `field.bool`; `field.choice(OPTIONS, { as: 'cards' })` is one answer as icon cards, `field.choices` several.
 - A `mask` is the field's pattern (`0` a digit, `a` a letter); its `message` is said when an answer does not fill it.
 - Several choices `as: 'cards'` are one group to the keyboard: Tab reaches it once, the arrows move between cards, and Space turns one on or off. A card draws its option's `icon`.

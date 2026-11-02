@@ -1,0 +1,38 @@
+{
+  "//": [
+    "The kit's client as @mistriwork/kit publishes it: each module built on its own, beside its declarations, so a",
+    "product outside this repository bundles the kit's page from the installed package with the kit's Vite preset",
+    "(@mistriwork/kit/vite) as this repository's products bundle it from source. scripts/build-packages.mjs emits it",
+    "with --noCheck into a stage and copies the client's share, with its stylesheets, faces and page, to",
+    "packages/kit/dist/client: config/tsconfig.client.json is what checks these modules, and checks them once.",
+    "Bundler resolution and ESNext modules, as Vite reads them; comments kept, since they say why."
+  ],
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": true,
+    "checkJs": false,
+    "jsx": "react-jsx",
+    "declaration": true,
+    "noEmit": false,
+    "removeComments": false,
+    "sourceMap": false,
+    "strict": false,
+    "skipLibCheck": true,
+    "noUncheckedSideEffectImports": false,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "incremental": false,
+    "rootDir": "../packages/kit/src",
+    "outDir": "../node_modules/.cache/kit-client-stage"
+  },
+  "include": ["../packages/kit/src/client/**/*.js", "../packages/kit/src/client/**/*.ts", "../packages/kit/src/client/**/*.tsx"],
+  "exclude": [
+    "../packages/kit/src/client/**/*.test.ts",
+    "../packages/kit/src/client/**/*.test.tsx",
+    "../packages/kit/src/client/**/*.stories.tsx",
+    "../packages/kit/src/client/**/*.stories.ts",
+    "../packages/kit/src/client/components/dragTesting.ts"
+  ]
+}

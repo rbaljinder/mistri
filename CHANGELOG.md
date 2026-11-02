@@ -5,6 +5,84 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.12
+
+- **An App's scoped reads on PostgreSQL compare with the database's own operators.** A row policy and the reader's
+  filters compared a column with a bare `=`, which resolves through the search_path: pg_catalog has no
+  `varchar = varchar`, so an operator of that signature a schema author made in `public` decided which rows a policy of
+  `tenant = 'a'` admitted, and with `pg_catalog` after `public` on the path a table the policy did not name read every
+  row. A comparison on a built-in type now names `pg_catalog`'s operator (an IN list as `= ANY` of the list, a pattern
+  as `~~*`), and a table no policy names is `WHERE FALSE`. A column of an enum, citext or another type the database
+  defines keeps its own operator.
+- **A tenant command's delete counts the references its cascade would reach.** Before it deletes a row others
+  reference, a command counts every row that still references it; on PostgreSQL that count joined with `=`, where the
+  foreign key compares by its own operator, so a `char(3)` key missed its `text` reference 'ab ' (and a schema author's
+  `=` decided the count), and the delete cascaded into a row outside the bound. It now compares as the foreign key
+  does, with the operator the parent check already reads.
+- **A table that becomes an inheritance parent while a scoped write runs refuses the write.** The check that keeps
+  writes under a row policy off partition and inheritance tables ran when the transaction began, and `ALTER TABLE …
+  INHERIT` does not wait for a write's lock on the parent, so a child attached mid-write could bring rows the write then
+  reached. The written tables are read again with the COMMIT, at no extra round trip.
+- **An App that cannot fetch its live-sync or source-watcher part says so.** Both are chunks the App's chrome fetches
+  by hand; one that did not arrive (a deploy replaced it, the network dropped) was an unhandled rejection, and open views
+  quietly stopped following other people's changes. It is now logged and offers a Reload, as a part drawn on demand does.
+- **A scoped write that references an inheritance parent is refused.** The parent check read the parent with its
+  children while the foreign key reads the parent's own rows, so a child's visible row passed for a hidden parent row
+  and the write committed pointing at it. A partitioned table is still checked, and a parent that gains a child while
+  the write runs is caught with the COMMIT.
+- **A component's command judges its input as the command's form does.** A `run()` from a component or a public page,
+  with or without a record, treats an input the command's `when` hides as neither required nor sent, even before any
+  form has opened; when the input is incomplete, the form it opens keeps everything the component gave it.
+- **A run whose answer is lost is `unknown`, not `refused`.** `useCommand(…).run` resolves
+  `{ status: 'unknown', message, check() }`, and `check()` asks again under the same key, so the run applies at most
+  once (a public page's `check({ challenge })` takes a fresh human-check token). `run(record, input, { attempt })` takes
+  a caller-held UUID, made once per intent, so a run sent again after a reload is the same run. Only the server's own
+  refusal is `refused`. Public types: `CommandRunOptions`, the `unknown` member of `CommandOutcome`, `MoneyFormat`,
+  `Loaded`.
+- **Money is typed and said exactly.** `field.money({ minor: true, currency? })` types a command's amount at the
+  currency's precision (dollars and cents, yen whole), carries it as exact decimal text and hands the handler exact
+  minor units (a string past 2^53); too many decimals is refused with a `precision` reason. `useFormat().money(value,
+  { currency, minor, whole, compact })` says money as a `money` column does, from a decimal string too, and
+  `useFormat().dateTime(value, { timezone })` says a moment in a named zone. A stacked chart's legend, bar totals and goal
+  share one formatter, so `$14,234.74` no longer compacts beside an exact `$69,800`.
+- **`<Loaded>` draws a read's loading, empty and error states as the platform does** (in `@mistriwork/mistri/ui` and
+  `/page`): a skeleton, "Nothing here yet.", and the error with Try again, which keeps a stale result drawn. A page loader
+  may read no table (`defineLoader({ reads: [] })`).
+- **A list's room no longer draws a crumb bar of one crumb.** A list names itself in its own heading row with its count,
+  New and Export; the trail appears once the walk goes deeper and starts at the first room's name.
+  `ui.shell.breadcrumbs` takes `true`, `false` or `{ top, home }`. An App may say a `shortName` (12 characters or fewer)
+  that a phone's bar and an installed App's icon use; `mistri check` advises one for a name past 16 characters.
+- **A list's tab says its own empty state** (`tabs: [{ segment, empty }]`). The tab a list opens on says the list's
+  `empty`, so an authored empty state is no longer hidden, and a dashboard's `embed` of a list takes `empty` as a rows
+  section does. An empty dashboard section that follows the window offers "Show all time".
+- **Touch targets and the foot of a page.** Under a finger a tree's rows are 44px tall, and a record's value link and
+  the pencil beside a linked field take a 44px hit area cut at their row. A free-form page's verbs at the screen's foot
+  say so with `<Row foot>`, and on a phone a notice stands above them instead of covering them.
+- **An App that stops answering is named.** Its reader is told "{App} is not answering" (and, for an answer that is not
+  JSON, that something between the page and the App may be intercepting it), not a sentence naming tablewalk.
+- **A bumped producing command no longer strands a job or workflow store.** `mistri check` and a start report
+  `store-destination-changed` (check exit 8), `mistri migrate status` shows it, and `mistri migrate up --app` drains and
+  replaces the destination when nothing in it is undelivered. Destinations a bump leaves behind are retired once
+  drained, so upgrades alone never reach the 16-destination cap.
+- **Operator and test tools.** `createAppAccounts(appDir, accounts, { verified: true })` lets the operator assert an
+  address, recorded on the account trail. `shot` and `grade` open a record under any list over its table, and
+  `--as <role>:<email>` signs in as a verified account of that role. `@mistriwork/mistri/testing`'s `base` covers API and
+  sign-in calls, and a command is sent at the version the session is served it. Under `mistri dev` an icon name that
+  names no icon is drawn as a house and said once in the console with the nearest name; `mistri grade` counts it.
+  `shot` and `grade` keep the browser's temporary folders in the run's own and delete them with it: on a machine with
+  Chrome and no Playwright browser, each run left a profile and an artifacts folder in /tmp.
+- **The source server finds a page's libraries before the first request.** Under `mistri dev` (and the repository's own
+  dev server) Vite found the page's libraries one request at a time, so a part loaded on demand re-ran the optimizer
+  under a new hash: a form could hold React twice (`useId` of null), an open dialog was lost to the reload, and a browser
+  test never saw the page go quiet. It now scans the client folders up front.
+- **The database browser is built from the published layers.** `tablewalk` now takes its client from
+  `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui` as they are packed, and CI proves it builds and serves a
+  database from those tarballs alone.
+- **Docs.** Custom components: gate a button on `available(record)` and keep it `busy` while asked, `unknown` with
+  `check()`, `Loaded`, the `useFormat` options, and "Draw it like the platform". Tenant Apps: one table of what a tenant
+  keeps. Commands: rc.11's aggregate changes. Sign-in: who verifies an account under each creation path. Dashboards and
+  themes: stacked charts and palettes.
+
 ## 1.0.0-rc.11
 
 - **A connection written as `${VAR}` finds its command stores.** The connection opened through its expansion, but the

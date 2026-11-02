@@ -177,7 +177,9 @@ export async function openRoom(page: Page, table: string, query = ''): Promise<v
 export async function openRow(page: Page, text: string, strip = false): Promise<void> {
   const title = page.locator('.applist-title');
   await expect(title).toBeVisible({ timeout: ROOM_SETTLED_MS });
-  const label = (await title.innerText()).trim();
+  /* Its words, not their rendering, as openRoom reads them: with no trail over a room the title is the list's own
+     heading, which Workshop's heading role sets in capitals (docs/design.md), and `settled` compares the words. */
+  const label = ((await title.textContent()) ?? '').trim();
   await settled(page, label);
   /* A phone draws the list as cards of the same records, each opened by its name. */
   const row = page.locator('tbody tr', { hasText: text }).first();

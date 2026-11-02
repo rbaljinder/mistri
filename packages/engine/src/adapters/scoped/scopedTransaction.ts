@@ -36,6 +36,13 @@ export interface ScopeCatalog {
    * reference to a partitioned table from an ordinary one is still checked, through the partitioned table.
    */
   hierarchy?: ReadonlySet<string>;
+  /**
+   * PostgreSQL: ordinary tables with inheritance children. A reference to one is refused: its foreign key checks the
+   * parent's own rows (`ONLY`), while a parent check reads the parent with its children, so a child's visible row
+   * could pass for a hidden one of the parent's under the same key. A partitioned table is not here: its key and its
+   * check both read every partition.
+   */
+  inheritanceParents?: ReadonlySet<string>;
 }
 
 /** One foreign key's comparison, column by column in its order (ScopeCatalog.references); or the reason it has none. */
@@ -90,6 +97,12 @@ export const loadTriggerEffects = () => import('./triggerEffects.js');
 interface ScopeRowLocks {
   target(table: TableMeta, filter: Filter): Promise<void>;
   parent(table: TableMeta, filter: Filter): Promise<void>;
+  /**
+   * Told of each table a write of this transaction targets, once it is judged a target, before the write is sent:
+   * where a table can join a hierarchy under the lock the write's pin holds (PostgreSQL, ALTER TABLE … INHERIT), what
+   * it wrote is read again before COMMIT (postgresScopeCatalog.ts hierarchyRecheck).
+   */
+  written?(table: TableMeta): void;
   /**
    * Run `ride` the moment the update of `table` is sent, so the read that
    * proves the row still in scope leaves behind it in the same round trip
@@ -151,19 +164,54 @@ export interface ScopeBound {
  * does, and missed such a reference, which the delete's cascade then reached.
  * Here each parent column is the left side of a join, where both engines take
  * its affinity and collation as the foreign key does; where two collations
- * conflict, PostgreSQL refuses the count, and the delete with it.
+ * conflict, PostgreSQL refuses the count, and the delete with it. On
+ * PostgreSQL the join compares by the constraint's own operator
+ * (`conpfeqop`), each side cast as ri_triggers.c casts it: the comparison the
+ * catalog read for the parent check (ScopeCatalog.references,
+ * Condition.equality), so a `char(3)` key reaches the `text` reference 'ab '
+ * the cascade reaches, and no `=` on the search_path decides what is counted.
+ * A key whose comparison the catalog refused refuses the count.
  */
-export function referencesStatement(schema: DatabaseSchema, fk: ForeignKey, key: Filter, style: SqlStyle): SqlFragment {
-  const relation = (id: string) => {
+export function referencesStatement(
+  catalog: Pick<ScopeCatalog, 'schema' | 'references'>,
+  fk: ForeignKey,
+  key: Filter,
+  style: SqlStyle,
+): SqlFragment {
+  const { schema } = catalog;
+  const tableOf = (id: string) => {
     const table = schema.tables.find((table) => table.id === id);
     if (!table) throw new Refusal('This operation is not available in the current row scope.');
-    return `${style.quote(table.schema)}.${style.quote(table.name)}`;
+    return table;
   };
-  const on = fk.to.columns.map((column, index) => `p.${style.quote(column)} = c.${style.quote(fk.from.columns[index])}`).join(' AND ');
-  const where = buildWhere(key, style, 1, (name) => `p.${style.quote(name)}`);
+  const relation = (table: TableMeta) => `${style.quote(table.schema)}.${style.quote(table.name)}`;
+  const compared = catalog.references?.get(referenceKey(fk));
+  if (catalog.references && !compared) refuse(`"${fk.from.table}" has a foreign key whose comparison was not read with the catalog.`);
+  if (compared && 'refused' in compared) refuse(compared.refused);
+  const columns = compared && 'columns' in compared ? compared.columns : undefined;
+  const parent = tableOf(fk.to.table);
+  const on = buildWhere(
+    {
+      groups: [
+        fk.to.columns.map((column, index) => {
+          const equality = columns?.[index]?.equality;
+          return { column, op: '=' as const, other: fk.from.columns[index], ...(equality ? { equality } : {}) };
+        }),
+      ],
+    },
+    style,
+    1,
+    (name) => `p.${style.quote(name)}`,
+    (name) => `c.${style.quote(name)}`,
+    undefined,
+    undefined,
+    true,
+  );
+  const typeOf = (name: string) => parent.columns.find((column) => column.name === name)?.type;
+  const where = buildWhere(key, style, 1, (name) => `p.${style.quote(name)}`, undefined, undefined, undefined, false, typeOf);
   if (!where.text) throw new Refusal('This operation is not available in the current row scope.');
   return {
-    text: `SELECT COUNT(*) AS n FROM ${relation(fk.from.table)} AS c JOIN ${relation(fk.to.table)} AS p ON ${on}${where.text}`,
+    text: `SELECT COUNT(*) AS n FROM ${relation(tableOf(fk.from.table))} AS c JOIN ${relation(parent)} AS p ON ${on.text.replace(/^ WHERE /, '')}${where.text}`,
     params: where.params,
   };
 }
@@ -334,6 +382,7 @@ export function createScopedTransaction(
       return refuse(`"${id}" has no primary key, so a scoped write cannot prove which row it changed.`);
     const unkeyed = catalog.unkeyed?.get(id);
     if (unkeyed) return refuse(`${unkeyed}.`);
+    locks?.written?.(table);
     return table;
   };
   const keyFilter = (table: TableMeta, key: Record<string, unknown>): Filter => {
@@ -448,6 +497,12 @@ export function createScopedTransaction(
         return compares?.equality ? asBound(value) : value;
       });
       if (values.some((value) => value === null)) continue;
+      if (catalog.inheritanceParents?.has(fk.to.table)) {
+        checks.push({
+          refused: `"${table.id}" references "${fk.to.table}", an inheritance parent: its foreign key reads the parent's own rows and a parent check its children's too, which writes under a row policy do not support yet.`,
+        });
+        break;
+      }
       if ('refused' in compared) {
         checks.push({ refused: compared.refused });
         break;

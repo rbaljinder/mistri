@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ALLOW, BINS, check, checkEntries, exportTarget } from '../scripts/check-boundary.mjs';
+import { ALLOW, check, checkEntries, exportTarget } from '../scripts/check-boundary.mjs';
 import { ENTRIES } from '../scripts/boundary/entries.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../scripts/check-boundary.mjs', import.meta.url));
@@ -37,10 +37,7 @@ const PACKAGES = {
 const TABLE = { packages: PACKAGES, entries: {} as Record<string, object> };
 
 /** A workspace with one module per layer, every import the right way, and an empty allowlist. */
-function tree(
-  files: Record<string, string> = {},
-  { bins = {} as object, allow = {} as Record<string, string> | null, table = TABLE as object } = {},
-) {
+function tree(files: Record<string, string> = {}, { allow = {} as Record<string, string> | null, table = TABLE as object } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'tablewalk-boundary-test-'));
   const all: Record<string, string> = {
     'packages/engine/package.json': manifest('@fixture/engine'),
@@ -56,7 +53,6 @@ function tree(
     'packages/mistri/src/server/app/app.ts': "import { rule } from '@fixture/engine/shared/rule.js';\nexport const app = rule;\n",
     'packages/mistri/src/server/app/app.test.ts': "import '../../../../tablewalk/src/client/workbench.js';\n",
     [ENTRIES]: JSON.stringify(table),
-    [BINS]: JSON.stringify({ bin: {}, ...bins }),
     ...(allow ? { [ALLOW]: JSON.stringify(allow) } : {}),
     ...files,
   };
@@ -163,41 +159,43 @@ test('a published type file is a module of the package it sits in', () => {
   );
 });
 
-test("the declared bin may load each product's main with import(), and nothing else across the line", () => {
-  const index = 'packages/tablewalk/src/server/index.ts';
-  const mains = ['packages/tablewalk/src/server/cli/browserMain.ts', 'packages/mistri/src/server/cli/mistriMain.ts'];
-  const bins = { bin: { [index]: { mains, reason: 'one bin, both products' } } };
-  const lazy =
-    "const mains = { b: () => import('./cli/browserMain.js'), m: () => import('@mistriwork/mistri/server/cli/mistriMain.js') };\n";
+test("no module names another product's main, not even with import(): each product's build answers its own", () => {
+  const start = 'packages/kit/src/client/shellStart.js';
   const files = {
-    'packages/tablewalk/src/server/cli/browserMain.ts': 'export const main = 1;\n',
-    'packages/mistri/src/server/cli/mistriMain.ts': 'export const main = 2;\n',
-    [index]: lazy,
+    'packages/tablewalk/src/client/workbenchShell.js': 'export const start = 1;\n',
+    [start]: "const main = () => import('../../../tablewalk/src/client/workbenchShell.js');\n",
   };
-  assert.deepEqual(run(files, { bins }), []);
-  /* Undeclared, the same import is a crossing like any other. */
-  assert.match(run(files)[0], /index\.ts -> packages\/mistri\/src\/server\/cli\/mistriMain\.ts: browser -> mistri goes the wrong way/);
-  /* A static import would make the browser's package fail to start without the App framework. */
-  assert.match(
-    run(
-      { ...files, [index]: "import '@mistriwork/mistri/server/cli/mistriMain.js';\nconst b = () => import('./cli/browserMain.js');\n" },
-      { bins },
-    ).join('\n'),
-    /bin packages\/tablewalk\/src\/server\/index\.ts imports packages\/mistri\/src\/server\/cli\/mistriMain\.ts statically/,
-  );
-  /* The exception is the declared mains only. */
-  assert.match(
-    run({ ...files, [index]: lazy + "const app = () => import('@mistriwork/mistri/server/app/app.js');\n" }, { bins })[0],
-    /index\.ts -> packages\/mistri\/src\/server\/app\/app\.ts: browser -> mistri goes the wrong way/,
-  );
-  assert.match(
-    run({ ...files, [index]: "const b = () => import('./cli/browserMain.js');\n" }, { bins }).join('\n'),
-    /no longer imports packages\/mistri\/src\/server\/cli\/mistriMain\.ts/,
-  );
-  assert.match(
-    run(files, { bins: { bin: { [index]: { mains } } } }).join('\n'),
-    /bin packages\/tablewalk\/src\/server\/index\.ts needs the reason/,
-  );
+  assert.match(run(files)[0], /shellStart\.js -> packages\/tablewalk\/src\/client\/workbenchShell\.js: kit -> browser goes the wrong way/);
+  /* A name the product's build answers (the kit's Vite preset, `shellMain`) is no module, and no crossing. */
+  assert.deepEqual(run({ ...files, [start]: "const main = () => import('virtual:mistri/shell-main');\n" }), []);
+});
+
+test('a host imports only the names on the host list, each published; a listed name nothing imports is stale', () => {
+  const host = (exports: Record<string, string[]>) => ({
+    table: { ...TABLE, host: { importers: { tablewalk: ['packages/tablewalk/src', 'scripts/host'] }, exports } },
+  });
+  const listed = host({ '@fixture/kit': ['./client/grid.js'] });
+  assert.deepEqual(run({}, listed), []);
+  /* A module the kit exports to this checkout is still not the host's to import until it is reviewed onto the list,
+     from the product's sources or from its build's config (an importer named by its folder). */
+  const kit = manifest('@fixture/kit', byPath('client/hidden.js', 'client/hidden.ts'));
+  const hidden = { 'packages/kit/package.json': kit, 'packages/kit/src/client/hidden.ts': 'export const hidden = 1;\n' };
+  for (const [file, line] of [
+    [
+      'packages/tablewalk/src/client/workbench.js',
+      "import { grid } from '@fixture/kit/client/grid.js';\nimport '@fixture/kit/client/hidden.js';\n",
+    ],
+    ['scripts/host/vite.config.ts', "import '@fixture/kit/client/hidden.js';\n"],
+  ])
+    assert.deepEqual(run({ ...hidden, [file]: line }, listed), [
+      `${file} imports @fixture/kit/client/hidden.js, which is not on the host list: tablewalk builds from the published ` +
+        'packages, so each name it imports of @fixture/kit is reviewed. Import a name on it, or add this one to ' +
+        `${ENTRIES} host.exports.`,
+    ]);
+  assert.deepEqual(run(hidden, host({ '@fixture/kit': ['./client/grid.js', './client/hidden.js', './client/gone.js'] })), [
+    `${ENTRIES} host.exports names @fixture/kit/client/hidden.js, which no importer imports any more: take it off, in a release that says so.`,
+    `${ENTRIES} host.exports names @fixture/kit/client/gone.js, which @fixture/kit as published does not export.`,
+  ]);
 });
 
 test('a type-only import counts, and is reported as type-only; so is a JSDoc import in a .js module', () => {

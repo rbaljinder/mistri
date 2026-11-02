@@ -321,7 +321,7 @@ function startingValues(
     try {
       // Alone, so a bound beside a sibling (`below`) is not judged against a sibling that is not there.
       const { below: _below, above: _above, ...alone } = field as typeof field & { below?: string; above?: string };
-      Object.assign(started, readCommandInput([alone as typeof field], { [field.name]: value }, { partial: true }));
+      Object.assign(started, readCommandInput([alone as typeof field], { [field.name]: value }, { partial: true, wire: true }));
     } catch {
       /* left empty */
     }
@@ -333,7 +333,7 @@ function startingValues(
 function servedInitial(command: AnyBusinessCommand, given: Record<string, unknown>): Record<string, unknown> {
   try {
     const detached = JSON.parse(canonicalCommandJson(given)) as unknown;
-    return JSON.parse(canonicalCommandJson(readCommandInput(command.fields, detached, { partial: true })));
+    return JSON.parse(canonicalCommandJson(readCommandInput(command.fields, detached, { partial: true, wire: true })));
   } catch {
     throw new BusinessCommandExecutionError('invalid_result');
   }

@@ -1,18 +1,18 @@
 /** The real renderer in a separate viewport; no app boot, routes or mutation controls. */
-import { ownedBy } from '../requestIdentity.js';
+import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { api, findTable, keyOf, labelPath, primaryKey, rowLabel, state } from '../core.js';
-import { pathEqualityFilter } from '../resourceRequests.js';
+import { api, findTable, keyOf, labelPath, primaryKey, rowLabel, state } from '@mistriwork/kit/client/core.js';
+import { pathEqualityFilter } from '@mistriwork/kit/client/resourceRequests.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import type { PageDef } from '@mistriwork/engine/shared/page.js';
-import { PageView } from './Page.js';
-import type { SectionPlan } from './pageModel.js';
+import { PageView } from '@mistriwork/kit/client/components/Page.js';
+import type { SectionPlan } from '@mistriwork/kit/client/components/pageModel.js';
 import { Modal } from '@mistriwork/ui/Modal.js';
-import { useWalk } from './walk.js';
+import { useWalk } from '@mistriwork/kit/client/components/walk.js';
 import { say } from '../copy/workbench/components/PagePreview.js';
-import { shellBody, shellRoot } from '../shellHost.js';
+import { shellBody, shellRoot } from '@mistriwork/kit/client/shellHost.js';
 
 export interface PagePreviewContext {
   connection: string;

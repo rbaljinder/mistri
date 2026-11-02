@@ -29,7 +29,7 @@ vi.mock('../../../../kit/src/client/dashboard.js', () => ({ dashboardEntry: () =
 vi.mock('../../../../kit/src/client/url.js', () => ({ syncHash: () => {} }));
 vi.mock('./LandingData.js', () => ({ landingSection: () => null, landingImage: () => undefined }));
 vi.mock('../../../../kit/src/client/components/viewLink.js', () => ({ viewLink: () => undefined }));
-vi.mock('../../../../kit/src/client/components/Crumbs.js', () => ({ Crumbs: () => null }));
+vi.mock('../../../../kit/src/client/components/Crumbs.js', () => ({ Crumbs: () => null, crumbBarShown: () => false }));
 vi.mock('../../../../kit/src/client/components/Rooms.js', () => ({
   AppListRoom: () => <p>a list</p>,
   DashboardRoom: () => null,

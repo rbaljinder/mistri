@@ -25,6 +25,7 @@ const REASON_SENTENCES: Readonly<Record<CommandInputReason, string>> = Object.fr
   format: 'This is not in the form it takes.',
   pattern: 'This is not in the form it takes.',
   integer: 'This must be a whole number.',
+  precision: 'This has more decimals than the currency has.',
   below_min: 'This is below the least it takes.',
   above_max: 'This is above the most it takes.',
   not_below: 'This must be below its pair.',

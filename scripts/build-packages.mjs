@@ -8,7 +8,10 @@
  * server modules whole, since tsc does not emit a file it reached through node_modules (a workspace link included) and
  * mistri's declarations import the engine by its package name. tsc writes the program under a stage, laid out as
  * packages/ is, and each package's share (`<stage>/<dir>/src/…`)
- * moves to `packages/<dir>/dist/…`. Then the files tsc does not make: ui's stylesheets, the
+ * moves to `packages/<dir>/dist/…`. The kit's client is a third program (config/tsconfig.kit-client.json): its modules
+ * one by one, with their declarations, and beside them the stylesheets, fonts and index.html they name, for a product
+ * outside this repository to bundle with `@mistriwork/kit/vite` (an install names those on the host list,
+ * scripts/pack-manifest.mjs). Then the files tsc does not make: ui's stylesheets, the
  * docs and the Console rooms mistri ships, the kit's page as each product serves it (`vite build -c vite.<product>.config.ts`, into that product's
  * dist/client), and
  * mistri's bundles (@mistriwork/mistri/ui, @mistriwork/mistri/react, the observability page, the server renderer).
@@ -31,11 +34,13 @@ import { PACKAGES } from './workspace.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const STAGE = join(ROOT, 'node_modules/.cache/build-stage');
+const KIT_STAGE = join(ROOT, 'node_modules/.cache/kit-client-stage');
 const bin = (name) => join(ROOT, 'node_modules/.bin', name);
 const run = (command, args, options = {}) => execFileSync(command, args, { cwd: ROOT, stdio: 'inherit', ...options });
 const node = (...args) => run(process.execPath, args);
 
 rmSync(STAGE, { recursive: true, force: true });
+rmSync(KIT_STAGE, { recursive: true, force: true });
 for (const { dir } of PACKAGES) rmSync(join(ROOT, dir, 'dist'), { recursive: true, force: true });
 
 /* The first program is checked: a build from a tag or a tarball has not run `npm test` first, and an emit that
@@ -50,6 +55,17 @@ for (const { dir } of PACKAGES) {
   for (const name of readdirSync(emitted)) cpSync(join(emitted, name), join(ROOT, dir, 'dist', name), { recursive: true });
 }
 rmSync(STAGE, { recursive: true, force: true });
+/* The kit's client, emitted unchecked: the build program above does not hold it, and `npm test` checks it
+   (test/check-client-types.mjs, tsconfig.json). Only the client moves: the stage's shared modules are the build's. */
+run(bin('tsc'), ['-p', 'config/tsconfig.kit-client.json', '--noCheck']);
+cpSync(join(KIT_STAGE, 'client'), join(ROOT, 'packages/kit/dist/client'), { recursive: true });
+rmSync(KIT_STAGE, { recursive: true, force: true });
+/* What the client's modules name that tsc does not write: stylesheets, fonts and their licenses, the page, and the
+   declarations written by hand (a stylesheet import, the product's main). */
+cpSync(join(ROOT, 'packages/kit/src/client'), join(ROOT, 'packages/kit/dist/client'), {
+  recursive: true,
+  filter: (source) => !/\.(?:[jt]sx?)$/.test(source) || source.endsWith('.d.ts'),
+});
 /* @mistriwork/ui's stylesheets are its own files, which tsc does not carry: copied as they are. */
 for (const name of readdirSync(join(ROOT, 'packages/ui/src')))
   if (name.endsWith('.css')) cpSync(join(ROOT, 'packages/ui/src', name), join(ROOT, 'packages/ui/dist', name));
@@ -70,6 +86,13 @@ const expected = [
   'packages/ui/dist/index.js',
   'packages/ui/dist/index.d.ts',
   'packages/ui/dist/style.css',
+  'packages/kit/dist/client/app.js',
+  'packages/kit/dist/client/app.d.ts',
+  'packages/kit/dist/client/boot.js',
+  'packages/kit/dist/client/index.html',
+  'packages/kit/dist/client/style.css',
+  'packages/kit/dist/client/shellMain.d.ts',
+  'packages/kit/dist/vite.js',
   'packages/cloudflare/dist/index.js',
   'packages/cloudflare/dist/index.d.ts',
   'packages/tablewalk/dist/client/index.workbench.html',

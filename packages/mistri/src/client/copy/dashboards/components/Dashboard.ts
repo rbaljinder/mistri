@@ -33,6 +33,8 @@ export const say = defineMessages({
   moreCount: '+ {figure} more',
   timeWindow: 'Time window',
   allTimeWindow: 'All time',
+  nothingInThisTimeWindow: 'Nothing in this time window.',
+  showAllTime: 'Show all time',
   defaultWindow: 'Default',
   windowRange: '{from} – {to}',
   pickWindow: 'Time window: {window}',

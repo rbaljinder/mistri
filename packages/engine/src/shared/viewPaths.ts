@@ -272,6 +272,14 @@ export interface ResolvedPath {
   jsonKey?: { column: string; key: string };
 }
 
+/** The type of the column a path lands on, where it is that column itself: undefined for a rollup, a computed column,
+ * a record's tags or a JSON key, which are expressions, and for a path that does not resolve. */
+export function plainType(schema: DatabaseSchema, base: string, path: string): string | undefined {
+  const { resolved } = tryResolvePath(schema, base, path);
+  if (!resolved || resolved.rollup || resolved.computed || resolved.tags || resolved.jsonKey) return undefined;
+  return resolved.column.type;
+}
+
 /**
  * Resolve a path against the schema, or explain precisely why it does not.
  *

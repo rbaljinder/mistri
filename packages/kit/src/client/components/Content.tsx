@@ -27,7 +27,7 @@ import { appListFor, type ListSpec } from './appListModel.js';
 import { ASSISTANT_PAGE, INBOX_PAGE, dashPageId, dashViewKey, formViewKey, homeRoom } from './appRooms.js';
 import { onDemand } from './onDemand.js';
 import type { BreakdownEntry } from './Breakdown.js';
-import { Crumbs } from './Crumbs.js';
+import { crumbBarShown, Crumbs } from './Crumbs.js';
 import type { DashboardDef } from './dashboardModel.js';
 import { LoadErrorNote, NothingGranted, WorkbenchLanding } from './Landing.js';
 import type { PageEntry } from './pageModel.js';
@@ -113,7 +113,7 @@ export function Content({ onHome }: { onHome: () => void }) {
 }
 
 function ContentBody({ onHome }: { onHome: () => void }) {
-  useWalk();
+  const walked = useWalk();
   const paint = paintVersion();
   const entry = currentEntry() as ((TableEntry | BreakdownEntry | PageEntry | RowEntry) & { kind: string }) | undefined;
   /* Every paint is a state change worth linking to, so the address bar is
@@ -169,7 +169,9 @@ function ContentBody({ onHome }: { onHome: () => void }) {
   const room = shell().inApp() ? `app:${roomVersion()}` : `room:${roomVersion()}`;
   return (
     <>
-      {app?.ui.shell?.breadcrumbs !== false && (
+      {/* Decided here, from the walk, in the render that draws the room: a list painted without the bar has its
+          heading row from the first frame (crumbSlot.ts), and one painted with it never draws that row at all. */}
+      {crumbBarShown(walked) && (
         <div className="crumbs-host">
           <Crumbs onHome={onHome} />
         </div>

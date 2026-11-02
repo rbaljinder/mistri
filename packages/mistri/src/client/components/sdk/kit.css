@@ -65,6 +65,10 @@
     align-items: flex-end;
   }
   /* Segmented: a row of words in one hairline, the chosen one filled as a tab is; a count is a pill beside its word. */
+  /* A read on its way (Loaded): one line of body text unless the caller holds the drawing's own size. */
+  .kit-loading {
+    block-size: calc(var(--text-base) * 1.45);
+  }
   .kit-segmented {
     display: inline-flex;
     flex-wrap: nowrap;
