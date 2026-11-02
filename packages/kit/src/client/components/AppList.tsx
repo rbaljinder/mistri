@@ -22,7 +22,7 @@ import { filterLabel } from '@mistriwork/engine/shared/listFilters.js';
 import { BoardNewForm } from './boardNew.js';
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { createPortal } from 'react-dom';
-import { listControlsRef, useCrumbSlots } from './crumbSlot.js';
+import { listControlsRef, listHeadRef, useCrumbSlots } from './crumbSlot.js';
 import { FavoriteStar } from './FavoriteStar.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -229,7 +229,12 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   const filter = useRef<HTMLInputElement>(null);
   const head = useRef<HTMLDivElement>(null);
   const crumbs = useCrumbSlots();
-  const inCrumbs = !embedded && !inDashboard && Boolean(crumbs.note && crumbs.tools);
+  const ownList = !embedded && !inDashboard;
+  /* The page's own list names itself in the crumb bar where one is drawn over it; where none is (a room reached
+     from the menu, `shell.breadcrumbs`), in its own heading row, whose end holds the same verbs. Either way its
+     New and Export stand together at the end of the row with its title, and its range is said in the pager. */
+  const inBar = ownList && Boolean(crumbs.note && crumbs.tools);
+  const inCrumbs = inBar || (ownList && Boolean(crumbs.head));
   const [gridResult, setGridResult] = useState<{
     query: string;
     connection: string | null | undefined;
@@ -688,7 +693,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
 
   /* The page's own list names itself in the crumb bar — title, count, star —
      with New at the bar's end, instead of a heading band of its own. An
-     embedded list, or an App without breadcrumbs, keeps the heading row. */
+     embedded list, or a list with no bar over it, keeps the heading row. */
   /* The rows, kept as one element for as long as what they are drawn from is
      unchanged. The search box is this room's state, so each character typed
      redrew the room and, with it, the whole grid under the box; now a
@@ -701,7 +706,11 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   onGridNow.current = onGrid;
   const keptOnGrid = useCallback((result: ResourceHttpSuccess<'/api/run'>) => onGridNow.current(result), []);
   const unrefined = !splitQuery(`rows ${refinement}`).filter.trim();
-  const listEmpty = Boolean(!embedded && spec.empty && unrefined);
+  /* The words an empty tab says when nothing narrows it past its own condition: the tab's own, else on the first
+     tab (where the list opens) the list's, so a list whose first tab is "Open" no longer said its authored empty
+     only after the reader took the tab away. Other tabs fall back to "No {things} in {tab}". */
+  const tabOwnEmpty = filterTab >= 0 ? tabs[filterTab].empty : undefined;
+  const authoredEmpty = embedded || narrowedPast ? undefined : (tabOwnEmpty ?? (unrefined || filterTab === 0 ? spec.empty : undefined));
   /* A list that says nothing of its own empty state says what belongs in it, by its noun, and offers New where the
      room does: "No work orders yet. Use New to add the first work order." A narrowed list keeps its own words. */
   const noun = resourceOf(shell().app(), entry.table)?.noun;
@@ -773,8 +782,8 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
               empty={
                 embedded ? undefined : narrowedPast ? (
                   noMatches
-                ) : listEmpty && spec.empty ? (
-                  <ListEmpty spec={spec.empty} />
+                ) : authoredEmpty ? (
+                  <ListEmpty spec={authoredEmpty} />
                 ) : (
                   (nothingYet ?? tabEmpty)
                 )
@@ -804,7 +813,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
       keptTotals,
       inCrumbs,
       keptOnGrid,
-      listEmpty,
+      authoredEmpty,
       narrowedPast,
       noMatches,
       filterTab,
@@ -841,13 +850,13 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
           onBoxes={onDefinedBoxes}
         />
       ))}
-      {inCrumbs && createPortal(title, crumbs.note!)}
-      {inCrumbs && !spec.quickAdd && newButton && createPortal(newButton, crumbs.tools!)}
-      <div className={`applist-head${inCrumbs ? ' in-crumbs' : ''}`}>
-        {!inCrumbs && !inDashboard && (
+      {inBar && createPortal(title, crumbs.note!)}
+      {inCrumbs && !spec.quickAdd && newButton && createPortal(newButton, (crumbs.tools ?? crumbs.head)!)}
+      <div className={`applist-head${inBar ? ' in-crumbs' : ''}`}>
+        {!inBar && !inDashboard && (
           <div className="applist-head-row" ref={head}>
             {title}
-            {!spec.quickAdd && newButton}
+            {ownList ? <div className="applist-head-tools" ref={listHeadRef} /> : !spec.quickAdd && newButton}
           </div>
         )}
         {/* In the layout under a heading, chips or none: a row that appears with the

@@ -18,7 +18,7 @@ import { findTable, labelPath, primaryKey, type DatabaseSchema, type TableMeta }
 import { referenceProjection } from './referenceModel.js';
 import { tableAtPrefix } from './viewPaths.js';
 import type { ServedResource } from './servedApp.js';
-import type { AppListPresentation } from './listPresentations.js';
+import type { AppListEmpty, AppListPresentation } from './listPresentations.js';
 import { leadTonePath, subtitlePath } from './subtitlePath.js';
 import { currencyPath } from './money.js';
 
@@ -34,6 +34,8 @@ export interface ListTab {
   query?: string;
   /** Its word in an address where the label is said in another language (addressParams.ts `tabKey`). */
   slug?: string;
+  /** What it says while it holds no row and nothing narrows it past its own condition. */
+  empty?: AppListEmpty;
 }
 
 /** What of a list view its question is made from. */

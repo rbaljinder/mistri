@@ -127,17 +127,27 @@ function noteSearchFallback(res) {
  * What a reader is told when the server does not answer at all. Offline
  * comes first, because it is the one cause the reader can see and fix; a
  * server on this machine is one they started, so restarting it is theirs to
- * do; anyone else — a hosted App, a phone — can only try again.
+ * do; anyone else — a hosted App, a phone — can only try again. An App's
+ * reader is told the App's name: "tablewalk" is the database browser's, and
+ * meant nothing to someone working in Compass.
  * @returns {string}
  */
-function unansweredSentence() {
+export function unansweredSentence() {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return say('problem.offline');
   const host = typeof location === 'undefined' ? '' : location.hostname;
   if (host === 'localhost' || host === '[::1]' || host.startsWith('127.')) {
-    return say('tablewalkIsNotAnswering');
+    return say('isNotAnswering', { app: appNamed() });
   }
   return say('theServerIsNotAnswering');
 }
+
+/** What an answer that is not JSON says, named by the App a reader is in. */
+export function uninterpretableSentence(status) {
+  return say('theServerAnsweredWithSomething', { status }) + say('somethingBetweenThisPage', { app: appNamed() });
+}
+
+/** The App a reader is in, by its name; in the Workbench, tablewalk. */
+const appNamed = () => (shell().inApp() && shell().app()?.name) || 'tablewalk';
 
 /* The GET replies the server tags for revalidation (reply.ts sendRevalidated). */
 const REVALIDATED = new Set(['/api/schema', '/api/app', '/api/pages', '/api/runtime']);
@@ -306,7 +316,7 @@ async function request(path, body, headers) {
     /* An answer that is not JSON is a proxy, a login page, or a crash — none
        of which the caller can do anything with, and all of which read better
        as what they are than as "Unexpected token < in JSON". */
-    throw new Error(say('theServerAnsweredWithSomething', { status: res.status }) + say('somethingBetweenThisPage'));
+    throw new Error(uninterpretableSentence(res.status));
   }
 
   if (!bootstrap) assertSessionCurrent(identity);

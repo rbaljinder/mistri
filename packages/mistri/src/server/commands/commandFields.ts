@@ -76,7 +76,7 @@ export const field: {
   url<const O extends FormatOptions = {}>(options?: O): CommandTextField & { type: 'text' } & Optional<O>;
   /** A number: `min`, `max`, `integer`, a `step` it is rounded to, `below`/`above` a sibling. */
   number<const O extends Omit<CommandNumberField, 'type'> = {}>(options?: O): CommandNumberField & Optional<O>;
-  /** An amount of money in the App's currency, from 0 unless `min` says less, in cents unless `step` says otherwise; `as: 'slider'` between `min` and `max`. */
+  /** An amount of money in the App's currency (or the field's own `currency`), from 0 unless `min` says less, in cents unless `step` says otherwise; `minor: true` hands the command the exact minor units; `as: 'slider'` between `min` and `max`. */
   money<const O extends Omit<CommandMoneyField, 'type'> = {}>(options?: O): CommandMoneyField & Optional<O>;
   /** A month and its year, `YYYY-MM` (typed `MM/YYYY` in en-US): `min`, `max`, `below`/`above` a sibling month. */
   month<const O extends Omit<CommandMonthField, 'type'> = {}>(options?: O): CommandMonthField & Optional<O>;

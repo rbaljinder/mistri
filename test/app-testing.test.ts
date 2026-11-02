@@ -65,6 +65,73 @@ test('independent session clients and authorization matrix detect an intentional
   await assert.rejects(alice.request('https://example.com/'), /another origin/);
 });
 
+/* A field report: under `--base-path` the client sent its sign-in and API calls to the root, and a command a component
+   runs by name at v2 was sent as v1, since only record actions were read for its version. */
+test('a client under a base path signs in and calls the API there, and sends a command at the version it is served', async (t) => {
+  const asked: Array<{ path: string; version?: unknown }> = [];
+  const VERSIONS: Record<string, number> = { schedule: 2, apply: 3, transfer: 1 };
+  const server = createServer(async (request, response) => {
+    const path = request.url ?? '';
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    const json = body ? (JSON.parse(body) as { command?: string; commandVersion?: unknown }) : {};
+    asked.push({ path: path.split('?')[0], ...(json.command ? { version: json.commandVersion } : {}) });
+    const reply = (status: number, value: unknown, headers: Record<string, string> = {}) =>
+      response.writeHead(status, { 'content-type': 'application/json', ...headers }).end(JSON.stringify(value));
+    if (!path.startsWith('/tools/')) return reply(404, { error: 'Nothing is served outside /tools.' });
+    if (path === '/tools/api/auth/sign-in/email') return reply(200, {}, { 'set-cookie': 'session=ana; Path=/tools' });
+    if (!request.headers.cookie?.includes('session=ana')) return reply(401, { error: 'Sign in.' });
+    if (path.startsWith('/tools/api/app?'))
+      return reply(200, {
+        app: {
+          id: 'desk',
+          nav: [],
+          views: { apply: { kind: 'form', label: 'Apply', command: { id: 'apply', version: 3, input: [] } } },
+          formCommands: { schedule: { id: 'schedule', version: 2, input: [] } },
+        },
+      });
+    if (path.startsWith('/tools/api/schema?')) return reply(200, { tables: [] });
+    if (path.startsWith('/tools/api/commands/')) {
+      if (VERSIONS[json.command ?? ''] !== json.commandVersion)
+        return reply(410, { code: 'command_version_mismatch', error: 'This command has changed.' });
+      return reply(200, path.startsWith('/tools/api/commands/prepare') ? { expectedVersion: 0 } : { ok: true });
+    }
+    return reply(404, { error: 'Not here.' });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const ana = createTestClient(url, { app: 'desk', base: '/tools/' });
+  await ana.signIn('ana@example.com', 'secret');
+  assert.equal((await ana.command('schedule', {}, {})).ok, true);
+  assert.equal((await ana.prepare('apply', {})).ok, true);
+  // A path already under the mount is not mounted twice.
+  assert.equal(
+    (await ana.request('/tools/api/commands/prepare', { method: 'POST', json: { command: 'transfer', commandVersion: 1 } })).status,
+    200,
+  );
+  assert.deepEqual(
+    asked.filter((call) => call.version !== undefined).map((call) => `${call.path} v${call.version}`),
+    [
+      '/tools/api/commands/prepare v2',
+      '/tools/api/commands/execute v2',
+      '/tools/api/commands/prepare v3',
+      '/tools/api/commands/prepare v1',
+    ],
+  );
+  // One it is not served is asked under the first version, and a wrong guess says so rather than passing for a refusal.
+  VERSIONS.ghost = 4;
+  const ghost = await ana.command('ghost', {}, {});
+  assert.equal(ghost.ok, false);
+  assert.match(ghost.ok ? '' : ghost.message, /not served to this session.*\{ version \}/);
+  assert.equal((await ana.command('ghost', {}, {}, { version: 4 })).ok, true);
+  assert.ok(
+    asked.every((call) => call.path.startsWith('/tools/')),
+    JSON.stringify(asked),
+  );
+});
+
 test('fixture clock resets deterministically', () => {
   const clock = createTestClock(1000);
   assert.equal(clock.advance(250), 1250);

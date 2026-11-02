@@ -41,7 +41,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -128,6 +128,8 @@ async function freePort() {
 }
 
 const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-vitals-'));
+/* The copy of an App this run serves from inside the repository (APPS['compass-trail']), removed with the scratch. */
+let trailCopy;
 
 /** The compiled server, as `npx tablewalk` runs it. */
 async function start(name, serveArgs, env = {}) {
@@ -255,6 +257,26 @@ const APPS = {
     writeFileSync(`${db}.json`, JSON.stringify({ connections: [{ name: 'crm', url: db, writable: true }] }));
     return start('compass', ['--config', `${db}.json`, '--app', 'test/fixtures/apps/crm']);
   },
+  /* Compass again, with the whole trail (`ui.shell.breadcrumbs: true`): its list names itself in the crumb bar, where
+     a late move of the heading was measured once (crumbSlot.ts), and which the default no longer draws over a room
+     opened from the menu. A copy inside the repository, so its imports resolve as the fixture's do. */
+  async 'compass-trail'() {
+    const db = join(scratch, 'compass-trail.db');
+    execFileSync(process.execPath, [join(root, 'test/fixtures/databases/crm/make-crm-db.mjs'), db], {
+      cwd: root,
+      stdio: 'ignore',
+      env: { ...process.env, MISTRI_CRM_TODAY: TODAY },
+    });
+    writeFileSync(`${db}.json`, JSON.stringify({ connections: [{ name: 'crm', url: db, writable: true }] }));
+    trailCopy = join(root, 'e2e', '.tmp', `vitals-compass-trail-${process.pid}`);
+    cpSync(join(root, 'test/fixtures/apps/crm'), trailCopy, { recursive: true });
+    const app = join(trailCopy, 'app.ts');
+    const source = readFileSync(app, 'utf8');
+    const trail = source.replace("shell: { placement: 'top' }", "shell: { placement: 'top', breadcrumbs: true }");
+    assert.notEqual(trail, source, "Compass's shell is no longer `{ placement: 'top' }`: say the whole trail another way here.");
+    writeFileSync(app, trail);
+    return start('compass-trail', ['--config', `${db}.json`, '--app', trailCopy]);
+  },
   async forecourt() {
     // Forecourt's seed migrates its command journal through @mistriwork/mistri/commands, which tsx resolves from source.
     const db = join(scratch, 'forecourt.db');
@@ -352,6 +374,9 @@ const SCENARIOS = [
     },
   },
   { app: 'compass', kind: 'load', name: 'record', path: '/leads/11' },
+  /* The whole trail: the list's title, count, New and Export in the bar, and a record under it. */
+  { app: 'compass-trail', kind: 'load', name: 'list in the trail', path: '/leads' },
+  { app: 'compass-trail', kind: 'load', name: 'record in the trail', path: '/leads/11' },
   { app: 'compass', kind: 'load', name: 'calendar', path: '/task-calendar' },
   {
     app: 'compass',
@@ -863,6 +888,7 @@ const servers = {};
 async function stopServers() {
   await Promise.allSettled(Object.values(servers).map((server) => server?.stop()));
   rmSync(scratch, { recursive: true, force: true });
+  if (trailCopy) rmSync(trailCopy, { recursive: true, force: true });
 }
 
 async function main() {

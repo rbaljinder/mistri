@@ -24,6 +24,7 @@ export {
   Empty,
   Heading,
   Icon,
+  Loaded,
   Meter,
   Row,
   Segmented,

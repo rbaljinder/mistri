@@ -1,8 +1,11 @@
+/**
+ * The Workbench at a phone's width: a record, the query bar and the SQL pane keep the workspace's width, and the table
+ * list opens over it and closes without changing the desktop's preference. An App's half is e2e/app-responsive.spec.ts.
+ */
 import { expect, test, type Page } from './support/harness';
 import { DEMO } from './support/fixtures';
 
 const SIDEBAR_KEY = 'mistri.sidebar-hidden';
-const CRM = `http://127.0.0.1:${process.env.TABLEWALK_E2E_CRM_PORT}/`;
 
 async function fitsViewport(page: Page, selector: string, minimumWidth = 0) {
   const element = page.locator(selector);
@@ -102,16 +105,4 @@ test('Workbench phone navigator closes accessibly and never changes the desktop 
     else await expect(sidebar).toBeVisible();
     expect(await page.evaluate((key) => localStorage.getItem(key), SIDEBAR_KEY)).toBe(stored);
   }
-});
-
-test('a narrow App keeps its own navigation and has no Workbench to switch to', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`${CRM}/opportunity`);
-  await expect(page.locator('body')).toHaveClass(/app-mode/);
-  await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
-  await expect(page.locator('.sidebar-reveal')).toBeHidden();
-  await page.keyboard.press('w');
-  await expect(page.locator('body')).toHaveClass(/app-mode/);
-  await expect(page.locator('.sidebar-reveal')).toBeHidden();
-  await expect(page.getByRole('navigation', { name: 'Tables', exact: true })).toHaveCount(0);
 });

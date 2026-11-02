@@ -346,12 +346,17 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     across.push(`${where}: form views require "auth" and "auth.roles". A form runs a command, and commands need both.`);
   } else gather(across, () => checkForms(forms, ctx));
   for (const source of ofKind('list')) {
-    const action = source.view.empty?.action;
-    if (!action) continue;
-    /* A room, by the one rule every action's destination answers to (appDestinations.ts): "No canned responses:
-       write one" opens the signed-in form that writes one. */
-    const problem = destinationProblem(`${source.at}, "empty.action.view"`, action.view, parsedKind(views.get(action.view)));
-    if (problem) across.push(problem);
+    const said = [
+      { at: `${source.at}, "empty.action.view"`, action: source.view.empty?.action },
+      ...(source.view.tabs ?? []).map((tab, i) => ({ at: `${source.at}, tab ${i + 1}, "empty.action.view"`, action: tab.empty?.action })),
+    ];
+    for (const { at, action } of said) {
+      if (!action) continue;
+      /* A room, by the one rule every action's destination answers to (appDestinations.ts): "No canned responses:
+         write one" opens the signed-in form that writes one. */
+      const problem = destinationProblem(at, action.view, parsedKind(views.get(action.view)));
+      if (problem) across.push(problem);
+    }
   }
   /* A dashboard's note, a banner too, opens a room by the same rule. Its target becomes a room only when this
      dashboard is reached from nav, home, a landing or a reachable dashboard; final payload projection still
@@ -979,7 +984,7 @@ function parseTabs(raw: unknown, at: string): AppListTab[] {
        count, the address, a dashboard's embed) takes as it is, and which
        wins over the view's `sort`. */
     // `segment` is what a tab naming one unfolds to (appSegments.ts); its name is the tab's address.
-    allowKeys(entry, ['label', 'query', 'segment', 'sort'], here);
+    allowKeys(entry, ['label', 'query', 'segment', 'sort', 'empty'], here);
     if (typeof entry.label !== 'string' || !entry.label.trim()) throw new Error(`${here} has no "label".`);
     const query = optionalText(entry, 'query', here);
     const segment = typeof entry.segment === 'string' ? entry.segment : undefined;
@@ -988,10 +993,13 @@ function parseTabs(raw: unknown, at: string): AppListTab[] {
       throw new Error(`${here} has a "sort" that is not written like the query bar: "due_on", "created_on desc", "year desc, mileage".`);
     }
     const sort = typeof entry.sort === 'string' ? entry.sort.trim().replace(/\s+/g, ' ') : undefined;
+    /* What the tab says while nothing is under it, as a list's `empty` says it for the list as it opens. */
+    const empty = entry.empty === undefined ? undefined : parseListEmpty(entry.empty, here);
     return {
       label: entry.label.trim(),
       query: sort === undefined ? query : `${query ? `${query} ` : ''}sort ${sort}`,
       ...(segment ? { segment, slug: segment } : {}),
+      ...(empty ? { empty } : {}),
     };
   });
 }
@@ -2088,6 +2096,14 @@ function embedSection(
   if (windows && presentation?.kind === 'board')
     throw new Error(`${at} embeds "${key}", a board, which takes the dashboard's window; its own "windows" are for a list.`);
   const interactive = embedInteractive(s, at, key, presentation?.kind, aside);
+  /* What the embed says while it has nothing: its own guidance or 'hide', as a rows section takes; else the tab's,
+     and on the first tab (the list as it opens) the list's own. A board says 'hide' or nothing: its lanes are its
+     empty state. */
+  if (s.empty === false) throw new Error(`${at} has "empty: false", which is now "empty: 'hide'".`);
+  const own = s.empty === undefined || s.empty === 'hide' ? undefined : parseListEmpty(s.empty, at);
+  if (own && presentation?.kind === 'board')
+    throw new Error(`${at} embeds "${key}", a board, which takes "empty: 'hide'"; its lanes say it has nothing.`);
+  const empty = own ?? tab?.empty ?? (tab === view.tabs?.[0] ? view.empty : undefined);
   const query = andQuery(view.query, tab?.query) || undefined;
   // The view's default order, where its tab says none of its own.
   const tabSorts = Boolean(tab?.query && /(^|\s)(sort|order\s+by)\b/i.test(splitClauseTail(tab.query).tail));
@@ -2102,6 +2118,7 @@ function embedSection(
     ...(over ? { over } : {}),
     ...(windows ? { windows } : {}),
     ...(interactive ? { interactive } : {}),
+    ...(s.empty === 'hide' ? { emptyMode: 'hide' as const } : empty && presentation?.kind !== 'board' ? { empty } : {}),
     view: key,
   };
   if (!presentation || presentation.kind === 'split') {

@@ -60,9 +60,15 @@ test.describe('private tenant membership-driven write UI', () => {
   const noUndo = async (page: Page) => {
     await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: /^Account: / }).click();
-    await expect(page.getByRole('menuitemcheckbox', { name: /^Editing enabled/ })).toHaveCount(0);
-    await expect(page.getByRole('menuitem', { name: /^Undo/ })).toHaveCount(0);
+    /* The menu mounts a frame after the click, and its Escape is heard only once it has: wait for it, or the two
+       absences below hold of a menu not yet drawn and Escape lands first, leaving the menu open (and its backdrop
+       over the page) after it. */
+    const menu = page.getByRole('menu', { name: /^Account: / });
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitemcheckbox', { name: /^Editing enabled/ })).toHaveCount(0);
+    await expect(menu.getByRole('menuitem', { name: /^Undo/ })).toHaveCount(0);
     await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
   };
   const switchTo = async (page: Page, tenant: 'north' | 'south') => {
     await page.getByRole('button', { name: `Tenant: ${tenant === 'north' ? 'south' : 'north'}`, exact: true }).click();

@@ -43,7 +43,19 @@ const common = ['package.json', 'README.md', 'LICENSE'];
    mistri's since the split. */
 const need = {
   '@mistriwork/engine': [...common, 'dist/server/connections.js'],
-  '@mistriwork/kit': [...common, 'dist/clientFiles.js'],
+  /* The kit's client, as modules a product outside this repository bundles with the preset
+     (scripts/prove-browser-from-tarballs.mjs builds the database browser so). */
+  '@mistriwork/kit': [
+    ...common,
+    'dist/clientFiles.js',
+    'dist/vite.js',
+    'dist/vite.d.ts',
+    'dist/client/index.html',
+    'dist/client/boot.js',
+    'dist/client/app.js',
+    'dist/client/app.d.ts',
+    'dist/client/style.css',
+  ],
   '@mistriwork/mistri': [
     ...common,
     ...client('mistri'),

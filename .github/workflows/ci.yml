@@ -235,6 +235,10 @@ jobs:
           # Every package's tarball: mistri, and tablewalk beside it, install the @mistri packages at their own version.
           npm pack --workspaces --pack-destination "$RUNNER_TEMP"
           node scripts/test-installed-testing.mjs "$RUNNER_TEMP"/*.tgz
+      # The database browser built and served from the engine, kit and ui tarballs alone, as a checkout of it
+      # outside this repository builds it (docs/boundary.md, "The host list").
+      - name: Database browser from the tarballs
+        run: node scripts/prove-browser-from-tarballs.mjs "$RUNNER_TEMP"/*.tgz
       # Web Vitals on the build: layout shift, largest paint and interaction
       # latency, each held to its budget (test/built-client-vitals.mjs), and a gate.
       # Ignition's tenant pages are measured only where a PostgreSQL server

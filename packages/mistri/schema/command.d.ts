@@ -89,12 +89,21 @@ export interface CommandNumberField extends FieldBase {
       format: `live: { monthly: 'biweekly_gross * 26 / 12' }` reads "$5,417 monthly". Display only, never sent. */
   live?: CommandLiveLines;
 }
-/** An amount in the App's currency (`ui.currency`): typed as `$2,500`, received as a number on its `step` (cents). */
+/** An amount in the App's currency (`ui.currency`), or the field's own `currency`: typed as `$2,500`, received as a number
+    on its `step` (cents).
+    With `minor: true` the reader still types the major amount, at the currency's own precision (two places in USD, none in
+    JPY, three in KWD; a finer fraction is refused, never rounded), but the handler receives the exact whole number of minor
+    units - 19.99 is 1999 - as a number, or as a string past 2^53, as an id is. `min` and `max` stay in the typed (major)
+    unit, and `step` is not taken: the currency sets the precision. */
 export interface CommandMoneyField extends FieldBase {
   type: 'money';
   min?: number;
   max?: number;
   step?: number;
+  /** Received as the exact whole number of minor units (cents, paise, yen) the typed amount is. */
+  minor?: boolean;
+  /** ISO 4217 code this amount is in, where the App's `ui.currency` is not (`'EUR'`). */
+  currency?: string;
   below?: string;
   above?: string;
   live?: CommandLiveLines;
@@ -275,6 +284,7 @@ type FieldValue<F> =
   : F extends { type: 'group'; fields: infer G extends CommandInput; repeat: object } ? CommandInputOf<G>[]
   : F extends { type: 'group'; fields: infer G extends CommandInput } ? CommandInputOf<G>
   : F extends { type: 'text' | 'textarea' | 'richText' | 'date' | 'month' | 'datetime' } ? string
+  : F extends { type: 'money'; minor: true } ? number | string
   : F extends { type: 'number' | 'money' } ? number
   : F extends { type: 'boolean'; accept: true } ? true
   : F extends { type: 'boolean' } ? boolean

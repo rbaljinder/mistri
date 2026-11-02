@@ -10,13 +10,24 @@
  * `Card` draws as a plain group); the 20px field gap and the 40px section
  * seam as `Stack`'s two gaps; a tone is a dot and its word.
  */
-import { createContext, useContext, useRef, type ComponentProps, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  type ComponentProps,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import type { AppIconName } from '@mistriwork/engine/shared/appIcons.js';
 import { Icon as PlatformIcon } from '@mistriwork/kit/client/components/Icon.js';
-import { Empty as PlatformEmpty } from '@mistriwork/kit/client/components/Notes.js';
+import { Empty as PlatformEmpty, Problem } from '@mistriwork/kit/client/components/Notes.js';
 import { Dressed, Said } from '@mistriwork/kit/client/components/Dressed.js';
 import { authoredDisplay, dressFor, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import { useUiHost } from './context.js';
+/* Named apart: `say` is also Sparkline's prop below, a figure's speaker. */
+import { say as sayKit } from '../../copy/components/components/sdk/kit.js';
 import { Sparkline, StackedColumns } from '@mistriwork/kit/client/components/Chart.js';
 
 export { Button } from '@mistriwork/ui/Button.js';
@@ -55,19 +66,30 @@ export function Stack({
   return <Tag className={['kit-stack', GAPS[gap], className].filter(Boolean).join(' ')}>{children}</Tag>;
 }
 
-/** Children side by side, wrapping onto a new line where there is no room. */
+/** Children side by side, wrapping onto a new line where there is no room. `foot` says the row is the page's actions
+    at the screen's foot (a sticky row of verbs on a phone): a notice stands above it, as above a record's bar, and
+    never over the verbs it reports on. */
 export function Row({
   gap = 'field',
   align = 'center',
+  foot,
   children,
   className,
 }: {
   gap?: Gap;
   align?: 'start' | 'center' | 'baseline' | 'end';
+  foot?: boolean;
   children?: ReactNode;
   className?: string;
 }) {
-  return <div className={['kit-row', GAPS[gap], `kit-align-${align}`, className].filter(Boolean).join(' ')}>{children}</div>;
+  return (
+    <div
+      className={['kit-row', GAPS[gap], `kit-align-${align}`, className].filter(Boolean).join(' ')}
+      {...(foot ? { 'data-foot-actions': '' } : {})}
+    >
+      {children}
+    </div>
+  );
 }
 
 /** A heading inside a section: the section's own title is its h2, so this is an h3 by default. */
@@ -135,6 +157,61 @@ export function Meter({ value, max = 100, tone, label }: { value: number; max?: 
 /** What a component says when it has nothing to draw: the platform's own quiet note. */
 export function Empty({ title, description, action }: { title: ReactNode; description?: ReactNode; action?: ReactNode }) {
   return <PlatformEmpty text={title} detail={description} action={action} />;
+}
+
+/** What `<Loaded>` reads of a read: a hook's query (`useRows`, `useRecord`, `useBreakdown`) as it stands. */
+interface LoadedQuery<T> {
+  data: T | undefined;
+  isError: boolean;
+  error: Error | null;
+  refetch(): unknown;
+}
+
+/**
+ * A read's states before its drawing, said as every section says them: the platform's placeholder while it is asked
+ * (at `height`, the size the drawing will take, so nothing under it moves when it lands), `Empty` for no rows or no
+ * record (`empty`, or the house sentence), and the house problem with Try again when it could not be read — focus on
+ * Try again when the drawing it replaced held it, so focus is never dropped. Then `children(data)`, the App's own.
+ * What was read stays drawn when a later refresh fails: a finished screen is never swapped for a note. Domain states
+ * ("not eligible", "unavailable") are the App's to draw inside it.
+ */
+export function Loaded<T>({
+  query,
+  empty,
+  height,
+  children,
+}: {
+  query: LoadedQuery<T>;
+  empty?: ReactNode;
+  height?: number | string;
+  children: (data: NonNullable<T>) => ReactNode;
+}) {
+  const failed = query.data === undefined && query.isError;
+  const note = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The placeholder holds no focus; a drawing that did and went (a refresh that failed once its rows were dropped) left it on the body.
+    if (!failed) return;
+    const at = document.activeElement;
+    if (at === null || at === document.body) note.current?.querySelector<HTMLElement>('.problem-retry')?.focus({ preventScroll: true });
+  }, [failed]);
+  if (failed)
+    return (
+      <div ref={note} className="kit-loaded">
+        <Problem text={query.error?.message || sayKit('notRead')} retry={() => void query.refetch()} />
+      </div>
+    );
+  if (query.data === undefined)
+    return (
+      <div
+        className="sk-bar kit-loading"
+        role="status"
+        aria-label={sayKit('common.loading')}
+        {...(height === undefined ? {} : { style: { blockSize: height } })}
+      />
+    );
+  if (query.data === null || (Array.isArray(query.data) && query.data.length === 0))
+    return <>{empty ?? <Empty title={sayKit('nothingHereYet')} />}</>;
+  return <>{children(query.data as NonNullable<T>)}</>;
 }
 
 /** One of the App's curated marks (the names a view's `icon` takes). Decoration unless it has a label. */

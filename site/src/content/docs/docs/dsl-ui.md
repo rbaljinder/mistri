@@ -25,6 +25,14 @@ adjust it. `currency` is US dollars unless the App says otherwise, and a money
 rule names its own only for a column in another. See [Looks](/docs/looks/)
 and [Navigation and shell](/docs/nav-and-shell/).
 
+`shell.breadcrumbs` is the trail over a room. By default a list, dashboard,
+form or page opened from the menu names itself in its own heading row (title,
+count, New, Export) with no bar over it, and the bar appears once the reader
+goes deeper, to a record, a related list or a record's tab, starting at the
+first room's name: `Leads › Ada Stone`. `{ top: true }` keeps the bar over
+the first rooms too, `{ home: true }` starts it with the home mark, `true` is
+both and `false` never draws it.
+
 `timezone` may instead be read per reader: `timezone: { column:
 'desk_setting.timezone', default: 'America/New_York' }` counts each reader's
 today and windows in the zone the first row of that column they may read
@@ -578,7 +586,9 @@ tenant's own words over the catalogs. See [Languages](/docs/languages/).
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `ui.shell` | object | Stable | App shell visibility, spacing and placement. Omitted settings keep the existing UI. Used in `examples/apps/tick/app.ts`. |
-| `ui.shell.breadcrumbs` | boolean | Stable | false hides the crumb bar above each room. Default `true`. Used in `examples/apps/tick/app.ts`. |
+| `ui.shell.breadcrumbs` | boolean \| object | Stable | The crumb bar above a room. By default a room reached straight from the menu draws its own heading row and no bar, and the bar appears once the walk goes deeper (a record, a related list, a record's tab), starting at the first room's name. true is the whole trail everywhere, with the home mark; false never draws it. Default `{"top":false,"home":false}`. Used in `examples/apps/tick/app.ts`. |
+| `ui.shell.breadcrumbs.home` | boolean | Stable | Start the trail with the home mark. Default `false`. Used in `examples/apps/tick/app.ts`. |
+| `ui.shell.breadcrumbs.top` | boolean | Stable | Draw the bar above a room reached straight from the menu (a list, a dashboard, a form, a page) too. Default `false`. |
 | `ui.shell.counts` | boolean | Stable | Show live row counts beside the App menu's lists of work: a list whose condition picks its machine's unfinished states, a date at or before today (said in the danger's ink), or the reader (me). A list's own count: true or false says otherwise. Defaults to false; Workbench estimates remain. Default `false`. Used in `examples/apps/lintel/app.ts`. |
 | `ui.shell.gutter` | `"none"` · `"compact"` · `"normal"` · `"comfortable"` | Stable |  One of `comfortable`, `compact`, `none`, `normal`. Used in `examples/apps/tick/app.ts`. |
 | `ui.shell.headerWidth` | `"full"` · `"content"` | Stable | content aligns header contents to shell width and gutter while its background and border remain full width. Omit or use full to keep the existing header. One of `content`, `full`. Used in `examples/apps/tick/app.ts`. |

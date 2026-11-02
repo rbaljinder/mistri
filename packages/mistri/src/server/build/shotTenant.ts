@@ -85,7 +85,7 @@ export async function tenantShotAccount(input: {
   process.env.XDG_CONFIG_HOME = input.xdg;
   let granted: { membershipId: string; version: string } | undefined;
   try {
-    const [accountId] = await createAppAccounts(input.appDir, [{ email, name: `A ${role}`, password }]);
+    const [accountId] = await createAppAccounts(input.appDir, [{ email, name: `A ${role}`, password }], { verified: true });
     const validUntil = Date.now() + LIFETIME;
     granted =
       realm === 'platform'

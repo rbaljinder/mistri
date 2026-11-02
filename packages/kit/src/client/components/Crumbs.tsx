@@ -71,12 +71,43 @@ function homeWords(): { title: string; 'aria-label': string } {
   return { title: say('theSchemaYourWork'), 'aria-label': say('common.schema') };
 }
 
+/* What the App asks of its trail (`ui.shell.breadcrumbs`). By default a room reached straight from the menu names
+   itself in its own heading row, with no bar over it, and the trail, once there is one, starts at the first room:
+   a bar that only said "home › Leads" over a list called Leads was chrome, and the house a second way home beside
+   the menu. The Workbench keeps the whole trail; its first crumb is the schema, which nothing else offers. */
+function trailSetting(): { top: boolean; home: boolean } | false {
+  if (!shell().inApp()) return { top: true, home: true };
+  const said = shell().app()?.ui?.shell?.breadcrumbs;
+  if (said === false) return false;
+  if (said === true) return { top: true, home: true };
+  return { top: said?.top ?? false, home: said?.home ?? false };
+}
+
+// Indices stay the walk's own: only the selected row is left off the end.
+const trailOf = (walked: WalkEntry[]): WalkEntry[] => (splitSelection(walked) ? walked.slice(0, -1) : walked);
+
+/**
+ * Whether the bar is drawn over this walk. Read from the walk itself, in the same render that draws the room, so a
+ * list knows on its first paint whether its title goes in the bar or in its own heading row (crumbSlot.ts): decided
+ * any later, the heading moved after the paint and every row under it jumped. A room is deeper than the menu once
+ * the walk has a second step, or when it is a record however it was reached (a link straight to one).
+ */
+export function crumbBarShown(walked: WalkEntry[]): boolean {
+  const setting = trailSetting();
+  if (!setting) return false;
+  if (setting.top) return true;
+  const stack = trailOf(walked);
+  const top = stack.at(-1);
+  return stack.length > 1 || top?.kind === 'row' || (top?.kind === 'page' && top.key != null);
+}
+
 export function Crumbs({ onHome }: { onHome: () => void }) {
   const walked = useWalk();
   /* Said again when a visitor's language arrives with the App. */
   useMessageLanguage();
-  // Indices stay the walk's own: only the selected row is left off the end.
-  const stack = splitSelection(walked) ? walked.slice(0, -1) : walked;
+  const stack = trailOf(walked);
+  const setting = trailSetting();
+  const home = Boolean(setting && setting.home);
   const previous = stack.length > 1 ? stack[stack.length - 2] : null;
   /* A public reader's record page names itself in its heading straight
      below: the trail ends at the list it came from, which stays a link. */
@@ -89,24 +120,28 @@ export function Crumbs({ onHome }: { onHome: () => void }) {
   const shown = trail.map((entry, index) => ({ entry, index })).filter(({ entry, index }) => !sameRoom(entry, trail[index + 1]));
   return (
     <nav className="crumbs" aria-label={say('trail')}>
-      <button type="button" className="crumb-home" {...homeWords()} onClick={onHome}>
-        <svg
-          viewBox="0 0 16 16"
-          width="17"
-          height="17"
-          aria-hidden="true"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M2 7.2 8 2.4l6 4.8" />
-          <path d="M3.4 6.6V13a.6.6 0 0 0 .6.6h8a.6.6 0 0 0 .6-.6V6.6" />
-        </svg>
-      </button>
-      {shown.map(({ entry, index: i }) => {
+      {home && (
+        <button type="button" className="crumb-home" {...homeWords()} onClick={onHome}>
+          <svg
+            viewBox="0 0 16 16"
+            width="17"
+            height="17"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M2 7.2 8 2.4l6 4.8" />
+            <path d="M3.4 6.6V13a.6.6 0 0 0 .6.6h8a.6.6 0 0 0 .6-.6V6.6" />
+          </svg>
+        </button>
+      )}
+      {shown.map(({ entry, index: i }, n) => {
         const last = i === stack.length - 1;
+        /* Without the house the first step stands at the start of the bar, with nothing before it to separate. */
+        const first = n === 0 && !home;
         /* A row crumb names its table when the walk has changed table —
            which is exactly what following a foreign key does. A page crumb
            is a record crumb drawn as a page, on the same rule. */
@@ -139,11 +174,11 @@ export function Crumbs({ onHome }: { onHome: () => void }) {
           <Fragment key={i}>
             {ownStep && (
               <>
-                <span className="sep">›</span>
+                {!first && <span className="sep">›</span>}
                 <span className="crumb-table-step">{tableWord}</span>
               </>
             )}
-            <span className="sep">›</span>
+            {(!first || ownStep) && <span className="sep">›</span>}
             {last ? (
               <span className="current">{content}</span>
             ) : (

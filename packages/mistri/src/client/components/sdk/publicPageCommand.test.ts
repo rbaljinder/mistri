@@ -67,3 +67,69 @@ test("an input the declaration refuses is refused before anything is sent, and t
   await vi.advanceTimersByTimeAsync(3_500);
   expect(await running).toEqual({ status: 'refused', message: 'Too many requests from this address.' });
 });
+
+/* A field report: a public page's run judged its input before the draft's logic had arrived, so a question its
+   condition hides was required. */
+test("a run judges the command's conditions first: what a `when` hides is neither required nor sent", async () => {
+  const timed = {
+    id: 'book',
+    version: 1,
+    input: [
+      { name: 'timing', type: 'text', label: 'Timing', required: true },
+      { name: 'frequency', type: 'text', label: 'Frequency', default: 'once', when: "timing = 'later'" },
+      { name: 'on', type: 'date', label: 'Date', required: true, when: "timing = 'later'" },
+    ],
+  } as unknown as AppFormCommandReference;
+  fetchServer.mockResolvedValueOnce(reply(200, { ticket: 'ticket-1' })).mockResolvedValueOnce(reply(200, { reference: 'BK-1' }));
+  const handle = publicPageCommand('lobby', 'book', timed);
+  const running = handle.run({}, { timing: 'now' });
+  await vi.advanceTimersByTimeAsync(3_500);
+  expect((await running).status).toBe('applied');
+  expect(JSON.parse(String((fetchServer.mock.calls[1] as [string, RequestInit])[1].body)).input).toEqual({ timing: 'now' });
+});
+
+const sentKeys = () =>
+  (fetchServer.mock.calls.filter(([url]) => String(url).includes('/commands/')) as Array<[string, RequestInit]>).map(
+    ([, init]) => JSON.parse(String(init.body)).submission as string,
+  );
+
+test('an answer that never came is not known, never refused; check sends the same submission again', async () => {
+  fetchServer
+    .mockResolvedValueOnce(reply(200, { ticket: 'ticket-1' }))
+    .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    .mockResolvedValueOnce(reply(200, { reference: 'ENR-0003' }));
+  const handle = publicPageCommand('lobby', 'enrol', reference);
+  const running = handle.run({}, { name: 'Mara' });
+  await vi.advanceTimersByTimeAsync(3_500);
+  const outcome = await running;
+  expect(outcome.status).toBe('unknown');
+  const checked = await (outcome as Extract<typeof outcome, { status: 'unknown' }>).check();
+  expect(checked).toEqual({ status: 'applied', output: { reference: 'ENR-0003', receipt: undefined } });
+  const keys = sentKeys();
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toBe(keys[1]);
+});
+
+test('a server that could not say is not known; on a check, a refusal before any run says nothing either', async () => {
+  fetchServer
+    .mockResolvedValueOnce(reply(200, { ticket: 'ticket-1' }))
+    .mockResolvedValueOnce(reply(503, { code: 'temporarily_unavailable', error: 'Try again shortly.' }))
+    .mockResolvedValueOnce(reply(429, { code: 'rate_limited', error: 'Too many requests from this address.' }));
+  const handle = publicPageCommand('lobby', 'enrol', reference);
+  const running = handle.run({}, { name: 'Mara' });
+  await vi.advanceTimersByTimeAsync(3_500);
+  const outcome = await running;
+  expect(outcome.status).toBe('unknown');
+  const checked = await (outcome as Extract<typeof outcome, { status: 'unknown' }>).check();
+  expect(checked).toMatchObject({ status: 'unknown', message: 'Too many requests from this address.' });
+});
+
+test("a component's attempt is the submission key the run is sent under", async () => {
+  fetchServer.mockResolvedValueOnce(reply(200, { ticket: 'ticket-1' })).mockResolvedValueOnce(reply(200, { reference: 'ENR-0004' }));
+  const handle = publicPageCommand('lobby', 'enrol', reference);
+  const attempt = '0b8d1d4e-2f3a-4c5b-9d6e-7f8a9b0c1d2e';
+  const running = handle.run({}, { name: 'Mara' }, { attempt });
+  await vi.advanceTimersByTimeAsync(3_500);
+  expect((await running).status).toBe('applied');
+  expect(sentKeys()).toEqual([attempt]);
+});

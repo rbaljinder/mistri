@@ -411,7 +411,13 @@ export function diffSurface(recorded, live) {
     const before = recorded.sections[section] ?? {},
       after = live.sections[section] ?? {};
     const added = Object.keys(after).filter((name) => !(name in before));
-    const removed = Object.keys(before).filter((name) => !(name in after));
+    /* A key that one more kind of a section list came to share is restated as `[kind=*]` (commonKeys): every kind
+       still takes it, so the per-kind name is not gone. */
+    const restated = (name) => {
+      const match = /^(.*(?:sections|aside)\[\])\[kind=[^\]]+\](.*)$/.exec(name);
+      return Boolean(match && `${match[1]}[kind=*]${match[2]}` in after);
+    };
+    const removed = Object.keys(before).filter((name) => !(name in after) && !restated(name));
     const changed = Object.keys(after).filter((name) => name in before && before[name] !== after[name]);
     if (added.length || removed.length || changed.length) result[section] = { added, removed, changed };
   }

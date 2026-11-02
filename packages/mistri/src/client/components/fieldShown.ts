@@ -24,8 +24,9 @@ export function maskShown(mask: string, raw: string): string {
  * An amount in the App's currency, grouped as the locale groups it: `$1,000` on a whole step or a whole amount,
  * `$12.50` where the cents say something. Without a currency it is the App's (`ui.currency`), else US dollars.
  */
-export function amountIn(amount: number, currency?: string, step?: number): string {
-  const digits = step === undefined || Number.isInteger(step) || Number.isInteger(amount) ? 0 : 2;
+export function amountIn(amount: number, currency?: string, step?: number, own?: boolean): string {
+  // A minor-unit amount says the currency's own places whenever it has a fraction (`own`), as a step says cents.
+  const digits = Number.isInteger(amount) ? 0 : own ? undefined : step === undefined || Number.isInteger(step) ? 0 : 2;
   try {
     return new Intl.NumberFormat(formatLocale(), {
       style: 'currency',

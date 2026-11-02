@@ -178,7 +178,7 @@ reads, then `http/dataWriteRoutes.ts` (update, insert, SQL, revert, delete).
 
 Each package's `src/client/` is served two ways from the same source. `npm run build` bundles
 it with Vite once per product (`config/vite.tablewalk.config.ts`, `config/vite.mistri.config.ts`, both
-`clientConfig` in `vite.config.ts`) into that product's `dist/client`: the browser's pages
+the kit's preset, `@mistriwork/kit/vite` in `packages/kit/src/vite.ts`) into that product's `dist/client`: the browser's pages
 are the index and the Workbench, mistri's the index, the public pages, the App shell and
 a tenant's; neither bundle holds the other product's main. Minified, with source maps (sources inside)
 shipped beside it so a stack trace still maps to the line; content-named under
@@ -232,14 +232,15 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   stores. A vanilla module that still needs to draw crosses over through
   `components/mount.tsx`.
 - **Two mains over one kit shell.** `boot.js` runs `shellStart.js`, which
-  wears the look and starts the main of the product that sent the page:
+  wears the look and starts the main of the product that built the page
+  (`virtual:mistri/shell-main`, which each product's build answers):
   `appShell.js` (an App's public pages, sign-in, then the shell with the App's
   chrome, `appnav.js`) or `workbenchShell.js` (the shell with the Workbench's
   tools, `workbench.js`). Each hands the kit's shell (`app.js`) its chrome
   through `shells.ts`, and answers the kit's questions — the visitor, the
   tenant, an App's parts in a list or a record page (`slots`, `rooms`) —
   through `shellMode.ts`, so no kit component imports either product. Each
-  page preloads its chunks (`vite.config.ts` `surfaces`): an App's the shell
+  page preloads its chunks (the kit's preset, `surfaces`): an App's the shell
   and the chrome, the Workbench's the shell and its main.
 - **Headless controls** come from Base UI, dressed in the tool's own classes:
   `Modal.tsx` for every dialog, `DropMenu.tsx`/`OverflowMenu.tsx`/`ThMenu.tsx`/

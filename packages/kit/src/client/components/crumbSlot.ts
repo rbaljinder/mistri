@@ -3,7 +3,10 @@
  * the current crumb, and the tools, at the bar's far end. A list page puts
  * its title, count and star in the first and New and Export in the second,
  * so its name and its verbs share the bar that already says where it is.
- * Both are null where the App hides breadcrumbs, and the room draws its own.
+ * Both are null where no bar is drawn over the room (the App's
+ * `shell.breadcrumbs`, Crumbs.tsx), and the room draws its own heading; a list
+ * page's heading row then offers its own place for the verbs (`head`), so New
+ * and Export stand beside its title there as they would in the bar.
  */
 import { useLayoutEffect, useReducer, useSyncExternalStore } from 'react';
 
@@ -13,9 +16,11 @@ interface CrumbSlots {
   /* Not the bar's: the end of a list page's control strip, where a phone's Records/Table switch stands beside the
      tabs instead of on a row of its own over the rows (TableView). */
   controls: HTMLElement | null;
+  /* Not the bar's either: the end of a list page's own heading row, drawn where no bar is (AppList). */
+  head: HTMLElement | null;
 }
 
-let slots: CrumbSlots = { note: null, tools: null, controls: null };
+let slots: CrumbSlots = { note: null, tools: null, controls: null, head: null };
 const listeners = new Set<() => void>();
 
 function set(kind: keyof CrumbSlots, element: HTMLElement | null) {
@@ -28,6 +33,10 @@ function set(kind: keyof CrumbSlots, element: HTMLElement | null) {
 export const crumbNoteRef = (element: HTMLElement | null) => set('note', element);
 export const crumbToolsRef = (element: HTMLElement | null) => set('tools', element);
 export const listControlsRef = (element: HTMLElement | null) => set('controls', element);
+export const listHeadRef = (element: HTMLElement | null) => set('head', element);
+
+/** Where the page's own list puts its verbs: the bar's end, or its heading row's when no bar is drawn. */
+export const verbsAt = (at: CrumbSlots): HTMLElement | null => at.tools ?? at.head;
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);

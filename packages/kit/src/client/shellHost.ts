@@ -43,6 +43,24 @@ export const shellQuery = <E extends Element = HTMLElement>(selector: string): E
 /** Every shell element matching a selector. */
 export const shellQueryAll = <E extends Element = HTMLElement>(selector: string): NodeListOf<E> => document.querySelectorAll<E>(selector);
 
+/** The brand's words: the App's name, and its short name where it gives one, which a phone's bar says instead
+    (style.css). The full name stays in the button, read, so it is what the button is called. */
+export function sayBrandName(brand: Element | null, name: string, short?: string): void {
+  if (!brand) return;
+  if (!short || short === name) {
+    if (brand.childElementCount || brand.textContent !== name) brand.textContent = name;
+    return;
+  }
+  const long = document.createElement('span');
+  long.className = 'brand-long';
+  long.textContent = name;
+  const said = document.createElement('span');
+  said.className = 'brand-short';
+  said.setAttribute('aria-hidden', 'true');
+  said.textContent = short;
+  brand.replaceChildren(long, said);
+}
+
 /** Say what the tab shows. */
 export function setTabTitle(title: string): void {
   document.title = title;

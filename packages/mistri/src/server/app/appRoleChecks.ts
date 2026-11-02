@@ -612,16 +612,21 @@ export function appDestinationWarnings(loaded: LoadedApp, schema: DatabaseSchema
         ...view.sections.map((section, i) => ({ section, at: `views "${key}", section ${i + 1}` })),
         ...(view.aside ?? []).map((section, i) => ({ section, at: `views "${key}", "aside", section ${i + 1}` })),
       ];
-      for (const { section, at } of placed)
+      for (const { section, at } of placed) {
         if (section.kind === 'note' && section.action && 'view' in section.action)
           destinations.push({ at: `${at}, note action "${section.action.label}"`, source: view, to: section.action.view });
-    } else if (!isFormView(view) && view.empty?.action) {
-      destinations.push({
-        at: `views "${key}", empty action "${view.empty.action.label}"`,
-        source: view,
-        table: view.table,
-        to: view.empty.action.view,
-      });
+        // A rows section's empty, its own or the one an embedded list's tab or list lends it.
+        if (section.kind === 'rows' && section.empty?.action)
+          destinations.push({ at: `${at}, empty action "${section.empty.action.label}"`, source: view, to: section.empty.action.view });
+      }
+    } else if (!isFormView(view)) {
+      const said = [
+        { at: `views "${key}"`, empty: view.empty },
+        ...(view.tabs ?? []).map((tab, i) => ({ at: `views "${key}", tab ${i + 1}`, empty: tab.empty })),
+      ];
+      for (const { at, empty } of said)
+        if (empty?.action)
+          destinations.push({ at: `${at}, empty action "${empty.action.label}"`, source: view, table: view.table, to: empty.action.view });
     }
   }
   for (const page of loaded.pages) {

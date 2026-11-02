@@ -8,6 +8,11 @@
  * and reports every name a non-test module under a package's src/ exports that appears
  * in no other file.
  *
+ * A module on the host list (scripts/boundary/entries.json `host`) is
+ * imported from outside this repository, by the database browser built from
+ * the published packages, so every name it exports counts as used: the
+ * host's files are not always here to mention it.
+ *
  * The allowlist (audit-exports.allow) is today's findings. It may only
  * shrink: a new finding fails, and so does an entry that is no longer a
  * finding, so the list never keeps a name that was since fixed. Mentions
@@ -68,9 +73,36 @@ const exportedNames = (source) => {
   return names;
 };
 
+/* The modules the host list names, as repository paths: each subpath answered by its package's exports as a checkout
+   reads them (the dev form's source), the longest matching pattern first. */
+const hostModules = (() => {
+  const table = JSON.parse(readFileSync(root + 'scripts/boundary/entries.json', 'utf8'));
+  const out = new Set();
+  for (const [name, subpaths] of Object.entries(table.host?.exports ?? {})) {
+    const dir = table.packages[name]?.dir;
+    if (!dir) continue;
+    const { exports = {} } = JSON.parse(readFileSync(`${root}${dir}/package.json`, 'utf8'));
+    const source = (target) => (typeof target === 'string' ? target : target?.default);
+    for (const subpath of subpaths) {
+      let target = source(exports[subpath]);
+      if (!target) {
+        const key = Object.keys(exports)
+          .filter((key) => key.endsWith('*') && subpath.startsWith(key.slice(0, -1)))
+          .sort((a, b) => b.length - a.length)[0];
+        target = key && source(exports[key])?.replace('*', subpath.slice(key.length - 1));
+      }
+      if (!target) continue;
+      const path = `${dir}/${target.slice(2)}`;
+      const stem = path.replace(/\.js$/, '');
+      for (const candidate of [path, `${stem}.ts`, `${stem}.tsx`]) if (text.has(candidate)) out.add(candidate);
+    }
+  }
+  return out;
+})();
+
 const findings = [];
 for (const [file, source] of text) {
-  if (!/^packages\/[^/]+\/src\//.test(file) || TEST.test(file) || file.endsWith('.d.ts')) continue;
+  if (!/^packages\/[^/]+\/src\//.test(file) || TEST.test(file) || file.endsWith('.d.ts') || hostModules.has(file)) continue;
   for (const name of exportedNames(source)) {
     const where = mentions.get(name);
     if (![...(where ?? [])].some((other) => other !== file)) findings.push(`${file} ${name}`);

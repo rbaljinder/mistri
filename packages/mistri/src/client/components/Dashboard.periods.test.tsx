@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { bridgeShell } from '../../../../../test/shellBridge.js';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { columnKind, labelColumn, primaryKey, type TableMeta } from '../../../../engine/src/shared/schema.js';
@@ -131,6 +131,8 @@ describe('a section with windows of its own', () => {
     expect(dashboardSelection(review as never, undefined).window).toBe('last 30 days');
     expect(dashboardSelection(review as never, 'last-7-days').window).toBe('last 7 days');
     expect(dashboardSelection(review as never, 'all-time').window).toBeNull();
+    expect(dashboardSelection(review as never, 'all').window, 'all is the word a person guesses').toBeNull();
+    expect(parseRootSlot('all').window).toBe('all-time');
     // A window it no longer offers lands where it opens.
     expect(dashboardSelection(review as never, 'last-2-years').window).toBe('last 30 days');
     // The window it opens on goes unsaid; all time is said, so a reload keeps it.
@@ -140,5 +142,38 @@ describe('a section with windows of its own', () => {
     // Without a declared window, nothing changes: unpicked is all time, unsaid.
     expect(rootSlot(null, {})).toBe('');
     expect(dashboardSelection({ ...review, window: undefined } as never, 'all-time').window).toBeNull();
+  });
+});
+
+describe('an empty windowed section', () => {
+  const windowed = {
+    id: 'win',
+    label: 'Win',
+    windows: ['last 7 days', 'last 30 days'],
+    sections: [{ kind: 'breakdown', table: 'deal', by: 'stage', title: 'Open by stage', query: 'stage = open', over: 'closed_on' }],
+  };
+  const drawWindowed = (dashboard: unknown, props = {}) =>
+    render(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+        <Dashboard dashboard={dashboard as never} {...props} />,
+      ),
+    );
+
+  test('it says the window and offers all time, which unpicks the window', async () => {
+    const onWindow = vi.fn();
+    drawWindowed(windowed, { window: 'last 7 days', onWindow });
+    expect(await screen.findByText('Nothing in this time window.')).toBeTruthy();
+    expect(screen.getAllByText(/Last 7 days/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Show all time' }));
+    expect(onWindow).toHaveBeenCalledWith(null);
+  });
+
+  test('a section that keeps its own period has no all time to offer', async () => {
+    drawWindowed(own, { window: 'last 30 days' });
+    await waitFor(() => expect(asked().length).toBeGreaterThan(0));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole('button', { name: 'Show all time' })).toBeNull();
   });
 });

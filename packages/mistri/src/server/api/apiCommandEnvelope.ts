@@ -142,7 +142,7 @@ export function createApiCommandEnvelopeBundle(
       const request = many ? parseCommandEnvelope(raw) : parseCommandRequest(raw);
       pinned(request);
       keys(commandTargetList(request).keys);
-      readCommandInput(command.fields, request.input);
+      readCommandInput(command.fields, request.input, { wire: true });
       return request;
     };
     const validateRecoveryRequest = (raw: unknown) => {
@@ -251,7 +251,7 @@ export function createApiCommandEnvelopeBundle(
         request.expectedVersion !== 0
       )
         return refuse();
-      readCommandInput(command.fields, request.input);
+      readCommandInput(command.fields, request.input, { wire: true });
       return request;
     };
     return Object.freeze({

@@ -116,7 +116,8 @@ export interface AppListView {
   /** false draws the list without its title. */
   heading?: false;
   presentation?: AppListPresentation;
-  /** Copy for an empty base list; tabs and filters retain their ordinary no-matches message. */
+  /** Copy for the list as it opens (its first tab) with no rows; a tab says its own (`tabs[].empty`), and a search or
+      filter past the tab keeps the no-matches message. */
   empty?: AppListEmpty;
   /** Filter tabs across the top of the list. Absent means one unfiltered list. */
   tabs?: AppListTab[];
@@ -1177,6 +1178,8 @@ export interface AppDef {
   live?: true;
   id: string;
   name: string;
+  /** What a phone's bar and an installed icon say where `name` does not fit; 12 characters or fewer. */
+  shortName?: string;
   /** Connection this app is for, by id or name. Absent means every connection. */
   connection?: string;
   /** Every resource the App declares, by logical name. A physical binding
@@ -1575,4 +1578,5 @@ export const VIEW_SECTION_KEYS = [
   'over',
   'windows',
   'interactive',
+  'empty',
 ] as const;

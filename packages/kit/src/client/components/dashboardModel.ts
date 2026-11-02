@@ -15,7 +15,7 @@ import { currencyDigits, currencyPath, minorFigure } from '@mistriwork/engine/sh
 import { DURATION_STEPS } from '@mistriwork/engine/shared/niceTicks.js';
 import { sayDuration, withUnit } from './valueModel.js';
 import { say } from '../copy/dashboards/components/dashboardModel.js';
-import { ALL_TIME } from '@mistriwork/engine/shared/addressParams.js';
+import { ALL_TIME, readPeriod } from '@mistriwork/engine/shared/addressParams.js';
 
 interface DisplayRule {
   format?: string;
@@ -260,11 +260,15 @@ function measuredFraction(value: unknown): string | null {
 }
 
 /**
- * A legend's figures, said by one rule: money compact for all of them where any is large enough to be said compact,
- * whole for all of them else, so "$45,230" never stands beside "$451.2K" on one line.
+ * A stacked chart's visible figures (its legend's totals, each bar's pill and its target), said by one rule decided from
+ * all of them: money compact from a thousand for every one where any reaches a hundred thousand, exact for every one
+ * else, so "$45,230" never stands beside "$451.2K" on one chart. The figures arrive as stored, so a sum of cents is read
+ * in the major unit before it is held to the threshold: a hundred thousand cents is a thousand dollars, not compact.
  */
-export function legendSayer(section: Section, totals: readonly number[]): (value: unknown) => string {
-  return sayer(section, undefined, { compact: totals.some((n) => Math.abs(n) >= COMPACT_FROM) });
+export function legendSayer(section: Section, figures: readonly number[]): (value: unknown) => string {
+  const rule = measureRule(section);
+  const major = rule?.format === 'money' && rule.minor ? 10 ** currencyDigits(rule.currency || defaultCurrency()) : 1;
+  return sayer(section, undefined, { compact: figures.some((n) => Math.abs(n) / major >= COMPACT_FROM) });
 }
 
 /** How a section says a figure: in its measure's dress, else as a number. */
@@ -494,7 +498,7 @@ export function parseRootSlot(body: unknown): { window: string; picks: Picks; pe
     const eq = part.indexOf('=');
     if (eq > 0 && part.startsWith(PERIOD_PREFIX)) periods[part.slice(PERIOD_PREFIX.length, eq)] = part.slice(eq + 1);
     else if (eq > 0) picks[part.slice(0, eq)] = part.slice(eq + 1);
-    else if (part) window = part;
+    else if (part) window = readPeriod(part);
   }
   return { window, picks, ...(Object.keys(periods).length ? { periods } : {}) };
 }

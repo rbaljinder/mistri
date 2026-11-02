@@ -24,6 +24,8 @@ export interface AppListTab {
   slug?: string;
   /** The resource's segment the tab names (appSegments.ts): its `query` is that word, written out where it is read. */
   segment?: string;
+  /** What the tab says while nothing is under it and nothing narrows it past its own condition. */
+  empty?: AppListEmpty;
 }
 
 /**

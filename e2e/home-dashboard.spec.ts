@@ -60,9 +60,10 @@ for (const width of [412, 1024, 1440])
     await page.getByRole('option', { name: 'Any stage', exact: true }).click();
     await expect(page).toHaveURL(/\/$/);
     await stable();
+    // A dashboard opened by its address, a window chosen, is a room of the menu: it names itself, with no trail over it.
     await page.goto(`${CRM}/@dash-sales-dashboard~last-30-days`);
     await expect(heading).toHaveText('Sales dashboard');
-    await expect(page.locator('.crumbs-host')).toBeVisible();
+    await expect(page.locator('.crumbs-host')).toHaveCount(0);
   });
 
 /* A donut's slice that drills is a Tab stop, and grade's hidden-focus found four on this dashboard: the ring was the

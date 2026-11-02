@@ -84,7 +84,10 @@ test('a Postgres 12+ scope inlines its CTE and says a repeated condition once', 
   differing.table('item');
   const kept = differing.finish();
   assert.deepEqual(kept.params, ['north', 'south', 'east']);
-  assert.match(kept.text, /= \$1 AND \(\(.+ != \$2\) OR \(.+ IN \(\$3\)\)\)/);
+  assert.match(
+    kept.text,
+    /OPERATOR\(pg_catalog\.=\) \$1 AND \(\(.+ OPERATOR\(pg_catalog\.<>\) \$2\) OR \(.+ OPERATOR\(pg_catalog\.=\) ANY \(ARRAY\[\$3\]::pg_catalog\.text\[\]\)\)\)/,
+  );
 });
 
 /* item(id, tenant, parent_id → item, name); north and south interleaved so a
@@ -206,7 +209,7 @@ test(
       await leakChecks(reads as never, table, schema.foreignKeys[0].name, (sql) => {
         if (version >= 120_000) assert.match(sql, /AS NOT MATERIALIZED \(SELECT/);
         else assert.doesNotMatch(sql, /MATERIALIZED/);
-        assert.equal(sql.match(/"tenant" = \$/g)?.length, 1, 'the repeated condition is said once');
+        assert.equal(sql.match(/"tenant" OPERATOR\(pg_catalog\.=\) \$/g)?.length, 1, 'the repeated condition is said once');
       });
     } finally {
       await adapter.close();

@@ -90,12 +90,15 @@ export function FormBody({
   form,
   appName,
   prefill,
+  initial,
   onDismiss,
 }: {
   form: ServedForm;
   appName: string;
   /** Where it starts, as a query string, when it is not drawn at its own address. */
   prefill?: string;
+  /** Where it starts, as a component gave it: every input, over what the command prepared. */
+  initial?: Readonly<Record<string, unknown>>;
   /** Drawn over a page: back to it, from Cancel or from Done once received. */
   onDismiss?: () => void;
 }) {
@@ -137,7 +140,7 @@ export function FormBody({
       inDialog={Boolean(onDismiss)}
       connection={connection ?? undefined}
       identityEpoch={identity.epoch}
-      {...(prepared.data ? { initial: prepared.data.initial } : {})}
+      {...(prepared.data || initial ? { initial: { ...prepared.data?.initial, ...initial } } : {})}
       {...(prepared.data?.questions ? { questions: prepared.data.questions } : {})}
       {...(prefill === undefined ? {} : { prefill })}
       {...(onDismiss ? { onDismiss } : {})}

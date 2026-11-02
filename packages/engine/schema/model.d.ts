@@ -157,7 +157,7 @@ export type AppCommandField = (CommandValueBase & (
   | { type: 'richText'; minLength?: number; maxLength?: number; mentions?: CommandRichTextMentions; images?: string }
   | { type: 'number'; min?: number; max?: number; integer?: boolean; step?: number; below?: string; above?: string; live?: CommandLiveLines }
   /** An amount of money in the App's currency (`ui.currency`), from 0 unless `min` says less, on cents unless `step` says otherwise. */
-  | { type: 'money'; min?: number; max?: number; step?: number; below?: string; above?: string; live?: CommandLiveLines }
+  | { type: 'money'; min?: number; max?: number; step?: number; minor?: boolean; currency?: string; below?: string; above?: string; live?: CommandLiveLines }
   /** `statement`: the long words a consent box stands beside (at most 2,000 characters), drawn as one paragraph. */
   | { type: 'boolean'; accept?: true; statement?: string }
   | { type: 'date'; min?: string; max?: string; below?: string; above?: string }

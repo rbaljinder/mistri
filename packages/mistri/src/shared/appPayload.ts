@@ -217,6 +217,7 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
   return {
     id: app.id,
     name: app.name,
+    ...(app.shortName ? { shortName: app.shortName } : {}),
     ...(app.landing ? { landingView: app.landing.view } : {}),
     views,
     nav: servedNav(app.nav, views),

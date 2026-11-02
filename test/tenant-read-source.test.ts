@@ -38,7 +38,7 @@ import {
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import { mapScopeCatalog } from '../packages/engine/src/shared/scopeCatalog.js';
 import type { ViewDef } from '../packages/engine/src/shared/view.js';
-import { CATALOG } from './support/statements.js';
+import { readsCatalog } from './support/statements.js';
 import type { BreakdownDef } from '../packages/engine/src/shared/breakdown.js';
 import {
   CASE_INSENSITIVE,
@@ -719,11 +719,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
           await source.assertCurrent(member);
           assert.equal((await source.readMembership(lookup()))?.membershipId, 'grant-1');
           assert.ok(seen.length > 0, 'the reads were seen');
-          assert.deepEqual(
-            seen.filter((sql) => CATALOG.test(sql)),
-            [],
-            'no catalog statement: the snapshots begin with the LOCK alone',
-          );
+          assert.deepEqual(seen.filter(readsCatalog), [], 'no catalog statement: the snapshots begin with the LOCK alone');
         } finally {
           watch.restore();
         }

@@ -26,6 +26,16 @@ const AS_PASSWORD = 'MISTRI_AS_PASSWORD';
 export const namesAccount = (as: string) => as.includes('@');
 
 /**
+ * `--as <role>:<email>`: a new account of that role made with that address (verified: the run's own store, the
+ * run's own address), so a row policy that finds a household by email has one to show. Undefined for a bare role or
+ * an existing account's email.
+ */
+export function splitRoleEmail(as: string): { role: string; email: string } | undefined {
+  const found = /^([^:@\s]+):([^:@\s]+@[^:\s]+)$/.exec(as);
+  return found ? { role: found[1], email: found[2].toLowerCase() } : undefined;
+}
+
+/**
  * The account's store, copied into the run's config directory where a start of the App over `xdg` reads it, and
  * the email and password to sign in with. Throws (the caller's refusal) with what to do instead.
  */

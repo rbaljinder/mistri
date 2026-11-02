@@ -29,7 +29,7 @@ const parse = (extra: object = {}) =>
     },
     'shell fixture',
   );
-const booleans = ['menuSearch', 'breadcrumbs', 'heading', 'counts'] as const;
+const booleans = ['menuSearch', 'heading', 'counts'] as const;
 const shell: AppShell = {
   search: false,
   breadcrumbs: false,
@@ -84,6 +84,19 @@ test('shell booleans are strict, including migrated breadcrumbs', () => {
   for (const breadcrumbs of [false, true, undefined]) {
     assert.throws(() => parse({ breadcrumbs }), /has no "breadcrumbs"/);
   }
+});
+
+/* The trail is all or nothing (true, false), or which of its two parts a room reached from the menu keeps: the bar
+   over it (`top`) and the house it starts with (`home`). Left out, both are off (Crumbs.tsx). */
+test('breadcrumbs is true, false, or { top, home } with each true or false', () => {
+  for (const value of [{}, { top: true }, { home: true }, { top: false, home: true }])
+    assert.deepEqual(parse({ ui: { shell: { breadcrumbs: value } } }).ui.shell, { breadcrumbs: value });
+  const said = { top: true };
+  const parsed = parse({ ui: { shell: { breadcrumbs: said } } }).ui.shell!.breadcrumbs;
+  assert.notEqual(parsed, said);
+  for (const value of [null, 0, 'top', [], new Date(), { top: 'yes' }, { home: 1 }])
+    assert.throws(() => parse({ ui: { shell: { breadcrumbs: value } } }), /shell\.breadcrumbs.*true or false/);
+  assert.throws(() => parse({ ui: { shell: { breadcrumbs: { top: true, deep: true } } } }), /ui\.shell\.breadcrumbs has no "deep"/);
 });
 
 test("the header's search is offered to a signed-out visitor only where the App says so", () => {
@@ -286,8 +299,14 @@ test('JSON schema pins the exact shell shape, enums, and list-only filterBar', (
   // `placement` is where the nav sits, beside the shell's other settings.
   assert.deepEqual(
     Object.keys(definition.properties).sort(),
-    [...booleans, 'search', 'placement', 'rail', 'width', 'headerWidth', 'gutter', 'sidebar', 'new'].sort(),
+    [...booleans, 'breadcrumbs', 'search', 'placement', 'rail', 'width', 'headerWidth', 'gutter', 'sidebar', 'new'].sort(),
   );
+  // The trail: true, false, or which of its parts a room reached from the menu keeps.
+  const trail = definition.properties.breadcrumbs;
+  assert.deepEqual(trail.anyOf[0], { type: 'boolean' });
+  assert.deepEqual(Object.keys(trail.anyOf[1].properties), ['top', 'home']);
+  assert.equal(trail.anyOf[1].additionalProperties, false);
+  assert.deepEqual(trail.default, { top: false, home: false });
   // `new` (0.8.14): the header's New menu, each line a list's view or a command's form, or a group of
   // them under a heading.
   assert.equal(definition.properties.new.minItems, 1);

@@ -12,6 +12,7 @@ import {
   PathError,
   backrefsTo,
   labelColumnMeta,
+  plainType,
   resolvePath,
   tableAtPrefix,
   tryResolvePath,
@@ -428,7 +429,14 @@ export function viewPaths(schema: DatabaseSchema, view: ViewDef, plan: JoinPlan,
       ),
     );
   };
-  return { resolve, qualify, membership, exists };
+  /* The catalog's type of what a path reads where it reads one column as it is stored, as `qualify` writes it plain:
+     what a comparison names the database's own operator by (SqlStyle.builtin). A label, a JSON key, an expression,
+     a rollup or a record's tags is an expression and is compared as written. */
+  const typeOf = (path: string): string | undefined =>
+    labelPrefix(path) !== undefined || jsonKeyAt(path) || expressionAt(path) || computedAt(path) || tagsAt(path)
+      ? undefined
+      : plainType(schema, view.base, path);
+  return { resolve, qualify, membership, exists, typeOf };
 }
 
 /* What a stored column is to an expression that reads it: a yes-or-no column native or a 0/1 integer. */

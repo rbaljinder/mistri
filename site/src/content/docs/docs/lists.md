@@ -53,8 +53,11 @@ See it in the sample (`examples/apps/lintel/views.ts:143`) (some tabs left out);
 | `editable`, `totals`, `rowActions` | Cells edited in place, sums over the whole tab, a row's own actions | off | Stable |
 | `open`, `order`, `import` | `'drawer'` or `'modal'`; a column people drag rows by; Import from CSV | page; none; off | Stable |
 | `opens` | a reference column: a row opens the record it names, so a list of `ticket_watcher` opens each ticket; a grid only | the row | Stable |
+| `empty` | `{ title, description?, action? }`: what the list says while it has no row, as it opens; a tab says its own with `{ segment, empty }` | "No work orders yet." | Stable |
 
 A tab's `query` is the [query language](/docs/query/) without the table name: `status = open and due_on < today`, `close_date = next 90 days`, `account_id.rating = hot`. With the generated `mistri-schema.d.ts` beside the App, every query string is typed: `` `amout` is not a column of opportunity `` is a type error at the string. That needs exactly one App's schema in the TypeScript project; with none or two, the types stand down and `check` judges the strings ([the limit](/docs/app-dsl/#typed-query-strings)). Every key: [views reference](/docs/dsl-views/#viewskindlisttabs). Each presentation is pictured in the [blocks gallery](/docs/blocks/).
+
+An empty list says one of three things. A search or filter past the tab that found nothing says No matches, with Clear. Otherwise a tab with an `empty` of its own says it (`{ segment: 'overdue', empty: { title: 'No overdue jobs' } }`); the first tab, where the list opens, says the list's `empty`; and any other tab names itself ("No work orders in Overdue right now.").
 
 ## Common mistakes
 

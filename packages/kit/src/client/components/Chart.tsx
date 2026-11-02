@@ -1329,8 +1329,9 @@ export function StackedBars({
   /** A series' tone from its column's display map. Where every series has one, and no two share it, the bars wear the
       tones (Paid good, Open warning) rather than the palette, whose order says nothing about what a value means. */
   seriesTone?: (key: string) => string | undefined;
-  /** The legend's figures by one rule, given every total (compact for all or whole for all). */
-  sayLegend?: (totals: readonly number[]) => Say;
+  /** The chart's visible figures (legend, each bar's total, the target) by one rule, given every one of them as stored
+      (compact for all or exact for all); the titles and the hidden text stay exact. */
+  sayLegend?: (figures: readonly number[]) => Say;
 }) {
   const MAX_SERIES = 7;
   const name = (v: unknown) => (v == null ? '—' : String(v));
@@ -1390,7 +1391,9 @@ export function StackedBars({
   const goal = target !== undefined && Number.isFinite(target) && target > 0 ? target : undefined;
   const scale = Math.max(...shown.map((bar) => bar.total), goal ?? 0);
   const share = (v: number) => `${((100 * v) / scale).toFixed(2)}%`;
-  const sayTotal = sayLegend ? sayLegend(series.map((s) => s.total)) : say;
+  const sayTotal = sayLegend
+    ? sayLegend([...series.map((s) => s.total), ...shown.map((bar) => bar.total), ...(goal === undefined ? [] : [goal])])
+    : say;
   return (
     <div className="chart-stacked">
       <ul className="chart-legend chart-stacked-legend">
@@ -1405,7 +1408,7 @@ export function StackedBars({
           <li className="chart-stacked-goal">
             <span className="chart-target-swatch" aria-hidden="true" />
             <span className="chart-legend-key">{sayCopy('targetLabel')}</span>
-            <span className="chart-legend-value">{say(goal)}</span>
+            <span className="chart-legend-value">{sayTotal(goal)}</span>
           </li>
         )}
       </ul>
@@ -1443,7 +1446,7 @@ export function StackedBars({
                 </span>
                 {goal !== undefined && <span className="chart-stacked-target" style={{ left: share(goal) }} aria-hidden="true" />}
               </span>
-              <span className="chart-stacked-total">{say(bar.total)}</span>
+              <span className="chart-stacked-total">{sayTotal(bar.total)}</span>
               <span className="visually-hidden">{`: ${parts.map(({ s, value }) => `${s.label} ${say(value)}`).join(', ')}`}</span>
             </>
           );

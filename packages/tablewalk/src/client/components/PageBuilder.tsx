@@ -27,14 +27,12 @@ import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { ConfirmDialog, PromptDialog } from '@mistriwork/kit/client/components/Prompt.js';
 import { asConfig, checkedDraft, type PageDraft } from './pageDraft.js';
 import type { RecoveredPageDraft, RecoveryStatus } from '../pageDraftRecovery.js';
-import type { PagePreviewContext } from '@mistriwork/kit/client/components/PagePreview.js';
+import type { PagePreviewContext } from './PagePreview.js';
 import { formatDateTime } from '@mistriwork/kit/client/locale.js';
 import { say } from '../copy/workbench/components/PageBuilder.js';
 import { addHostListener, popupContainer, removeHostListener } from '@mistriwork/kit/client/shellHost.js';
 
-const PagePreview = lazy(() =>
-  import('@mistriwork/kit/client/components/PagePreview.js').then((module) => ({ default: module.PagePreview })),
-);
+const PagePreview = lazy(() => import('./PagePreview.js').then((module) => ({ default: module.PagePreview })));
 
 export type { PageDraft } from './pageDraft.js';
 type Section = PageSection;

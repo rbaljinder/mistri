@@ -35,7 +35,11 @@ export type Navigation =
 
 /** A command a component ran or opened, recorded instead of sent. */
 export interface CommandCall { command: string; mode: 'run' | 'open'; key: Readonly<Record<string, unknown>>; input?: Readonly<Record<string, unknown>> }
-export type CommandOutcome = { status: 'applied'; message?: string; output?: unknown } | { status: 'refused'; message: string } | { status: 'closed' };
+export type CommandOutcome =
+  | { status: 'applied'; message?: string; output?: unknown }
+  | { status: 'refused'; message: string }
+  | { status: 'closed' }
+  | { status: 'unknown'; message: string; check(options?: { challenge?: string }): Promise<CommandOutcome> };
 
 export interface RenderOptions {
   /** Evaluated values only; these fixtures never grant access or record exposure. */

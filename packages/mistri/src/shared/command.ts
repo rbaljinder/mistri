@@ -368,6 +368,8 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       'mask',
       'sensitive',
       'live',
+      'minor',
+      'currency',
       'statement',
       'exclusive',
       'as',
@@ -506,9 +508,16 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
   }
   if (f.type === 'number' || f.type === 'money') {
     only(
-      f.type === 'money' ? ['min', 'max', 'step', 'below', 'above', 'live'] : ['min', 'max', 'integer', 'step', 'below', 'above', 'live'],
+      f.type === 'money'
+        ? ['min', 'max', 'step', 'minor', 'currency', 'below', 'above', 'live']
+        : ['min', 'max', 'integer', 'step', 'below', 'above', 'live'],
     );
-    if (f.type === 'money' && f.step === undefined) f.step = 0.01;
+    if (f.minor !== undefined && typeof f.minor !== 'boolean') return fail(where, 'minor must be boolean');
+    if (f.currency !== undefined && (typeof f.currency !== 'string' || !/^[A-Z]{3}$/.test(f.currency)))
+      return fail(where, "currency must be an ISO 4217 code such as 'EUR'");
+    if (f.minor === true && f.step !== undefined)
+      return fail(where, 'a minor-unit amount takes its precision from the currency, not a step');
+    if (f.type === 'money' && f.step === undefined && f.minor !== true) f.step = 0.01;
     if (f.type === 'money' && f.min === undefined) f.min = 0;
     for (const key of ['min', 'max'] as const)
       if (f[key] !== undefined && (typeof f[key] !== 'number' || !Number.isFinite(f[key]))) fail(where, `${key} must be finite`);
@@ -532,6 +541,8 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       ...(f.max === undefined ? {} : { max: f.max as number }),
       ...(f.integer === undefined ? {} : { integer: f.integer as boolean }),
       ...(f.step === undefined ? {} : { step: f.step as number }),
+      ...(f.minor === true ? { minor: true } : {}),
+      ...(f.currency === undefined ? {} : { currency: f.currency as string }),
       ...sibling('below'),
       ...sibling('above'),
       ...(f.live === undefined ? {} : { live: liveLines(f.live, where) }),

@@ -21,6 +21,7 @@ export const say = defineMessages({
   mustBeMoreThan: '{label} must be more than {other}.',
   hasCharactersAForm: '{label} has characters a form does not take.',
   mustBeASafe: '{label} must be a safe whole number.',
+  hasMoreDecimalsThanTheCurrency: '{label} has more decimal places than the currency takes.',
   mustBeOnOrAfter: '{label} must be on or after {min}.',
   labelMustBeAt: '{label} must be at least {min}.',
   mustBeOnOrBefore: '{label} must be on or before {max}.',

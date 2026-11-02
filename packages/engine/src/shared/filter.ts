@@ -230,6 +230,17 @@ export interface SqlStyle {
   jsonKey?(expression: string, key: string, as: 'value' | 'text' | 'number'): string;
   /** Whether a JSON key's list (or its one value) holds any of the bound values: `has` on a many-of-a-list field. */
   jsonHas?(expression: string, key: string, holes: readonly string[]): string;
+  /**
+   * The built-in type a column of `type` (ColumnMeta.type, the catalog's own word) compares as, where a comparison
+   * names its operator by schema: PostgreSQL's `OPERATOR(pg_catalog.=)`, as `name` (what an IN list is read as) and
+   * whether a pattern reads it as text. A bare `=` resolves through the search_path, where an exact signature
+   * pg_catalog lacks (`varchar = varchar`) wins over pg_catalog's own. Undefined for every other type (an enum, an
+   * extension's citext), whose operators are its own and stay as written. Only where `buildWhere` is told the types
+   * (`types`): an App's scoped reads.
+   */
+  builtin?(type: string): { readonly name: string; readonly text: boolean } | undefined;
+  /** A condition that holds for no row, said with no operator a search_path can shadow where the dialect has one. */
+  never?: string;
 }
 
 /** The periods a breakdown can group dates by: a calendar's (day to year), and the two that recur — the ISO
@@ -310,7 +321,39 @@ export const POSTGRES_STYLE: SqlStyle = {
         ? `CASE WHEN jsonb_typeof((${e})::jsonb -> '${key}') = 'number' THEN ((${e})::jsonb ->> '${key}')::numeric END`
         : `((${e})::jsonb ->> '${key}')`,
   jsonHas: (e, key, holes) => `(((${e})::jsonb -> '${key}') ?| ARRAY[${holes.join(', ')}]::text[])`,
+  /* information_schema's data_type, which says a domain by its base type: a varchar is read as text, as pg_catalog
+     compares it, and a char as bpchar, which keeps its trailing blanks insignificant without char(1)'s truncation. */
+  builtin: (type) => {
+    const name = POSTGRES_BUILTIN[type];
+    return name === undefined ? undefined : { name, text: name === 'text' || name === 'bpchar' };
+  },
+  never: 'FALSE',
 };
+
+/* The types a comparison names pg_catalog's operator for, by information_schema's word for them, and the name an IN
+   list is cast to. Absent: USER-DEFINED (an enum, citext, an extension's type) and ARRAY. */
+const POSTGRES_BUILTIN: Readonly<Record<string, string>> = Object.assign(Object.create(null), {
+  text: 'text',
+  'character varying': 'text',
+  character: 'bpchar',
+  smallint: 'int2',
+  integer: 'int4',
+  bigint: 'int8',
+  numeric: 'numeric',
+  real: 'float4',
+  'double precision': 'float8',
+  boolean: 'bool',
+  uuid: 'uuid',
+  date: 'date',
+  'timestamp without time zone': 'timestamp',
+  'timestamp with time zone': 'timestamptz',
+  'time without time zone': 'time',
+  'time with time zone': 'timetz',
+  interval: 'interval',
+  bytea: 'bytea',
+  jsonb: 'jsonb',
+  inet: 'inet',
+});
 
 /**
  * Postgres 12 and later: row-scope CTEs stay inlined however often a read
@@ -398,11 +441,27 @@ export function buildWhere(
   exists?: (rows: AnyRows) => string,
   /** Whether a condition may compare as a foreign key does (`Condition.equality`): a scoped write's own reads only. */
   references = false,
+  /** The catalog's type of a column the filter names, where the style names its operators by schema
+   * (SqlStyle.builtin): an App's scoped reads. Absent, or undefined for a name, the operator as written. */
+  types?: (name: string) => string | undefined,
 ): SqlFragment {
   if (!filter?.groups.length) return { text: '', params: [] };
   const params: unknown[] = [];
   let index = startIndex;
   const next = () => style.placeholder(index++);
+  const never = style.never ?? '1 = 0';
+  /* PostgreSQL's own operator for a built-in type, named so: a schema author's `=` on the search_path cannot decide
+     which rows a policy or a filter admits (SqlStyle.builtin). */
+  const builtin = (name: string) => {
+    const type = types?.(name);
+    return type === undefined ? undefined : style.builtin?.(type);
+  };
+  const operator = (op: string) => `OPERATOR(pg_catalog.${op === '!=' ? '<>' : op})`;
+  /* ILIKE … ESCAPE is `~~*` of like_escape, as the parser rewrites it; spelled so, the operator can be named. */
+  const pattern = (col: string, name: string) =>
+    style.likeOp === 'ILIKE' && builtin(name)?.text
+      ? `${col} ${operator('~~*')} pg_catalog.like_escape(${next()}, '${LIKE_ESCAPE}')`
+      : `${col} ${style.likeOp} ${next()} ESCAPE '${LIKE_ESCAPE}'`;
 
   /* A condition every group holds is said once, before the OR: the same
      rows (AND distributes over OR in SQL's three-valued logic too), and the
@@ -438,7 +497,7 @@ export function buildWhere(
         if (c.op === 'has') {
           if (!membership || c.other !== undefined) throw new RequestFault("This read cannot ask a record's tags.");
           const labels = (Array.isArray(c.value) ? c.value : [c.value]).filter((v) => typeof v === 'string' || typeof v === 'number');
-          if (!labels.length) return '1 = 0';
+          if (!labels.length) return never;
           const holes = labels.map((v) => {
             params.push(String(v));
             return next();
@@ -451,12 +510,15 @@ export function buildWhere(
             !references ||
             c.op !== '=' ||
             c.collation !== undefined ||
-            c.other !== undefined ||
+            (c.other !== undefined && (!other || typeof c.other !== 'string')) ||
             typeof operator !== 'string' ||
             !SQL_OPERATOR.test(operator) ||
             ![type, left, right].every((part, at) => (at > 0 && part === undefined) || (typeof part === 'string' && SQL_TYPE.test(part)))
           )
             throw new RequestFault('This read cannot compare as a foreign key does.');
+          /* A reference column on the right, as ri_triggers.c joins a key to its references: of its own type already. */
+          if (c.other !== undefined)
+            return `${column(c.column, c)}${left ? `::${left}` : ''} OPERATOR(${operator}) ${other!(c.other)}${right ? `::${right}` : ''}`;
           params.push(c.value ?? null);
           return `${column(c.column, c)}${left ? `::${left}` : ''} OPERATOR(${operator}) ${next()}::${type}${right ? `::${right}` : ''}`;
         }
@@ -465,7 +527,8 @@ export function buildWhere(
           if (!other || typeof c.other !== 'string' || !COMPARISONS.has(c.op)) {
             throw new RequestFault('This read cannot compare two columns.');
           }
-          return `${col} ${c.op} ${collate(other(c.other), c.collation, style)}`;
+          const op = builtin(c.column) && builtin(c.other) ? operator(c.op) : c.op;
+          return `${col} ${op} ${collate(other(c.other), c.collation, style)}`;
         }
         switch (c.op) {
           case 'isNull':
@@ -474,11 +537,14 @@ export function buildWhere(
             return `${col} IS NOT NULL`;
           case 'in': {
             const list = Array.isArray(c.value) ? c.value : [c.value];
-            if (!list.length) return '1 = 0'; // an empty IN matches nothing
+            if (!list.length) return never; // an empty IN matches nothing
             const holes = list.map((v) => {
               params.push(v ?? null);
               return next();
             });
+            /* IN has no operator to name: the same rows as `= ANY` of the list read as the column's type. */
+            const typed = builtin(c.column);
+            if (typed) return `${col} ${operator('=')} ANY (ARRAY[${holes.join(', ')}]::pg_catalog.${typed.name}[])`;
             return `${col} IN (${holes.join(', ')})`;
           }
           /* All three go through one pattern builder, which escapes the
@@ -488,7 +554,7 @@ export function buildWhere(
           case 'startsWith':
           case 'endsWith':
             params.push(likePattern(c.value, c.op));
-            return `${col} ${style.likeOp} ${next()} ESCAPE '${LIKE_ESCAPE}'`;
+            return pattern(col, c.column);
           /* Bound, not escaped: the wildcards belong to whoever typed them.
                Still a parameter — the value never becomes SQL text — so the
                safety argument is unchanged, and still `ESCAPE '#'`, so the
@@ -496,7 +562,7 @@ export function buildWhere(
                internally. */
           case 'like':
             params.push(String(c.value ?? ''));
-            return `${col} ${style.likeOp} ${next()} ESCAPE '${LIKE_ESCAPE}'`;
+            return pattern(col, c.column);
           default: {
             /* The one field in a structured request that becomes SQL text
                  rather than a bound parameter — and until now it was checked
@@ -512,7 +578,7 @@ export function buildWhere(
               throw new RequestFault(`"${String(c.op)}" is not an operator this tool knows.`);
             }
             params.push(c.value ?? null);
-            return `${col} ${c.op} ${next()}`;
+            return `${col} ${builtin(c.column) ? operator(c.op) : c.op} ${next()}`;
           }
         }
       })

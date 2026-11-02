@@ -206,6 +206,14 @@ type HolesOf<V> = V extends string
 /** Nothing for a message without holes; otherwise a value for every hole, and only those. */
 type ParamsOf<V> = [HolesOf<V>] extends [never] ? [] : [params: Record<HolesOf<V>, string | number>];
 type Shared = typeof catalog.en;
+/**
+ * A module's speaker (`defineMessages`): a key of its own table, or a shared one, with the holes its words ask for.
+ * Named, so a table's declarations (the kit's built client ships them) say it rather than spell it out.
+ */
+export type RoomMessage<T extends Record<string, MessageValue>> = <K extends (keyof T & string) | MessageKey>(
+  key: K,
+  ...params: ParamsOf<K extends keyof T ? T[K] : K extends keyof Shared ? Shared[K] : never>
+) => string;
 
 /** What the server says about an App's reader: the tag it resolved, and whether it chose among the App's own catalogs. */
 export interface ServedLanguage {
@@ -400,7 +408,7 @@ export function message(key: MessageKey, params?: MessageParams): string {
 export function defineMessages<const T extends Record<string, MessageValue>>(
   en: T,
   translated: { [L in Exclude<MessageLanguage, 'en'>]?: { [K in keyof T]?: MessageValue } } = {},
-) {
+): RoomMessage<T> {
   return function roomMessage<K extends (keyof T & string) | MessageKey>(
     key: K,
     ...params: ParamsOf<K extends keyof T ? T[K] : K extends keyof Shared ? Shared[K] : never>

@@ -10,7 +10,7 @@ import { extractFixture } from '../../fixture.js';
 import { tableNamed } from '@mistriwork/engine/shared/schema.js';
 import { lintCounts, lintSchema } from '../../../shared/lint.js';
 import { diffSchemas } from '../../../shared/diff.js';
-import { insertOrder } from '@mistriwork/engine/shared/order.js';
+import { insertOrder } from '../../../shared/order.js';
 import { linkTo, openFor, READS, STATS, wholeKeyOrThrow, type Handler } from '../toolkit.js';
 
 export const definitions = [

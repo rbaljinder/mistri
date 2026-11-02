@@ -1354,6 +1354,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
                 ...(browser
                   ? {
                       appName: loaded.app.name,
+                      ...(loaded.app.shortName ? { appShortName: loaded.app.shortName } : {}),
                       ...(home === undefined ? {} : { home }),
                       // The landing's view key, as the single-App who-am-I sends it (gate.ts): without it
                       // the signed-out home skips the landing and a visitor gets the sign-in screen.
@@ -1391,6 +1392,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
                   ? {
                       tenant: true,
                       appName: loaded.app.name,
+                      ...(loaded.app.shortName ? { appShortName: loaded.app.shortName } : {}),
                       ...(home === undefined ? {} : { home }),
                       // The landing's view key, as the single-App who-am-I sends it (gate.ts): without it
                       // the signed-out home skips the landing and a visitor gets the sign-in screen.
@@ -1424,6 +1426,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
                 ? {
                     tenant: true,
                     appName: loaded.app.name,
+                    ...(loaded.app.shortName ? { appShortName: loaded.app.shortName } : {}),
                     look: withIconGlyphs(appLook(loaded.app)),
                     ...(loaded.app.auth?.tenancy?.label ? { tenantLabel: loaded.app.auth.tenancy.label } : {}),
                     ...(loaded.app.auth?.tenancy?.platform ? { platformLabel: loaded.app.auth.tenancy.platform.label } : {}),

@@ -68,6 +68,8 @@ export interface BusinessCommandAuthorization {
   readonly machine?: CommandMachine;
   /** The App's `ui.timezone`: the wall clock a write into a zone-less timestamp column is made in (UTC when absent). */
   readonly timezone?: string;
+  /** The App's `ui.currency`: what a minor-unit amount in a command's input is typed in where it names none (USD when absent). */
+  readonly currency?: string;
   /** The table people are rows of (`auth.me`), where the command reads it: what `me` writes to a reference to it. */
   readonly people?: Readonly<{ table: string; column: string; key: string; id: string }>;
   /** The file resources it writes, by local name: where a new row's bytes go and the most it may hold (the
@@ -776,6 +778,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           machine,
           versionField,
           ...(appZone(app.ui) ? { timezone: appZone(app.ui) } : {}),
+          currency: app.ui?.currency ?? 'USD',
           ...peopleIn(app, schema, catalog),
           ...(files.size ? { files } : {}),
         },
@@ -919,6 +922,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         ...(binding.lookup ? { lookupTables: binding.lookup.reader } : {}),
         ...(binding.machine ? { machine: machineFor(binding.machine, identity) } : {}),
         ...(binding.timezone ? { timezone: binding.timezone } : {}),
+        ...(binding.currency ? { currency: binding.currency } : {}),
         ...(binding.people ? { people: binding.people } : {}),
         ...(binding.files ? { files: binding.files } : {}),
         table(local: string, writing = false): string {

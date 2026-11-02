@@ -278,6 +278,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
       'pages',
       'resources',
       'retention',
+      /* `shortName` (1.0.0-rc.12): what a phone's bar and an installed icon say where the name does not fit. */
+      'shortName',
       'sources',
       'track',
       'ui',
@@ -708,7 +710,10 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.11: a metric's `figure`, exact (the default) or compact (one entry; `figure` is a name already): 1668/502.
     // 1.0.0-rc.11: a money rule's `whole`, a whole amount said without its minor digits (one entry, one new name): 1669/503.
     // 1.0.0-rc.11: a resource's `triggers`, the ones a row policy accepts (one entry, one new name): 1670/504.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1670, names: 504 });
+    // 1.0.0-rc.12: the shell's `breadcrumbs` takes `{ top, home }` (two entries, no new name: `top` and `home` are others' already): 1672/504.
+    // 1.0.0-rc.12: a tab's `empty` (both tab shapes) and a dashboard embed's (three entries, no new name): 1675/504.
+    // 1.0.0-rc.12: the root's `shortName` (one entry, one new name): 1676/505.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1676, names: 505 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

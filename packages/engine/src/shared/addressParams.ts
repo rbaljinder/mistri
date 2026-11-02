@@ -51,3 +51,6 @@ export function addressSortValue(raw: string): { field: string; descending: bool
 
 /** All time, said where a dashboard opens on a window of its own (`window: 'last 30 days'`): `?period=all-time`. */
 export const ALL_TIME = 'all-time';
+
+/** An address's `period=` as it is read: `all` is the word a person guesses, and means all time as `all-time` does. */
+export const readPeriod = (word: string): string => (word === 'all' ? ALL_TIME : word);

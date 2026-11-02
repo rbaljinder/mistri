@@ -68,14 +68,17 @@ test.describe('a view that names its roles', () => {
     await requester.keyboard.press('Escape');
 
     /* The queue's address, and one that names no view: the same answer — the
-       crumb echoing the address typed — and no word of the queue. */
-    const said = async (address: string, crumb: string) => {
+       heading echoing the address typed, in the look's case — and no word of the queue. */
+    const said = async (address: string, heading: string) => {
       await requester.goto(`${app.origin}/${address}`);
       const main = requester.locator('main');
       await expect(main).toContainText('This page is not available to your role.');
       // The shell holds main hidden until its first paint settles; read the words once they are shown.
       await expect(main).toBeVisible();
-      return { url: new URL(requester.url()).pathname.replace(address, '…'), text: (await main.innerText()).replace(crumb, '…') };
+      return {
+        url: new URL(requester.url()).pathname.replace(address, '…'),
+        text: (await main.innerText()).replace(new RegExp(heading, 'i'), '…'),
+      };
     };
     const queue = await said('queue', 'Queue');
     expect(queue).toEqual(await said('no-such-view', 'No-such-view'));

@@ -24,6 +24,7 @@ import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
 import type { TriggerAcceptance } from '../packages/engine/src/adapters/scoped/triggerProof.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import { buildWhere, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { referencesStatement } from '../packages/engine/src/adapters/scoped/scopedTransaction.js';
 import { refusalCause } from '../packages/engine/src/shared/refusal.js';
 import { liveSkip } from './live.js';
 
@@ -388,6 +389,64 @@ describe('the parent check on PostgreSQL, compared as the foreign key compares',
     assert.deepEqual(await rows(`SELECT id FROM ${SCHEMA}.ch`), [{ id: 1 }]);
   });
 
+  /* The pin's ROW EXCLUSIVE does not conflict with the SHARE UPDATE EXCLUSIVE that ALTER TABLE … INHERIT takes on the
+     parent, so a target that passed the catalog's check can gain a child while the write runs. Here the child brings a
+     row whose own key points at tenant b's r: the update through p reached it, no check read the child's key, and it
+     committed pointing at a hidden row. The hierarchy is read again with the COMMIT (hierarchyRecheck). */
+  test('a target that gains an inheritance child while the write runs refuses the transaction, nothing committed', async () => {
+    await reset(`CREATE TABLE ${SCHEMA}.r (id int PRIMARY KEY, tenant text NOT NULL);
+      CREATE TABLE ${SCHEMA}.p (k int PRIMARY KEY, x int, tenant text NOT NULL);
+      CREATE TABLE ${SCHEMA}.pc (k int PRIMARY KEY, x int REFERENCES ${SCHEMA}.r, tenant text NOT NULL);
+      INSERT INTO ${SCHEMA}.r VALUES (1, 'a'), (2, 'b');
+      INSERT INTO ${SCHEMA}.pc VALUES (5, 1, 'a');`);
+    const result = await said(ofA('p', 'r'), async (tx) => {
+      await control.query(`ALTER TABLE ${SCHEMA}.pc INHERIT ${SCHEMA}.p`);
+      await tx.update({ table: `${SCHEMA}.p`, key: { k: 5 }, values: { x: 2 } });
+    });
+    assert.equal(result.said, REFUSED, result.cause);
+    assert.match(result.cause, /"scoped_references\.p" became part of a partition or inheritance hierarchy while the write ran/);
+    assert.deepEqual(await rows(`SELECT k, x FROM ${SCHEMA}.pc`), [{ k: 5, x: 1 }]);
+  });
+
+  /* An inheritance parent's foreign key reads the parent's own rows (ONLY), while the parent check read it with its
+     children: a child's row under the same key, visible to the person, passed for the parent's hidden one, and the
+     insert committed pointing at tenant b's row (a field report). A reference to an inheritance parent is refused; a
+     partitioned table, whose key and check both read every partition, is still checked (above). */
+  const INHERITED = `CREATE TABLE ${SCHEMA}.p (id int PRIMARY KEY, tenant text NOT NULL);
+    CREATE TABLE ${SCHEMA}.t (id int PRIMARY KEY, p_id int REFERENCES ${SCHEMA}.p, tenant text NOT NULL);
+    INSERT INTO ${SCHEMA}.p VALUES (1, 'b');`;
+  const pointing = (id: number, p_id: number | null) => (tx: WriteTransaction) =>
+    tx.insert({ table: `${SCHEMA}.t`, values: { id, p_id, tenant: 'a' } });
+
+  test("a reference to an inheritance parent is refused: a child's visible row does not pass for the parent's hidden one", async () => {
+    await reset(`${INHERITED}
+      CREATE TABLE ${SCHEMA}.pc () INHERITS (${SCHEMA}.p);
+      INSERT INTO ${SCHEMA}.pc VALUES (1, 'a');`);
+    const hidden = await said(ofA('p', 't'), pointing(1, 1));
+    assert.equal(hidden.said, REFUSED, hidden.cause);
+    assert.match(hidden.cause, /"scoped_references\.t" references "scoped_references\.p", an inheritance parent/);
+    // A row that references nothing checks nothing.
+    const none = await said(ofA('p', 't'), pointing(2, null));
+    assert.equal(none.said, 'committed', none.cause);
+    assert.deepEqual(await rows(`SELECT id, p_id FROM ${SCHEMA}.t ORDER BY id`), [{ id: 2, p_id: null }]);
+  });
+
+  /* The same, where the parent gains its child while the write runs: ALTER TABLE … INHERIT takes SHARE UPDATE
+     EXCLUSIVE on the parent, which the pin's ROW EXCLUSIVE does not hold off. What the written tables reference is read
+     again with the COMMIT (hierarchyRecheck). */
+  test('a referenced table that becomes an inheritance parent while the write runs refuses the transaction', async () => {
+    await reset(`${INHERITED}
+      CREATE TABLE ${SCHEMA}.pc (id int NOT NULL, tenant text NOT NULL);
+      INSERT INTO ${SCHEMA}.pc VALUES (1, 'a');`);
+    const raced = await said(ofA('p', 't'), async (tx) => {
+      await control.query(`ALTER TABLE ${SCHEMA}.pc INHERIT ${SCHEMA}.p`);
+      await pointing(1, 1)(tx);
+    });
+    assert.equal(raced.said, REFUSED, raced.cause);
+    assert.match(raced.cause, /"scoped_references\.p" became an inheritance parent while the write ran/);
+    assert.deepEqual(await rows(`SELECT id FROM ${SCHEMA}.t`), []);
+  });
+
   test('a trigger effect onto a partition or an inheritance child is refused, named for the hierarchy', async () => {
     await reset(`${PARTITIONED}
       CREATE TABLE ${SCHEMA}.q (k int PRIMARY KEY, n int, tenant text NOT NULL);
@@ -414,6 +473,53 @@ describe('the parent check on PostgreSQL, compared as the foreign key compares',
     );
     assert.match(heir.cause, /it writes "scoped_references\.qc", part of a partition or inheritance hierarchy/);
     assert.deepEqual(await rows(`SELECT n FROM ${SCHEMA}.s`), [{ n: 0 }]);
+  });
+
+  /* A bound's delete counts every row that references the row deleted, on the writer, across the whole table
+     (scopedTransaction.ts referencesStatement): any row a cascade would reach must be counted, or a delete the count
+     let through cascades into a row outside the bound. Counted by `=`, a char(3) key missed the text reference 'ab '
+     its foreign key (bpchar = bpchar) reaches, and a schema author's `=(varchar, varchar)` decided the count outright. */
+  const referencing = async (setup: string, shadow?: { create: string; drop: string }) => {
+    await reset(setup);
+    if (shadow) await control.query(shadow.create);
+    const adapter = new PostgresAdapter(LIVE!, 'references', [SCHEMA]);
+    let counted: number | undefined;
+    try {
+      await adapter.scopeVerifiedTransaction(
+        ofA('code', 'pick'),
+        async (write, catalog) => {
+          const fk = catalog.schema.foreignKeys.find((key) => key.from.table === `${SCHEMA}.pick`)!;
+          const statement = referencesStatement(catalog, fk, eq('code', 'ab'), POSTGRES_STYLE);
+          counted = Number((await write.query(statement.text, statement.params)).rows[0]?.n);
+        },
+        async () => {},
+      );
+    } finally {
+      await adapter.close();
+      if (shadow) await control.query(shadow.drop);
+    }
+    return counted;
+  };
+  test("a delete's references are counted by the foreign key's own operator: a char(3) key reaches its text reference 'ab '", async () => {
+    const counted = await referencing(`CREATE TABLE ${SCHEMA}.code (code char(3) PRIMARY KEY, tenant text NOT NULL);
+      CREATE TABLE ${SCHEMA}.pick (id int PRIMARY KEY, tenant text NOT NULL, code text REFERENCES ${SCHEMA}.code (code) ON DELETE CASCADE);
+      INSERT INTO ${SCHEMA}.code VALUES ('ab', 'a'); INSERT INTO ${SCHEMA}.pick VALUES (1, 'b', 'ab ');`);
+    const [cascade] = await rows(`SELECT count(*)::int AS n FROM ${SCHEMA}.pick`);
+    assert.equal(cascade.n, 1);
+    assert.equal(counted, 1);
+  });
+  test("a delete's references are counted by the foreign key's own operator: an =(varchar, varchar) in public does not decide", async () => {
+    const counted = await referencing(
+      `CREATE TABLE ${SCHEMA}.code (code varchar(8) PRIMARY KEY, tenant text NOT NULL);
+       CREATE TABLE ${SCHEMA}.pick (id int PRIMARY KEY, tenant text NOT NULL, code varchar(8) REFERENCES ${SCHEMA}.code (code) ON DELETE CASCADE);
+       INSERT INTO ${SCHEMA}.code VALUES ('ab', 'a'); INSERT INTO ${SCHEMA}.pick VALUES (1, 'b', 'ab');`,
+      {
+        create: `CREATE FUNCTION public.refs_never(varchar, varchar) RETURNS boolean LANGUAGE sql IMMUTABLE AS 'SELECT false';
+                 CREATE OPERATOR public.= (leftarg = varchar, rightarg = varchar, function = public.refs_never)`,
+        drop: `DROP OPERATOR IF EXISTS public.= (varchar, varchar); DROP FUNCTION IF EXISTS public.refs_never(varchar, varchar)`,
+      },
+    );
+    assert.equal(counted, 1);
   });
 });
 

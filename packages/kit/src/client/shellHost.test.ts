@@ -13,6 +13,7 @@ import {
   popupContainer,
   portalRoot,
   removeHostListener,
+  sayBrandName,
   setTabTitle,
   shellBody,
   shellById,
@@ -45,6 +46,21 @@ describe('the shell host, served', () => {
   it('writes the tab title', () => {
     setTabTitle('Leads · Compass');
     expect(document.title).toBe('Leads · Compass');
+  });
+
+  /* A phone's bar says the App's short name (style.css); the full one stays in the button, read, so the button is
+     still called by it. */
+  it("says the brand's name, and beside it a short name only a phone's bar shows", () => {
+    document.body.innerHTML = '<button type="button"><span class="brand-name">tablewalk</span></button>';
+    const brand = shellQuery('.brand-name');
+    sayBrandName(brand, 'Northwind Field Service', 'Northwind');
+    expect(brand?.querySelector('.brand-long')?.textContent).toBe('Northwind Field Service');
+    const short = brand?.querySelector('.brand-short');
+    expect(short?.textContent).toBe('Northwind');
+    expect(short?.getAttribute('aria-hidden')).toBe('true');
+    sayBrandName(brand, 'Desk');
+    expect(brand?.childElementCount).toBe(0);
+    expect(brand?.textContent).toBe('Desk');
   });
 
   it('puts a listener on the target it names, and its remover takes it off', () => {

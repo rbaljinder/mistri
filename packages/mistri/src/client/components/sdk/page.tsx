@@ -28,7 +28,7 @@ import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { pageBlocks } from './pageBlocks.js';
 import { say } from '../../copy/components/components/sdk/page.js';
 
-export { Card, Columns, Empty, Heading, Row, Stack, Stat, Value } from './kit.js';
+export { Card, Columns, Empty, Heading, Loaded, Row, Stack, Stat, Value } from './kit.js';
 export { Button };
 /* A page's place in its address: `page.useParam` is this hook, typed to the page's `params`; this one is for a module
    the page draws that is not the page itself (a widget, the Console's rooms). */

@@ -68,7 +68,7 @@ test(
       assert.equal((await provisionPostgresEventDeliveryStore(owned.url, destination('lender', `lender-${i}`))).destinationAdded, true);
     await assert.rejects(provisionPostgresEventDeliveryStore(owned.url, destination('lender', 'lender-16')), EventDeliveryUnavailable);
     const leads = await provisionPostgresEventDeliveryStore(owned.url, destination('leads', 'leads-0'));
-    assert.deepEqual(leads, { version: 1, provisioned: true, destinationAdded: true });
+    assert.deepEqual(leads, { version: 1, provisioned: true, destinationAdded: true, destinationReplaced: false, retired: [] });
     // One destination id is one App's: another App naming it is a shared id, refused.
     await assert.rejects(provisionPostgresEventDeliveryStore(owned.url, destination('leads', 'lender-0')), EventDeliveryUnavailable);
 

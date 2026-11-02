@@ -9,7 +9,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { insertOrder } from '../packages/engine/src/shared/order.js';
+import { insertOrder } from '../packages/tablewalk/src/shared/order.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
 const table = (name: string, columns: Array<Record<string, unknown>> = []) =>

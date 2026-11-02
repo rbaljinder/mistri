@@ -42,7 +42,7 @@ import {
   appCatalog,
   appRollupRules,
 } from '../../shared/app.js';
-import { resolveValidation, resourceValidation } from '../../shared/app.js';
+import { resolveValidation, resourceValidation, SHORT_NAME_MAX } from '../../shared/app.js';
 import { compileAppDefinitionValidation } from './appValidation.js';
 import { compileAppStamps } from './appStamps.js';
 import { cardsProblem } from '@mistriwork/engine/shared/appCards.js';
@@ -1265,6 +1265,7 @@ export function appAdvisories(loaded: LoadedApp, schema: DatabaseSchema): string
     ...rawIdWarnings(loaded.app, loaded.pages),
     ...mixedCurrencyWarnings(loaded.app),
     ...liveOffWarnings(loaded.app),
+    ...shortNameWarnings(loaded.app),
     ...notifyAdvisories(loaded.app, schema),
     ...valueLabelFindings(loaded.app).warnings,
   ].map((w) => `${manifest}: ${locateProblem(loaded.origins, w)}`);
@@ -1511,6 +1512,19 @@ function mixedCurrencyWarnings(app: LoadedApp['app']): string[] {
 /* A resource's `live: false` takes its table out of live sync, which an App joins only with `live: true` at its top.
    On an App that does not, nothing is followed and the word changes nothing: said, so the author does not believe a
    table is held out of something the App never does, or that the rest of it follows changes. */
+/** Past this many characters a phone's bar cuts the App's name, and a home screen its icon's label. */
+const BAR_NAME_FITS = 16;
+
+/** `[short-name]`: a name a phone's bar would cut ("Northwind Fi…"), with no `shortName` to say there instead. */
+function shortNameWarnings(app: LoadedApp['app']): string[] {
+  const length = Array.from(app.name).length;
+  if (app.shortName || length <= BAR_NAME_FITS) return [];
+  return [
+    `name [short-name]: "${app.name}" is ${length} characters, which a phone's bar and an installed icon cut short. ` +
+      `Say a shortName of ${SHORT_NAME_MAX} or fewer for them; the full name stays the bar's accessible name and the page's title.`,
+  ];
+}
+
 function liveOffWarnings(app: LoadedApp['app']): string[] {
   if ((app as { live?: true }).live === true) return [];
   return Object.entries(app.resources ?? {}).flatMap(([name, resource]) =>

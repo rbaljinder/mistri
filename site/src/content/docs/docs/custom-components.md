@@ -70,10 +70,25 @@ export default function BinMap({ rows }: SectionProps<typeof warehouseBins, Rows
 
 `@mistriwork/mistri/ui` is the only mistri module a component imports. It holds:
 
-- **The kit**: `Card`, `Stack`, `Row`, `Heading`, `Button`, `Value`, `Tone`, `Meter`, `Stat`, `Columns`, `Table`, `Dropdown`, `Segmented`, `SplitListDetail`, `Empty`, `Icon`. `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link.
+- **The kit**: `Card`, `Stack`, `Row`, `Heading`, `Button`, `Value`, `Tone`, `Meter`, `Stat`, `Columns`, `Table`, `Dropdown`, `Segmented`, `SplitListDetail`, `Empty`, `Loaded`, `Icon`. `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link. A free-form page's row of verbs at the screen's foot is `<Row foot>`: on a phone a notice stands above it instead of covering it.
 - **Reads**: `useRows`, `useRecord`, `useBreakdown`, `useFile`, all under the reader's grants, row policy and tenant.
 - **Commands**: `useCommand(cmd)` with `available`, `reason`, `run` and `open`; an applied run resolves with the command's `output`.
 - **The rest**: `useNavigate`, `useComposer` (fills the page's conversation box, never sends), `useViewer`, `useFormat`, `useMessage`, `useLook`, `useToken`, `useFlags`.
+
+`<Loaded query={rows}>{(data) => …}</Loaded>` draws a read's three other states as the platform does: a skeleton while it loads, `empty` (or "Nothing here yet.") for no rows, and the error with Try again. `useFormat().money(value, { currency, minor, whole, compact })` says a figure as a `money` column does, exactly, from a decimal string too; `dateTime(value, { timezone: 'America/Chicago' })` says it in that zone.
+
+### Run a command
+
+```tsx
+const close = useCommand('closeTicket');
+const can = close.available(ticket); // undefined while the server is asked
+{can !== false && <Button busy={can === undefined} onClick={() => close.run(ticket, { outcome: 'fixed' })}>Close</Button>}
+```
+
+- Gate a button on `available(record)`, not `granted`: `granted` is the role, `available` adds the command's `when` for this record. While it is undefined, keep the button and set `busy`, never `disabled`: a disabled button drops the reader's focus.
+- `run` resolves with `{ status }`: `applied`, `refused` (in the server's words), `closed` when its form was closed unsent, or `unknown` when the answer was lost. On `unknown`, call `check()` before sending again: it asks under the same key, so the run applies at most once.
+- One key covers each run. For a command that names no record, or a public page's, a run that must survive a reload takes `{ attempt }`: a `crypto.randomUUID()` made once per intent and kept (in the address, say). The same attempt sent again is the same run.
+- Inputs a command's `when` hides are neither required nor sent, as in its form.
 
 An id past 2^53 arrives as a string: draw it with `Value`, never through `Number()`.
 
@@ -115,8 +130,8 @@ See it in the sample (`examples/apps/ladle/pages/check-in.page.tsx:13`).
 
 - The path is the file's name, and the address: `/check-in?class=2`. `home` may name a page by its path.
 - `page.useRows`, `useRecord`, `useBreakdown` and `useFile` read only its `reads`; `page.useCommand` runs only its `commands`; `page.useParam('class')` keeps state in the address. Anything else is a type error, a `[page-undeclared]` problem in `check`, and refused by the server.
-- A role is offered the page when it is granted every read (`roles` narrows it; `public: true` opens it within `auth.public`). `useCommand(…).granted` is false for a command the role lacks, so draw that button only where it is granted. A service role is offered a page only where the page names it.
-- A `public: true` page may name `public: true` commands, and a signed-out visitor runs them through the page's own door. That door asks for the page's ticket, takes a request from the page's own origin only (never from a host that embeds it), and holds the run to the public form's rules. `run(record, input, { challenge })` passes a human check's token where `auth.challenge` names one. The answer is `{ reference, receipt }`, never the input.
+- A role is offered the page when it is granted every read (`roles` narrows it; `public: true` opens it within `auth.public`). `useCommand(…).granted` is false for a command the role lacks; draw its button where `available(record)` is not false. A service role is offered a page only where the page names it.
+- A `public: true` page may name `public: true` commands, and a signed-out visitor runs them through the page's own door. That door asks for the page's ticket, takes a request from the page's own origin only (never from a host that embeds it), and holds the run to the public form's rules. `run(record, input, { challenge })` passes a human check's token where `auth.challenge` names one. The answer is `{ reference, receipt }`, never the input; a lost answer is `unknown`, and `check({ challenge })` asks again under the same submission.
 - `authority.lock` records each page's reads, commands and loader. `<CommandForm command="…" />` is a command's own dialog behind a button.
 
 A `loader` runs on the server for the reader and hands the component its `data`. It is exported from the commands module with `defineLoaders` and `defineLoader` (`@mistriwork/mistri/commands`); a page that names one it does not export, or one that reads past the page, fails `check` (`[page-loader]`):
@@ -132,7 +147,7 @@ export const loaders = defineLoaders({
       return { lists: lists.sort((a, b) => (a.shipBy ?? '\uffff').localeCompare(b.shipBy ?? '\uffff')) };
 ```
 
-Its `db` is read-only, holds only the tables it declares (each one the page reads too) and reads through the reader's grants, row policy and tenant. It has `params`, `viewer`, `now` and `signal`, ends after its `timeout` (`'5 seconds'` by default, at most ten) and returns at most 256 KiB of JSON. `mistri check` types `data` from what `load` returns. Give the component its own return type (`function PickWalk(): ReactNode`); without it TypeScript reports "'page' implicitly has type 'any'".
+`reads: []` declares a loader that reads no table, such as one that hands the page its program's settings. Its `db` is read-only, holds only the tables it declares (each one the page reads too) and reads through the reader's grants, row policy and tenant. It has `params`, `viewer`, `now` and `signal`, ends after its `timeout` (`'5 seconds'` by default, at most ten) and returns at most 256 KiB of JSON. `mistri check` types `data` from what `load` returns. Give the component its own return type (`function PickWalk(): ReactNode`); without it TypeScript reports "'page' implicitly has type 'any'".
 
 ### Blocks
 
@@ -158,6 +173,13 @@ The platform's sections are components of `@mistriwork/mistri/page`, each taking
 - `<Grid>`, `<Panel title width>` and `<Tabs tabs param>`: the layout, with `width` `full`, `half`, `third` or `two-thirds`.
 
 A word a block does not take, or a resource the page does not read, stands as a problem note in the block's place.
+
+## Draw it like the platform
+
+- Type by role, not by weight: `var(--type-display)`, `var(--type-list-title)` and `var(--type-record-title)` for the page's headings, `var(--heading-weight)`, and the `--text-xs` to `--text-xl` steps. Each look sets them, so the component follows it.
+- Check it in grayscale in two distinct looks. Hierarchy should hold without hue.
+- An App's own composition variants follow `useLook()` (`look`, `mode`, `density`), not a prop of your own.
+- A button waiting on the server is `busy`, never `disabled`.
 
 ## Security
 

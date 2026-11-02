@@ -6,17 +6,17 @@
  * one main runs the rest: the App framework's (appShell.js — its public
  * pages, sign-in and token consent, then the kit's shell with its chrome) or
  * the database browser's (workbenchShell.js — the kit's shell with the
- * Workbench's chrome and tools). The server says which in the page it sends
- * (server/clientSurface.ts, the `mistri-shell` meta the database browser's
- * pages carry); a page that says nothing is an App's.
+ * Workbench's chrome and tools).
  *
- * This is the client's bin, as packages/tablewalk/src/server/index.ts is the server's: the one
- * module that names both products' mains, each by import(), so a build
- * without one of them still boots the other (scripts/boundary/bins.json
- * `bin`, held by scripts/check-boundary.mjs). Nothing else here crosses into
- * either product. Both mains are first-paint code, never a round trip of
- * their own: the App framework's rides in the entry's chunk and the
- * Workbench's in the chunk its page preloads (vite.config.ts, `surfaces`).
+ * Which one is the product's to say, not the kit's: the page imports
+ * `virtual:mistri/shell-main`, and the product's build answers it with its
+ * own main (the kit's Vite preset, `@mistriwork/kit/vite` `shellMain`), so
+ * the kit names neither product and a product's bundle holds only its own
+ * main. A workspace that serves more than one product from source answers it
+ * with a module that picks by the page (this repository's vite.config.ts,
+ * by the `mistri-shell` meta the database browser's pages carry). Each main
+ * is first-paint code, never a round trip of its own: it rides in the chunk
+ * its page preloads (the preset's `surfaces`).
  *
  * A module of its own so the same sequence runs where the page is not the
  * shell's: `@mistriwork/mistri/react` (src/embed/) starts it inside a host's route,
@@ -28,16 +28,13 @@ import { initVisualTheme } from './visualTheme.js';
 import { initTheme } from './theme.js';
 import { applyDensity } from './density.js';
 import { applyTypography } from './typography.js';
-import { shellQuery } from './shellHost.js';
 
 /**
- * The main the page names: the database browser's where the server said so.
+ * The product's main, as its build answers the name (shellMain.d.ts).
  * @returns {Promise<import('./shells.js').ShellMain>}
  */
 function namedMain() {
-  return shellQuery('meta[name="mistri-shell"]')?.getAttribute('content') === 'workbench'
-    ? import('tablewalk/client/workbenchShell.js')
-    : import('@mistriwork/mistri/client/appShell.js');
+  return import('virtual:mistri/shell-main');
 }
 
 /**

@@ -394,6 +394,8 @@ Looking at an App — its pages as PNG files, for the agent that built it:
   yours is read or written), opens each route in Chromium once it has settled
   and prints the path of each PNG. A route is /{app}/leads/12 or leads/12;
   with none, every view and page the App declares, a page on its first record.
+  A record under any list over its table opens at the table's canonical address
+  (the resource's view, else the first plain list in menu order); a note says which.
       --theme <id|all>  with shot or grade: a built-in look (workshop, lumen,
                       mono, sage, ledger) or one of the App's own themes instead of the
                       one it wears; with shot, all shoots every built-in
@@ -446,6 +448,10 @@ Looking at an App — its pages as PNG files, for the agent that built it:
       --as <email>    sign in as that account, already made (by mistri dev
                       or a local start), with the password in
                       MISTRI_AS_PASSWORD; its store is read, never written
+      --as <role>:<email>
+                      a new account of that role with that address, verified, in
+                      the run's own store: the household a row policy finds by
+                      email (not admin; not a tenant App)
       --tenant <id>   with --as on a tenant App: the tenant the role is held
                       in (a platform role needs none). The account is granted
                       a temporary membership in the App's tenant store,
@@ -497,7 +503,7 @@ Grading an App — the rubric measured in a browser, not looked at:
                   [--json] [--browser <path>]
 
   Serves the App as shot does and opens every view, a record of each page and
-  each of its documents at 1280, 390 and 320 wide, and at 390 in the dark
+  each of its documents at 1280, 768, 390 and 320 wide, and at 390 in the dark
   scheme. Each is measured:
   sideways scroll, figures and words cut off, controls drawn over each other,
   targets under 44px on a phone, text and field edges below the contrast

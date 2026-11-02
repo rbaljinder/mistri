@@ -9,7 +9,7 @@ import { Refusal } from './refusal.js';
 import { findTable, type DatabaseSchema } from './schema.js';
 import { isFixedScopeCatalog } from './scopeCatalog.js';
 import { qualifiedTable } from './sqlRelation.js';
-import { tryResolvePath } from './viewPaths.js';
+import { plainType, tryResolvePath } from './viewPaths.js';
 
 /** Internal, server-owned compiler input; never a member of a request definition.
  * Exact catalog IDs only. With a scope present, missing resources deny rows.
@@ -289,12 +289,17 @@ export class ScopedRelations {
     const policy = this.scope[id] ?? false;
     const where =
       typeof policy === 'boolean'
-        ? { text: policy ? '' : ' WHERE 1 = 0', params: [] }
+        ? { text: policy ? '' : ` WHERE ${this.style.never ?? '1 = 0'}`, params: [] }
         : buildWhere(
             withoutRepeats(policy),
             this.style,
             this.params.length + 1,
             (column) => this.style.quote(column) + (policy.binary?.includes(column) ? ' COLLATE BINARY' : ''),
+            undefined,
+            undefined,
+            undefined,
+            false,
+            (column) => table.columns.find((c) => c.name === column)?.type,
           );
     const columns = table.columns.map((column) => this.style.quote(column.name)).join(', ');
     // The style's hint (cteHint) goes between AS and the body: Postgres inlines the CTE, so the
@@ -369,7 +374,13 @@ export class ScopedRelations {
       );
     }
     const local = (column: string) => paths.get(column) ?? own(column);
-    const where = buildWhere(filter, this.style, this.params.length + 1, local, local);
+    // A column's type, or a path's where it lands on a column: a computed one is an expression, compared as written.
+    const typeOf = (column: string) => {
+      if (written && Object.hasOwn(written, column)) return undefined;
+      if (!column.includes('.')) return table.columns.find((c) => c.name === column)?.type;
+      return plainType(this.schema, id, column);
+    };
+    const where = buildWhere(filter, this.style, this.params.length + 1, local, local, undefined, undefined, false, typeOf);
     const columns = table.columns.map((column) => q(column.name)).join(', ');
     this.definitions.push(`${q(name)} AS (SELECT ${columns} FROM ${source}${row ? ` ${q(row)}` : ''}${where.text})`);
     this.params.push(...where.params);

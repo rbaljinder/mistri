@@ -175,6 +175,33 @@ test('@mistriwork/mistri/ui and @mistriwork/mistri/react import only optional pe
   );
 });
 
+test("the kit's client and its Vite preset import only what an install brings, or an optional peer the product installs", () => {
+  /* The kit publishes its client as modules a product bundles (config/tsconfig.kit-client.json) and the preset that
+     bundles them (@mistriwork/kit/vite): the product that builds a page installs React, TanStack, Base UI, tiptap and
+     Vite, at the versions the kit declares — this checkout's (the client libraries above are devDependencies here). */
+  const KIT = PACKAGES.find(({ pkg }) => pkg.name === '@mistriwork/kit')!;
+  const kitFile = /\.(test|spec|stories)\.tsx?$|\.d\.ts$|components\/dragTesting\.ts$/;
+  const sources = [
+    ...files(join(KIT.dir, 'src/client'), /\.(tsx?|js)$/).filter((file) => !kitFile.test(file)),
+    join(KIT.dir, 'src/vite.ts'),
+    ...(existsSync(join(KIT.dir, 'dist/client')) ? files(join(KIT.dir, 'dist/client'), /\.js$/) : []),
+    ...(existsSync(join(KIT.dir, 'dist/vite.js')) ? [join(KIT.dir, 'dist/vite.js')] : []),
+  ];
+  const imports = importedBy(sources);
+  const stray = sources.flatMap((file) =>
+    imports
+      .get(file)!
+      /* A virtual module (`virtual:mistri/shell-main`) is the product's build's to answer. */
+      .filter((name) => !name.startsWith('virtual:') && !KIT.installed.has(name) && !KIT.optionalPeers.has(name))
+      .map((name) => `${relative(root, file)}: ${name}`),
+  );
+  assert.deepEqual(stray, [], "The kit's client imports a package its manifest neither installs nor names as an optional peer.");
+  /* The ranges are the ones this checkout builds and tests with. */
+  const declared = KIT.pkg.peerDependencies ?? {};
+  for (const name of CLIENT_LIBRARIES.filter((name) => name in declared && !/^react(-dom)?$/.test(name)))
+    assert.equal(declared[name], workspace.devDependencies?.[name], `the kit's peer ${name} is the checkout's range`);
+});
+
 test('@mistriwork/ui imports only optional peers: the page bundles them, a project drawing with ui installs them', () => {
   const UI = PACKAGES.find(({ pkg }) => pkg.name === '@mistriwork/ui')!;
   const sources = files(join(UI.dir, 'src'), /\.tsx?$/).filter((file) => !/\.(test|spec)\.tsx?$/.test(file));

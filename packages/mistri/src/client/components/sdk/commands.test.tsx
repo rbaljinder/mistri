@@ -44,6 +44,16 @@ vi.mock('../../../../../kit/src/client/components/appRooms.js', async (importOri
   formAt: (_app: unknown, pageId: string) => (pageId === 'form-raise' ? raise : undefined),
 }));
 
+/* Timing, then a frequency and a day asked only for later: the frequency defaults to once, and the day is required
+   (`dated`) or not. */
+const timing = (dated: boolean) => [
+  { name: 'timing', type: 'text', label: 'Timing', required: true },
+  { name: 'frequency', type: 'text', label: 'Frequency', default: 'once', when: "timing = 'later'" },
+  { name: 'on', type: 'date', label: 'Date', required: dated, when: "timing = 'later'" },
+];
+const settles = <T,>(run: Promise<T>) =>
+  Promise.race([run, new Promise((resolve) => setTimeout(() => resolve('still waiting: the form opened'), 1_500))]);
+
 const { pageBridge } = await import('../../../../../kit/src/client/uiBridge.js');
 const { installShell } = await import('../../../../../kit/src/client/shellMode.js');
 await import('./commands.js');
@@ -59,6 +69,20 @@ const installDesk = () =>
           // Run only by a component: kept out of every menu, still the resource's action and still granted.
           deal: {
             actions: [
+              {
+                id: 'closeDeal',
+                label: 'Close',
+                header: false,
+                command: {
+                  id: 'closeDeal',
+                  version: 1,
+                  target: 'deal',
+                  input: [
+                    { name: 'outcome', type: 'text', label: 'Outcome', required: true },
+                    { name: 'reason', type: 'text', label: 'Reason', default: 'Price', when: "outcome = 'lost'" },
+                  ],
+                },
+              },
               {
                 id: 'checkStep',
                 label: 'Mark a step done',
@@ -76,7 +100,23 @@ const installDesk = () =>
         grantedCommands: granted,
         views: { raise: { kind: 'form', command: { id: 'raise', version: 1 } } },
         // A granted command that names no record and that no form runs, served by name.
-        formCommands: { markAllRead: { id: 'markAllRead', version: 3, input: [] } },
+        formCommands: {
+          markAllRead: { id: 'markAllRead', version: 3, input: [] },
+          // A transfer now or later: when later, how often (once, unless said) and on which day (a field report's shape).
+          schedule: { id: 'schedule', version: 2, input: timing(true) },
+          remind: { id: 'remind', version: 1, input: timing(false) },
+          // Every kind a component may hand a form that opens: text, a number, yes/no, a group.
+          transfer: {
+            id: 'transfer',
+            version: 1,
+            input: [
+              { name: 'note', type: 'text', label: 'Note', required: true },
+              { name: 'amount', type: 'number', label: 'Amount' },
+              { name: 'urgent', type: 'boolean', label: 'Urgent' },
+              { name: 'payee', type: 'group', label: 'Payee', fields: [{ name: 'name', type: 'text', label: 'Payee name' }] },
+            ],
+          },
+        },
         // A public page's public command, its choices from a table served with it (forms/formChoices.ts).
         publicCommands: {
           enrol: {
@@ -107,7 +147,7 @@ beforeEach(() => {
   installDesk();
   calls.length = 0;
   toasts.length = 0;
-  granted = ['raise', 'markAllRead', 'checkStep'];
+  granted = ['raise', 'markAllRead', 'checkStep', 'closeDeal', 'schedule', 'remind', 'transfer'];
   answer = async () => ({ status: 'applied', receiptId: 'r-1' });
 });
 afterEach(() => {
@@ -153,10 +193,90 @@ test("a form's command is found through its form, granted, and runs with no reco
 
 test("a refusal is said in the server's words", async () => {
   answer = async () => {
-    throw new Error('The desk is closed.');
+    throw Object.assign(new Error('The desk is closed.'), { status: 409, code: 'ineligible_state', outcome: 'not_applied' });
   };
   expect(await handle('raise').run({}, { title: 'Late' })).toEqual({ status: 'refused', message: 'The desk is closed.' });
   expect(toasts).toEqual(['The desk is closed.']);
+});
+
+/* A field report: on a page whose draft logic had not loaded yet, a component's run validated with nothing hidden.
+   These come first: the logic is fetched once per page, and a form drawn by an earlier test would have fetched it. */
+test("a record's command judges its conditions before it sends, so a hidden field's default stays home", async () => {
+  await onDesk();
+  answer = async () =>
+    calls.at(-1)!.path === '/api/commands/prepare'
+      ? { expectedVersion: 4 }
+      : { status: 'applied', receiptId: 'r-9', command: 'closeDeal', commandVersion: 1, resource: 'deal', key: { id: 7 } };
+  expect(await settles(handle('closeDeal').run({ id: 7 }, { outcome: 'won' }))).toEqual({ status: 'applied' });
+  expect(calls.find((call) => call.path === '/api/commands/execute')?.body.input).toEqual({ outcome: 'won' });
+});
+
+test("a hidden field's default is not sent, and a shown one is", async () => {
+  expect(await settles(handle('remind').run({}, { timing: 'now' }))).toEqual({ status: 'applied' });
+  expect(calls[0].body.input).toEqual({ timing: 'now' });
+  expect(await settles(handle('remind').run({}, { timing: 'later', on: '2026-12-01' }))).toEqual({ status: 'applied' });
+  expect(calls[1].body.input).toEqual({ timing: 'later', frequency: 'once', on: '2026-12-01' });
+});
+
+test("a run on a cold page judges the form's conditions first: a hidden required field neither blocks nor is asked", async () => {
+  expect(await settles(handle('schedule').run({}, { timing: 'now' }))).toEqual({ status: 'applied' });
+  expect(calls).toHaveLength(1);
+  expect(calls[0].body).toMatchObject({ command: 'schedule', commandVersion: 2, input: { timing: 'now' } });
+});
+
+test('the form a component opens keeps every value it was given, not only the prefillable ones', async () => {
+  const opened = handle('transfer').open({}, { note: 'Rent', amount: 1250, urgent: true, payee: { name: 'Mara' } });
+  const note = await vi.waitFor(() => {
+    const found = document.querySelector<HTMLInputElement>('.form-dialog input[type="text"]');
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  expect(note.value).toBe('Rent');
+  expect(
+    document.querySelector<HTMLInputElement>('.form-dialog input[inputmode="decimal"], .form-dialog input[type="number"]')?.value,
+  ).toBe('1250');
+  expect(document.querySelector<HTMLInputElement>('.form-dialog input[type="checkbox"]')?.checked).toBe(true);
+  expect([...document.querySelectorAll<HTMLInputElement>('.form-dialog input')].some((input) => input.value === 'Mara')).toBe(true);
+  // An incomplete run opens the same form, as filled.
+  document.querySelector<HTMLButtonElement>('.form-dialog .form-actions button:not(.primary)')?.click();
+  void opened;
+  calls.length = 0;
+  void handle('transfer').run({}, { amount: 40, urgent: true });
+  await vi.waitFor(() => expect(document.querySelectorAll('.form-dialog input[type="checkbox"]:checked')).not.toHaveLength(0));
+  expect(calls).toEqual([]);
+});
+
+test('a run whose answer never came is not known, never refused; check asks again under the same key', async () => {
+  answer = async () => {
+    throw new Error('The server is not answering.');
+  };
+  const outcome = await handle('raise').run({}, { title: 'Mouse missing' });
+  expect(outcome.status).toBe('unknown');
+  expect(toasts.join(' ')).toMatch(/not known/i);
+  answer = async () => ({ status: 'applied', receiptId: 'r-1', result: { ticketId: 41 } });
+  const checked = await (outcome as Extract<typeof outcome, { status: 'unknown' }>).check();
+  expect(checked).toEqual({ status: 'applied', output: { ticketId: 41 } });
+  expect(calls.map((call) => call.path)).toEqual(['/api/commands/execute', '/api/commands/execute']);
+  expect(calls[1].body.idempotencyKey).toBe(calls[0].body.idempotencyKey);
+  expect(calls[1].body.input).toEqual(calls[0].body.input);
+});
+
+test('a server that could not say whether it ran is not known either', async () => {
+  answer = async () => {
+    throw Object.assign(new Error('The request was cancelled.'), { status: 503, code: 'cancelled', outcome: 'unknown' });
+  };
+  expect((await handle('markAllRead').run({}, {})).status).toBe('unknown');
+});
+
+test("each run is its own key, and a component's attempt is the key it is sent under", async () => {
+  await handle('raise').run({}, { title: 'One' });
+  await handle('raise').run({}, { title: 'Two' });
+  expect(calls[0].body.idempotencyKey).not.toBe(calls[1].body.idempotencyKey);
+  const attempt = '6f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b';
+  await handle('raise').run({}, { title: 'Three' }, { attempt });
+  expect(calls[2].body.idempotencyKey).toBe(attempt);
+  await expect(handle('raise').run({}, { title: 'Four' }, { attempt: 'not-a-uuid' })).rejects.toThrow(/UUID/);
+  expect(calls).toHaveLength(3);
 });
 
 test('a reader not granted it is refused before anything is sent', async () => {

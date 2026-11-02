@@ -30,7 +30,8 @@ import type { RowScope } from '../../shared/rowScope.js';
 import { captureScopeCatalog } from '../../shared/scopeCatalog.js';
 import { writtenType } from '../postgresCatalog.js';
 import type { PgQuery } from '../postgresPool.js';
-import { referenceKey, triggerNames, type ReferenceComparison, type ScopeCatalog } from './scopedTransaction.js';
+import { referenceKey, ScopeRefusal, triggerNames, type ReferenceComparison, type ScopeCatalog } from './scopedTransaction.js';
+import { recordRefusalCause } from '../../shared/refusal.js';
 import {
   baseType,
   CATALOG_OPERATORS,
@@ -72,6 +73,8 @@ interface FactRow {
   updatable: boolean;
   /** In a partition or inheritance hierarchy, on either side of pg_inherits: no scoped write targets it (ScopeCatalog.hierarchy). */
   hierarchy: boolean;
+  /** An ordinary table with inheritance children (ScopeCatalog.inheritanceParents): a reference to it is not checked. */
+  inherited: boolean;
   /** The first primary key column of a type a scoped write does not take as a row's identity (keyTypes.ts), and that type. */
   unkeyed_column: string | null;
   unkeyed_type: string | null;
@@ -110,6 +113,7 @@ async function facts(client: PgQuery, targets: Array<{ schema: string; name: str
             pg_catalog.has_table_privilege(c.oid, 'UPDATE') AS updatable,
             c.relkind ${EQ} 'p' OR EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhrelid ${EQ} c.oid OR i.inhparent ${EQ} c.oid)
               AS hierarchy,
+            c.relkind ${EQ} 'r' AND EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhparent ${EQ} c.oid) AS inherited,
             unkeyed.name AS unkeyed_column, unkeyed.said AS unkeyed_type
        FROM ${WANTED}
        -- A key column whose type is not on the list (keyTypes.ts), its domains unwrapped: no scoped write targets the table.
@@ -127,7 +131,9 @@ async function facts(client: PgQuery, targets: Array<{ schema: string; name: str
       typeof row.schema !== 'string' ||
       typeof row.name !== 'string' ||
       typeof row.kind !== 'string' ||
-      [row.rls, row.triggers, row.rules, row.policies, row.updatable, row.hierarchy].some((value) => typeof value !== 'boolean') ||
+      [row.rls, row.triggers, row.rules, row.policies, row.updatable, row.hierarchy, row.inherited].some(
+        (value) => typeof value !== 'boolean',
+      ) ||
       !Array.isArray(row.trigger_names) ||
       row.trigger_names.some((name) => typeof name !== 'string') ||
       (row.unkeyed_column !== null && typeof row.unkeyed_column !== 'string') ||
@@ -194,6 +200,73 @@ export async function attestPostgresTriggers(client: PgQuery, catalog: PostgresS
     return refuse();
   }
 }
+/* The value a hierarchy found again is said in (hierarchyRecheck), between these, so its failure names the table. */
+const JOINED = 'mistri: a scoped write target is in a hierarchy: ';
+const INHERITED = 'mistri: a scoped write references an inheritance parent: ';
+const JOINED_END = ' (end)';
+
+/**
+ * The tables a scoped write wrote, read again for a hierarchy just before COMMIT, as a statement that fails where one
+ * is in one: sent with the COMMIT (beforeCommit), its failure answers the COMMIT as a ROLLBACK, so it costs no round
+ * trip. The pin's ROW EXCLUSIVE holds a target against becoming a partition or a child (ATTACH PARTITION and ALTER
+ * TABLE … INHERIT take ACCESS EXCLUSIVE on it), but not against becoming a parent: ALTER TABLE c INHERIT t and CREATE
+ * TABLE c () INHERITS (t) take SHARE UPDATE EXCLUSIVE on t, and every mode that conflicts with that conflicts with an
+ * ordinary write's ROW EXCLUSIVE or with itself, which would line up every scoped write of the table behind one
+ * another. Under READ COMMITTED a statement after the transaction's last write sees every inheritance committed before
+ * that write was planned, and one committed after it no write of the transaction expanded into: so a target that
+ * passed the catalog's check (ScopeCatalog.hierarchy) and gained a child while the write ran refuses the transaction.
+ * The tables those reference are read in the same statement for the same reason: one that gained an inheritance child
+ * while the write ran (CREATE TABLE … INHERITS takes the same SHARE UPDATE EXCLUSIVE) may have let a parent check
+ * find the child's visible row where the foreign key, which reads the parent alone, found a hidden one
+ * (ScopeCatalog.inheritanceParents). Undefined where nothing was written.
+ */
+export function hierarchyRecheck(
+  ids: Iterable<string>,
+  referenced: Iterable<string> = [],
+): { text: string; values: unknown[] } | undefined {
+  const at = [...new Set(ids)].map(located);
+  if (!at.length) return undefined;
+  const parents = [...new Set(referenced)].map(located);
+  const said = (prefix: string) =>
+    `('${prefix}' ${CONCAT} n.nspname::pg_catalog.text ${CONCAT} '.' ${CONCAT} c.relname::pg_catalog.text ${CONCAT} '${JOINED_END}')::pg_catalog.int4`;
+  return {
+    text: `SELECT ${said(JOINED)}
+       FROM ${WANTED}
+      WHERE c.relkind ${EQ} 'p' OR EXISTS (SELECT FROM pg_catalog.pg_inherits i WHERE i.inhrelid ${EQ} c.oid OR i.inhparent ${EQ} c.oid)${
+        parents.length
+          ? `
+     UNION ALL
+     SELECT ${said(INHERITED)}
+       FROM ${WANTED.replace('$1::', '$3::').replace('$2::', '$4::')}
+      WHERE c.relkind ${EQ} 'r' AND EXISTS (SELECT FROM pg_catalog.pg_inherits i WHERE i.inhparent ${EQ} c.oid)`
+          : ''
+      }`,
+    values: [
+      at.map((table) => table.schema),
+      at.map((table) => table.name),
+      ...(parents.length ? [parents.map((table) => table.schema), parents.map((table) => table.name)] : []),
+    ],
+  };
+}
+
+/** The refusal a hierarchyRecheck failure says, or undefined for any other failure. */
+export function joinedHierarchy(error: unknown): ScopeRefusal | undefined {
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  if (code !== '22P02' || typeof message !== 'string') return undefined;
+  const reference = message.includes(INHERITED);
+  const prefix = reference ? INHERITED : JOINED;
+  const start = message.indexOf(prefix);
+  const end = message.indexOf(JOINED_END, start);
+  if (start === -1 || end === -1) return undefined;
+  const table = message.slice(start + prefix.length, end);
+  return recordRefusalCause(
+    new ScopeRefusal('This operation is not available in the current row scope.'),
+    reference
+      ? `"${table}" became an inheritance parent while the write ran, and a reference to it is not checked under a row policy: the foreign key reads its own rows, a parent check its children's too.`
+      : `"${table}" became part of a partition or inheritance hierarchy while the write ran, which writes under a row policy do not support yet.`,
+  );
+}
+
 /** The relations of `$1` (schemas) and `$2` (names), as `c` and `n`: the proof's own catalog read, its operators named in pg_catalog (postgresTriggers.ts). */
 const WANTED = `pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid ${EQ} c.relnamespace
        JOIN ROWS FROM (pg_catalog.unnest($1::pg_catalog.text[]), pg_catalog.unnest($2::pg_catalog.text[])) AS wanted(schema, name)
@@ -464,6 +537,7 @@ export async function readPostgresScopeCatalog(
     const blockedBy = new Map<string, string>();
     const unkeyed = new Map<string, string>();
     const hierarchy = new Set<string>();
+    const inheritanceParents = new Set<string>();
     const locks = new Set<string>();
     const withTriggers: Array<{ id: string; schema: string; name: string }> = [];
     for (const table of schema.tables) {
@@ -475,6 +549,7 @@ export async function readPostgresScopeCatalog(
         unkeyed.set(table.id, keyTypeRefusal('postgres', table.id, fact.unkeyed_column, fact.unkeyed_type ?? 'unknown'));
       // Never a target, but still lockable: a reference to a partitioned table holds its parent row through it.
       if (fact.hierarchy) hierarchy.add(table.id);
+      if (fact.inherited) inheritanceParents.add(table.id);
       if (!lockable(fact)) continue;
       locks.add(table.id);
       if (fact.hierarchy) continue;
@@ -519,6 +594,7 @@ export async function readPostgresScopeCatalog(
       ...(blockedBy.size ? { blockedBy } : {}),
       ...(unkeyed.size ? { unkeyed } : {}),
       ...(hierarchy.size ? { hierarchy } : {}),
+      ...(inheritanceParents.size ? { inheritanceParents } : {}),
       ...(triggered.size ? { triggered, triggerVersions } : {}),
       lockable: locks,
       pinned: relations,

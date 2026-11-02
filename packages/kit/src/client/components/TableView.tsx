@@ -10,7 +10,7 @@
  */
 import { PresentationSwitch } from './PresentationSwitch.js';
 import { createPortal } from 'react-dom';
-import { useCrumbSlots } from './crumbSlot.js';
+import { useCrumbSlots, verbsAt } from './crumbSlot.js';
 import {
   PAGE_SIZES,
   beginNavigation,
@@ -247,9 +247,10 @@ function ResultHead({
   headRef: RefObject<HTMLDivElement | null>;
   inCrumbs?: boolean;
 }) {
-  const { tools } = useCrumbSlots();
-  /* The page's own list says its count in the crumb bar and its range in the
-     pager; Export joins New at the bar's end, and no stats row is drawn. */
+  const tools = verbsAt(useCrumbSlots());
+  /* The page's own list says its count in the crumb bar (or its heading row,
+     where no bar is drawn) and its range in the pager; Export joins New at
+     that row's end, and no stats row is drawn. */
   if (inCrumbs && tools) {
     return (
       <div className="result-head-anchor" ref={headRef}>
@@ -257,9 +258,9 @@ function ResultHead({
       </div>
     );
   }
-  /* An App's list without a crumb bar (shell.breadcrumbs: false) still
-     names its count in its own title: "2 rows" and "sorted by id ↓" under
-     it were the Workbench's instruments, which stay in the Workbench. */
+  /* Any other App list (one drawn inside a record or a dashboard) names its
+     count in its own title: "2 rows" and "sorted by id ↓" under it were the
+     Workbench's instruments, which stay in the Workbench. */
   if (shell().inApp() && !chrome) {
     const own = findTable(data.table) as TableMeta | undefined;
     return (

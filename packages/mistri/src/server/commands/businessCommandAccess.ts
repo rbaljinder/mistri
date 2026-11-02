@@ -46,6 +46,8 @@ export interface AuthorizedBusinessCommand {
   readonly readsInCommand?: true;
   /** The App's `ui.timezone`, the wall clock its writes into zone-less timestamp columns are made in (UTC when absent). */
   readonly timezone?: string;
+  /** The App's `ui.currency` (see businessCommandAuthorization.ts). */
+  readonly currency?: string;
   /** The table people are rows of (`auth.me`), where the command reads it: what `me` writes to a reference to it. */
   readonly people?: Readonly<{ table: string; column: string; key: string; id: string }>;
   /** The file resources it writes, by local name: the only tables a command may put bytes in, within their cap. */
@@ -223,6 +225,7 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
         catalog: binding.catalog,
         ...(binding.machine ? { machine: binding.machine } : {}),
         ...(binding.timezone ? { timezone: binding.timezone } : {}),
+        ...(binding.currency ? { currency: binding.currency } : {}),
         ...(binding.people ? { people: binding.people } : {}),
         ...(binding.files ? { files: binding.files } : {}),
         // A lookup reads each declared table through its own source's adapter,

@@ -222,7 +222,9 @@ apply: commandForm('Apply', 'submitApplication', [
   [lintel/commands/ledger.ts:185](../../../examples/apps/lintel/commands/ledger.ts#L185);
   on a range it is a slider in the currency,
   `field.money({ min: 150, max: 1000, step: 10, as: 'slider' })`, and a plain
-  number's slider is `as: 'slider'` too.
+  number's slider is `as: 'slider'` too. A ledger that keeps cents takes
+  `field.money({ minor: true })`: the reader types dollars, the handler receives
+  the exact minor units (`19.99` is `1999`), so there is no `cents()` helper.
 - **A shaped text** takes a `mask` and the `message` said when it is not filled:
   `field.text({ mask: '00000', message: 'Enter the 5 digits of your ZIP.' })`.
   An identity number is also `sensitive: { keep: 'last4' }`: drawn masked,

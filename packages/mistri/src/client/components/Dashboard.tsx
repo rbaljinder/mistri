@@ -83,6 +83,7 @@ import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { FirstRun, useFirstRun } from './FirstRun.js';
 import { ErrorBoundary } from '@mistriwork/kit/client/components/ErrorBoundary.js';
 import { Empty, Problem, ProblemScopeProvider } from '@mistriwork/kit/client/components/Notes.js';
+import { Button } from '@mistriwork/ui/Button.js';
 import { landingImage } from './LandingData.js';
 import type { AppIconName } from '@mistriwork/engine/shared/appIcons.js';
 import { currencyPath } from '@mistriwork/engine/shared/money.js';
@@ -727,7 +728,7 @@ const BreakdownRows = memo(function BreakdownRows({ section }: { section: Sectio
     return section.emptyMode === 'hide' ? (
       <LeaveOut />
     ) : (
-      <Empty text={inAppMode() ? sayCopy('nothingToCountYet') : sayCopy('noToCount', { table: section.table ?? '' })} />
+      <Nothing text={inAppMode() ? sayCopy('nothingToCountYet') : sayCopy('noToCount', { table: section.table ?? '' })} />
     );
   const largest = Math.max(...rows.map((r) => Number(r[countName]) || 0));
   const sayRow = say.among(rows.map((r) => r[countName]));
@@ -853,7 +854,7 @@ const StepCards = memo(function StepCards({ section }: { section: Section }) {
   const keys = vocabulary ?? counted.map((row) => row[keyName]);
   const countOf = new Map(counted.map((row) => [String(row[keyName]), row[countName]]));
   const steps = keys.filter((key) => key != null).slice(0, section.limit ?? 8);
-  if (data.data && !steps.length) return section.emptyMode === 'hide' ? <LeaveOut /> : <Empty text={sayCopy('nothingToCountYet')} />;
+  if (data.data && !steps.length) return section.emptyMode === 'hide' ? <LeaveOut /> : <Nothing text={sayCopy('nothingToCountYet')} />;
   // Rows of four or fewer, as even as the count allows (eight steps are two rows of four, not six and two): the
   // columns are named here so a step that starts a row is known to the looks that part the cells with hairlines.
   const cols = steps.length <= 4 ? Math.max(steps.length, 1) : Math.ceil(steps.length / Math.ceil(steps.length / 4));
@@ -927,6 +928,7 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
      and the chart keeps the longest bars, so `limit` counts bars, not rows. */
   const stacked = section.shape === 'stacked';
   const donut = section.shape === 'donut';
+  const nothing = useNothing(inAppMode() ? sayCopy('nothingToDrawYet') : sayCopy('noToDraw', { table: section.table ?? '' }));
   /* Bars over categories are ordered here, as a donut's slices are, so they ask for every group first. */
   /* `auto` (autoChart.ts): the unit is chosen from the window and the data, so what is asked is the section in that
      unit (or nothing, while the data's extent is read), and what is drawn is the answer coarsened to it. */
@@ -941,7 +943,6 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
   if (data.isError) return <Problem text={(data.error as Error).message} />;
   const label = namedGroups(answer, answer?.columns?.[0], sayGroup(section.table, firstKey));
   const seriesLabel = namedGroups(answer, secondKey ? answer?.columns?.[1] : undefined, sayGroup(section.table, secondKey));
-  const empty = inAppMode() ? sayCopy('nothingToDrawYet') : sayCopy('noToDraw', { table: section.table ?? '' });
   if (section.emptyMode === 'hide' && answer && !(answer.rows ?? []).length) return <LeaveOut />;
   /* The unit the chart chose, said as text under the title: the slot is held from the first paint so naming it moves nothing. */
   const unitNote = auto ? <p className="chart-unit">{drawn?.unit ? sayUnit(drawn.unit) : null}</p> : null;
@@ -963,7 +964,9 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
           limit={section.limit}
           target={typeof section.target === 'number' ? section.target : undefined}
           height={section.height}
-          empty={empty}
+          empty={nothing.text}
+          emptyDetail={nothing.detail}
+          emptyAction={nothing.action}
         />
       </>
     );
@@ -1002,7 +1005,9 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
               ? drillFor({ ...section, by: firstKey })
               : null
         }
-        empty={empty}
+        empty={nothing.text}
+        emptyDetail={nothing.detail}
+        emptyAction={nothing.action}
         curve={section.curve}
         total={section.total}
       />
@@ -1065,7 +1070,7 @@ const Matrix = memo(function Matrix({ section }: { section: Section }) {
     return section.emptyMode === 'hide' ? (
       <LeaveOut />
     ) : (
-      <Empty text={inAppMode() ? sayCopy('nothingToCrossYet') : sayCopy('noToCross', { table: section.table ?? '' })} />
+      <Nothing text={inAppMode() ? sayCopy('nothingToCrossYet') : sayCopy('noToCross', { table: section.table ?? '' })} />
     );
   /* Rows in the first key's vocabulary order where it has one (a stage reads
      as a pipeline), else heaviest first; ten at most. */
@@ -1624,6 +1629,30 @@ function Pick({
 const NO_PERIODS: Periods = {};
 const NO_SECTIONS: ReadonlySet<number> = new Set();
 
+/* A section over the window the reader picked, where all time is the unpicked state: widening it is offered by whatever
+   is empty inside it, so "Nothing to count yet." after a 90-day pick does not read as an empty table. */
+const AllTimeOffer = createContext<{ window: string; showAll: () => void } | null>(null);
+
+/** An empty section's words: the plain sentence, or under a window picked, that it is empty there and a way to see all time. */
+function useNothing(plain: string): { text: string; detail?: string; action?: ReactNode } {
+  const offer = useContext(AllTimeOffer);
+  if (!offer) return { text: plain };
+  return {
+    text: sayCopy('nothingInThisTimeWindow'),
+    detail: offer.window.charAt(0).toUpperCase() + offer.window.slice(1),
+    action: (
+      <Button intent="quiet" size="compact" onClick={offer.showAll}>
+        {sayCopy('showAllTime')}
+      </Button>
+    ),
+  };
+}
+
+/** What a section says when it has nothing to draw. */
+function Nothing({ text }: { text: string }) {
+  return <Empty {...useNothing(text)} />;
+}
+
 const Sections = memo(function Sections({
   dashboard,
   sections,
@@ -1631,6 +1660,7 @@ const Sections = memo(function Sections({
   picks,
   periods,
   onPeriod,
+  onAllTime,
   served,
   aside = false,
 }: {
@@ -1641,6 +1671,8 @@ const Sections = memo(function Sections({
   /** The periods picked on sections with windows of their own, and where a new pick goes. */
   periods: Periods;
   onPeriod: (key: string, phrase: string) => void;
+  /** The window picker's unpicked state, which is all time where no section keeps a window of its own. */
+  onAllTime: () => void;
   /** Each authored section's place among the dashboard's as served, which is how an activity names itself to the server. */
   served: ReadonlyMap<Section, number>;
   aside?: boolean;
@@ -1668,6 +1700,12 @@ const Sections = memo(function Sections({
       }),
     [sections, windowNow, picks, periods],
   );
+  /* Where the reader's window is what a section is over, and unpicking it is all time (the picker says "Default" over a
+     section that keeps a window of its own), an empty section offers to widen it. */
+  const widened = (section: Section) =>
+    windowNow !== null && Boolean(section.over) && section.windowBase === undefined && !section.windows?.length
+      ? { window: windowNow, showAll: onAllTime }
+      : null;
   /* A layout places every section in an area of a grid (the aside is never beside one: the parser refuses both). */
   const layout = !aside && dashboard.areas?.length ? layoutGrid(dashboard.areas) : undefined;
   /* Sections flow into the page's rows, or into an area of the layout: the same walk over the sections of one flow. */
@@ -1838,7 +1876,7 @@ const Sections = memo(function Sections({
               </>
             )}
           >
-            {body}
+            <AllTimeOffer.Provider value={widened(section)}>{body}</AllTimeOffer.Provider>
           </ErrorBoundary>
         </SectionShell>,
       );
@@ -1959,6 +1997,7 @@ export function DashboardBlock({ section }: { section: Section }) {
           picks={NO_PICKS}
           periods={NO_PERIODS}
           onPeriod={noPeriod}
+          onAllTime={noPeriod}
           served={NO_SERVED}
         />
       )}
@@ -2013,6 +2052,10 @@ export function Dashboard({
   }
   const lead = firstRun && run.stage === 'started' ? <FirstRun section={firstRun} done={run.done} fresh={false} /> : null;
   dashboard = firstRun ? { ...dashboard, sections: dashboard.sections.filter((section) => section !== firstRun) } : dashboard;
+  const onAllTime = () => {
+    setWindow(null);
+    onWindow?.(null);
+  };
   const controls = Boolean(dashboard.windows?.length) || Boolean(dashboard.filters?.length);
   return (
     <ProblemScopeProvider>
@@ -2063,6 +2106,7 @@ export function Dashboard({
                 picks={picks}
                 periods={periods}
                 onPeriod={onPeriod}
+                onAllTime={onAllTime}
                 served={served}
               />
             </div>
@@ -2074,6 +2118,7 @@ export function Dashboard({
                 picks={picks}
                 periods={periods}
                 onPeriod={onPeriod}
+                onAllTime={onAllTime}
                 served={served}
                 aside
               />
@@ -2088,6 +2133,7 @@ export function Dashboard({
               picks={picks}
               periods={periods}
               onPeriod={onPeriod}
+              onAllTime={onAllTime}
               served={served}
             />
           </div>

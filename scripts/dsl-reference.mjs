@@ -43,7 +43,7 @@ export const PAGES = [
   {
     slug: 'root',
     title: 'App: root keys',
-    keys: ['id', 'name', 'connection', 'sources', 'home', 'nav', 'live', 'retention'],
+    keys: ['id', 'name', 'shortName', 'connection', 'sources', 'home', 'nav', 'live', 'retention'],
     about: 'The keys at the top of an App that name it, say where its data comes from and where it opens.',
   },
   {

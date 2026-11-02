@@ -837,6 +837,39 @@ test('authored empty guidance survives sorting but yields to a filter or embedde
   expect(screen.queryByText('No tasks yet')).toBeNull();
 });
 
+/* A list that opens on a tab (Open, Overdue) said its authored empty only once the reader took the tab away, and a
+   tab could say nothing of its own: an empty tab read "No tasks in Overdue right now." whatever the author meant. */
+test("an empty tab says its own words, and the first tab, where the list opens, says the list's", () => {
+  const tabbed = {
+    ...spec,
+    empty: { title: 'Nothing to do', description: 'Tasks you add land here.' },
+    tabs: [
+      { label: 'Open', query: 'status = open' },
+      {
+        label: 'In progress',
+        query: 'status = in_progress',
+        empty: { title: 'Nothing under way', description: 'Start a task to see it here.' },
+      },
+      { label: 'Done', query: 'status = done' },
+    ],
+  };
+  draw('task status = open', { spec: tabbed });
+  expect(screen.getByText('Nothing to do')).toBeVisible();
+  cleanup();
+  draw('task status = in_progress', { spec: tabbed });
+  expect(screen.getByText('Nothing under way')).toBeVisible();
+  expect(screen.queryByText('Nothing to do')).toBeNull();
+  cleanup();
+  // A tab with nothing of its own, past the first, says its name.
+  draw('task status = done', { spec: tabbed });
+  expect(screen.getByText('No tasks in Done right now.')).toBeVisible();
+  cleanup();
+  // A search past the tab is still a search that missed, with its Clear.
+  draw('task status = in_progress and priority = 2', { spec: tabbed });
+  expect(screen.queryByText('Nothing under way')).toBeNull();
+  expect(screen.getByText('No matches')).toBeVisible();
+});
+
 test('a list that says no empty state of its own says what belongs in it, and offers New where the room does', () => {
   draw('task sort title');
   expect(screen.getByText('No tasks yet.')).toBeVisible();
@@ -851,4 +884,29 @@ test('a list that says no empty state of its own says what belongs in it, and of
   cleanup();
   draw('task', { embedded: true });
   expect(screen.queryByText('No tasks yet.')).toBeNull();
+});
+
+/* With no crumb bar over it (a room reached from the menu, `ui.shell.breadcrumbs`), the page's own list names itself
+   in its heading row, and that row ends in its verbs as the bar would: New, and Export once the rows say there is
+   something to export (TableView puts it beside New, `inCrumbs`). Before, Export stood in a row of its own over the
+   rows. */
+test('with no bar over it, the heading row holds the title, the count, New and the place Export takes', async () => {
+  draw(`task status = open ${PLUMBING}`, {
+    newButton: (
+      <button type="button" className="applist-new">
+        New task
+      </button>
+    ),
+  });
+  const row = document.querySelector('.applist-head-row')!;
+  expect(within(row as HTMLElement).getByRole('heading', { level: 1 })).toHaveTextContent('Tasks');
+  await vi.waitFor(() => expect(row.querySelector('.applist-count')).toHaveTextContent('7'));
+  const tools = row.querySelector('.applist-head-tools')!;
+  expect(within(tools as HTMLElement).getByRole('button', { name: 'New task' })).toBeInTheDocument();
+  expect(room.inCrumbs).toBe(true);
+  cleanup();
+  // A list drawn inside another room keeps New in its own row and its verbs in its grid's head.
+  draw(`task status = open ${PLUMBING}`, { embedded: true, newButton: <button type="button">New task</button> });
+  expect(document.querySelector('.applist-head-tools')).toBeNull();
+  expect(room.inCrumbs).toBe(false);
 });

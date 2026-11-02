@@ -7,4 +7,7 @@ export const say = defineMessages({
     'Business data has been closed. You can finish account administration, then reload to verify access and choose a tenant.',
   reloadAndChooseATenant: 'Reload and choose a tenant',
   tenantApplicationIdentityIsInvalid: 'Tenant application identity is invalid.',
+  // Named in the console when its chunk does not load (unloaded() in appChrome.js).
+  liveSync: 'live sync',
+  appSourceWatcher: 'App source watcher',
 });

@@ -478,6 +478,41 @@ Where the build departs from the design above, and why.
   works: PostgreSQL copies the key onto each partition of the referenced
   table, the catalog leaves those copies out (`conparentid`), and the check
   counts the parent through the partitioned table the policy names.
+- **A target that joins a hierarchy while the write runs is refused at
+  COMMIT.** The scope's pin takes ROW EXCLUSIVE on each table, which holds a
+  target against becoming a partition or a child (ATTACH PARTITION and
+  `ALTER TABLE … INHERIT` take ACCESS EXCLUSIVE on the table attached) but
+  not against becoming a parent: `ALTER TABLE c INHERIT t` and `CREATE TABLE
+  c () INHERITS (t)` take SHARE UPDATE EXCLUSIVE on `t`. No lock closes
+  that without blocking writes. In PostgreSQL's conflict table SHARE UPDATE
+  EXCLUSIVE conflicts with SHARE UPDATE EXCLUSIVE, SHARE, SHARE ROW
+  EXCLUSIVE, EXCLUSIVE and ACCESS EXCLUSIVE; the last four conflict with
+  ROW EXCLUSIVE, the mode of every ordinary INSERT, UPDATE and DELETE, and
+  the first conflicts with itself, so every scoped write of a table would
+  wait on the one before it (and on VACUUM and ANALYZE). So the tables the
+  transaction wrote (and, where a target's trigger ran, every table its
+  effects can reach) are read again for a hierarchy just before COMMIT, by a
+  statement sent with the COMMIT that fails where it finds one, answering
+  the COMMIT as a ROLLBACK: no round trip is added. Under READ COMMITTED it
+  sees every inheritance committed before the transaction's last write was
+  planned, and a write planned before an inheritance committed did not
+  expand into the child. Before it, a child attached mid-write brought a row
+  whose own key pointed at a hidden row, and an update through the parent
+  committed it (`test/postgres-scoped-references.test.ts`).
+- **A reference to an inheritance parent is refused.** Its foreign key
+  checks the parent's own rows (`ONLY`), while the parent check reads the
+  parent with its children, so a child's row visible to the person passed
+  for a hidden parent row under the same key, and the insert committed
+  pointing at it (a field report). A parent check whose table is an ordinary
+  table with inheritance children (`ScopeCatalog.inheritanceParents`, read
+  in the catalog's existing facts statement) refuses the write instead; a
+  NULL reference checks nothing and still commits. Reading the parent with
+  `ONLY` was not chosen: for a partitioned table it would read no rows. A
+  partitioned table is not refused, since its key and its check both read
+  every partition. A referenced table that becomes an inheritance parent
+  while the write runs is caught by the same statement the COMMIT carries,
+  over the tables the written ones reference; there a table that became a
+  parent refuses the write whether or not a reference to it was checked.
 - **Known limits.** A schema author's own code (a DEFAULT, a CHECK, an
   IMMUTABLE function) that calls `set_config` could undo the transaction's
   pinned settings; a principal cannot cause that. On SQLite an integer key
@@ -516,9 +551,20 @@ Where the build departs from the design above, and why.
   foreign and primary keys the description reads and the catalog digest
   among them: a polymorphic built-in loses to an exact-typed function of
   the same name anywhere on the search_path, and `public.cardinality(text[])`
-  answering 0 read every table as having no triggers. The person's own row
-  reads and the trigger's statements still resolve through the search_path,
-  which the database's owner sets.
+  answering 0 read every table as having no triggers. So does an App's
+  scoped read: each comparison on a column of a built-in type, the policy's
+  and the reader's own filter alike (`=`, `<>`, the ranges, an IN list as
+  `= ANY` of the list read as the column's type, and a pattern as `~~*` of
+  `like_escape`), names pg_catalog's operator, and a policy of `false` is
+  `WHERE FALSE`. pg_catalog has no `varchar = varchar`, so a schema author's
+  exact one in public answered every varchar comparison, and a `1 = 0` with
+  pg_catalog after public on the path admitted every row
+  (`test/postgres-scoped-read-operators.test.ts`). A column of a type the
+  database defines (an enum, citext, an extension's) keeps its own operator,
+  which is what that column means, and still resolves through the
+  search_path; so do the key joins between scoped relations, which pair two
+  rows the reader may already read, and the trigger's statements. The
+  database's owner sets the search_path.
 - **`mistri check` reads what the write reads.** Besides the keys, it reads
   whether a table is in a partition or inheritance hierarchy, its row-level
   security, rules and the writer's privileges, and on SQLite each table's

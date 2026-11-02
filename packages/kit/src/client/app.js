@@ -75,7 +75,17 @@ import { OverflowMenu } from './components/OverflowMenu.js';
 import './composerEntry.js';
 import { say } from './copy/shell/app.js';
 import { arrivedPlacement, herePath, hereSearch, shown, shownUnplaced } from './addressMount.js';
-import { addHostListener, navReplace, navState, onNavigate, setTabTitle, shellBody, shellQuery, shellQueryAll } from './shellHost.js';
+import {
+  addHostListener,
+  navReplace,
+  navState,
+  onNavigate,
+  sayBrandName,
+  setTabTitle,
+  shellBody,
+  shellQuery,
+  shellQueryAll,
+} from './shellHost.js';
 /* The product this page runs, installed by its main (`boot`): its chrome,
    and the Workbench's tools where it is the Workbench. */
 /** @type {import('./shells.js').ShellChrome} */
@@ -300,8 +310,7 @@ subscribeMessages(sayShellWords);
 function applyBrand() {
   const app = shell().app();
   const inApp = shell().inApp();
-  const brand = shellQuery('.brand-name');
-  if (brand) brand.textContent = app ? app.name : 'tablewalk';
+  sayBrandName(shellQuery('.brand-name'), app ? app.name : 'tablewalk', app?.shortName);
   sayShellWords();
   setTabTitle(say('common.documentTitle', { title: app ? app.name : state.schema.label }));
   chrome.brand();

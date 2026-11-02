@@ -168,7 +168,7 @@ parts: { status: { case: 'upper' } },
 
 Lintel lists it in `ui.customThemes: [lintel, blueprint, hearth, tidelight]` and still wears its own. Each reader finds Blueprint under Preferences, Visual theme, beside the built-in looks; the theme `ui.theme` names is marked "This App's theme", and Reset puts a reader back on it. Name `ui.theme: { preset: 'blueprint' }` and Blueprint is the one marked.
 
-`mistri grade examples/apps/lintel --theme blueprint` measures the rendered pages (Lintel's 26 at 1280, 390 and 320 wide, and at 390 in dark).
+`mistri grade examples/apps/lintel --theme blueprint` measures the rendered pages (Lintel's 26 at 1280, 768, 390 and 320 wide, and at 390 in dark).
 
 ## Three themes to start from
 
@@ -239,7 +239,7 @@ export const iris = defineTheme({
 
 ## Chart colors and palettes
 
-A chart with one series draws it in `chart[0]`. Several series take `chart[0]`, `chart[1]` and on, largest first, or in the order the column declares its values; a sparkline draws in `chart[0]`, and under `stat: 'icon'` a metric's icon and sparkline take `chart[0]` to `chart[3]` by the card's place in its row. Two kinds of series skip the order: a scale (Low to Urgent) draws in steps of one hue, and values that each have their own status (Paid good, Open warning) wear the `status` colors. `mistri check` holds each pair of neighbors apart, color-blind readers included, and suggests an order that keeps the brand's colors first.
+A chart with one series draws it in `chart[0]`; a stacked chart's segments take the same order, and a reader's palette recolors them like any other series. Several series take `chart[0]`, `chart[1]` and on, largest first, or in the order the column declares its values; a sparkline draws in `chart[0]`, and under `stat: 'icon'` a metric's icon and sparkline take `chart[0]` to `chart[3]` by the card's place in its row. Two kinds of series skip the order: a scale (Low to Urgent) draws in steps of one hue, and values that each have their own status (Paid good, Open warning) wear the `status` colors. `mistri check` holds each pair of neighbors apart, color-blind readers included, and suggests an order that keeps the brand's colors first.
 
 `palettes` are named variations of one theme, `[{ id, label, light, dark }]`, each naming only the colors that differ; a reader picks one in Preferences, `defaultPalette` says which is worn first, and each is checked like the theme's own colors. `mistri shot --palette <id>` shoots a page in one, and `mistri grade --palette all` grades them all.
 

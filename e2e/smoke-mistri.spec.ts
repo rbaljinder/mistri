@@ -47,21 +47,25 @@ test('the app’s rooms all render', async ({ page }) => {
   await page.locator('#table-list button[data-table]').first().click();
   await expect(page.locator('.applist-title')).toBeVisible();
   await expect(page.locator('tbody tr').first()).toBeVisible();
-  /* One content edge per room (docs/design.md, --room-inset): the crumbs'
-     first word, the list's controls and its rows start together. */
+  /* One content edge per room (docs/design.md, --room-inset): the list's
+     title, its controls and its rows start together. A room opened from the
+     menu has no crumb bar over it (shell.breadcrumbs): its title heads it. */
   const edge = (selector: string) =>
     page
       .locator(selector)
       .first()
       .evaluate((node) => Math.round(node.getBoundingClientRect().left));
-  const crumb = await edge('.crumbs > :first-child');
+  await expect(page.locator('.crumbs')).toHaveCount(0);
+  const crumb = await edge('.applist-head-row > :first-child');
   expect(await edge('.applist-controls > :first-child')).toBe(crumb);
   expect(await edge('.result-table')).toBe(crumb);
 
   // A record through the app's page, on the same edge.
   await page.locator('tbody tr').first().click();
   await expect(page.locator('.page-body .page-section').first()).toBeVisible();
+  // A record is a step deeper: the trail stands over it, starting at the list.
   expect(await edge('.page-head')).toBe(await edge('.crumbs > :first-child'));
+  expect(await edge('.page-head')).toBe(crumb);
 
   // Preferences: the dialog and its dropdowns construct.
   await page.evaluate(async () => {

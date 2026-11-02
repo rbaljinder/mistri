@@ -136,9 +136,10 @@ retry replays one write and answers its receipt. The answer is a status alone:
 `204` applied or replayed, `400` a body it cannot read, `401` a bad signature
 or time, `409` a reused key with a different body or a refusal, `413` past
 256 KB. `runAs` holds `service: true` roles alone. Deliveries are remembered in
-the integrations store (`provisionStores` with the App and its `jobs`). Not in
-tenant Apps. An [integration's webhooks](/docs/integrations/#what-core-does)
-are this same endpoint.
+the integrations store (`provisionStores` with the App and its `jobs`). A
+tenant App refuses a hand-written one; an [integration's
+webhooks](/docs/integrations/#what-core-does) are this same endpoint and are
+served per tenant ([what a tenant keeps](/docs/tenant-apps/#what-a-tenant-keeps)).
 
 ### A workflow
 
@@ -287,6 +288,15 @@ failed or diverged instance again from its last good step; on a running or
 waiting one (Console's Wake) it wakes the instance where it is, for a wake-up
 lost to a crash. In a row-policy App each principal runs as a service the
 policy's `services` names, in the rows it gives that service.
+
+When a command a job listens to is bumped (`mistri check --bump`), the job's delivery destination in the
+store was made for the old version, and a start refuses it. `mistri check` says so as `store-destination-changed`
+(exit 8) and `migrate status` shows it, naming the destination and the versions it was made for and has now.
+`mistri migrate up --app …` with the server stopped replaces it, once nothing in it is undelivered: while some
+deliveries are, it says how many and refuses until they have drained or been redriven. The other way out is to
+raise the job's or workflow's own `version`, which makes a new destination beside the old one. Running two
+producer versions into one job is not supported, because the handler would need both input shapes. An effect's
+destination is new for every bump, and `up` retires the drained ones it leaves behind.
 
 A tenant App's jobs module also declares its email: `mail: { receive, send, links }`
 ([tenant mail](/docs/tenant-mail/)).

@@ -22,16 +22,26 @@ export function SignedInFormDialog({
   form,
   appName,
   prefill,
+  initial,
   onClose,
 }: {
   form: ServedForm;
   appName: string;
-  prefill: string;
+  /** Where it starts, as an address says it: only its `prefillable` inputs read it. */
+  prefill?: string;
+  /** Where it starts, as a component gave it (`useCommand(…).open(record, input)`): every input, as typed values. */
+  initial?: Readonly<Record<string, unknown>>;
   onClose: () => void;
 }) {
   return (
     <Modal className="form-dialog" onClose={onClose} ariaLabel={form.label}>
-      <FormBody form={form} appName={appName} prefill={prefill} onDismiss={onClose} />
+      <FormBody
+        form={form}
+        appName={appName}
+        {...(prefill === undefined ? {} : { prefill })}
+        {...(initial ? { initial } : {})}
+        onDismiss={onClose}
+      />
     </Modal>
   );
 }

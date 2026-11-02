@@ -437,6 +437,7 @@ async function executeUntraced(
             revealed[name] = value;
           },
           now: now(),
+          ...(authorized.currency ? { currency: authorized.currency } : {}),
           // A line's cells are read as their columns' kinds, so a handler's lines are typed as its rows are.
           cell: (table, column, value) => {
             const meta = authorized.catalog?.[table]?.meta;

@@ -1086,7 +1086,7 @@ export function defineCommand<
     // A literal must be an answer the field itself accepts.
     const { below: _below, above: _above, ...alone } = field as AppCommandField & { below?: string; above?: string };
     try {
-      readCommandInput([alone as AppCommandField], { [field.name]: start }, { partial: true });
+      readCommandInput([alone as AppCommandField], { [field.name]: start }, { partial: true, wire: true });
     } catch {
       fail(`Command input "${path}" starts as ${JSON.stringify(start)}, which the field itself refuses.`);
     }
@@ -1257,11 +1257,14 @@ export function parseRegisteredInput(
     /** The record-reading `when`s, bound to the target (commandDraft.ts); absent, those fields are judged later. */
     bound?: Readonly<Record<string, BoundCondition>>;
     now?: Date;
+    /** The App's `ui.currency`, which a minor-unit amount without a currency of its own is typed in. */
+    currency?: string;
   },
 ): unknown {
   if (!registered.has(command)) adoptCommand(command);
   const read = readCommandInput(command.fields, raw, {
     publicForm: options.publicForm,
+    ...(options.currency ? { currency: options.currency } : {}),
     richText: (value, most) => readRichTextInput(value, {}, most),
     ...(options.cell ? { cell: options.cell } : {}),
   });

@@ -819,6 +819,11 @@ export async function focusStops(page: Page): Promise<NonNullable<Probe['focus']
  */
 export function watchEvents(page: Page, events: { errors: string[]; failed: string[] }): void {
   page.on('pageerror', (error) => events.errors.push(`the page threw: ${error.message.split('\n')[0]}`));
+  /* What the platform says of an App's own mistake while it is written (a name that names no icon) is the page's
+     error too: said in the console, so a reader is not stopped, and counted here. */
+  page.on('console', (message) => {
+    if (message.type() === 'error' && message.text().startsWith('mistri: ')) events.errors.push(`the page said: ${message.text()}`);
+  });
   page.on('requestfailed', (request) => {
     const why = request.failure()?.errorText ?? '';
     /* A request the page let go of — a query it no longer needs — is not a failure. */

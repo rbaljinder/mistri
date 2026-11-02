@@ -35,7 +35,8 @@ import { esmExternalRequirePlugin } from 'rolldown/plugins';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { jsMayBeTs, noDevtoolsClient, ownSourcesOnly, shortCatalogKeys } from '../vite.config.js';
+import { PRODUCT_CLIENTS, jsMayBeTs, noDevtoolsClient, ownSourcesOnly, shortCatalogKeys } from '../vite.config.js';
+import { shellMain } from '../packages/kit/src/vite.ts';
 import { KIT_CLIENT } from '../packages/kit/src/clientFiles.ts';
 import { tablewalkScope } from '../scripts/embed-css.mjs';
 
@@ -192,9 +193,12 @@ export function embedPlugins(): Plugin[] {
     adoptedCss(),
     shellSkeleton(),
     jsMayBeTs(),
+    /* The page's entry starts the product's main by name (shellStart.js); the embed's is the App framework's, which
+       shell.ts hands it already loaded, so the name never reaches another product's. */
+    shellMain(resolve(HERE, 'packages/mistri/src/client/appShell.js')),
     noDevtoolsClient(),
     react({ include: /\.[jt]sx$/ }),
-    shortCatalogKeys(),
+    shortCatalogKeys([PRODUCT_CLIENTS.mistri]),
     {
       name: 'mistri:embed-settings',
       config: () => ({

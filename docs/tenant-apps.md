@@ -195,7 +195,12 @@ others reference is allowed once nothing references it, and only where the
 reader reads every row of each referencing table the bound holds; otherwise
 a row it cannot see might be the one a cascade reaches, and it is refused.
 The references are counted on the writer across every tenant, after the row
-is locked, so another tenant's row pointing at it refuses the delete too.
+is locked, so another tenant's row pointing at it refuses the delete too. They
+are counted as the foreign key matches them, so as its cascade would reach
+them: the parent column on the left, for SQLite's affinity and collation, and
+on PostgreSQL the constraint's own operator (`conpfeqop`), read with the scope
+catalog as the parent check reads it; a `char(3)` key counted by `=` missed
+its `text` reference 'ab ', which the cascade reached.
 An ordinary (non-command) write, the platform realm and support sessions keep
 the stricter rule: a row is written only where it is read.
 

@@ -11,7 +11,7 @@ export interface UpdateOwner {
   key: Record<string, unknown>;
 }
 type Values = Record<string, string | number | boolean | null>;
-interface UpdateAttempt {
+export interface UpdateAttempt {
   phase: 'pending' | 'uncertain';
   values: Values;
   message: string;

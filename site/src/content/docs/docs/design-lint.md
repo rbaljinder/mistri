@@ -62,7 +62,7 @@ makes the picture sharper without changing the layout.
 
 `check --design` reads the definition; `mistri grade` measures the drawn
 page. It serves the App as `shot` does, opens every view and a record of each
-page at 1280, 390 and 320 wide in light and at 390 in dark, and prints one line
+page at 1280, 768, 390 and 320 wide in light and at 390 in dark, and prints one line
 per finding with its fix, at the file and line that declares the page where it
 can find one, else at `page@width`. The run ends with a score out of 100; an
 error fails it with exit code 2. `--json` prints one document instead. An App

@@ -49,8 +49,13 @@ interface NativeAccountRegistration {
 }
 
 /** Who made an account on someone's behalf, as its row of the trail says:
- * the operator's maintenance step, or the invitation the account claims. */
-type NativeAccountMaker = { readonly by: 'maintenance' } | { readonly by: 'invitation'; readonly invitationId: string };
+ * the operator's maintenance step, or the invitation the account claims.
+ * `verified: true` is the operator's assertion that the address is theirs to vouch for (a throwaway
+ * `@…test` address of a dev store, a person they know): the account is made with its email verified and the
+ * row of the trail says so. Without it nothing proved the address, and the account is unverified. */
+type NativeAccountMaker =
+  | { readonly by: 'maintenance'; readonly verified?: true }
+  | { readonly by: 'invitation'; readonly invitationId: string };
 
 /** Why an account was not made. `exists` is only ever said to a caller that
  * is entitled to know the address has an account (see the module comment). */
@@ -208,7 +213,13 @@ export async function createNativeAccount(runtime: AppAuthRuntime, input: Native
   try {
     // The account and its row of the trail, in one transaction: a row that cannot be written unmakes the account.
     return await store.audit.transaction(async () => {
-      const created = await store.create({ email: account.email, name: account.name, password: account.password });
+      const verified = maker.by === 'maintenance' && maker.verified === true;
+      const created = await store.create({
+        email: account.email,
+        name: account.name,
+        password: account.password,
+        ...(verified ? { data: { emailVerified: true } } : {}),
+      });
       const user = created && typeof created === 'object' ? (created as { user?: unknown }).user : undefined;
       const { id, email, role } = (user && typeof user === 'object' ? user : {}) as { id?: unknown; email?: unknown; role?: unknown };
       if (typeof id !== 'string' || typeof email !== 'string' || email.toLowerCase() !== account.email)
@@ -224,7 +235,7 @@ export async function createNativeAccount(runtime: AppAuthRuntime, input: Native
         targetId: id,
         targetEmail: account.email,
         before: null,
-        after: { email: account.email, name: account.name, roles: rolesOf(role), active: true },
+        after: { email: account.email, name: account.name, roles: rolesOf(role), active: true, ...(verified ? { verified: true } : {}) },
       });
       return id;
     });

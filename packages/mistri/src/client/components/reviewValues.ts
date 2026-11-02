@@ -55,7 +55,7 @@ export function sayInput(field: AppCommandField, value: unknown, nameOf?: NameOf
   // A day is a calendar date, not a moment: read in UTC so no zone moves it, and said as the person's locale says it.
   if (field.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(String(value)))
     return new Date(`${String(value)}T00:00:00Z`).toLocaleDateString(formatLocale(), { timeZone: 'UTC', dateStyle: 'medium' });
-  if (field.type === 'money' && Number.isFinite(Number(value))) return amountIn(Number(value), undefined, field.step);
+  if (field.type === 'money' && Number.isFinite(Number(value))) return amountIn(Number(value), field.currency, field.step, field.minor);
   if (mask && typeof value === 'string') return maskShown(mask, value);
   if (field.type === 'choice') return field.options.find((option) => option.value === value)?.label ?? String(value);
   if (field.type === 'choices') {

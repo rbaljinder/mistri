@@ -178,8 +178,9 @@ for (const dialect of ['postgres'] as const) {
         assert.deepEqual(statement.params, [11, 22, ...(paged ? tail : [])]);
         assert.match(statement.text, /WITH /);
         if (dialect === 'postgres') {
-          assert.match(statement.text, /"tenant" = \$1/);
-          assert.match(statement.text, /"tenant" = \$2/);
+          // pg_catalog's own equality, which no `=` on the search_path stands in for (filter.ts SqlStyle.builtin).
+          assert.match(statement.text, /"tenant" OPERATOR\(pg_catalog\.=\) \$1/);
+          assert.match(statement.text, /"tenant" OPERATOR\(pg_catalog\.=\) \$2/);
           if (paged) assert.match(statement.text, /LIMIT \$3 OFFSET \$4$/);
         } else {
           assert.equal((statement.text.match(/\?/g) ?? []).length, statement.params.length);
@@ -328,12 +329,12 @@ for (const dialect of ['postgres'] as const) {
       for (const scope of cases) {
         const reads = await f.adapter.scopeReads(scope);
         await reads.query(request());
-        assert.match(f.statements.at(-1)!.text, /WHERE 1 = 0/);
+        assert.match(f.statements.at(-1)!.text, dialect === 'postgres' ? /WHERE FALSE\)/ : /WHERE 1 = 0/);
       }
       const all = await f.adapter.scopeReads({ 'shop.item': true });
       await all.runView(view());
       assert.match(f.statements.at(-1)!.text, /^WITH /);
-      assert.doesNotMatch(f.statements.at(-1)!.text, /WHERE 1 = 0/);
+      assert.doesNotMatch(f.statements.at(-1)!.text, /WHERE (1 = 0|FALSE)/);
       await f.adapter.runView(view(), 3);
       assert.doesNotMatch(f.statements.at(-1)!.text, /_tw_scope/);
       assert.deepEqual(f.statements.at(-1)!.params, [7, 3]);

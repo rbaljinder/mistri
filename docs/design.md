@@ -722,7 +722,7 @@ every look, so the picture it keeps reads on whatever page shows it.
   Optional `shell.headerWidth: 'content'` aligns the brand and header controls
   with that width and gutter on desktop and phones. The header's background
   and border stay full width; omitted/`full` preserves existing header spacing.
-  Menu, search, breadcrumbs and visible page headings may be suppressed by
+  Menu, search, the trail and visible page headings may be suppressed by
   the App shell; headings retain their accessible name. A list may hide its
   filter form independently of its view tabs and active-query chips.
 - A dashboard's `aside` holds supporting sections in an independent column.
@@ -804,14 +804,23 @@ every look, so the picture it keeps reads on whatever page shows it.
 - A record's layout answers to the room it is drawn in, not the window: a
   peek, a side panel or a split detail is a container, and its record stacks
   as a narrow screen would.
-- An App list names itself in the crumb bar: title, match count and star after
-  the trail, New and Export at its end, with tabs and filters on the one row
-  below. A band of heading over a table is space a reader scrolls past on every
-  visit. An embedded list, which has no bar of its own, keeps its heading row.
-  The bar is one height in every room, a control's, so going from a list to
-  its record does not move the page under the bar. On a phone its tools are
-  marks (Import is its upload arrow, still named Import), so the title, New
-  and ⋯ keep the one line rather than pushing the tools under it.
+- The trail is drawn where it says something (`shell.breadcrumbs`). A room
+  opened from the menu (a list, a dashboard, a form, a page) has no bar over
+  it by default: the menu already says where the reader is, and a bar reading
+  "⌂ › Leads" over a list headed Leads was chrome. The bar appears once the
+  walk goes deeper (a record, a related list, a record's tab) and starts at
+  the first room's name, with no house: the logo and the menu are the way
+  home. Whether it is drawn is read from the walk in the render that draws the
+  room, never after the paint. An App that wants the whole trail says `true`.
+- An App list names itself in one row: title, match count and star, then New
+  and Export at its end, with tabs and filters on the one row below. Under a
+  bar that row is the bar (the title after the trail); with no bar it is the
+  list's own heading row, holding the same things in the same order. A band
+  of heading over a table is space a reader scrolls past on every visit. An
+  embedded list keeps its plain heading row. The bar is one height in every
+  room, a control's. On a phone the tools are marks (Import is its upload
+  arrow, still named Import), so the title, New and ⋯ keep the one line rather
+  than pushing the tools under it.
 - App record pages show the selected layout name without a layout switcher or
   Copy layout action. Layout authoring stays in Workbench; business tabs, fields
   and commands keep their existing behavior.

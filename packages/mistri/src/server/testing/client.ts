@@ -7,9 +7,15 @@ export interface TestRequest extends Omit<RequestInit, 'body'> {
   body?: BodyInit | null;
 }
 /** A separate client is a separate browser session. Redirects stay explicit. `app` names the App on a server that
-    serves several (a suite); `base` is where it is mounted there. */
+    serves several (a suite); `base` is where it is mounted there, or the `--base-path` it is served under. */
 export function createTestClient(origin: string, options: { app?: string; base?: string } = {}) {
   const base = new URL(origin);
+  /* Every call goes under the mount, its API and sign-in as much as its pages: an App served under a base path answers
+     nowhere else, and the client sent /api/… and /api/auth/… to the root (a field report). A path already under it,
+     as a page address the client makes is, stays as it is. */
+  const mounted = (options.base ?? '').replace(/\/+$/, '');
+  const inside = (path: string) => path.startsWith(mounted) && (path.length === mounted.length || '/?#'.includes(path[mounted.length]));
+  const under = (path: string) => (!mounted || !path.startsWith('/') || path.startsWith('//') || inside(path) ? path : `${mounted}${path}`);
   const cookies = new Map<
     string,
     {
@@ -21,7 +27,7 @@ export function createTestClient(origin: string, options: { app?: string; base?:
     }
   >();
   async function request(path: string, options: TestRequest = {}) {
-    const url = new URL(path, base);
+    const url = new URL(under(path), base);
     if (url.origin !== base.origin) throw new Error('Test client refuses to send session credentials to another origin.');
     const { json, ...init } = options;
     const headers = new Headers(init.headers);

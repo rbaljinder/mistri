@@ -58,6 +58,22 @@ All keys: [the generated reference](/docs/dsl-auth/). Changing `auth` needs a re
 - For password resets and verified addresses, an [email service](/docs/email/). Without one, `MISTRI_AUTH_RESET=log` writes each reset link to the log under `mistri dev` only; a served App logs one line, with no link, saying a reset was requested and nothing was sent, and warns at startup.
 - With `signUp: 'open'`, an [email service](/docs/email/) too. A self-made account is matched to `me` (and to the rows a row policy finds by its email) and given notifications only once its address is verified; until then it is signed in as nobody in particular. An account made on the accounts screen, or with `POST /api/accounts`, is verified when made. `mistri check` fails on open sign-up with no email service ([`open-sign-up-unproven`](/docs/check-codes/#open-sign-up-unproven)).
 
+### Who verifies an address
+
+Only a verified address is matched to `me` and to the rows a row policy finds
+by email. What makes an account depends on how it was made:
+
+| Created by | Verified when made | How it becomes verified |
+| --- | --- | --- |
+| `MISTRI_AUTH_ADMIN_EMAIL` at the first start | Yes | The operator named the address. |
+| The accounts screen, or `POST /api/accounts` `create` | Yes | An administrator made it. |
+| `mistri dev`, and `shot` / `grade --as` | Yes | Throwaway accounts; the tool asserts the address. |
+| `createAppAccounts` (the maintenance step) | No | Pass `{ verified: true }` to assert the address; the account trail's row records `verified: true`. |
+| `mistri tenant grant` | No | The person verifies it through the [email service](/docs/email/). |
+| An accepted invitation | No | The invitation's token vouched for the holder, not for the address; the person verifies it. |
+| Public sign-up (`signUp: 'open'`) | No | The person follows the link in the verification email. |
+| SSO (an identity provider) | When the provider says the address is verified | The provider's `email_verified` claim, or `verifiedEmails` on the [provider](/docs/identity-providers/). |
+
 ### Managing accounts
 
 An account holding `admin` adds accounts (name, email, roles and, with
@@ -72,7 +88,7 @@ A script makes the same changes, signed in as an administrator, with
 `POST /api/accounts` and `{ app, operation, … }`: `create` (`email`, `name`,
 `roles`, `password`), `setRoles` (`accountId`, `roles`), `deactivate`,
 `reactivate` and `setPassword` (`accountId`, `password`). `mistri dev` makes
-its accounts this way. Better Auth's own admin endpoints that make or change an
+its accounts verified. Better Auth's own admin endpoints that make or change an
 account (`create-user`, `update-user`, `set-role`, `set-user-password`,
 `ban-user`, `unban-user`, `remove-user`, `impersonate-user`) answer 404 and say
 so.

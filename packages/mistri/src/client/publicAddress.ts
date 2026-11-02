@@ -63,7 +63,15 @@ import {
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
 import { filterAddressWord, hasFilterOf } from '@mistriwork/engine/shared/listFilters.js';
-import { ALL_TIME, addressFilterValue, addressSortValue, tabKey, tabSlug, tabWord } from '@mistriwork/engine/shared/addressParams.js';
+import {
+  ALL_TIME,
+  readPeriod,
+  addressFilterValue,
+  addressSortValue,
+  tabKey,
+  tabSlug,
+  tabWord,
+} from '@mistriwork/engine/shared/addressParams.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import {
   INBOX_SEGMENT,
@@ -389,7 +397,7 @@ function dashboardParams(body: string | undefined): URLSearchParams {
 }
 
 /** The dashboard behind a view key as the walk holds it, its window and picks read from the parameters. */
-function dashboardEntry(key: string, search: string, home: boolean): Entry | undefined {
+export function dashboardEntry(key: string, search: string, home: boolean): Entry | undefined {
   const app = activeApp();
   const room = app ? viewRoom(app, key) : undefined;
   if (!room || !('sections' in room)) return undefined;
@@ -398,7 +406,8 @@ function dashboardEntry(key: string, search: string, home: boolean): Entry | und
   const picks = [...(room.filters ?? []), ...((room as { page?: { params: string[] } }).page?.params ?? [])].flatMap((column) =>
     params.has(column) ? [`${column}=${params.get(column)}`] : [],
   );
-  const period = params.get('period');
+  /* Said `all-time`, or `all` as a person guesses it, once written. */
+  const period = readPeriod(params.get('period') ?? '');
   /* All time is said only where the dashboard opens on a window of its own (`window:`, shared/addressParams.ts ALL_TIME). */
   const windowed =
     period && (room.windows?.some((phrase) => windowSlug(phrase) === period) || (room.window && period === ALL_TIME)) ? period : '';
