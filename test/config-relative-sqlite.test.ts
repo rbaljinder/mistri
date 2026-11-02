@@ -208,6 +208,6 @@ test('shot and grade read a config from another folder the same way', { timeout:
   assert.match(shot.out, /table: .*Name — 1 row/);
   const grade = await run(['grade', '../app', '--config', '../mistri.json'], here, { TMPDIR: browserTmp });
   assert.equal(grade.code, 0, `${grade.out}\n${grade.err}`);
-  assert.match(grade.out, /^grade: \d+\/100/m);
+  assert.match(grade.out, /^grade: .*; score \d+\/100$/m);
   assert.deepEqual(readdirSync(here), [], 'nothing was opened where the commands ran');
 });

@@ -164,6 +164,7 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
           'references',
           'allowed',
           'flag',
+          'scale',
           'text',
           'comment',
           'writable',
@@ -184,6 +185,9 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
           typeof column.primaryKey !== 'boolean' ||
           (column.default !== undefined && typeof column.default !== 'string') ||
           (column.flag !== undefined && column.flag !== true) ||
+          /* `scale` (a numeric's declared places, where the type string cannot say them) is evidence like `flag`:
+             how to say a sum, never a grant. */
+          (column.scale !== undefined && (typeof column.scale !== 'number' || !Number.isInteger(column.scale) || column.scale < 0)) ||
           (column.identity !== undefined && column.identity !== 'always' && column.identity !== 'by-default')
         )
           return refuse();

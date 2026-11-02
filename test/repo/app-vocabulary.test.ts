@@ -25,6 +25,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
     keys: [
       'analytics',
       'api',
+      'approvedTriggers',
       'assistant',
       'audiences',
       'auth',
@@ -112,6 +113,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'source',
       'tags',
       'text',
+      'triggers',
       'types',
       'validation',
       'view',

@@ -5,4 +5,8 @@ export const say = defineMessages({
   choicesCouldNotBeLoaded: 'Choices could not be loaded. Try again.',
   loadingChoices: 'Loading choices…',
   noMatchingChoices: 'No matching choices.',
+  loadingName: 'Loading…',
+  nameCouldNotBeLoaded: 'Its name could not be loaded.',
+  tryAgain: 'Try again',
+  noLongerAvailable: 'No longer available. Change this answer.',
 });

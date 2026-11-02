@@ -12,9 +12,10 @@ export const resources = {
     // A shared car reads as one: /forecourt/vehicles/1-2021-toyota-corolla on the public side.
     slug: true,
     display: {
-      price: { format: 'money' },
+      // A listing price is read at a glance: "$24,495", and cents only if a car carries them.
+      price: { format: 'money', whole: true },
       // The page's second figure: "Est. $242/mo", on the terms its note says.
-      est_monthly: { format: 'money', unit: '/mo' },
+      est_monthly: { format: 'money', unit: '/mo', whole: true },
       mileage: { unit: 'mi' },
       battery_health: { format: 'percent' },
       // One feature per line in the seed: a list on the page, a line on a card.

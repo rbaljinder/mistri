@@ -174,6 +174,7 @@ export function hideColumns(adapter: Adapter, name: string, rules: HiddenColumnR
       ...(inner.lockRecord ? { lockRecord: guard(inner.lockRecord) } : {}),
       query: guard(inner.query),
       count: guard(inner.count),
+      ...(inner.aggregate ? { aggregate: guard(inner.aggregate) } : {}),
       insert: guard(inner.insert),
       update: guard(inner.update),
       remove: guard(inner.remove),
@@ -208,6 +209,7 @@ export function hideColumns(adapter: Adapter, name: string, rules: HiddenColumnR
         checked(() => checks.breakdownFor(def)),
         limit,
       ),
+    ...(bound.aggregate ? { aggregate: (request) => bound.aggregate!(checked(() => checks.aggregateFor(request))) } : {}),
   });
 
   const wrapped: Adapter = Object.create(Object.getPrototypeOf(adapter) as object) as Adapter;
@@ -219,6 +221,7 @@ export function hideColumns(adapter: Adapter, name: string, rules: HiddenColumnR
   };
   if (adapter.poolStats) wrapped.poolStats = from('poolStats') as Adapter['poolStats'];
   if (adapter.privileges) wrapped.privileges = from('privileges') as Adapter['privileges'];
+  if (adapter.triggers) wrapped.triggers = from('triggers') as Adapter['triggers'];
   if (adapter.estimateCount) wrapped.estimateCount = from('estimateCount') as Adapter['estimateCount'];
   wrapped.query = async (request) => adapter.query(checked(() => checks.queryFor(request)));
   wrapped.count = async (table, filter, limit) =>
@@ -257,6 +260,7 @@ export function hideColumns(adapter: Adapter, name: string, rules: HiddenColumnR
         checked(() => checks.breakdownFor(def)),
         limit,
       );
+  if (adapter.aggregate) wrapped.aggregate = async (request) => adapter.aggregate!(checked(() => checks.aggregateFor(request)));
   if (adapter.scopeReads) wrapped.scopeReads = async (scope) => reads(await adapter.scopeReads!(scope));
   /* Raw SQL can name any column, in any spelling, through any function: no
      honest redaction exists for it. EXPLAIN is refused with it, since a plan

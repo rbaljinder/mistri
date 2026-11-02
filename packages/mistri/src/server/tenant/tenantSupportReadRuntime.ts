@@ -26,7 +26,7 @@
  * support evidence.
  */
 import { isPromise } from 'node:util/types';
-import type { Adapter, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
+import type { Adapter, AggregateRequest, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { assertScopeCatalog, captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
@@ -345,6 +345,17 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
                 (value) => reader.countBreakdown!(value.definition, value.limit),
                 (value) => assertStructuredReadFilter(value.definition.filter, 'path'),
               ),
+            /* A sum or a group, read through the same guarded reader as `count`: the same rows, the same granted columns. */
+            ...(reader.aggregate
+              ? {
+                  aggregate: (request: AggregateRequest) =>
+                    track(
+                      request,
+                      (value) => reader.aggregate!(value),
+                      (value) => assertStructuredReadFilter(value.filter, 'column'),
+                    ),
+                }
+              : {}),
           });
           const schema = captureScopeCatalog(guarded.schema);
           const capabilities = presentation ? captureTenantData(presentation(supportAsMember(principal), schema)) : undefined;

@@ -34,6 +34,13 @@ export const isBusinessCommandPath = (path: string): boolean => path.startsWith(
  * for one with an Idempotency-Key header, as a caller that retries does. */
 const browserDoor = (req: IncomingMessage): CommandDoor => (req.headers['idempotency-key'] === undefined ? 'ui' : 'ui-idempotent');
 
+/**
+ * A refusal's status on the App's own routes. `invalid_result` is the server's own fault — a handler that returned
+ * what its declaration does not hold, wrote outside its footprint, or met a stored value the platform will not
+ * trust — so it is 500, as the App API says it (api/apiCommandResponse.ts REFUSAL_STATUS): a 503 told every client
+ * that retries 502/503/504 (sessionLifecycle.ts, a gateway, an integrator's SDK) to send the same request again, and
+ * it fails the same way every time. 503 stays for what a retry can cure: `temporarily_unavailable`, `row_locked`.
+ */
 export function businessCommandHttpError(error: unknown, statusOnly = false) {
   const safe =
     error instanceof BusinessCommandExecutionError
@@ -54,19 +61,21 @@ export function businessCommandHttpError(error: unknown, statusOnly = false) {
           ? 404
           : safe.code === 'invalid_input'
             ? 400
-            : safe.code === 'consumes_refused'
-              ? 422
-              : [
-                    'stale_account',
-                    'stale_record',
-                    'command_version_mismatch',
-                    'idempotency_conflict',
-                    'ineligible_state',
-                    'reviewer_unavailable',
-                    'duplicate_record',
-                  ].includes(safe.code)
-                ? 409
-                : 503;
+            : safe.code === 'invalid_result'
+              ? 500
+              : safe.code === 'consumes_refused'
+                ? 422
+                : [
+                      'stale_account',
+                      'stale_record',
+                      'command_version_mismatch',
+                      'idempotency_conflict',
+                      'ineligible_state',
+                      'reviewer_unavailable',
+                      'duplicate_record',
+                    ].includes(safe.code)
+                  ? 409
+                  : 503;
   return {
     status,
     ...(safe.code === 'row_locked' ? { retryAfter: ROW_LOCKED_RETRY_AFTER_SECONDS } : {}),

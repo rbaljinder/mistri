@@ -23,6 +23,7 @@ import { freezeDerivedCatalog, isCapturedScopeCatalog, isFixedScopeCatalog } fro
 import { compileView, resolveAggregate, tryResolvePath, type ViewDef } from '../shared/view.js';
 import { rollupReads, type Rollup } from '../shared/rollups.js';
 import { compileBreakdown, measureConditions, type BreakdownDef } from '../shared/breakdown.js';
+import { aggregateColumns, type AggregateRequest } from '../shared/aggregate.js';
 import { textToView } from '../shared/viewtext.js';
 import { textToBreakdown } from '../shared/breakdowntext.js';
 import { isJsonType, type DatabaseSchema, type ForeignKey } from '../shared/schema.js';
@@ -468,6 +469,14 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     for (const order of request.orderBy ?? []) assertFields(request.table, [order.column], 'read', server);
     return { ...request, columns, filter: filterFor(request.table, request.filter, server) };
   };
+  /* An aggregate reads the columns it keys and measures by, and its where's, as a query reads its own. */
+  const aggregateFor = (input: AggregateRequest): AggregateRequest => {
+    const server = isServerRequest(input);
+    const request = requestData(input);
+    assertRead(request.table);
+    assertFields(request.table, aggregateColumns(request), 'read', server);
+    return { ...request, filter: filterFor(request.table, request.filter, server) };
+  };
   /* A rollup reads its child rows: the child, the reference, the column it
      sums and the columns its filter narrows by must all be readable here —
      an inner rollup's too — or the number would be built from values this
@@ -638,6 +647,7 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     keyFields,
     queryFor,
     filterFor,
+    aggregateFor,
     viewFor,
     breakdownFor,
     assertRelatedWrites,
@@ -712,7 +722,8 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
   // authorizeResources may bind the explicit capability before composing this.
   if (grant.rows !== undefined) throw new AppAccessDenied();
   const checks = resourceChecks(full, grant);
-  const { assertRead, assertWrite, assertAllFields, recordFields, keyFields, queryFor, filterFor, assertRelatedWrites } = checks;
+  const { assertRead, assertWrite, assertAllFields, recordFields, keyFields, queryFor, filterFor, aggregateFor, assertRelatedWrites } =
+    checks;
   const product = rules?.(checks);
   // Keep each call's rules stable across its awaits; the next call reads current grants.
   const capture = (current: G): G => (product ? product.capture(current) : captureGrant(current));
@@ -741,6 +752,7 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
       : {}),
     query: (request) => writer.query(queryFor(request)),
     count: (table, filter) => writer.count(table, filterFor(table, filter)),
+    ...(writer.aggregate ? { aggregate: (request: AggregateRequest) => writer.aggregate!(aggregateFor(request)) } : {}),
     insert: (input) => {
       const server = isServerRequest(input);
       const request = jsonWritten(full, requestData(input));

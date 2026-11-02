@@ -670,6 +670,47 @@ describe('the Postgres adapter, against a real server', { skip: liveSkip('postgr
       }
     });
 
+    test('a protected edit of a domain column compares by the domain, as declared; its value is coerced as the type under it', async () => {
+      /* The write path's columns are read with both types: the declared one, which the guard compares by `=` as it
+         always has, and the one under a domain (postgresCatalog.ts writtenType), which only coerces a value. The guard
+         read the base type once both were one, and refused a domain over money, an array or an interval. */
+      const own = `${FIXTURE}_domains`;
+      const specifier = 'pg';
+      const pg = (await import(specifier)) as { default?: { Client: new (c: unknown) => any }; Client?: new (c: unknown) => any };
+      const Client = (pg.Client ?? pg.default?.Client)!;
+      const control = new Client({ connectionString: LIVE });
+      await control.connect();
+      const domains = new PostgresAdapter(LIVE!, 'pg-domains', [own]);
+      try {
+        await control.query(`CREATE SCHEMA ${own};
+          CREATE DOMAIN ${own}.amount AS money; CREATE DOMAIN ${own}.tags AS int[]; CREATE DOMAIN ${own}.span AS interval;
+          CREATE DOMAIN ${own}.qty AS numeric; CREATE DOMAIN ${own}.ident AS integer;
+          CREATE TABLE ${own}.t (id int PRIMARY KEY, a ${own}.amount, g ${own}.tags, s ${own}.span, q ${own}.qty, n ${own}.ident);
+          INSERT INTO ${own}.t VALUES (1, '1.00', '{1}', '1 day', '1.50', 3)`);
+        const edit = (column: string, from: string, to: string) =>
+          domains.update!({ table: `${own}.t`, key: { id: 1 }, values: { [column]: to }, expected: { [column]: from } });
+        for (const [column, from, to] of [
+          ['a', '$1.00', '2.00'],
+          ['g', '{1}', '{2}'],
+          ['s', '1 day', '2 days'],
+          ['q', '1.50', '7.50'],
+        ])
+          assert.equal((await edit(column, from, to)).affected, 1, column);
+        // A stale original is still a conflict.
+        await assert.rejects(edit('g', '{1}', '{3}'), WriteConflict);
+        // Coerced as the integer under the domain: "" is NULL, as it is for a column declared integer.
+        assert.equal((await domains.update!({ table: `${own}.t`, key: { id: 1 }, values: { n: '' } })).affected, 1);
+        assert.deepEqual((await control.query(`SELECT a::text, g::text, s::text, q::text, n FROM ${own}.t`)).rows, [
+          // A domain over unconstrained numeric keeps no display scale, as numeric itself does not.
+          { a: '$2.00', g: '{2}', s: '2 days', q: '7.5', n: null },
+        ]);
+      } finally {
+        await domains.close().catch(() => {});
+        await control.query(`DROP SCHEMA IF EXISTS ${own} CASCADE`);
+        await control.end();
+      }
+    });
+
     test('updates exactly one row, with every value bound', async () => {
       assert.equal((await read('customer', { id: 1 })).credit_limit, '5000.00');
 

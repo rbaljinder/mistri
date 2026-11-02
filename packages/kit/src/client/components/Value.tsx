@@ -72,8 +72,6 @@ interface ValueProps {
   wholeText?: boolean;
   /** The record the value is of, where a money rule reads its currency from another of its columns (money.ts). */
   row?: Readonly<Record<string, unknown>>;
-  /** Money drawn among others: whether the set says its cents (centsAmong). Left out, the figure's own decide. */
-  cents?: boolean;
 }
 
 /** A value as the record and the page show it: dressed when the app says, plain otherwise. */
@@ -115,7 +113,7 @@ export function Value(props: ValueProps) {
   );
 }
 
-function PlatformValue({ col, value, tableId, compact = false, links = !compact, wholeText = false, row, cents }: ValueProps) {
+function PlatformValue({ col, value, tableId, compact = false, links = !compact, wholeText = false, row }: ValueProps) {
   if (value === null || value === undefined)
     return (
       <span className="null" title="null">
@@ -150,9 +148,8 @@ function PlatformValue({ col, value, tableId, compact = false, links = !compact,
     declared?.currencyColumn && row
       ? { ...declared, currency: rowCurrency(declared, row, declared.currency ?? '') || undefined }
       : declared;
-  const priced = owned && cents !== undefined && owned.format === 'money' ? { ...owned, cents } : owned;
   /* A due date passed on a row still open is drawn in the warning tone (dueOpen.ts). */
-  const rule = priced?.format === 'relative' && dueOpen(tableId, col?.name ?? '', row) ? { ...priced, open: true } : priced;
+  const rule = owned?.format === 'relative' && dueOpen(tableId, col?.name ?? '', row) ? { ...owned, open: true } : owned;
   /* An address, a number or a page is something to act on: in an App it is
      a link (by its rule, or by a column named for it); the Workbench shows
      the data as it is. */

@@ -85,7 +85,7 @@ const invalidDate = (column: ColumnMeta, value: string, kind?: FieldInput) =>
 
 export type { InsertResponse, InsertResult } from './useRecordInsert.js';
 import type { InsertExtra } from './useRecordInsert.js';
-import { addHostListener, removeHostListener, shellById, shellQuery } from '../shellHost.js';
+import { addHostListener, removeHostListener, shellBody, shellById, shellQuery } from '../shellHost.js';
 
 /* What a text rule says when a value breaks it: the App's sentence, else the rule in plain words. */
 const textRuleMessage = (rule: TextRule, value: string) => {
@@ -1312,6 +1312,29 @@ function NewRecordPage({ pane, ...props }: NewRecordProps & { pane: HTMLElement 
   );
 }
 
+/**
+ * Everything beside `panel` and beside each of its ancestors up to the shell's body made inert, until the release
+ * this returns: out of the accessibility tree, the Tab order and hit testing. What was inert already is left as it
+ * was; a popup's portal (one a field in the panel opens, or one the page keeps mounted and closed) and a live region,
+ * which says a save's outcome, are left out.
+ */
+function inertBehind(panel: HTMLElement): () => void {
+  const made: HTMLElement[] = [];
+  const top = shellBody();
+  for (let node: HTMLElement = panel; node !== top && node.parentElement; node = node.parentElement) {
+    for (const sibling of node.parentElement.children) {
+      if (sibling === node || !(sibling instanceof HTMLElement) || sibling.inert) continue;
+      if (sibling.matches('[data-base-ui-portal], [aria-live], [role="status"], [role="alert"]')) continue;
+      sibling.inert = true;
+      made.push(sibling);
+    }
+    if (node.parentElement === top) break;
+  }
+  return () => {
+    for (const el of made) el.inert = false;
+  };
+}
+
 /** The drawer frame: over the list's right side, which stays in sight. */
 function NewRecordSheet(props: NewRecordProps) {
   const title = newRecordTitle(props.table, props.app);
@@ -1323,6 +1346,7 @@ function NewRecordSheet(props: NewRecordProps) {
      button — unless the reader has already put it somewhere. */
   const opener = useRef(document.activeElement);
   const panel = useRef<HTMLElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   useEffect(
     () => () => {
       const back = opener.current;
@@ -1333,6 +1357,10 @@ function NewRecordSheet(props: NewRecordProps) {
     },
     [],
   );
+  /* The page behind is inert while the drawer is open, as aria-modal says it is: a list drawn beside the form was
+     still in the accessibility tree and under a finger, and a grade of Compass's New lead read the list's grid as a
+     control drawn over the form's fields. Released before focus goes back to the New button, which is behind. */
+  useLayoutEffect(() => (root.current ? inertBehind(root.current) : undefined), []);
   useEffect(() => {
     const popupOpen = () => shellQuery('.picker-popup:not([data-closed]) .picker-list, .dd-popup:not([data-closed]) .dd-list');
     /* Tab stays in the drawer. A pointer on the list closes the drawer first,
@@ -1375,7 +1403,7 @@ function NewRecordSheet(props: NewRecordProps) {
   }, [onCancel, discard]);
 
   return (
-    <div className="peekpanel-root">
+    <div ref={root} className="peekpanel-root">
       <div className="peekpanel-backdrop" onPointerDown={onCancel} />
       <aside ref={panel} className="peekpanel newpanel" role="dialog" aria-modal="true" aria-label={title}>
         <div className="peekpanel-head">

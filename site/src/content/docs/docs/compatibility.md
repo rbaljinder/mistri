@@ -59,6 +59,7 @@ At 1.0 these stay Preview:
 - `@mistriwork/ui`, the React primitives.
 - `mistri deploy` and `@mistriwork/cloudflare`.
 - `roundTrips` in `@mistriwork/mistri/testing`.
+- The triggers a row-policy App names (`resources.<t>.triggers`).
 
 A feature added in a 1.x release may ship as Preview too. The
 [status page](/docs/status/) marks each one in its tables.

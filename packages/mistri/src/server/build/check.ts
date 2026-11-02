@@ -40,7 +40,7 @@ import { appHome, segmentsTakenFrom, settingsMount, type AddressMount } from '@m
 import { isTenantApp } from '../../shared/appModel.js';
 import { appRealms } from '../../shared/appTenancy.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
+import { getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import {
   AppProblems,
   appCommandGrants,
@@ -88,6 +88,14 @@ import {
   type CheckStep,
 } from './checkProblems.js';
 import { CONFIG_SECTIONS } from '../serviceConnections.js';
+import {
+  appEntries,
+  claimContext,
+  contextJson,
+  contextLines,
+  fromProfile,
+  projectContext,
+} from '@mistriwork/engine/server/config/profile.js';
 import { APP_ICONS } from '@mistriwork/engine/shared/appIcons.js';
 
 /** What an unknown-icon refusal ends with: the whole list, which a run says once rather than after each of them. */
@@ -115,12 +123,24 @@ export function warningSummary(kinds: ReadonlyMap<string, number>): string {
 }
 
 /** The exit codes: the first step that failed says which. */
-const CHECK_EXIT = { passed: 0, couldNotCheck: 1, types: 2, typecheck: 3, validation: 4, components: 5, pending: 6, deploy: 7 } as const;
+const CHECK_EXIT = {
+  passed: 0,
+  couldNotCheck: 1,
+  types: 2,
+  typecheck: 3,
+  validation: 4,
+  components: 5,
+  pending: 6,
+  deploy: 7,
+  /* The App's stores are not in its database yet: the migrate step's to make, not the App's to fix (store-pending). */
+  stores: 8,
+} as const;
 
 const CHECK_USAGE =
   'mistri check --app <dir> [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--no-index-check] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]';
 
-type Status = 'passed' | 'failed' | 'skipped';
+/* `pending` is the stores step's alone: what `mistri migrate up --app` makes, which no change to the App fixes. */
+type Status = 'passed' | 'failed' | 'skipped' | 'pending';
 /** A step's verdict, its lines as the text output says them, and its findings as `--json` gives them (checkProblems.ts). */
 interface Step {
   name: CheckStep;
@@ -153,6 +173,8 @@ interface CheckReport {
   steps: Array<{ step: CheckStep; status: Status; detail: string; lines?: string[] }>;
   problems: CheckProblem[];
   routes?: Array<{ path: string; what: string }>;
+  /** What the run resolved (docs/bootstrap-plan.md, Part B): the config file, the App, and each entry with where it came from. */
+  context?: ReturnType<typeof contextJson>;
 }
 
 const TYPES = 'mistri-schema.d.ts';
@@ -434,6 +456,107 @@ export async function schemaTypes(registry: Registry, loaded: LoadedApp | undefi
 }
 
 /* The lines mistri check sends to stderr that are only its startup narration. */
+/**
+ * The stores step: the stores the App uses that its database lacks (stores/storesCli.ts appStoresPlan, the plan
+ * `mistri migrate status --app` prints), or undefined when every one is there. Pending, never failed: the fix is
+ * the migrate step, with this run's own entries, and nothing in the App.
+ */
+async function storesPendingStep(registry: Registry, loaded: LoadedApp, opts: Options, appDir: string): Promise<Step | undefined> {
+  /* A build's stores are its deployment's, provisioned from the build's own entries (cli/appTargets.ts). */
+  if (loaded.build) return undefined;
+  const { appStoresPlan, migrateUpCommand, storeWords } = await import('../stores/storesCli.js');
+  const plan = await appStoresPlan({
+    registry,
+    loaded,
+    ...(opts.jobs !== undefined ? { jobs: opts.jobs } : {}),
+    ...(opts.policy !== undefined ? { policy: opts.policy } : {}),
+  });
+  /* Live sync is the one store a start does without (live/liveBinding.ts says it off, and pages refresh on focus):
+     the plan makes it, and its absence fails nothing here. */
+  const missing = plan.stores.filter((store) => store.state !== 'present' && store.id !== 'live-change');
+  if (!missing.length) return undefined;
+  const byConnection = new Map<string, string[]>();
+  for (const store of missing)
+    byConnection.set(store.connection, [
+      ...(byConnection.get(store.connection) ?? []),
+      `${storeWords(store.id)}${store.state === 'behind' ? ' (behind its layout)' : store.state === 'refused' ? ` (refused: ${store.refused})` : ''}`,
+    ]);
+  const said = [...byConnection].map(([connection, stores]) => `${connection}: ${stores.join(', ')}`).join('; ');
+  const fix = migrateUpCommand({
+    app: shown(appDir),
+    ...(opts.config !== undefined ? { config: opts.config } : {}),
+    ...(opts.target && !opts.targetFromEnvironment ? { target: opts.target } : {}),
+    ...(opts.commands !== undefined ? { commands: opts.commands } : {}),
+    ...(opts.jobs !== undefined ? { jobs: opts.jobs } : {}),
+    ...(opts.policy !== undefined ? { policy: opts.policy } : {}),
+  });
+  return {
+    name: 'stores',
+    status: 'pending',
+    detail: said,
+    lines: [`made by: ${fix}`],
+    problems: [
+      problem(
+        'stores',
+        'store-pending',
+        `The App uses stores its database does not have yet (${said}). The migrate step makes them; nothing in the App is wrong.`,
+        { fix },
+      ),
+    ],
+  };
+}
+
+/**
+ * What this run did not load that the App's directory or its commands say exists: a jobs module where commands
+ * record events (a check without it passed, and said nothing of the jobs it never read), a jobs or policy module
+ * beside the App that nothing named. An `info` finding: a check is judged on what it loaded, and says what it did not.
+ */
+function notLoadedFinding(loaded: LoadedApp, opts: Options, appDir: string): CheckProblem | undefined {
+  if (loaded.build) return undefined;
+  const beside = (stem: string) => [`${stem}.ts`, `${stem}.mjs`, `${stem}.js`].find((name) => existsSync(join(loaded.dir ?? appDir, name)));
+  const parts: string[] = [];
+  if (opts.jobs === undefined) {
+    const recording = Object.entries(loaded.commands?.registry ?? {})
+      .filter(([, command]) => getCommandEvents(command))
+      .map(([id]) => id);
+    const file = beside('jobs');
+    if (recording.length || file)
+      parts.push(
+        `jobs: ${recording.length ? `command${recording.length === 1 ? '' : 's'} ${recording.join(', ')} record${recording.length === 1 ? 's' : ''} events, and nothing that acts on them was checked` : 'nothing that runs on a schedule or an event was checked'}${file ? `; ${file} beside the App was not read` : ''}. Give --jobs ${file ?? '<file>'}, or name it once in mistri.json ("app": { "jobs": "${file ?? '<file>'}" })`,
+      );
+  }
+  if (opts.policy === undefined) {
+    const file = beside('policy');
+    if (file)
+      parts.push(
+        `policy: ${file} beside the App was not read. Give --policy ${file}, or name it once in mistri.json ("app": { "policy": "${file}" })`,
+      );
+  }
+  if (!parts.length) return undefined;
+  return problem('validation', NOT_LOADED, `${parts.join('. ')}.`, {}, 'info');
+}
+
+function profiledJson(context: NonNullable<CheckReport['context']>): boolean {
+  return (
+    context.config?.from === 'app' ||
+    context.app?.from === 'profile' ||
+    Object.values(context.entries).some((entry) => entry?.from === 'profile' || entry?.over !== undefined)
+  );
+}
+
+/** The context on one line, for `--brief`: `context: mistri.json · app . (mistri.json) · jobs jobs.ts (mistri.json) …`. */
+function contextLine(context: NonNullable<CheckReport['context']>): string {
+  const at = (path: string) => shown(path);
+  const parts = [context.config ? at(context.config.path) : 'no config file'];
+  if (context.app) parts.push(`app ${at(context.app.path)} (${context.app.from === 'profile' ? 'mistri.json' : context.app.from})`);
+  for (const [key, entry] of Object.entries(context.entries))
+    if (entry)
+      parts.push(
+        `${key} ${at(entry.path)} (${entry.from === 'profile' ? 'mistri.json' : entry.from}${entry.over ? `, over ${at(entry.over)}` : ''})`,
+      );
+  return `context: ${parts.join(' · ')}`;
+}
+
 /** The App's verdict as `mistri check` prints it (oneShot.ts checkApps): its name, then ok or its count of problems. */
 const VERDICT = /^[^:]+: (?:ok|\d+ problems?)$/;
 const NARRATION = /^mistri: (app ".*" from |\d+ connection\(s\)|.+ \((sqlite|postgres|http)\) — )/;
@@ -508,6 +631,11 @@ export async function runCheck(
  */
 /** The one information finding the text outputs say (briefLines and the step lines): which Preview features the App uses. */
 const PREVIEW_FEATURE = 'preview-feature';
+/** A line of the automation listing (jobLoader.ts describeJobs), information under `--json`: a job, workflow, inbound
+    endpoint, integration or decision the App runs. Its own code, so a tool that sorts on codes never reads it as the
+    refused load `invalid-app` names. */
+const AUTOMATION = 'automation';
+const NOT_LOADED = 'not-loaded';
 
 /* Where the documentation's fix points at the message ("the nearest"), the shortest hint that stands alone. */
 const BRIEF_HINTS: Record<string, string> = {
@@ -525,7 +653,7 @@ function tableOf(found: CheckProblem): string {
  * code on the same table, the same advice once per role — are one line a group with its count and one example, and a
  * last line points at `--warnings`: a green run of a big App printed 43k characters of them. Errors are never grouped.
  */
-export function briefLines(report: { problems: CheckProblem[] }, opts: { all?: boolean } = {}): string[] {
+export function briefLines(report: { problems: CheckProblem[]; context?: CheckReport['context'] }, opts: { all?: boolean } = {}): string[] {
   const place = (found: CheckProblem) =>
     found.file
       ? ` ${isAbsolute(found.file) ? relative(process.cwd(), found.file) || found.file : found.file}${found.line ? `:${found.line}` : ''}`
@@ -563,7 +691,15 @@ export function briefLines(report: { problems: CheckProblem[] }, opts: { all?: b
   /* Info is not a problem, but an author should hear once which Preview features the App leans on: the one info
      finding said, after `ok` or the problems, with no fix, since there is nothing to fix. */
   const preview = report.problems.find((found) => found.code === PREVIEW_FEATURE);
-  return [...(lines.length ? lines : ['ok']), ...(preview ? [`${preview.code} (info)${place(preview)} ${preview.message}`] : [])];
+  /* And which declared parts it did not load (`not-loaded`), so an `ok` is never read as a pass of the jobs nobody read. */
+  const unread = report.problems.find((found) => found.code === NOT_LOADED);
+  /* The context on one line, where a profile decided any of it. */
+  const context = report.context && profiledJson(report.context) ? [contextLine(report.context)] : [];
+  return [
+    ...context,
+    ...(lines.length ? lines : ['ok']),
+    ...[preview, unread].flatMap((found) => (found ? [`${found.code} (info)${place(found)} ${found.message}`] : [])),
+  ];
 }
 
 async function runSteps(argv: string[], write: (line: string) => void, emit?: (report: CheckReport) => void): Promise<number> {
@@ -590,7 +726,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     if (argv[i] === '--help' || argv[i] === '-h') {
       write(
         `${CHECK_USAGE}\n\nRegenerate the App's schema types, typecheck it and validate it against its database,\n` +
-          'one line per step, and lint its custom components. Exit codes: 1 could not check, 2 schema types, 3 typecheck, 4 validation, 5 components.\n' +
+          'one line per step, and lint its custom components. Exit codes: 1 could not check, 2 schema types, 3 typecheck, 4 validation, 5 components, 6 pending, 7 deploy, 8 stores pending.\n' +
+          'A store the App uses that its database lacks is store-pending (exit 8, unless a step above failed): mistri migrate up --app makes it, and validation goes on beside it.\n' +
           '--routes also prints every address the App answers to, and what each one opens.\n' +
           '--design also reads its pages, forms and shell for the compositions that come out basic, each a warning with its fix (mistri docs design).\n' +
           "--fix writes into each App theme's source the color or chart order its contrast and color-blind failures say passes, and checks it again;\n" +
@@ -934,6 +1071,11 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     }
     const named = loaded ?? partial;
     write(`Checking ${named ? `"${named.app.name}" ` : ''}in ${shown(appDir)}`);
+    /* What the run resolved, said where the profile or the App's own mistri.json decided any of it: a run that
+       named everything by flag reads as it always did, and --json carries the context either way. */
+    const context = projectContext();
+    const conventions = named ? appEntries(named, opts) : {};
+    if (fromProfile(context) && claimContext()) for (const line of contextLines(context, conventions)) write(`  ${line}`);
     if (config.environmentTargetNote) write(`  note: ${config.environmentTargetNote}`);
     let routeTableSaid: Array<{ path: string; what: string }> | undefined;
     const steps: Step[] = copy ? [{ name: 'pending', status: copy.status, detail: copy.detail, lines: copy.lines }] : [];
@@ -1043,7 +1185,16 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     const OLD_INDEX_ADVICE = /leads no index|has no trigram index/;
 
     // 3. Validation: the real mistri check, as CI runs it.
-    const checked = await checkApp([...rest, '--app', appDir]);
+    /* The stores the App uses, read as `mistri migrate status --app` reads them (docs/bootstrap-plan.md). One absent
+       is the migrate step's to make, not a fault in the App: exit 8 and `store-pending`, whose fix is the migrate
+       command, and validation goes on with their attestations set aside, so a real fault shows in the same run
+       instead of hiding behind the first absent store. A tenant App's stores are attested where its tenants are
+       enrolled, which cannot be set aside: its validation waits for them. */
+    const storesStep = loaded && !copy ? await storesPendingStep(registry, loaded, opts, appDir) : undefined;
+    const tenantWaits = storesStep !== undefined && loaded !== undefined && isTenantApp(loaded.app);
+    const checked = tenantWaits
+      ? { code: 0, output: '', stdout: '', stderr: '' }
+      : await checkApp([...rest, '--app', appDir], undefined, storesStep !== undefined);
     // Placed only in the modules the App was loaded from, and what they import: never a copy kept beside them.
     const locator = await sourceLocator(appDir, [...(loaded?.path ? [loaded.path] : manifest ? [manifest] : []), ...entries]);
     const verdict = checked.stdout
@@ -1106,7 +1257,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       const place = places.get(line);
       const theme = themeSaid.get(message);
       const path = theme ? `ui.customThemes.${theme.themeId}.${theme.at}` : pathOfMessage(message, pageIds);
-      const code = validationCode(message);
+      const code = listing.has(line) ? AUTOMATION : validationCode(message);
       return problem(
         'validation',
         code,
@@ -1131,26 +1282,34 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
         )
       : undefined;
     steps.push(
-      checked.code === 0
+      tenantWaits
         ? {
             name: 'validation',
-            status: 'passed',
-            detail: verdict[said] ?? 'ok',
-            lines: [...verdict.filter((_, i) => i !== said), ...notes],
-            problems: [
-              ...[...verdict.filter((_, i) => i !== said), ...stderr].flatMap((line) => found(line, false) ?? []),
-              ...(previewFinding ? [previewFinding] : []),
-            ],
+            status: 'skipped',
+            detail: "not judged: a tenant App's stores are attested as its tenants are enrolled, and they are not made yet",
+            lines: [],
           }
-        : {
-            name: 'validation',
-            status: 'failed',
-            detail: verdict[Math.max(head, 0)] ?? 'the App did not load',
-            lines: [...verdict.filter((_, i) => i !== Math.max(head, 0)).map(located), ...notes],
-            problems: [...verdict.filter((_, i) => i !== Math.max(head, 0)), ...stderr].flatMap((line) => found(line, true) ?? []),
-          },
+        : checked.code === 0
+          ? {
+              name: 'validation',
+              status: 'passed',
+              detail: verdict[said] ?? 'ok',
+              lines: [...verdict.filter((_, i) => i !== said), ...notes],
+              problems: [
+                ...[...verdict.filter((_, i) => i !== said), ...stderr].flatMap((line) => found(line, false) ?? []),
+                ...(previewFinding ? [previewFinding] : []),
+              ],
+            }
+          : {
+              name: 'validation',
+              status: 'failed',
+              detail: verdict[Math.max(head, 0)] ?? 'the App did not load',
+              lines: [...verdict.filter((_, i) => i !== Math.max(head, 0)).map(located), ...notes],
+              problems: [...verdict.filter((_, i) => i !== Math.max(head, 0)), ...stderr].flatMap((line) => found(line, true) ?? []),
+            },
     );
 
+    if (storesStep) steps.push(storesStep);
     if (indexed) steps.push(indexed);
 
     if (unloaded)
@@ -1442,42 +1601,56 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     /* The Preview features the App uses: one line, not a step's, since it fails nothing (the finding is info). */
     const previewed = steps.flatMap((step) => step.problems ?? []).find((found) => found.code === PREVIEW_FEATURE);
     if (previewed) write(`  preview: ${previewed.message}`);
-    const failed = steps.find((step) => step.status === 'failed');
+    /* What the App declares that this run did not load (a jobs module, a policy beside it): said, so a pass is never
+       read as a pass of the parts nobody loaded. */
+    const notLoaded = loaded ? notLoadedFinding(loaded, opts, appDir) : undefined;
+    if (notLoaded) write(`  not loaded: ${notLoaded.message}`);
+    /* A step that failed says the exit code; stores that are only pending say theirs when nothing failed. */
+    const failed = steps.find((step) => step.status === 'failed') ?? steps.find((step) => step.status === 'pending');
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     const code = !failed
       ? CHECK_EXIT.passed
-      : failed.name === 'pending'
-        ? CHECK_EXIT.pending
-        : failed.name === 'schema types'
-          ? CHECK_EXIT.types
-          : failed.name === 'typecheck'
-            ? CHECK_EXIT.typecheck
-            : failed.name === 'components'
-              ? CHECK_EXIT.components
-              : failed.name === 'deploy'
-                ? CHECK_EXIT.deploy
-                : CHECK_EXIT.validation;
+      : failed.name === 'stores'
+        ? CHECK_EXIT.stores
+        : failed.name === 'pending'
+          ? CHECK_EXIT.pending
+          : failed.name === 'schema types'
+            ? CHECK_EXIT.types
+            : failed.name === 'typecheck'
+              ? CHECK_EXIT.typecheck
+              : failed.name === 'components'
+                ? CHECK_EXIT.components
+                : failed.name === 'deploy'
+                  ? CHECK_EXIT.deploy
+                  : CHECK_EXIT.validation;
     const passed = steps.filter((step) => step.status === 'passed').length;
     write(
       failed
         ? `${steps
             .filter((step) => step.status === 'failed')
             .map((step) => step.name)
-            .join(' and ')} failed (${passed} of ${steps.length} passed) in ${seconds}s. Exit ${code}.`
+            .join(' and ')}${steps.some((step) => step.status === 'failed') ? ' failed' : ''}${
+            steps.some((step) => step.status === 'pending')
+              ? `${steps.some((step) => step.status === 'failed') ? ', and ' : ''}stores pending`
+              : ''
+          } (${passed} of ${steps.length} passed) in ${seconds}s. Exit ${code}.`
         : `Checked in ${seconds}s: ${passed} of ${steps.length} steps passed${passed < steps.length ? ', the rest skipped as said' : ''}.`,
     );
     /* A failed step that found nothing it could place still fails with one problem: its verdict. */
-    const problems = steps.flatMap((step) =>
-      step.problems?.length || step.status !== 'failed' || step.name === 'themes'
-        ? (step.problems ?? [])
-        : [
-            problem(
-              step.name,
-              step.name === 'validation' ? 'invalid-app' : step.name === 'typecheck' ? 'typecheck' : step.name.replace(' ', '-'),
-              step.detail,
-            ),
-          ],
-    );
+    const problems = [
+      ...steps.flatMap((step) =>
+        step.problems?.length || step.status !== 'failed' || step.name === 'themes'
+          ? (step.problems ?? [])
+          : [
+              problem(
+                step.name,
+                step.name === 'validation' ? 'invalid-app' : step.name === 'typecheck' ? 'typecheck' : step.name.replace(' ', '-'),
+                step.detail,
+              ),
+            ],
+      ),
+      ...(notLoaded ? [notLoaded] : []),
+    ];
     emit?.({
       version: 1,
       app: named ? { id: named.app.id, name: named.app.name } : null,
@@ -1493,6 +1666,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       })),
       problems,
       ...(routeTableSaid ? { routes: routeTableSaid } : {}),
+      context: contextJson(context, conventions),
     });
     return code;
   } finally {

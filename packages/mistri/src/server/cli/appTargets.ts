@@ -18,6 +18,7 @@ import { AppProblems, type AppDef } from '../../shared/app.js';
 import { machinePath, type AppMachineDef } from '../../shared/appMachine.js';
 import { stateStampColumn, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
+import { appEntries } from '@mistriwork/engine/server/config/profile.js';
 import { appBinding } from './appBinding.js';
 import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import type { MigrateApp, MigrateHost } from '@mistriwork/engine/server/migrate/cli.js';
@@ -69,9 +70,9 @@ interface MigrateAppRun extends MigrateApp {
 
 /** `mistri migrate`, as the App framework extends it. */
 export const MIGRATE_APPS: MigrateHost<MigrateAppRun> = {
-  async app(appDir, { opts, config, command, flags }) {
+  async app(appDir, { opts, config, command }) {
     let loaded = await loadTargetApp(appDir, opts, config, opts.commands);
-    let jobs = typeof flags['--jobs'] === 'string' ? flags['--jobs'] : undefined;
+    let jobs = opts.jobs;
     /* A build holds its commands and jobs as the bundles it was built with, not as a commands.ts beside its
        manifest, so the definition alone named no command, and `stores up` provisioned nothing a command, an
        event or a job needs. Its own entries are read, as a source's commands.ts is; a flag that names another
@@ -81,7 +82,7 @@ export const MIGRATE_APPS: MigrateHost<MigrateAppRun> = {
       const { assertBuildEntries } = await import('./apps.js');
       assertBuildEntries({ commands: opts.commands, jobs, policy: opts.policy }, [loaded]);
       if (own.commands) loaded = { ...loaded, commands: await builtCommands(own.commands, loaded) };
-      if (command === 'stores') jobs ??= own.jobs;
+      if (command !== 'files') jobs ??= own.jobs;
     }
     return {
       loaded,
@@ -94,17 +95,26 @@ export const MIGRATE_APPS: MigrateHost<MigrateAppRun> = {
         if (step.status === 'failed')
           write(`  warning: ${step.detail}. mistri check --app ${shown(appDir)} regenerates them and says what no longer fits.`);
       },
-      /* R3: the App judged against the schema the run left. The migrations are in the database whatever this says —
-         forward only — so a failure here names what to fix, in the App or in a migration that puts back what it
-         needs; `mistri check --pending` asks the same question before anything runs. */
-      async check(rest: string[], write: (line: string) => void) {
-        write('');
-        const { runCheck } = await import('../build/check.js');
-        if ((await runCheck(['--app', appDir, ...rest], write)) === 0) return true;
-        write(
-          `The migrations are applied, and the App no longer fits the schema they made: fix what the check names above, or write a migration that puts back what the App needs. Next time, mistri check --app ${shown(appDir)} --pending judges them first.`,
+      /* The bootstrap plan's App phases (stores/bootstrap.ts): the stores, the sign-in store, seed data, and the
+         check. The migrations are in the database whatever the check says, forward only, so a failure there names
+         what to fix, in the App or in a migration that puts back what it needs; a store still absent is said as one,
+         never as a schema the App no longer fits (a field report). */
+      entries: appEntries(loaded, opts),
+      async bootstrap(input) {
+        const { bootstrapPhases } = await import('../stores/bootstrap.js');
+        return bootstrapPhases(
+          {
+            loaded,
+            appDir,
+            config,
+            ...(jobs !== undefined ? { jobs } : {}),
+            async check(rest, write) {
+              const { runCheck } = await import('../build/check.js');
+              return runCheck(['--app', appDir, ...rest], write);
+            },
+          },
+          input,
         );
-        return false;
       },
     };
   },
@@ -113,7 +123,7 @@ export const MIGRATE_APPS: MigrateHost<MigrateAppRun> = {
       says: 'the layouts mistri keeps in a database of its own',
       usage: STORES_USAGE,
       needs: 'stores needs status or up.',
-      takes: { '--suite': true, '--jobs': true },
+      takes: { '--suite': true },
       async run(input, write) {
         const { runStores } = await import('../stores/storesCli.js');
         return runStores(
@@ -129,9 +139,7 @@ export const MIGRATE_APPS: MigrateHost<MigrateAppRun> = {
             ...(typeof input.flags['--suite'] === 'string' ? { suite: input.flags['--suite'] } : {}),
             sections: input.sections,
             ...(input.opts.policy !== undefined ? { policy: input.opts.policy } : {}),
-            ...((input.app?.jobs ?? input.flags['--jobs']) !== undefined
-              ? { jobs: (input.app?.jobs ?? input.flags['--jobs']) as string }
-              : {}),
+            ...((input.app?.jobs ?? input.opts.jobs) !== undefined ? { jobs: (input.app?.jobs ?? input.opts.jobs)! } : {}),
           },
           write,
         );

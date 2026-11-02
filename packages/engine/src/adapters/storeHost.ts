@@ -23,6 +23,10 @@ import type { PostgresScopeCatalog } from './scoped/postgresScopeCatalog.js';
 import type { SqliteScopeCatalog } from './scoped/sqliteScopeCatalog.js';
 import type { DatabaseSchema } from '../shared/schema.js';
 import type { RowScope } from '../shared/rowScope.js';
+import type { TriggerAcceptance } from './scoped/triggerProof.js';
+
+/* The acceptance a command's journal transaction carries, for the App runtime that builds it. */
+export type { TriggerAcceptance, TriggerChange } from './scoped/triggerProof.js';
 
 /** A reserved store's meta row: the one row whose version says the layout, and the cache key its attestation is kept under. */
 export interface StoreMeta {
@@ -72,6 +76,8 @@ export interface JournalTransactionOptions<V> {
   readonly verify?: V;
   /** A verified ordinary transaction's trusted host check, after BEGIN and again before COMMIT. */
   readonly ordinaryVerify?: () => unknown;
+  /** A scoped transaction's triggers the App accepts, by physical table (scoped/triggerProof.ts). */
+  readonly triggers?: TriggerAcceptance;
 }
 
 /** The callback: the records, the journal, and a scoped transaction's catalog evidence (absent in an ordinary one). */

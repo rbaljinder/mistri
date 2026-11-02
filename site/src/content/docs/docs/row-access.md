@@ -41,6 +41,20 @@ also given the other, so test for each by name, as Lintel's `OFFICE` list does.
 - Use a [tenant App](/docs/tenant-apps/) instead when each customer is a separate organization with its own members, roles and administration.
 - Use [roles](/docs/roles/) alone when people differ only in which tables and columns they reach.
 
+## Try it as each person
+
+`mistri dev` makes one account per role, each a row of `me` where one fits,
+so it shows one household. To see another, sign in as its `admin` (the
+address and password it prints) and add an account with that person's email
+from the `me` table, on the accounts screen or with `POST /api/accounts`
+([managing accounts](/docs/sign-in/#managing-accounts)). It lands in the store
+dev signs in to, verified, so `me` and the policy find it. Sign in as it, or
+picture its pages:
+
+```sh
+MISTRI_AS_PASSWORD=… npx @mistriwork/mistri shot --app . --policy ./policy.ts --as ana@example.test
+```
+
 ## Options
 
 | Part | What it does | Default | Status |
@@ -59,16 +73,61 @@ need a restart.
 ### What a policy scopes
 
 - **Reads.** Lists, records, related lists, searches, counts and exports. A path through a reference is scoped like one through a key.
-- **Writes.** With `access: 'write'` and role `write` grants, Save, inline edits, fixed actions and New work on a writable SQLite or PostgreSQL source. A write may point a row only at a parent the person reads; only the references it sets are checked. A row the same write made counts as the person's for the rest of that write, so a child rule that names its parents by key (`request_id in [...]`) admits a line on the new parent; a rule of `false` stays closed.
+- **Writes.** With `access: 'write'` and role `write` grants, Save, inline edits, fixed actions and New work on a writable SQLite or PostgreSQL source. A write may point a row only at a parent the person reads; only the references it sets are checked. A row the same write made counts as the person's for the rest of that write, so a child rule that names its parents by key (`request_id in [...]`) admits a line on the new parent; a rule of `false` stays closed. On PostgreSQL a table in a partition or inheritance hierarchy (a partitioned table, a partition, an inheritance parent or child) is not written under a policy yet; a reference to a partitioned table is checked through it.
+- **Key types.** A write checks rows by their keys, so each key it relies on (a primary key, either side of a foreign key, a named trigger's key) must be of a type whose value reads back exactly. On PostgreSQL that is `text`, `varchar`, `char`, `citext`, `name`, an integer, `numeric`, `uuid`, `date`, `boolean` or an enum, through a domain; on SQLite, `INTEGER` or `TEXT` affinity. A write that relies on any other (`jsonb`, a float, a timestamp, an array, `REAL`, a decimal with a scale) is refused, naming the table, column and type.
 - **Commands.** `--commands` works beside `--policy`; a conflicting row the person cannot see is refused as `temporarily_unavailable`, never revealed.
 - **Jobs and services.** Jobs, timers, inbound endpoints, integrations and effects run as a service the policy's `services: ['clock']` names, and get the rows `resolveRows` gives `service:clock` ([events and jobs](/docs/events-and-jobs/)). A command's events are recorded under the policy too.
 - **Mail.** A notify rule's `email: true` mails a recipient only while the policy gives them that record, the same rows a session of theirs would get. `send: { channel: 'email' }` mails an address the record holds ([email](/docs/email/#mail-to-an-address-a-record-holds)).
+- **Triggers.** A database trigger runs inside the write and reaches whatever its body says, which the policy cannot bound, so a write that fires one is refused. A trigger that only checks the row is not: it reads `NEW`, `OLD` and literals and raises (`SELECT RAISE(ABORT, '…') WHERE NEW.balance < 0` on SQLite, `IF NEW.balance < 0 THEN RAISE EXCEPTION '…'; END IF; RETURN NEW;` in PL/pgSQL). A trigger fires only on its own event and `UPDATE OF` columns, so an update of other columns runs. On PostgreSQL the same holds for a CHECK constraint, a column's default, a generated column, an expression index or a domain that calls a function the database defines: a write that runs it is refused (a domain's, only a write of its column). PostgreSQL's own functions (`now()`, `nextval`, `gen_random_uuid()`) block nothing. `mistri check` names each command one blocks (`[command-trigger]`): move that work into the command, or [name the trigger](#triggers-the-app-names), rather than drop a check.
 - **Refused.** Raw SQL, MCP, the CLI's export modes and the App API's event feed. The server serves exactly one `--app` with a policy.
 
 ```sh
 mistri check --app ./dealer --policy ./dealer/policy.ts
 mistri --config server.json --app ./dealer --policy ./dealer/policy.ts
 ```
+
+### Triggers the App names
+
+**Preview.** A trigger that keeps a balance or writes an audit row can run
+under the policy when the App names it on the table it fires on:
+
+```ts
+resources: {
+  ledger_entry: { access: 'write', triggers: ['post_balance', 'entry_audit'] },
+}
+```
+
+A named trigger's body must be keyed effects: each statement writes, inserts,
+deletes or reads one row of another table, by a key equal to columns of `NEW`
+or `OLD` (`UPDATE account SET posted_minor = posted_minor + NEW.amount WHERE
+id = NEW.account_id`). The key is the table's primary key on SQLite, and a
+primary key or unique index on PostgreSQL; each column of it has the same type
+and collation as the column of `NEW` or `OLD` it equals, so `char(3)` against
+`text`, or `NOCASE` against `BINARY`, is refused. An update, a delete or a read
+must know its key before the write: one keyed by an id the database assigns is
+refused. Before the write, under its row locks, every row an effect reaches
+must be one the person's rows admit; a row they cannot see is refused with the
+answer a hidden row gets, and nothing is written. A trigger
+that fires another is followed up to four deep. On SQLite a session also
+checks, before `COMMIT`, that the triggers wrote nothing else.
+
+`mistri check --write-authority` records each named trigger in
+`authority.lock`, with the digest of its definition and what it does:
+
+```text
+trigger ledger_entry.post_balance on insert sha256:3f1c…
+  writes account.posted_minor where account.id = NEW.account_id
+```
+
+An App that names a trigger needs the lock. A named trigger the lock has no
+line for (or no lock at all), or whose definition changed, is `[trigger-lock]`:
+the server does not start and a write that fires it is refused until
+`mistri check --write-authority` writes the lock again. The rows a trigger changed are in
+record history, named for the trigger and the command (`Post entry (trigger
+post_balance)`), and live sync announces them. A command that also writes a
+table its trigger writes is `[trigger-double-write]`. A trigger not named stays
+refused; one that only checks `NEW` and `OLD` needs no name. Tenant Apps do
+not accept named triggers yet.
 
 ## Common mistakes
 

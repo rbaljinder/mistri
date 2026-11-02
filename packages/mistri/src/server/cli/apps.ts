@@ -27,10 +27,11 @@ import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 export const CHECK_BUILD_OF = 'MISTRI_CHECK_BUILD_OF';
 import type { AppEnvName } from '../../shared/appAuthority.js';
 
-/* A built App is started with the entries it was built with. The flag still
-   names each one — an entry is never inferred from the App — but it must be
-   the build's own bundle, so what runs is the code the build hashed and
-   checked, and never TypeScript. A suite's App entry names them the same way (suiteCommand.ts). */
+/* A built App is started with the entries it was built with: the manifest's
+   own where no flag names one (docs/bootstrap-plan.md D9), never a module
+   found beside the App. A flag that names one must name the build's own
+   bundle, so what runs is the code the build hashed and checked, and never
+   TypeScript. A suite's App entry names them the same way (suiteCommand.ts). */
 export function assertBuildEntries(opts: Partial<Record<BuildEntryKind, string>>, loadedApps: LoadedApp[]): void {
   for (const { build } of loadedApps) {
     if (!build) continue;
@@ -120,12 +121,25 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
         /* --commands names the one --app's module; an App without it may keep commands.ts beside its manifest. */
         const own = opts.commands !== undefined && opts.apps?.length === 1 && resolve(opts.apps[0]) === resolve(target);
         const loaded = await loadApp(target, { ...loadOptions, ...more, ...(own ? { commands: opts.commands } : {}) });
+        /* A build is served with the entries it was built with (decision D9 of docs/bootstrap-plan.md): the build is
+           the hashed record of the authority someone chose, and `migrate stores up` already reads it. A flag still
+           names the build's own bundle or is refused (assertBuildEntries); a tenant App's policy is the build's. */
+        const built: string[] = [];
+        if (loaded.build && appTargets.length === 1)
+          for (const kind of BUILD_ENTRY_KINDS) {
+            const recorded = loaded.build.entries[kind];
+            if (opts[kind] === undefined && recorded) {
+              opts[kind] = recorded;
+              built.push(kind);
+            }
+          }
         if (isTenantApp(loaded.app) && !opts.policy)
           throw new Error('Tenant applications are not enabled without explicit --policy enrollment.');
         loadedApps.push(loaded);
         console.log(
           `mistri: app "${loaded.app.name}" from ${loaded.path}` +
-            `${loaded.build ? ` — a build by mistri ${loaded.build.mistri}, served as built: no reload` : ''}`,
+            `${loaded.build ? ` — a build by mistri ${loaded.build.mistri}, served as built: no reload` : ''}` +
+            `${built.length ? `; ${built.join(', ')} from: build` : ''}`,
         );
       }
       assertBuildEntries(opts, loadedApps);

@@ -24,7 +24,13 @@
 import { realpathSync, statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { isProxy } from 'node:util/types';
-import { ANSI_STYLE, Serial, TransactionOutcomeUnknown, type ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
+import {
+  ANSI_STYLE,
+  Serial,
+  TransactionOutcomeUnknown,
+  type AggregateRequest,
+  type ScopedReads,
+} from '@mistriwork/engine/adapters/adapter.js';
 import { PostgresAdapter, type PostgresReadSnapshot } from '@mistriwork/engine/adapters/postgres.js';
 import { createScopedReads } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { readSqliteReadCatalog } from '@mistriwork/engine/adapters/scoped/sqliteScopeCatalog.js';
@@ -475,6 +481,8 @@ export function openSqlitePlatformReadSource(existingPath: string, input: Tenant
             countView: (view, limit) => run([view, limit], reads.countView),
             runBreakdown: (breakdown, offset) => run([breakdown, offset], reads.runBreakdown),
             countBreakdown: (breakdown, limit) => run([breakdown, limit], reads.countBreakdown),
+            // Revalidated first and bounded by the realm's rows, as `count` is.
+            ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => run([request], reads.aggregate!) } : {}),
           } satisfies ScopedReads);
         } catch {
           return denyTenant();
@@ -675,6 +683,8 @@ export async function openPostgresPlatformReadSource(
             countView: (view, limit) => run([view, limit], reads.countView),
             runBreakdown: (breakdown, offset) => run([breakdown, offset], reads.runBreakdown),
             countBreakdown: (breakdown, limit) => run([breakdown, limit], reads.countBreakdown),
+            // Revalidated first and bounded by the realm's rows, as `count` is.
+            ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => run([request], reads.aggregate!) } : {}),
           } satisfies ScopedReads);
         } catch {
           return denyTenant();

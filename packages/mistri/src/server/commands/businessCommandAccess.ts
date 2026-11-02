@@ -1,4 +1,9 @@
-import { TransactionOperations, type TellRequest, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import {
+  TransactionOperations,
+  type AggregateRequest,
+  type TellRequest,
+  type WriteTransaction,
+} from '@mistriwork/engine/adapters/adapter.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
 import { captureCommandEventStoreBinding, type CommandEventStoreBinding } from '../../adapters/events/commandEventSchema.js';
@@ -189,6 +194,12 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
           const result = await run({
             query: (request) => operations.read(async () => tx.query({ ...request, table: table(request.table) })),
             count: (local, filter) => operations.read(async () => tx.count(table(local), filter)),
+            ...(tx.aggregate
+              ? {
+                  aggregate: (request: AggregateRequest) =>
+                    operations.read(async () => tx.aggregate!({ ...request, table: table(request.table) })),
+                }
+              : {}),
             insert: (request) => operations.run(async () => tx.insert({ ...request, table: table(request.table, true) })),
             update: (request) => operations.run(async () => tx.update({ ...request, table: table(request.table, true) })),
             remove: (request) => operations.run(async () => tx.remove({ ...request, table: table(request.table, true) })),

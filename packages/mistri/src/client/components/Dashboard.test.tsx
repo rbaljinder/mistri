@@ -539,24 +539,29 @@ describe('the screen', () => {
     expect(within(card).queryByText(/target/)).toBeNull();
   });
 
-  test('a strip of money cards says its figures one way, each whole in its title and to a screen reader', async () => {
+  test('a money card says its figure to the cent; a compact strip says one way, each whole in its title and to a screen reader', async () => {
     breakdowns['deal sum fee'] = { columns: ['sum'], rows: [{ sum: 414100 }] };
     breakdowns['deal sum deposit'] = { columns: ['sum'], rows: [{ sum: 27300 }] };
+    breakdowns['deal sum balance'] = { columns: ['sum'], rows: [{ sum: 28123.45 }] };
     draw({
       dashboard: {
         ...dashboard,
         windows: [],
         filters: [],
         sections: [
-          { kind: 'metric', table: 'deal', measure: 'sum fee', format: 'money', title: 'Fees' },
-          { kind: 'metric', table: 'deal', measure: 'sum deposit', format: 'money', title: 'Deposits' },
+          { kind: 'metric', table: 'deal', measure: 'sum fee', format: 'money', title: 'Fees', figure: 'compact' },
+          { kind: 'metric', table: 'deal', measure: 'sum deposit', format: 'money', title: 'Deposits', figure: 'compact' },
+          // A field report's balance read "$28K": exact is the default, to the cent.
+          { kind: 'metric', table: 'deal', measure: 'sum balance', format: 'money', title: 'Balance' },
         ],
       },
     });
-    const fees = await screen.findByRole('button', { name: /^Fees: \$414,100/ });
-    const deposits = await screen.findByRole('button', { name: /^Deposits: \$27,300/ });
-    expect(within(fees).getByText('$414.1K')).toHaveAttribute('title', expect.stringMatching(/^\$414,100/));
-    expect(within(deposits).getByText('$27.3K')).toHaveAttribute('title', expect.stringMatching(/^\$27,300/));
+    const fees = await screen.findByRole('button', { name: /^Fees: \$414,100\.00/ });
+    const deposits = await screen.findByRole('button', { name: /^Deposits: \$27,300\.00/ });
+    expect(within(fees).getByText('$414.1K')).toHaveAttribute('title', expect.stringMatching(/^\$414,100\.00/));
+    expect(within(deposits).getByText('$27.3K')).toHaveAttribute('title', expect.stringMatching(/^\$27,300\.00/));
+    const balance = await screen.findByRole('button', { name: /^Balance: \$28,123\.45/ });
+    expect(within(balance).getByText('$28,123.45')).toBeInTheDocument();
   });
 
   test('once the reader picks a window, a card it does not move says so', async () => {

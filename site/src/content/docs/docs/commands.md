@@ -55,6 +55,7 @@ and never imports the module. The module is `commands.ts` beside `app.ts` (or
 | `input`                       | The fields its form asks, parsed by the same reader on the server                                                                                                                                                                                                                                      | none      | Stable |
 | `output`                      | The [shape](#output-shapes) of what `handle` returns; leave it out when it returns nothing                                                                                                                                                                                                             | none      | Stable |
 | `track`                       | What it keeps for a retry: `'none'`, `'receipts'` or `'audit'` ([below](#what-a-command-keeps))                                                                                                                                                                                                        | by caller | Stable |
+| `snapshot`                    | `true`: every read in the handler sees one moment, so a total and its rows agree while others write ([below](#sums-groups-and-pages))                                                                                                                                                                  | off       | Stable |
 | `lookup`, `effects`, `events` | Read another source first, post a webhook after commit, record [events](/docs/events-and-jobs/)                                                                                                                                                                                                        | none      | Stable |
 
 Commands run only on the server. `mistri check` writes
@@ -132,7 +133,7 @@ declaration off.
 | Context                                                       | What                                                                                                                                                                                                                                      |
 | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `record`, `records`                                           | The target as this transaction reads it; every target, in request order, for `targets: 'many'`                                                                                                                                            |
-| `db.<table>`                                                  | The footprint, typed from `Rows`: `get`, `find`, `where(…).orderBy().limit()`, `count`, `insert`, `update(row, changes)`, `remove(row)`; on a file resource, `insertFile({ name, type, data }, values)`                                   |
+| `db.<table>`                                                  | The footprint, typed from `Rows`: `get`, `find`, `where(…).orderBy().limit()`, `count`, [sums, groups and pages](#sums-groups-and-pages), `insert`, `update(row, changes)`, `remove(row)`; on a file resource, `insertFile({ name, type, data }, values)` |
 | `files`                                                       | The parts a mail intake received, `[{ name, type, size, data }]` (tenant mail)                                                                                                                                                            |
 | `actor`                                                       | The verified principal: `id`, `roles`, and for an account `email` and `name`; `kind` is `'public'` or `'service'` for a public form or a job                                                                                              |
 | `door`                                                        | Where the request came in: `'ui'` (a screen or a form), `'api'` (the App API), `'mcp'` (App MCP), `'job'` or `'workflow'`. The host says it, never the request                                                                            |
@@ -163,6 +164,58 @@ The handler reads its footprint whole, as the App's own server code: a
 column a role's `fields` or the resource's `hidden` withholds is still in
 `record` and `db`. What reaches the person stays narrowed, so keep a withheld
 value out of `output` yourself.
+
+### Sums, groups and pages
+
+```ts
+import { count, sum, max, period } from '@mistriwork/mistri/commands';
+
+const owed = await db.invoice.where({ status: 'open' }).sum('amount'); // '18340.50'
+const months = await db.invoice
+  .where`status = ${'open'}`
+  .groupBy('customer_id', period.month('issued_on'))
+  .aggregate({ invoices: count(), total: sum('amount'), largest: max('amount') })
+  .orderBy('total', 'desc')
+  .limit(20);
+// [{ customer_id: 7, issued_on: '2026-10', invoices: 3, total: '1210.00', largest: '900.00' }, …]
+```
+
+- `sum` and `avg` over a decimal or an integer are exact decimal strings, with
+  the column's places (`avg` two more, rounded half to even); over a float
+  column (`REAL`, `double precision`) they are numbers, since a float has no
+  exact digits to say. `count` is a number; `min` and `max` keep the column's
+  type. Over no rows a sum is `'0.00'`, an average `null`. SQLite adds a
+  decimal exactly while each value times 10^places stays below 2^53; past that
+  the command is refused with `invalid_result`, never answered wrong.
+- Keys and measures name the table's own columns, up to three keys; a period
+  is `hour`, `day`, `week`, `month`, `quarter`, `year` or `weekday`. A
+  reference path (`customer_id.region`) is refused: group by the id and read
+  the few rows it names.
+- `page({ after, size })` reads up to 1,000 rows in key order (or the query's
+  order, the key appended) and answers `{ rows, next }`. `next` is plain data:
+  keep it in a job, a workflow step or a URL and pass it back as `after`. The
+  next page is read under whoever asks for it.
+- `iterate({ size })` walks every row a page at a time, in one command, and
+  stops between pages when the command is cancelled.
+- Bounds are refused, never cut: more than 1,000 groups without `.limit`, more
+  than 100,000 rows in one `iterate`. Past that, page across commands: one
+  workflow step per page, each handed the last one's `next`, resumes where it
+  stopped after a restart, and a mark taken first (`max('id')`) keeps rows
+  added meanwhile out of the run.
+
+They read exactly what `where` and `count` read in the same command: the
+footprint, the row policy, the tenant, and `elevate`. A group whose only rows
+are hidden is not there.
+
+On PostgreSQL each statement sees what had committed when it ran. `snapshot:
+true` opens the command's transaction `REPEATABLE READ` instead, so every
+read sees one moment; a row another writer changed after it and the command
+then writes is refused as `stale_record`, which jobs and workflows retry.
+SQLite's writer already reads one moment: there `snapshot` changes nothing,
+and `mistri check` says so. Every statement on PostgreSQL stops at 30 seconds
+(the session's `statement_timeout`); SQLite runs a statement to its end, so a
+sum over a very large SQLite table holds the server as a dashboard over it
+does.
 
 ### Output shapes
 
@@ -228,13 +281,15 @@ role that cannot read the table, and `mistri check --design` lists every one.
 
 Commands run on SQLite and PostgreSQL and keep a journal in the business
 database: one row per command, its receipt and audit together. Startup checks it and never creates it;
-with the server stopped, one command creates the journal, the event store when
+with the server stopped, one command applies the migrations, creates the journal, the event store when
 a command records events, and every other store the App uses (`--jobs <file>`
-adds its jobs'):
+adds its jobs'), then checks the App:
 
 ```sh
-npx @mistriwork/mistri migrate stores up --app .
+npx @mistriwork/mistri migrate up --app .
 ```
+
+`mistri check` names a store the database still lacks (`store-pending`, exit 8) with this command as its fix.
 
 From a script, `migrateSqliteCommandJournal(path)` or
 `migratePostgresCommandJournal(url)` from `@mistriwork/mistri/maintenance` does the same
@@ -282,7 +337,7 @@ receipts are kept, `mistri check` names a contract change as breaking, and
 
 - `[outside-ceiling]`: the command's target or a `write` table has no `access: 'write'` → add it to the resource; a target is always written. `[command-unreadable]`: the footprint reads a table the role does not read, so its button never shows → grant the role that table.
 - `[command-and-edit]`: a role edits in place a table a command writes → say which columns it edits in a `fields` rule, or give the table a machine.
-- Under a row policy or in a tenant App, a command answers `invalid_result` and the terminal says `Command "…" set job.bench_id, which points at a "bench" row, and "bench" is not in the command's footprint` → add that table to the command's `read`. Only a reference the write sets is judged; one a row already holds is not. A handler that returns a value without declaring `output` answers `invalid_result` too (an omitted `output` means it returns nothing, and `mistri check` cannot see a return value): the terminal says `returned a value but declares no output` → declare `output: shape({ … })`, or return nothing.
+- Under a row policy or in a tenant App, a command answers `invalid_result` (500, on every route: the App's fault, not one a retry cures), and the terminal leads with `Command "…" set job.bench_id, which points at a "bench" row, and "bench" is not in the command's footprint` → add that table to the command's `read`. Only a reference the write sets is judged; one a row already holds is not. A handler that returns a value without declaring `output` answers `invalid_result` too (an omitted `output` means it returns nothing, and `mistri check` cannot see a return value): the terminal says `returned a value but declares no output` → declare `output: shape({ … })`, or return nothing.
 - A form says the record changed (`stale_record`) → it moved since the form opened; reopen it. A record's `version` column, where there is one, is the revision.
 
 ## Related

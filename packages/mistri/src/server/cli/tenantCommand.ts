@@ -33,7 +33,9 @@ const HELP = `${TENANT_USAGE}
           --days days (default 180, at most 366). An address with no
           account yet gets one in the App's auth store, with the password
           in MISTRI_ACCOUNT_PASSWORD (never on the command line) and
-          --name (default: the address before its @).
+          --name (default: the address before its @). The store is the
+          one the App names, else mistri dev's once dev has started the
+          App there, else a plain start's; grant says which.
   clone   Makes <sandbox>, a new tenant, from a copy of <source>: the rows of
           every resource the App marks clone: 'config', and with --samples
           those marked clone: 'sample' too. Ids are rewritten so the copy
@@ -195,29 +197,49 @@ export async function runTenantCommand(
     }
     if (command === 'grant') {
       const app = appDir;
-      let accountId = await maintenance.findAppAccount(app, email!);
-      if (accountId === null) {
-        // A password on the command line would be in the shell's history and the process list.
-        const password = process.env.MISTRI_ACCOUNT_PASSWORD;
-        if (!password) return fail(`${email} has no account yet: set MISTRI_ACCOUNT_PASSWORD to the password it is made with.`);
-        [accountId] = await maintenance.createAppAccounts(app, [
-          { email: email!, name: flags['--name'] ?? email!.split('@')[0], password },
-        ]);
-        write(`${email}: an account was made in ${loaded.app.id}'s auth store.`);
+      /* The account is made, found and checked in the store mistri dev signs in to, once dev has started the App
+         here, else a plain start's (auth.ts localAuthStore): the same rule shot --as reads by. The store follows
+         XDG_CONFIG_HOME, so it is set for this step alone, as shot's own grant does (shotTenant.ts). */
+      const { localAuthStore } = await import('../auth/auth.js');
+      const local = localAuthStore(loaded);
+      const id = loaded.app.id;
+      const kept =
+        local.kept === 'named'
+          ? `the store ${id} names (${local.store})`
+          : local.kept === 'dev'
+            ? `the store mistri dev keeps for ${id} (${local.store})`
+            : `the store a start of ${id} keeps (${local.store}); mistri dev keeps its own once it has started the App, so grant again then to sign in there`;
+      const saved = process.env.XDG_CONFIG_HOME;
+      if (local.env.XDG_CONFIG_HOME === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = local.env.XDG_CONFIG_HOME;
+      try {
+        let accountId = await maintenance.findAppAccount(app, email!);
+        if (accountId === null) {
+          // A password on the command line would be in the shell's history and the process list.
+          const password = process.env.MISTRI_ACCOUNT_PASSWORD;
+          if (!password) return fail(`${email} has no account yet: set MISTRI_ACCOUNT_PASSWORD to the password it is made with.`);
+          [accountId] = await maintenance.createAppAccounts(app, [
+            { email: email!, name: flags['--name'] ?? email!.split('@')[0], password },
+          ]);
+          write(`${email}: an account was made in ${kept}.`);
+        } else write(`${email}: the account in ${kept}.`);
+        const roles = flags['--roles']
+          .split(',')
+          .map((role) => role.trim())
+          .filter(Boolean);
+        const validUntil = Date.now() + days * 86_400_000;
+        const tenantId = flags['--tenant'];
+        const granted = tenantId
+          ? await maintenance.grantTenantMembership(where, binding, { app, tenantId, accountId, roles, validUntil, operator })
+          : await maintenance.grantPlatformMembership(where, binding, { app, accountId, roles, validUntil, operator });
+        write(
+          `${email}: ${roles.join(', ')} of ${tenantId ?? 'the platform realm'} until ${new Date(validUntil).toISOString().slice(0, 10)}. Receipt ${granted.receiptId}.`,
+        );
+        return 0;
+      } finally {
+        if (saved === undefined) delete process.env.XDG_CONFIG_HOME;
+        else process.env.XDG_CONFIG_HOME = saved;
       }
-      const roles = flags['--roles']
-        .split(',')
-        .map((role) => role.trim())
-        .filter(Boolean);
-      const validUntil = Date.now() + days * 86_400_000;
-      const tenantId = flags['--tenant'];
-      const granted = tenantId
-        ? await maintenance.grantTenantMembership(where, binding, { app, tenantId, accountId, roles, validUntil, operator })
-        : await maintenance.grantPlatformMembership(where, binding, { app, accountId, roles, validUntil, operator });
-      write(
-        `${email}: ${roles.join(', ')} of ${tenantId ?? 'the platform realm'} until ${new Date(validUntil).toISOString().slice(0, 10)}. Receipt ${granted.receiptId}.`,
-      );
-      return 0;
     }
     if (command !== 'clock' && !prepared.clone)
       return fail(`${loaded.app.id} marks no resource clone: there is nothing a clone would copy.`);

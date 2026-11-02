@@ -15,6 +15,7 @@ import type { TestContext } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { migrateSqliteCommandJournal } from '../../packages/mistri/src/adapters/commands/commandJournal.js';
+import { migratePostgresCommandJournal } from '../../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
 import { provisionSqliteInbox } from '../../packages/mistri/src/adapters/inbox/sqliteInbox.js';
 import { provisionPostgresLiveChange } from '../../packages/mistri/src/adapters/live/postgresLiveChange.js';
 import { provisionSqliteLiveChange } from '../../packages/mistri/src/adapters/live/sqliteLiveChange.js';
@@ -37,7 +38,7 @@ export interface PolicyServerOptions {
   env?: Record<string, string>;
   /** Provision the notification store (SQLite), for an App whose resources notify. */
   inbox?: boolean;
-  /** The commands module's source (commands.mjs, `--commands`); its journal is provisioned (SQLite). */
+  /** The commands module's source (commands.mjs, `--commands`); its journal is provisioned. */
   commands?: string;
   /** The start is expected to be refused: wait for the process to stop. */
   refused?: boolean;
@@ -71,6 +72,7 @@ export async function policyServer(t: TestContext, options: PolicyServerOptions)
       await client.end();
     }
     url = owned.url;
+    if (options.commands !== undefined) await migratePostgresCommandJournal(url);
     if (options.live) await provisionPostgresLiveChange(url);
   } else {
     url = join(directory, 'business.db');

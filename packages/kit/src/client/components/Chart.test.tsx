@@ -3,9 +3,9 @@
  * the one interaction the line has.
  */
 import { afterEach, describe, expect, test } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { BarChart, DonutChart, LineChart, Sparkline, StackedBars, axisMarks, namesAtEnds, periodTick } from './Chart.js';
+import { BarChart, DonutChart, LineChart, Sparkline, StackedBars, axisMarks, namesAtEnds, periodTick, sliceRing } from './Chart.js';
 import { installShell } from '../shellMode.js';
 
 afterEach(cleanup);
@@ -515,6 +515,61 @@ describe('the donut', () => {
     /* The figure holding buttons is a group, not an image: a button
        inside role="img" fails axe's nested-interactive. */
     expect(container.querySelector('.chart-donut')).toHaveAttribute('role', 'group');
+  });
+
+  test('a slice that drills is a door holding its arc and the ring it wears in focus, drawn round its own arc', () => {
+    const { container } = render(
+      <DonutChart
+        rows={[
+          { key: 'a', value: 3 },
+          { key: 'b', value: 1 },
+        ]}
+        onPick={() => {}}
+      />,
+    );
+    const doors = [...container.querySelectorAll('.chart-slice-door')];
+    expect(doors).toHaveLength(2);
+    for (const door of doors) {
+      expect(door).toHaveAttribute('role', 'button');
+      expect(door).toHaveAttribute('tabindex', '0');
+      expect(door.querySelector('.chart-slice-drill')).not.toBeNull();
+      expect(door.querySelector('[data-focus-ring]')).not.toBeNull();
+    }
+    /* A quarter from 12 o'clock (75 hundredths on from 3): the ring's outer arc starts just before the top, past the
+       slice's 7-unit stroke and 2px of ground, and ends just past 3 o'clock; under half the circle, its small arc. */
+    const quarter = sliceRing(21, 15.9155, 75, 25);
+    expect(quarter).toMatch(/^M 19\.651 0\.579 A 20\.46\d 20\.46\d 0 0 1 /);
+    expect(quarter.split('A')).toHaveLength(3);
+    // The whole circle has no ends: two circles, outside and inside the stroke.
+    expect(sliceRing(21, 15.9155, 75, 100).match(/M /g)).toHaveLength(2);
+    /* Off the stroke the look draws: Lumen's line charts draw it at 4.5 units, and a ring off a 7-unit stroke stood
+       1.25 units (about 4px) further out, 6px off the slice. */
+    expect(sliceRing(21, 15.9155, 75, 25, 4.5)).toMatch(/ A 19\.21\d 19\.21\d 0 0 1 /);
+    expect(sliceRing(21, 15.9155, 75, 25, 4.5)).toMatch(/ A 12\.61\d 12\.61\d 0 0 0 /);
+  });
+
+  test("a slice's ring is drawn off the stroke the look gives the slice, read as the slice takes focus", async () => {
+    const style = document.createElement('style');
+    style.textContent = '.chart-slice { stroke-width: 4.5px }';
+    document.head.append(style);
+    try {
+      const { container } = render(
+        <DonutChart
+          rows={[
+            { key: 'a', value: 3 },
+            { key: 'b', value: 1 },
+          ]}
+          onPick={() => {}}
+        />,
+      );
+      const door = container.querySelector<SVGGElement>('.chart-slice-door')!;
+      const outer = () => Number(/ A ([\d.]+)/.exec(door.querySelector('.chart-slice-ring')!.getAttribute('d')!)?.[1]);
+      expect(outer()).toBeCloseTo(15.9155 + 3.5 + 1.05, 2);
+      await act(async () => door.focus());
+      expect(outer()).toBeCloseTo(15.9155 + 2.25 + 1.05, 2);
+    } finally {
+      style.remove();
+    }
   });
 
   test('a donut with nothing to drill stays an image', () => {

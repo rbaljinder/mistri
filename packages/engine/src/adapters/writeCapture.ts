@@ -15,6 +15,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { DeleteRequest, DeleteResult, InsertRequest, InsertResult, TellRequest, UpdateRequest, UpdateResult } from './adapter.js';
 import type { PgQuery } from './postgresPool.js';
+import type { TriggerChange } from './scoped/triggerProof.js';
 
 /** The transaction's writer, by dialect: a capture's own rows join it. */
 type CaptureWriter = { readonly dialect: 'postgres'; readonly client: PgQuery } | { readonly dialect: 'sqlite'; readonly db: DatabaseSync };
@@ -48,6 +49,12 @@ interface WriteCapture {
   remove(request: DeleteRequest, write: (request: DeleteRequest) => Promise<DeleteResult>): Promise<DeleteResult>;
   /** A flow's notify step (WriteTransaction.tell). */
   tell(request: TellRequest): Promise<void>;
+  /**
+   * A row a trigger the App accepts changed, once the proof reached it (scoped/triggerProof.ts): the database wrote
+   * it, not a statement of the transaction, so nothing above passes through the three writes. Kept and announced as
+   * one of them is, attributed to the trigger.
+   */
+  triggered?(change: TriggerChange): Promise<void>;
   /**
    * Once, after the transaction's last operation has settled and just before
    * COMMIT, on the same writer: what a capture keeps per transaction rather

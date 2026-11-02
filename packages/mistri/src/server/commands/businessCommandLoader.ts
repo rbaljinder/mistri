@@ -349,9 +349,12 @@ export async function validateBusinessCommandStartup(
   resources: RuntimeResources,
   writableConnection: (connection: string) => boolean,
   events?: CommandJournalAppScope,
+  /** `attest: false` is `mistri check`'s alone, once it has said the journal is absent (`store-pending`). */
+  { attest = true }: { attest?: boolean } = {},
 ): Promise<void> {
   // Startup judges what is there now: never a binding kept from before.
   bindHttpBusinessCommandsNow(app, commands, resources, writableConnection, events);
+  if (!attest) return;
   const connections = new Set(
     Object.values(commands).map((command) => resources.connectionFor(logicalResource(app, command.source, command.target))),
   );

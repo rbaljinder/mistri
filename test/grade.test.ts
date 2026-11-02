@@ -15,7 +15,9 @@ import {
   mixedFormats,
   readFigure,
   roundTicks,
+  sayCoverage,
   sayFinding,
+  sayVerdict,
   scoreOf,
   type GradedTheme,
   type Judged,
@@ -186,6 +188,35 @@ describe('a run: merged, scored and said', () => {
       /^sideways-scroll app\.ts:48 \/tasks\/1@1280 the page scrolls 40px sideways — fix: .+/,
     );
     assert.match(sayFinding(small!), /^small-target \(warning\) \/tasks@390,320 1 control under 44px: button 30×30 — fix: /);
+  });
+  /* A field report's scan said "97/100" with an error under it, and opened no document: a score was read as a pass. */
+  test('after the findings, what was covered and skipped, then the verdict: the failures before the score', () => {
+    const lines = sayCoverage({
+      shots: [
+        { path: '/atelier', kind: 'home' },
+        { path: '/atelier/orders', kind: 'view' },
+        { path: '/atelier/orders/12', kind: 'record' },
+        { path: '/atelier/orders/12/invoice', kind: 'document' },
+      ],
+      skipped: [{ what: '/atelier/lines/{id}', why: "said under its order's address: name one to grade it" }],
+      windows: ['1280', '390'],
+      look: 'Workshop',
+      asked: false,
+      as: 'clerk',
+    });
+    assert.deepEqual(lines, [
+      'covered: 4 pages (1 home, 1 view, 1 record, 1 document) at 1280, 390, in Workshop, as clerk',
+      '  documents, on screen and on paper: /atelier/orders/12/invoice',
+      'skipped: 1 address',
+      "  /atelier/lines/{id}: said under its order's address: name one to grade it",
+      'not graded here: the other looks (--theme all) and roles (--as all)',
+    ]);
+    const asked = sayCoverage({ shots: [{ path: '/atelier/orders' }], skipped: [], windows: ['1280'], look: 'Workshop', asked: true });
+    assert.equal(asked[0], 'covered: the 1 address asked at 1280, in Workshop');
+    assert.match(asked[1]!, /^skipped: every address not asked for/);
+    assert.equal(sayVerdict(1, 60, 97), 'grade: fails — 1 error, 60 warnings; score 97/100');
+    assert.equal(sayVerdict(0, 2, 99), 'grade: passes — 2 warnings; score 99/100');
+    assert.equal(sayVerdict(0, 0, 100), 'grade: passes — nothing to fix; score 100/100');
   });
   test('every code grade says is documented, so mistri explain says it', () => {
     const documented = new Set(codeRows().map((row) => row.code));

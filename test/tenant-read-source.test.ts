@@ -339,7 +339,15 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       );
       const reads = await source.scopeReads(await f.evidence(), allow);
       assert.equal(Object.isFrozen(reads), true);
-      assert.deepEqual(Object.keys(reads).sort(), ['count', 'countBreakdown', 'countView', 'query', 'runBreakdown', 'runView']);
+      assert.deepEqual(Object.keys(reads).sort(), [
+        'aggregate',
+        'count',
+        'countBreakdown',
+        'countView',
+        'query',
+        'runBreakdown',
+        'runView',
+      ]);
       assert.equal('db' in source || 'transaction' in source || 'runSql' in reads || 'scopeReads' in reads, false);
     });
 

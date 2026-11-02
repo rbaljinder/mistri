@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import { Refusal, ANSI_STYLE } from '../packages/engine/src/adapters/adapter.js';
 import { createScopedTransaction } from '../packages/engine/src/adapters/scoped/scopedTransaction.js';
+import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 import { readSqliteScopeCatalog } from '../packages/engine/src/adapters/scoped/sqliteScopeCatalog.js';
 import { ScopedRelations } from '../packages/engine/src/shared/rowScope.js';
 import { refusalCause } from '../packages/engine/src/shared/refusal.js';
@@ -112,32 +116,42 @@ test('complete physical FK graph retains unscoped, generated and trigger-blocked
   assert.equal(writable.has('generated_child'), true);
 });
 
-test('main and TEMP triggers block only their main-table targets, and a write names them', async (t) => {
+test('main and TEMP triggers keep only their main-table targets out of the writable set, and a write they fire names them', async (t) => {
   const db = database(
     t,
     `
     CREATE TABLE ordinary (id INTEGER PRIMARY KEY);
     CREATE TABLE main_triggered (id INTEGER PRIMARY KEY);
     CREATE TABLE temp_triggered (id INTEGER PRIMARY KEY);
-    CREATE TRIGGER main_action AFTER INSERT ON main_triggered BEGIN SELECT 1; END;
-    CREATE TEMP TRIGGER temp_action AFTER INSERT ON main.temp_triggered BEGIN SELECT 1; END
+    CREATE TABLE checked (id INTEGER PRIMARY KEY, n INTEGER);
+    CREATE TRIGGER main_action AFTER INSERT ON main_triggered BEGIN DELETE FROM ordinary; END;
+    CREATE TEMP TRIGGER temp_action AFTER INSERT ON main.temp_triggered BEGIN DELETE FROM ordinary; END;
+    CREATE TRIGGER checked_n BEFORE UPDATE OF n ON checked WHEN NEW.n < 0 BEGIN SELECT RAISE(ABORT, 'negative'); END
   `,
   );
   const catalog = readSqliteScopeCatalog(db);
   assert.deepEqual([...catalog.writable], ['ordinary']);
-  // The refusal names what blocks the table, so its owner knows what to drop or move.
+  // Each triggered table carries its triggers, read: what fires them and whether they only check the row.
   assert.deepEqual(
-    [...(catalog.blockedBy ?? [])],
+    [...(catalog.triggered ?? [])].map(([table, triggers]) => [
+      table,
+      triggers.map(({ name, events, validates }) => ({ name, events, validates })),
+    ]),
     [
-      ['main_triggered', 'the trigger "main_action"'],
-      ['temp_triggered', 'the trigger "temp_action"'],
+      ['checked', [{ name: 'checked_n', events: ['update'], validates: true }]],
+      ['main_triggered', [{ name: 'main_action', events: ['insert'], validates: false }]],
+      ['temp_triggered', [{ name: 'temp_action', events: ['insert'], validates: false }]],
     ],
   );
+  assert.equal(catalog.blockedBy, undefined);
   const unused = {} as never;
   const scoped = createScopedTransaction(catalog, unused, unused, unused);
   // The reader is told only that the scope refuses; the reason is the owner's, kept beneath it.
   await assert.rejects(scoped.insert({ table: 'main_triggered', values: { id: 1 } }), (error: unknown) => {
-    assert.match(String(refusalCause(error)), /"main_triggered" cannot be written under a row policy: it has the trigger "main_action"/);
+    assert.match(
+      String(refusalCause(error)),
+      /"main_triggered" cannot be written under a row policy: an insert fires the trigger "main_action" \(it writes rows\)/,
+    );
     return true;
   });
 });
@@ -291,4 +305,27 @@ test('ambiguous single-column reference metadata refuses rather than choosing a 
   `,
   );
   assert.throws(() => readSqliteScopeCatalog(db), Refusal);
+});
+
+/* PostgreSQL's CHECKs, defaults and domains may call a function of the database's, which the trigger proof cannot see
+   (postgresTriggers.ts readPostgresTableCode). SQLite's have only SQLite's own functions to call: a function is the
+   connection's, and mistri registers none and loads no extension on either handle. Were one ever registered, a CHECK
+   or a default could call it under the policy, and this would say so. */
+test('the writer and reader handles call only the functions SQLite builds in', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-sqlite-functions-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const file = join(directory, 'db.sqlite');
+  new DatabaseSync(file).close();
+  const adapter = new SqliteAdapter(file);
+  t.after(() => adapter.close());
+  const functions = (db: DatabaseSync) =>
+    db
+      .prepare("SELECT name || '/' || narg AS f FROM pragma_function_list ORDER BY 1")
+      .all()
+      .map((row) => row.f);
+  const fresh = new DatabaseSync(':memory:');
+  t.after(() => fresh.close());
+  const handles = adapter as unknown as { db: DatabaseSync; writeHandle(): DatabaseSync };
+  assert.deepEqual(functions(handles.writeHandle()), functions(fresh));
+  assert.deepEqual(functions(handles.db), functions(fresh));
 });

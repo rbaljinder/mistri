@@ -1202,8 +1202,8 @@ describe('typed section reads', () => {
     // The figure's box is held, unseen, while it is read (PageMetrics.tsx): the figure is the one that is not.
     await waitFor(() => expect(document.querySelector('.page-metric-value:not([aria-hidden]) .metric-number')).not.toBeNull());
     const said = document.querySelector('.page-metric-value:not([aria-hidden]) .metric-number')!.textContent!;
-    if (typeof value === 'number') expect(said).toContain('$');
-    else expect(said.replace(/[^0-9]/g, '')).toBe(value);
+    /* To the cent, a figure past 2^53 digit for digit: Number() reads 9007199254740993 as ...992. */
+    expect(said).toBe({ 425111: '$425,111.00', 0: '$0.00', '9007199254740993': '$9,007,199,254,740,993.00' }[value]);
   });
 
   test('a narrowed sum reads its one figure from a keyless breakdown and reopens as the rows it measured', async () => {
@@ -1239,12 +1239,12 @@ describe('typed section reads', () => {
         },
       ],
     });
-    expect(await screen.findByText('$1,250')).toHaveClass('metric-number');
+    expect(await screen.findByText('$1,250.00')).toHaveClass('metric-number');
     expect(calls.filter((call) => call.path === '/api/breakdown')).toHaveLength(1);
     expect(
       calls.some((call) => call.path === '/api/view/run' && (call.body.view as HttpViewDefinition | undefined)?.id === 'invalid'),
     ).toBe(false);
-    await userEvent.setup().click(screen.getByRole('button', { name: /\$1,250/ }));
+    await userEvent.setup().click(screen.getByRole('button', { name: /\$1,250\.00/ }));
     expect(gone).toContainEqual([
       'go',
       { kind: 'table', table: 'invoice', query: 'invoice customer_id = 4 and status = open', tab: undefined },

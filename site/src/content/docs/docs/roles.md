@@ -124,8 +124,9 @@ writes a table a command writes must narrow it with
 in a `fields` write list, because only commands move a revision.
 
 A column a role does not read is left out of metadata and every answer, and a
-query, filter or sort that names it is refused. Primary keys stay readable, and
-a written column must be readable. `fields` needs `auth` and `roles`; without
+query, filter or sort that names it is refused. A field list names the table's
+own columns: a rollup or a computed column is not one, and is refused. It keeps
+the whole primary key readable, and a written column must be readable. `fields` needs `auth` and `roles`; without
 sign-in, use `hidden`. A command's handler still reads its footprint whole.
 
 ### Views and pages: `roles`

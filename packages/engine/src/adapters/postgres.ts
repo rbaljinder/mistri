@@ -55,11 +55,35 @@ import {
   type CountItem,
   type RolePrivileges,
   type SqlStyle,
+  type AggregateRequest,
+  type AggregateResult,
 } from './adapter.js';
+import { compileAggregate } from '../shared/aggregate.js';
 import { coerceForColumn } from '../shared/schema.js';
 import { buildUpdateGuard } from './scoped/updateGuard.js';
-import { createScopedTransaction, wholeWithin } from './scoped/scopedTransaction.js';
-import { readPostgresScopeCatalog, type PostgresScopeCatalog } from './scoped/postgresScopeCatalog.js';
+import {
+  createScopedTransaction,
+  foreignKeyRefusal,
+  isForeignKeyViolation,
+  referencesStatement,
+  wholeWithin,
+} from './scoped/scopedTransaction.js';
+import type { TriggerAcceptance, TriggerChange } from './scoped/triggerProof.js';
+import {
+  attestPostgresTriggers,
+  effectCatalogFacts,
+  readPostgresScopeCatalog,
+  type PostgresScopeCatalog,
+} from './scoped/postgresScopeCatalog.js';
+import {
+  postgresTriggerAnalyzer,
+  postgresTriggersByTable,
+  postgresTriggerStatement,
+  readPostgresTableCode,
+  type PostgresTriggerAnalyzer,
+} from './scoped/postgresTriggers.js';
+import type { ScopeTrigger } from './scoped/scopeTriggers.js';
+import type { TriggerKeyFacts } from './scoped/triggerEffects.js';
 import { captureScopeCatalog, mapScopeCatalog } from '../shared/scopeCatalog.js';
 import { createPinnedPostgresReadOwner, type PinnedPostgresReadOwner, type PostgresReadDependency } from './postgresReadCatalog.js';
 import { isRuntimeRelation, qualified, redact, valueSafe, withBytes, toJsonSafe } from './postgresValues.js';
@@ -79,9 +103,7 @@ import {
   aheadReport,
   behindWrite,
   generationOf,
-  holdAhead,
   redoWithoutAhead,
-  sendAhead,
   sendsAhead,
   waitsAhead,
   RolledBackAtCommit,
@@ -92,11 +114,26 @@ import {
   noteCatalogVersion,
   readsCatalogVersion,
   suspectsStores,
-  type AheadReport,
   type PipelinedStatement,
 } from './postgresTransactionHandle.js';
+import { snapshotRead, withoutSnapshotRead } from './snapshotRead.js';
 import { withoutWriteAhead, writeAhead, type WriteAhead } from './writeAhead.js';
 import { KeyRows } from './scoped/keyRows.js';
+import {
+  PLAIN_SCOPE,
+  catalogId,
+  heldLocks,
+  heldRows,
+  lockKey,
+  plainStatement,
+  plainTable,
+  reportWriteAhead,
+  rowLockKey,
+  rowLockStatement,
+  scopedStatement,
+  sendPlainAhead,
+  sendWriteAhead,
+} from './postgresWriteAhead.js';
 import type { PoolRoleStats } from './poolMetrics.js';
 import { postgresRowEstimate } from './postgresCatalogRows.js';
 import {
@@ -548,6 +585,58 @@ export class PostgresAdapter implements Adapter {
     return primaryReads(async () => postgresPrivileges(await this.conn(), this.schemas, SYSTEM_SCHEMAS));
   }
 
+  /**
+   * Each table's triggers, read as a scoped write reads them on its writer. On
+   * a writer, inside a transaction rolled back: the proof has PostgreSQL parse
+   * each condition into a temporary view (postgresTriggers.ts), which a
+   * read-only transaction may not make. Without a writer nothing with a
+   * condition is proven, and such a trigger is then said to block.
+   */
+  async triggers(): Promise<ReadonlyMap<string, readonly ScopeTrigger[]>> {
+    const schema = await this.introspect();
+    const tables = schema.tables.filter((table) => !table.isView);
+    // Triggers, and the code a write runs that is not one (a CHECK, a default, a domain calling a function of the database's).
+    const read = async (db: PgQuery, analyzer: PostgresTriggerAnalyzer | undefined) => {
+      const triggers = await postgresTriggersByTable((await db.query(postgresTriggerStatement(false))).rows, analyzer);
+      const code = await readPostgresTableCode(db, tables);
+      return (key: string) => [...(triggers.get(key)?.triggers ?? []), ...(code.get(key) ?? [])];
+    };
+    const byTable = await this.connections
+      .withWriteClient(async (write) => {
+        await write.query('BEGIN');
+        try {
+          return await read(write, postgresTriggerAnalyzer(write));
+        } finally {
+          await write.query('ROLLBACK');
+        }
+      })
+      .catch(() => primaryReads(async () => read(await this.conn(), undefined)));
+    const found = new Map<string, readonly ScopeTrigger[]>();
+    for (const table of tables) {
+      const triggers = byTable(`${table.schema}.${table.name}`);
+      if (triggers.length) found.set(table.id, triggers);
+    }
+    return found;
+  }
+
+  /**
+   * What a write reads of `tables` to judge a trigger's effects (postgresScopeCatalog.ts effectCatalogFacts): their
+   * keys, which are in a partition or inheritance hierarchy, and which a scoped write cannot target. On a writer where there is one,
+   * inside a transaction rolled back, so the privileges read are the writer's, as `triggers` reads.
+   */
+  async triggerKeys(tables: readonly string[]): Promise<TriggerKeyFacts> {
+    return this.connections
+      .withWriteClient(async (write) => {
+        await write.query('BEGIN');
+        try {
+          return await effectCatalogFacts(write, tables);
+        } finally {
+          await write.query('ROLLBACK');
+        }
+      })
+      .catch(() => primaryReads(async () => effectCatalogFacts(await this.conn(), tables)));
+  }
+
   /** The catalog as one handle sees it, read by postgresCatalog.ts: the
    * reader on connect, or the leased writer inside a scoped transaction,
    * where the same description is the evidence the deployed permissions are
@@ -636,14 +725,15 @@ export class PostgresAdapter implements Adapter {
    */
   private async openWrite(
     write: PgQuery,
-    options: { lock?: readonly string[]; pin?: string; digest?: boolean; sent?: () => void },
+    options: { lock?: readonly string[]; pin?: string; digest?: boolean; session?: string; sent?: () => void },
     began: () => void,
   ): Promise<{ epoch?: string }> {
+    const begin = beginOf(write) + (options.session ?? '');
     // Begun again on the same handle (a scope's retry), what the last transaction read is not this one's.
     noteCatalogVersion(write, this.database, undefined);
     if (this.epochStore === false) {
       if (options.digest) return this.openWithDigest(write, options, began);
-      const opening = write.query('BEGIN');
+      const opening = write.query(begin);
       options.sent?.();
       await opening;
       began();
@@ -655,7 +745,7 @@ export class PostgresAdapter implements Adapter {
     let answered: unknown;
     try {
       const opening = write.query(
-        `BEGIN;${options.lock?.length ? ` LOCK TABLE ${options.lock.join(', ')} IN ROW EXCLUSIVE MODE;` : ''}${options.pin ? ` ${options.pin};` : ''} ${statement}`,
+        `${begin};${options.lock?.length ? ` LOCK TABLE ${options.lock.join(', ')} IN ROW EXCLUSIVE MODE;` : ''}${options.pin ? ` ${options.pin};` : ''} ${statement}`,
       );
       // Behind it, in the same flight: what the transaction opens with (sendWriteAhead).
       options.sent?.();
@@ -670,7 +760,7 @@ export class PostgresAdapter implements Adapter {
         /* The BEGIN below says whether this client can go on. */
       }
       if (this.epochStore === false && options.digest) return this.openWithDigest(write, options, began);
-      await write.query('BEGIN');
+      await write.query(begin);
       began();
       return {};
     }
@@ -702,13 +792,14 @@ export class PostgresAdapter implements Adapter {
    */
   private async openWithDigest(
     write: PgQuery,
-    options: { lock?: readonly string[]; pin?: string; sent?: () => void },
+    options: { lock?: readonly string[]; pin?: string; session?: string; sent?: () => void },
     began: () => void,
   ): Promise<{ epoch?: string }> {
+    const begin = beginOf(write) + (options.session ?? '');
     let answered: unknown;
     try {
       const opening = write.query(
-        `BEGIN;${options.lock?.length ? ` LOCK TABLE ${options.lock.join(', ')} IN ROW EXCLUSIVE MODE;` : ''}${options.pin ? ` ${options.pin};` : ''} ${SCOPED_CATALOG_DIGEST}`,
+        `${begin};${options.lock?.length ? ` LOCK TABLE ${options.lock.join(', ')} IN ROW EXCLUSIVE MODE;` : ''}${options.pin ? ` ${options.pin};` : ''} ${SCOPED_CATALOG_DIGEST}`,
       );
       options.sent?.();
       answered = await opening;
@@ -718,7 +809,7 @@ export class PostgresAdapter implements Adapter {
       } catch {
         /* The BEGIN below says whether this client can go on. */
       }
-      await write.query('BEGIN');
+      await write.query(begin);
       began();
       return {};
     }
@@ -917,6 +1008,10 @@ export class PostgresAdapter implements Adapter {
     return this.countOn(table, filter, await this.conn(), limit, true);
   }
 
+  async aggregate(request: AggregateRequest): Promise<AggregateResult> {
+    return this.aggregateOn(request, await this.conn());
+  }
+
   async countEach(items: readonly CountItem[], limit?: number): Promise<number[]> {
     const relations = await Promise.all(
       items.map(async (item) => {
@@ -935,6 +1030,16 @@ export class PostgresAdapter implements Adapter {
     const text = countStatement(`${POSTGRES_STYLE.quote(schema)}.${POSTGRES_STYLE.quote(name)}${where.text}`, limit);
     const result = await db.query(text, where.params);
     return Number((result.rows[0] as { n?: string })?.n ?? 0);
+  }
+
+  /* A command's aggregate on its own transaction's client (shared/aggregate.ts): one statement over the table as
+     `countOn` names it, its numeric and bigint answers the exact text the driver reads them as. */
+  private async aggregateOn(request: AggregateRequest, db: PgQuery): Promise<AggregateResult> {
+    const { schema: namespace, name } = await this.assertTable(request.table, db);
+    const catalog = await this.schema();
+    const compiled = compileAggregate(catalog, { ...request, table: `${namespace}.${name}` }, POSTGRES_STYLE);
+    const result = await db.query(compiled.text, compiled.params);
+    return { rows: result.rows.map(toJsonSafe) };
   }
 
   private async columnsOf(schema: string, name: string, db?: PgQuery): Promise<PgColumnRow[]> {
@@ -993,7 +1098,7 @@ export class PostgresAdapter implements Adapter {
       /* Coerced against the declared type, because everything typed into a
          text box arrives as a string — and Postgres, unlike SQLite, rejects
          "17901" for a numeric column rather than quietly taking it. */
-      applied[column] = coerceForColumn(declared.type || '', raw);
+      applied[column] = coerceForColumn(declared.written || declared.type || '', raw);
       if (applied[column] === null && declared.notnull) {
         throw new Refusal(`"${column}" is NOT NULL and cannot be emptied.`);
       }
@@ -1074,7 +1179,7 @@ export class PostgresAdapter implements Adapter {
     for (const [column, raw] of entries) {
       const declared = meta.find((c) => c.name === column);
       if (!declared) throw new Refusal(`${id} has no column called "${column}".`);
-      applied[column] = coerceForColumn(declared.type || '', raw);
+      applied[column] = coerceForColumn(declared.written || declared.type || '', raw);
       if (applied[column] === null && declared.notnull) {
         throw new Refusal(`"${column}" is NOT NULL and cannot be null. Leave it out to use its default, if it has one.`);
       }
@@ -1141,7 +1246,12 @@ export class PostgresAdapter implements Adapter {
     /* The capture's read of the row it keeps a before image of: an unscoped transaction's reads by key, which a row
        sent ahead may answer (plainReads). */
     query: (request: QueryRequest) => Promise<QueryResult> = (request) => this.queryOn(request, write),
-  ): Pick<WriteTransaction, 'insert' | 'update' | 'remove' | 'tell'> & { finish(): Promise<void>; committed(): void } {
+  ): Pick<WriteTransaction, 'insert' | 'update' | 'remove' | 'tell'> & {
+    finish(): Promise<void>;
+    committed(): void;
+    /** A row an accepted trigger changed (writeCapture.ts). */
+    triggered(change: TriggerChange): Promise<void>;
+  } {
     const history = beginWriteCapture(this, {
       writer: { dialect: 'postgres', client: write },
       read: async (table, key, columns, lock) => {
@@ -1174,7 +1284,7 @@ export class PostgresAdapter implements Adapter {
         return behindWrite(write, (text) => text.startsWith(update), ride);
       },
     });
-    if (!history) return { ...base, finish: async () => {}, committed: () => {} };
+    if (!history) return { ...base, finish: async () => {}, committed: () => {}, triggered: async () => {} };
     return {
       insert: (r) => history.insert(r, base.insert),
       update: (r) => history.update(r, base.update),
@@ -1182,6 +1292,7 @@ export class PostgresAdapter implements Adapter {
       tell: (r) => history.tell(r),
       finish: () => finishWriteCapture(history),
       committed: () => committedWriteCapture(history),
+      triggered: async (change) => history.triggered?.(change),
     };
   }
 
@@ -1243,6 +1354,7 @@ export class PostgresAdapter implements Adapter {
      record's earlier writes. */
   private async transact<T>(lane: readonly string[], run: (tx: WriteTransaction) => Promise<T>): Promise<T> {
     const hint = writeAhead();
+    const snapshot = snapshotRead();
     const schema = hint ? await this.schema().catch(() => undefined) : undefined;
     return this.watched(
       this.writes.run(lane, () =>
@@ -1251,6 +1363,7 @@ export class PostgresAdapter implements Adapter {
           // A writer that pipelines sends reads asked together in one flight (TransactionOperations.read).
           const write = transactionHandle(leased, this),
             operations = new TransactionOperations(sendsAhead(write));
+          if (snapshot) snapshotHandles.add(write);
           let began = false;
           let commitAttempted = false;
           let committed = false;
@@ -1269,15 +1382,18 @@ export class PostgresAdapter implements Adapter {
             );
             // The transaction's own work runs without the hint: a transaction it opens is not this one.
             const out = await withoutWriteAhead(() =>
-              run({
-                lockRecord: (r) => queueRecordLock(operations, r, (request) => this.lockRecordNow(request, write)),
-                query: (r) => operations.read(() => reads(r)),
-                count: (table, filter) => operations.read(() => this.countOn(table, filter, write)),
-                insert: (r) => operations.run(() => writes.insert(r)),
-                remove: (r) => operations.run(() => writes.remove(r)),
-                update: (r) => operations.run(() => writes.update(r)),
-                ...(writes.tell ? { tell: (r: TellRequest) => operations.run(() => writes.tell!(r)) } : {}),
-              }),
+              withoutSnapshotRead(() =>
+                run({
+                  lockRecord: (r) => queueRecordLock(operations, r, (request) => this.lockRecordNow(request, write)),
+                  query: (r) => operations.read(() => reads(r)),
+                  count: (table, filter) => operations.read(() => this.countOn(table, filter, write)),
+                  aggregate: (r) => operations.read(() => this.aggregateOn(r, write)),
+                  insert: (r) => operations.run(() => writes.insert(r)),
+                  remove: (r) => operations.run(() => writes.remove(r)),
+                  update: (r) => operations.run(() => writes.update(r)),
+                  ...(writes.tell ? { tell: (r: TellRequest) => operations.run(() => writes.tell!(r)) } : {}),
+                }),
+              ),
             );
             await operations.finish();
             await writes.finish();
@@ -1335,7 +1451,7 @@ export class PostgresAdapter implements Adapter {
     let aheads: Promise<unknown>[] = [];
     await this.openWrite(
       write,
-      schema && hint ? { sent: () => void (aheads = this.sendPlainAhead(write, schema, keyRows, journal, hint)) } : {},
+      schema && hint ? { sent: () => void (aheads = sendPlainAhead(this, write, schema, keyRows, journal, hint)) } : {},
       began,
     );
     if (aheads.length && (await aheadsFailed(aheads))) {
@@ -1383,72 +1499,6 @@ export class PostgresAdapter implements Adapter {
     };
   }
 
-  /** The statements openPlain sends behind the BEGIN; each exactly what the transaction sends in its turn (lockRecordNow, queryOn). */
-  private sendPlainAhead(
-    write: PgQuery,
-    schema: DatabaseSchema,
-    keyRows: KeyRows,
-    journal: PostgresTransactionJournal<unknown> | undefined,
-    hint: WriteAhead,
-  ): Promise<unknown>[] {
-    if (!sendsAhead(write)) return [];
-    const opening: PipelinedStatement[] = [];
-    try {
-      if (hint.receipt !== undefined && journal?.ahead) opening.push(...journal.ahead(hint.receipt));
-    } catch {
-      /* Asked in its turn. */
-    }
-    const answers = sendAhead(write, opening);
-    for (const target of hint.targets) {
-      const table = schema.tables.find((candidate) => candidate.id === catalogId(target.table));
-      if (!table || table.isView || isRuntimeRelation(table.id)) continue;
-      const pk = table.columns.filter((column) => column.primaryKey).map((column) => column.name);
-      const key = target.key;
-      if (
-        !pk.length ||
-        Object.keys(key).length !== pk.length ||
-        !pk.every((column) => Object.hasOwn(key, column) && (typeof key[column] === 'string' || typeof key[column] === 'number'))
-      )
-        continue;
-      const filter: Filter = { groups: [pk.map((column) => ({ column, op: '=' as const, value: key[column] }))] };
-      if (!hint.readOnly && (hint.locks || (hint.writes && capturesWrites(this, table.id)))) {
-        /* lockRecordNow's statement, where the transaction will send it (the save's own lock, the history capture's). Held rather than answered once: the row stays locked until the transaction ends,
-           so each later lock of it in this transaction (the command's, the history capture's) is answered by it, even
-           after a write to another record has moved the statement generation. */
-        const [text, values] = rowLockStatement(table, key as Readonly<Record<string, string | number>>);
-        const lock = holdAhead(write, { text, values });
-        if (lock) {
-          answers.push(lock.answer);
-          const locks = heldLocks.get(write) ?? new Map<string, () => void>();
-          heldLocks.set(write, locks);
-          const rows = heldRows.get(write) ?? new Set<string>();
-          heldRows.set(write, rows);
-          void lock.answer.then(
-            (result) => {
-              if (result.rows.length <= 1) locks.set(lockKey(text, values), lock.take);
-              // Only a row that is there is held: one that is not could be inserted by another transaction meanwhile.
-              if (result.rows.length === 1) rows.add(lockKey(text, values));
-            },
-            () => {},
-          );
-        }
-      }
-      const read = plainStatement({ table: table.id, filter, limit: 2, offset: 0 });
-      const row = read && holdAhead(write, { text: read.text, values: read.params });
-      if (row) {
-        answers.push(row.answer);
-        keyRows.keep(
-          PLAIN_SCOPE,
-          table,
-          filter,
-          row.answer.then((result) => result.rows),
-          row.take,
-        );
-      }
-    }
-    return answers;
-  }
-
   /**
    * Same-source records and a durable journal in one transaction, the
    * journal lent by the App framework (storeHost.ts TransactionJournal): the
@@ -1483,7 +1533,14 @@ export class PostgresAdapter implements Adapter {
       const verify = options.ordinaryVerify;
       return this.ordinaryJournalTransaction(journal, run, verify && (async () => void (await verify())));
     }
-    return this.scopedTransact(options.scope, journal, run as JournalRun<J | undefined, T>, options.verify, options.bound);
+    return this.scopedTransact(
+      options.scope,
+      journal,
+      run as JournalRun<J | undefined, T>,
+      options.verify,
+      options.bound,
+      options.triggers,
+    );
   }
 
   private async ordinaryJournalTransaction<J, T>(
@@ -1495,6 +1552,7 @@ export class PostgresAdapter implements Adapter {
        Extra records discovered inside the handler still rely on row locks and
        compare-and-set, as they do across processes. */
     const hint = writeAhead();
+    const snapshot = snapshotRead();
     const schema = hint ? await this.schema().catch(() => undefined) : undefined;
     return this.watched(
       this.writes.run([], () =>
@@ -1503,6 +1561,7 @@ export class PostgresAdapter implements Adapter {
           // A writer that pipelines sends reads asked together in one flight (TransactionOperations.read).
           const write = transactionHandle(leased, this),
             operations = new TransactionOperations(sendsAhead(write));
+          if (snapshot) snapshotHandles.add(write);
           let began = false;
           let commitAttempted = false;
           let committed = false;
@@ -1525,13 +1584,16 @@ export class PostgresAdapter implements Adapter {
               lockRecord: (r) => queueRecordLock(operations, r, (request) => this.lockRecordNow(request, write)),
               query: (r) => operations.read(() => reads(r)),
               count: (table, filter) => operations.read(() => this.countOn(table, filter, write)),
+              aggregate: (r) => operations.read(() => this.aggregateOn(r, write)),
               insert: (r) => operations.run(() => writes.insert(r)),
               remove: (r) => operations.run(() => writes.remove(r)),
               update: (r) => operations.run(() => writes.update(r)),
               ...(writes.tell ? { tell: (r: TellRequest) => operations.run(() => writes.tell!(r)) } : {}),
             };
             // The transaction's own work runs without the hint: a transaction it opens is not this one.
-            const out = await withoutWriteAhead(() => run(Object.freeze(records), journal.open(write, operations)));
+            const out = await withoutWriteAhead(() =>
+              withoutSnapshotRead(() => run(Object.freeze(records), journal.open(write, operations))),
+            );
             await operations.finish();
             await writes.finish();
             if (verify) {
@@ -1594,9 +1656,13 @@ export class PostgresAdapter implements Adapter {
    * rollback that was not acknowledged, is unknown, and the client is
    * discarded rather than reused. Everything else did not commit.
    */
-  async scopeTransaction<T>(input: RowScope, run: (tx: WriteTransaction, catalog: DatabaseSchema) => Promise<T>): Promise<T> {
+  async scopeTransaction<T>(
+    input: RowScope,
+    run: (tx: WriteTransaction, catalog: DatabaseSchema) => Promise<T>,
+    triggers?: TriggerAcceptance,
+  ): Promise<T> {
     const scope = captureRowScope(input);
-    return this.scopedTransact(scope, undefined, (tx, _journal, catalog) => run(tx, catalog!));
+    return this.scopedTransact(scope, undefined, (tx, _journal, catalog) => run(tx, catalog!), undefined, undefined, triggers);
   }
 
   /**
@@ -1694,20 +1760,30 @@ export class PostgresAdapter implements Adapter {
     run: JournalRun<J | undefined, T>,
     verify?: PostgresTransactionVerifier,
     bound?: RowScope,
+    triggers?: TriggerAcceptance,
   ): Promise<T> {
+    /* The proof is loaded where a transaction accepts triggers, not at startup; and awaited in the transaction's turn,
+       not before it is queued: a write asked after this one would otherwise take its turn while the module loads. */
+    const loading = triggers && !journal?.fixedRecords ? import('./scoped/triggerProof.js') : undefined;
+    loading?.catch(() => {}); // Rejected or not, it is awaited in its turn below.
     // This transaction's own handle: what its verifier learns is kept on it, never on the pooled client.
     /* No lane: every target is taken FOR UPDATE and every parent FOR SHARE
        before it is checked (below), which is what orders two of these
        across connections, in this process as across pods. */
     const hint = writeAhead();
+    const snapshot = snapshotRead();
     return this.writes.run([], () =>
       this.connections.withWriteClient(async (leased) => {
+        const proving = await loading;
         // A writer that pipelines sends reads asked together in one flight (TransactionOperations.read).
         const write = transactionHandle(leased, this),
           operations = new TransactionOperations(sendsAhead(write));
+        if (snapshot) snapshotHandles.add(write);
         let began = false;
         let commitAttempted = false;
         let committed = false;
+        // The proof of the validation-only triggers this transaction's writes fired, read again (attestPostgresTriggers).
+        let attest: (() => Promise<void>) | undefined;
         try {
           /* The scope catalog is kept per set of scoped tables under the epoch;
            the tables it pinned last time are pinned in the message that reads
@@ -1725,12 +1801,12 @@ export class PostgresAdapter implements Adapter {
           // The rows whose locks were sent ahead, held from the moment their answers came back (sendWriteAhead).
           const lockedAhead = new Set<string>();
           let aheads: Promise<unknown>[] = [];
-          const opening = { lock: pinned, pin, digest: true };
+          const opening = { lock: pinned, pin, digest: true, session: SCOPED_SESSION };
           let opened = await this.openWrite(
             write,
             {
               ...opening,
-              sent: () => void (aheads = this.sendWriteAhead(write, scope, peeked, keyRows, journal, verify, hint, lockedAhead)),
+              sent: () => void (aheads = sendWriteAhead(this, write, scope, peeked, keyRows, journal, verify, hint, lockedAhead)),
             },
             () => {
               began = true;
@@ -1805,7 +1881,7 @@ export class PostgresAdapter implements Adapter {
           };
           const scopedReads = (guard: boolean, given: RowScope = scope, within = checkedScope(given)) =>
             keyRows.over(
-              createScopedReads(catalog.schema, within, POSTGRES_STYLE, executor(guard)),
+              createScopedReads(catalog.schema, within, POSTGRES_STYLE, executor(guard), guard),
               given,
               catalog.schema,
               (request) => scopedStatement(catalog.schema, within, request),
@@ -1823,7 +1899,8 @@ export class PostgresAdapter implements Adapter {
             const at = rowLockKey(table, filter);
             const had = held.get(at);
             if (had === 'UPDATE' || had === mode) return;
-            const where = buildWhere(filter, POSTGRES_STYLE);
+            // A parent is held by the key its reference names as the foreign key compares it (Condition.equality).
+            const where = buildWhere(filter, POSTGRES_STYLE, 1, undefined, undefined, undefined, undefined, mode === 'SHARE');
             const text = `SELECT 1 FROM ${qualified(table)}${where.text} FOR ${mode}`;
             /* Sent ahead behind the BEGIN and granted, its answer since dropped by a write of the transaction's own:
                the row is held all the same, to the transaction's end. While that answer still waits, asking takes it. */
@@ -1839,6 +1916,9 @@ export class PostgresAdapter implements Adapter {
             remove: (r) => this.removeNow(r, write, write),
             update: (r) => this.updateNow(r, write, write),
           });
+          // The tables whose validation-only triggers a write of this transaction fired: their proof is read again before COMMIT.
+          const relied = new Set<string>();
+          attest = () => attestPostgresTriggers(write, catalog, relied);
           let records = createScopedTransaction(
             catalog,
             {
@@ -1858,35 +1938,70 @@ export class PostgresAdapter implements Adapter {
                 return behindWrite(write, (text) => text.startsWith(update), ride);
               },
               together: sendsAhead(write),
+              relied: (table) => void relied.add(table.id),
             },
-            bound && { reads: scopedReads(true, bound), whole: wholeWithin(scope, bound) },
+            bound && {
+              reads: scopedReads(true, bound),
+              whole: wholeWithin(scope, bound),
+              references: async (fk, key) => {
+                const statement = referencesStatement(catalog.schema, fk, key, POSTGRES_STYLE);
+                return Number((await write.query(statement.text, statement.params)).rows[0]?.n ?? 0);
+              },
+            },
             // A public intake writes exactly its fixed rows; only a principal's own transaction counts its new parents in.
             journal?.fixedRecords ? undefined : { scope, reads: (within, guard) => scopedReads(guard, within) },
+            // Triggers the App names, on a principal's own transaction: their effects proven per write (triggerProof.ts).
+            triggers && proving
+              ? {
+                  prove: proving.createTriggerProof,
+                  acceptance: {
+                    ...triggers,
+                    // Kept and announced as the transaction's own writes are (writeCapture.ts).
+                    changed: async (change: TriggerChange) => {
+                      await writes.triggered(change);
+                      await triggers.changed?.(change);
+                    },
+                  },
+                  scope,
+                }
+              : undefined,
           );
           if (journal?.fixedRecords) records = journal.fixedRecords(records);
           const invoke = scopedCommandInvoker(operations, true, journal !== undefined, isRuntimeRelation);
           // The transaction's own work runs without the hint: a transaction it opens is not this one.
           const out = await withoutWriteAhead(() =>
-            run(
-              Object.freeze({
-                // The scoped policy facade deliberately has no generic lock capability.
-                query: (r: QueryRequest) => invoke(r, (r) => records.query(r), true),
-                count: (table: string, filter?: Filter) => invoke({ table, filter }, (r) => records.count(r.table, r.filter), true),
-                insert: (r: InsertRequest) => invoke(r, (r) => records.insert(r)),
-                remove: (r: DeleteRequest) => invoke(r, (r) => records.remove(r)),
-                update: (r: UpdateRequest) => invoke(r, (r) => records.update(r)),
-                // Beneath the row scope: the flows' command tells only of its own target, which it read through the scope.
-                ...(writes.tell ? { tell: (r: TellRequest) => invoke(r, (r) => writes.tell!(r)) } : {}),
-              }),
-              journal?.open(write, operations),
-              evidence,
+            withoutSnapshotRead(() =>
+              run(
+                Object.freeze({
+                  // The scoped policy facade deliberately has no generic lock capability.
+                  query: (r: QueryRequest) => invoke(r, (r) => records.query(r), true),
+                  count: (table: string, filter?: Filter) => invoke({ table, filter }, (r) => records.count(r.table, r.filter), true),
+                  ...(records.aggregate ? { aggregate: (r: AggregateRequest) => invoke(r, (r) => records.aggregate!(r), true) } : {}),
+                  insert: (r: InsertRequest) => invoke(r, (r) => records.insert(r)),
+                  remove: (r: DeleteRequest) => invoke(r, (r) => records.remove(r)),
+                  update: (r: UpdateRequest) => invoke(r, (r) => records.update(r)),
+                  // Beneath the row scope: the flows' command tells only of its own target, which it read through the scope.
+                  ...(writes.tell ? { tell: (r: TellRequest) => invoke(r, (r) => writes.tell!(r)) } : {}),
+                }),
+                journal?.open(write, operations),
+                evidence,
+              ),
             ),
           );
           await operations.finish();
           await writes.finish();
           if (verify) await verify(write, catalog, described);
+          await attestPostgresTriggers(write, catalog, relied);
           commitAttempted = true;
-          await write.query('COMMIT');
+          try {
+            await write.query('COMMIT');
+          } catch (error) {
+            /* A deferred foreign key the COMMIT found broken: the server answered, so nothing committed, and the
+               refusal is a hidden parent's (foreignKeyRefusal). */
+            if (!isForeignKeyViolation(error)) throw error;
+            commitAttempted = false;
+            throw foreignKeyRefusal(error);
+          }
           committed = true;
           writes.committed();
           return out;
@@ -1905,7 +2020,16 @@ export class PostgresAdapter implements Adapter {
              COMMIT as a ROLLBACK: nothing committed, and that write's failure is
              what is said. */
           const refused = err instanceof RolledBackAtCommit;
-          const failure = refused ? err.cause : err;
+          let failure = refused ? err.cause : err;
+          /* A write that fired a trigger proven validation-only failed, and what the trigger raised is in its error,
+             said to the caller. A trigger's function can be replaced without a lock on its table: replaced since the
+             proof, it raised whatever its replacement read. So the proof is read again, once the transaction is
+             rolled back, before that error is said; changed, the write is refused instead. */
+          if (rolledBack && attest && !(failure instanceof Refusal))
+            failure = await attest().then(
+              () => failure,
+              (refusal: unknown) => refusal,
+            );
           // withWriteClient destroys the client on any failure, so a connection
           // in an uncertain state is never handed to the next write.
           const unknown = !refused && (commitAttempted || (began && !rolledBack));
@@ -1918,87 +2042,6 @@ export class PostgresAdapter implements Adapter {
         }
       }),
     );
-  }
-
-  /**
-   * The statements a scoped transaction opens with, sent behind its BEGIN
-   * (openWrite's `sent`), from what it was told (writeAhead.ts) and the scope
-   * catalog read last time: the verifier's own (its fence), the journal's
-   * receipt lookup, and for each target its row lock, its row read in full
-   * through the scope (kept to answer its reads by key, keyRows.ts), and,
-   * where the write is captured for history, the capture's own lock and read
-   * (historyWrites). Each is exactly the statement the transaction sends in
-   * its turn, built by the same rules; one it never sends is left, counted,
-   * and changes nothing. None where the client does not pipeline.
-   */
-  private sendWriteAhead(
-    write: PgQuery,
-    scope: RowScope,
-    peeked: PostgresScopeCatalog | undefined,
-    keyRows: KeyRows,
-    journal: PostgresTransactionJournal<unknown> | undefined,
-    verify: PostgresTransactionVerifier | undefined,
-    hint: WriteAhead | undefined,
-    locked: Set<string>,
-  ): Promise<unknown>[] {
-    if (!sendsAhead(write) || (!hint && !verify?.ahead)) return [];
-    const opening: PipelinedStatement[] = [];
-    try {
-      opening.push(...(verify?.ahead?.() ?? []));
-      if (hint?.receipt !== undefined && journal?.ahead) opening.push(...journal.ahead(hint.receipt));
-    } catch {
-      /* Asked in its turn. */
-    }
-    const answers = sendAhead(write, opening);
-    for (const target of (peeked && hint?.targets) || []) {
-      const table = peeked!.schema.tables.find((candidate) => candidate.id === catalogId(target.table));
-      if (!table || !peeked!.lockable.has(table.id)) continue;
-      const pk = table.columns.filter((column) => column.primaryKey).map((column) => column.name);
-      const key = target.key;
-      if (
-        !pk.length ||
-        Object.keys(key).length !== pk.length ||
-        !pk.every((column) => Object.hasOwn(key, column) && (typeof key[column] === 'string' || typeof key[column] === 'number'))
-      )
-        continue;
-      // The scoped transaction's own key filter and lock (scopedTransaction.ts keyFilter, `lock` above).
-      const filter: Filter = { groups: [pk.map((column) => ({ column, op: '=' as const, value: key[column] }))] };
-      const where = buildWhere(filter, POSTGRES_STYLE);
-      if (!hint!.readOnly) {
-        answers.push(...sendAhead(write, [{ text: `SELECT 1 FROM ${qualified(table)}${where.text} FOR UPDATE`, values: where.params }]));
-        locked.add(rowLockKey(table, filter));
-      }
-      const read = scopedStatement(peeked!.schema, scope, { table: table.id, filter, limit: 2, offset: 0 });
-      const row = read && holdAhead(write, { text: read.text, values: read.params });
-      if (row) {
-        answers.push(row.answer);
-        keyRows.keep(
-          scope,
-          table,
-          filter,
-          row.answer.then((result) => result.rows),
-          row.take,
-        );
-      }
-      if (hint!.writes && !hint!.readOnly && capturesWrites(this, table.id)) {
-        // historyWrites' read: lockRecordNow, then queryOn of the whole row by the key as given.
-        const given = buildWhere(
-          { groups: [Object.entries(key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
-          POSTGRES_STYLE,
-        );
-        const n = given.params.length;
-        answers.push(
-          ...sendAhead(write, [
-            {
-              text: `SELECT ${pk.map(POSTGRES_STYLE.quote).join(', ')} FROM ${qualified(table)}${where.text} FOR UPDATE`,
-              values: where.params,
-            },
-            { text: `SELECT * FROM ${qualified(table)}${given.text} LIMIT $${n + 1} OFFSET $${n + 2}`, values: [...given.params, 2, 0] },
-          ]),
-        );
-      }
-    }
-    return answers;
   }
 
   /**
@@ -2141,85 +2184,14 @@ function verifierPin(verify: PostgresTransactionVerifier | undefined): string | 
   return typeof pin === 'string' && /^LOCK TABLE [^;$]+ IN [A-Z ]+ MODE(; LOCK TABLE [^;$]+ IN [A-Z ]+ MODE)*$/.test(pin) ? pin : undefined;
 }
 
-/* The row scope an unscoped transaction's kept rows are filed under (keyRows.ts): none, the same object every time. */
-const PLAIN_SCOPE: RowScope = Object.freeze({});
+/* Handles whose transaction reads one snapshot (snapshotRead.ts): REPEATABLE READ from its BEGIN, so every statement
+   reads as of its first. Kept on the handle, as its epoch is, so a retry of the opening begins the same way. */
+const snapshotHandles = new WeakSet<PgQuery>();
+const beginOf = (write: PgQuery) => (snapshotHandles.has(write) ? 'BEGIN ISOLATION LEVEL REPEATABLE READ' : 'BEGIN');
 
-/* The record locks a transaction took behind its BEGIN (openPlain), by statement, each with what marks it taken.
-   Only those: a lock taken later could be let go by a ROLLBACK TO SAVEPOINT, one taken at the opening cannot. */
-const heldLocks = new WeakMap<PgQuery, Map<string, () => void>>();
-/* Of those, the ones that found their row: it is the transaction's, unmoving, until it ends (openPlain's `widen`). */
-const heldRows = new WeakMap<PgQuery, Set<string>>();
-const lockKey = (text: string, values: readonly unknown[]) => JSON.stringify([text, values]);
-/* lockRecordNow's statement for a row named by its whole primary key, and its values. */
-function rowLockStatement(table: TableMeta, key: Readonly<Record<string, string | number>>): [string, unknown[]] {
-  const pk = table.columns.filter((column) => column.primaryKey).map((column) => column.name);
-  const where = buildWhere({ groups: [pk.map((column) => ({ column, op: '=' as const, value: key[column] }))] }, POSTGRES_STYLE);
-  return [`SELECT ${pk.map(POSTGRES_STYLE.quote).join(', ')} FROM ${qualified(table)}${where.text} FOR UPDATE`, where.params];
-}
-
-/* A table's schema and name from the name a request gives it, as assertPostgresTable reads it. */
-function plainTable(table: string): { schema: string; name: string } {
-  const dot = table.indexOf('.');
-  return dot === -1 ? { schema: 'public', name: table } : { schema: table.slice(0, dot), name: table.slice(dot + 1) };
-}
-
-/* A table's catalog id from the name a request gives it: a bare name is in the public schema, as assertPostgresTable reads it. */
-const catalogId = (table: string) => (table.includes('.') ? table : `public.${table}`);
-
-/* The statement queryOn sends for an unordered read, without sending it: the table as its id names it
-   (assertPostgresTable), the read bounded as every read is. */
-function plainStatement(request: QueryRequest): SqlFragment | undefined {
-  if (request.orderBy?.length) return undefined;
-  const at = plainTable(request.table);
-  const where = buildWhere(request.filter, POSTGRES_STYLE);
-  const cols = request.columns?.length ? request.columns.map((column) => POSTGRES_STYLE.quote(column)).join(', ') : '*';
-  const n = where.params.length;
-  return {
-    text: `SELECT ${cols} FROM ${qualified(at)}${where.text} LIMIT $${n + 1} OFFSET $${n + 2}`,
-    params: [...where.params, clampLimit(request.limit), clampOffset(request.offset)],
-  };
-}
-
-/* A statement a scoped read would send, without sending it: createScopedReads
-   compiles before it executes, so the executor is reached synchronously and
-   says what it was handed. */
-/** A row lock as a scoped transaction keeps it: its table and the filter that names the row. */
-const rowLockKey = (table: TableMeta, filter: Filter) => `${table.id}\u0000${JSON.stringify(filter)}`;
-
-function scopedStatement(schema: DatabaseSchema, within: RowScope, request: QueryRequest): SqlFragment | undefined {
-  let said: SqlFragment | undefined;
-  void createScopedReads(schema, within, POSTGRES_STYLE, async (sql) => {
-    said = sql;
-    return { columns: [], rows: [], ms: 0, sql };
-  })
-    .query(request)
-    .catch(() => {});
-  return said;
-}
-
-/* Statements sent ahead that a committed transaction never asked: a hint
-   that no longer says what the transaction does. Warned once per statement
-   outside production; a refused transaction stops early, and leaves some by
-   design. With MISTRI_AHEAD_REPORT set, every transaction's account is a line
-   on stderr (e2e/write-storm.spec.ts reads it). */
-const warnedAhead = new Set<string>();
-function reportWriteAhead(report: AheadReport | undefined, committed: boolean): void {
-  if (!report || (!report.sent && !report.missed)) return;
-  const said = (key: string) => {
-    try {
-      return String((JSON.parse(key) as unknown[])[0]).slice(0, 160);
-    } catch {
-      return key.slice(0, 160);
-    }
-  };
-  if (process.env.MISTRI_AHEAD_REPORT)
-    process.stderr.write(
-      `mistri-ahead ${JSON.stringify({ at: Date.now(), committed, sent: report.sent, taken: report.taken, answered: report.answered, missed: report.missed, left: report.left.map(said), redone: report.redone, asked: report.asked })}\n`,
-    );
-  if (!committed || process.env.NODE_ENV === 'production') return;
-  for (const statement of report.left.map(said)) {
-    if (warnedAhead.has(statement)) continue;
-    warnedAhead.add(statement);
-    process.emitWarning(`A statement sent ahead was never asked by the transaction it was sent for: ${statement}`, 'MistriWriteAhead');
-  }
-}
+/* What a scoped transaction's BEGIN also says, in its one message: the text a date is read as, whatever the role or
+   database set. A check binds a key's stored text and the database reads it back (storedText.ts, keyTypes.ts); under
+   `DateStyle = 'SQL, YMD'` a date said as 01/02/2026 reads back as another day. Only the output style is set: the
+   field order, which decides how a person's own 01/02/2026 is read, stays the database's. The float and interval
+   text, which no key is (keyTypes.ts), is pinned as well, so a value a trigger's proof compares reads as stored. */
+const SCOPED_SESSION = '; SET LOCAL DateStyle = ISO; SET LOCAL IntervalStyle = postgres; SET LOCAL extra_float_digits = 3';

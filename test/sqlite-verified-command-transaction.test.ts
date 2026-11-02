@@ -74,7 +74,7 @@ test('private ordinary verifier surrounds handler and drained journal operations
         records = tx;
         journal = store;
         order.push('handler');
-        assert.deepEqual(Object.keys(tx).sort(), ['count', 'insert', 'lockRecord', 'query', 'remove', 'update']);
+        assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'lockRecord', 'query', 'remove', 'update']);
         void tx.update(update);
         void store.commit(receipt, audit);
         order.push('return');

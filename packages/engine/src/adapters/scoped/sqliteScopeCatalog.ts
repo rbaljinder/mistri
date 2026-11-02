@@ -9,7 +9,11 @@ import {
   type TableMeta,
 } from '../../shared/schema.js';
 import { mapScopeCatalog } from '../../shared/scopeCatalog.js';
-import { triggerNames, type ScopeCatalog } from './scopedTransaction.js';
+import { referenceKey, type ReferenceComparison, type ScopeCatalog } from './scopedTransaction.js';
+import { keyTypeRefusal, sqliteAffinity, sqliteKeyType, sqliteTypeSaid } from './keyTypes.js';
+import { readSqliteTrigger, sqliteColumnCollations, sqliteConflictClauses } from './sqliteTriggers.js';
+import type { ScopeTrigger } from './scopeTriggers.js';
+import type { EffectCatalog, KeyComparison, resolveTriggerEffects } from './triggerEffects.js';
 
 export type SqliteScopeCatalog = ScopeCatalog;
 
@@ -71,9 +75,187 @@ function identities<T extends { name: string }>(items: T[]): Map<string, T> {
  * estimates or data scans: the lease's physical metadata is the authority.
  * A non-writable table remains in the graph so hidden dependents cannot vanish.
  */
-export function readSqliteScopeCatalog(db: DatabaseSync): SqliteScopeCatalog {
-  const { schema, writable, blockedBy } = scanSqliteScopeCatalog(db);
-  return { schema, writable, ...(blockedBy.size ? { blockedBy } : {}) };
+export function readSqliteScopeCatalog(db: DatabaseSync, resolve?: typeof resolveTriggerEffects): SqliteScopeCatalog {
+  const scanned = scanSqliteScopeCatalog(db);
+  const { schema, writable } = scanned;
+  /* Keyed effects are judged against the catalog they run in (triggerEffects.ts, which the caller loads); a database
+     without them asks nothing more. Unjudged, none is accepted. */
+  const keyed = [...scanned.triggered.values()].some((triggers) => triggers.some((trigger) => trigger.effects));
+  const triggered = !keyed
+    ? scanned.triggered
+    : resolve
+      ? resolve({ schema, writable, triggered: scanned.triggered, foldCase: true, ...sqliteKeyFacts(db) })
+      : new Map(
+          [...scanned.triggered].map(([id, triggers]) => [
+            id,
+            triggers.map((trigger) =>
+              trigger.effects ? { ...trigger, unaccepted: 'its effects were not judged against the catalog' } : trigger,
+            ),
+          ]),
+        );
+  const unkeyed = sqliteUnkeyed(schema);
+  return {
+    schema,
+    writable,
+    ...(triggered.size ? { triggered } : {}),
+    references: sqliteReferences(schema),
+    ...(unkeyed.size ? { unkeyed } : {}),
+  };
+}
+
+/** The tables whose primary key has a column of a type a scoped write does not take as a row's identity (keyTypes.ts), with why. */
+function sqliteUnkeyed(schema: DatabaseSchema): ReadonlyMap<string, string> {
+  const unkeyed = new Map<string, string>();
+  for (const table of schema.tables) {
+    const column = table.columns.find((candidate) => candidate.primaryKey && !sqliteKeyType(candidate.type));
+    if (column) unkeyed.set(table.id, keyTypeRefusal('sqlite', table.id, column.name, sqliteTypeSaid(column.type)));
+  }
+  return unkeyed;
+}
+
+/**
+ * Whether SQLite's foreign key can find another parent than a check before the write, for a child column of affinity
+ * `child` and a parent key of `parent`, each of a type a key may be (keyTypes.ts: INTEGER or TEXT, and a typeless
+ * child). The foreign key applies the parent's affinity to what the child column stored (its own affinity applied to
+ * the value written, datatype3.html 3.0); the check applies the parent's affinity to the value written. The two part
+ * only where the child's affinity changes a value in a way the parent's does not undo:
+ *
+ * - BLOB (a typeless column) converts nothing: what it stores is what was written. Never.
+ * - The same affinity twice: applying one affinity again changes nothing. Never.
+ * - TEXT against an INTEGER key: a number stored as its text reads back as that number under the key's affinity, and
+ *   a text stays the text it was. Never.
+ * - INTEGER against a TEXT key: "7.0" is stored as 7 and the key reads "7". The check, given "7.0", reads otherwise,
+ *   and a number read back is the number given, so nothing after the statement tells them apart. Refused.
+ */
+const affinitiesPart = (child: string, parent: string): boolean => {
+  const [c, p] = [sqliteAffinity(child), sqliteAffinity(parent)];
+  return c !== 'BLOB' && c !== p && p === 'TEXT';
+};
+
+/**
+ * How each foreign key compares a reference (ScopeCatalog.references). SQLite's applies the parent column's affinity
+ * to the value the child column stored, which that column's own affinity made of what was written; a parent check
+ * binds what was written and the parent column applies its affinity to that. The two agree unless the child's
+ * affinity changes the value first in a way the parent's does not undo (affinitiesPart): an INTEGER column stores
+ * "7.0" as 7, which a TEXT key reads as '7', where the check's '7.0' found '7.0'. A write through such a foreign key
+ * cannot be checked, and is refused, as is one where either side is of a type a key may not be (keyTypes.ts); one
+ * through a typeless reference, or a TEXT one to an INTEGER key, is checked.
+ */
+function sqliteReferences(schema: DatabaseSchema): ReadonlyMap<string, ReferenceComparison> {
+  const typeOf = (table: string, name: string) =>
+    schema.tables.find((candidate) => candidate.id === table)?.columns.find((column) => column.name === name)?.type;
+  const references = new Map<string, ReferenceComparison>();
+  for (const fk of schema.foreignKeys) {
+    const types = fk.from.columns.map((column) => typeOf(fk.from.table, column));
+    const parents = fk.to.columns.map((column) => typeOf(fk.to.table, column));
+    /* Each side of a reference is a row's identity (keyTypes.ts): the key it points at of a type on the list, and the
+       reference too, or typeless (BLOB affinity), which stores what was written and so compares as the check does. */
+    const unkeyed = parents.findIndex((type) => type !== undefined && !sqliteKeyType(type));
+    const unkeyedChild = types.findIndex((type) => type !== undefined && !sqliteKeyType(type) && sqliteAffinity(type) !== 'BLOB');
+    const differ = types.findIndex(
+      (type, index) => type === undefined || parents[index] === undefined || affinitiesPart(type, parents[index]!),
+    );
+    references.set(
+      referenceKey(fk),
+      unkeyed !== -1
+        ? { refused: `${keyTypeRefusal('sqlite', fk.to.table, fk.to.columns[unkeyed], sqliteTypeSaid(parents[unkeyed]!))}.` }
+        : unkeyedChild !== -1
+          ? { refused: `${keyTypeRefusal('sqlite', fk.from.table, fk.from.columns[unkeyedChild], sqliteTypeSaid(types[unkeyedChild]!))}.` }
+          : differ === -1 && types.length === parents.length
+            ? { columns: types.map((type) => ({ type: type! })) }
+            : {
+                refused:
+                  `"${fk.from.table}".${fk.from.columns[differ] ?? fk.from.columns.join('+')} references "${fk.to.table}".${fk.to.columns[differ] ?? fk.to.columns.join('+')}, ` +
+                  "a column of another affinity that changes the value before the foreign key compares it: SQLite's foreign key compares it as no check before the write can, so a scoped write that sets it is refused.",
+              },
+    );
+  }
+  return references;
+}
+
+/**
+ * How a key equality in a trigger compares on SQLite (triggerEffects.ts): each column's affinity, which decides what
+ * a value is converted to before it is compared, and its collation, which `NEW.code = code` takes from the column on
+ * its left; and the primary key as a key only where its index compares each column under that column's own
+ * collation (`PRIMARY KEY (code COLLATE NOCASE)` on a BINARY column is unique under one and found under the other).
+ * And the conflict clause a table declares other than ABORT, which a trigger's write runs under when the statement
+ * that fired it is a delete (triggerEffects.ts). Read where effects are judged, inside the writer's BEGIN IMMEDIATE.
+ */
+export function sqliteKeyFacts(db: DatabaseSync): Pick<EffectCatalog, 'keys' | 'comparison' | 'conflicts'> {
+  const definitions = new Map<string, string | undefined>();
+  const definitionOf = (table: TableMeta) => {
+    if (!definitions.has(table.id)) {
+      const row = db.prepare("SELECT sql FROM main.sqlite_schema WHERE type = 'table' AND name = ?").get(table.name);
+      definitions.set(table.id, typeof row?.sql === 'string' ? row.sql : undefined);
+    }
+    return definitions.get(table.id);
+  };
+  const collations = new Map<string, Map<string, string> | undefined>();
+  const collationsOf = (table: TableMeta) => {
+    if (!collations.has(table.id)) {
+      const sql = definitionOf(table);
+      collations.set(table.id, sql === undefined ? undefined : sqliteColumnCollations(sql));
+    }
+    return collations.get(table.id);
+  };
+  const conflicts = (table: TableMeta): string | undefined => {
+    const sql = definitionOf(table);
+    const clauses = sql === undefined ? undefined : sqliteConflictClauses(sql);
+    if (!clauses) return 'a conflict clause mistri cannot read';
+    // ABORT is what the statement's own OR ABORT would say; any other changes what a conflicting write does.
+    return clauses.find((clause) => clause !== 'ON CONFLICT ABORT');
+  };
+  const comparison = (table: TableMeta, name: string): KeyComparison | undefined => {
+    const column = table.columns.find((candidate) => folded(candidate.name) === folded(name));
+    const collation = column && collationsOf(table)?.get(folded(column.name));
+    if (!column || !collation) return undefined;
+    const type = sqliteAffinity(column.type);
+    return {
+      type,
+      collation,
+      exact: true,
+      said: `${type} affinity, COLLATE ${collation}`,
+      keyable: sqliteKeyType(column.type),
+      declared: sqliteTypeSaid(column.type),
+    };
+  };
+  const keys = (table: TableMeta): string[][] => {
+    const primary = table.columns.filter((column) => column.primaryKey).map((column) => column.name);
+    if (!primary.length) return [];
+    // A rowid alias holds integers alone, compared by no collation; it has no index of its own.
+    if (primary.length === 1 && table.columns.find((column) => column.name === primary[0])?.identity) return [primary];
+    const index = db
+      .prepare(`PRAGMA main.index_list(${ANSI_STYLE.quote(table.name)})`)
+      .all()
+      .find((row) => row.origin === 'pk');
+    if (typeof index?.name !== 'string') return [];
+    const indexed = db
+      .prepare(`PRAGMA main.index_xinfo(${ANSI_STYLE.quote(index.name)})`)
+      .all()
+      .filter((row) => row.key === 1);
+    const same = primary.every((name) => {
+      const at = indexed.find((row) => typeof row.name === 'string' && folded(row.name) === folded(name));
+      const own = comparison(table, name);
+      return typeof at?.coll === 'string' && own !== undefined && at.coll.toUpperCase() === own.collation;
+    });
+    return same && indexed.length === primary.length ? [primary] : [];
+  };
+  return { keys, comparison, conflicts };
+}
+
+/**
+ * For `mistri check`: the tables a scoped write cannot target for what they are rather than their triggers — a
+ * virtual table and its shadow tables, whose module writes them (scanSqliteScopeCatalog keeps them out of
+ * `writable`) — read on the reader, so check refuses an effect on one as the write does.
+ */
+export function sqliteBlockedTables(db: DatabaseSync): ReadonlyMap<string, string> {
+  const blocked = new Map<string, string>();
+  for (const table of db.prepare('PRAGMA main.table_list').all() as unknown as ListedTable[]) {
+    if (table.schema !== 'main' || typeof table.name !== 'string') continue;
+    if (table.type === 'virtual' || table.type === 'shadow')
+      blocked.set(table.name, "a virtual table's module, whose writes the policy cannot bound");
+  }
+  return blocked;
 }
 
 /** Metadata-only read attestation inside the caller's owned snapshot. Exposes
@@ -88,7 +270,7 @@ export function readSqliteReadCatalog(db: DatabaseSync): { schema: DatabaseSchem
 
 function scanSqliteScopeCatalog(
   db: DatabaseSync,
-): SqliteScopeCatalog & { readable: ReadonlySet<string>; blockedBy: ReadonlyMap<string, string> } {
+): SqliteScopeCatalog & { readable: ReadonlySet<string>; triggered: ReadonlyMap<string, readonly ScopeTrigger[]> } {
   try {
     if (db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 1) return refuse();
     const entries = db
@@ -99,23 +281,25 @@ function scanSqliteScopeCatalog(
     // unavailable table-kind metadata as proof that a table is ordinary.
     if (!listed.some((table) => table.schema === 'main' && table.name === 'sqlite_schema' && table.type === 'table')) return refuse();
     const kinds = identities(listed.filter((table) => table.schema === 'main'));
-    const blocked = new Set<string>();
-    const triggered = new Map<string, string[]>();
+    /* Each table's triggers, main and TEMP, with the statement that made them: which writes fire each, and whether
+       it only validates its row, is read from that text per table below (sqliteTriggers.ts, scopeTriggers.ts). */
+    const definitions = new Map<string, Array<{ name: string; sql: unknown }>>();
     for (const namespace of ['main', 'temp']) {
       const triggers = db
-        .prepare(`SELECT tbl_name AS name, name AS trigger FROM ${namespace}.sqlite_schema WHERE type = 'trigger' ORDER BY name`)
+        .prepare(`SELECT tbl_name AS name, name AS trigger, sql FROM ${namespace}.sqlite_schema WHERE type = 'trigger' ORDER BY name`)
         .all();
       for (const trigger of triggers) {
         if (typeof trigger.name !== 'string' || typeof trigger.trigger !== 'string') return refuse();
-        blocked.add(folded(trigger.name));
-        triggered.set(folded(trigger.name), [...(triggered.get(folded(trigger.name)) ?? []), trigger.trigger]);
+        definitions.set(folded(trigger.name), [
+          ...(definitions.get(folded(trigger.name)) ?? []),
+          { name: trigger.trigger, sql: trigger.sql },
+        ]);
       }
     }
-    const blockedBy = new Map<string, string>();
+    const triggered = new Map<string, readonly ScopeTrigger[]>();
     const shadowed = new Set<string>();
     for (const table of db.prepare("SELECT name FROM temp.sqlite_schema WHERE type IN ('table', 'view')").all()) {
       if (typeof table.name !== 'string') return refuse();
-      blocked.add(folded(table.name));
       shadowed.add(folded(table.name));
     }
 
@@ -180,12 +364,21 @@ function scanSqliteScopeCatalog(
       if (
         kind.type === 'table' &&
         !folded(entry.name).startsWith('sqlite_') &&
-        !blocked.has(folded(entry.name)) &&
+        !shadowed.has(folded(entry.name)) &&
         columns.every((column) => column.hidden !== 1)
-      )
-        writable.add(entry.name);
-      const triggers = kind.type === 'table' ? triggered.get(folded(entry.name)) : undefined;
-      if (triggers) blockedBy.set(entry.name, triggerNames(triggers));
+      ) {
+        /* A table with triggers is written only by the writes that fire none of them but validation-only ones
+           (scopedTransaction.ts target): it stays out of `writable`, which says every write may run. */
+        const triggers = definitions.get(folded(entry.name));
+        if (!triggers) writable.add(entry.name);
+        else {
+          const computed = new Set(columns.filter(generated).map((column) => folded(column.name)));
+          triggered.set(
+            entry.name,
+            triggers.map((trigger) => readSqliteTrigger(trigger.name, trigger.sql, computed)),
+          );
+        }
+      }
       if (
         kind.type === 'table' &&
         !folded(entry.name).startsWith('sqlite_') &&
@@ -277,7 +470,7 @@ function scanSqliteScopeCatalog(
       schema: { dialect: 'sqlite', label: 'SQLite scoped transaction', readAt: new Date().toISOString(), tables, foreignKeys },
       writable,
       readable,
-      blockedBy,
+      triggered,
     };
   } catch (error) {
     if (error instanceof Refusal) throw error;

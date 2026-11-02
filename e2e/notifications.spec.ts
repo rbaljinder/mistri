@@ -173,9 +173,9 @@ test.describe('Notifications', () => {
       });
       expect(signIn.ok()).toBe(true);
       const account = { email: 'buyer@depot.example.test', password: 'disposable-depot-buyer-password' };
-      const made = await page.request.post(`${sample.origin}/api/auth/admin/create-user`, {
+      const made = await page.request.post(`${sample.origin}/api/accounts`, {
         headers: { origin: sample.origin },
-        data: { ...account, name: 'Parker Buyer', role: 'purchaser' },
+        data: { app: 'depot', operation: 'create', ...account, name: 'Parker Buyer', roles: ['purchaser'] },
       });
       expect(made.ok(), await made.text()).toBe(true);
       const login = await buyer.request.post(`${sample.origin}/api/auth/sign-in/email`, {

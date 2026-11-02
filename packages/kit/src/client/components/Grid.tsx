@@ -58,7 +58,7 @@ import {
 } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
 import { labelColumn as namingColumn } from '@mistriwork/engine/shared/schema.js';
-import { centsAmong, dressFor, leadTonePath, maskedText, ruleSays, subtitlePath, type DisplayRule } from './valueModel.js';
+import { datesAmong, dressFor, leadTonePath, maskedText, ruleSays, subtitlePath, type DisplayRule } from './valueModel.js';
 import { currencyPath } from '@mistriwork/engine/shared/money.js';
 import { dueOpen } from './dueOpen.js';
 import { LeadMark } from './Dressed.js';
@@ -120,6 +120,8 @@ const FOLD_ROOM = 150;
 
 /* How many of a record's tags a list's cell draws before it says how many more. */
 const TAGS_SHOWN = 3;
+/* The mark a reference's head draws after its label, and its sizing counts. */
+const REFERENCE_MARK = '→';
 
 export type Row = Record<string, unknown>;
 
@@ -913,7 +915,7 @@ export function Grid({
       asked.map((name) => {
         const plan = plans.get(name)!;
         const labelColumn = referenceLabels?.[name];
-        const display = centsAmong(
+        const display = datesAmong(
           columnDisplay(table?.id, name) as DisplayRule | null,
           rows.map((row) => row[name]),
         );
@@ -936,6 +938,9 @@ export function Grid({
           chipExtra: (cellChips[asked.indexOf(name) + shift] ?? -1) >= 0 ? cellChips[asked.indexOf(name) + shift] : undefined,
           kind: labelColumn ? 'text' : plan.kind,
           controls: language || Boolean(byName.get(name)?.primaryKey || byName.get(name)?.references),
+          /* A reference's arrow stands beside its label in the sort (the head, below), after the sort's 4px gap:
+             uncounted, it took the room past the label that the resizer's strip is (style.css). */
+          mark: byName.get(name)?.references ? 4 + (headMeasure ? headSet(REFERENCE_MARK) : GRID_HEAD_CHAR) : undefined,
           showTime: plan.showTime,
           values: rows.slice(0, GRID_SIZE_SAMPLE).map((row) => {
             if (labelColumn && row[labelColumn] != null) return row[labelColumn];
@@ -1261,8 +1266,8 @@ export function Grid({
   })();
   const cellColumns = useKeptColumns(
     ordered.map((name) => {
-      /* A column of money says its cents only where one of its figures has some (centsAmong). */
-      const display = centsAmong(
+      /* A column of relative dates is said one way down its length (datesAmong). */
+      const display = datesAmong(
         columnDisplay(table?.id, name) as DisplayRule | null,
         rows.map((row) => row[name]),
       );
@@ -1293,7 +1298,7 @@ export function Grid({
                 head: String(labels?.[other] ?? columnLabel(table?.id, other) ?? other),
                 meta: byName.get(other),
                 plan: plans.get(other)!,
-                display: centsAmong(
+                display: datesAmong(
                   columnDisplay(table?.id, other) as DisplayRule | null,
                   rows.map((row) => row[other]),
                 ),
@@ -1422,7 +1427,7 @@ export function Grid({
           >
             <span className="th-label">{headLabel}</span>
             {meta?.primaryKey && <span className="pk">{say('common.key')}</span>}
-            {meta?.references && <span className="fk">→</span>}
+            {meta?.references && <span className="fk">{REFERENCE_MARK}</span>}
             {sorted && <span className="th-arrow">{sorted === 'desc' ? '↓' : '↑'}</span>}
           </button>
           {/* The column's own order, beside its sort: one step at a time,
@@ -1703,13 +1708,7 @@ export function Grid({
                   return <td key={name}>{index === 0 && <span className="grid-totals-label">{totalsLabel}</span>}</td>;
                 return (
                   <td key={name} className="align-right num">
-                    <TotalValue
-                      value={totals[name]}
-                      display={centsAmong(columnDisplay(table?.id, name) as DisplayRule | null, [
-                        ...rows.map((row) => row[name]),
-                        totals[name],
-                      ])}
-                    />
+                    <TotalValue value={totals[name]} display={columnDisplay(table?.id, name) as DisplayRule | null} />
                   </td>
                 );
               })}

@@ -13,7 +13,7 @@
  */
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { openMigrationDb, quoteIdent, splitPostgres, type Dialect, type MigrationDb } from './database.js';
+import { dialectOf, openMigrationDb, quoteIdent, splitPostgres, sqlitePath, type Dialect, type MigrationDb } from './database.js';
 import { readMigrations, type MigrationDirectory, type MigrationFile } from './files.js';
 import {
   BASELINE_DESCRIPTION,
@@ -112,6 +112,10 @@ async function readStatus(db: MigrationDb, target: MigrateTarget): Promise<Statu
 }
 
 export function migrationStatus(target: MigrateTarget): Promise<Status> {
+  /* A SQLite file not made yet is a database with nothing applied, which `up` makes: read as an empty one, so the
+     plan of a first App says what is pending instead of refusing (docs/bootstrap-plan.md). A read never makes it. */
+  if (dialectOf(target.url) === 'sqlite' && sqlitePath(target.url) !== ':memory:' && !existsSync(sqlitePath(target.url)))
+    return withDb({ ...target, url: ':memory:' }, true, (db) => readStatus(db, target));
   return withDb(target, false, (db) => readStatus(db, target));
 }
 

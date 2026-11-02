@@ -41,6 +41,8 @@ import {
   RATE_TABLE,
   seedCombination,
   settleJob,
+  tallyCommand,
+  tenancyWithRowPolicy,
   tenancy,
   touchAction,
   touchCommand,
@@ -239,11 +241,14 @@ test('combination: a command reference × no registry refuses to start, by name'
  * read. The proof is a deployment that starts and answers: a tenant token
  * reads its own tenant's rows through the API, and nobody else's.
  */
-test('combination: an api block × the tenant runtime starts, and serves one tenant its own rows', async (t) => {
+/** A tenant combination, deployed as an operator deploys one: the tenant
+ * store with two tenants and Alice a member of north, the native accounts, a
+ * token the real token CLI issues for her membership, and the real CLI
+ * serving it. */
+async function deployTenant(t: TestContext, part: Part) {
   const { directory, stopping } = scratch(t, 'tw-combination-tenant-');
   const business = join(directory, 'business.db'),
     authPath = join(directory, 'auth.db');
-  const part = merge(base({ write: true }), auth('AUTH-STORE'), apiReads(), tenancy());
   const whole: Part = { ...part, root: JSON.parse(JSON.stringify(part.root).replaceAll('"AUTH-STORE"', JSON.stringify(authPath))) };
   seedCombination(business, whole);
   const { appDir, config, flags } = writeCombination(directory, whole, { business });
@@ -273,7 +278,8 @@ test('combination: an api block × the tenant runtime starts, and serves one ten
     db.close();
   }
 
-  const loaded = await loadApp(appDir);
+  const commands = flags.includes('--commands') ? flags[flags.indexOf('--commands') + 1] : undefined;
+  const loaded = await loadApp(appDir, commands ? { commands } : {});
   writeFileSync(join(appDir, 'authority.lock'), loaded.authority!.report);
   const saved = process.env.BETTER_AUTH_SECRET;
   process.env.BETTER_AUTH_SECRET = SESSION_SECRET;
@@ -306,6 +312,7 @@ test('combination: an api block × the tenant runtime starts, and serves one ten
     'north',
     '--policy',
     policy,
+    ...(commands ? ['--commands', commands] : []),
     '--subject',
     'alice',
     '--actor',
@@ -320,14 +327,23 @@ test('combination: an api block × the tenant runtime starts, and serves one ten
   assert.equal(issued.code, 0, issued.err);
   const { token } = (JSON.parse(issued.out) as { result: { token: string } }).result;
 
-  const served = await serveApi(t, { config, appDir }, 'combo', flags);
+  const served = await serveApi(
+    t,
+    { config, appDir, ...(commands ? { commands } : {}) },
+    'combo',
+    flags.filter((flag, index) => flag !== '--commands' && flags[index - 1] !== '--commands'),
+  );
   stopping(async () => {
     if (served.child.exitCode === null && served.child.signalCode === null) served.child.kill('SIGTERM');
     await served.closed;
   });
   await served.started;
-  const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
-  const list = await fetch(`${served.base}/item?sort=id`, { headers });
+  return { base: served.base, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' } };
+}
+
+test('combination: an api block × the tenant runtime starts, and serves one tenant its own rows', async (t) => {
+  const served = await deployTenant(t, merge(base({ write: true }), auth('AUTH-STORE'), apiReads(), tenancy()));
+  const list = await fetch(`${served.base}/item?sort=id`, { headers: served.headers });
   const body = (await list.json()) as { items: Array<Record<string, unknown>> };
   assert.equal(list.status, 200, JSON.stringify(body));
   // North's rows, and only north's: the pair works and the boundary holds.
@@ -335,6 +351,32 @@ test('combination: an api block × the tenant runtime starts, and serves one ten
     body.items.map((row) => row.id),
     ['north-1', 'north-2'],
   );
+});
+
+/** A command's aggregate in a tenant App under a row policy. Sums and groups
+ * compile through the breakdown compiler, which reads under a scope its own
+ * way (relations, not the row reader's filters); each is covered alone, and
+ * what is proved here is that the tenant's bound and the policy inside it both
+ * reach it: the command counts what its own `where` lists — north's `new`
+ * items — and never south's row or north's archived one. */
+test('combination: a command aggregate × a row policy × the tenant runtime counts only what its where reads', async (t) => {
+  const served = await deployTenant(
+    t,
+    merge(base({ write: true }), auth('AUTH-STORE'), apiReads(), tallyCommand(), tenancyWithRowPolicy()),
+  );
+  const tally = async (status: string) => {
+    const ran = await fetch(`${served.base}/item/commands/tally/v1`, {
+      method: 'POST',
+      headers: { ...served.headers, 'idempotency-key': `combination-tally-${status}` },
+      body: JSON.stringify({ status }),
+    });
+    const answer = (await ran.json()) as { result?: Record<string, unknown> } & Record<string, unknown>;
+    assert.equal(ran.status, 200, JSON.stringify(answer));
+    return answer.result;
+  };
+  // South's new item would make three; north's archived one would make an archived group.
+  assert.deepEqual(await tally('new'), { counted: 2, listed: 2, groups: 'new:2' });
+  assert.deepEqual(await tally('archived'), { counted: 0, listed: 0, groups: 'new:2' });
 });
 
 /** An ordered workflow strip on a page of a tenant App. The strip is drawn

@@ -37,11 +37,11 @@ Lintel is the whole of this recipe. Look: Lumen, side menu with `rail: true`.
   compared to the previous period —
   [lintel/dashboards.ts:14](../../../examples/apps/lintel/dashboards.ts#L14);
   the repairs' road as a `shape: 'steps'` breakdown with `notes` —
-  [lintel/dashboards.ts:27](../../../examples/apps/lintel/dashboards.ts#L27);
+  [lintel/dashboards.ts:28](../../../examples/apps/lintel/dashboards.ts#L28);
   rent by month as a stacked `chart`, leases ending soon as `rows`, the day's
   viewings as an `embed`. A resident's `portal` is their balance, their
   open repairs and two embedded lists —
-  [lintel/dashboards.ts:78](../../../examples/apps/lintel/dashboards.ts#L78).
+  [lintel/dashboards.ts:79](../../../examples/apps/lintel/dashboards.ts#L79).
 - **Lists** with counted `tabs` from `segments` and `rowActions` —
   [lintel/views.ts:104](../../../examples/apps/lintel/views.ts#L104);
   `totals` under a column —
@@ -83,7 +83,7 @@ Look: Lumen, side menu with `rail: true` ([lintel/app.ts:175](../../../examples/
 
 - **Home** "Workspace": opened and closed metrics compared to the previous
   period, a "Needs attention" `rows` of urgent open work; add a `shape: 'steps'`
-  breakdown of the status flow ([lintel/dashboards.ts:27](../../../examples/apps/lintel/dashboards.ts#L27)) and a `heatmap` of
+  breakdown of the status flow ([lintel/dashboards.ts:28](../../../examples/apps/lintel/dashboards.ts#L28)) and a `heatmap` of
   when requests arrive (`weekday created_at, hour created_at`).
 - **Lists**: an `inbox` as a `split` (list beside the request, keys for the
   verbs); `triage` as a `queue`
@@ -104,7 +104,7 @@ Look: Lumen, side menu, `shell: { placement: 'side', counts: true }`
 ([lintel/app.ts:173](../../../examples/apps/lintel/app.ts#L173)).
 
 - **Home** "Operations": `firstRun` for an empty depot; metrics with an `icon`
-  and a `to` list ([lintel/dashboards.ts:23](../../../examples/apps/lintel/dashboards.ts#L23)); the floor's flow as `steps` with
+  and a `to` list ([lintel/dashboards.ts:24](../../../examples/apps/lintel/dashboards.ts#L24)); the floor's flow as `steps` with
   `notes`; two embedded queues at half; moves by day, a `heatmap`, a `treemap`
   of stock value beside a `waterfall` of net units; an `aside` with `activity`
   and the low-stock list.
@@ -169,7 +169,7 @@ Look: Sage, or a small `extends: 'sage'` theme for people work, named in
 
 - **Home** "Today", a to-do `dashboard`: embedded queues of what waits on the
   reader, an aside of who starts soon and what is coming up
-  (the resident's `portal`, [lintel/dashboards.ts:78](../../../examples/apps/lintel/dashboards.ts#L78), embeds two lists).
+  (the resident's `portal`, [lintel/dashboards.ts:79](../../../examples/apps/lintel/dashboards.ts#L79), embeds two lists).
 - **Lists**: each approval a `queue` with a `badge`, its facts and an
   `openLabel` verb; lookups and settings in a folded
   group.

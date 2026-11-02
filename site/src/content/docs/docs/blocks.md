@@ -202,7 +202,7 @@ breakdown('Pipeline by stage', 'opportunity', 'stage', {
     }),
 ```
 
-See it in the sample (`examples/apps/lintel/dashboards.ts:25`); the picture is a warehouse App's pick lists.
+See it in the sample (`examples/apps/lintel/dashboards.ts:26`); the picture is a warehouse App's pick lists.
 
 ![A warehouse App: four steps from To pick to Shipped, each with its count and a line.](../../../assets/gallery/steps.webp)
 

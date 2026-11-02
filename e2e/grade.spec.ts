@@ -32,7 +32,7 @@ const ORIGIN = 'http://grade.test';
 async function graded(
   browser: Browser,
   body: string,
-  { width = 1280, height = 900, record = false }: { width?: number; height?: number; record?: boolean } = {},
+  { width = 1280, height = 900, record = false, zoom = 1 }: { width?: number; height?: number; record?: boolean; zoom?: number } = {},
 ): Promise<GradeCode[]> {
   // Motion reduced, as grade opens every window (shotContext).
   const context = await browser.newContext({ viewport: { width, height }, reducedMotion: 'reduce' });
@@ -46,6 +46,7 @@ async function graded(
             body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>
               body { margin: 0; font: 16px/1.5 sans-serif; color: #111; background: #fff; }
               button { min-width: 44px; min-height: 44px; }
+              :root { zoom: ${zoom} }
             </style></head><body>${body}</body></html>`,
           }),
     );
@@ -204,6 +205,72 @@ test("a control inside a text input's padding, clear of its text, is no overlap;
   expect(await graded(browser, IN_PADDING('80px'), { width: 1280, height: 800 })).toContain('overlap');
 });
 
+/* Under the density zoom a computed length (a padding, a hit area drawn on ::before) and a box's scroll are in layout
+   pixels, and a box on the screen is that times the zoom: grade mixed the two, so at the spacious 1.24 a date's button
+   in its field's padding read as drawn over its text, and at a zoom under 1 a 44px hit area read as 44 where the
+   screen draws 39. Each is measured on the screen now, as the client's one ruler measures (ruler.ts). */
+test('the probe reads a padding and a hit area on the screen under the density zoom', async ({ browser }) => {
+  for (const zoom of [1.12, 1.24])
+    expect(await graded(browser, IN_PADDING('4px'), { width: 1280, height: 800, zoom })).not.toContain('overlap');
+  const HIT = `<main style="padding: 40px"><button style="position: relative; width: 30px; height: 30px; min-width: 0; min-height: 0">×</button></main>
+    <style>main button::before { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%) }</style>`;
+  expect(await graded(browser, HIT, { width: 390, height: 844 })).not.toContain('small-target');
+  expect(await graded(browser, HIT, { width: 390, height: 844, zoom: 0.895 })).toContain('small-target');
+});
+
+/* A drawer is fixed over the page and scrolls in itself, its actions sticky at its foot (a New form's sheet): a field
+   under the actions in one frame scrolls clear of them while the drawer's body leaves the room, as a page's does under
+   a bar pinned to the window. Both are pinned, the actions inside the drawer's layer, which grade took for two bars. */
+const SHEET = (clearance: number) => `
+  <aside role="dialog" aria-label="New lead" style="position: fixed; inset: 0 0 0 auto; width: 100%; display: flex; flex-direction: column; background: #fff">
+    <div style="flex: 1; overflow: auto; padding: 16px 16px ${clearance}px">
+      ${Array.from({ length: 12 }, (_, i) => `<label style="display: block; margin-bottom: 16px">Field ${i + 1}<input style="display: block; width: 100%; height: 44px; box-sizing: border-box"></label>`).join('')}
+      <div style="position: sticky; bottom: 0; height: 64px; display: flex; gap: 8px; justify-content: flex-end; background: #fff; border-top: 1px solid #ddd">
+        <button>Cancel</button><button>Add</button>
+      </div>
+    </div>
+  </aside>`;
+
+test("a field under a drawer's sticky actions is no overlap while the drawer can scroll it clear, and one when it cannot", async ({
+  browser,
+}) => {
+  for (const zoom of [1, 1.12, 1.24]) expect(await graded(browser, SHEET(16), { width: 390, height: 640, zoom })).not.toContain('overlap');
+  // The actions over the drawer's last field with no scroll at all: they can never come apart.
+  const STUCK = `<aside style="position: fixed; inset: 0; background: #fff"><div style="position: relative; height: 200px; overflow: hidden">
+      <input aria-label="Last" style="position: absolute; bottom: 10px; left: 16px; right: 16px; height: 44px">
+      <div style="position: sticky; bottom: 0; margin-top: 140px; height: 60px; display: flex; justify-content: flex-end"><button>Add</button></div>
+    </div></aside>`;
+  expect(await graded(browser, STUCK, { width: 390, height: 640 })).toContain('overlap');
+});
+
+/* A donut's slices are each a whole circle drawn as one arc of its stroke: their boxes are one square, and the point
+   between them is the hole, where the drawing itself is hit. A field report's grade read every pair of slices as an
+   overlap; two shapes that do paint the same pixels still are one. */
+const DONUT = `
+  <main style="padding: 16px"><svg width="220" height="220" viewBox="0 0 42 42" aria-label="Spend">
+    ${[
+      [0, 30],
+      [30, 35],
+      [65, 35],
+    ]
+      .map(
+        ([at, length], i) =>
+          `<circle role="button" tabindex="0" aria-label="Slice ${i}" cx="21" cy="21" r="15.9155" fill="none" stroke="#1d4ed8" stroke-width="7"
+             stroke-dasharray="${length} 100" stroke-dashoffset="${-at!}"></circle>`,
+      )
+      .join('')}
+  </svg></main>`;
+const SHAPES = `
+  <main style="padding: 16px"><svg width="220" height="120" viewBox="0 0 220 120">
+    <rect role="button" tabindex="0" aria-label="Plan" x="0" y="0" width="120" height="80" fill="#1d4ed8"></rect>
+    <rect role="button" tabindex="0" aria-label="Actual" x="60" y="20" width="120" height="80" fill="#b42318"></rect>
+  </svg></main>`;
+
+test("a drawing's shapes overlap where they paint the same pixels, not where their boxes meet", async ({ browser }) => {
+  for (const width of [1280, 390]) expect(await graded(browser, DONUT, { width, height: 800 })).not.toContain('overlap');
+  expect(await graded(browser, SHAPES, { width: 1280, height: 800 })).toContain('overlap');
+});
+
 /* The grid's ring under the density zoom (T4). The root's zoom scales a 2px outline to 1.79px, which C3 reads as a ring
    under 2px; style.css divides the width by --density-zoom for the grid. The rules are read from the stylesheets themselves, so
    the fixture cannot drift from what ships. */
@@ -236,6 +303,36 @@ test('the grid ring holds 2px under the density zoom, where a plain 2px outline 
   expect(await ringWidth(page(rules[2]!))).toBeGreaterThanOrEqual(2);
   // The same outline declared in plain layout pixels is what the zoom thinned.
   expect(await ringWidth(page('.result table:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }'))).toBeLessThan(2);
+});
+
+/* A ring is read on the screen, as grade reads every box. At the comfortable density (a root zoom of 1.12) a 2px outline
+   is 2.24 zoomed pixels, drawn as 2 whole ones: 2px on the screen, which the computed style gives back as 1.786 in the
+   page's own pixels. Grade read that figure and failed every ring of a theme at that density; a ring the zoom really
+   thins (1px on the screen at 0.895) still reads under 2px. */
+test('a ring is read in screen pixels under the density zoom: 2px at 1.12, and thinner where the zoom thins it (C3)', async ({
+  browser,
+}) => {
+  const ringWidth = async (zoom: number, outline: string) => {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+    try {
+      await context.route(`${ORIGIN}/**`, (route) =>
+        route.fulfill({
+          contentType: 'text/html',
+          body: `<!doctype html><html><head><style>:root { zoom: ${zoom} } input { border: 1px solid #888; outline: none }
+            input:focus-visible { outline: ${outline} solid #1d4ed8 }</style></head><body><main><input aria-label="Owner"></main></body></html>`,
+        }),
+      );
+      const tab = await context.newPage();
+      await tab.goto(`${ORIGIN}/page`);
+      return (await focusStops(tab))[0]!.width;
+    } finally {
+      await context.close();
+    }
+  };
+  expect(await ringWidth(1.12, '2px')).toBe(2);
+  expect(await ringWidth(1.24, '2px')).toBe(2);
+  expect(await ringWidth(1, '2px')).toBe(2);
+  expect(await ringWidth(0.895, '2px')).toBeLessThan(2);
 });
 
 /* A field or a card that wears the ring while its input or button holds focus (a picker's box, a board card) shows the
@@ -304,11 +401,16 @@ test('mistri grade on Tick: every view and a record, each finding a line with it
       pages: number;
       captures: number;
       findings: Array<{ code: string; severity: string; page: string; windows: string[]; file?: string; line?: number; fix: string }>;
+      coverage: { pages: Array<{ path: string; kind?: string }>; windows: string[]; skipped: unknown[] };
     };
     expect(report.app).toBe('tick');
     // The list and a task's page (the home is the list, measured once), each in five windows.
     expect(report.pages).toBe(2);
     expect(report.captures).toBe(10);
+    // What it covered says so, page by page; Tick has nothing it could not open.
+    expect(report.coverage.pages.map((page) => page.kind)).toEqual(['view', 'record']);
+    expect(report.coverage.windows).toHaveLength(5);
+    expect(report.coverage.skipped).toEqual([]);
     expect(report.ok).toBe(ran.code === 0);
     expect(report.score).toBeGreaterThan(50);
     /* What Tick is clean of: it throws nothing, asks for nothing that fails, never scrolls sideways, cuts no figure,

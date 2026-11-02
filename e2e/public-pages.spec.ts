@@ -104,6 +104,7 @@ test.describe('Forecourt public pages', () => {
     expect(detail).toContain('data-ssr="room"');
     expect(detail).toContain(`<h1>${cars[0].title}</h1>`);
     expect(detail).toContain('<nav aria-label="Up"><a href="/vehicles">Cars for sale</a></nav>');
+    // To the cent, as the App takes it over and says it (locale.ts formatMoney): the words do not change under the reader.
     expect(detail).toMatch(/<dt>Price<\/dt><dd>\$[\d,]+<\/dd>/);
     expect(detail).toContain('<meta property="og:type" content="article">');
     expect(detail).toContain(`<meta property="og:title" content="${cars[0].title}">`);

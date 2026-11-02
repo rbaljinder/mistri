@@ -24,7 +24,7 @@ import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js'
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { cardsImageSort, factWord, type AppCardsList } from '@mistriwork/engine/shared/appCards.js';
 import { Value } from './Value.js';
-import { centsAmong, dressFor, hueOf, initialsOf, maskedText, type DisplayRule } from './valueModel.js';
+import { dressFor, hueOf, initialsOf, maskedText, type DisplayRule } from './valueModel.js';
 import { Icon, type IconName } from './Icon.js';
 import { useListOrder, type ListOrder } from './useListOrder.js';
 import { useChangedRows } from '../liveState.js';
@@ -172,22 +172,9 @@ export function CardsList({
   });
   /* A rollup or a label path dresses as what it reads, and a reference the list
      fetched a name for says the name (listColumn.ts). */
-  /* A field's money says its cents on every card where one card's figure has some (centsAmong): "$24,495" on each. */
-  const centsOf = new Map<string, boolean | undefined>();
-  const cents = (name: string) => {
-    if (!centsOf.has(name))
-      centsOf.set(
-        name,
-        centsAmong(
-          columnDisplay(table.id, name) as DisplayRule | null,
-          rows.map((row) => namedCell(table, name, row, referenceLabels).value),
-        )?.cents,
-      );
-    return centsOf.get(name);
-  };
   const said = (row: Record<string, unknown>, name: string) => {
     const { column, value } = namedCell(table, name, row, referenceLabels);
-    return <Value col={column} value={value} tableId={table.id} compact cents={cents(name)} />;
+    return <Value col={column} value={value} tableId={table.id} compact />;
   };
   // A line or a fact may be a label path ("dealer_id.name"): its caption is the App's, else its last step's.
   const caption = (name: string) => (columnLabel(table.id, name) as string | null) ?? humanName(name.split('.').pop() ?? name);

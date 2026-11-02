@@ -71,7 +71,7 @@ test('logical scoped transactions map five operations, retain columns/results an
   const { logical } = await fixture(t);
   const { adapter } = logical();
   const answer = await adapter.scopeTransaction!(scope(), async (tx) => {
-    assert.deepEqual(Reflect.ownKeys(tx).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+    assert.deepEqual(Reflect.ownKeys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
     assert.equal(Object.isFrozen(tx), true);
     const rows = await tx.query({ ...query('items'), columns: ['name', 'a.b'] });
     assert.deepEqual(rows.columns, ['name', 'a.b']);

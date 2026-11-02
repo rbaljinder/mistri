@@ -2,11 +2,13 @@ import { commandVisitorAudit } from '../experiments/commandVisitor.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isProxy } from 'node:util/types';
 import { inWriteLanes, recordLane } from '@mistriwork/engine/adapters/writeLanes.js';
+import { isSnapshotConflict, withSnapshotRead } from '@mistriwork/engine/adapters/snapshotRead.js';
 import { withWriteAhead, type WriteAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 import {
   isWriteConflict,
   Refusal,
   TransactionOperations,
+  type AggregateRequest,
   type QueryResult,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
@@ -66,7 +68,7 @@ import { placeFile, type PlacedFile } from '../files/fileStorage.js';
 import type { CommandFileRule } from './businessCommandAuthorization.js';
 import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
 import { currentSpan, errorCode, inSpan, tracing } from '@mistriwork/engine/adapters/telemetry/trace.js';
-import { refusalCause, refusalReasons } from '@mistriwork/engine/shared/refusal.js';
+import { authorFault, isRequestFault, refusalCause, refusalReasons } from '@mistriwork/engine/shared/refusal.js';
 import { handlerNextNumber } from '../../adapters/commands/commandSequences.js';
 import { commandFlagEnabled, commandFlagsReader, executeWithCommandFlags, type CommandFlags } from './commandFlags.js';
 
@@ -277,6 +279,8 @@ async function executeUntraced(
   let priorOutcomeUnknown = scoped;
   // Set once the request is read: a fresh path that keeps receipts, whose refusals are looked up (below).
   let tracked = false;
+  // Whether this command reads one snapshot (snapshotRead.ts), for the refusal its conflict is said as.
+  let snapshot = false;
   /* Objects a handler's insertFile put in a bucket (files/fileStorage.ts):
      deleted when the transaction is known to have rolled back, and left for
      the sweep when its outcome is unknown. */
@@ -316,6 +320,7 @@ async function executeUntraced(
     if (scoped && (typeof authorized.assertTarget !== 'function' || typeof authorized.assertResult !== 'function'))
       throw new AppAccessDenied();
     const { command } = authorized;
+    snapshot = command.snapshot === true;
     const flags = commandFlagsReader(options.flags);
     const flagEnabled = commandFlagEnabled(command, flags);
     // A command's events and its effects, which are recorded as events.
@@ -576,8 +581,10 @@ async function executeUntraced(
           : [],
       writes: command.appendOnly !== true,
     };
+    // One snapshot for every read, where the command asked for it (snapshotRead.ts); SQLite's writer is one already.
+    const reading = <T>(work: () => Promise<T>) => withWriteAhead(ahead, () => withSnapshotRead(snapshot, work));
     const committed: BusinessCommandStatus = await inWriteLanes(lanes, () =>
-      withWriteAhead(ahead, () =>
+      reading(() =>
         authorized.commandTransaction!(async (records, journal) => {
           afterCommit.length = 0;
           transactionStarted = true;
@@ -733,7 +740,7 @@ async function executeUntraced(
               list.push(entry);
               canonicalCommandJson(list, 65536);
             } catch {
-              throw recordRefusalCause(new BusinessCommandExecutionError('invalid_result'), auditRefusal(request.command, change));
+              throw developerError(auditRefusal(request.command, change));
             }
           };
           /* The target's revision, checked up front, or, for a command that declares `appendOnly`, at its first write to the
@@ -768,6 +775,21 @@ async function executeUntraced(
                 },
                 true,
               ),
+            /* Sums and groups read as `count` reads, through the same store and its scope; a store that cannot say one
+               leaves this out, and the handler's db refuses (commandDb.ts). */
+            ...(store.aggregate
+              ? {
+                  aggregate: (request: AggregateRequest) =>
+                    accept(
+                      request,
+                      async (request) => {
+                        checkCancelled();
+                        return store.aggregate!(request);
+                      },
+                      true,
+                    ),
+                }
+              : {}),
             insert: (request) =>
               accept(request, async (request) => {
                 checkCancelled();
@@ -1370,7 +1392,14 @@ async function executeUntraced(
         new BusinessCommandExecutionError('invalid_input', outcome, cause.fields[0], undefined, cause.reasons[cause.fields[0]]),
         cause,
       );
+    /* A request the handler built that can never succeed as written (a malformed filter, an aggregate naming a column
+       the table lacks, a sum SQLite cannot add exactly): the App author's to fix, never a retry. */
+    if (isRequestFault(cause)) throw authorFault(new BusinessCommandExecutionError('invalid_result', outcome), cause.message);
     if (isWriteConflict(cause)) throw new BusinessCommandExecutionError('stale_record', outcome, undefined, refusedKey(conflictKey));
+    /* A snapshot command wrote or locked a row another transaction changed after its snapshot (PostgreSQL's 40001):
+       the record moved under it, said as a conditional write's conflict is, which a job or workflow retries. */
+    if (snapshot && isSnapshotConflict(cause))
+      throw new BusinessCommandExecutionError('stale_record', outcome, undefined, refusedKey(conflictKey));
     /* An integrity rule the database enforced, recognized by the engine's own
        code and never by its message (constraints.ts). A unique or exclusion
        violation conflicts with a row already there, and a foreign key with one
@@ -1459,7 +1488,7 @@ function auditRefusal(command: string, change: Record<string, unknown>): string 
 /* ---------- what a new row may carry ---------- */
 
 type Authorized = import('./businessCommandAccess.js').AuthorizedBusinessCommand;
-const developerError = (cause: string) => recordRefusalCause(new BusinessCommandExecutionError('invalid_result'), cause);
+const developerError = (cause: string) => authorFault(new BusinessCommandExecutionError('invalid_result'), cause);
 
 /**
  * A reference a command's write sets must land in the command's footprint

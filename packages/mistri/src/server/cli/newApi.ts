@@ -176,7 +176,7 @@ export default defineCommands({ complete });
     2,
   )}\n`;
   files['mistri.json'] = `${JSON.stringify(
-    { connections: [{ name: id, url: database, writable: true, migrations: { dir: 'db/migrations' } }] },
+    { app: { dir: '.' }, connections: [{ name: id, url: database, writable: true, migrations: { dir: 'db/migrations' } }] },
     null,
     2,
   )}\n`;
@@ -190,10 +190,10 @@ export default defineCommands({ complete });
       private: true,
       type: 'module',
       scripts: {
-        check: 'mistri check --app . --config mistri.json',
-        migrate: 'mistri migrate up --app . --config mistri.json',
-        'schema:diff': 'mistri migrate diff --config mistri.json',
-        'schema:check': 'mistri migrate check --config mistri.json',
+        check: 'mistri check',
+        migrate: 'mistri migrate up',
+        'schema:diff': 'mistri migrate diff',
+        'schema:check': 'mistri migrate check',
         ...formatScripts,
       },
       // mistri for its bin and the `mistri/*` the modules import; the database browser (`tablewalk`) is not needed.

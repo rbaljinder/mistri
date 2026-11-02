@@ -21,6 +21,7 @@
  *     journal and the write scope already read.
  */
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -921,6 +922,29 @@ export function appAuthStore(loaded: LoadedApp, env: NodeJS.ProcessEnv = process
   return isAbsolute(named) ? named : resolve(loaded.dir ?? dirname(loaded.path), named);
 }
 
+/** The config directory `mistri dev` gives the App in `appDir` (devMode.ts): its default auth store is under it. */
+export const devConfigHome = (appDir: string) => join(appDir, '.mistri', 'config');
+
+/**
+ * The auth store a command run on this machine keeps the App's accounts in, and the environment that opens it.
+ * `mistri tenant grant` made its account in the store a plain start keeps while `mistri dev` read its own, and the
+ * sign-in it reported done failed (a field report). One rule now, the one `shot --as` reads by: the store the App
+ * names (`auth.store`), where it names one; else mistri dev's, once dev has started the App here (its
+ * `.mistri/dev.json`) and this is not production, where dev never runs; else a plain start's.
+ */
+export function localAuthStore(
+  loaded: LoadedApp,
+  env: NodeJS.ProcessEnv = process.env,
+): { store: string; kept: 'named' | 'dev' | 'start'; env: NodeJS.ProcessEnv } {
+  if (loaded.app.auth?.store) return { store: appAuthStore(loaded, env), kept: 'named', env };
+  const dir = loaded.dir ?? dirname(loaded.path);
+  if (env.NODE_ENV !== 'production' && existsSync(join(dir, '.mistri', 'dev.json'))) {
+    const dev = { ...env, XDG_CONFIG_HOME: devConfigHome(dir) };
+    return { store: appAuthStore(loaded, dev), kept: 'dev', env: dev };
+  }
+  return { store: appAuthStore(loaded, env), kept: 'start', env };
+}
+
 export async function createAppAuth(
   loaded: LoadedApp,
   opts: {
@@ -1675,11 +1699,18 @@ export async function createAppAuth(
         }
         /* What changes an account goes through the accounts screen (accountAdministration.ts), which keeps the last
            administrator, the App's own roles and the trail; Better Auth's own doors for the same changes, and the one for
-           signing in as somebody else, are not this App's. */
+           signing in as somebody else, are not this App's. The answer says where the change is made: `not_found` alone
+           read as a door that was missing by mistake (a field report). */
         if (closedNativeAdminPath(path.slice(under.length))) {
-          res
-            .writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' })
-            .end(JSON.stringify({ error: 'not_found' }));
+          res.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(
+            JSON.stringify({
+              error: 'not_found',
+              message:
+                loaded.app.auth?.rows === 'tenant'
+                  ? "Better Auth's own admin endpoints that make or change an account are not served: a tenant App's members are added and changed in its tenants' administration."
+                  : "Better Auth's own admin endpoints that make or change an account are not served: an administrator makes and changes accounts on the App's accounts screen, or with POST /api/accounts.",
+            }),
+          );
           return;
         }
         return nativeHandler(req, res);

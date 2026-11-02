@@ -10,8 +10,8 @@ import { andQuery } from '@mistriwork/engine/shared/query.js';
 import type { FigureFormat } from '@mistriwork/engine/shared/model.js';
 import { breakdownText, sectionPeriod, windowed } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { columnDisplay, findTable, quote } from '../core.js';
-import { defaultCurrency, formatLocale, formatMoney, formatNumber, formatPercent } from '../locale.js';
-import { currencyDigits, currencyPath } from '@mistriwork/engine/shared/money.js';
+import { defaultCurrency, formatLocale, formatMoney, formatNumber, formatPercent, formatWholeMoney } from '../locale.js';
+import { currencyDigits, currencyPath, minorFigure } from '@mistriwork/engine/shared/money.js';
 import { DURATION_STEPS } from '@mistriwork/engine/shared/niceTicks.js';
 import { sayDuration, withUnit } from './valueModel.js';
 import { say } from '../copy/dashboards/components/dashboardModel.js';
@@ -21,6 +21,7 @@ interface DisplayRule {
   format?: string;
   currency?: string;
   minor?: true;
+  whole?: true;
   /** Each row says its own currency in this column (`currency: { column }`). */
   currencyColumn?: string;
 }
@@ -74,6 +75,8 @@ export interface Section {
   /** metric: how its figure is said, and the word after it, where its measure has no column's rule to say it. */
   format?: FigureFormat;
   unit?: string;
+  /** metric: money said exact, to the currency's minor digits at any size (the default), or compact from a thousand. */
+  figure?: 'exact' | 'compact';
   shape?: string;
   /** funnel: the stages a row reaches in order (shared/funnel.ts). */
   stages?: import('@mistriwork/engine/shared/funnel.js').FunnelStage[];
@@ -203,37 +206,42 @@ function measureRule(section: Section): DisplayRule | null {
 }
 
 /** Where money goes compact: a hundred thousand in a table or a breakdown, where a figure is read whole; a
-    thousand on a metric card (CARD_COMPACT). */
+    thousand on a metric card that says `figure: 'compact'` (CARD_COMPACT). */
 const COMPACT_FROM = 100_000;
-/* A strip of cards said "$414.1K" beside "$27,300": each card measures alone, so no rule over its neighbours could
-   hold before every one had answered, and a card that changed its figure's form as they did would shift. One rule
-   a card keeps by itself — compact from a thousand, as its axis and its change say it — reads one way across any
-   strip; the exact figure is the card's title and what a screen reader hears (docs/design.md, stat cards). */
+/* A strip of compact cards said "$414.1K" beside "$27,300": each card measures alone, so no rule over its neighbours
+   could hold before every one had answered, and a card that changed its figure's form as they did would shift. One
+   rule a compact card keeps by itself — compact from a thousand, as its axis and its change say it — reads one way
+   across any strip (docs/design.md, stat cards). */
 const CARD_COMPACT = 1000;
+/** Never compact: money to the currency's minor digits at any size. A metric's figure by default, a card's title,
+    what a screen reader hears, and a record page's metric. */
+export const EXACT = Infinity;
 
-/** A measured figure in its dress: compact money reads as "$27.9M" on a
-    card, full anywhere small enough to say whole. */
+/** A stored decimal's digits, or a finite number: what money can be said exactly from (formatMoney). */
+const DECIMAL = /^\s*[+-]?\d+(\.\d+)?\s*$/;
+
+/** A measured figure in its dress: compact money reads as "$27.9M" from
+    `compactFrom`, and exact below it — to the currency's minor digits, a
+    figure past 2^53 digit for digit — save in a set whose figures are all
+    whole (`cents: false`, a breakdown's `among`). */
 function dressedFigure(rule: DisplayRule | null, value: unknown, cents?: boolean, compactFrom = COMPACT_FROM): string | null {
   if (value instanceof CurrencyFigures)
     return value.figures
       .map(([currency, each]) => dressedFigure({ ...rule, format: 'money', currency }, each, cents, compactFrom) ?? figure(each))
       .join(' · ');
-  const stored = Number(value);
-  if (rule?.format !== 'money' || !Number.isFinite(stored) || !Number.isSafeInteger(Math.trunc(stored))) {
-    return null;
-  }
-  /* A sum of minor units is said in the major unit: 1999 cents is $19.99. */
-  const n = rule.minor ? stored / 10 ** currencyDigits(rule.currency || defaultCurrency()) : stored;
-  /* To the cent where the figure, or the set it stands in (`among`), has cents; whole where it has none. */
-  const toCent = cents ?? Math.round(n * 100) % 100 !== 0;
+  if (rule?.format !== 'money') return null;
+  const currency = rule.currency || defaultCurrency();
+  /* A sum of minor units is said in the major unit, exactly: 1999 cents is $19.99, as text. */
+  const major = rule.minor ? minorFigure(value, currency) : value;
+  const exact = (typeof major === 'number' && Number.isFinite(major)) || (typeof major === 'string' && DECIMAL.test(major));
+  if (!exact) return null;
+  const n = Number(major);
+  if (Math.abs(n) >= compactFrom) return formatMoney(n, rule.currency, { notation: 'compact', maximumFractionDigits: 1 });
+  if (rule.whole && cents !== false) return formatWholeMoney(major as number | string, rule.currency);
   return formatMoney(
-    n,
+    major as number | string,
     rule.currency,
-    Math.abs(n) >= compactFrom
-      ? { notation: 'compact', maximumFractionDigits: 1 }
-      : toCent
-        ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-        : { minimumFractionDigits: 0, maximumFractionDigits: 0 },
+    cents === false ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {},
   );
 }
 
@@ -256,22 +264,27 @@ function measuredFraction(value: unknown): string | null {
  * whole for all of them else, so "$45,230" never stands beside "$451.2K" on one line.
  */
 export function legendSayer(section: Section, totals: readonly number[]): (value: unknown) => string {
-  return sayer(section, undefined, { card: totals.some((n) => Math.abs(n) >= COMPACT_FROM) });
+  return sayer(section, undefined, { compact: totals.some((n) => Math.abs(n) >= COMPACT_FROM) });
 }
 
 /** How a section says a figure: in its measure's dress, else as a number. */
 export function sayer(
   section: Section,
   measured?: unknown,
-  /* A metric card's own figure, its change and its goal: money compact from a thousand (CARD_COMPACT); or the
-     figure whole at any size, for the card's title. */
-  { card = false, whole = false }: { card?: boolean; whole?: boolean } = {},
+  /* A metric card's own figure, its change and its goal: money exact, or compact from a thousand (CARD_COMPACT) where
+     the metric says `figure: 'compact'`; `whole`, exact at any size, for the card's title; `compact`, a legend's
+     figures compact from a thousand. */
+  { card = false, whole = false, compact = false }: { card?: boolean; whole?: boolean; compact?: boolean } = {},
 ): ((value: unknown) => string) & { tick: (value: unknown) => string; among: (values: readonly unknown[]) => (value: unknown) => string } {
   const rule = measureRule(section);
   /* Figures in one currency, read apart per currency: its change and its goal are said in it too. */
   const one = measured instanceof CurrencyFigures && measured.figures.length === 1 ? measured.figures[0][0] : undefined;
   const dress = one && rule ? { ...rule, currency: one } : rule;
-  const said = figureSayer(dress, section.unit, whole ? Infinity : card ? CARD_COMPACT : COMPACT_FROM);
+  const said = figureSayer(
+    dress,
+    section.unit,
+    whole ? EXACT : compact ? CARD_COMPACT : card ? (section.figure === 'compact' ? CARD_COMPACT : EXACT) : COMPACT_FROM,
+  );
   /* Figures said side by side, in one form: where every one is a thousand or more, money drops its cents, so
      "$67,713.40" never stands beside "$17,970" in one breakdown; else every figure says cents if one has some. */
   const among = (values: readonly unknown[]) => {

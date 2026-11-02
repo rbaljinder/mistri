@@ -25,6 +25,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
+  AggregateRequest,
   DeleteRequest,
   InsertRequest,
   TransactionOperations,
@@ -174,6 +175,7 @@ function audited(records: WriteTransaction, sink: TenantWriteSink, requestId: st
   return Object.freeze<WriteTransaction>({
     query: (request) => records.query(request),
     count: (table, filter) => records.count(table, filter),
+    ...(records.aggregate ? { aggregate: (request: AggregateRequest) => records.aggregate!(request) } : {}),
     insert: async (request: InsertRequest) => {
       const result = await records.insert(request);
       await record(request.table, 'insert', result.key as Record<string, unknown>, {

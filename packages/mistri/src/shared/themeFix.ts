@@ -108,6 +108,19 @@ function varied(spec: unknown, path: string, value: unknown, fill: (index: numbe
   return copy;
 }
 
+/** A copy of the spec without the value at `path`: the look's own is worn in its place. */
+function without(spec: unknown, path: string): unknown {
+  const copy = structuredClone(spec) as Record<string | number, unknown>;
+  const walk = steps(path);
+  let at: unknown = copy;
+  for (const step of walk.slice(0, -1)) {
+    if (at === null || typeof at !== 'object') return copy;
+    at = (at as Record<string | number, unknown>)[step];
+  }
+  if (at !== null && typeof at === 'object') delete (at as Record<string | number, unknown>)[walk.at(-1)!];
+  return copy;
+}
+
 /** Where a color of this palette and mode is written in the spec. */
 function specPath(theme: ThemeDefinition, paletteId: string, mode: 'light' | 'dark', role: keyof ThemePalette): string {
   const inside =
@@ -116,6 +129,9 @@ function specPath(theme: ThemeDefinition, paletteId: string, mode: 'light' | 'da
 }
 
 const CHART_ROLES = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `chart${n}` as keyof ThemePalette);
+
+/* A group of colors a theme may leave to its look, as a sentence names what the look derives in its place. */
+const GROUP_SAID: Record<string, string> = { nav: "the menu's colors", status: 'the status colors', rules: 'the rules' };
 
 /* The roles an App's own `ui.theme.accent` is worn over: a theme's value for them is not what the page shows. */
 const ACCENT_ROLES = new Set<string>(['accent', 'onAccent', 'accentInk', 'focus', 'link', 'accentSoft', 'chart1']);
@@ -132,13 +148,12 @@ export function checkThemeWithFixes(theme: ThemeDefinition, own: { accent?: AppA
   const spec = themeSpecOf(theme);
   /* One trial: the spec with one value changed, compiled and checked whole. Undefined where it does not compile. */
   const trials = new Map<string, { compiled: ThemeDefinition; problems: ThemeProblem[] } | undefined>();
-  const trial = (path: string, value: unknown, fill: (index: number) => string | null) => {
+  const judged = (key: string, raw: () => unknown) => {
     if (!spec) return undefined;
-    const key = JSON.stringify([path, value]);
     if (trials.has(key)) return trials.get(key);
     let made: { compiled: ThemeDefinition; problems: ThemeProblem[] } | undefined;
     try {
-      const compiled = compileAppTheme(varied(spec.raw, path, value, fill), spec.where, spec.taken, spec.options);
+      const compiled = compileAppTheme(raw(), spec.where, spec.taken, spec.options);
       made = { compiled, problems: checkTheme(compiled, { own, authored: authoredRoles(compiled, base) }) };
     } catch {
       made = undefined;
@@ -146,9 +161,16 @@ export function checkThemeWithFixes(theme: ThemeDefinition, own: { accent?: AppA
     trials.set(key, made);
     return made;
   };
+  const trial = (path: string, value: unknown, fill: (index: number) => string | null) =>
+    judged(JSON.stringify([path, value]), () => varied(spec!.raw, path, value, fill));
+  /* The spec with what the author wrote at `path` left out, so the look derives it. */
+  const leftOut = (path: string) => judged(JSON.stringify([path]), () => without(spec!.raw, path));
   const worn = (paletteId: string, mode: 'light' | 'dark') =>
     withInks(effectiveThemePalette(effectiveThemeDefinition(theme, paletteId)[mode], mode === 'dark', own) as ThemePalette);
   const fixes = new Map<string, ThemeFix | null>();
+  /* Where no color of the hue passes, what leaving the author's own out does: the role's value, or the group it is
+     written in (a light theme's whole `nav`), each tried whole, as a fix is. The sentence it is said in. */
+  const releases = new Map<string, string>();
   /* A palette says only the colors it changes: one it leaves to the theme's own is fixed there, once, for both. */
   const owner = (paletteId: string, mode: 'light' | 'dark', roles: readonly (keyof ThemePalette)[]) => {
     const variant = theme.palettes?.find((item) => item.id === paletteId);
@@ -169,6 +191,30 @@ export function checkThemeWithFixes(theme: ThemeDefinition, own: { accent?: AppA
     const chart = problem.check.includes(' beside ');
     const roles = chart ? CHART_ROLES : [problem.role];
     return `${owner(problem.paletteId, problem.mode, roles)} ${problem.mode} ${chart ? 'chart' : problem.role}`;
+  };
+
+  /* What the author wrote at `path`, left out — the role's own value, then the group it is written in — said where
+     the look's own then passes every check the failure was in and breaks none it did not. */
+  const releaseOf = (path: string, problem: ThemeProblem, ours: (found: ThemeProblem) => boolean, allowed: number) => {
+    const group = /^(.*\.(nav|status|rules))\.\w+$/.exec(path);
+    for (const at of [path, ...(group ? [group[1]!] : [])]) {
+      if (writtenAt(theme, at) === undefined) continue;
+      const tried = leftOut(at);
+      if (!tried || tried.problems.some(ours) || tried.problems.length > allowed) continue;
+      const derived = withInks(
+        effectiveThemePalette(
+          effectiveThemeDefinition(tried.compiled, problem.paletteId)[problem.mode],
+          problem.mode === 'dark',
+          own,
+        ) as ThemePalette,
+      )[problem.role];
+      const what = at === path ? `${colorPath(problem.role)}${derived ? ` (${derived})` : ''}` : (GROUP_SAID[group![2]!] ?? 'its colors');
+      return {
+        sentence: `leave ${at} out, and the look derives ${what}, which ${at === path ? 'passes every check it is in' : 'pass every check they are in'}.`,
+        ...(derived && HEX.test(derived) ? { derived } : {}),
+      };
+    }
+    return undefined;
   };
 
   for (const problem of problems) {
@@ -207,10 +253,20 @@ export function checkThemeWithFixes(theme: ThemeDefinition, own: { accent?: AppA
       const tried = trial(path, hex, fill);
       return tried && !tried.problems.some(ours) && tried.problems.length <= problems.length - before ? tried : undefined;
     };
-    const hex = nearestOfHue(current, passes);
+    let hex = nearestOfHue(current, passes);
     if (!hex) {
-      fixes.set(key, null);
-      continue;
+      /* No shade of its hue passes: the checks it is in ask more than lightness can give (a light theme's dark menu
+         under the pill's light tint wants a mark both light and dark). What leaving the author's own out derives is
+         said where it passes (a field report: "pick another hue" named none, and dropping the light theme's `nav`
+         was the fix), and the nearest of another hue among the colors the theme already wears, and the look's
+         derived one, is offered where one passes, proved as any fix is. */
+      const release = releaseOf(path, problem, ours, problems.length - before);
+      if (release) releases.set(key, release.sentence);
+      hex = nearestOf(current, [...new Set([...(release?.derived ? [release.derived] : []), ...Object.values(palette)])], passes);
+      if (!hex) {
+        fixes.set(key, null);
+        continue;
+      }
     }
     /* The ratio the failed check reaches with the fix, for the sentence: measured on the compiled trial. */
     const tried = passes(hex)!;
@@ -238,13 +294,16 @@ export function checkThemeWithFixes(theme: ThemeDefinition, own: { accent?: AppA
     const written = problem.written
       ? ` Written the same as the accent, it is drawn in the accent's ink instead: leave it out to wear that, or write one that reads.`
       : '';
+    const release = releases.get(keyOf(problem));
     const then = fix
-      ? `${written} Try ${fix.said}.`
+      ? `${written} Try ${fix.said}.${release ? ` Or ${release}` : ''}`
       : chart
         ? ' Neither another order of these series nor a lighter or darker shade of one keeps every neighbor apart: replace the one named with a color of another hue.'
         : own.accent && ACCENT_ROLES.has(problem.role)
           ? " The App's ui.theme.accent is worn over this color: fix that accent."
-          : ' No color of its hue passes every check it is in: pick another hue.';
+          : release
+            ? ` No color of its hue, or of another this theme wears, passes every check it is in. ${release[0]!.toUpperCase()}${release.slice(1)}`
+            : ' No color of its hue, or of another this theme wears, passes every check it is in: change a color it is drawn on.';
     const at = pathOf(problem);
     /* The color by where it is written (`cadence.colors.light.lineControl`), so the line names what to change,
        not only what was measured: a palette's own color and one it leaves to the theme read differently. */
@@ -291,6 +350,20 @@ function nearestOfHue(hex: string, passes: (hex: string) => unknown): string | u
     found.push({ hex: atLightness(edge, c, h), distance: Math.abs(edge - l) });
   }
   return found.sort((a, b) => a.distance - b.distance)[0]?.hex;
+}
+
+/** The nearest of `candidates` to `hex` (by OKLab distance) that `passes`: a color of another hue, proved as any fix is. */
+function nearestOf(hex: string, candidates: readonly (string | undefined)[], passes: (hex: string) => unknown): string | undefined {
+  const [l, a, b] = oklab(linear(hex));
+  const distance = (other: string) => {
+    const [l2, a2, b2] = oklab(linear(other));
+    return Math.hypot(l - l2, a - a2, b - b2);
+  };
+  return candidates
+    .filter((candidate): candidate is string => Boolean(candidate && HEX.test(candidate) && candidate.toLowerCase() !== hex.toLowerCase()))
+    .map((candidate) => candidate.toLowerCase())
+    .sort((x, y) => distance(x) - distance(y))
+    .find((candidate) => passes(candidate));
 }
 
 /** The nearest color of `hex`'s hue that reads at `need` on `ground`: what grade's matrix says a theme's token should be. */

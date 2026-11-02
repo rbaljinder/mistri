@@ -205,6 +205,7 @@ test('verified context exposes only frozen logical metadata and scoped capabilit
     assert.deepEqual(context.principal, { id: 'editor-id', appId: 'policy-app', roles: ['editor'], email: 'editor@example.test' });
     assert.deepEqual([...context.sources].sort(), ['inventory', 'operations']);
     assert.deepEqual(Reflect.ownKeys(context.data).sort(), [
+      'aggregate',
       'count',
       'countBreakdown',
       'countView',

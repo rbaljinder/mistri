@@ -2,6 +2,7 @@ import type { CommandEventBatch, CommandEventManifest } from '../events/commandE
 import type { PublicPlacementAdmission, PublicPlacementOwner, PublicPlacementRun } from './publicPlacementTypes.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import type { TriggerAcceptance } from '@mistriwork/engine/adapters/storeHost.js';
 
 /** Portable contracts only; SQLite storage and migration live in commandJournal.ts. */
 /** Bound by the private source owner, never supplied in receipt/lookup DTOs.
@@ -137,6 +138,8 @@ declare module '@mistriwork/engine/adapters/adapter.js' {
       scope: RowScope,
       run: (records: WriteTransaction, journal: CommandJournal, catalog: DatabaseSchema) => Promise<T>,
       events?: CommandJournalAppScope,
+      /** The triggers the App names on the tables of `scope` (resources.<table>.triggers), by the same names `scope` uses. */
+      triggers?: TriggerAcceptance,
     ): Promise<T>;
 
     /** Trusted source owner only: exact physical eligibility anchors are locked

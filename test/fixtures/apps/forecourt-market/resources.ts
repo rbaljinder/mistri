@@ -27,8 +27,11 @@ export const resources = {
     favorite: true,
     computed: { days_on_lot: computed.number('today - listed_on') },
     display: {
+      // A listing price is read at a glance: "$24,495", and "$24,495.50" if a car ever carries cents.
+      price: { format: 'money', whole: true },
+      was_price: { format: 'money', whole: true },
       // The page's second figure: "$389/mo", on the terms its note says.
-      est_monthly: { format: 'money', unit: '/mo' },
+      est_monthly: { format: 'money', unit: '/mo', whole: true },
       horsepower: { unit: 'hp' },
       mpg_city: { unit: 'mpg' },
       mpg_highway: { unit: 'mpg' },

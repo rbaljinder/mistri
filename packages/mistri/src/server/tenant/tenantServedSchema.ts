@@ -251,6 +251,7 @@ function servedAfresh(context: ServedContext, app: AppDef, now: Date, me: string
         ...(column.references === undefined ? {} : { references: column.references }),
         ...(column.allowed === undefined ? {} : { allowed: column.allowed }),
         ...(column.flag ? { flag: true } : {}),
+        ...(column.scale === undefined ? {} : { scale: column.scale }),
         ...(column.text === undefined ? {} : { text: column.text }),
       })),
     })),

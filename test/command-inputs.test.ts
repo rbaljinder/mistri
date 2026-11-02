@@ -1109,7 +1109,7 @@ test('initial reads only within the footprint, and serves only what the declarat
     f.control.reach = false;
     f.control.malformed = true;
     const malformed = await prepare(f);
-    assert.equal(malformed.status, 503);
+    assert.equal(malformed.status, 500);
     assert.equal(malformed.body.code, 'invalid_result');
     assert.doesNotMatch(malformed.text, /twenty/);
   });

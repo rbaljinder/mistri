@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.10",
+  "version": "1.0.0-rc.11",
   "description": "The engine both products stand on: the adapters (SQLite, Postgres), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -178,6 +178,10 @@
       "mistri-built": "./dist/adapters/writeCapture.js",
       "default": "./src/adapters/writeCapture.ts"
     },
+    "./adapters/snapshotRead.js": {
+      "mistri-built": "./dist/adapters/snapshotRead.js",
+      "default": "./src/adapters/snapshotRead.ts"
+    },
     "./adapters/writeAhead.js": {
       "mistri-built": "./dist/adapters/writeAhead.js",
       "default": "./src/adapters/writeAhead.ts"
@@ -251,6 +255,10 @@
     "./server/config/locations.js": {
       "mistri-built": "./dist/server/config/locations.js",
       "default": "./src/server/config/locations.ts"
+    },
+    "./server/config/profile.js": {
+      "mistri-built": "./dist/server/config/profile.js",
+      "default": "./src/server/config/profile.ts"
     },
     "./server/configPaths.js": {
       "mistri-built": "./dist/server/configPaths.js",
@@ -520,6 +528,10 @@
       "mistri-built": "./dist/shared/appMessages.js",
       "default": "./src/shared/appMessages.ts"
     },
+    "./shared/aggregate.js": {
+      "mistri-built": "./dist/shared/aggregate.js",
+      "default": "./src/shared/aggregate.ts"
+    },
     "./shared/appNoun.js": {
       "mistri-built": "./dist/shared/appNoun.js",
       "default": "./src/shared/appNoun.ts"
@@ -539,6 +551,10 @@
     "./shared/breakdowntext.js": {
       "mistri-built": "./dist/shared/breakdowntext.js",
       "default": "./src/shared/breakdowntext.ts"
+    },
+    "./shared/decimals.js": {
+      "mistri-built": "./dist/shared/decimals.js",
+      "default": "./src/shared/decimals.ts"
     },
     "./shared/clauses.js": {
       "mistri-built": "./dist/shared/clauses.js",

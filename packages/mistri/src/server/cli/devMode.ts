@@ -19,7 +19,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import type { LoadedApp } from '../app/apps.js';
-import { configLocations } from '@mistriwork/engine/server/config/locations.js';
+import { findConfig } from '@mistriwork/engine/server/config/profile.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { isTenantApp } from '../../shared/appModel.js';
 import { columnKind, primaryKey, tableNamed } from '@mistriwork/engine/shared/schema.js';
@@ -97,11 +97,12 @@ export function prepareDev(argv: string[], env: NodeJS.ProcessEnv = process.env)
   if (!['app.ts', 'app.mjs', 'app.json'].some((name) => existsSync(join(app, name))))
     throw new DevRefusal(`${app} has no app.ts (or app.mjs / app.json): name the App's directory. ${USAGE}`);
 
-  /* The config is found before XDG_CONFIG_HOME moves into .mistri/: the App's own mistri.json, else the one a
-     plain `mistri` would read (the working directory's, then the person's own). */
+  /* The config is found before XDG_CONFIG_HOME moves into .mistri/, by the one rule every App command reads
+     (engine config/profile.ts): the App's own mistri.json, the working directory's, the person's own. Named, since
+     the person's own is read from under XDG_CONFIG_HOME. */
   if (!namesData(args)) {
-    const config = [join(app, 'mistri.json'), ...configLocations(undefined, env)].find((file) => existsSync(file));
-    if (config) args.push('--config', config);
+    const config = findConfig({ app }, env);
+    if (config) args.push('--config', config.path);
   }
 
   const folder = join(app, '.mistri');

@@ -21,7 +21,7 @@
  *   listener the network reaches or a proxy speaks for.
  */
 import type { IncomingMessage } from 'node:http';
-import { refusalReasons, refusalSaid } from '../../shared/refusal.js';
+import { isAuthorFault, refusalReasons, refusalSaid } from '../../shared/refusal.js';
 import { clientTrusted, type Bound } from './trust.js';
 import { AppAccessDenied } from '../columnGrants.js';
 import { TenantContextError } from '../evidence.js';
@@ -97,8 +97,17 @@ export function reportRefusal(
      what its author meant it to allow is found here, not first with diagnostics on (field report TR7). */
   if (status < 500 && !recorded(error).length && !refusalSaid(error) && !always) return undefined;
   const path = (req.url ?? '').split('?')[0];
-  console.error(`${product()}: ${req.method ?? 'GET'} ${path} refused (${status}${code ? ` ${code}` : ''})${heard ? `: ${heard}` : ''}`);
-  for (const reason of reasons) console.error(`  because: ${reason}`);
+  const refused = `${product()}: ${req.method ?? 'GET'} ${path} refused (${status}${code ? ` ${code}` : ''})`;
+  /* The author's own mistake leads with what to fix; the sentence its caller was told follows, as what it was. */
+  const fault = isAuthorFault(error) ? reasons.at(-1) : undefined;
+  if (fault) {
+    console.error(`${refused}: ${fault}`);
+    for (const reason of reasons.slice(0, -1)) console.error(`  because: ${reason}`);
+    if (heard) console.error(`  callers are told: ${heard}`);
+  } else {
+    console.error(`${refused}${heard ? `: ${heard}` : ''}`);
+    for (const reason of reasons) console.error(`  because: ${reason}`);
+  }
   // The innermost reason is the one that names the rule, the table or the column.
   return authors.has(req) ? reasons.at(-1) : undefined;
 }

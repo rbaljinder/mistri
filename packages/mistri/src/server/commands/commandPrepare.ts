@@ -51,7 +51,7 @@ export interface PreparedCommand {
 /** Add business eligibility to an already visibility/state-filtered bulk
  * prepare. One target read and one hook invocation, not one staff query per row. */
 export async function readPreparedTargetAvailability(
-  reader: Pick<WriteTransaction, 'query' | 'count'>,
+  reader: Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>,
   options: {
     command: AnyBusinessCommand;
     commandId: string;
@@ -200,9 +200,10 @@ export async function readPreparedRecord(
   if (!initial && !registeredAvailability(command) && !pickers.length && !starts.length && !conditional.length && !questions)
     return { expectedVersion };
   // Reads only: the handler's writes are not the prefill's to make.
-  const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count'>>({
+  const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>>({
     query: (request) => records.query(request),
     count: (table, filter) => records.count(table, filter),
+    ...(records.aggregate ? { aggregate: (request) => records.aggregate!(request) } : {}),
   });
   const table = catalog[command.target];
   const exact = table && canonicalKey(table, key);
@@ -365,9 +366,10 @@ async function readPreparedStart(
   if (!commandFlagEnabled(command, flags)) throw new BusinessCommandExecutionError('forbidden');
   const started = startingValues(preparedStarts(command), options.actor, {});
   const initial = registeredInitial(command);
-  const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count'>>({
+  const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>>({
     query: (request) => records.query(request),
     count: (table, filter) => records.count(table, filter),
+    ...(records.aggregate ? { aggregate: (request) => records.aggregate!(request) } : {}),
   });
   // Its questions, where it asks some: those that name no record, as no record is named.
   const asked = definedInputs(command).length ? { defined: await readCommandDefinitions(tx, catalog, command) } : {};

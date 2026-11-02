@@ -444,6 +444,10 @@ export interface AppFormField<Field extends string = string> {
  */
 export interface AppDisplayRule {
   /** money: currency. percent: the value is 0–100, shown with %. number: separators. relative: a date said from today.
+      date: a day said absolutely ("Sep 4, 2026"), the same on any day and for any reader; a stored date never shifts,
+      a moment is the day it falls on in `timezone`. datetime: a moment with its time and zone ("Sep 4, 2026,
+      2:30 PM PDT"), said in `timezone`, else the App's `ui.timezone`, else the zone the server writes in; a stored
+      date alone is still its day. What a statement, a ledger or a log says, where "3 days ago" is wrong tomorrow.
       items: a text of one item per line, drawn as a list (a line of them where there is no room).
       duration: a number of seconds said as its two largest units — "2h 15m", "3d 4h".
       email, phone, url: the value is a link — mail, a call, a page opened beside the App — where it has that
@@ -466,6 +470,8 @@ export interface AppDisplayRule {
     | 'percent'
     | 'number'
     | 'relative'
+    | 'date'
+    | 'datetime'
     | 'items'
     | 'duration'
     | 'email'
@@ -486,6 +492,9 @@ export interface AppDisplayRule {
       data face and any other text in the reading face, because a name is not compared character by character.
       A rule with a `component` takes no face, the component sets its own; `masked: true` takes none either. */
   face?: 'data' | 'ui' | 'code';
+  /** With format "date" or "datetime": the IANA zone a moment is said in, over the App's `ui.timezone`:
+      `paid_at: { format: 'datetime', timezone: 'America/New_York' }`. A stored date alone never shifts. */
+  timezone?: string;
   /** With format "rating": the stars of its scale, 3 to 10 (5 when unsaid). The value is a whole number of
       them, edited by picking a star. */
   outOf?: number;
@@ -529,6 +538,11 @@ export interface AppDisplayRule {
       3 for KWD): `total: { format: 'money', minor: true, currency: { column: 'currency_code' } }`. The column is an
       integer; a decimal money column needs nothing. */
   minor?: true;
+  /** For "money": a whole amount is said without its minor digits — "$24,495", not "$24,495.00" — for a listing where
+      cents are noise, a car's price: `price: { format: 'money', whole: true }`. An amount that has cents still shows them
+      ("$24,495.50"): the option never hides money. Every screen, a document and the server-drawn public page say it so;
+      a CSV export stays exact. */
+  whole?: true;
   /** With "number", "money" or no format on a numeric column: the unit said after the figure — "mi", "kg", "/mo" (a leading slash joins
       without a space: "$242/mo"). At most 12 characters. */
   unit?: string | AppMessageRef;
@@ -826,6 +840,11 @@ export interface AppResource<Column extends string = string, Page extends string
   inputs?: Partial<Record<Column, ComponentDecl<string, 'input'>>>;
   /** Resource invariants, enforced on every write. */
   validation?: readonly FormRule[];
+  /** Under a row policy, the database triggers on this resource's table the App accepts, by name: a command's write
+      that fires one runs, and every row its keyed effects reach is proven inside the person's rows. The effects are
+      read from the trigger; authority.lock records each definition, and a changed one is refused until approved
+      again. A trigger that only validates needs no name. @preview */
+  triggers?: readonly string[];
   /** How long a text column's value may be and what form it takes, keyed by column:
       `text: { code: { pattern: '^[A-Z]{3}$', message: 'Three capital letters.' }, name: { min: 2 } }` — the words a
       command's text input uses. The New form says the rule under the field as someone types, and the server holds
@@ -1198,7 +1217,9 @@ export interface AppAuth<Resource extends string = string, Role extends string =
 export interface AppChecklist<Column extends string = string> {
   kind: 'checklist';
   readonly [madeBy]: 'checklist';
+  /** The card's title: a local text column. */
   primary: Column;
+  /** The column a tick toggles: a local, readable boolean column (declare it BOOLEAN in SQLite). */
   checked: Column;
   lines?: readonly [Column];
 }
@@ -1632,6 +1653,11 @@ export interface MetricDashSection extends DashTableSection, DashFigureWords {
   /** Draw the measure's last twelve months inside the card while no window stands. Needs `over`. A windowed metric
       draws its trend across the window unless this is false. */
   spark?: boolean;
+  /** How money is said on the card: `'exact'` (the default), to the currency's minor digits at any size —
+      "$28,123.45", a balance read to the cent — or `'compact'` from a thousand, "$28.1K", for a revenue card
+      glanced at beside its trend. Its change and its goal follow it; the card's title and what a screen reader
+      hears are exact either way. */
+  figure?: 'exact' | 'compact';
   /** A goal for the measure: a meter under the number, and the share reached said beside it. A number, or a goal
       read from data in the metric's own words — `{ from: 'quota', query: 'period = this quarter', measure: 'sum amount' }`;
       an unwritten `from` or `measure` is the metric's. Where the goal counts the same measure over the same table with
@@ -1799,7 +1825,7 @@ export interface NoteDashSection extends DashSectionCommon {
   text: string | AppMessageRef;
   /** A curated mark above the guidance. */
   icon?: AppIcon;
-  /** One already-reachable list or dashboard to open. */
+  /** One of the App's rooms to open: a list, a dashboard or a signed-in form view, as an empty list's action and nav open. */
   action?: AppLinkAction;
   /** 'banner': the dashboard's introduction — a ground of its own across the width, the title larger, the action a
       button, and room for a picture on the right. The look dresses it (its `banner` recipe). Needs a `title`. */
@@ -2599,7 +2625,7 @@ export interface NoteSection extends SectionCommon {
   variant?: 'quiet' | 'callout';
   /** A curated mark above the words. */
   icon?: AppIcon;
-  /** One of the App's list or dashboard views to open. */
+  /** One of the App's rooms to open: a list, a dashboard or a signed-in form view. */
   action?: AppLinkAction;
 }
 

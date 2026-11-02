@@ -30,6 +30,23 @@ export class Refusal extends Error {
   }
 }
 
+/* A request that can never succeed as written: a malformed filter, an aggregate naming a column the table lacks, a
+   sum SQLite cannot add exactly. Whoever wrote the request fixes it, so nothing is worth retrying; a command that
+   meets one says invalid_result, where every other refusal it could not place was temporarily_unavailable and
+   sent a job or a workflow round a retry that could not end. Branded with a registered symbol, since a handler
+   may import a second copy of this module. */
+const REQUEST_FAULT = Symbol.for('mistri.requestFault');
+export class RequestFault extends Refusal {
+  readonly [REQUEST_FAULT] = true;
+  constructor(message: string, options: { columns?: readonly string[]; cause?: unknown } = {}) {
+    super(message, options);
+    this.name = 'RequestFault';
+  }
+}
+/** Whether a refusal is a request that can never succeed as written (`RequestFault`), from any copy of the module. */
+export const isRequestFault = (error: unknown): error is RequestFault =>
+  error instanceof Error && (error as { [REQUEST_FAULT]?: unknown })[REQUEST_FAULT] === true;
+
 /* Why a refusal happened, kept for the trusted owner that has to diagnose it.
    A caller hears one fixed sentence and must: a driver's error text names
    columns, values and internal tables, and a clash on a hidden unique column
@@ -57,6 +74,30 @@ export function recordRefusalCause<E extends object>(error: E, cause: unknown): 
 /** The recorded reason behind a refusal, for a trusted diagnostic only. */
 export const refusalCause = (error: unknown): unknown =>
   error !== null && typeof error === 'object' && CAUSE in error ? (error as Record<symbol, unknown>)[CAUSE] : undefined;
+
+/* A refusal that is its App author's own mistake — a command handler that set a reference outside its footprint,
+   wrote bytes where no file resource keeps them — rather than the caller's or the platform's. Its caller still
+   hears the fixed sentence, but that sentence names nothing to fix, and leading with it put "The command did not
+   produce a valid result." over the one line that said what to change (a field report). Marked where the mistake
+   is found, so the operator's terminal leads with the recorded cause; who may hear that cause does not move
+   (refusalReport.ts). */
+const AUTHOR_FAULT = Symbol.for('mistri.refusalAuthorFault');
+/** Mark a refusal as its App author's mistake, and record why: the operator is told the cause first. */
+export function authorFault<E extends object>(error: E, cause: string): E {
+  if (!Object.hasOwn(error, AUTHOR_FAULT)) Object.defineProperty(error, AUTHOR_FAULT, { value: true, enumerable: false });
+  return recordRefusalCause(error, cause);
+}
+/** Whether a refusal, or one it was rebuilt over (a command's refusals are re-issued with the outcome), was marked
+    as its App author's mistake (authorFault). */
+export function isAuthorFault(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  for (let at: unknown = error, depth = 0; at !== null && typeof at === 'object' && !seen.has(at) && depth < 8; depth++) {
+    if (AUTHOR_FAULT in at) return true;
+    seen.add(at);
+    at = refusalCause(at) ?? (at as { cause?: unknown }).cause;
+  }
+  return false;
+}
 
 /**
  * What the operator is told about a refusal: each reason under it, outermost

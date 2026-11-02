@@ -104,7 +104,7 @@ export default defineJobs({ nightly: defineJob({ every: '0 2 * * *', timezone: '
 
   const json = JSON.parse((await run([...args, '--json'], env)).out) as {
     steps: Array<{ step: string; detail: string }>;
-    problems: Array<{ severity: string; message: string }>;
+    problems: Array<{ code: string; severity: string; message: string; docs: string }>;
   };
   const validation = json.steps.find((step) => step.step === 'validation')!;
   assert.match(validation.detail, /^Desk: 1 problem$/);
@@ -113,5 +113,15 @@ export default defineJobs({ nightly: defineJob({ every: '0 2 * * *', timezone: '
   assert.ok(
     listed.every((found) => found.severity === 'info'),
     JSON.stringify(listed),
+  );
+  /* Its code says what it is, so a tool can sort on the code alone: a listing labelled `invalid-app`, the code of a
+     refused load, read as an error to anything that did not also read the severity. */
+  assert.deepEqual(
+    listed.map((found) => [found.code, found.docs]),
+    listed.map(() => ['automation', 'https://mistriwork.dev/docs/check-codes/#automation']),
+  );
+  assert.deepEqual(
+    json.problems.filter((found) => found.severity === 'error').map((found) => found.code),
+    ['unknown-column'],
   );
 });

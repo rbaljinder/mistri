@@ -11,6 +11,10 @@ import { statementShape } from '../../packages/engine/src/adapters/telemetry/sta
 /** A read of the catalog: PostgreSQL's system catalogs and information_schema, SQLite's schema table and PRAGMAs. */
 export const CATALOG =
   /\b(pg_catalog|pg_class|pg_attribute|pg_trigger|pg_collation|pg_namespace|pg_index|pg_constraint|pg_rewrite|pg_policy|pg_type|pg_proc|pg_roles|pg_auth_members|information_schema|sqlite_master|sqlite_schema|pragma_\w+|PRAGMA)\b/i;
+/* A row read may spell a built-in it calls (`pg_catalog.jsonb_build_object`, `::pg_catalog.text`) so a search_path
+   cannot shadow it, as a scoped read's stored-text column does: that is not a read of the catalog. */
+const QUALIFIED_BUILTIN = /\bpg_catalog\.(jsonb_build_object|text)\b/gi;
+const readsCatalog = (sql: string) => CATALOG.test(sql.replace(QUALIFIED_BUILTIN, ''));
 /** The one statement a transaction spends on knowing the catalog has not moved: not a catalog read, its validation. */
 export const EPOCH = /__mistri_schema_epoch|pragma_schema_version/;
 const CONTROL = /^\s*(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i;
@@ -39,7 +43,7 @@ export function count(statements: readonly string[]): Counted {
     statements: [...statements],
     total: statements.length,
     epoch: statements.filter((sql) => EPOCH.test(sql)).length,
-    catalog: statements.filter((sql) => CATALOG.test(sql) && !EPOCH.test(sql)),
+    catalog: statements.filter((sql) => readsCatalog(sql) && !EPOCH.test(sql)),
     repeated,
   };
 }

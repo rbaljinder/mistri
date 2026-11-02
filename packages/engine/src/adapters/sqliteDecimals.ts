@@ -11,14 +11,9 @@
  * left exactly as they were.
  */
 
-const DECLARED_SCALE = /^\s*(?:decimal|numeric)\s*\(\s*\d+\s*,\s*(\d+)\s*\)\s*$/i;
+import { declaredScale } from '../shared/decimals.js';
 
-/** The scale a declared type asks for, when it is a DECIMAL/NUMERIC with one above zero. */
-export function declaredScale(type: string | null | undefined): number {
-  if (!type) return 0;
-  const scale = Number(DECLARED_SCALE.exec(type)?.[1] ?? 0);
-  return scale > 0 ? scale : 0;
-}
+export { declaredScale };
 
 /** Per output position, the scale to apply, or undefined when no column needs one. */
 export function scalesOf(columns: ReadonlyArray<{ type?: string | null }>): number[] | undefined {

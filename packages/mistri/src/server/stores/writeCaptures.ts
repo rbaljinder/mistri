@@ -70,6 +70,7 @@ function composed(history: HistoryCapture | undefined, live: LiveChangeCapture |
       update: live.update,
       remove: live.remove,
       tell: async () => {},
+      triggered: live.triggered,
       finish: live.finish,
       committed: live.committed,
     };
@@ -78,6 +79,10 @@ function composed(history: HistoryCapture | undefined, live: LiveChangeCapture |
     update: ((request, write) => live.update(request, (inner) => history.update(inner, write))) as HistoryCapture['update'],
     remove: ((request, write) => live.remove(request, (inner) => history.remove(inner, write))) as HistoryCapture['remove'],
     tell: (request: Parameters<HistoryCapture['tell']>[0]) => history.tell(request),
+    triggered: async (change: Parameters<HistoryCapture['triggered']>[0]) => {
+      await history.triggered(change);
+      await live.triggered(change);
+    },
     finish: live.finish,
     committed: live.committed,
   };

@@ -27,7 +27,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.10; the
+These App features ship in mistri 1.0.0-rc.11; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -469,7 +469,10 @@ mistri check --app <dir> [--app-entry <file>]
                               an agent, or --brief one line per problem
                               (code file:line message — fix: …). Exit 1 could not check, 2 schema
                               types, 3 typecheck, 4 validation, 5 components,
-                              6 a pending migration failed on the copy, 7 --deploy refused
+                              6 a pending migration failed on the copy, 7 --deploy refused,
+                              8 a store the App uses is not in its database
+                              (store-pending: its fix is the migrate up --app
+                              that makes it; validation still runs)
                               (mistri docs check-codes)
 
 mistri schema --brief [<db> | --db <target> | --config <path>]
@@ -487,22 +490,33 @@ mistri migrate diff <name> | check | squash
                 [--app <dir>] [<db> | --db <target> | --config <path>]
                 [--connection <name>] [--schema <name>] [--migrations <dir>]
                 [--history-table <name>] [--dry-run] [--tool flyway]
-                [--schema-file <path>] [--dev-url <url>]
+                [--schema-file <path>] [--dev-url <url>] [--json]
+                [--commands <file>] [--jobs <file>] [--policy <file>]
                               versioned SQL files in Flyway's format, forward
                               only: V3__add_payoff_quote.sql once, in its own
                               transaction (a failure is recorded as failed);
                               R__views.sql again when it changes. up
-                              applies what is pending, then with --app
-                              regenerates the App's types and runs check;
-                              status shows applied, pending, drift made
-                              outside migrations and types older than the
-                              database; validate fails on any of those;
-                              baseline records an existing database as
-                              version 0 and writes baseline.schema.json;
-                              repair fixes the history. A lock keeps two
-                              deploys apart. Exit 1 could not run, 2 files
-                              and history disagree, 3 a migration failed,
-                              4 applied but the App no longer checks.
+                              applies what is pending. With --app, status
+                              prints the App's bootstrap plan and changes
+                              nothing, and up carries it out: migrations,
+                              the stores the App uses (with the --commands,
+                              --jobs and --policy it takes), a postgres://
+                              auth.store, seed (reported, never run), then
+                              check (with --policy for an App with row
+                              policies; without it, up says the check was
+                              skipped). up --dry-run prints the plan, --json
+                              prints it as data. status shows applied,
+                              pending, drift made outside migrations and
+                              types older than the database; validate fails
+                              on any of those; baseline records an existing
+                              database as version 0 and writes
+                              baseline.schema.json; repair fixes the history.
+                              A lock keeps two deploys apart. Exit 1 could
+                              not run, 2 files and history disagree (with
+                              --app, validate: a phase pending), 3 a
+                              migration failed, 4 applied but the App no
+                              longer checks, 5 a store or the sign-in store
+                              failed or is still absent.
                               diff writes the next V file from schema.sql
                               (beside the migrations): what they still lack,
                               for review; check exits 2 when the migrations
@@ -601,7 +615,9 @@ stop part-way. grant grants <email> a membership of the platform realm, or
 with --tenant of that tenant, with that realm's --roles, for --days (default
 180, at most 366). An address with no account gets one in the App's auth
 store, its password read from MISTRI_ACCOUNT_PASSWORD, never the command
-line. Exit codes: 1 could not run.
+line: the store the App names, else mistri dev's once dev has started the
+App there, else a plain start's; grant says which. Exit codes: 1 could
+not run.
 
 mistri tenant clone <source> <sandbox> --app <dir> --policy <file> [--samples]
 mistri tenant import <sandbox> --app <dir> --policy <file>
@@ -724,15 +740,18 @@ mistri seed [--app <dir>] [<db> | --db <target> | --config <path>]
 mistri grade [<app-dir>] [<db> | --db <target> | --config <path>] [<route>…]
                 [--as <role|email|all> [--tenant <id>]] [--theme <id|all> [--palette <id|all>]]
                 [--json] [--browser <path>]
-                              serve the App as shot does and measure every view
-                              and a record of each page at 1280, 390 and 320
-                              wide and at 390 dark: sideways scroll, cut
-                              figures and words, overlapping controls, targets
+                              serve the App as shot does and measure every
+                              view, a record of each page and its documents
+                              at 1280, 390 and 320 wide and at 390 dark:
+                              sideways scroll, cut figures and words,
+                              overlapping controls, targets
                               under 44px on a phone, contrast, layout shift,
                               page errors and failed requests, empty sections,
                               mixed number formats, unround chart ticks, a
                               record's name past two lines. One line per
-                              finding with its fix, then a score. Signed in
+                              finding with its fix, errors first; then what
+                              it covered and skipped; then the verdict, which
+                              an error fails whatever the score. Signed in
                               as the role that reads the most unless --as
                               names one. --theme all, --palette all and
                               --as all grade every look, palette and role
@@ -846,6 +865,28 @@ command reads a file's paths that way — serve, check, build, shot, grade,
 migrate, seed, a suite and a test host — so a connection's `"url": "./shop.db"`
 is the file beside the config wherever the command runs. A value from the
 environment (`"${DATABASE_URL}"`) is read as given, from the current directory.
+
+The project profile is an `app` block in that `mistri.json`: the App and the
+modules that carry its authority, named once, as paths from the file's folder.
+
+```json
+{
+  "app": { "dir": ".", "commands": "commands.ts", "jobs": "jobs.ts", "policy": "policy.ts" },
+  "connections": [{ "name": "desk", "url": "desk.db", "writable": true, "migrations": { "dir": "db/migrations" } }]
+}
+```
+
+Every App command finds the file by one rule: `--config`, then
+`<--app dir>/mistri.json`, then `./mistri.json` and `./.mistri.json`, then
+your own file, with no walking up. Without `--app`, the block's `dir` names
+the App, so `mistri check`, `mistri migrate up` and `mistri seed` need no
+flags. A flag beats the block, and the block beats the `commands.ts` beside
+the App. The block takes `dir`, `entry` (as `--app-entry`), `commands`,
+`jobs` and `policy`, and nothing else: an unknown key, a `${NAME}` or a file
+that is not there is refused. A tenant App's `policy` named there is its
+enrollment, as `--policy` is. Where the block decided anything, the run prints
+what it read and from where (`--json`: `context`), and a deploy falls back to
+it for the App and its entries.
 
 An option it does not recognize is an error, not a shrug: `mistri --prot
 4111` says so rather than quietly serving the default port.

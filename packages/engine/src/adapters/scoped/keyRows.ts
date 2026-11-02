@@ -30,6 +30,7 @@
 import { clampLimit, type Filter, type QueryRequest, type QueryResult, type ScopedReads, type SqlFragment } from '../adapter.js';
 import type { DatabaseSchema, TableMeta } from '../../shared/schema.js';
 import type { RowScope } from '../../shared/rowScope.js';
+import { storedTextOf } from './storedText.js';
 
 type Row = Record<string, unknown>;
 type Reads = Pick<ScopedReads, 'query'> & Partial<ScopedReads>;
@@ -156,7 +157,11 @@ export class KeyRows {
       // Asked again after a statement that moved the generation, of a column the row does not carry, or of a value it does not hold exactly: in its turn.
       const answer = async (kept: Kept): Promise<QueryResult | undefined> => {
         const rows = await kept.rows;
-        const names = request.columns?.length ? request.columns : table!.columns.map((column) => column.name);
+        const names = [
+          ...(request.columns?.length ? request.columns : table!.columns.map((column) => column.name)),
+          // A scoped write's read of the stored texts is answered only by a row read with them (storedText.ts).
+          ...(request.storedText ? [storedTextOf(schema, table!)?.alias ?? []].flat() : []),
+        ];
         const sql = statementOf(request);
         if (
           !rows ||
@@ -170,7 +175,7 @@ export class KeyRows {
           return undefined;
         kept.take?.();
         return {
-          columns: [...names],
+          columns: request.columns?.length ? [...request.columns] : table!.columns.map((column) => column.name),
           rows: rows
             .slice(0, clampLimit(request.limit))
             .map((row) => format(Object.fromEntries(names.map((name) => [name, row[name]])), request)),
@@ -184,7 +189,8 @@ export class KeyRows {
         const answered = await answer(kept);
         if (answered) return answered;
       } else if (key !== undefined && current !== undefined && widen?.held(table!, guarded!.values)) {
-        const sent = widen.reads.query({ table: request.table, filter: request.filter, limit: 2, offset: 0 });
+        // With the stored texts, so the scoped write's own reads of the row are answered from it too.
+        const sent = widen.reads.query({ table: request.table, filter: request.filter, limit: 2, offset: 0, storedText: true });
         /* Its generation is the one it was sent under: what waited for the COMMIT leaves in front of it, in its flight
            (postgresTransactionHandle), moving the generation as it goes, and the row it reads is after that. Kept
            under the generation before it was sent, it would answer nothing after it. Reads are sent as they are

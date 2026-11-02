@@ -316,12 +316,13 @@ yes or no; a no is fixed before the page is done.
 ## Grade before handing back
 
 About two thirds of the rubric is measurement, and `mistri grade` takes it:
-it serves the App, opens every view and a record of each page at 1280, 390
-and 320 wide and at 390 in the dark, and prints one line per finding with its
-fix, at the file and line that declares the page.
+it serves the App, opens every view, a record of each page and its documents
+at 1280, 390 and 320 wide and at 390 in the dark, and prints one line per
+finding with its fix, at the file and line that declares the page, then what
+it covered and skipped. An error fails it, whatever the score.
 
 ```sh
-npx @mistriwork/mistri grade . --config ../mistri.json            # one line per finding, then a score
+npx @mistriwork/mistri grade . --config ../mistri.json            # findings, coverage, then the verdict
 npx @mistriwork/mistri grade . --config ../mistri.json --as desk  # as a role sees it
 ```
 

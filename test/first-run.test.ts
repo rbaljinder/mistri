@@ -152,10 +152,11 @@ describe('a fresh project, as check meets it', () => {
     const dir = app('stores-app', { 'app.ts': COMMAND_APP, 'commands.ts': commands('export default defineCommands({ finishTask });') });
     const before = await run(['check', '--app', dir, '--config', config]);
     assert.equal(before.code, 4, before.out + before.err);
-    assert.match(
-      before.out,
-      /has no event store for App "tickc"\. Provision it once, with the server stopped: `mistri migrate stores up --app <the App's directory>`/,
-    );
+    /* The absent stores are the migrate step's (store-pending), and validation goes on beside them: the App's own
+       fault, its commands with no role to run them, is said in the same run instead of hiding behind the first
+       absent store (docs/bootstrap-plan.md). */
+    assert.match(before.out, /stores\s+pending\s+tick: command journal, event store\n\s+made by: mistri migrate up --app /);
+    assert.match(before.out, /Business commands need sign-in with role grants/);
     const up = await run(['migrate', 'stores', 'up', '--app', dir, '--config', config]);
     assert.equal(up.code, 0, up.out + up.err);
     assert.match(up.out, /tick: command journal v\d+ provisioned\n {2}tick: event store for App "tickc" v\d+ provisioned/);

@@ -12,11 +12,11 @@
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { LoadedApp } from '../app/apps.js';
 import { hashPassword } from 'better-auth/crypto';
-import { appAuthStore } from '../auth/auth.js';
+import { appAuthStore, devConfigHome } from '../auth/auth.js';
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 
 /** The variable `--as <email>` reads the account's password from. */
@@ -135,7 +135,7 @@ export async function personEmails(app: LoadedApp['app'], adapter: Pick<Adapter,
 /** The stores a local run of the App keeps its accounts in: mistri dev's, then a plain start's. */
 function localStores(loaded: LoadedApp, env: NodeJS.ProcessEnv): string[] {
   const dir = loaded.dir ?? dirname(loaded.path);
-  return [appAuthStore(loaded, { ...env, XDG_CONFIG_HOME: join(dir, '.mistri', 'config') }), appAuthStore(loaded, env)];
+  return [appAuthStore(loaded, { ...env, XDG_CONFIG_HOME: devConfigHome(dir) }), appAuthStore(loaded, env)];
 }
 
 /** The store copied into the run's config directory (`VACUUM INTO`, read-only on the original); its path. */

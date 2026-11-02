@@ -38,7 +38,8 @@ import { WIDTHS, type SectionWidth } from '@mistriwork/engine/shared/page.js';
 import { parseTableSizing } from '@mistriwork/engine/shared/tableSizing.js';
 import { parseListEmpty } from '@mistriwork/engine/shared/listEmpty.js';
 import { ASSISTANT_ROOM, parseRoutePath } from './appAddress.js';
-import { parseAppLinkAction, parseAppTarget } from '@mistriwork/engine/shared/appLinks.js';
+import { destinationProblem, type DestinationKind } from './appDestinations.js';
+import { parseAppLinkAction } from '@mistriwork/engine/shared/appLinks.js';
 import { checkGreeting } from './appGreeting.js';
 import {
   BETTER,
@@ -53,7 +54,6 @@ import {
   resourceCeiling,
   type AppAuth,
   type AppRoleGrant,
-  type SeriesColor,
   type AppDashSection,
   type DashTarget,
   type FilterBar,
@@ -108,6 +108,7 @@ import { conditionsOnly, parseChartShape, parseAreas, parseFunnelStages, parseNo
 import { AppProblems, gather } from './appProblems.js';
 import { autoKeyOf } from '@mistriwork/engine/shared/autoBucket.js';
 import { parseOpenRoles } from './appViewRoles.js';
+import { parseNav } from './appNav.js';
 import { isRegisteredCommand, registeredCommand } from './command.js';
 
 /* Each view as parsed: the AppDef view itself, beside what only parsing
@@ -141,6 +142,10 @@ interface FormView {
   form: AppFormView;
 }
 type ParsedView = ListView | DashboardView | LandingView | FormView;
+
+/** A parsed view's kind, as a destination reads it (appDestinations.ts). */
+const parsedKind = (view: ParsedView | undefined): DestinationKind | undefined =>
+  view === undefined ? undefined : view.kind === 'form' ? (view.form.public ? 'public form' : 'form') : view.kind;
 
 interface ContentContext {
   data: ParsedData;
@@ -343,24 +348,23 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
   for (const source of ofKind('list')) {
     const action = source.view.empty?.action;
     if (!action) continue;
-    const target = views.get(action.view);
-    /* A signed-in form is a room too, so "No canned responses: write one" opens the form that writes one. A public
-       form is served at its own address, outside the App, and is the landing's to link. */
-    const signedInForm = target?.kind === 'form' && !target.form.public;
-    if (!target || (target.kind !== 'list' && target.kind !== 'dashboard' && !signedInForm)) {
-      across.push(`${source.at}, "empty.action.view" names "${action.view}", which is not a list, a dashboard or a signed-in form view.`);
-    }
+    /* A room, by the one rule every action's destination answers to (appDestinations.ts): "No canned responses:
+       write one" opens the signed-in form that writes one. */
+    const problem = destinationProblem(`${source.at}, "empty.action.view"`, action.view, parsedKind(views.get(action.view)));
+    if (problem) across.push(problem);
   }
-  /* A dashboard note may point at a list or dashboard. It becomes a
-     room only when this dashboard is reached from nav, home, a landing or a
-     reachable dashboard; final payload projection still removes lost targets. */
+  /* A dashboard's note, a banner too, opens a room by the same rule. Its target becomes a room only when this
+     dashboard is reached from nav, home, a landing or a reachable dashboard; final payload projection still
+     removes lost targets. */
   for (const source of ofKind('dashboard')) {
-    for (const section of [...source.view.sections, ...(source.view.aside ?? [])]) {
+    const placed = [
+      ...source.view.sections.map((section, i) => ({ section, at: `${source.at}, section ${i + 1}` })),
+      ...(source.view.aside ?? []).map((section, i) => ({ section, at: `${source.at}, "aside", section ${i + 1}` })),
+    ];
+    for (const { section, at } of placed) {
       if (section.kind !== 'note' || !section.action || 'to' in section.action) continue;
-      const target = views.get(section.action.view);
-      if (!target || (target.kind !== 'list' && target.kind !== 'dashboard')) {
-        across.push(`${source.at}, note action names "${section.action.view}", which is not a list or dashboard view.`);
-      }
+      const problem = destinationProblem(`${at}, note action`, section.action.view, parsedKind(views.get(section.action.view)));
+      if (problem) across.push(problem);
     }
   }
   const publicForms = new Set(forms.filter((view) => view.form.public).map((view) => view.key));
@@ -424,7 +428,7 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     across.push(
       `${where}: views "${ASSISTANT_ROOM}" takes the word the assistant's page is placed by (assistant placement 'page'). Give the view another key.`,
     );
-  const nav = gather(across, () => parseNav(a.nav, where, views, order, assistantPage));
+  const nav = gather(across, () => parseNav(a.nav, where, views, order, parsedKind, assistantPage));
   const homeViews = new Map<string, HomeView>(
     order.map((key) => {
       const view = views.get(key)!;
@@ -1889,6 +1893,10 @@ function parseDashSections(
         throw new Error(`${here} has a "format" of "${String(s.format)}". Use ${FIGURE_FORMAT_WORDS}.`);
       if (s.unit !== undefined && (typeof s.unit !== 'string' || !s.unit.trim() || s.unit.length > 24))
         throw new Error(`${here} has a "unit" that is not a short word said after the figure, like "days".`);
+      if (s.figure !== undefined && s.figure !== 'exact' && s.figure !== 'compact')
+        throw new Error(
+          `${here} has a "figure" of ${JSON.stringify(s.figure)}. Use "exact" (to the cent, the default) or "compact" ("$28.1K").`,
+        );
       const windows = parseSectionWindows(s, here);
       /* A metric counts its own query. The list it opens (`to:`) adds only its
        standing conditions — the rows that list can show at all, so the drill
@@ -1979,6 +1987,7 @@ function parseDashSections(
         spark: s.spark as boolean | undefined,
         ...(s.format === undefined ? {} : { format: s.format as AppDashSection['format'] }),
         ...(s.unit === undefined ? {} : { unit: (s.unit as string).trim() }),
+        ...(s.figure === undefined ? {} : { figure: s.figure as 'exact' | 'compact' }),
         by: s.by === undefined ? undefined : (s.by as string).trim(),
         ...(stages ? { stages } : {}),
         ...(s.lanes === undefined ? {} : { lanes: [...(s.lanes as string[])] }),
@@ -2120,123 +2129,4 @@ function embedSection(
     };
   }
   return { kind: 'rows', ...base, show: card };
-}
-
-/* ---------- nav: references and groups ---------- */
-
-/** Local references normalize to `{ view, label? }`, checked static destinations
- * to `{ label, to }`, and groups to `{ group, label, children }`. */
-function parseNav(
-  raw: unknown,
-  where: string,
-  views: ReadonlyMap<string, ParsedView>,
-  order: readonly string[],
-  assistantPage = false,
-): AppNavNode[] {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw)) throw new Error(`${where}: "nav" must be an array.`);
-  const groups = new Set<string>();
-  const placed = new Set<string>();
-  const visiting = new Set<object>();
-  const leaf = (key: unknown, label: string | undefined, at: string, color?: SeriesColor): AppNavNode => {
-    const view = typeof key === 'string' ? views.get(key) : undefined;
-    if (!view && key === ASSISTANT_ROOM && assistantPage) {
-      if (placed.has(ASSISTANT_ROOM)) throw new Error(`${at} names the assistant a second time; it appears in nav at most once.`);
-      placed.add(ASSISTANT_ROOM);
-      return {
-        view: ASSISTANT_ROOM,
-        ...(label === undefined ? {} : { label }),
-        ...(color === undefined ? {} : { color }),
-      };
-    }
-    if (!view) {
-      throw new Error(
-        `${at} names the view "${String(key)}", which this App does not declare. It declares: ${order.join(', ') || 'no views'}. See \`mistri docs nav-and-shell\`.`,
-      );
-    }
-    if (view.kind === 'landing' || (view.kind === 'form' && view.form.public)) {
-      throw new Error(
-        `${at} names the ${view.kind === 'landing' ? 'landing' : 'public form'} view "${view.key}". Public views are not in nav, which is signed-in chrome: ` +
-          "a landing is reached through home, a public form through its address and a landing's call to action.",
-      );
-    }
-    if (placed.has(view.key)) throw new Error(`${at} names the view "${view.key}" a second time; a view appears in nav at most once.`);
-    placed.add(view.key);
-    return {
-      view: view.key,
-      ...(label === undefined ? {} : { label }),
-      ...(color === undefined ? {} : { color }),
-    };
-  };
-  /* `depth` is the number of groups around these entries. */
-  const walk = (entries: unknown[], parent: string, depth: number): AppNavNode[] =>
-    entries.map((node, i) => {
-      const at = `${parent}: nav entry ${i + 1}`;
-      if (typeof node === 'string') return leaf(node, undefined, at);
-      if (!isRecord(node)) throw new Error(`${at} is not a view id, a { label, to } or a navGroup.`);
-      if (Object.hasOwn(node, 'children')) {
-        if (visiting.has(node)) throw new Error(`${at} contains a navigation cycle.`);
-        if (depth >= 8) throw new Error(`${at} exceeds the maximum navigation group depth of 8.`);
-        allowKeys(node, ['id', 'label', 'icon', 'realm', 'placement', 'inline', 'folded', 'children'], `${at} (a navigation group)`);
-        if (typeof node.id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(node.id)) {
-          throw new Error(`${at} needs a group "id" using lowercase letters, digits and hyphens.`);
-        }
-        if (groups.has(node.id)) throw new Error(`${at} repeats navigation group id "${node.id}".`);
-        if (typeof node.label !== 'string' || !node.label.trim()) throw new Error(`${at} needs a non-empty group "label".`);
-        if (!Array.isArray(node.children) || !node.children.length) throw new Error(`${at} needs a non-empty "children" array.`);
-        if (node.placement !== undefined && node.placement !== 'footer')
-          throw new Error(
-            `${at} has a "placement" of ${JSON.stringify(node.placement)}: the one placement is "footer", the group held at the foot of the sidebar.`,
-          );
-        if (node.placement !== undefined && depth > 0)
-          throw new Error(`${at} is a group inside a group with a "placement". Only a group of the top level goes to the foot.`);
-        /* `inline` is the top bar's: the group's rooms stand in the bar as links of their own, so a portal's few
-           places need no menu to open. The sidebar draws the group as ever. Only the top level is in the bar. */
-        if (node.inline !== undefined && node.inline !== true)
-          throw new Error(`${at} has an "inline" of ${JSON.stringify(node.inline)}: it is true, or left out.`);
-        if (node.inline !== undefined && depth > 0)
-          throw new Error(`${at} is a group inside a group with "inline". Only a group of the top level stands in the top bar.`);
-        /* `folded` is where a section starts for someone who has never opened or closed it: a rarely used
-           section stays one line until it is wanted. Their own choice, once made, is kept over it. */
-        if (node.folded !== undefined && node.folded !== true)
-          throw new Error(`${at} has a "folded" of ${JSON.stringify(node.folded)}: it is true, or left out.`);
-        groups.add(node.id);
-        visiting.add(node);
-        const children = walk(node.children, `${at} (${node.id})`, depth + 1);
-        visiting.delete(node);
-        return {
-          group: node.id,
-          label: node.label.trim(),
-          ...(node.icon === undefined ? {} : { icon: parseIcon(node.icon, `${at} (${node.id})`) }),
-          ...(node.realm === undefined ? {} : { realm: parseRealm(node.realm, `${at} (${node.id})`) }),
-          ...(node.placement === undefined ? {} : { placement: 'footer' as const }),
-          ...(node.inline === undefined ? {} : { inline: true as const }),
-          ...(node.folded === undefined ? {} : { folded: true as const }),
-          children,
-        };
-      }
-      if (Object.hasOwn(node, 'to')) {
-        allowKeys(node, ['label', 'to', 'color'], at);
-        if (typeof node.label !== 'string' || !node.label.trim() || node.label.length > 120 || /[\p{Cc}\p{Cs}]/u.test(node.label)) {
-          throw new Error(`${at}: { label, to } needs a non-blank label of at most 120 characters.`);
-        }
-        /* A colored dot in the icon's place: a project or a label told apart at a glance, in a theme's own series color. */
-        if (
-          node.color !== undefined &&
-          (typeof node.color !== 'number' || !Number.isInteger(node.color) || node.color < 1 || node.color > 8)
-        )
-          throw new Error(`${at} has a "color" of ${JSON.stringify(node.color)}: one of the theme's eight chart colors, 1 to 8.`);
-        const color = node.color as SeriesColor | undefined;
-        if (typeof node.to === 'string') return leaf(node.to, node.label.trim(), at, color);
-        return {
-          label: node.label.trim(),
-          to: parseAppTarget(node.to, `${at}.to`, false) as import('../../schema/app.js').StaticAppTarget,
-          ...(color === undefined ? {} : { color }),
-        };
-      }
-      throw new Error(`${at} is not a view id, a { label, to } or a navGroup.`);
-    });
-  const nav = walk(raw, where, 0);
-  /* The assistant's page is always reachable: where nav does not place it, it closes the menu. */
-  return assistantPage && !placed.has(ASSISTANT_ROOM) ? [...nav, { view: ASSISTANT_ROOM }] : nav;
 }

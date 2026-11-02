@@ -29,8 +29,7 @@
  */
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { useQuery } from '@tanstack/react-query';
-import { api, columnDisplay, columnLabel, state } from '../core.js';
-import { centsTogether, type DisplayRule } from './valueModel.js';
+import { api, columnLabel, state } from '../core.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import type { ColumnMeta } from '@mistriwork/engine/shared/schema.js';
 import type { PageHeadlineAction } from '@mistriwork/engine/shared/pageModel.js';
@@ -109,24 +108,18 @@ export function PageHeadline({ tableId, row, paths, column, actions, subfigure, 
   const second = subfigure !== undefined && hasValue(row[subfigure]);
   const earlier = wasShown(row, figure, was);
   const shownFacts = facts.filter((path) => hasValue(row[path]));
-  /* The figure, the price it was and the facts in one money form (centsTogether), as a record's fields are. */
-  const cents = centsTogether(
-    [figure, earlier ? was : undefined, second ? subfigure : undefined, ...shownFacts]
-      .filter((path): path is string => path !== undefined)
-      .map((path) => [columnDisplay(tableId, column(path)?.name ?? '') as DisplayRule | null, row[path]] as const),
-  );
   return (
     <div className="page-headline">
       {figure !== undefined && (
         <p className="page-headline-figure">
           <span className="visually-hidden">{caption(figure)}: </span>
-          <Value col={column(figure)} value={row[figure]} tableId={tableId} compact row={row} cents={cents} />
+          <Value col={column(figure)} value={row[figure]} tableId={tableId} compact row={row} />
           {earlier && (
             <>
               {' '}
               <s className="page-headline-was">
                 <span className="visually-hidden">{caption(was!)}: </span>
-                <Value col={column(was!)} value={row[was!]} tableId={tableId} compact cents={cents} />
+                <Value col={column(was!)} value={row[was!]} tableId={tableId} compact />
               </s>
             </>
           )}
@@ -135,7 +128,7 @@ export function PageHeadline({ tableId, row, paths, column, actions, subfigure, 
       {second && (
         <p className="page-headline-sub">
           <span className="page-headline-sub-caption">{caption(subfigure!)}</span>{' '}
-          <Value col={column(subfigure!)} value={row[subfigure!]} tableId={tableId} compact cents={cents} />
+          <Value col={column(subfigure!)} value={row[subfigure!]} tableId={tableId} compact />
         </p>
       )}
       {links.some(Boolean) && (
@@ -181,7 +174,7 @@ export function PageHeadline({ tableId, row, paths, column, actions, subfigure, 
             <div key={path}>
               <dt>{caption(path)}</dt>
               <dd>
-                <Value col={column(path)} value={row[path]} tableId={tableId} compact cents={cents} />
+                <Value col={column(path)} value={row[path]} tableId={tableId} compact />
               </dd>
             </div>
           ))}

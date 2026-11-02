@@ -26,6 +26,8 @@ export type StoreTarget = Readonly<{ sqlite: string }> | Readonly<{ postgres: st
 /** The database a connection URL names. */
 export function storeTargetOf(url: string | undefined): StoreTarget | undefined {
   if (typeof url !== 'string' || !url.trim()) return undefined;
+  // A reference nobody expanded would become a file called "${VAR}"; say so instead.
+  if (url.includes('${')) throw new Error('A connection URL still holds an unexpanded ${…} reference; expand it before locating a store.');
   if (/^postgres(ql)?:\/\//i.test(url)) return Object.freeze({ postgres: url });
   return Object.freeze({ sqlite: url.replace(/^sqlite:(\/\/)?/i, '') });
 }
@@ -66,6 +68,9 @@ export async function appCommandEventsFor(
   commands: BusinessCommandRegistry,
   resources: Pick<RuntimeResources, 'connectionFor'>,
   locate: (connection: string) => string | undefined,
+  /** `attest: false` is `mistri check`'s alone, once it has said the store is absent (`store-pending`): the scope is
+   * issued without reading the store, so the commands bound to it are still judged. */
+  { attest = true }: { attest?: boolean } = {},
 ): Promise<CommandJournalAppScope | undefined> {
   const emitting = Object.entries(commands).filter(([, command]) => getCommandEvents(command));
   if (!emitting.length) return undefined;
@@ -77,6 +82,7 @@ export async function appCommandEventsFor(
   }
   const [id, command] = emitting[0];
   const binding = appCommandEventStore(app.id, command.source);
+  if (!attest) return issueAppScopeCommandEvents(binding);
   try {
     const target = storeTargetOf(locate(resources.connectionFor(logicalResource(app, command.source, command.target))));
     if (!target) throw new Error();

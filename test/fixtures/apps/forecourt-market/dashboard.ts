@@ -18,7 +18,7 @@ export const deskDashboard = dashboard(
       spark: true,
       width: 'third',
     }),
-    metric('Stock value', 'vehicle', { query: 'for_sale', measure: 'sum price as value', width: 'third', to: 'stock' }),
+    metric('Stock value', 'vehicle', { query: 'for_sale', measure: 'sum price as value', figure: 'compact', width: 'third', to: 'stock' }),
     metric('Average days on the lot', 'vehicle', {
       query: 'for_sale',
       measure: 'avg days_on_lot as days',

@@ -738,6 +738,18 @@
     :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > .applist-host > .applist-controls::after {
       background: linear-gradient(to right, transparent, var(--head-band));
     }
+    /* Raised buttons draw a list's search on the raised ground (lumenLook.css), which on the band is the step above: a
+       ground no palette colour is, so `check` passed what grade then read there, Lumen's own placeholder at 4.05:1 and
+       its edge at 2.67:1 (a field report's theme the same). On the band the search is a field on the surface, as it
+       is in focus, and its words, mark and edge are the pairs check measures. */
+    :root:is([data-look-header='band'], [data-look-header='hero'])[data-look-buttons='raised']
+      .app-mode
+      .content
+      > .applist-host
+      > .applist-controls
+      .applist-search-input {
+      background: var(--surface);
+    }
     /* `hero` is the band with the record's avatar large beside its name, the head's words a column to its right; on a
      phone it stands over the eyebrow. The room is kept from the first paint wherever the resource says its records
      have an avatar (`has-avatar`, PageHead.tsx), before the name it is drawn from has arrived. A record without one

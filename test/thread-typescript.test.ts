@@ -577,6 +577,7 @@ const originalContract = {
         view: 'workspace',
       },
     ],
+    approvedTriggers: {},
     ui: {
       logo: 'kanban',
       theme: {

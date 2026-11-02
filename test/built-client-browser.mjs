@@ -145,7 +145,10 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
 // the security branch's client strings (scripts/bundle-budget.mjs, its newest paragraphs). Measured: 248.6 KB the staff
 // sign-in, 447 KB Forecourt's landing, 450.3 KB its list, 562.8 KB Tick's list and 395.1 KB the Workbench; the
 // sign-in passed its ceiling and the list met it, so both move to about 0.5% above.
-const FIRST_PAINT_WIRE_KB = { public: 249.9, app: 452.6, workshop: 565, workbench: 425 };
+// rc.11 adds the field reports' client fixes: money said to its currency's minor digits, a form's review naming a
+// reference's record, documents' day dates and print sheet, and the clearer messages. Measured: 250.1 KB the staff
+// sign-in, 453.2 KB Forecourt's list and 565.8 KB Tick's list; each ceiling passed moves to about 0.5% above.
+const FIRST_PAINT_WIRE_KB = { public: 251.4, app: 455.5, workshop: 568.6, workbench: 425 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/workbench', '/assets/tenant'],
   app: ['/assets/workbench', '/assets/tenant', '/assets/public'],

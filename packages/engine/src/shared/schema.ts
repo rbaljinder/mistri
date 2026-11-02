@@ -35,6 +35,12 @@ export interface ColumnMeta {
   references?: { table: string; column: string };
   /** Declared default, if any. */
   default?: string;
+  /**
+   * The places a `numeric(p, s)` column holds (s), where `type` cannot say them: PostgreSQL's catalog calls the
+   * type plain `numeric`. Absent for an unconstrained numeric and for every other type; SQLite's declared type
+   * string carries its own (`decimals.ts` declaredScale).
+   */
+  scale?: number;
   /** Public presence hint when a private schema projection omits the SQL default. */
   hasDefault?: boolean;
   /** Catalog-confirmed automatic identity assignment; absent is not a type-based guess. */

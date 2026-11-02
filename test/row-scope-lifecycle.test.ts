@@ -35,7 +35,7 @@ test('scoped SQLite exposes detached frozen catalog evidence without enlarging r
   let evidence!: DatabaseSchema;
   await adapter.scopeTransaction({ item: true }, async function (tx, catalog) {
     assert.equal(arguments.length, 2);
-    assert.deepEqual(Object.keys(tx).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+    assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
     evidence = catalog;
     const table = catalog.tables.find((table) => table.id === 'item')!;
     assert.notEqual(catalog, cached);

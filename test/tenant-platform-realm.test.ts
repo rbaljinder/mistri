@@ -761,6 +761,51 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       });
     });
 
+    test("a context sums and groups what its count counts: a dealer its own rows, the platform every dealer's, and neither a table its count is refused", async (t) => {
+      const { service } = await fixture(t, dialect);
+      const deployment = service.deployment;
+      const tally = {
+        table: 'lead',
+        by: [{ name: 'tenant', column: 'tenant_id' }],
+        measures: [{ name: 'n', fn: 'count' as const }],
+        limit: 10,
+      };
+      const own = await deployment.withContext(as('alice'), ['north'], async (context) => ({
+        counted: await context.data.count('lead'),
+        summed: Number((await context.data.aggregate!({ ...tally, by: [] })).rows[0]!.n),
+      }));
+      assert.deepEqual(plain(own), { counted: 1, summed: 1 });
+      // A platform table is no dealer's: its count is refused, and so is the aggregate of it.
+      await rejected(deployment.withContext(as('alice'), ['north'], (context) => context.data.count('dealer')));
+      await rejected(
+        deployment.withContext(as('alice'), ['north'], (context) =>
+          context.data.aggregate!({ table: 'dealer', measures: [{ name: 'n', fn: 'count' }], limit: 1 }),
+        ),
+      );
+      const platform = await deployment.withPlatformContext(as('lee'), async (context) => ({
+        counted: await context.data.count('lead'),
+        summed: Number((await context.data.aggregate!({ ...tally, by: [] })).rows[0]!.n),
+        grouped: (
+          plain((await context.data.aggregate!({ ...tally, orderBy: [{ name: 'tenant', direction: 'asc' }] })).rows) as unknown as Array<{
+            tenant: string;
+            n: unknown;
+          }>
+        ).map((row) => [row.tenant, Number(row.n)]),
+        reviews: Number(
+          (await context.data.aggregate!({ table: 'review_file', measures: [{ name: 'n', fn: 'count' }], limit: 1 })).rows[0]!.n,
+        ),
+      }));
+      assert.deepEqual(plain(platform), {
+        counted: 2,
+        summed: 2,
+        grouped: [
+          ['north', 1],
+          ['south', 1],
+        ],
+        reviews: 1,
+      });
+    });
+
     test('a platform read avoids a second empty context', async (t) => {
       const { engine, contexts } = await fixture(t, dialect);
       const lease = await contexts.openPlatform(as('lee'));

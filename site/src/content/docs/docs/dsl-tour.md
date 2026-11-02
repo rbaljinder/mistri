@@ -202,6 +202,16 @@ Lintel wears a look of its own, Lumen with one recipe changed; an App that names
 
 [Looks](/docs/looks/) shows all four, and the twelve palettes each offers.
 
+## Common first refusals
+
+Five rules cost a first App a `check` run each. Each guards something real, and the message names the fix:
+
+- **A segment's name is its own.** A resource's segment called `open` where its machine has an `open` state (or a column, a computed column or a rollup is called that) is refused; call it `open_only` and keep the words in its `label`.
+- **A role that edits a table a command writes names its columns.** It narrows `fields: { table: { write: [...] } }`, and the list leaves the command's `version` column out (`[command-and-edit]`, [Roles](/docs/roles/)).
+- **A checklist ticks a real boolean.** `checked` is a local boolean column of the list's table, declared `BOOLEAN` in SQLite, not a computed one.
+- **A calendar's title is text.** Its `primary` is a text column, or a one-hop label path such as `owner_id.name`.
+- **A role's field list holds the table's own columns.** A rollup or a computed column is not one, and the list keeps the whole primary key readable.
+
 ## Run it
 
 From a source checkout (`npm install` first), Lintel's own README has the

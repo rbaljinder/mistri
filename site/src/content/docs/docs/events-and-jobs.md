@@ -274,7 +274,8 @@ tenant App runs one `--tenant` at a time. Running it again starts nothing new.
 
 ### Provision and operate
 
-`mistri migrate stores up --app <dir> --jobs <file>` creates the job store,
+`mistri migrate up --app <dir> --jobs <file>` (or `migrate stores up` with the same flags, for the stores alone;
+or name the module once, `"app": { "jobs": "jobs.ts" }` in the App's `mistri.json`) creates the job store,
 the deliveries the jobs listen on, and the journal and event store the commands
 need (from a script, `provisionStores({ sqlite: path }, { app: { id, commands }, jobs })`
 from `@mistriwork/mistri/maintenance`; a tenant App passes `app: { tenant: binding, commands }`).

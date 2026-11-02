@@ -247,6 +247,24 @@ test('db reads: get, find, where as an object, the query language or a template,
   );
 });
 
+test('a string where with extra arguments is refused: only the template and the object form bind values', async () => {
+  await fixture(
+    async (f) => {
+      await assert.rejects(f.execute('reads', {}), (error: unknown) => {
+        assert.ok(error instanceof BusinessCommandExecutionError, String(error));
+        assert.equal(error.code, 'invalid_result');
+        return true;
+      });
+    },
+    {
+      reads: async ({ db }) => {
+        const vehicle = db.vehicle as unknown as { where(text: string, value: number): unknown };
+        return { rows: await (vehicle.where('year <= {x}', 2017) as Promise<unknown>) };
+      },
+    },
+  );
+});
+
 test('db is exactly the footprint: the target and what it reads, writable only where it writes; past the types, the runtime refuses the rest', async () => {
   await fixture(
     async (f) => {

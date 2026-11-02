@@ -36,7 +36,7 @@ import {
   keyFilter,
   normalizeRow,
   type CommandCatalog,
-  type Query,
+  type RowQuery,
   type UntypedRow,
   type Where,
 } from './commandDb.js';
@@ -80,8 +80,8 @@ export function scopedLookupReader(
 export interface LookupTable<Row> {
   get(key: Readonly<Record<string, string | number>> | string | number): Promise<Row>;
   find(where: Where<Row> | string): Promise<Row | undefined>;
-  where(where?: Where<Row> | string): Query<Row>;
-  where(strings: TemplateStringsArray, ...values: readonly unknown[]): Query<Row>;
+  where(where?: Where<Row> | string): RowQuery<Row>;
+  where(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
 }
 /** `sources.<source>.<table>`. */
 export type LookupSources = Readonly<Record<string, Readonly<Record<string, LookupTable<UntypedRow>>>>>;
@@ -130,7 +130,7 @@ export function createLookupSources(
           if (found.length > 1) throw new Error(`${source}.${local}: find matched several rows; narrow the where, or use where().`);
           return found[0];
         },
-        where(where?: unknown, ...values: readonly unknown[]): Query<UntypedRow> {
+        where(where?: unknown, ...values: readonly unknown[]): RowQuery<UntypedRow> {
           const order: { column: string; direction: 'asc' | 'desc' }[] = [];
           let cap: number | undefined;
           const run = async (limit?: number): Promise<UntypedRow[]> => {
@@ -141,7 +141,7 @@ export function createLookupSources(
               throw new Error(`${source}.${local}: more than ${LOOKUP_CAP} rows match; say how many with .limit(n).`);
             return found;
           };
-          const query: Query<UntypedRow> = {
+          const query: RowQuery<UntypedRow> = {
             orderBy(column, direction = 'asc') {
               if (!Object.hasOwn(table.kinds, column)) throw new Error(`${source}.${local}: "${column}" is not one of its columns.`);
               order.push({ column, direction: direction === 'desc' ? 'desc' : 'asc' });

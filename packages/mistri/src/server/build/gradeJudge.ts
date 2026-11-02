@@ -486,6 +486,47 @@ export function scoreOf(findings: readonly GradeFinding[], captures: number): nu
   return total ? Math.max(0, Math.round((100 * (total - failed)) / total)) : 100;
 }
 
+const KINDS = ['home', 'view', 'page', 'record', 'document'] as const;
+
+/**
+ * What a grade opened and what it passed over, said after the findings and before the verdict: a clean score is
+ * read against what it covered. A field report's full scan never opened the App's printed statement, and nothing said
+ * so; its errors were found by grading the document by hand.
+ */
+export function sayCoverage(input: {
+  shots: ReadonlyArray<{ path: string; kind?: string }>;
+  skipped: ReadonlyArray<{ what: string; why: string }>;
+  windows: readonly string[];
+  look: string;
+  asked: boolean;
+  as?: string;
+}): string[] {
+  const { shots, skipped, windows, look, asked } = input;
+  const kinds = KINDS.map((kind) => [shots.filter((shot) => shot.kind === kind).length, kind] as const)
+    .filter(([n]) => n > 0)
+    .map(([n, kind]) => count(n, kind));
+  const lines = [
+    `covered: ${asked ? `the ${count(shots.length, 'address', 'addresses')} asked` : `${count(shots.length, 'page')} (${kinds.join(', ')})`} at ${windows.join(', ')}, in ${look}${input.as ? `, as ${input.as}` : ''}`,
+  ];
+  const documents = shots.filter((shot) => shot.kind === 'document').map((shot) => shot.path);
+  if (documents.length) lines.push(`  documents, on screen and on paper: ${documents.join(', ')}`);
+  if (asked) lines.push('skipped: every address not asked for; without routes grade opens them all');
+  else if (skipped.length)
+    lines.push(`skipped: ${count(skipped.length, 'address', 'addresses')}`, ...skipped.map((unshot) => `  ${unshot.what}: ${unshot.why}`));
+  lines.push('not graded here: the other looks (--theme all) and roles (--as all)');
+  return lines;
+}
+
+/** The verdict, last: an error fails the grade whatever the score, so the failures are said before it. */
+export function sayVerdict(errors: number, warnings: number, score: number): string {
+  const found = errors
+    ? `fails — ${count(errors, 'error')}, ${count(warnings, 'warning')}`
+    : warnings
+      ? `passes — ${count(warnings, 'warning')}`
+      : 'passes — nothing to fix';
+  return `grade: ${found}; score ${score}/100`;
+}
+
 /** Findings from every capture, one per code and page: the first message, and every window it was seen in. */
 export function merge(seen: ReadonlyArray<{ page: string; window: string; found: readonly Judged[] }>): GradeFinding[] {
   const merged = new Map<string, GradeFinding>();

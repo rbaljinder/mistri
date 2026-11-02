@@ -598,7 +598,7 @@ test('prepare validates stored versions and execution rechecks a target hidden a
   for (const version of [-1, 1.5, 'PRIVATE version', Number.MAX_SAFE_INTEGER]) {
     f.db.prepare('UPDATE physical_loan SET version = ? WHERE id = 1').run(version);
     const invalid = await f.command('prepare', prepare());
-    assert.equal(invalid.status, 503);
+    assert.equal(invalid.status, 500);
     assert.equal(invalid.body.code, 'invalid_result');
     assert.equal(Object.hasOwn(invalid.body, 'expectedVersion'), false);
   }

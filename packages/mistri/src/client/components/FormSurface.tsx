@@ -36,9 +36,10 @@ import { onDemand, useArrived } from '@mistriwork/kit/client/components/onDemand
 import { Button } from '@mistriwork/ui/Button.js';
 import { armLeaveGuard } from './formLeaveGuard.js';
 import { IntakeNote } from './IntakeNote.js';
-import { answered, maskedLast4, sensitiveText, stepSaid } from './reviewValues.js';
+import { answered, maskedLast4, sensitiveText, stepSaid, type NameOf } from './reviewValues.js';
+import { knownReferenceName } from './referenceNames.js';
 import './FormSurface.css';
-import { ReviewValue } from './ReviewValue.js';
+import { ReviewValue, type ReviewSource } from './ReviewValue.js';
 import { say } from '../copy/forms/components/FormSurface.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
 import type { ChallengeWidget, FormGuard, GuardHandle } from './PublicGuard.js';
@@ -533,6 +534,11 @@ export function FormSurface({
     />
   );
   const submitLabel = form.submitLabel ?? say('submit');
+  /* Where a reference's choices are read, and so its name: the reader's connection, or the visitor's signed-out read. */
+  const source = connection !== undefined ? connection : visitor ? { visitor } : undefined;
+  const from: ReviewSource | undefined = source === undefined ? undefined : { source, identityEpoch };
+  /* The steps so far say a reference by the name its picker read for its key, never by the key. */
+  const nameOf: NameOf = (field, value) => (source === undefined ? undefined : knownReferenceName(field, source, identityEpoch, value));
   /** A step's fields as it draws them: a row side by side, the rest one to a line. On the review, a sensitive answer
       is its last four and a way to ask for it again. */
   const body = (step: FormStep, onReview = false) =>
@@ -607,7 +613,7 @@ export function FormSurface({
                       <div key={field.name}>
                         <dt>{field.label}</dt>
                         <dd>
-                          <ReviewValue field={field} value={values[field.name]} />
+                          <ReviewValue field={field} value={values[field.name]} {...(from ? { from } : {})} />
                         </dd>
                       </div>
                     ))}
@@ -648,7 +654,7 @@ export function FormSurface({
                   <div key={field.name}>
                     <dt>{field.label}</dt>
                     <dd>
-                      <ReviewValue field={field} value={said[field.name]} />
+                      <ReviewValue field={field} value={said[field.name]} {...(from ? { from } : {})} />
                     </dd>
                   </div>
                 ))}
@@ -743,6 +749,7 @@ export function FormSurface({
                 return stepSaid(
                   stepFields(step).filter((field) => !hidden.has(field.name)),
                   values,
+                  nameOf,
                 );
               }}
               {...(intake ? { style: 'intake' as const, note: <IntakeNote note={form.note} />, isStepEmpty: stepEmpty } : {})}

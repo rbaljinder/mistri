@@ -1,5 +1,11 @@
 import { isPromise } from 'node:util/types';
-import { TransactionOperations, type Adapter, type TellRequest, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import {
+  TransactionOperations,
+  type Adapter,
+  type AggregateRequest,
+  type TellRequest,
+  type WriteTransaction,
+} from '@mistriwork/engine/adapters/adapter.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
@@ -12,6 +18,7 @@ import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import { actorReader, bindBusinessCommands, registerScopedAppEventBinding, type BusinessCommandBinding } from './businessCommandAccess.js';
 import { defineCommands, BusinessCommandDefinitionError, getCommandEvents, type BusinessCommandRegistry } from './businessCommands.js';
 import { commandsOf } from '../stores/commandStores.js';
+import { pinnedDigest } from './triggerLock.js';
 
 export interface CommandResultReference {
   readonly table: string;
@@ -114,6 +121,16 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
       return [owner, captured] as const;
     }),
   );
+  /* Each source's named triggers, by resource: what a scoped command's transaction accepts (triggerProof.ts). */
+  const namedTriggers = new Map<string, Map<string, ReadonlyMap<string, string | undefined>>>();
+  for (const [resource, block] of Object.entries(app.resources ?? {})) {
+    const owner = owners.get(resource);
+    if (!block.triggers?.length || owner === undefined) continue;
+    const of = namedTriggers.get(owner) ?? new Map<string, ReadonlyMap<string, string | undefined>>();
+    of.set(resource, new Map(block.triggers.map((name) => [name, pinnedDigest(app, resource, name)])));
+    namedTriggers.set(owner, of);
+  }
+  const triggersOf = (owner: string): ReadonlyMap<string, ReadonlyMap<string, string | undefined>> => namedTriggers.get(owner) ?? new Map();
   const resources: RuntimeResources = {
     ...options.resources,
     schema,
@@ -159,13 +176,21 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
             if (!writable(owner)) throw new AppAccessDenied();
           };
           current();
+          /* The triggers the App names on this source's resources (resources.<t>.triggers, docs/trigger-effects.md).
+             A write that fires one has its effects' rows proven inside the person's rows, so where the command writes
+             a resource that names one, the transaction carries the person's rule for every resource of the source:
+             an effect may reach a table the handler never reads. The handler's own reads and writes stay the
+             command's (authorizeTransaction below). */
+          const named = triggersOf(owner);
+          const triggered = [...write].some((resource) => named.has(resource));
           const policy = Object.freeze(
             Object.fromEntries(
               Object.entries(rows)
                 .filter(([resource]) => owners.get(resource) === owner)
-                .map(([resource, rule]) => [resource, read.has(resource) ? rule : false]),
+                .map(([resource, rule]) => [resource, read.has(resource) || triggered ? rule : false]),
             ),
           );
+          const triggers = triggered ? Object.freeze({ named }) : undefined;
           const ids = new Map(schema.tables.filter((table) => owners.get(table.id) === owner).map((table) => [table.id, table.id]));
           const expected = mapScopeCatalog({ ...schema, dialect: source.dialect }, ids);
           const localTable = (name: string, writing = false): string => {
@@ -237,6 +262,12 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                       accept(request, (request) => readResult(tx.query({ ...request, table: localTable(request.table) })), true),
                     count: (table, filter) =>
                       accept({ table, filter }, (request) => readResult(tx.count(localTable(request.table), request.filter)), true),
+                    ...(tx.aggregate
+                      ? {
+                          aggregate: (request: AggregateRequest) =>
+                            accept(request, (request) => readResult(tx.aggregate!({ ...request, table: localTable(request.table) })), true),
+                        }
+                      : {}),
                     insert: (request) => accept(request, (request) => tx.insert({ ...request, table: localTable(request.table, true) })),
                     update: (request) => accept(request, (request) => tx.update({ ...request, table: localTable(request.table, true) })),
                     remove: (request) => accept(request, (request) => tx.remove({ ...request, table: localTable(request.table, true) })),
@@ -357,6 +388,7 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                   }
                 },
                 eventSource,
+                triggers,
               );
             },
           });

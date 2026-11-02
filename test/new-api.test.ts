@@ -49,8 +49,8 @@ test('new --api writes an API App that checks, takes a token, serves and answers
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'tsconfig.json'), 'utf8')).compilerOptions.types, ['node']);
   assert.equal(pkg.scripts['format:check'], 'oxfmt --check "**/*.ts"');
   // The schema loop: schema.sql is what is wanted, V1 is how the database got there, and its history says so.
-  assert.equal(pkg.scripts['schema:diff'], 'mistri migrate diff --config mistri.json');
-  assert.equal(pkg.scripts['schema:check'], 'mistri migrate check --config mistri.json');
+  assert.equal(pkg.scripts['schema:diff'], 'mistri migrate diff');
+  assert.equal(pkg.scripts['schema:check'], 'mistri migrate check');
   assert.match(readFileSync(join(dir, 'db', 'schema.sql'), 'utf8'), /^-- The schema this App wants[\s\S]*CREATE TABLE task \(/);
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'mistri.json'), 'utf8')).connections[0].migrations, { dir: 'db/migrations' });
   assert.match(readFileSync(join(dir, '.gitignore'), 'utf8'), /^\.mistri\/$/m);

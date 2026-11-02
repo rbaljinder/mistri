@@ -91,7 +91,7 @@ value is pictured in `mistri docs theme-recipes`.
 - **A kind, not a state** (design, research, ops): `colors: { design: 1, research: 3 }`,
   so it keeps one chart color in every look; a board shows it as `category`.
 - **A trend** is green or red only where `better` says which way is good —
-  [lintel/dashboards.ts:19](../../../examples/apps/lintel/dashboards.ts#L19).
+  [lintel/dashboards.ts:20](../../../examples/apps/lintel/dashboards.ts#L20).
 
 ## Values drawn, not printed
 
@@ -167,15 +167,15 @@ pairs, then the lists of waiting work. Blocks by intent:
 | Intent | Section | Example |
 | --- | --- | --- |
 | Introduce the board and its one next step | `note(text, { variant: 'banner', title, eyebrow, action })`, once, first | `mistri docs compose-dashboard` |
-| A flow through ordered states (received, picked, shipped) | `breakdown(..., { shape: 'steps', notes })`, full width | [lintel/dashboards.ts:27](../../../examples/apps/lintel/dashboards.ts#L27) |
-| A trend over time | `chart(..., 'month <date>', { curve: 'smooth' })` | [lintel/dashboards.ts:40](../../../examples/apps/lintel/dashboards.ts#L40) |
+| A flow through ordered states (received, picked, shipped) | `breakdown(..., { shape: 'steps', notes })`, full width | [lintel/dashboards.ts:28](../../../examples/apps/lintel/dashboards.ts#L28) |
+| A trend over time | `chart(..., 'month <date>', { curve: 'smooth' })` | [lintel/dashboards.ts:41](../../../examples/apps/lintel/dashboards.ts#L41) |
 | Shares of a whole, at most six parts | `shape: 'donut', total: 'Leads'` | `mistri docs compose-dashboard` |
 | How far rows get through a pipeline | `shape: 'funnel'` | `mistri docs compose-dashboard` |
 | Two figures per group (count against value) | `shape: 'scatter', x: 'count'` | `mistri docs compose-dashboard` |
 | When work happens (weekday by hour) | `shape: 'heatmap'` over `weekday <ts>, hour <ts>` | `mistri docs compose-dashboard` |
 | Where a total sits, too many parts for a donut | `shape: 'treemap'` | `mistri docs compose-dashboard` |
 | Rises and falls that make a net | `shape: 'waterfall'` | `mistri docs compose-dashboard` |
-| The page's window as one date button | `windowControl: 'button'` with `windows` | [lintel/dashboards.ts:73](../../../examples/apps/lintel/dashboards.ts#L73) |
+| The page's window as one date button | `windowControl: 'button'` with `windows` | [lintel/dashboards.ts:74](../../../examples/apps/lintel/dashboards.ts#L74) |
 
 Charts follow the data-visualization rules, or they are left out:
 

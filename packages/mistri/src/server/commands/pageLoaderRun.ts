@@ -39,7 +39,7 @@ function readOnly(handle: ReadTable<UntypedRow>): ReadTable<UntypedRow> {
 export async function runPageLoader(options: {
   name: string;
   loader: PageLoader;
-  reader: Pick<Adapter, 'query' | 'count'>;
+  reader: Pick<Adapter, 'query' | 'count' | 'aggregate'>;
   schema: DatabaseSchema;
   /** A declared resource's table in `schema` (logicalResource for a qualified source). */
   logical?: (local: string) => string;
@@ -57,7 +57,7 @@ export async function runPageLoader(options: {
   let open = true;
   const controller = new AbortController();
   const revoked = () => new PageLoaderRefused(504, 'loader_timeout', `The loader "${options.name}" ran out of time.`);
-  /* Only these two, and only while it runs: no transaction, no writer, no other table. */
+  /* Only these, and only while it runs: no transaction, no writer, no other table. */
   const tx = Object.freeze({
     query: async (request: Parameters<Adapter['query']>[0]) => {
       if (!open) throw revoked();
@@ -71,6 +71,17 @@ export async function runPageLoader(options: {
       if (!open) throw revoked();
       return result;
     },
+    /* A sum or a group, through the reader as `count` is (its rows and its granted columns), while the loader runs. */
+    ...(reader.aggregate
+      ? {
+          aggregate: async (request: Parameters<NonNullable<Adapter['aggregate']>>[0]) => {
+            if (!open) throw revoked();
+            const result = await reader.aggregate!({ ...request, table: idOf(request.table)! });
+            if (!open) throw revoked();
+            return result;
+          },
+        }
+      : {}),
   });
   const handles = createCommandDb({ tx, catalog, read: loader.reads, write: [], now: () => options.now });
   const db = Object.freeze(Object.fromEntries(Object.entries(handles).map(([name, handle]) => [name, readOnly(handle)])));

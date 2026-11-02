@@ -116,7 +116,7 @@ describe('the accounts screen', () => {
   const stored = (email: string) => {
     const store = new DatabaseSync(host.auth!.store, { readOnly: true });
     try {
-      return store.prepare('SELECT id, role, banned, banReason FROM user WHERE email = ?').get(email);
+      return store.prepare('SELECT id, role, banned, banReason, emailVerified FROM user WHERE email = ?').get(email);
     } finally {
       store.close();
     }
@@ -270,6 +270,7 @@ describe('the accounts screen', () => {
     await change(root, { operation: 'create', email: 'jo@example.org', name: 'Jo', roles: ['manager'], password: 'jo-password-1' });
     const jo = String(stored('jo@example.org')!.id);
     for (const path of [
+      '/api/auth/admin/create-user',
       '/api/auth/admin/set-role',
       '/api/auth/admin/ban-user',
       '/api/auth/admin/unban-user',
@@ -282,7 +283,10 @@ describe('the accounts screen', () => {
       '/api/auth/admin/ban-user/',
     ]) {
       const body = JSON.stringify({ userId: jo, role: 'admin', newPassword: 'taken-over-1', data: { role: 'admin' } });
-      assert.equal((await call(path, { method: 'POST', cookie: root, body })).status, 404, path);
+      const answer = await call(path, { method: 'POST', cookie: root, body });
+      assert.equal(answer.status, 404, path);
+      // It says where the change is made: `not_found` alone read as a door missing by mistake (a field report).
+      assert.match(String(answer.json.message), /accounts screen, or with POST \/api\/accounts/, path);
     }
     assert.equal(stored('jo@example.org')!.role, 'manager');
     assert.equal(stored('jo@example.org')!.banned, 0);
@@ -291,6 +295,26 @@ describe('the accounts screen', () => {
     assert.equal((await change(root, { operation: 'setRoles', accountId: jo, roles: ['admin'] })).status, 200);
     assert.equal((await change(root, { operation: 'deactivate', accountId: jo })).status, 200);
     assert.equal(stored('jo@example.org')!.banned, 1);
+  });
+
+  /* The sign-in page says every change to an account is recorded and that an account an administrator makes is
+     verified when made. Better Auth's own create-user did neither: it took any role string, wrote no row of the
+     trail, and made an unverified account (a field report). It is closed like its siblings; the accounts screen's
+     door makes a verified account with one of the App's roles, and a row of the trail. */
+  test("Better Auth's create-user is closed; the accounts screen makes a verified account and records it", async () => {
+    const root = (await signIn('root@example.org', 'root-password-1')).cookie;
+    const native = await call('/api/auth/admin/create-user', {
+      method: 'POST',
+      cookie: root,
+      body: JSON.stringify({ email: 'nat@example.org', name: 'Native', password: 'native-password-1', role: 'no-such-role' }),
+    });
+    assert.equal(native.status, 404);
+    assert.match(String(native.json.message), /make or change an account[^]*POST \/api\/accounts/);
+    assert.equal(stored('nat@example.org'), undefined);
+    await change(root, { operation: 'create', email: 'ida@example.org', name: 'Ida', roles: ['manager'], password: 'ida-password-1' });
+    assert.equal(stored('ida@example.org')!.emailVerified, 1);
+    assert.equal((await change(root, { operation: 'create', email: 'eve@example.org', name: 'Eve', roles: ['no-such-role'] })).status, 400);
+    assert.equal(stored('eve@example.org'), undefined);
   });
 
   const trail = (store = host.auth!.store) => {

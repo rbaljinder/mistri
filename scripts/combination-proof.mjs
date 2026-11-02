@@ -40,19 +40,27 @@ const MUTATIONS = [
   },
   {
     id: 'a-command-reference-with-no-registry',
-    defect: 'An App referring to a command started without a registry behind it, and its action bar offered a verb nothing could run.',
-    file: 'packages/mistri/src/server/cli/commandHost.ts',
-    // An App that refers to commands no longer brings the requirement with
-    // it: only an explicit `--commands` does, so the referring App starts.
-    find: '  if (opts.commands !== undefined || commandApps.length) {',
-    replace: '  if (opts.commands !== undefined) {',
+    defect:
+      'An App referring to a command was accepted with no registry behind it, so nothing named the missing --commands and its action bar offered a verb nothing could run.',
+    // The reference check (shared/command.ts) is where the refusal lives now: it names the flag. Here it takes the
+    // name on trust with no catalog, which is the shape that shipped.
+    file: 'packages/mistri/src/shared/command.ts',
+    find: '  if (!catalog) {\n    return fail(',
+    replace: '  if (!catalog) {\n    return [raw, {} as CommandCatalogEntry];\n    return fail(',
+    // And the host no longer asks for a registry because an App refers to commands: only an explicit `--commands` does.
+    also: {
+      file: 'packages/mistri/src/server/cli/commandHost.ts',
+      find: '  if (opts.commands !== undefined || loadedCommands || commandApps.length) {',
+      replace: '  if (opts.commands !== undefined || loadedCommands) {',
+    },
   },
   {
     id: 'the-tenant-runtime-admitting-an-app',
     defect: 'The tenant host refused a deployment whose loaded App carried a fact its admission list did not name.',
-    file: 'packages/mistri/src/server/tenant/tenantAuthenticatedHttp.ts',
-    find: "      ['path', 'dir', 'app', 'pages', 'sources', 'authority', 'origins', 'build'])) as unknown as LoadedApp;",
-    replace: "      ['path', 'dir', 'app', 'pages', 'sources', 'authority', 'origins'])) as unknown as LoadedApp;",
+    // The admission list moved with the package split: it is LOADED_APP_KEYS now, one list for every tenant start.
+    file: 'packages/mistri/src/server/app/apps.ts',
+    find: "  'origins',\n  'build',\n",
+    replace: "  'origins',\n",
   },
   {
     id: 'a-session-kept-wider-than-its-request',
@@ -64,14 +72,26 @@ const MUTATIONS = [
     replace: '      const kept = resolved.get(auth as never);',
     also: {
       file: 'packages/mistri/src/server/tenant/tenantAuthenticatedHttp.ts',
-      find: '      if (proof && !kept) resolved.set(request, proof);',
-      replace: '      if (proof && !kept) resolved.set(auth as never, proof);',
+      find: '        if (proof) resolved.set(request, proof);',
+      replace: '        if (proof) resolved.set(auth as never, proof);',
     },
+  },
+  {
+    id: 'an-aggregate-read-past-its-scope',
+    defect:
+      "A command's aggregate compiled without the row scope its transaction carries, so it counted another tenant's rows and a policy's hidden ones that its own where never listed.",
+    file: 'packages/engine/src/adapters/scoped/scopedReads.ts',
+    find: '      const compiled = compileBreakdown(schema, aggregateBreakdown(schema, snapshotScopedData(request)), style, 0, scope);',
+    replace:
+      '      const compiled = compileBreakdown(schema, aggregateBreakdown(schema, snapshotScopedData(request)), style, 0, undefined);',
   },
 ];
 
 const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });
-const clean = () => git(['status', '--porcelain', '--', 'packages/*/src']).trim() === '';
+// Every package's sources. A bare `packages/*/src` matches no file — a wildcard pathspec is matched against the whole
+// path, never as a leading directory — so the check passed on any tree and the restore failed, leaving a defect in.
+const SOURCES = ':(glob)packages/*/src/**';
+const clean = () => git(['status', '--porcelain', '--', SOURCES]).trim() === '';
 
 function runFixture() {
   const done = spawnSync('npx', ['tsx', '--test', FIXTURE], { cwd: ROOT, encoding: 'utf8', timeout: 600_000 });
@@ -113,7 +133,7 @@ function main() {
     } catch (error) {
       results.push({ id: mutation.id, red: false, defect: mutation.defect, error: String(error.message) });
     } finally {
-      git(['checkout', '--', 'packages/*/src']);
+      git(['checkout', '--', SOURCES]);
     }
   }
 

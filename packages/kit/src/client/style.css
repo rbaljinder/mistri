@@ -59,9 +59,11 @@ body {
   --focus-width: var(--focus-ring-width, 2px);
   --focus-offset: 2px;
   /* The ring on the grid, held at its true width under the density zoom. The root's zoom scales a ring declared
-     in layout pixels (2px -> 1.79px at 0.895, which `mistri grade` reads as under C3's 2px), so the width is
-     divided by the zoom the root exposes (--density-zoom, density.js) and the ring lands at 2 CSS px. Only the
-     rings drawn straight on a table and its cursor cell use it; the others are not read as the grid is. */
+     in layout pixels and the browser draws it in whole zoomed pixels: under a zoom below 1 (2px -> 1.79 at 0.895,
+     drawn as 1) the ring thins on the screen, where `mistri grade` reads it against C3's 2px. So the width is
+     divided by the zoom the root exposes (--density-zoom, density.js) and the ring lands at 2 screen px. Above 1
+     (comfortable's 1.12) a plain 2px is 2.24, drawn as 2. Only the rings drawn straight on a table and its cursor
+     cell use it; the others are not read as the grid is. */
   --focus-width-true: calc(var(--focus-width) / var(--density-zoom, 1));
 }
 
@@ -1083,6 +1085,13 @@ th:focus-within .th-move { opacity: 1; }
 th.align-right:not(:last-child) { padding-right: var(--space-3h); }
 /* ...and its resizer stops at the same line: wider, it lay over the label's last pixels and answered a click meant for the sort. */
 th.align-right:not(:last-child) .th-resizer { width: var(--space-3h); }
+/* A text head's controls end where its resizer begins, the same way: the head keeps the resizer's 12px as its own
+   padding, and the sort, whose trailing room that strip now is, keeps none of its own. With no padding there, a sort
+   filling its head ran under the resizer: a reference's arrow, and the sort's arrow beside it, at the floor its column
+   is given at 768px ("Engineer→↑"), and a field report's grade found "Customer→" and "Resize Customer column" drawn
+   over each other. The last head's own 14px already holds its resizer, except in a grid inset from its edges. */
+:is(th:not(:last-child), .grid-inset > .table-wrap th:last-child):not(.align-right):has(> .th-resizer) { padding-right: var(--space-4); }
+:is(th:not(:last-child), .grid-inset > .table-wrap th:last-child):not(.align-right):has(> .th-resizer) .th-sort { padding-right: 0; }
 
 .th-menu {
   /* Placed by the positioner (Base UI) under the header that opened it. */
@@ -3484,7 +3493,9 @@ body.tenant-suspended > :not(.tenant-renewal-overlay) * { visibility: hidden !im
   body { height: auto; display: block; background: Canvas; color: CanvasText; }
   .layout, .content { display: block; }
   .content { overflow: visible; }
-  .topbar, .sidebar, #querybar, #toast, .crumb-tools, .page-head-actions, .page-pending, .pending-dock, .applist-controls,
+  /* The skip link is the keyboard's way past the bars, and paper has no keyboard: kept off screen by a transform,
+     it was still a fixed box in the print tree, and "Skip to content" came out on the PDF. */
+  .skip-link, .topbar, .sidebar, #querybar, #toast, .crumb-tools, .page-head-actions, .page-pending, .pending-dock, .applist-controls,
   .pager, .quick-add, .page-related-create, .inline-edit-button, .date-field-trigger { display: none !important; }
   .page-tabpanel[hidden] { display: none; }
   /* The trail is the walk's, not the sheet's: sticky, it printed over a record's first lines (a quote's

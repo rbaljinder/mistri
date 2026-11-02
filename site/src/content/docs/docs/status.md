@@ -1,6 +1,6 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.10 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.11 scope, stable and preview features, current limitations and planned work.
 ---
 
 The scope of this release, stable and preview features, current limitations and planned work.
@@ -10,7 +10,7 @@ npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.10**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.11**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -25,7 +25,7 @@ outside the compatibility promise; `mistri check` lists the Preview features
 an App uses, as information. At 1.0 these stay Preview: feature flags,
 audiences and `@mistriwork/mistri/openfeature`, experiments, the Suite Console, behavior
 analytics, SCIM, the Gantt presentation, a resource's `search` (its packs ship
-after 1.0), an App's installable PWA (`ui.pwa`, [installable PWAs](/docs/pwa/)), `@mistriwork/ui`, `mistri deploy` with `@mistriwork/cloudflare`, and `roundTrips` in the testing entry. The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
+after 1.0), an App's installable PWA (`ui.pwa`, [installable PWAs](/docs/pwa/)), `@mistriwork/ui`, `mistri deploy` with `@mistriwork/cloudflare`, `roundTrips` in the testing entry, and the triggers a row-policy App names (`resources.<t>.triggers`). The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
 flows and machines, the assistant, integrations and durable workflows are
 stable.
 
@@ -55,6 +55,7 @@ stable.
 | Gallery, `headline()` (and its earlier figure, `was`), `card()`, facts, sheet and property-rail sections, section `tab`, ordered workflow strip, related cards, `related(…, { same, near })` | Stable |
 | The Gantt presentation (`gantt()`, `kind: 'gantt'` and its keys) | Preview |
 | `roundTrips(response)` in `@mistriwork/mistri/testing`: the database flights a request made, for a test to hold a budget with | Preview |
+| Triggers a row-policy App names (`resources.<t>.triggers`): their keyed effects proven inside the person's rows, approved in `authority.lock`, kept in record history and announced to live sync ([row access](/docs/row-access/#triggers-the-app-names)) | Preview |
 | Row-defined fields (`defined`) | Stable |
 | Flows from rows (`flows`, `flowRunner`, the `flows()` and `diagram()` sections, `mistri flows start`) | Stable |
 | Forms with groups and `when`; multi-step forms (`form.steps`) | Stable |

@@ -102,11 +102,12 @@
 .chart-donut-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-5); max-width: 46rem; }
 .chart-donut { width: 120px; height: 120px; flex: none; transform: rotate(0); }
 .chart-slice { fill: none; stroke: var(--accent); stroke-width: 7; }
-/* A slice that drills: the pointer says it goes somewhere, and the
-   focus ring is the stroke itself, widened, so a keyboard reader sees
-   which slice holds focus. */
+/* A slice that drills: the pointer says it goes somewhere, and while it holds
+   the keyboard it wears the house ring round its own arc (sliceRing, Chart.tsx). */
 .chart-slice-drill { cursor: pointer; }
-.chart-slice-drill:focus-visible { stroke-width: 11; outline: none; }
+.chart-slice-door { outline: none; }
+.chart-slice-ring { display: none; fill: none; stroke: var(--focus); stroke-width: 2px; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none; }
+.chart-slice-door:focus-visible > .chart-slice-ring { display: inline; }
 /* A point that drills: the pointer says it goes somewhere, the hit disc
    is wider than the dot so a mouse finds it, and the focus ring is the
    dot's own stroke widened, as a slice's stroke widens. */

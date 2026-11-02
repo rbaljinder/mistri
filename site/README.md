@@ -62,7 +62,9 @@ Publish **only `site/dist/`**, never the source directory. No adapter, database,
 server functions or secrets are needed to build the static site.
 
 The existing `.github/workflows/site.yml` builds on main and deploys to the
-`tablewalk` Pages project when both Cloudflare secrets are configured. Manual
+`mistri` Pages project (mistriwork.dev) when both Cloudflare secrets are
+configured. tablewalk.dev is the database browser's own site and is not built
+from here. Manual
 feature-branch runs retain the branch name for preview deployments. Publishing
 requires explicit authorization; a local build does not deploy anything.
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { chartLimit, windowed } from '../../../../engine/src/shared/dashboardAsks.js';
-import { CurrencyFigures, figureSayer, namedGroups, ownWindow, sayer, type Section } from './dashboardModel.js';
+import { CurrencyFigures, EXACT, figureSayer, namedGroups, ownWindow, sayer, type Section } from './dashboardModel.js';
 
 describe('ownWindow', () => {
   const won = {
@@ -86,16 +86,29 @@ test('money summed apart per currency is said per currency; one currency is a fi
   expect(sayer(section, yen)(250)).toBe('¥250');
 });
 
-test('a metric card says money one way across a strip: compact from a thousand, whole below; a table keeps its figures whole', () => {
-  const section = { kind: 'metric', title: 'Revenue', table: 'deal', measure: 'sum amount', format: 'money' } as Section;
+test('a metric card says money exact by default, a balance to the cent; compact only where it says so', () => {
+  const section = { kind: 'metric', title: 'Available balance', table: 'account', measure: 'sum balance', format: 'money' } as Section;
   const card = sayer(section, undefined, { card: true });
-  // "$414.1K" stood beside "$27,300" in one strip; each card now keeps the one rule by itself.
-  expect(card(414_100)).toBe('$414.1K');
-  expect(card(27_300)).toBe('$27.3K');
-  expect(card(950)).toBe('$950');
-  expect(card(12.5)).toBe('$12.50');
-  // Outside a card a figure is read against its neighbours, whole to a hundred thousand.
-  expect(sayer(section)(27_300)).toBe('$27,300');
+  // A field report's balance read "$28K": a balance is read to the cent, at any size.
+  expect(card(28_123.45)).toBe('$28,123.45');
+  expect(card(414_100)).toBe('$414,100.00');
+  expect(card(950)).toBe('$950.00');
+  expect(card(0)).toBe('$0.00');
+  expect(card(-12.5)).toBe('-$12.50');
+  expect(card('90071992547409931.25')).toBe('$90,071,992,547,409,931.25');
+  // Kept in cents, the sum is said by its digits: 9007199254740993 cents, where Number() reads ...409.92.
+  expect(figureSayer({ format: 'money', currency: 'USD', minor: true }, undefined, EXACT)('9007199254740993')).toBe(
+    '$90,071,992,547,409.93',
+  );
+  // A revenue card glanced at beside its trend says `figure: 'compact'`, and keeps one rule across a strip.
+  const compact = sayer({ ...section, figure: 'compact' } as Section, undefined, { card: true });
+  expect(compact(414_100)).toBe('$414.1K');
+  expect(compact(27_300)).toBe('$27.3K');
+  expect(compact(950)).toBe('$950.00');
+  // Its title, and what a screen reader hears, are exact either way.
+  expect(sayer({ ...section, figure: 'compact' } as Section, undefined, { whole: true })(28_123.45)).toBe('$28,123.45');
+  // Outside a card a figure is read against its neighbours: exact to a hundred thousand, compact past it.
+  expect(sayer(section)(27_300)).toBe('$27,300.00');
   expect(sayer(section)(414_100)).toBe('$414.1K');
 });
 

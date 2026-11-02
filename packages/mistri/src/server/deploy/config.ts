@@ -2,7 +2,8 @@
  * The deploy directory: `deploy/cloudflare/`, with the Worker's wrangler.jsonc and the config `init` wrote beside it.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
+import { findConfig, readProfile } from '@mistriwork/engine/server/config/profile.js';
 import type { DeployConfig } from './types.js';
 
 export const CONFIG_FILE = 'mistri-deploy.json';
@@ -93,10 +94,52 @@ export function readWorker(dir: string): WorkerFacts {
   };
 }
 
-export function readConfig(dir: string): DeployConfig {
+export function readConfig(dir: string, env: NodeJS.ProcessEnv = process.env): DeployConfig {
   const file = join(dir, CONFIG_FILE);
   if (!existsSync(file)) throw new Error(`${file} does not exist. Write it with: mistri deploy init cloudflare`);
-  const config = JSON.parse(readFileSync(file, 'utf8')) as DeployConfig;
-  if (typeof config.app !== 'string' || !Array.isArray(config.secrets)) throw new Error(`${file} needs "app" and "secrets".`);
-  return config;
+  const { config } = withProfile(JSON.parse(readFileSync(file, 'utf8')) as Partial<DeployConfig>, env);
+  if (typeof config.app !== 'string' || !Array.isArray(config.secrets))
+    throw new Error(`${file} needs "secrets", and "app" unless mistri.json's app block names the App.`);
+  return config as DeployConfig;
+}
+
+/** The deploy keys the project profile stands in for, and the profile's key for each. */
+const PROFILE_KEYS = { app: 'dir', appEntry: 'entry', commands: 'commands', jobs: 'jobs', policy: 'policy' } as const;
+
+/**
+ * The deploy request with the project profile under it (docs/bootstrap-plan.md D11): `app`, `appEntry`, `config`,
+ * `commands`, `jobs` and `policy` fall back to the `app` block of the mistri.json every App command reads, so a
+ * deploy serves what `check` and `dev` checked. A key the deploy file or a flag names wins. `from` lists the keys
+ * the profile gave. Paths are as the person reads them from the project root, where `mistri deploy` runs.
+ */
+export function withProfile(
+  request: Partial<DeployConfig>,
+  env: NodeJS.ProcessEnv = process.env,
+): { config: Partial<DeployConfig>; from: string[]; file?: string } {
+  const found = findConfig(
+    { ...(request.config !== undefined ? { explicit: request.config } : {}), ...(request.app !== undefined ? { app: request.app } : {}) },
+    env,
+  );
+  if (!found || found.from === 'user') return { config: request, from: [] };
+  const profile = readProfile(found.path);
+  /* A mistri.json without an app block is the deploy file's to name, as it always was. */
+  if (!profile) return { config: request, from: [] };
+  const config: Partial<DeployConfig> = { ...request };
+  const from: string[] = [];
+  const near = (path: string) => {
+    const rel = relative(process.cwd(), path);
+    return rel === '' ? '.' : rel.startsWith('..') || isAbsolute(rel) ? path : rel;
+  };
+  if (config.config === undefined) {
+    config.config = near(found.path);
+    from.push('config');
+  }
+  for (const key of Object.keys(PROFILE_KEYS) as Array<keyof typeof PROFILE_KEYS>) {
+    const said = profile[PROFILE_KEYS[key]];
+    if (config[key] === undefined && said !== undefined) {
+      config[key] = near(said);
+      from.push(key);
+    }
+  }
+  return { config, from, file: found.path };
 }

@@ -140,11 +140,12 @@ describe("the app's dress", () => {
     expect(dressFor({ tone: { open: 'good' } }, 'constructor')).toMatchObject({ tone: 'neutral', text: 'constructor' });
   });
 
-  test('money, percent with its bar, a relative day — and a bigint falls through', () => {
+  test('money, percent with its bar, a relative day — and money past 2^53 said digit for digit', () => {
     expect(dressFor({ format: 'money', currency: 'EUR' }, 1234)?.text).toMatch(/€|EUR/);
     expect(dressFor({ format: 'percent', bar: true }, 42)).toEqual({ kind: 'percent', text: '42%', bar: 42 });
     expect(dressFor({ format: 'number' }, 12345.5)).toEqual({ kind: 'number', text: '12,345.5', title: '12345.5' });
-    expect(dressFor({ format: 'money' }, '9223372036854775807')).toBeNull();
+    expect(dressFor({ format: 'money', currency: 'USD' }, '9223372036854775807')?.text).toBe('$9,223,372,036,854,775,807.00');
+    expect(dressFor({ format: 'number' }, '9223372036854775807')).toBeNull();
     // Local, not UTC: relativeDay counts from the reader's own today.
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;

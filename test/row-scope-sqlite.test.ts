@@ -51,7 +51,17 @@ test('SQLite private scope binds all seven reads and preserves bigint values and
   const { adapter, schema } = await fixture(t);
   const scope: RowScope = Object.fromEntries(schema.tables.map((table) => [table.id, eq('tenant', 'a')]));
   const reads = await adapter.scopeReads(scope);
-  assert.deepEqual(Object.keys(reads).sort(), ['count', 'countBreakdown', 'countEach', 'countView', 'query', 'runBreakdown', 'runView']);
+  // `aggregate` is a command's sum or group under the same scope (shared/aggregate.ts), proved in command-aggregates.
+  assert.deepEqual(Object.keys(reads).sort(), [
+    'aggregate',
+    'count',
+    'countBreakdown',
+    'countEach',
+    'countView',
+    'query',
+    'runBreakdown',
+    'runView',
+  ]);
   assert.equal(Object.isFrozen(reads), true);
   const result = await reads.query(query({ columns: ['id'], orderBy: [{ column: 'id', direction: 'asc' }] }));
   assert.deepEqual(result.rows, [{ id: 1 }, { id: 3 }, { id: '9007199254740993' }]);

@@ -32,6 +32,9 @@ const order = table('sales_order', [
   col('total', 'NUMERIC'),
   col('financial_status', 'TEXT'),
   col('summary', 'TEXT'),
+  col('ordered_on', 'DATE'),
+  col('due_on', 'DATE'),
+  col('paid_at', 'TIMESTAMP'),
 ]);
 const line = table('order_line', [
   col('id', 'INTEGER', { primaryKey: true, nullable: false }),
@@ -41,7 +44,7 @@ const line = table('order_line', [
   col('amount', 'NUMERIC'),
 ]);
 const tables: Record<string, TableMeta> = { sales_order: order, order_line: line };
-const money = { format: 'money', currency: 'USD' };
+let money: Record<string, unknown> = { format: 'money', currency: 'USD' };
 const orderRow = (): Record<string, unknown> => ({
   id: 1042,
   ship_name: 'Celeste Abbott',
@@ -94,7 +97,9 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
       ? money
       : column === 'financial_status'
         ? { tone: { paid: 'good', pending: 'warn' } }
-        : null,
+        : column === 'due_on'
+          ? { format: 'relative' }
+          : null,
   columnLabel: (_table: string, column: string) => ({ ship_name: 'Ship to', total: 'Total', amount: 'Amount' })[column] ?? null,
   emptyWord: () => '—',
   currentEntry: () => undefined,
@@ -245,6 +250,64 @@ test('a part the total takes off is said negated, and a status is its plain word
   const status = container.querySelector('.doc-property dd')!;
   expect(status.textContent).toBe('Paid');
   expect(status.querySelector('.tone')).toBeNull();
+});
+
+test('money on paper is its digits to the cent, past 2^53 too, and a zero stored as text is left unsaid', async () => {
+  ordered = { ...orderRow(), subtotal: '90071992547409931.25', discount: '-0.00', total: '90071992547409931.25' };
+  const { container } = draw();
+  await screen.findByRole('table');
+  const totals = [...container.querySelectorAll('.doc-total')].map((row) => [
+    row.querySelector('dt')?.textContent,
+    row.querySelector('dd')?.textContent,
+  ]);
+  expect(totals).toEqual([
+    ['Subtotal', '$90,071,992,547,409,931.25'],
+    ['Total', '$90,071,992,547,409,931.25'],
+  ]);
+});
+
+test('whole money on paper drops zero cents and keeps real ones', async () => {
+  money = { format: 'money', currency: 'USD', whole: true };
+  ordered = { ...orderRow(), subtotal: '1200.00', discount: '0', total: '1199.50' };
+  try {
+    const { container } = draw();
+    await screen.findByRole('table');
+    const totals = [...container.querySelectorAll('.doc-total')].map((row) => row.querySelector('dd')?.textContent);
+    expect(totals).toEqual(['$1,200', '$1,199.50']);
+  } finally {
+    money = { format: 'money', currency: 'USD' };
+  }
+});
+
+test('a date is its day on paper, never said from today: a plain one, a relative one and a moment with its zone', async () => {
+  /* A field report's statement said "yesterday" and "13 days ago": true the day it was read, false every day after. */
+  document.body.classList.add('app-mode');
+  const day = (offset: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const medium = (iso: string) =>
+    new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
+  ordered = { ...orderRow(), ordered_on: day(-1), due_on: day(3), paid_at: '2026-09-04T21:30:00Z' };
+  composed = async () => ({
+    page: {
+      ...invoicePage,
+      sections: [
+        ...invoicePage.sections,
+        { kind: 'fields', paths: ['ordered_on', 'due_on', 'paid_at'], presentation: 'properties', width: 'half' },
+      ],
+    },
+    plans,
+  });
+  try {
+    const { container } = draw();
+    await screen.findByRole('table');
+    const said = [...container.querySelectorAll('.doc-property dd')].map((dd) => dd.textContent?.replace(/[\u00a0\u202f]/g, ' '));
+    expect(said).toEqual([medium(day(-1)), medium(day(3)), 'Sep 4, 2026, 9:30 PM UTC']);
+  } finally {
+    document.body.classList.remove('app-mode');
+  }
 });
 
 test("long text sits under its caption at the section's width; a short value stays beside its caption", async () => {

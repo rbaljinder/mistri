@@ -185,6 +185,28 @@ function suite(name: string, skip: false | string, open: () => Promise<{ store?:
       assert.equal(driver.executed('call:bureau'), 4);
     });
 
+    test('a step that failed, or a process killed mid-step, leaves no timer armed for its timeout', async () => {
+      /* The step's timeout is a real timer (30 seconds), whatever the controlled clock says: left armed past a
+         back-off or a kill, it held the test process for its whole length. */
+      const timers = () => process.getActiveResourcesInfo().filter((kind) => kind === 'Timeout').length;
+      const failing = await make(underwrite, {
+        calls: {
+          bureau: () => {
+            throw new Error('down');
+          },
+        },
+      });
+      const killed = await make(underwrite);
+      /* Counted after both drivers are open: a PostgreSQL pool arms an idle-client timer of its own when a
+         connection is released, and that is not the step's timer this test is about. */
+      const before = timers();
+      await failing.emit(Applied, { id: 'L-timer-1', amount: 1 });
+      assert.equal(timers(), before, 'a failed try leaves its step timeout armed');
+      killed.killDuring('approve');
+      await killed.emit(Applied, { id: 'L-timer-2', amount: 1 });
+      assert.equal(timers(), before, 'a killed advance leaves its step timeout armed');
+    });
+
     test('a decision that arrives before the wait is not lost', async () => {
       const early = workflow(async (w, start) => {
         await w.sleep('review', '1 hour');

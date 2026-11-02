@@ -219,7 +219,7 @@ export async function runDecideCommand(
           app,
           commands,
           await loadAppRuntimeResources(registry, app, owner, (id) => held.push(registry.lease(id))),
-          (id) => registry.configOf(id)?.url,
+          (id) => registry.openableUrlOf(id),
         );
         policy = await loadHttpAppPolicy({
           registry,

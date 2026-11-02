@@ -467,3 +467,60 @@ export function seedCombination(business: string, part: Part): void {
   // combination that runs commands migrates it exactly as a deployment does.
   if (part.journal) migrateSqliteCommandJournal(business);
 }
+
+/** A command that sums and groups rows (`db.item.where().aggregate(…)`,
+    commandDb.ts), exposed through the `api` block. It names no record: it
+    answers what it counted beside what the same command's `where` lists, so a
+    case can hold the two to each other under whatever bounds the reader. */
+export const tallyCommand = (): Part => ({
+  root: {
+    resources: { item: { access: 'write' } },
+    auth: { roles: { operator: { commands: ['tally'] } } },
+    // An untargeted command is exposed where a signed-in form already runs it.
+    views: { tally: { kind: 'form', label: 'Tally', command: 'tally' } },
+    nav: ['tally'],
+    api: { version: 1, roles: ['operator'], commands: ['tally'] },
+  },
+  files: {
+    /* Beside the manifest, where the token CLI's provision (which takes no --commands) finds the module the App's
+       `api.commands` names; .mjs, because a directory with no package.json loads .ts as CommonJS. */
+    'app/commands.mjs': `import { defineCommand, defineCommands } from '${source('packages/mistri/src/server/commands/businessCommands.ts')}';
+import { count } from '${source('packages/mistri/src/server/commands/commandDb.ts')}';
+import { shape, number, text } from '${source('packages/mistri/src/server/commands/commandShapes.ts')}';
+export default defineCommands({ tally: defineCommand({ source: 'business', target: 'item', targets: 'none', read: ['item'],
+  input: { status: { type: 'text' } }, output: shape({ counted: number(), listed: number(), groups: text({ max: 200 }) }),
+  async handle({ db }, input) {
+    const asked = () => db.item.where({ status: input.status });
+    const whole = await asked().aggregate({ n: count() });
+    const listed = await asked().limit(100);
+    const groups = await db.item.where().groupBy('status').aggregate({ n: count() });
+    return { counted: Number(whole.n), listed: listed.length,
+      groups: groups.map((group) => group.status + ':' + group.n).join(',') };
+  } }) });
+`,
+  },
+  flags: ['--commands', '{app/commands.mjs}'],
+  journal: true,
+});
+
+/** Tenancy with a row policy inside the tenant: a member reads only the
+    tenant's `new` items. The archived row is the tenant's own and still
+    hidden, so a reader that shows it has slipped the policy, not the tenant. */
+export const ARCHIVED_ROW = "INSERT INTO item(id, tenant_id, name, status) VALUES ('north-3','north','North archived','archived')";
+export const tenancyWithRowPolicy = (): Part => ({
+  root: {
+    auth: { rows: 'tenant' },
+    resources: { item: { owner: 'tenant' } },
+  },
+  files: {
+    'policy.mjs': `import { defineAppTenantPolicy } from '${source('packages/mistri/src/server/policy/appTenantPolicy.ts')}';
+const open = { item: { groups: [[{ column: 'status', op: '=', value: 'new' }]] } };
+export default defineAppTenantPolicy({ kind: 'tenant', appId: 'combo', storeId: '${COMBO_STORE}',
+  ownership: { item: { kind: 'tenant', column: 'tenant_id' } },
+  resolveMembershipRows: () => open, resolveRows: () => open,
+  resultReferences: { tally: () => [] } });
+`,
+  },
+  flags: ['--policy', '{policy.mjs}'],
+  ddl: [ARCHIVED_ROW],
+});

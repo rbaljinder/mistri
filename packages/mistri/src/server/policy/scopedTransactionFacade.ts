@@ -2,6 +2,7 @@ import { AppValidationDenied } from '../app/appValidationDenied.js';
 import {
   Refusal,
   TransactionOperations,
+  type AggregateRequest,
   type DeleteRequest,
   type TellRequest,
   type Filter,
@@ -54,6 +55,7 @@ export async function runScopedTransactionFacade<T>(records: WriteTransaction, r
         ...(records.lockRecord ? { lockRecord: (r: DeleteRequest) => invoke(r, (request) => records.lockRecord!(request)) } : {}),
         query: (r: QueryRequest) => invoke(r, (request) => records.query(request)),
         count: (table: string, filter?: Filter) => invoke({ table, filter }, (request) => records.count(request.table, request.filter)),
+        ...(records.aggregate ? { aggregate: (r: AggregateRequest) => invoke(r, (request) => records.aggregate!(request)) } : {}),
         insert: (r: InsertRequest) => invoke(r, (request) => records.insert(request)),
         update: (r: UpdateRequest) => invoke(r, (request) => records.update(request)),
         remove: (r: DeleteRequest) => invoke(r, (request) => records.remove(request)),

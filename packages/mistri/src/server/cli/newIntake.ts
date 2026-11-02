@@ -157,7 +157,7 @@ export default defineCommands({ submitInquiry });
   )}\n`;
   /* A path in a file is from that file's folder, so the project moves as one. */
   files['mistri.json'] = `${JSON.stringify(
-    { connections: [{ name: id, url: basename(database), writable: true, migrations: { dir: 'db/migrations' } }] },
+    { app: { dir: '.' }, connections: [{ name: id, url: basename(database), writable: true, migrations: { dir: 'db/migrations' } }] },
     null,
     2,
   )}\n`;
@@ -171,9 +171,9 @@ export default defineCommands({ submitInquiry });
       type: 'module',
       scripts: {
         dev: 'mistri dev .',
-        check: 'mistri check --app . --config mistri.json',
-        start: 'mistri --app . --config mistri.json',
-        migrate: 'mistri migrate up --app . --config mistri.json',
+        check: 'mistri check',
+        start: 'mistri --app .',
+        migrate: 'mistri migrate up',
         ...formatScripts,
       },
       dependencies: { '@mistriwork/mistri': `^${runtimeVersion()}` },

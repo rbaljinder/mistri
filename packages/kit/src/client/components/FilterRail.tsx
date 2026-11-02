@@ -33,7 +33,7 @@ import { isPickerDate } from '@mistriwork/ui/internal/datePickerModel.js';
 import { columnKind, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { vocabularyWord } from '@mistriwork/engine/shared/model.js';
-import { centsAmong, dressFor, wordFor, type DisplayRule } from './valueModel.js';
+import { dressFor, wordFor, type DisplayRule } from './valueModel.js';
 import { minorToMajor } from '@mistriwork/engine/shared/money.js';
 import { majorToMinor } from '@mistriwork/engine/shared/moneyEntry.js';
 import { WHOLE, conditionTail, holdsCondition, squeeze, unquote, withCondition } from '../filterbar.js';
@@ -411,14 +411,8 @@ function ValuesFacet({ box, tail, table, refinement, standing, set, more }: Face
   for (const value of ticked) if (!listed.some((c) => c.value === value)) listed.push({ value, count: 0 });
   if (!allowed?.length && box.kind !== 'ref' && numericColumn(box)) listed.sort((a, b) => Number(a.value) - Number(b.value));
   const shown = all || listed.length <= SHORT + SLACK ? listed : listed.filter((c, i) => i < SHORT || ticked.includes(c.value));
-  /* Money is said as the cards say it ($1,795), whatever unit it is kept in; the tick still asks for the stored value. */
-  const money =
-    rule?.format === 'money'
-      ? centsAmong(
-          rule,
-          listed.map((c) => c.value),
-        )
-      : null;
+  /* Money is said as the cards say it ($1,795.00), whatever unit it is kept in; the tick still asks for the stored value. */
+  const money = rule?.format === 'money' ? rule : null;
   const figure = (value: string) => {
     const dress = money ? dressFor(money, value) : null;
     return dress?.kind === 'money' ? dress.text : undefined;

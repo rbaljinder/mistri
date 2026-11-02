@@ -39,7 +39,7 @@ import {
 import { parseArgs } from '@mistriwork/engine/server/cli/args.js';
 import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
 import { CHECK_BUILD_OF } from '../cli/apps.js';
-import { CHECK_VALIDATION } from '@mistriwork/engine/server/cli/args.js';
+import { CHECK_STORES_ASIDE, CHECK_VALIDATION } from '@mistriwork/engine/server/cli/args.js';
 import { readStartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import { appTypes } from '../cli/oneShot.js';
 import { sameTypes, typesFileText } from '../typegen.js';
@@ -124,9 +124,19 @@ export function selfInvocation(): string[] {
 }
 
 /** Run this mistri's own validation over `args`, as a child (CHECK_VALIDATION): what `mistri check` and a build's database step both report. */
-export function checkApp(args: string[], builtFrom?: string): Promise<{ code: number; output: string; stdout: string; stderr: string }> {
+export function checkApp(
+  args: string[],
+  builtFrom?: string,
+  /** `mistri check` found the App's stores absent: the child sets their attestations aside (CHECK_STORES_ASIDE). */
+  storesAside = false,
+): Promise<{ code: number; output: string; stdout: string; stderr: string }> {
   return new Promise((done, reject) => {
-    const env = { ...process.env, [CHECK_VALIDATION]: '1', ...(builtFrom ? { [CHECK_BUILD_OF]: builtFrom } : {}) };
+    const env = {
+      ...process.env,
+      [CHECK_VALIDATION]: '1',
+      ...(builtFrom ? { [CHECK_BUILD_OF]: builtFrom } : {}),
+      ...(storesAside ? { [CHECK_STORES_ASIDE]: '1' } : {}),
+    };
     const child = spawn(process.execPath, [...selfInvocation(), ...args], { stdio: ['ignore', 'pipe', 'pipe'], env });
     let output = '';
     let stdout = '';

@@ -8,6 +8,7 @@ import dealerPolicy from '../test/fixtures/apps/keystone/dealer/policy.ts';
 import customerPolicy from '../test/fixtures/apps/keystone/customer/policy.ts';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { acquireAppPolicyResources } from '../packages/mistri/src/server/policy/appPolicyResources.js';
+import { count } from '../packages/mistri/src/server/commands/commandDb.js';
 import { createPolicyDb } from '../packages/mistri/src/server/policy/policyDb.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
@@ -239,3 +240,15 @@ test('malformed text pagination keys refuse rather than returning a partial scop
   seed.exec("INSERT INTO dealer_user VALUES (NULL, 'liberty', 'owner', 'carlos@example.com', 'active', 'owner')");
   await assert.rejects(async () => dealerPolicy.resolveRows(manager(), context), /invalid or repeated primary key/);
 });
+
+test('a policy reads sums and groups through its db, across every principal, and still cannot write', async (t) => {
+  const { context } = await fixture(t);
+  assert.deepEqual(plain(await context.db.dealer.where().aggregate({ n: count() })), { n: 5 });
+  const groups = plain(await context.db.dealer_user.where().groupBy('dealer_id').aggregate({ seats: count() }).orderBy('dealer_id'));
+  assert.equal(groups.find((group) => group.dealer_id === 'liberty')?.seats, 3);
+  assert.equal(
+    groups.reduce((all, group) => all + group.seats, 0),
+    (await context.db.dealer_user.where().aggregate({ n: count() })).n,
+  );
+});
+const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value));

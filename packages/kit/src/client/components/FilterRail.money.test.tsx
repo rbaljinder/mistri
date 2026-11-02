@@ -1,5 +1,5 @@
 /**
- * A money column kept in minor units, in the rail: the checklist names a value as the cards do ($1,795, not the
+ * A money column kept in minor units, in the rail: the checklist names a value as the cards do ($1,795.00, not the
  * stored 179500) and a range's boxes read and take major amounts. The question underneath stays in the stored unit,
  * so an address, a chip and a saved view mean the same thing whichever way they were reached.
  */
@@ -66,8 +66,8 @@ test('a checklist of rents names each as the cards do, and ticking one asks for 
   const user = userEvent.setup();
   const { onChange } = draw();
   const group = await settled();
-  const box = await within(group).findByRole('checkbox', { name: '$1,795 1' });
-  expect(within(group).getByRole('checkbox', { name: '$2,250 1' })).toBeInTheDocument();
+  const box = await within(group).findByRole('checkbox', { name: '$1,795.00 1' });
+  expect(within(group).getByRole('checkbox', { name: '$2,250.00 1' })).toBeInTheDocument();
   await user.click(box);
   expect(onChange).toHaveBeenLastCalledWith('rent = 179500');
 });

@@ -58,12 +58,27 @@ import {
   countsTogether,
   orderClause,
   type CountItem,
+  type AggregateRequest,
+  type AggregateResult,
 } from './adapter.js';
+import { compileAggregate } from '../shared/aggregate.js';
+import { readExactly, summed } from '../shared/decimals.js';
 import { buildUpdateGuard } from './scoped/updateGuard.js';
 import { createScopedReads } from './scoped/scopedReads.js';
 import { scopedCommandInvoker } from './scoped/scopedCommandOperations.js';
-import { createScopedTransaction, wholeWithin } from './scoped/scopedTransaction.js';
-import { readSqliteScopeCatalog, type SqliteScopeCatalog } from './scoped/sqliteScopeCatalog.js';
+import {
+  createScopedTransaction,
+  foreignKeyRefusal,
+  isForeignKeyViolation,
+  referencesStatement,
+  wholeWithin,
+} from './scoped/scopedTransaction.js';
+import type { TriggerAcceptance, TriggerChange } from './scoped/triggerProof.js';
+import type { TriggerWitness } from './scoped/sqliteTriggerSession.js';
+import { readSqliteScopeCatalog, sqliteBlockedTables, sqliteKeyFacts, type SqliteScopeCatalog } from './scoped/sqliteScopeCatalog.js';
+import { readSqliteTrigger } from './scoped/sqliteTriggers.js';
+import type { ScopeTrigger } from './scoped/scopeTriggers.js';
+import type { TriggerKeyFacts } from './scoped/triggerEffects.js';
 import { EpochCache } from './epochCache.js';
 import { captureRowScope, type RowScope } from '../shared/rowScope.js';
 import { isRuntimeTable } from '../shared/runtimeTables.js';
@@ -230,6 +245,29 @@ export class SqliteAdapter implements Adapter {
     };
     current();
     return current;
+  }
+
+  /** Each table's triggers, read on the reader as a scoped write reads them on its writer (sqliteTriggers.ts). A TEMP
+   * trigger is its own connection's, which this reader cannot see; the writer reads those too. */
+  async triggers(): Promise<ReadonlyMap<string, readonly ScopeTrigger[]>> {
+    const fold = (name: string) => name.replace(/[A-Z]/g, (char) => char.toLowerCase());
+    const tables = new Map((await this.introspect()).tables.filter((table) => !table.isView).map((table) => [fold(table.name), table]));
+    const found = new Map<string, ScopeTrigger[]>();
+    const rows = this.db.prepare("SELECT tbl_name, name, sql FROM main.sqlite_schema WHERE type = 'trigger' ORDER BY name").all();
+    for (const row of rows) {
+      const table = tables.get(fold(String(row.tbl_name)));
+      if (!table) continue;
+      const generated = this.db.prepare('SELECT name FROM pragma_table_xinfo(?) WHERE hidden IN (2, 3)').all(table.name);
+      const trigger = readSqliteTrigger(String(row.name), row.sql, new Set(generated.map((column) => fold(String(column.name)))));
+      found.set(table.id, [...(found.get(table.id) ?? []), trigger]);
+    }
+    return found;
+  }
+
+  /** What a write reads to judge a trigger's effects (sqliteScopeCatalog.ts): every table's keys, the conflict clauses
+   * its schema declares, and the tables a scoped write cannot target, on the reader. */
+  async triggerKeys(): Promise<TriggerKeyFacts> {
+    return { ...sqliteKeyFacts(this.db), blocked: sqliteBlockedTables(this.db) };
   }
 
   async introspect(): Promise<DatabaseSchema> {
@@ -606,7 +644,10 @@ export class SqliteAdapter implements Adapter {
     const compiled = compileBreakdown(schema, breakdown, ANSI_STYLE, offset);
 
     const started = performance.now();
-    const rows = await this.readRows(compiled.text, compiled.params, true);
+    const { rows } = await readExactly(
+      async () => ({ rows: await this.readRows(compiled.text, compiled.params, true) }),
+      summed(breakdown.measures),
+    );
     await this.turn();
     return {
       columns: compiled.columns.map((c) => c.name),
@@ -785,6 +826,12 @@ export class SqliteAdapter implements Adapter {
     return counted;
   }
 
+  async aggregate(request: AggregateRequest): Promise<AggregateResult> {
+    const answered = await this.aggregateOn(request, this.db);
+    await this.turn();
+    return answered;
+  }
+
   async countEach(items: readonly CountItem[], limit?: number): Promise<number[]> {
     const relations = items.map((item) => ({ relation: ANSI_STYLE.quote(this.readTable(item.table)), filter: item.filter }));
     const statement = countEachStatement(relations, ANSI_STYLE, { limit, together: countsTogether(this.cachedSchema, items, limit) });
@@ -799,6 +846,19 @@ export class SqliteAdapter implements Adapter {
     const text = countStatement(`${ANSI_STYLE.quote(name)}${where.text}`, limit);
     const [row] = await this.readRows(text, where.params, true, db);
     return Number(row?.n ?? 0);
+  }
+
+  /* A command's aggregate on its own transaction's handle (shared/aggregate.ts): one statement, its table's own
+     columns, its integers past 2^53 kept as their digits. */
+  private async aggregateOn(request: AggregateRequest, db: DatabaseSync): Promise<AggregateResult> {
+    this.assertTable(request.table, db);
+    const schema = await this.schema();
+    const compiled = compileAggregate(schema, request, ANSI_STYLE);
+    const { rows } = await readExactly(
+      async () => ({ rows: await this.readRows(compiled.text, compiled.params, true, db) }),
+      summed(request.measures),
+    );
+    return { rows: rows.map(toJsonSafe) };
   }
 
   /**
@@ -996,8 +1056,11 @@ export class SqliteAdapter implements Adapter {
        and normalised on the way out like every other read. */
     inserted.setReadBigInts(true);
     const described = inserted.columns();
+    const stored = inserted.get(...sqliteParams(params)) as Record<string, unknown>;
+    // The key as stored (a scoped write reads its row back by it); the row as a person reads it, a decimal with its scale.
+    const raw = toJsonSafe(stored);
     const row = scaleRows(
-      [inserted.get(...sqliteParams(params)) as Record<string, unknown>],
+      [{ ...stored }],
       described.map((c) => c.name),
       scalesOf(described),
     )[0];
@@ -1007,7 +1070,7 @@ export class SqliteAdapter implements Adapter {
     if (
       scoped &&
       pk.some((column) => {
-        const value = row[column];
+        const value = stored[column];
         return !(
           typeof value === 'string' ||
           (typeof value === 'number' && Number.isFinite(value)) ||
@@ -1016,7 +1079,7 @@ export class SqliteAdapter implements Adapter {
       })
     )
       throw new Refusal('The stored key cannot be checked in this row scope.');
-    const key = Object.fromEntries(pk.map((c) => [c, safe[c] as string | number]));
+    const key = Object.fromEntries(pk.map((c) => [c, (scoped ? raw : safe)[c] as string | number]));
     return { key, row: safe, applied, sql: { text, params } };
   }
 
@@ -1325,7 +1388,7 @@ export class SqliteAdapter implements Adapter {
     run: JournalRun<J, T>,
     options: JournalTransactionOptions<(db: DatabaseSync, catalog: SqliteScopeCatalog) => void> = {},
   ): Promise<T> {
-    const { scope, verify, ordinaryVerify, bound } = options;
+    const { scope, verify, ordinaryVerify, bound, triggers } = options;
     if (ordinaryVerify !== undefined) {
       if (!isSqliteVerifiedCommandSource(this)) throw new Refusal('This verified command transaction is unavailable.');
       if (typeof ordinaryVerify !== 'function' || isProxy(ordinaryVerify) || typeof run !== 'function' || isProxy(run) || this.closed)
@@ -1339,13 +1402,27 @@ export class SqliteAdapter implements Adapter {
       undefined,
       ordinaryVerify as (() => void) | undefined,
       bound,
+      triggers,
     );
   }
 
-  async scopeTransaction<T>(input: RowScope, run: (tx: WriteTransaction, catalog: DatabaseSchema) => Promise<T>): Promise<T> {
+  async scopeTransaction<T>(
+    input: RowScope,
+    run: (tx: WriteTransaction, catalog: DatabaseSchema) => Promise<T>,
+    triggers?: TriggerAcceptance,
+  ): Promise<T> {
     const scope = captureRowScope(input);
     if (this.closed) throw new Refusal('This adapter is closed.');
-    return this.transact((tx, _journal, catalog) => run(tx, catalog!), undefined, scope);
+    return this.transact(
+      (tx, _journal, catalog) => run(tx, catalog!),
+      undefined,
+      scope,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      triggers,
+    );
   }
 
   /** Private source-owner boundary, deliberately absent from Adapter. The
@@ -1390,12 +1467,23 @@ export class SqliteAdapter implements Adapter {
     maintenance?: (db: DatabaseSync, operations: TransactionOperations, assertCurrent: () => void) => Promise<T>,
     ordinaryVerify?: () => void,
     bound?: RowScope,
+    triggers?: TriggerAcceptance,
   ): Promise<T> {
     return this.queueWrite(async () => {
+      /* Inside the queued step, not before it: an await ahead of queueWrite lets a write asked for later take its place in the
+         queue, and a transaction asked for first must run first (row-scope-transaction.test.ts). */
+      /* Loaded where a transaction uses them, not at startup: the keyed-effect judge for a scoped write (its database
+         may hold keyed triggers), and the proof and its session witness where the App names triggers. */
+      const effects = scope !== undefined ? await import('./scoped/triggerEffects.js') : undefined;
+      const proving =
+        scope !== undefined && triggers
+          ? await Promise.all([import('./scoped/triggerProof.js'), import('./scoped/sqliteTriggerSession.js')])
+          : undefined;
       const operations = new TransactionOperations();
       let write: DatabaseSync | undefined;
       let began = false;
       let commitAttempted = false;
+      let witness: TriggerWitness | undefined;
       try {
         if (this.closed) throw new Refusal('This adapter is closed.');
         write = this.writeHandle();
@@ -1434,6 +1522,7 @@ export class SqliteAdapter implements Adapter {
         let records: WriteTransaction = {
           query: (r) => this.queryOn(r, handle),
           count: (table, filter) => this.countOn(table, filter, handle),
+          aggregate: (r) => this.aggregateOn(r, handle),
           insert: history ? (r) => history.insert(r, insert) : insert,
           remove: history ? (r) => history.remove(r, remove) : remove,
           update: history ? (r) => history.update(r, update) : update,
@@ -1448,7 +1537,9 @@ export class SqliteAdapter implements Adapter {
           if (result !== undefined || !handle.isTransaction) throw new Refusal('Transaction verification must be synchronous.');
         };
         if (scope !== undefined) {
-          const catalog = this.catalogCache.throughSync(epoch, 'scope', () => readSqliteScopeCatalog(handle)) as SqliteScopeCatalog;
+          const catalog = this.catalogCache.throughSync(epoch, 'scope', () =>
+            readSqliteScopeCatalog(handle, effects?.resolveTriggerEffects),
+          ) as SqliteScopeCatalog;
           physicalCatalog = catalog;
           journal?.admit?.(handle, catalog, scope);
           // Keep the complete physical graph for row/FK enforcement. Runtime
@@ -1466,11 +1557,16 @@ export class SqliteAdapter implements Adapter {
               const statement = handle.prepare(sql.text);
               statement.setReadBigInts(true);
               const described = statement.columns();
-              const rows = scaleRows(
-                statement.all(...sqliteParams(sql.params)) as Record<string, unknown>[],
-                described.map((c) => c.name),
-                scalesOf(described),
-              );
+              const read = statement.all(...sqliteParams(sql.params)) as Record<string, unknown>[];
+              /* A guard's row is what a check names rows by: the value as stored, never said with a decimal's scale
+                 (19.987 said as "19.99" named another row). Only what a person reads is said so. */
+              const rows = guard
+                ? read
+                : scaleRows(
+                    read,
+                    described.map((c) => c.name),
+                    scalesOf(described),
+                  );
               return {
                 columns: described.map((column) => column.name),
                 rows: rows.map((row) =>
@@ -1489,16 +1585,69 @@ export class SqliteAdapter implements Adapter {
                 sql,
               };
             });
+          /* What the triggers it accepts wrote is seen again by a session before COMMIT (sqliteTriggerSession.ts). */
+          const seen = proving && !journal?.fixedRecords ? proving[1].sqliteTriggerWitness(handle, catalog.schema.tables) : undefined;
+          witness = seen;
+          const accepted = seen && {
+            acceptance: {
+              ...triggers!,
+              changed: async (change: TriggerChange) => {
+                seen.proven(change);
+                // Kept and announced as the transaction's own writes are (writeCapture.ts).
+                await history?.triggered?.(change);
+                await triggers!.changed?.(change);
+              },
+            },
+            scope,
+            watch: seen.watch,
+            prove: proving![0].createTriggerProof,
+          };
           records = createScopedTransaction(
             catalog,
             records,
             scopedReads(false),
             scopedReads(true),
             undefined,
-            bound && { reads: scopedReads(true, bound), whole: wholeWithin(scope, bound) },
+            bound && {
+              reads: scopedReads(true, bound),
+              whole: wholeWithin(scope, bound),
+              references: async (fk, key) => {
+                const statement = referencesStatement(catalog.schema, fk, key, ANSI_STYLE);
+                const [row] = await this.readRows(statement.text, statement.params, true, handle);
+                return Number(row?.n ?? 0);
+              },
+            },
             // A public intake writes exactly its fixed rows; only a principal's own transaction counts its new parents in.
             journal?.fixedRecords ? undefined : { scope, reads: (within, guard) => scopedReads(guard, within) },
+            // Triggers the App names, on a principal's own transaction: their effects proven per write (triggerProof.ts).
+            accepted,
           );
+          /* Each row the transaction's own statements write, told to the session after the statement and after the
+             proof has said what its triggers reached: a trigger the proof did not reach that writes it again later is
+             a change SQLite still calls direct. */
+          if (seen) {
+            const inner = records;
+            records = {
+              ...inner,
+              insert: async (r) => {
+                const result = await inner.insert(r);
+                seen.wrote(r.table, result.key);
+                return result;
+              },
+              update: async (r) => {
+                const result = await inner.update(r);
+                seen.wrote(r.table, r.key, r.values);
+                return result;
+              },
+              remove: async (r) => {
+                // Gone after the statement: its key as stored is read before it (sqliteTriggerSession.ts stored).
+                const key = seen.stored(r.table, r.key);
+                const result = await inner.remove(r);
+                seen.wrote(r.table, key);
+                return result;
+              },
+            };
+          }
           if (journal?.fixedRecords) records = journal.fixedRecords(records);
         }
         verified();
@@ -1514,6 +1663,7 @@ export class SqliteAdapter implements Adapter {
                   : {}),
                 query: (r: QueryRequest) => invoke(r, (r) => records.query(r)),
                 count: (table: string, filter?: Filter) => invoke({ table, filter }, (r) => records.count(r.table, r.filter)),
+                ...(records.aggregate ? { aggregate: (r: AggregateRequest) => invoke(r, (r) => records.aggregate!(r)) } : {}),
                 insert: (r: InsertRequest) => invoke(r, (r) => records.insert(r)),
                 remove: (r: DeleteRequest) => invoke(r, (r) => records.remove(r)),
                 update: (r: UpdateRequest) => invoke(r, (r) => records.update(r)),
@@ -1524,15 +1674,25 @@ export class SqliteAdapter implements Adapter {
               evidence,
             );
         await operations.finish();
+        witness?.settle();
         await finishWriteCapture(history);
         verified();
         verifyOrdinary();
         commitAttempted = true;
-        write.exec('COMMIT');
+        try {
+          write.exec('COMMIT');
+        } catch (error) {
+          /* A deferred foreign key the COMMIT found broken, in a scoped write: SQLite leaves the transaction open, so
+             nothing committed (the ROLLBACK below ends it), and the refusal is a hidden parent's (foreignKeyRefusal). */
+          if (scope === undefined || !isForeignKeyViolation(error) || !handle.isTransaction) throw error;
+          commitAttempted = false;
+          throw foreignKeyRefusal(error);
+        }
         committedWriteCapture(history);
         return out;
       } catch (err) {
         await operations.finish().catch(() => {});
+        witness?.close();
         let rolledBack = false;
         if (began) {
           try {

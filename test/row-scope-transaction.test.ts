@@ -76,7 +76,7 @@ test('SQLite scoped transactions expose only transaction methods and return the 
   const capability: Adapter = adapter;
   assert.equal(typeof capability.scopeTransaction, 'function');
   const result = await adapter.scopeTransaction(rowsA(), async (tx) => {
-    assert.deepEqual(Object.keys(tx).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+    assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
     assert.equal(await tx.count('item'), 2);
     assert.deepEqual((await tx.query(page('item', { columns: ['id'], filter: eq('id', 2) }))).rows, []);
     assert.equal(await tx.count('item', eq('id', 2)), 0);
@@ -759,11 +759,12 @@ test('SQLite scoped writes refuse views and virtual/shadow tables, and write a g
 });
 
 for (const temporary of [false, true]) {
-  test(`SQLite scoped writes refuse ${temporary ? 'TEMP' : 'main'} triggers on the target for every operation`, async (t) => {
+  test(`SQLite scoped writes refuse ${temporary ? 'TEMP' : 'main'} writing triggers on the target for each operation they fire on`, async (t) => {
     const { adapter } = await fixture(t);
     const write = await writer(adapter);
-    write.exec(`CREATE ${temporary ? 'TEMP' : ''} TRIGGER side_effect AFTER INSERT ON main.item
-      BEGIN UPDATE item SET name = 'Leaked' WHERE id = 2; END;`);
+    for (const event of ['INSERT', 'UPDATE', 'DELETE'])
+      write.exec(`CREATE ${temporary ? 'TEMP' : ''} TRIGGER side_effect_${event} AFTER ${event} ON main.item
+        BEGIN UPDATE item SET name = 'Leaked' WHERE id = 2; END;`);
     const before = await stored(adapter);
     for (const operation of [
       (tx: WriteTransaction) => tx.insert({ table: 'item', values: { id: 4 } }),
@@ -860,4 +861,34 @@ test('SQLite invalid complete scopes refuse before invoking the transaction call
   }
   assert.equal(invoked, false);
   assert.equal(accessed, false);
+});
+
+test('SQLite a hidden parent and a missing one answer alike, in the same words, and neither write is made', async (t) => {
+  // Before the write: a missing parent left to the database's own foreign key fails with its words, not the policy's.
+  const { adapter } = await fixture(t);
+  const before = await stored(adapter);
+  const said = async (operation: (tx: WriteTransaction) => Promise<unknown>) => {
+    try {
+      await adapter.scopeTransaction(rowsA(), operation);
+    } catch (error) {
+      const code = (error as { code?: unknown }).code;
+      return `${(error as Error).constructor.name}: ${(error as Error).message}${code === undefined ? '' : ` [${String(code)}]`}`;
+    }
+    return 'committed';
+  };
+  for (const [hidden, missing] of [
+    [
+      (tx: WriteTransaction) => tx.insert({ table: 'item', values: { id: 4, owner_id: 2 } }),
+      (tx: WriteTransaction) => tx.insert({ table: 'item', values: { id: 4, owner_id: 999 } }),
+    ],
+    [
+      (tx: WriteTransaction) => tx.update({ table: 'item', key: { id: 1 }, values: { owner_id: 2 } }),
+      (tx: WriteTransaction) => tx.update({ table: 'item', key: { id: 1 }, values: { owner_id: 999 } }),
+    ],
+  ]) {
+    const answer = await said(hidden);
+    assert.match(answer, /^ScopeRefusal: /);
+    assert.equal(await said(missing), answer);
+    assert.deepEqual(await stored(adapter), before);
+  }
 });

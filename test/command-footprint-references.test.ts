@@ -8,6 +8,8 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readResult } from '../packages/mistri/src/server/testing/appRequests.js';
+import { authorFault, isAuthorFault, recordRefusalCause } from '../packages/engine/src/shared/refusal.js';
 import { policyServer, sourceUrl } from './support/policyServer.js';
 
 const APP = {
@@ -18,7 +20,7 @@ const APP = {
     signUp: 'open',
     defaultRole: 'mechanic',
     rows: 'policy',
-    roles: { admin: { read: true }, mechanic: { read: true, commands: ['closeDay', 'openJob', 'assign'] } },
+    roles: { admin: { read: true, commands: ['openJob'] }, mechanic: { read: true, commands: ['closeDay', 'openJob', 'assign'] } },
   },
   resources: { job: { access: 'write', actions: { assign: { label: 'Assign', command: 'assign' } } }, bench: {}, staff: {} },
   views: { jobs: { kind: 'list', from: 'job' } },
@@ -94,3 +96,58 @@ test(
     );
   },
 );
+
+/* The footprint failure is the author's own mistake, and was said under the caller's fixed sentence: "refused (500
+   invalid_result): The command did not produce a valid result." on the terminal, the same as `message` in a test, with
+   what to fix only beneath it or in `body.cause` (a field report). It now leads; the caller's answer is unchanged. */
+test('a footprint failure leads with what to fix, for its author, and stays opaque to everyone else', { timeout: 60_000 }, async (t) => {
+  const server = await policyServer(t, { app: APP, policy: POLICY, sql: SQL, commands: COMMANDS });
+  const execute = (cookie: string, attempt: number) =>
+    server.api(
+      'commands/execute',
+      {
+        command: 'openJob',
+        commandVersion: 1,
+        key: {},
+        expectedVersion: 0,
+        idempotencyKey: `footprint-author-${String(attempt).padStart(6, '0')}`,
+        input: {},
+      },
+      cookie,
+    );
+  const cause =
+    /^Command "openJob" set job\.bench_id, which points at a "bench" row, and "bench" is not in the command's footprint: add "bench" to its read/;
+
+  // The App's administrator, on this machine, at an App served from its source: told why, as `cause`.
+  const author = await execute(await server.owner(), 1);
+  assert.equal(author.body.code, 'invalid_result', JSON.stringify(author.body));
+  assert.equal(author.body.message, 'The command did not produce a valid result.');
+  assert.match(author.body.cause, cause);
+  // Anyone else hears the fixed sentence alone.
+  const mechanic = await execute(await server.signUp('mechanic'), 2);
+  assert.equal(mechanic.body.code, 'invalid_result', JSON.stringify(mechanic.body));
+  assert.equal(Object.hasOwn(mechanic.body, 'cause'), false, JSON.stringify(mechanic.body));
+
+  // The terminal leads with the cause; the caller's sentence follows, as what callers are told.
+  const said = server.log();
+  assert.match(
+    said,
+    /refused \(500 invalid_result\): Command "openJob" set job\.bench_id[^\n]*\n\s+callers are told: The command did not produce a valid result\./,
+    said,
+  );
+  assert.doesNotMatch(said, /refused \(500 invalid_result\): The command did not produce a valid result\./, said);
+
+  // A test reads the author's answer with the cause first, and keeps it as `cause`.
+  const read = await readResult(new Response(JSON.stringify(author.body), { status: author.status }));
+  assert.equal(read.ok, false);
+  if (read.ok) return;
+  assert.match(read.message, cause);
+  assert.match(read.message, /\(callers are told: The command did not produce a valid result\.\)$/);
+  assert.match(read.cause ?? '', cause);
+});
+
+test("a refusal rebuilt over an author's mistake is still the author's; a cause alone is not", () => {
+  const fault = authorFault(new Error('The command did not produce a valid result.'), 'Add "bench" to its read.');
+  assert.equal(isAuthorFault(recordRefusalCause(new Error('The command did not produce a valid result.'), fault)), true);
+  assert.equal(isAuthorFault(recordRefusalCause(new Error('Try again.'), 'A driver said no.')), false);
+});

@@ -83,6 +83,7 @@ import {
   readAuthority,
   type AppAuthority,
 } from './authorityLock.js';
+import { lockedTriggers } from '../commands/triggerLock.js';
 import { withCommandCatalog } from '../../shared/command.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { AppEnvName } from '../../shared/appAuthority.js';
@@ -571,6 +572,9 @@ export async function loadApp(
   }
   const authority = await readAuthority(app, origins, dir ?? dirname(path), options.env);
   if (options.lock !== 'report') assertAuthorityLock(authority);
+  /* The triggers it approved, pinned into each scoped command's transaction (triggerLock.ts). */
+  const approved = lockedTriggers(authority.lock);
+  if (approved) app.approvedTriggers = Object.fromEntries(approved);
   // Command exposures are checked against their registry where one is hosted.
   assertAppApiContext(readApiApp(app));
   /* The components it places, each compiled from its module: a load that

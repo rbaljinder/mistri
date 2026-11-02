@@ -235,7 +235,15 @@ test('tenant runtime exposes only frozen read authority, with membership resourc
   assert.deepEqual(Reflect.ownKeys(runtime).sort(), ['retire', 'withContext']);
   const result = await runtime.withContext(request, ['north'], async (context) => {
     assert.deepEqual(Reflect.ownKeys(context).sort(), ['data', 'principal', 'schema', 'together']);
-    assert.deepEqual(Reflect.ownKeys(context.data).sort(), ['count', 'countBreakdown', 'countView', 'query', 'runBreakdown', 'runView']);
+    assert.deepEqual(Reflect.ownKeys(context.data).sort(), [
+      'aggregate',
+      'count',
+      'countBreakdown',
+      'countView',
+      'query',
+      'runBreakdown',
+      'runView',
+    ]);
     frozen(context);
     assert.deepEqual([...context.principal.roles], ['reviewer']);
     assert.equal(context.principal.accountId, 'alice');
@@ -293,7 +301,15 @@ test('presentation captures current membership data without granting writes to t
     retained!.schema.tables.every((table) => table.columns.every((column) => column.writable === false)),
     true,
   );
-  assert.deepEqual(Object.keys(retained!.data).sort(), ['count', 'countBreakdown', 'countView', 'query', 'runBreakdown', 'runView']);
+  assert.deepEqual(Object.keys(retained!.data).sort(), [
+    'aggregate',
+    'count',
+    'countBreakdown',
+    'countView',
+    'query',
+    'runBreakdown',
+    'runView',
+  ]);
 });
 
 for (const change of ['session', 'membership', 'retire', 'throw', 'non-data'] as const) {

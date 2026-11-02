@@ -34,6 +34,7 @@ import {
   type UpdateRequest,
   type UpdateResult,
 } from '@mistriwork/engine/adapters/adapter.js';
+import type { TriggerChange } from '@mistriwork/engine/adapters/storeHost.js';
 import { currentWriteAttribution } from '@mistriwork/engine/adapters/writeAttribution.js';
 
 export const LIVE_CHANGE_VERSION = 1;
@@ -210,6 +211,8 @@ export interface LiveChangeCapture {
   insert(request: InsertRequest, write: (request: InsertRequest) => Promise<InsertResult>): Promise<InsertResult>;
   update(request: UpdateRequest, write: (request: UpdateRequest) => Promise<UpdateResult>): Promise<UpdateResult>;
   remove(request: DeleteRequest, write: (request: DeleteRequest) => Promise<DeleteResult>): Promise<DeleteResult>;
+  /** A row an accepted trigger changed (../writeCapture.ts): announced as the transaction's own writes are. */
+  triggered(change: TriggerChange): Promise<void>;
   finish(): Promise<void>;
   committed(): void;
 }
@@ -246,6 +249,10 @@ function liveKey(key: Record<string, unknown>): LiveKey | undefined {
   }
   return Object.keys(out).length ? out : undefined;
 }
+
+/* Values cross the driver: 3 and '3' are one value, null is only null. */
+const sameValue = (a: unknown, b: unknown) =>
+  a === null || a === undefined || b === null || b === undefined ? (a ?? null) === (b ?? null) : String(a) === String(b);
 
 const keyText = (key: LiveKey) =>
   JSON.stringify(
@@ -377,6 +384,25 @@ export function captureLiveChanges(adapter: object, sink: LiveChangeSink, now: (
       if (result.affected !== 1) return result;
       note(request.table, 'delete', tenantOf(request.table, before), liveKey(request.key), undefined, before);
       return result;
+    },
+    /* The proof read the row before and after (triggerProof.ts), under the write's locks: its images are the ones a
+       write of the transaction's own would have read. An insert whose key the database assigned names no key, and
+       says `many` for its table. */
+    async triggered(change) {
+      if (unheard(change.table) || !(await on())) return;
+      const columns =
+        change.kind === 'update' && change.before && change.after
+          ? Object.keys(change.after).filter((column) => !sameValue(change.before![column], change.after![column]))
+          : undefined;
+      if (columns && !columns.length) return;
+      note(
+        change.table,
+        change.kind,
+        tenantOf(change.table, change.before ?? change.after),
+        change.key && liveKey(change.key),
+        columns,
+        change.before,
+      );
     },
     async finish() {
       if (!wrote || !building.size) return;

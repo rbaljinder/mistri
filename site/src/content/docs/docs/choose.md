@@ -82,10 +82,10 @@ Figures first, then how they move and divide, then what waits ([Design a dashboa
 | --- | --- | --- | --- |
 | The headline numbers | 3 or 4 `metric` cards of one `width` | more than four in a row | `examples/apps/lintel/dashboards.ts:11` |
 | A figure with a before | `over` with `better` (the change and its trend come unasked) | `better` alone: there is no change to color | `examples/apps/lintel/dashboards.ts:17` |
-| Movement over time | a `chart` over `auto` (or by month) | `week`: it is a window, not a grouping | `examples/apps/lintel/dashboards.ts:40` |
-| A total divided by a vocabulary; two divisions crossed | a `breakdown` at half width; a `matrix` | — | `examples/apps/lintel/dashboards.ts:49` |
-| Work waiting | `rows` of it with a `limit`, two to a row | — | `examples/apps/lintel/dashboards.ts:50` |
-| Read by period | `windows` on the dashboard, `over` on each section | — | `examples/apps/lintel/dashboards.ts:73` |
+| Movement over time | a `chart` over `auto` (or by month) | `week`: it is a window, not a grouping | `examples/apps/lintel/dashboards.ts:41` |
+| A total divided by a vocabulary; two divisions crossed | a `breakdown` at half width; a `matrix` | — | `examples/apps/lintel/dashboards.ts:50` |
+| Work waiting | `rows` of it with a `limit`, two to a row | — | `examples/apps/lintel/dashboards.ts:51` |
+| Read by period | `windows` on the dashboard, `over` on each section | — | `examples/apps/lintel/dashboards.ts:74` |
 
 ## Arrange the App
 

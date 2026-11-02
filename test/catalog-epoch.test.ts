@@ -107,7 +107,8 @@ test('SQLite: a row scope kept under the epoch still refuses a table a trigger w
     await write('scoped');
     const warm = await statementsOf(() => write('warm'));
     assert.deepEqual(warm.catalog, [], `a warm scoped write asks the catalog nothing:\n${warm.statements.join('\n')}`);
-    f.db.exec(`CREATE TRIGGER audit_item AFTER UPDATE ON item BEGIN SELECT 1; END`);
+    // A trigger that writes: a validation-only one would not block the write at all.
+    f.db.exec(`CREATE TRIGGER audit_item AFTER UPDATE ON item BEGIN DELETE FROM item WHERE 0; END`);
     await assert.rejects(write('after trigger'), /not available in the current row scope|read-only in this scope/);
     f.db.exec('DROP TRIGGER audit_item');
     await write('trigger gone');
@@ -165,7 +166,7 @@ test(
       const warm = await statementsOf(() => write({ name: 'warm' }));
       assert.deepEqual(warm.catalog, [], `a warm command asks the catalog nothing:\n${warm.statements.join('\n')}`);
       assert.equal(warm.epoch, 1, 'the epoch rides in the message that begins the transaction');
-      assert.match(warm.statements[0], /^BEGIN; LOCK TABLE/, 'with the lock the scope pinned last time');
+      assert.match(warm.statements[0], /^BEGIN;(?: SET LOCAL [^;]+;)* LOCK TABLE/, 'with the lock the scope pinned last time');
 
       // A column added underneath is written by the next transaction.
       await assert.rejects(write({ extra: 'x' }), refusedWith(/no column called "extra"/));
@@ -173,8 +174,8 @@ test(
       await write({ extra: 'x' });
       assert.equal((await control.query('SELECT extra FROM item WHERE id = 1')).rows[0].extra, 'x');
 
-      // A trigger attached underneath makes the table read-only in scope at once.
-      await control.query(`CREATE FUNCTION noop() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+      // A writing trigger attached underneath refuses the writes it fires on at once.
+      await control.query(`CREATE FUNCTION noop() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN UPDATE item SET id = id WHERE false; RETURN NEW; END $$;
       CREATE TRIGGER noop BEFORE UPDATE ON item FOR EACH ROW EXECUTE FUNCTION noop()`);
       await assert.rejects(write({ name: 'refused' }));
       await control.query('DROP TRIGGER noop ON item');
@@ -260,12 +261,12 @@ test(
       const warm = await statementsOf(() => write({ name: 'warm' }));
       // The digest, in the message that begins the transaction, and no other catalog read: no relation probe, no column read, no scope facts.
       assert.equal(warm.catalog.length, 1, `one catalog statement, the digest:\n${warm.statements.join('\n')}`);
-      assert.match(warm.catalog[0], /^BEGIN; LOCK TABLE .* AS fingerprint/s);
+      assert.match(warm.catalog[0], /^BEGIN;(?: SET LOCAL [^;]+;)* LOCK TABLE .* AS fingerprint/s);
       await assert.rejects(write({ extra: 'x' }), refusedWith(/no column called "extra"/));
       await control.query('ALTER TABLE item ADD COLUMN extra text');
       await write({ extra: 'x' });
       assert.equal((await control.query('SELECT extra FROM item WHERE id = 1')).rows[0].extra, 'x');
-      await control.query(`CREATE FUNCTION noop() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+      await control.query(`CREATE FUNCTION noop() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN UPDATE item SET id = id WHERE false; RETURN NEW; END $$;
       CREATE TRIGGER noop BEFORE UPDATE ON item FOR EACH ROW EXECUTE FUNCTION noop()`);
       await assert.rejects(write({ name: 'refused' }));
     } finally {

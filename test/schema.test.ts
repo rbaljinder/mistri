@@ -704,7 +704,11 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.1 forms wave 3b: a palette's `primary` and `onPrimary` (light and dark), and a New form field's `as` (five entries; `onPrimary` is the one new name): 1661/498.
     // 1.0.0-rc.1 retention: the App's `retention` and its `history`, `commands` and `attempts` windows (four entries; `retention`, `history` and `attempts` are new names): 1665/501.
     // PR #12: `ui.pwa`, the PWA opt-in (one entry, one new name): 1666/502.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1666, names: 502 });
+    // 1.0.0-rc.11: a display rule's `timezone`, the zone a `date` or `datetime` is said in (one entry; `timezone` is ui's name already): 1667/502.
+    // 1.0.0-rc.11: a metric's `figure`, exact (the default) or compact (one entry; `figure` is a name already): 1668/502.
+    // 1.0.0-rc.11: a money rule's `whole`, a whole amount said without its minor digits (one entry, one new name): 1669/503.
+    // 1.0.0-rc.11: a resource's `triggers`, the ones a row policy accepts (one entry, one new name): 1670/504.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1670, names: 504 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

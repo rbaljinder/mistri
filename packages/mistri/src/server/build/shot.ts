@@ -416,8 +416,16 @@ export interface Shot {
   name: string;
   view?: string;
   page?: string;
-  /** A record's table, where the address is one record's. */
+  /** A record's table, where the address is one record's (a document's too: its record's). */
   table?: string;
+  /** What the address is, for grade's inventory of what it covered. */
+  kind?: 'home' | 'view' | 'page' | 'record' | 'document';
+}
+
+/** An address the discovery did not open, and why: grade says these beside what it covered. */
+interface Unshot {
+  what: string;
+  why: string;
 }
 
 const slug = (path: string) =>
@@ -430,16 +438,19 @@ const slug = (path: string) =>
 /**
  * The addresses asked for, each checked against the App's own route book —
  * a segment it does not answer to is refused with the ones it does — or, with
- * none asked, every view and page it declares: each room, and one record of
- * each table a page draws, the first by its key.
+ * none asked, every view and page it declares: each room, one record of
+ * each table a page draws, the first by its key, and each document of that
+ * record (`/orders/12/invoice`), which no route or menu names. What it passes
+ * over is said in `skipped`, with why.
  */
-async function addresses(
+export async function addresses(
   asked: readonly string[],
   loaded: LoadedApp,
   book: AddressBook,
   firstKey: (table: string, column?: string) => Promise<string | undefined>,
   realm: 'tenant' | 'platform' | undefined,
   mount: AddressMount,
+  skipped: Unshot[] = [],
 ): Promise<Shot[]> {
   const app = encodeURIComponent(loaded.app.id);
   if (asked.length) {
@@ -478,7 +489,7 @@ async function addresses(
       return { path, name: slug(path.slice(app.length + 1)) };
     });
   }
-  const shots: Shot[] = [{ path: `/${app}`, name: 'home' }];
+  const shots: Shot[] = [{ path: `/${app}`, name: 'home', kind: 'home' }];
   /* A tenant App's context offers its own realm's rooms: the other's are not there to shoot. */
   const elsewhere = (target: { kind: string; view?: string; page?: string }) => {
     if (!realm) return false;
@@ -490,25 +501,66 @@ async function addresses(
           : undefined;
     return said !== undefined && said !== realm;
   };
+  const other = realm === 'tenant' ? "the platform's" : "a tenant's";
   for (const [segment, target] of book.routes) {
-    if (target.kind === 'table' || elsewhere(target)) continue; // a table no view declares, or the other realm's
+    if (target.kind === 'table') continue; // a table no view declares: its rows are addressed through its records
+    if (elsewhere(target)) {
+      skipped.push({ what: `/${app}/${segment}`, why: `${other}, not this context's` });
+      continue;
+    }
     shots.push({
       path: `/${app}/${segment}`,
       name: slug(segment),
+      kind: 'view' in target ? 'view' : 'page',
       ...('view' in target ? { view: target.view } : {}),
       ...('page' in target ? { page: target.page } : {}),
     });
   }
+  const keys = new Map<string, string>();
   for (const [table, route] of book.records) {
-    if (route.parent || !book.defaultPage.has(table) || elsewhere(route.target)) continue;
+    if (!book.defaultPage.has(table)) continue; // no page draws its record: there is none to open
+    const where = `/${app}/${route.segment}/{id}`;
+    if (route.parent) {
+      skipped.push({ what: where, why: `said under its ${route.parent.table}'s address: name one to grade it` });
+      continue;
+    }
+    if (elsewhere(route.target)) {
+      skipped.push({ what: where, why: `${other}, not this context's` });
+      continue;
+    }
     const key = await firstKey(table, route.column);
-    if (key !== undefined)
-      shots.push({
-        path: `/${app}/${route.segment}/${encodeURIComponent(key)}`,
-        name: slug(`${route.segment}-${key}`),
-        page: book.defaultPage.get(table),
-        table,
+    if (key === undefined) {
+      skipped.push({ what: where, why: 'no row to open' });
+      continue;
+    }
+    keys.set(table, key);
+    shots.push({
+      path: `/${app}/${route.segment}/${encodeURIComponent(key)}`,
+      name: slug(`${route.segment}-${key}`),
+      kind: 'record',
+      page: book.defaultPage.get(table),
+      table,
+    });
+  }
+  /* A document is put on paper from its record (appDocuments.ts): the record opened above, under the document's key. */
+  for (const page of loaded.pages) {
+    if (page.document === undefined) continue;
+    const route = book.records.get(page.base);
+    const key = keys.get(page.base);
+    if (!route || key === undefined) {
+      skipped.push({
+        what: route ? `/${app}/${route.segment}/{id}/${page.id}` : `the document "${page.id}"`,
+        why: route ? 'its record was not opened' : `"${page.base}" has no record address`,
       });
+      continue;
+    }
+    shots.push({
+      path: `/${app}/${route.segment}/${encodeURIComponent(key)}/${encodeURIComponent(page.id)}`,
+      name: slug(`${route.segment}-${key}-${page.id}`),
+      kind: 'document',
+      page: page.id,
+      table: page.base,
+    });
   }
   return [...new Map(shots.map((shot) => [shot.path, shot])).values()];
 }
@@ -567,16 +619,24 @@ async function serve(args: string[], env: Record<string, string>): Promise<{ ori
 }
 
 /** Signed in as an account of `role`: the bootstrapped admin, one it makes with that role, or — `made` — one already made (shotTenant.ts). */
-async function signIn(browser: Browser, origin: string, admin: { email: string; password: string }, role: string, made = false) {
+async function signIn(
+  browser: Browser,
+  origin: string,
+  app: string,
+  admin: { email: string; password: string },
+  role: string,
+  made = false,
+) {
   const context = await browser.newContext();
-  const post = async (path: string, data: Record<string, string>) => {
+  const post = async (path: string, data: Record<string, unknown>) => {
     const answer = await context.request.post(`${origin}${path}`, { headers: { origin }, data });
     if (!answer.ok()) throw new Refusal(`signing in as "${role}" failed: ${path} answered ${answer.status()}.`);
   };
   await post('/api/auth/sign-in/email', admin);
   if (role !== 'admin' && !made) {
     const account = { email: `shot-${role}@example.invalid`, password: randomBytes(18).toString('base64url') };
-    await post('/api/auth/admin/create-user', { ...account, name: `A ${role}`, role });
+    /* Through the accounts screen's door, which checks the role is the App's and records the account it makes. */
+    await post('/api/accounts', { app, operation: 'create', ...account, name: `A ${role}`, roles: [role] });
     await context.clearCookies();
     await post('/api/auth/sign-in/email', account);
   }
@@ -1156,6 +1216,8 @@ interface OpenedShotRun {
   loaded: LoadedApp;
   schema: Awaited<ReturnType<typeof loadAppRuntimeResources>>['schema'];
   shots: Shot[];
+  /** What the discovery passed over, and why (nothing, where addresses were asked for). */
+  skipped: Unshot[];
   origin: string;
   browser: Browser;
   session?: SessionState;
@@ -1377,12 +1439,14 @@ class ShotRun {
       /* Served as the server started below serves it: one App at the root,
          a tenant App's too, unless the flags say otherwise. */
       const mount = settingsMount([loaded.app.id], opts, config);
-      const shots = (await addresses(options.routes, loaded, appRoutes(loaded, schema), firstKey, this.member?.realm, mount)).map(
+      const skipped: Unshot[] = [];
+      const shots = (await addresses(options.routes, loaded, appRoutes(loaded, schema), firstKey, this.member?.realm, mount, skipped)).map(
         (shot) => ({
           ...shot,
           path: outward(mount, shot.path),
         }),
       );
+      for (const unshot of skipped) if (unshot.what.startsWith('/')) unshot.what = outward(mount, unshot.what);
 
       const started = await serve(
         [...options.rest, ...(config.configPath && !opts.config ? ['--config', config.configPath] : []), '--app', appDir],
@@ -1408,21 +1472,23 @@ class ShotRun {
       if (options.everyRole) {
         sessions = [{ role: 'signed-out' }];
         // One at a time: each makes an account in the run's store.
-        for (const role of peopleRoles(auth!.roles)) sessions.push({ role, session: await signIn(browser, started.origin, admin!, role) });
+        for (const role of peopleRoles(auth!.roles))
+          sessions.push({ role, session: await signIn(browser, started.origin, loaded.app.id, admin!, role) });
       }
       const session = options.everyRole
         ? undefined
         : admin
-          ? await signIn(browser, started.origin, admin, options.as!)
+          ? await signIn(browser, started.origin, loaded.app.id, admin, options.as!)
           : account
-            ? await signIn(browser, started.origin, account, options.as!, true)
+            ? await signIn(browser, started.origin, loaded.app.id, account, options.as!, true)
             : this.member
-              ? await signIn(browser, started.origin, this.member, options.as!, true)
+              ? await signIn(browser, started.origin, loaded.app.id, this.member, options.as!, true)
               : undefined;
       return {
         loaded,
         schema,
         shots,
+        skipped,
         origin: started.origin,
         browser,
         session,

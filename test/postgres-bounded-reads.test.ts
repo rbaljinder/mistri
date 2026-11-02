@@ -450,7 +450,7 @@ describe('bounded tenant reads on PostgreSQL', { skip: liveSkip('postgres', LIVE
       `asked again in a snapshot whose catalog is checked: ${JSON.stringify(again)}`,
     );
     assert.ok(
-      again.some((statement) => /md5\(string_agg/.test(statement.text)),
+      again.some((statement) => /(?:pg_catalog\.)?md5\((?:pg_catalog\.)?string_agg/.test(statement.text)),
       'the digest read on the snapshot asked again',
     );
     // And a member whose membership was revoked meanwhile is refused on the same path.

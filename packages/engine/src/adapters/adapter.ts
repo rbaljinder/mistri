@@ -15,11 +15,14 @@ import { declaredOrder, type DatabaseSchema, type Order, type TableMeta } from '
    these edges do not exist once compiled. */
 import type { CompiledColumn, CompiledJoin, ViewDef } from '../shared/view.js';
 import type { BreakdownDef, CompiledMeasure } from '../shared/breakdown.js';
+import type { AggregateRequest, AggregateResult } from '../shared/aggregate.js';
 import type { RowScope } from '../shared/rowScope.js';
 import { Refusal } from '../shared/refusal.js';
 import type { QueryResult } from '../shared/reads.js';
 import { orderClauseSql, type Filter, type SqlFragment, type SqlStyle } from '../shared/filter.js';
 import type { PoolRoleStats } from './poolMetrics.js';
+import type { ScopeTrigger } from './scoped/scopeTriggers.js';
+import type { TriggerKeyFacts } from './scoped/triggerEffects.js';
 
 /* The filter, the limit policy and Refusal live in shared/, where the query
    language and views reach them without depending on the adapters. Adapter
@@ -35,6 +38,7 @@ export {
   type SqlFragment,
   type SqlStyle,
 } from '../shared/filter.js';
+export type { AggregateMeasure, AggregateRequest, AggregateResult } from '../shared/aggregate.js';
 export {
   DEFAULT_LIMIT,
   ESTIMATE_ABOVE,
@@ -133,6 +137,11 @@ export interface QueryRequest {
   offset: number;
   /** Binary columns come back as their bytes, not the `<n bytes>` label: a file download's read, never a grid's. */
   binary?: true;
+  /**
+   * A PostgreSQL scoped read also selects the stored text of the table's reference columns, which a scoped write's
+   * parent check binds rather than the driver's reading of them (scoped/storedText.ts). Ignored elsewhere.
+   */
+  storedText?: true;
 }
 
 /**
@@ -617,6 +626,10 @@ export interface WriteTransaction {
   lockRecord?(request: DeleteRequest): Promise<void>;
   query(request: QueryRequest): Promise<QueryResult>;
   count(table: string, filter?: Filter): Promise<number>;
+  /** A command's sums, counts and groups over one table's own columns (shared/aggregate.ts), read as `count` reads:
+   * through the same scope, footprint and table names. Optional, and never approximated where absent: a facade that
+   * cannot bound it as it bounds `count` leaves it out, and the command's `db` refuses the call. */
+  aggregate?(request: AggregateRequest): Promise<AggregateResult>;
   /** Non-replacing creation, including restoration: enforce InsertRequest's
    * conflict contract in this transaction. A prior absent-key lock/read is not
    * an absence reservation; uniqueness conflicts must still reject the insert. */
@@ -773,6 +786,8 @@ export interface ScopedReads {
   runBreakdown(breakdown: BreakdownDef, offset?: number): Promise<BreakdownResult>;
   /** With `limit`, stops after that many groups, as `count` does. */
   countBreakdown(breakdown: BreakdownDef, limit?: number): Promise<number>;
+  /** An aggregate over one table, under the scope (WriteTransaction.aggregate). */
+  aggregate?(request: AggregateRequest): Promise<AggregateResult>;
   /** Several `count`s in one statement, each under the scope and its own filter
    * (a menu's badges); absent on a reader that counts one at a time. */
   countEach?(items: readonly CountItem[], limit?: number): Promise<number[]>;
@@ -810,6 +825,22 @@ export interface Adapter {
    * the boundary that always holds. Absent where there is no role (SQLite).
    */
   privileges?(): Promise<RolePrivileges>;
+
+  /**
+   * Each table's triggers, keyed by table id, read as a row-scoped write reads
+   * them (scoped/scopeTriggers.ts): which writes fire each, and whether it only
+   * checks the row it fires on. For `mistri check`, which names the commands a
+   * trigger blocks; a write never trusts this, and reads them again on its
+   * writer, under its own lock.
+   */
+  triggers?(): Promise<ReadonlyMap<string, readonly ScopeTrigger[]>>;
+
+  /**
+   * The keys of `tables` a trigger's effect may name, and how each column compares, read by the rules a scoped
+   * write judges effects by (triggerEffects.ts), so `mistri check` refuses the keys a write would refuse. As with
+   * `triggers`, a write never trusts this and reads them again on its writer.
+   */
+  triggerKeys?(tables: readonly string[]): Promise<TriggerKeyFacts>;
 
   /**
    * The connection pools' meters (poolMetrics.ts): checkouts, the wait for a
@@ -908,6 +939,11 @@ export interface Adapter {
 
   /** How many groups there are, ignoring the page. With `limit`, stops after that many. */
   countBreakdown?(breakdown: BreakdownDef, limit?: number): Promise<number>;
+
+  /** A command's sums and groups over one table's own columns (shared/aggregate.ts), as `count` reads the table:
+      what a row policy's `db`, a page loader and a command's availability read through. Optional, and never
+      approximated where absent: a reader that cannot bound it as it bounds `count` leaves it out, and the `db` refuses. */
+  aggregate?(request: AggregateRequest): Promise<AggregateResult>;
 
   /**
    * Count matching rows, for pagination and the "how many point here" badge.

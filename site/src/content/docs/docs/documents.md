@@ -50,6 +50,8 @@ A document draws three kinds of section: `fields`, related lists and notes. They
 - **A related list** is every line of the record, up to 500, found by `whose` or, as on a page, by a match (`{ same: ['sales_order_id'] }`, the lines that share the record's order). It is drawn as a table whose header repeats on each sheet, with figures right-aligned in tabular numerals and money to the cent. Its `totals` are said once, under the last line.
 - **A note** holds the terms, a thank-you or how to pay. `variant: 'quiet'` sets it as small print.
 
+A value on paper is said as the App dresses it, with three exceptions. A date is its day ("Sep 4, 2026"), never "yesterday" or "13 days ago", and a moment is its day, time and zone, so the sheet says the same words on any day and for any reader. A status is its plain word. Money is shown to the cent. The sheet is ink on white in every look and in dark mode, and a [custom value component](/docs/custom-components/) drawn on it inherits paper's inks. Printed, it is the sheet alone: no navigation, bar or skip link.
+
 Paper refuses whatever operates a screen: the aside, tabs, actions, row actions, editing, a gallery or cards. `mistri check` names each one under the [`document`](/docs/check-codes/) code.
 
 ## Who sees it

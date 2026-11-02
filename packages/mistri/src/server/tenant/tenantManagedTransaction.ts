@@ -2,6 +2,7 @@ import { isPromise, isProxy, isUint8Array } from 'node:util/types';
 import {
   TransactionOperations,
   TransactionOutcomeUnknown,
+  type AggregateRequest,
   type DeleteRequest,
   type TellRequest,
   type Filter,
@@ -23,6 +24,7 @@ import { supportManagedKind } from './tenantManagedKindSupport.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
 import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { assertStructuredReadFilter } from '@mistriwork/engine/server/resourceReadOperations.js';
+import { aggregateColumns } from '@mistriwork/engine/shared/aggregate.js';
 
 /** The principals a managed transaction runs for, chosen by the evidence's own
  * `realm`; any other realm is refused. A kind adds its module and one line here. */
@@ -128,6 +130,12 @@ async function runManaged<T>(
   const tell =
     told && 'value' in told && typeof told.value === 'function'
       ? (((...args: unknown[]) => Reflect.apply(told.value, records, args)) as NonNullable<WriteTransaction['tell']>)
+      : undefined;
+  // Optional too: a command's sums and groups, where the engine beneath can say them (commandDb.ts).
+  const summed = Object.getOwnPropertyDescriptor(records, 'aggregate');
+  const aggregate =
+    summed && 'value' in summed && typeof summed.value === 'function'
+      ? (((...args: unknown[]) => Reflect.apply(summed.value, records, args)) as NonNullable<WriteTransaction['aggregate']>)
       : undefined;
   const journalMethod = <K extends keyof CommandJournal>(name: K): CommandJournal[K] => {
     if (!journal || typeof journal !== 'object' || isProxy(journal)) return denyTenant();
@@ -248,6 +256,27 @@ async function runManaged<T>(
         filter(target(value.table), value.filter);
         return count(value.table, value.filter);
       }),
+    /* Read as `count` reads: one table the tenant may name, and its own columns only; the scope beneath binds the rows. */
+    ...(aggregate
+      ? {
+          aggregate: (request: AggregateRequest) =>
+            invoke(request, (value) => {
+              tenantRecord(value, ['table', 'filter', 'by', 'measures', 'orderBy', 'limit', 'dates']);
+              const table = target(value.table);
+              filter(table, value.filter);
+              if (
+                typeof value.limit !== 'number' ||
+                !Array.isArray(value.measures) ||
+                (value.by !== undefined && !Array.isArray(value.by)) ||
+                (value.dates !== undefined && !Array.isArray(value.dates)) ||
+                (value.orderBy !== undefined && !Array.isArray(value.orderBy)) ||
+                aggregateColumns(value).some((column) => !known(table, column))
+              )
+                return denyTenant();
+              return aggregate(value);
+            }),
+        }
+      : {}),
     insert: (request: InsertRequest) =>
       invoke(request, (value) => {
         tenantRecord(value, ['table', 'values']);

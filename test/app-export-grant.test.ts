@@ -17,7 +17,7 @@ import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 /* Export is a grant of its own: a person exports a table any of their roles writes or lists in `export`, a visitor
    never, and an App without role grants keeps its one switch. The server refuses the file, not only the menu. */
 const connection = 'export-grant-database';
-const appId = 'export-atlas';
+const appId = 'export-teller';
 const person = (role: string): Identity => ({
   id: `account-${role}`,
   who: `${role}@example.test`,
@@ -34,7 +34,7 @@ const appOver = (ui?: Record<string, unknown>) =>
   parseAppConfig(
     {
       id: appId,
-      name: 'Export Atlas',
+      name: 'Export Teller',
       connection,
       resources: { incident: { access: 'write' }, service: {} },
       auth: {
@@ -61,7 +61,7 @@ const app = appOver();
 
 async function served(run: (base: string) => Promise<void>, over = app, more = '') {
   const directory = mkdtempSync(join(tmpdir(), 'tablewalk-export-grant-'));
-  const path = join(directory, 'atlas.db');
+  const path = join(directory, 'teller.db');
   const db = new DatabaseSync(path);
   db.exec(`
     CREATE TABLE service (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
@@ -74,7 +74,7 @@ async function served(run: (base: string) => Promise<void>, over = app, more = '
   const registry = new Registry();
   registry.add({
     id: connection,
-    name: 'Atlas',
+    name: 'Teller',
     url: path,
     source: 'config',
     writable: true,
@@ -141,6 +141,71 @@ test('a writer exports what they write, a listed reader what is listed, any othe
   });
 });
 
+test("a CSV says money to its currency's minor digits, exactly: whole, zero, negative, cents and past 2^53", async () => {
+  /* A field report's statement export: an amount is read to settle something, so "5917" is 5917.00, as the screen
+     says it, and a sum kept in cents past 2^53 is its digits, never the double Number() makes of it. */
+  const priced = parseAppConfig(
+    {
+      id: appId,
+      name: 'Export Teller',
+      connection,
+      resources: {
+        incident: { access: 'write' },
+        service: {},
+        charge: {
+          access: 'write',
+          display: {
+            amount: { format: 'money' },
+            yen: { format: 'money', currency: 'JPY' },
+            cents: { format: 'money', minor: true },
+          },
+        },
+      },
+      auth: { providers: ['email'], roles: { writer: { read: ['incident', 'service', 'charge'], write: ['incident', 'charge'] } } },
+      views: { incidents: { kind: 'list', from: 'incident' } },
+      home: 'incidents',
+    },
+    'export money fixture',
+  );
+  await served(
+    async (base) => {
+      const response = await fetch(`${base}/api/export`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(3_000),
+        headers: { Cookie: 'session=writer', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ app: appId, q: 'charge sort id', format: 'csv' }),
+      });
+      assert.equal(response.status, 200);
+      const lines = (await response.text())
+        .replace(/^\uFEFF/, '')
+        .trim()
+        .split(/\r?\n/);
+      assert.deepEqual(
+        lines,
+        [
+          'id,amount,yen,cents',
+          '1,5917.00,1500,591700',
+          '2,0.00,0,0',
+          '3,-12.50,-40,-1250',
+          '4,19.99,1500,1999',
+          '5,90071992547409931.25,1500,9007199254740993',
+        ].map((line, i) => (i === 0 ? line : line.replace(/,(-?\d+)$/, (_, c) => `,${minorText(c)}`))),
+      );
+    },
+    priced,
+    `CREATE TABLE charge (id INTEGER PRIMARY KEY, amount TEXT, yen INTEGER, cents TEXT);
+     INSERT INTO charge VALUES (1, '5917', 1500, '591700'), (2, '0', 0, '0'), (3, '-12.5', -40, '-1250'),
+       (4, '19.99', 1500, '1999'), (5, '90071992547409931.25', 1500, '9007199254740993');`,
+  );
+});
+
+/** A whole number of cents as its dollars, by its digits. */
+const minorText = (cents: string) => {
+  const sign = cents.startsWith('-') ? '-' : '';
+  const digits = cents.replace('-', '').padStart(3, '0');
+  return `${sign}${digits.slice(0, -2)}.${digits.slice(-2)}`;
+};
+
 test('the app payload offers Export only for the tables the person may export', async () => {
   await served(async (base) => {
     const tables = async (who?: string) => {
@@ -183,7 +248,7 @@ test('appExportable: role export is inherited through extends, and an App withou
   const extending = parseAppConfig(
     {
       id: appId,
-      name: 'Export Atlas',
+      name: 'Export Teller',
       connection,
       resources: { incident: { access: 'write' }, service: {} },
       auth: {
@@ -220,7 +285,7 @@ test('export names a table the role reads', () => {
     parseAppConfig(
       {
         id: appId,
-        name: 'Export Atlas',
+        name: 'Export Teller',
         connection,
         resources: { incident: { access: 'write' }, service: {} },
         auth: {
@@ -289,7 +354,7 @@ test('a rollup carries the table it counts into the file, and the export grant h
   const over = parseAppConfig(
     {
       id: appId,
-      name: 'Export Atlas',
+      name: 'Export Teller',
       connection,
       resources: {
         incident: { access: 'write', computed: { doubled: { type: 'number', value: 'id * 2' } } },

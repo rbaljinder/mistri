@@ -1,7 +1,7 @@
 /** Shared eligibility evaluation. The host must supply already-authorized
  * target rows and a read transaction under the command's footprint/row scope.
  * This helper neither authorizes a principal nor executes a handler. */
-import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import type { AggregateRequest, WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { BULK_LIMIT } from '../../shared/command.js';
@@ -70,7 +70,7 @@ export async function readCommandAvailability(options: {
   command: AnyBusinessCommand;
   actor: BusinessCommandActor;
   catalog: CommandCatalog;
-  reader: Pick<WriteTransaction, 'query' | 'count'>;
+  reader: Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>;
   signal: AbortSignal;
   requestId?: string;
   now?: () => Date;
@@ -143,7 +143,7 @@ export async function evaluateCommandAvailability(options: {
   actor: BusinessCommandActor;
   records: readonly Readonly<Record<string, unknown>>[];
   catalog: CommandCatalog;
-  reader: Pick<WriteTransaction, 'query' | 'count'>;
+  reader: Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>;
   signal: AbortSignal;
   requestId: string;
   now: () => Date;
@@ -181,7 +181,7 @@ export async function evaluateCommandAvailability(options: {
   } catch {
     throw new BusinessCommandExecutionError('invalid_input');
   }
-  const reader: Pick<WriteTransaction, 'query' | 'count'> = Object.freeze({
+  const reader: Pick<WriteTransaction, 'query' | 'count' | 'aggregate'> = Object.freeze({
     query: async (request) => {
       checkCancelled();
       const result = await options.reader.query(request);
@@ -194,6 +194,18 @@ export async function evaluateCommandAvailability(options: {
       checkCancelled();
       return result;
     },
+    /* A sum or a group, read through the same facade and under the same cancellation as `count`; a reader without
+       one leaves it out and the handle refuses (commandDb.ts). */
+    ...(options.reader.aggregate
+      ? {
+          aggregate: async (request: AggregateRequest) => {
+            checkCancelled();
+            const result = await options.reader.aggregate!(request);
+            checkCancelled();
+            return result;
+          },
+        }
+      : {}),
   });
   const db = createCommandDb({ tx: reader, catalog: options.catalog, read: command.read, write: [], now: options.now });
   const result = await hook(

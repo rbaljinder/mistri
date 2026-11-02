@@ -18,6 +18,8 @@ import { APP_DEMO_DB, configHome, expect, FIELDOPS, type Page, test } from './su
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { count } from './support/db';
+import { inPage, probePage, type Probe } from '../packages/mistri/src/server/build/gradeProbe';
+import { TAP } from '../packages/mistri/src/server/build/gradeJudge';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
 test.use({ servers: ['fieldops'] });
@@ -262,6 +264,65 @@ test('app mode humanizes column headers without hiding the real names', async ({
   /* The label is for reading; the tooltip keeps speaking the column's real
      name, so the humanized word never hides what the data is. */
   await expect(header).toHaveAttribute('title', /first_name/);
+});
+
+test('a head’s sort ends where its resizer begins, with a reference’s arrow and the sort’s at its floor, in every look', async ({
+  page,
+}) => {
+  /* At 768 a column sits at the floor its head sets, and the sort filled the head to its edge, under the resizer's
+     12px: "Engineer→↑" (a reference, sorted) shared 6-10px with "Resize Engineer column" in four looks, the overlap
+     grade reports as an error (a field report: "Customer→" on /jobs@768). Looked at as the grade does, by the boxes,
+     and the label is not cut for it. */
+  await page.setViewportSize({ width: 768, height: 900 });
+  for (const look of ['workshop', 'lumen', 'mono', 'sage', 'ledger']) {
+    await page.goto(`${APP}/`);
+    await page.evaluate((chosen) => {
+      localStorage.setItem('mistri.visual-theme', chosen);
+      localStorage.setItem('mistri.tour.v1', 'done');
+    }, look);
+    await page.goto(`${APP}/work-orders?sort=assigned_to`);
+    await expect(page.locator('html')).toHaveAttribute('data-visual-theme', look);
+    await expect(page.locator('th.sorted .th-sort', { hasText: /^Engineer/ })).toBeVisible();
+    const heads = await page.evaluate(() =>
+      [...document.querySelectorAll('th')]
+        .filter((th) => th.querySelector(':scope > .th-resizer'))
+        .map((th) => {
+          const sort = th.querySelector('.th-sort')!.getBoundingClientRect();
+          const resizer = th.querySelector('.th-resizer')!.getBoundingClientRect();
+          const label = th.querySelector('.th-label') as HTMLElement;
+          return {
+            head: th.querySelector('.th-sort')!.textContent,
+            shared: Math.round((Math.min(sort.right, resizer.right) - Math.max(sort.left, resizer.left)) * 10) / 10,
+            cut: label.scrollWidth > label.clientWidth + 1 || label.scrollHeight > label.clientHeight + 1,
+          };
+        }),
+    );
+    expect(heads.length, look).toBeGreaterThan(3);
+    for (const h of heads) {
+      expect(h.shared, `${look}: ${h.head}`).toBeLessThanOrEqual(0);
+      expect(h.cut, `${look}: ${h.head}`).toBe(false);
+    }
+  }
+});
+
+test.describe('on a phone, under a finger', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  test('the platform’s own controls are targets of 44px, measured by grade’s own probe', async ({ page }) => {
+    /* The bar's menu and search marks (40px), a list's search (40px tall) and its Records/Table pair (40×32), a
+       record's breakdown rows (28px): grade's small-target warning on every page of a field report's App. */
+    await page.goto(`${APP}/`);
+    await page.evaluate(() => localStorage.setItem('mistri.tour.v1', 'done'));
+    for (const [path, ready] of [
+      ['/work-orders', '.applist-search-input'],
+      ['/work_order/@work-order~352', '.page-body .pbd-drill'],
+    ] as const) {
+      await page.goto(`${APP}${path}`);
+      await expect(page.locator(ready).first()).toBeVisible();
+      await expect(page.locator('.tn-mobile-menu')).toBeVisible();
+      const probe = (await page.evaluate(inPage(probePage, { tap: TAP, record: false }))) as Probe;
+      expect(probe.small, path).toEqual([]);
+    }
+  });
 });
 
 test('field presentation: DSL labels agree across lists, pages and drawers', async ({ page }, testInfo) => {
