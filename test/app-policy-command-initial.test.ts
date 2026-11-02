@@ -192,7 +192,7 @@ test("initial prefills from the revision it is read with, within the principal's
   assert.deepEqual(await f.prepare({}), { expectedVersion: 7, initial: { assignee: 'Original', due_on: '2026-09-30' } });
   assert.equal(f.seen.initials, 1);
   assert.equal(f.seen.expectedVersion, 7);
-  assert.deepEqual(f.seen.tx, ['count', 'query']);
+  assert.deepEqual(f.seen.tx, ['aggregate', 'count', 'query']);
   assert.ok(f.seen.frozen);
   assert.equal(f.seen.hidden, 0);
   // An optional value the record does not hold is absent, not null.

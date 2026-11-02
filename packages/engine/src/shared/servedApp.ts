@@ -211,7 +211,8 @@ export interface AppDisplayRule {
   /** money: currency formatting. percent: the value is 0–100, shown with %.
       number: separators forced on a numeric-looking text column. relative:
       a date said from today — "in 3 days", "64 days ago" — with the date
-      itself in the tooltip. email, phone, url: the value is a link — to write
+      itself in the tooltip. date, datetime: a day, or a moment with its time and zone, said absolutely — the same
+      words on any day, for any reader; a date alone never shifts. email, phone, url: the value is a link — to write
       to, to call, to open beside the App — where it has that shape. An App
       links a column named like one (`email`, `phone`, `website`) without a rule. richText: the value is
       sanitized HTML (shared/richText.ts), drawn formatted on a record, as an excerpt in a list, edited in the
@@ -221,6 +222,8 @@ export interface AppDisplayRule {
     | 'percent'
     | 'number'
     | 'relative'
+    | 'date'
+    | 'datetime'
     | 'items'
     | 'duration'
     | 'email'
@@ -241,6 +244,8 @@ export interface AppDisplayRule {
       data face and any other text in the reading face, because a name is not compared character by character.
       A rule with a `component` takes no face, the component sets its own; `masked: true` takes none either. */
   face?: 'data' | 'ui' | 'code';
+  /** With format "date" or "datetime": the IANA zone a moment is said in, over the App's `ui.timezone`. */
+  timezone?: string;
   /** With format "rating": how many stars the scale has, 3 to 10 (5 when unsaid). */
   outOf?: number;
   /** With format "percent": the value as a small ring, filled against 100, beside the figure. */
@@ -277,6 +282,8 @@ export interface AppDisplayRule {
   currencyColumn?: string;
   /** For "money": the column holds whole minor units (money.ts), drawn and edited as the major figure. */
   minor?: true;
+  /** For "money": the minor digits are left off a whole amount ("$24,495"); an amount with cents keeps them. */
+  whole?: true;
   /** With "number", "money" or no format on a numeric column: the unit said after the figure — "mi", "kg", "/mo" (a leading slash
       joins without a space: "$242/mo"). At most 12 characters. */
   unit?: string;

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import {
   dayOf,
   defaultCurrency,
+  formatAbsolute,
   formatApprox,
   formatBytes,
   formatDate,
@@ -15,6 +16,7 @@ import {
   formatDayHeading,
   formatLocale,
   formatMoney,
+  formatWholeMoney,
   formatNumber,
   formatPercent,
   withPercentSign,
@@ -125,6 +127,24 @@ describe('money', () => {
     expect(plain(formatMoney(24))).toBe('$24.00');
   });
 
+  test('formatWholeMoney drops zero minor digits and keeps any cents', () => {
+    inLocale({ locale: 'en-US', currency: 'USD' });
+    expect([24495, '24495.00', '-12'].map((v) => plain(formatWholeMoney(v)))).toEqual(['$24,495', '$24,495', '-$12']);
+    expect([24495.5, '24495.50', '0.05', '-12.50'].map((v) => plain(formatWholeMoney(v)))).toEqual([
+      '$24,495.50',
+      '$24,495.50',
+      '$0.05',
+      '-$12.50',
+    ]);
+    expect(plain(formatWholeMoney('90071992547409931.00'))).toBe('$90,071,992,547,409,931');
+    expect(plain(formatWholeMoney('90071992547409931.25'))).toBe('$90,071,992,547,409,931.25');
+    expect(plain(formatWholeMoney(1500, 'JPY'))).toBe('¥1,500');
+    expect(plain(formatWholeMoney('12.000', 'KWD'))).toMatch(/12$/);
+    expect(plain(formatWholeMoney('12.250', 'KWD'))).toMatch(/12\.250$/);
+    inLocale({ locale: 'de-DE', currency: 'EUR' });
+    expect([1234, 1234.5].map((v) => plain(formatWholeMoney(v)))).toEqual(['1.234 €', '1.234,50 €']);
+  });
+
   test("a rule's own currency wins over the App's, and compact notation layers on", () => {
     inLocale({ locale: 'de-DE', currency: 'EUR' });
     expect(plain(formatMoney(1234.5, 'USD'))).toBe('1.234,50 $');
@@ -192,6 +212,45 @@ describe('dates and times', () => {
     const at = new Date(2026, 2, 5, 9, 5);
     expect(formatDateTime(at)).toBe('5 Mar 2026, 09:05');
     expect(formatDateTime(at.getTime())).toBe('5 Mar 2026, 09:05');
+  });
+});
+
+describe('absolute dates', () => {
+  /* What a statement, a ledger or a log says: the same words on any day, for any reader (F04 of a field report). */
+  test('a stored day is its day in every zone, never shifted', () => {
+    for (const timezone of [undefined, 'Pacific/Auckland', 'America/Los_Angeles']) {
+      inLocale({ locale: 'en-US', timezone, clockZone: timezone });
+      expect(formatAbsolute('2026-09-04')).toBe('Sep 4, 2026');
+      expect(formatAbsolute('2026-09-04', { time: true }), 'a date alone has no time to say').toBe('Sep 4, 2026');
+      expect(formatAbsolute('2026-09-04', { time: true, zone: 'Asia/Tokyo' })).toBe('Sep 4, 2026');
+    }
+  });
+
+  test("a moment is said in the rule's zone, else the App's, else the clock zone, naming it", () => {
+    inLocale({ locale: 'en-US' });
+    expect(plain(formatAbsolute('2026-09-04T21:30:00Z', { time: true })), 'no App zone: UTC').toBe('Sep 4, 2026, 9:30 PM UTC');
+    expect(plain(formatAbsolute('2026-09-04T21:30:00Z', { time: true, zone: 'America/New_York' }))).toBe('Sep 4, 2026, 5:30 PM EDT');
+    expect(formatAbsolute('2026-09-04T21:30:00Z', { zone: 'Pacific/Auckland' }), 'the day it falls on there').toBe('Sep 5, 2026');
+    inLocale({ locale: 'en-US', timezone: 'America/Los_Angeles', clockZone: 'America/Los_Angeles' });
+    expect(plain(formatAbsolute('2026-09-04T21:30:00+00:00', { time: true }))).toBe('Sep 4, 2026, 2:30 PM PDT');
+    expect(plain(formatAbsolute('2026-01-15 08:00:15', { time: true })), 'zone-less: written in the clock zone, seconds kept').toBe(
+      'Jan 15, 2026, 8:00:15 AM PST',
+    );
+    expect(plain(formatAbsolute('2026-01-15 08:00:00', { time: true, zone: 'UTC' }))).toBe('Jan 15, 2026, 4:00 PM UTC');
+    expect(plain(formatAbsolute(Date.UTC(2026, 8, 4, 21, 30), { time: true })), 'an epoch is an instant').toBe('Sep 4, 2026, 2:30 PM PDT');
+  });
+
+  test('a wall clock past a DST change lands on the hour it names', () => {
+    inLocale({ locale: 'en-US', clockZone: 'America/New_York' });
+    expect(plain(formatAbsolute('2026-03-08 12:00:00', { time: true, zone: 'UTC' }))).toBe('Mar 8, 2026, 4:00 PM UTC');
+    expect(plain(formatAbsolute('2026-03-07 12:00:00', { time: true, zone: 'UTC' }))).toBe('Mar 7, 2026, 5:00 PM UTC');
+  });
+
+  test('what is not a date comes back as it was, and a time alone is a time', () => {
+    inLocale({ locale: 'en-US' });
+    expect(formatAbsolute('soon')).toBe('soon');
+    expect(formatAbsolute('2026-02-31')).toBe('2026-02-31');
+    expect(plain(formatAbsolute('14:30:00'))).toBe('2:30 PM');
   });
 });
 

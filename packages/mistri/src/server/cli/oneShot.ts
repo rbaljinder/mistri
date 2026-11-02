@@ -26,14 +26,23 @@ import {
   type AppDef,
 } from '../../shared/app.js';
 import { appAdvisories, appProblems, type LoadedApp } from '../app/apps.js';
-import { appRoleReach, appRoleWarnings } from '../app/appRoleChecks.js';
+import { appDestinationWarnings, appRoleReach, appRoleWarnings } from '../app/appRoleChecks.js';
 import { commandRestatedWarnings } from '../commands/commandRestated.js';
+import { snapshotCommandChecks } from '../app/appSnapshotChecks.js';
 import { consumesCommandWarnings, machineCommandWarnings } from '../app/appMachineChecks.js';
 import { appIndexWarnings } from '../../shared/appIndexWarnings.js';
 import { appSignUpProblems } from '../../shared/appWarnings.js';
 import { checkAuthorityLock } from '../app/authorityLock.js';
 import { CONTRACT_PREFIX, contractDigest, contractLines, lockedContracts } from '../commands/commandContracts.js';
 import { WORKFLOW_LINE_PREFIX, workflowLines } from '../workflows/workflowContracts.js';
+import {
+  EFFECT_LINE,
+  lockedTriggers,
+  namesTriggers,
+  TRIGGER_LINE_PREFIX,
+  triggerLockFindings,
+  type TriggerLockFindings,
+} from '../commands/triggerLock.js';
 import type { WorkflowShape } from '../workflows/workflowProbe.js';
 import { accessibleSchema } from '../app/appAccess.js';
 import { appSourceConnections, loadAppRuntimeResources } from '../app/appRuntimeResources.js';
@@ -600,6 +609,8 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
         // The event source serving binds too: a policy App's command that declares events loads as it serves.
         ...(commandHosting?.events ? { events: commandHosting.events } : {}),
         verifySession: async () => null,
+        // Its named triggers are judged against the lock below, as problems, and written there on --write-authority.
+        triggerLock: false,
       });
       await policy.retire();
       /* The services its jobs run as, said as problems and advice rather than the one refusal startup makes. */
@@ -639,6 +650,9 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
   for (const app of loadedApps) {
     /* The commands' contracts first: a bump or an accepted lock writes them beside the authority. */
     const contracts = await commandContractCheck(app, registry, jobCommands, bump, workflows);
+    /* Then the triggers it names, as the database defines them now (triggerLock.ts). */
+    const triggers = await triggerLockCheck(app, registry);
+    contracts.lines.push(...triggers.lines);
     const authority =
       app.authority && contracts.lines.length
         ? { ...app.authority, report: `${app.authority.report.trimEnd()}\n\n${contracts.lines.join('\n')}\n` }
@@ -674,15 +688,22 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
     let lines: string[];
     let advice: string[] = [];
     try {
-      const { schema } = await loadAppRuntimeResources(registry, app.app, match?.id ?? registry.active!);
+      const resources = await loadAppRuntimeResources(registry, app.app, match?.id ?? registry.active!);
+      const { schema } = resources;
       resolveAppAccess(app.app, schema, []);
       await learnValueLabels(app, schema);
       /* What a role meets only when it signs in, judged once per role over
          the catalog it is served: here, where every role's reach is known. */
       const reach = appRoleReach(app, schema, jobRoles);
+      // `snapshot: true` against the engine each command's target is read on.
+      const snapshots = snapshotCommandChecks(commandHosting?.registry ?? app.commands?.registry, (resource) => {
+        const table = tableNamed(schema, resource);
+        return table ? (table.sourceDialect ?? schema.dialect) : undefined;
+      });
       lines = [
         ...appProblems(app, schema),
         ...reach.problems,
+        ...snapshots.problems,
         // Open sign-up the config gives nothing to prove an address with.
         ...appSignUpProblems(app.app, Boolean(emailConfigOf(registry))).map((problem) => `${app.path}: ${problem}`),
         // The identity providers it names are the config file's: named and none of them a tenant's.
@@ -703,6 +724,8 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
         ...appAdvisories(app, schema),
         ...reach.warnings,
         ...appRoleWarnings(app, schema, commandHosting?.registry),
+        // An action some role sees and cannot follow: its destination is not among that role's rooms.
+        ...appDestinationWarnings(app, schema, jobRoles),
         ...machineCommandWarnings(app.app, commandHosting?.registry ?? app.commands?.registry),
         ...consumesCommandWarnings(app.app, schema, commandHosting?.registry ?? app.commands?.registry),
         // A targeted command nothing offers: prepare refuses it. Those a job, workflow or endpoint runs prepare nothing.
@@ -712,6 +735,7 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
           new Set([...hosted.serviceRuns.values()].flatMap((commands) => [...commands])),
         ),
         ...commandRestatedWarnings(commandHosting?.registry ?? app.commands?.registry),
+        ...snapshots.warnings,
         ...appIndexWarnings(app.app, app.pages, schema),
         // Its themes' font files: one past its size, all past the budget, one never drawn (appFonts.ts).
         ...fontWarnings(app.app, app.fonts).map((warning) => `${app.path}: ${warning}`),
@@ -726,6 +750,16 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
         // A logo picture with no dark answer (appBrand.ts): the theme contract's C10.
         ...brandWarnings(app.app).map((warning) => `${app.path}: ${warning}`),
       ];
+      /* A command whose writes fire a trigger the row policy cannot bound: refused when it runs, said here. */
+      const commands = commandHosting?.registry ?? app.commands?.registry;
+      const { commandTriggerFindings, commandTriggers } = await import('../commands/commandTriggerChecks.js');
+      const triggered = commandTriggerFindings(
+        app.app,
+        commands,
+        await commandTriggers(app.app, resources, commands, async (id) => (await registry.open(id)).adapter),
+      );
+      lines.push(...triggered.problems);
+      advice.push(...triggered.warnings);
       /* Its decisions' inputs against the schema served, and their contracts against decisions.lock. */
       if (decisions.size && commandRegistry && app === loadedApps[0]) {
         const { checkDecisions, decisionLockDirectory } = await import('../decide/decisionCheck.js');
@@ -746,6 +780,9 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
       lines = [(error as Error).message];
     }
     if (lock.problem) lines.push(lock.problem);
+    /* A named trigger the lock has not approved as it is now: written, and so approved, by --write-authority. */
+    lines.push(...triggers.problems.filter((problem) => !(lock.wrote && problem.includes('[trigger-lock]'))));
+    advice.push(...triggers.warnings);
     /* Mail to an address a record holds: the same findings startup refuses and warns with (email/contactMail.ts). */
     const { appEmailsContacts, contactMailPlaces } = await import('../email/contactMail.js');
     if (appEmailsContacts(app.app)) {
@@ -788,6 +825,28 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
   process.exitCode = bad ? 1 : 0;
 }
 
+/**
+ * The triggers half of authority.lock for a row-policy App that names triggers (triggerLock.ts): its lines as the
+ * database defines the named triggers now, and what is wrong with them. Nothing to say, and nothing read, otherwise;
+ * a catalog that cannot be read is the validation step's to name.
+ */
+async function triggerLockCheck(loaded: LoadedApp, registry: Registry): Promise<TriggerLockFindings> {
+  if (!namesTriggers(loaded.app)) return { lines: [], problems: [], warnings: [] };
+  try {
+    const bound = loaded.app.connection ?? (loaded.app.sources ? loaded.app.sources[homeSourceOf(loaded.app)!]?.connection : undefined);
+    const connection =
+      registry.list().find((c) => c.id === bound || c.name === bound) ?? registry.list().find((c) => c.id === registry.active);
+    if (!connection) return { lines: [], problems: [], warnings: [] };
+    const resources = await loadAppRuntimeResources(registry, loaded.app, connection.id);
+    const naming = Object.keys(loaded.app.resources ?? {}).filter((resource) => loaded.app.resources![resource].triggers?.length);
+    const { triggersAt } = await import('../commands/commandTriggerChecks.js');
+    const triggersOf = await triggersAt(resources, naming, async (id) => (await registry.open(id)).adapter);
+    return triggerLockFindings(loaded.app, triggersOf, lockedTriggers(loaded.authority?.lock));
+  } catch {
+    return { lines: [], problems: [], warnings: [] };
+  }
+}
+
 /** --bump: authority.lock with its contract lines replaced, and nothing else of it touched. */
 async function writeContractLines(
   authority: NonNullable<LoadedApp['authority']>,
@@ -795,7 +854,13 @@ async function writeContractLines(
 ): Promise<{ wrote?: string; problem?: string }> {
   const kept = (authority.lock ?? '')
     .split('\n')
-    .filter((line) => !line.startsWith(CONTRACT_PREFIX) && !line.startsWith(WORKFLOW_LINE_PREFIX))
+    .filter(
+      (line) =>
+        !line.startsWith(CONTRACT_PREFIX) &&
+        !line.startsWith(WORKFLOW_LINE_PREFIX) &&
+        !line.startsWith(TRIGGER_LINE_PREFIX) &&
+        !EFFECT_LINE.test(line),
+    )
     .join('\n')
     .trimEnd();
   const next = `${kept}\n\n${lines.join('\n')}\n`;

@@ -115,6 +115,25 @@ test('windows without an over, two sections with one name, and a board embed wit
   assert.throws(() => app(dash([{ kind: 'note', text: 'x', windows: ['last 7 days'] }])), /windows/);
 });
 
+test('a metric says its figure exact unless it says compact; a figure of anything else, or on another section, is refused', () => {
+  /* A field report's balance read "≈ $28K": exact is the default, and a card glanced at for its size opts out. */
+  const parsed = app(
+    dash([
+      { kind: 'metric', title: 'Balance', from: 'task', measure: 'count' },
+      { kind: 'metric', title: 'Volume', from: 'task', measure: 'count', figure: 'compact' },
+      { kind: 'metric', title: 'Owed', from: 'task', measure: 'count', figure: 'exact' },
+    ]),
+  );
+  const served = resolveViews(parsed, schema).overview as AppDashboardView;
+  assert.equal(served.error, undefined, served.error);
+  assert.deepEqual(
+    served.sections.map((section) => (section as { figure?: string }).figure),
+    [undefined, 'compact', 'exact'],
+  );
+  assert.throws(() => app(dash([{ kind: 'metric', title: 'A', from: 'task', figure: 'rounded' }])), /"figure" of "rounded"\. Use "exact"/);
+  assert.throws(() => app(dash([{ kind: 'chart', title: 'A', from: 'task', by: 'status', figure: 'compact' }])), /figure/);
+});
+
 test('an interactive embed is a list in the main flow: not in the aside, not a board', () => {
   const parsed = app(dash([{ kind: 'view', view: 'tasks', interactive: true }]));
   assert.equal((parsed.views.overview as AppDashboardView).sections[0].interactive, true);

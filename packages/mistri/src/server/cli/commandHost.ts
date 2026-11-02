@@ -21,7 +21,7 @@ import type { PreparedJobs } from '../jobs/jobLoader.js';
 import type { CommandHosting } from '../http/handler.js';
 import type { JobsReadiness } from '../http/appContext.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
-import type { Options } from '@mistriwork/engine/server/cli/args.js';
+import { CHECK_STORES_ASIDE, type Options } from '@mistriwork/engine/server/cli/args.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { FlagRequestRuntime } from '../flags/requestRuntime.js';
 import type { HttpAppPolicy } from '../policy/appPolicyHttp.js';
@@ -128,9 +128,10 @@ export async function hostCommands(opts: Options, registry: Registry, loadedApps
         ...(opts.policy ? { policy: () => jobPolicy.current() } : {}),
         jobsFile: opts.jobs,
         environment: process.env,
-        locate: (id) => registry.configOf(id)?.url,
+        locate: (id) => registry.openableUrlOf(id),
         current: () => jobApp.current(),
         checkApp: opts.checkApp,
+        ...(opts.checkApp && process.env[CHECK_STORES_ASIDE] === '1' ? { storesAside: true } : {}),
         ...decisionsDirectoryOf(loadedApps[0]),
       });
       commandHosting = hosted.commandHosting;
@@ -196,6 +197,9 @@ interface AppCommandHostOptions {
   readonly current: () => AppDef;
   /** `mistri check`: workflow problems and missing inbound secrets are reported, not refused. */
   readonly checkApp?: boolean;
+  /** `mistri check` found stores the App uses absent from its database (CHECK_STORES_ASIDE): nothing is attested or
+   * opened in them, and everything the commands and jobs declare is still judged. */
+  readonly storesAside?: boolean;
   readonly flagRuntime?: () => FlagRequestRuntime | undefined;
   /** Where decisions.lock is kept: beside authority.lock, or in the App's directory. */
   readonly decisionsDirectory?: string;
@@ -210,6 +214,8 @@ export type AppCommandHost = Omit<CommandHost, 'jobApp' | 'jobPolicy'>;
  */
 export async function hostAppCommands(options: AppCommandHostOptions): Promise<AppCommandHost> {
   const { app, commands, registry, owner, environment, locate, checkApp } = options;
+  /* Only ever under check: a start never runs beside a store it could not attest. */
+  const aside = checkApp === true && options.storesAside === true;
   const [
     ,
     { loadAppRuntimeResources },
@@ -265,9 +271,9 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
     const eventProblems = apiEventProblems(app, commands);
     if (eventProblems.length) throw new Error(eventProblems.join(' '));
     // Commands that declare events write into the App's attested event store; under a policy, through its scope.
-    events = await appCommandEventsFor(app, commands, resources, locate);
+    events = await appCommandEventsFor(app, commands, resources, locate, { attest: !aside });
     if (!rowPolicy) {
-      await validateBusinessCommandStartup(app, commands, resources, writable, events);
+      await validateBusinessCommandStartup(app, commands, resources, writable, events, { attest: !aside });
       // Commands the App exposes to its API are checked against this
       // registry at startup, so a wrong exposure never waits for a request.
       // Its generic writes and feed events are checked with them (apiGenericWrites.ts, apiEventFeed.ts).
@@ -393,7 +399,7 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
         });
       }
     }
-    if (effects) effectHost = await openEffectHost({ ...effects, ...(integrations ? { channels: integrations.channel } : {}) });
+    if (effects && !aside) effectHost = await openEffectHost({ ...effects, ...(integrations ? { channels: integrations.channel } : {}) });
     if (integrations) effectHost = withIntegrations(effectHost, integrations);
     if (prepared) {
       // Mail is routed to a tenant by its address; an App without tenants has no one for it to arrive for, yet.
@@ -413,7 +419,7 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
       for (const mapping of prepared.module.integrations?.webhooks.values() ?? [])
         for (const command of mapping.events.values()) jobCommands = new Set([...jobCommands, command]);
       // A module of only inbound endpoints or integrations runs no jobs, and has no job store to open.
-      if (prepared.deployment && prepared.module.jobs.size + prepared.module.workflows.size > 0) {
+      if (prepared.deployment && prepared.module.jobs.size + prepared.module.workflows.size > 0 && !aside) {
         const opened = new Map<string, Webhook>();
         // A workflow's `w.call` reaches the config file's webhook connections by name, opened when first used.
         const webhooks = {
@@ -520,7 +526,7 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
     }
     /* What this App decides rides its payload (decisionServing.ts), from the module hosted now: none is none. */
     const { serveDecisions } = await import('../decide/decisionServing.js');
-    serveDecisions(registry, app.id, prepared?.module.decisions?.values() ?? [], decide?.store);
+    if (!aside) serveDecisions(registry, app.id, prepared?.module.decisions?.values() ?? [], decide?.store);
   } catch (error) {
     await Promise.allSettled([effectHost?.stop() ?? integrations?.stop() ?? deliveries?.close(), jobHost?.stop() ?? decide?.store.close()]);
     retentionTimer?.stop();

@@ -54,6 +54,23 @@ export function minorToMajor(value: unknown, currency: string): string | undefin
 }
 
 /**
+ * A stored amount in the major unit as its exact decimal text, to the
+ * currency's minor digits: 5917 → "5917.00", "-12.5" → "-12.50", 1500 in JPY
+ * → "1500". Padded, never rounded: a figure with more places than its
+ * currency keeps them, as stored. A decimal string is read by its digits, so
+ * one past 2^53 is not the double Number() makes of it. Undefined for no
+ * decimal at all.
+ */
+export function majorText(value: unknown, currency: string): string | undefined {
+  const text = typeof value === 'number' ? (Number.isFinite(value) ? String(value) : '') : typeof value === 'string' ? value.trim() : '';
+  const m = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!m) return undefined;
+  const places = (m[3] ?? '').padEnd(currencyDigits(currency), '0');
+  const figure = `${m[2]}${places ? `.${places}` : ''}`;
+  return (m[1] === '-' && /[1-9]/.test(figure) ? '-' : '') + figure;
+}
+
+/**
  * A minor-unit value as the figure a money format draws: the exact major text
  * where it is a whole number of minor units, else the number divided (a
  * total's average). Undefined for no number at all.

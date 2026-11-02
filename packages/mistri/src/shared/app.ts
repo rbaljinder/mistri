@@ -22,6 +22,7 @@
  * and nothing is silently skipped.
  */
 import { checkShellNew } from './appNewMenu.js';
+import { destinationProblem, servedView, servedViewKind } from './appDestinations.js';
 import { parseBrandingDeclaration } from './tenantBranding.js';
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
 import { stitchedFarProblem, stitchedHop, stitchedListProblem } from '@mistriwork/engine/shared/stitchedPaths.js';
@@ -82,7 +83,6 @@ import {
   DEFAULT_WINDOWS,
   grantsByRole,
   isFormView,
-  isPublicForm,
   noteRestated,
   resourceCeiling,
   resourceValidation,
@@ -473,19 +473,14 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef): AppDef {
         );
       }
       if (section.kind !== 'list' || !section.empty?.action) continue;
-      const target = app.views[section.empty.action.view];
-      if (
-        !Object.hasOwn(app.views, section.empty.action.view) ||
-        !target ||
-        // A signed-in form is a room an empty list may open; a public one is served outside the App.
-        isPublicForm(target) ||
-        'form' in target ||
-        'landing' in target
-      ) {
-        throw new Error(
-          `${where}: page "${page.id}" related empty action names "${section.empty.action.view}", which is not a list, a dashboard or a signed-in form view.`,
-        );
-      }
+      // A room, by the rule every action's destination answers to (appDestinations.ts).
+      const view = section.empty.action.view;
+      const problem = destinationProblem(
+        `${where}: page "${page.id}" related empty action`,
+        view,
+        servedViewKind(servedView(app.views, view)),
+      );
+      if (problem) throw new Error(problem);
     }
   }
   if (analytics) {

@@ -16,6 +16,13 @@ import { envName, productEnv } from '../product.js';
  */
 export const CHECK_VALIDATION = 'MISTRI_CHECK_VALIDATION';
 
+/**
+ * Set beside CHECK_VALIDATION when `mistri check` has already found stores the App uses missing from its database
+ * (`store-pending`, docs/bootstrap-plan.md): the child validates with the store attestations set aside, so a real
+ * fault in the App is said in the same run instead of hiding behind the first absent store.
+ */
+export const CHECK_STORES_ASIDE = 'MISTRI_CHECK_STORES_ASIDE';
+
 export interface Options {
   target: string;
   /** The target is DATABASE_URL's, not a flag's: a config's connections win over it (readStartupConfig). */

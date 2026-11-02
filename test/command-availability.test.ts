@@ -12,7 +12,7 @@ import {
 } from '../packages/mistri/src/server/commands/commandAvailability.js';
 import { parseCommandAvailability } from '../packages/mistri/src/server/commands/commandPayload.js';
 import { BusinessCommandExecutionError } from '../packages/mistri/src/server/commands/commandErrors.js';
-import { defineSource, type CommandCatalog } from '../packages/mistri/src/server/commands/commandDb.js';
+import { count, defineSource, type CommandCatalog } from '../packages/mistri/src/server/commands/commandDb.js';
 import { bool } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { field } from '../packages/mistri/src/server/commands/commandFields.js';
 import { BULK_LIMIT } from '../packages/mistri/src/shared/command.js';
@@ -323,4 +323,35 @@ test('bulk prepare checks business eligibility once for the visible state-matchi
   assert.equal(reads, 1);
   assert.equal(hooks, 1);
   assert.equal(targets[1].eligible, true);
+});
+
+test('an availability hook sums and groups through its reader, cancelled with it, and refuses where the reader cannot', async () => {
+  const asked: unknown[] = [];
+  const command = defineCommand({
+    ...base(),
+    async availability({ db, records }) {
+      const { n } = await db.item.where().aggregate({ n: count() });
+      return records.map((row) => n > row.team_id);
+    },
+  });
+  const reader = {
+    query: async () => {
+      throw new Error('No reads expected.');
+    },
+    count: async () => 0,
+    aggregate: async (request: unknown) => {
+      asked.push(request);
+      return { rows: [{ m0: 3 }] };
+    },
+  };
+  assert.deepEqual(await evaluateCommandAvailability({ ...options(), command, reader }), [true, false]);
+  assert.equal(asked.length, 1);
+  const cancelled = new AbortController();
+  cancelled.abort();
+  await assert.rejects(
+    evaluateCommandAvailability({ ...options(), command, reader, signal: cancelled.signal }),
+    BusinessCommandExecutionError,
+  );
+  // A reader with no aggregate leaves the handle without one: refused as the author's mistake, never read row by row.
+  await assert.rejects(evaluateCommandAvailability({ ...options(), command }), BusinessCommandExecutionError);
 });

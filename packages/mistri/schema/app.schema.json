@@ -1283,6 +1283,8 @@
             "percent",
             "number",
             "relative",
+            "date",
+            "datetime",
             "items",
             "duration",
             "email",
@@ -1298,9 +1300,10 @@
             "json",
             "qr"
           ],
-          "description": "money: currency formatting (metrics compact to \"$27.9M\"). percent: the value is 0\u2013100, shown with %. number: separators forced on. relative: a date said from today (\"in 3 days\", \"64 days ago\"), the date itself in the tooltip. items: a text of one item per line, drawn as a list (a line of them where there is no room). duration: a number of seconds said as its two largest units (\"2h 15m\"), the seconds in the tooltip. email, phone, url: a value of that shape is a link to write to, call or open; an App links a column named like one without a rule. richText: sanitized HTML, drawn formatted on a record and as an excerpt in a list, edited in the rich text editor; the server sanitizes every write and reads Markdown into it. avatars: the people on a thing (an array, a JSON array, or one name per line or comma) as up to three overlapping initials discs and a \"+N\"; takes nothing else. rating: a whole number of stars out of outOf (5). color: a hex color as its swatch and code. time, month, year: a time of day, a month, a year in the reader's words, each edited in its native picker. json: a JSON document as a tree, edited as text whose problem is said while it is typed; the server refuses a write that is not JSON. qr: the value as a QR code to scan. These draw the value their own way."
+          "description": "money: currency formatting (metrics compact to \"$27.9M\"). percent: the value is 0\u2013100, shown with %. number: separators forced on. relative: a date said from today (\"in 3 days\", \"64 days ago\"), the date itself in the tooltip. date: a day said absolutely (\"Sep 4, 2026\"), the same on any day for any reader; a stored date never shifts. datetime: a moment with its time and zone (\"Sep 4, 2026, 2:30 PM PDT\"), said in timezone, else the App's ui.timezone. items: a text of one item per line, drawn as a list (a line of them where there is no room). duration: a number of seconds said as its two largest units (\"2h 15m\"), the seconds in the tooltip. email, phone, url: a value of that shape is a link to write to, call or open; an App links a column named like one without a rule. richText: sanitized HTML, drawn formatted on a record and as an excerpt in a list, edited in the rich text editor; the server sanitizes every write and reads Markdown into it. avatars: the people on a thing (an array, a JSON array, or one name per line or comma) as up to three overlapping initials discs and a \"+N\"; takes nothing else. rating: a whole number of stars out of outOf (5). color: a hex color as its swatch and code. time, month, year: a time of day, a month, a year in the reader's words, each edited in its native picker. json: a JSON document as a tree, edited as text whose problem is said while it is typed; the server refuses a write that is not JSON. qr: the value as a QR code to scan. These draw the value their own way."
         },
         "face": { "enum": ["data", "ui", "code"], "description": "The face this column's values are set in, over the look's own: data (the look's data face, usually monospace), ui (the interface's reading face) or code (always monospace, for a VIN or a hash). Left out, an App sets a key, a reference, a code or a QR value in the data face and any other text in the reading face. A rule with a component takes no face, the component sets its own; masked: true takes none either." },
+        "timezone": { "type": "string", "minLength": 1, "description": "With format date or datetime: the IANA zone a moment is said in, over the App's ui.timezone (\"America/New_York\"). A stored date alone never shifts." },
         "outOf": { "type": "integer", "minimum": 3, "maximum": 10, "description": "With format rating: the stars of its scale (5 when unsaid)." },
         "ring": { "const": true, "description": "With format percent: the value as a small ring filled against 100." },
         "slider": {
@@ -1391,6 +1394,10 @@
         "minor": {
           "const": true,
           "description": "With \"money\": the integer column holds minor units (cents), said and edited in the currency's own decimals \u2014 1999 is $19.99, \u00a51,999, 1.999 KWD."
+        },
+        "whole": {
+          "const": true,
+          "description": "With \"money\": a whole amount is said without its minor digits (\"$24,495\"); an amount with cents still shows them (\"$24,495.50\"). For a listing price. A CSV export stays exact."
         },
         "unit": {
           "type": "string",
@@ -1819,6 +1826,16 @@
         "validation": {
           "$ref": "#/$defs/formRules",
           "description": "Resource invariants, enforced on every write, independent of views and forms."
+        },
+        "triggers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Under a row policy, the database triggers on this resource's table the App accepts, by name: a command's write that fires one runs, and every row its keyed effects reach is proven inside the person's rows. authority.lock records each definition; a changed one is refused until approved again. A trigger that only validates needs no name."
         },
         "text": {
           "type": "object",
@@ -2988,11 +3005,13 @@
               "const": "checklist"
             },
             "primary": {
+              "description": "The card's title: a local text column.",
               "type": "string",
               "minLength": 1,
               "pattern": "^[^.]*[^.\\s][^.]*$"
             },
             "checked": {
+              "description": "The column a tick toggles: a local, readable boolean column of the list's table (declare it BOOLEAN in SQLite, where an INTEGER is a number), not a reference path. Anything else is refused at check.",
               "type": "string",
               "minLength": 1,
               "pattern": "^[^.]*[^.\\s][^.]*$"
@@ -3918,6 +3937,11 @@
               "minLength": 1,
               "maxLength": 24,
               "description": "metric: a word said after the figure (\"days\", \"/mo\")."
+            },
+            "figure": {
+              "type": "string",
+              "enum": ["exact", "compact"],
+              "description": "How money is said on the card: exact (the default), to the currency's minor digits at any size (\"$28,123.45\", a balance read to the cent), or compact from a thousand (\"$28.1K\"). Its change and goal follow it; the card's title and what a screen reader hears are exact either way."
             },
             "target": {
               "oneOf": [

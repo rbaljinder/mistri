@@ -30,7 +30,8 @@ npm install
 **You should now see** the files it wrote: `app.ts` (the whole App),
 `db/schema.sql` and `db/migrations/V1__task.sql` (its schema, and how a
 database gets there), `billing.db` (that database, with a few rows),
-`mistri.json` (the connection the App binds), `package.json`,
+`mistri.json` (the connection the App binds, and an `app` block naming the
+App, so the commands below need no `--app`), `package.json`,
 `tsconfig.json`, `.oxfmtrc.json`, `.gitignore` and a `README.md` that walks
 you through them. `npm install` brings in mistri, TypeScript and Node's
 types.
@@ -63,7 +64,7 @@ header, with no restart.
 In a second terminal, run what CI would:
 
 ```sh
-npx @mistriwork/mistri check --app . --config mistri.json
+npx @mistriwork/mistri check
 ```
 
 **You should now see** `typecheck passed` and `validation passed`, and an exit
@@ -73,7 +74,7 @@ fix ([check codes](/docs/check-codes/)).
 ## 5. Build it for production
 
 ```sh
-npx @mistriwork/mistri build --app . --config mistri.json
+npx @mistriwork/mistri build
 ```
 
 **You should now see** `built …` and the command that serves the build. A
@@ -155,7 +156,8 @@ npx @mistriwork/mistri migrate up --app .
 
 **You should now see** `wrote migrations/V1__init.sql`, then `applied
 V1__init.sql` and the App checked against the tables it made: `typecheck
-passed` and `validation passed  Billing: ok`. Then serve it:
+passed` and `validation passed  Billing: ok`, then the bootstrap plan, which
+ends with what the run changed. Then serve it:
 
 ```sh
 npx @mistriwork/mistri dev

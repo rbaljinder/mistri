@@ -127,6 +127,12 @@ export const Dressed = memo(function Dressed({ dress, compact = false }: { dress
           {dress.text}
         </span>
       );
+    case 'date':
+      return (
+        <span className="date-value" title={dress.title}>
+          {dress.text}
+        </span>
+      );
     case 'relative':
       return (
         <span className={`date-value relative${dress.overdue ? ' overdue' : ''}`} title={dress.title}>

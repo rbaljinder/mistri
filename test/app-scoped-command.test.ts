@@ -124,7 +124,7 @@ for (const mode of modes) {
     const { adapter, scope, people, tickets, db, owner, catalog } = select(mode);
     const result = await commandsOf(adapter).scopeCommandTransaction!(scope, async function (records, journal, evidence) {
       assert.equal(arguments.length, 3);
-      assert.deepEqual(Reflect.ownKeys(records).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+      assert.deepEqual(Reflect.ownKeys(records).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
       assert.equal(Object.isFrozen(records), true);
       assert.deepEqual(Reflect.ownKeys(journal).sort(), ['commit', 'find', 'insert', 'kept', 'nextNumber', 'taken']);
       assert.notEqual(evidence, catalog);

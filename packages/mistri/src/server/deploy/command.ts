@@ -3,7 +3,7 @@
  * `init` and the usage never load wrangler, the database or the build.
  */
 import { DEFAULT_DIR, DEPLOY_USAGE, parseDeployArgs } from './args.js';
-import { readConfig } from './config.js';
+import { readConfig, withProfile } from './config.js';
 import { appNameOf, readConfigText, writeInit } from './init.js';
 import { logs, rollback, status, verify } from './manage.js';
 import { makePlan } from './plan.js';
@@ -41,20 +41,25 @@ export async function runDeployCommand(
         console.error(`mistri deploy: init takes the target: cloudflare. ${DEPLOY_USAGE}`);
         return 1;
       }
-      if (!request.app) {
-        console.error('mistri deploy: init needs --app <dir>, the App the Worker is for.');
+      /* What the project profile names is read from it at each deploy, not copied (D11): the file says the rest. */
+      const { config: full, from } = withProfile(request);
+      if (!full.app) {
+        console.error('mistri deploy: init needs --app <dir>, the App the Worker is for, or an app block in mistri.json that names it.');
         return 1;
       }
+      const profiled = from.filter((key) => (request as Record<string, unknown>)[key] === undefined);
       const written = writeInit({
-        ...request,
-        app: request.app,
+        ...full,
+        app: full.app,
+        profiled: profiled as Array<keyof DeployConfig>,
         dir: flags.dir,
-        configText: readConfigText(request.config ?? 'mistri.json'),
-        sourceTexts: [request.appEntry, request.policy].map(readConfigText).filter((text): text is string => text !== undefined),
-        appName: await (seams.appName ?? appNameOf)({ app: request.app, appEntry: request.appEntry }),
+        configText: readConfigText(full.config ?? 'mistri.json'),
+        sourceTexts: [full.appEntry, full.policy].map(readConfigText).filter((text): text is string => text !== undefined),
+        appName: await (seams.appName ?? appNameOf)({ app: full.app, ...(full.appEntry !== undefined ? { appEntry: full.appEntry } : {}) }),
         force,
       });
       for (const file of written) console.log(`wrote ${file}`);
+      if (profiled.length) console.log(`${profiled.join(', ')}: read from mistri.json's app block at each deploy, so not written here.`);
       console.log(
         `\nNext: set the Worker's secrets (npx wrangler secret put <NAME>, in ${DEFAULT_DIR}), then mistri deploy --dry-run.\nNothing was created on Cloudflare.`,
       );

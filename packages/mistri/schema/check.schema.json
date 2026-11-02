@@ -17,7 +17,7 @@
     },
     "dir": { "type": "string", "description": "The App directory, from where the command ran." },
     "ok": { "type": "boolean", "description": "Every step passed or was skipped; warnings and info never make it false." },
-    "exit": { "type": "integer", "enum": [0, 1, 2, 3, 4, 5, 6, 7], "description": "The exit code: the first step that failed." },
+    "exit": { "type": "integer", "enum": [0, 1, 2, 3, 4, 5, 6, 7, 8], "description": "The exit code: the first step that failed, else 8 while the App's stores are pending." },
     "seconds": { "type": "number", "minimum": 0 },
     "steps": {
       "type": "array",
@@ -27,7 +27,7 @@
         "required": ["step", "status", "detail"],
         "properties": {
           "step": { "$ref": "#/$defs/step" },
-          "status": { "enum": ["passed", "failed", "skipped"] },
+          "status": { "enum": ["passed", "failed", "skipped", "pending"] },
           "detail": { "type": "string" }
         }
       }
@@ -42,10 +42,66 @@
         "required": ["path", "what"],
         "properties": { "path": { "type": "string" }, "what": { "type": "string" } }
       }
+    },
+    "context": {
+      "type": "object",
+      "description": "What the run resolved: the config file and why it was the one read, the App, and each entry with where it came from (docs/bootstrap-plan.md, Part B).",
+      "additionalProperties": false,
+      "required": ["config", "app", "entries"],
+      "properties": {
+        "config": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "from"],
+              "properties": { "path": { "type": "string" }, "from": { "enum": ["flag", "app", "cwd", "user"] } }
+            }
+          ]
+        },
+        "app": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "from"],
+              "properties": { "path": { "type": "string" }, "from": { "enum": ["flag", "profile"] } }
+            }
+          ]
+        },
+        "entries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commands", "jobs", "policy", "entry"],
+          "properties": {
+            "commands": { "$ref": "#/$defs/entry" },
+            "jobs": { "$ref": "#/$defs/entry" },
+            "policy": { "$ref": "#/$defs/entry" },
+            "entry": { "$ref": "#/$defs/entry" }
+          }
+        }
+      }
     }
   },
   "$defs": {
-    "step": { "enum": ["check", "pending", "schema types", "typecheck", "themes", "fonts", "files", "validation", "indexes", "components", "routes", "design", "elevations", "segments", "defaults", "fix", "deploy"] },
+    "entry": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "from"],
+          "properties": {
+            "path": { "type": "string" },
+            "from": { "enum": ["flag", "profile", "convention", "build"] },
+            "over": { "type": "string", "description": "Where a flag overrode the profile: the path the profile named." }
+          }
+        }
+      ]
+    },
+    "step": { "enum": ["check", "pending", "schema types", "typecheck", "themes", "fonts", "files", "validation", "indexes", "components", "routes", "design", "elevations", "segments", "defaults", "fix", "deploy", "stores"] },
     "problem": {
       "type": "object",
       "additionalProperties": false,

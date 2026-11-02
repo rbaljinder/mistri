@@ -26,7 +26,23 @@ export type { RefusalCode } from './commands/commandErrors.js';
    writes through: a row type, a read-only view of some tables for a helper,
    and the table and query shapes. */
 export { defineSource } from './commands/commandDb.js';
-export type { CommandDb, CommandSource, Query, ReadTable, RowOf, Where, WriteTable } from './commands/commandDb.js';
+export type { CommandDb, CommandSource, Query, ReadTable, RowOf, RowQuery, Where, WriteTable } from './commands/commandDb.js';
+/* Sums and groups on a query (`where(…).groupBy(…).aggregate({ posted: sum('amount') })`), a date's period as a
+   group's key, and a page's boundary, which is plain data a caller keeps. */
+export { avg, count, max, min, period, sum } from './commands/commandDb.js';
+export type {
+  Aggregated,
+  Boundary,
+  GroupBy,
+  Grouped,
+  GroupKey,
+  GroupRow,
+  Measure,
+  Measures,
+  MeasureWord,
+  Page,
+  Period,
+} from './commands/commandDb.js';
 /* A free-form page's loader (@mistriwork/mistri/page): server code that reads for the
    page as the reader, read-only and bounded, exported beside the commands as
    `export const loaders = defineLoaders({ … })`. */

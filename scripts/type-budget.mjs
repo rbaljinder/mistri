@@ -202,11 +202,15 @@ const require = createRequire(join(ROOT, 'package.json'));
    (`Pick<Anchor…>`) beside the section's own. The counter now holds `0`s and the anchor carries `from` itself;
    the diagnostics on a file of 21 wrong and right page sections are byte for byte the same. Synthetic measures
    168,502 / 880,358 / 469,457 (11% instantiations left), Compass 28,124 / 117,183 / 60,729, Ignition 60,467 /
-   229,758 / 185,884 (5%). The ceilings hold: the headroom is for the vocabulary still to come before 1.0. */
+   229,758 / 185,884 (5%). The ceilings hold: the headroom is for the vocabulary still to come before 1.0.
+   rc.11: Ignition measures 64,952 types and 190,167 symbols, 2,152 and 667 past; instantiations (237,095) hold. What
+   rc.11 added to the declarations an App's typecheck reads is the command `db`'s aggregate surface (`Measures`,
+   `GroupBy`, `Grouped`, `Page`, `Period` and their rows, in commands.d.ts), names read once, nothing per table (not
+   isolated by a before/after run here). Types and symbols rise to about 1.5% above; instantiations hold. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 480_200 },
   compass: { types: 32_500, instantiations: 149_000, symbols: 72_000 },
-  ignition: { types: 62_800, instantiations: 242_300, symbols: 189_500 },
+  ignition: { types: 65_900, instantiations: 242_300, symbols: 191_000 },
 };
 
 /* Seconds of an unloaded core, scaled from the process's wall time (`calibrate`): a

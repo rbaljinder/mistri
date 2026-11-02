@@ -98,8 +98,8 @@ test("amounts kept in cents are said in each order's own currency", async ({ pag
   const yen = page.locator('.result-table tbody tr', { hasText: 'Kenji Sato' });
   // 2 × $19.99 + 3 × $8.50 + $5.00 shipping; ¥4,200 + ¥800.
   await expect(dollars).toContainText('$70.48');
-  // The shipping column holds whole amounts only, so it says them whole (45aaa320): $5, not $5.00.
-  await expect(dollars).toContainText(/\$5(?![.\d])/);
+  // Money says its currency's minor digits wherever it stands, a column of whole amounts too: $5.00, never $5.
+  await expect(dollars).toContainText('$5.00');
   await expect(yen).toContainText('¥5,000');
   await expect(yen).toContainText('¥800');
 });

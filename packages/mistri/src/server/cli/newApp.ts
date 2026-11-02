@@ -134,7 +134,7 @@ export default defineApp({
   )}\n`;
   /* A path in a file is from that file's folder, so the project moves as one. */
   files['mistri.json'] = `${JSON.stringify(
-    { connections: [{ name: id, url: basename(database), writable: true, migrations: { dir: 'db/migrations' } }] },
+    { app: { dir: '.' }, connections: [{ name: id, url: basename(database), writable: true, migrations: { dir: 'db/migrations' } }] },
     null,
     2,
   )}\n`;
@@ -148,9 +148,9 @@ export default defineApp({
       type: 'module',
       scripts: {
         dev: 'mistri dev .',
-        check: 'mistri check --app . --config mistri.json',
-        start: 'mistri --app . --config mistri.json',
-        migrate: 'mistri migrate up --app . --config mistri.json',
+        check: 'mistri check',
+        start: 'mistri --app .',
+        migrate: 'mistri migrate up',
         ...formatScripts,
       },
       // mistri for its bin and the `mistri/*` the modules import; the database browser (`tablewalk`) is not needed.
@@ -262,7 +262,7 @@ async function runNewFromBrief(file: string, rest: readonly string[]): Promise<n
   /* A path in a file is from that file's folder, so the project moves as one; the connection may write and says where its migrations are. */
   writeFileSync(
     join(dir, 'mistri.json'),
-    `${JSON.stringify({ connections: [{ name: connection, url: basename(database), writable: true, migrations: { dir: 'db/migrations' } }] }, null, 2)}\n`,
+    `${JSON.stringify({ app: { dir: '.' }, connections: [{ name: connection, url: basename(database), writable: true, migrations: { dir: 'db/migrations' } }] }, null, 2)}\n`,
   );
   if (brief.commands.length) writeFileSync(join(dir, 'commands.ts'), commandsModule(brief, connection));
   writeFileSync(join(dir, 'BRIEF.md'), text);
@@ -273,7 +273,7 @@ async function runNewFromBrief(file: string, rest: readonly string[]): Promise<n
       `${brief.commands.length} command${brief.commands.length === 1 ? '' : 's'}.`,
   );
   console.log(
-    `Next: cd ${shownPath(dir)} && npm install${brief.commands.length ? ' && npx @mistriwork/mistri migrate stores up --app .' : ''} && npx @mistriwork/mistri seed --app . && npx @mistriwork/mistri check --app . && npm run dev`,
+    `Next: cd ${shownPath(dir)} && npm install${brief.commands.length ? ' && npx @mistriwork/mistri migrate up' : ''} && npx @mistriwork/mistri seed && npx @mistriwork/mistri check && npm run dev`,
   );
   return drafted.problems.length ? 1 : 0;
 }

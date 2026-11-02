@@ -9,8 +9,7 @@ Check and bundle an App once in CI with mistri build, then run that build in a c
 npx @mistriwork/mistri build --app ./my-app --config ./mistri.json   # typecheck, validate, bundle
 npx @mistriwork/mistri migrate up --config ./mistri.json --migrations ./my-app/migrations
 npx @mistriwork/mistri migrate stores up --config ./mistri.json --app ./build/my-app  # the stores its commands and jobs use
-npx @mistriwork/mistri --config ./mistri.json --app ./build/my-app \
-  --commands ./build/my-app/server/commands.mjs
+npx @mistriwork/mistri --config ./mistri.json --app ./build/my-app  # served with the entries it was built with
 ```
 
 <!-- no picture: a build serves the same pages as the source; nothing on screen changes. -->
@@ -19,7 +18,7 @@ npx @mistriwork/mistri --config ./mistri.json --app ./build/my-app \
 
 - One line per step (typecheck, validation, bundle, database), and an exit code that names the first that failed. The typecheck runs the TypeScript installed in the App's project, which must be 7 or later (the native compiler; `npm i -D typescript`); an older one fails the step. mistri itself needs Node 24.22.1 or newer.
 - A `build/my-app/` directory that starts without TypeScript, a watcher or a compile, and is byte for byte the same on every run of the same source.
-- A server that re-hashes the build before serving it, and refuses a changed file or a different mistri version.
+- A server that re-hashes the build before serving it, and refuses a changed file or a different mistri version. It serves the commands, jobs and policy the build bundled, and says so on its startup line (`commands, jobs from: build`); a `--commands`, `--jobs` or `--policy` you give must name the build's own `server/<kind>.mjs`.
 
 ## When to use it
 
@@ -126,17 +125,24 @@ A [suite](/docs/suites/) is several Apps under one host, such as a lender at `/`
 
 ## A tenant App
 
-A [tenant App](/docs/tenant-apps/) adds its policy and a first boot. Build it with `--policy ./app/policy.ts`; the build bundles it as `server/policy.mjs`, the Dockerfile it writes starts with it, and every step below names it. Before the first rollout, over the direct port:
+A [tenant App](/docs/tenant-apps/) adds its policy and a first boot. Build it with `--policy ./app/policy.ts`; the build bundles it as `server/policy.mjs`, and the Dockerfile it writes starts with it. Before the first rollout, over the direct port, from a folder whose `mistri.json` names the build once (`release/mistri.json` here, its paths from that folder):
 
-```sh
-P="--config ./mistri.json --app ./build/app --policy ./build/app/server/policy.mjs"
-node -e "import('@mistriwork/mistri/maintenance').then((m) => m.migratePostgresAuthStore(process.env.MISTRI_AUTH_STORE))"
-npx @mistriwork/mistri migrate stores up $P          # the tenant store, its journals, and the rest
-npx @mistriwork/mistri tenant init north south $P    # the platform realm and the first tenants
-MISTRI_ACCOUNT_PASSWORD=… npx @mistriwork/mistri tenant grant ops@lender.example --roles manager $P
+```json
+{
+  "app": { "dir": "../build/app", "policy": "../build/app/server/policy.mjs" },
+  "connections": [{ "name": "lending", "url": "${DATABASE_URL}", "writable": true }]
+}
 ```
 
-- **`auth.store`** is a PostgreSQL database of its own, as `"${MISTRI_AUTH_STORE}"`, never the business database: a start refuses that. `migratePostgresAuthStore` makes its schema once.
+```sh
+cd release
+npx @mistriwork/mistri migrate stores up     # auth.store, the tenant store, its journals, and the rest
+npx @mistriwork/mistri tenant init north south    # the platform realm and the first tenants
+MISTRI_ACCOUNT_PASSWORD=… npx @mistriwork/mistri tenant grant ops@lender.example --roles manager
+```
+
+- **`auth.store`** is a PostgreSQL database of its own, as `"${MISTRI_AUTH_STORE}"`, never the business database: a start refuses that. `migrate stores up` makes its schema, and says so (`auth.store: sign-in store provisioned`).
+- **The policy** named in `mistri.json` is the tenant App's enrollment, as `--policy` is: each command prints it with where it came from.
 - **`MISTRI_AUDIT_KEY`** (32 bytes or more), with support access: set for provisioning and every start, and kept for good beside the backups. Without it the support audit's past cannot be verified.
 - **A restart** of the same build on an unchanged PostgreSQL catalog skips the catalog checks: `migrate stores up` makes a validation record, and each start of a build writes down what it checked. A changed catalog, a missing record, `mistri dev` and `mistri check` check in full. The startup line says which happened.
 - **`init` and `grant`** each run again safely: a tenant already there is left, and an address that already has an account is granted, not remade.

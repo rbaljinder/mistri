@@ -17,8 +17,19 @@ npx @mistriwork/mistri migrate up --app .                     # apply, regenerat
 ## What you'll see
 
 - `check --pending` applies the pending files to a scratch copy (`--pending-on <url>`: to a scratch database you name, such as a branch, where the role cannot create databases) and names what a dropped or renamed column breaks (`[unknown-column] view "tasks": "due" is not a column on task`), before anything changes.
-- `migrate up` applies each file in its own transaction, rewrites `mistri-schema.d.ts`, and runs `check` (exit 4 when the App no longer fits).
-- `migrate status` lists applied, pending and drift, and whether the App's types are older than the database.
+- `migrate up` applies each file in its own transaction, makes the stores the App uses, rewrites `mistri-schema.d.ts`, and runs `check` (exit 4 when the App no longer fits, 5 when a store could not be made). It ends with the bootstrap plan and what it changed:
+
+  ```text
+  Bootstrap of "desk" (sqlite, desk.db)
+    1 migrations     applied  V2__add_payoff_quote.sql
+    2 stores         done     command journal, event store
+    3 sign-in store  at start a SQLite file the first start makes (…/auth/desk.db)
+    4 seed           —        the App's tables hold rows
+    5 check          passed   the App fits the schema and the stores this run left
+  Changed: 1 migration.
+  ```
+
+- `migrate status` lists applied, pending and drift, and whether the App's types are older than the database; with `--app .` it prints the same plan and changes nothing (`--json` prints it as data, and `validate --app .` exits 2 while a phase is pending).
 
 ## When to use it, and when not
 

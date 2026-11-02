@@ -37,7 +37,7 @@ export async function contactMailPlaces(
   registry: Registry,
   host: AppHost,
   /** A connection's URL as it opens: a suite App's references resolve in its own environment. */
-  locate: (id: string) => string | undefined = (id) => registry.configOf(id)?.url,
+  locate: (id: string) => string | undefined = (id) => registry.openableUrlOf(id),
 ): Promise<{
   connectionOf(resource: string): { id: string; dialect: string } | undefined;
   target: StoreTarget | undefined;

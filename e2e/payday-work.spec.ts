@@ -216,7 +216,7 @@ test.describe('Payday people operations', () => {
         expect(net).toBe(lines);
         await expect(
           page
-            .getByText(`$${net.toLocaleString('en-US')}`, { exact: true })
+            .getByText(`$${net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, { exact: true })
             .filter({ visible: true })
             .first(),
         ).toBeVisible();

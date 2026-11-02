@@ -11,12 +11,12 @@
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appRoleReach, appRoleWarnings, sectionReads } from '../packages/mistri/src/server/app/appRoleChecks.js';
+import { appDestinationWarnings, appRoleReach, appRoleWarnings, sectionReads } from '../packages/mistri/src/server/app/appRoleChecks.js';
 import { accessibleSchema } from '../packages/mistri/src/server/app/appAccess.js';
 import { publicFormProblems } from '../packages/mistri/src/server/forms/savedFormChecks.js';
 import { defineCommand, defineCommands, type BusinessCommandRegistry } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { literal, shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
-import { resolveAppAccess } from '../packages/mistri/src/shared/app.js';
+import { orderAppPages, parseAppPages, resolveAppAccess } from '../packages/mistri/src/shared/app.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/pageConfig.js';
 import type { ColumnMeta, DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import type { PageSection } from '../packages/engine/src/shared/pageModel.js';
@@ -503,6 +503,88 @@ describe('every page section kind is judged for a role', () => {
     assert.deepEqual(sectionReads(schema, 'application', list), [
       { from: 'file', path: 'application_id' },
       { from: 'file', path: 'score' },
+    ]);
+  });
+});
+
+/* A field report: a customer's dashboard banner opened a form for a command only staff were granted. Every surface
+   that opens a room by its key draws its action only for a reader served that room, so the banner was simply not
+   there for a customer; the check says so once, naming the roles and why (appDestinationWarnings). */
+describe('an action some role sees and cannot follow', () => {
+  const raw = {
+    id: 'lender',
+    name: 'Lender',
+    sources: { main: { connection: 'db', default: true } },
+    resources: { vehicle: { access: 'write' }, saved: { access: 'write' } },
+    auth: {
+      roles: {
+        customer: { read: ['vehicle', 'saved'] },
+        clerk: { read: true, commands: ['save'] },
+        admin: { read: true, commands: ['save'] },
+      },
+    },
+    views: {
+      start: {
+        kind: 'dashboard',
+        label: 'Start',
+        roles: ['customer', 'clerk'],
+        sections: [
+          {
+            kind: 'note',
+            variant: 'banner',
+            title: 'Found one?',
+            text: 'Keep it for later.',
+            action: { label: 'Save a car', to: 'save-car' },
+          },
+        ],
+      },
+      garage: {
+        kind: 'list',
+        from: 'saved',
+        roles: ['customer'],
+        empty: { title: 'Nothing saved', action: { label: 'Browse stock', to: 'stock' } },
+      },
+      stock: { kind: 'list', from: 'vehicle', roles: ['clerk', 'admin'] },
+      'save-car': {
+        kind: 'form',
+        label: 'Save a car',
+        command: { id: 'save', version: 1, input: { note: { label: 'Note', type: 'text' } } },
+      },
+    },
+    home: 'start',
+    nav: ['start', 'garage', 'stock'],
+    pages: { vehicle: { base: 'vehicle', sections: [{ kind: 'note', text: 'Like it?', action: { label: 'Save it', to: 'save-car' } }] } },
+  };
+  const loadedOf = (app: Record<string, unknown>) => {
+    const parsed = parseTestApp(app, 'lender fixture');
+    const pages = orderAppPages(parsed, parseAppPages(app, 'lender fixture'), 'lender fixture');
+    return { app: parsed, path: '/apps/lender/app.ts', pages, sources: {} } as unknown as LoadedApp;
+  };
+
+  test('names the roles, the action and why, whichever surface the action is on', () => {
+    assert.deepEqual(appDestinationWarnings(loadedOf(raw), schema), [
+      'app.ts: views "start", section 1, note action "Save a car" [destination-unreachable]: it opens "save-car", which role "customer" cannot open: ' +
+        'it is not granted command "save". The action is not drawn for that role; open "save-car" to it, or point the action at a room it opens.',
+      'app.ts: views "garage", empty action "Browse stock" [destination-unreachable]: it opens "stock", which role "customer" cannot open: ' +
+        'its "roles" leave it out. The action is not drawn for that role; open "stock" to it, or point the action at a room it opens.',
+      'app.ts: pages "vehicle", section 1, note action "Save it" [destination-unreachable]: it opens "save-car", which role "customer" cannot open: ' +
+        'it is not granted command "save". The action is not drawn for that role; open "save-car" to it, or point the action at a room it opens.',
+    ]);
+  });
+
+  test('says nothing where every role that sees the action can follow it', () => {
+    const roles = {
+      customer: { read: ['vehicle', 'saved'], commands: ['save'] },
+      clerk: { read: true, commands: ['save'] },
+      admin: { read: true, commands: ['save'] },
+    };
+    const views = { ...raw.views, stock: { ...raw.views.stock, roles: ['customer', 'clerk', 'admin'] } };
+    assert.deepEqual(appDestinationWarnings(loadedOf({ ...raw, auth: { roles }, views }), schema), []);
+    // A table the role does not read is said as that.
+    const unread = { ...roles, customer: { read: ['saved'], commands: ['save'] } };
+    assert.deepEqual(appDestinationWarnings(loadedOf({ ...raw, auth: { roles: unread }, views, pages: {} }), schema), [
+      'app.ts: views "garage", empty action "Browse stock" [destination-unreachable]: it opens "stock", which role "customer" cannot open: ' +
+        'it does not read "vehicle". The action is not drawn for that role; open "stock" to it, or point the action at a room it opens.',
     ]);
   });
 });

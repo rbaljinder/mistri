@@ -203,7 +203,7 @@ export async function runFlowsCommand(
         return fail(`flow ${flow} starts ${String(row.start)}; flows start runs the flows that start on created.`);
     }
 
-    const target = storeTargetOf(registry.configOf(resources.connectionFor(resource))?.url);
+    const target = storeTargetOf(registry.openableUrlOf(resources.connectionFor(resource)));
     if (!target) return fail(`the job store is kept on SQLite or PostgreSQL; ${resource}'s source is neither.`);
     const policy = jobStorePolicy(module, app.id);
     let jobs: import('../../adapters/jobs/jobStoreContract.js').JobStore;

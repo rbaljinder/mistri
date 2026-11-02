@@ -5,6 +5,169 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.11
+
+- **A connection written as `${VAR}` finds its command stores.** The connection opened through its expansion, but the
+  event, effect and job stores beside it were located by the raw text, so `mistri check` failed with "declares events, but
+  source has no event store" and serve refused to start, even after `migrate stores up` had made them. Its command stores
+  are found where the connection is; a reference left unexpanded now fails loudly instead of becoming a file path.
+- **A value component's `label` no longer takes a row-policy App down.** The words a `label(value)` export gives its column
+  are learned after the App loads, and the policy compared its live App with its load-time snapshot on every request, so
+  once the first word was learned every signed-in request answered 503 "Application policy is unavailable" (how soon
+  depended on whether startup learning finished before the policy loaded). The learned display words are no longer part of
+  that comparison.
+- **Command sums are refused rather than wrong, and reach more readers.** On SQLite a decimal `sum` or `avg` beyond
+  what it can add exactly (or an integer total that overflows) now fails loudly, naming the column, as the App author's
+  fault; a malformed raw aggregate or query is likewise not retried. A float column's `sum` and `avg` are numbers; only
+  exact decimals and integers past 2^53 are strings. PostgreSQL's declared `numeric(p,s)` scale now reaches the sums,
+  so an empty set and a set with rows answer the same places on both engines, and `min`/`max` keep their places past
+  1e15. Aggregates now work in policy reads, page loaders and availability hooks under their rows and grants, in tenant Apps too (a member's, a support session's, the platform's and a visitor's, each answering what its `count` answers), a group
+  key may be any readable column (`_tag`, `región`), `__proto__`, `constructor` and `prototype` are refused as answer
+  names, a raw request can no longer declare a date column, and `iterate` never yields past its 100,000-row bound.
+- **A write under a row policy proves the code the database runs for it.** A trigger that only validates still
+  needs no name, and PostgreSQL now parses its conditions itself, so a trigger hidden by an unusual space, an implicit
+  cast through a user function, or a trigger on a partition or inheritance child no longer slips past the proof. CHECK
+  constraints, defaults, generated columns, expression indexes, partition keys and domains that call a user function
+  count as code too: **an insert into a table whose default calls a user function (a PL/pgSQL id generator, say) is now
+  refused under a row policy**, and `mistri check` names the constraint or default and the function it calls. A
+  parent's delete counts its children by the parent column's collation, as the foreign key does. **A write that points
+  a row at a parent that does not exist is now refused as one pointing at a hidden parent is**, with the same refusal
+  and words, where it used to fail on the database's own foreign key. The parent is looked up as that foreign key
+  compares: by the child column's type, named by its schema so that a type created on the search_path cannot stand in
+  for it, and the constraint's own operator on PostgreSQL (a `char(3)` reference to a `text` key finds what the key
+  finds, and a reference through a domain over `integer` is coerced as the integer column is, as every write now
+  coerces a domain's value, while a protected edit still compares a domain by its own name; and a value the check
+  takes from the stored row, such as the other column of a composite reference an update sets in part, is the text
+  PostgreSQL stored rather than the driver's reading of it); on SQLite a scoped write that sets a reference whose child column's affinity
+  changes the value before the key compares it (a number column against a `TEXT` key, a typed one against a typeless
+  key) is refused, while a typeless or `BLOB` reference, or a `TEXT` one to a numeric key, is checked; and a foreign key the database refuses all the same is said the same way. The scope's catalog
+  reads name every function and operator in `pg_catalog`, so one of the same name on the search_path cannot answer
+  for them. **A key such a write relies on (a primary key, either side of a foreign key, a named trigger's key) must now
+  be of a type whose value reads back exactly** (on PostgreSQL `text`, `varchar`, `char`, `citext`, `name`, an integer,
+  `numeric`, `uuid`, `date`, `boolean` or an enum, through domains; on SQLite `INTEGER` or `TEXT` affinity), and a write
+  that relies on a `jsonb`, float, timestamp, interval, array, `REAL` or scaled-decimal key is refused, naming the
+  table, column and type, where a review found each one could reach a hidden row (on SQLite, a key declared `UUID`,
+  `DATETIME` or the like is told to declare `TEXT` or `INTEGER`). On PostgreSQL such a write's transaction pins
+  `DateStyle`, `IntervalStyle` and `extra_float_digits` in its `BEGIN`, so a role's or database's own settings cannot
+  change how a key reads back. A foreign key with a generated column is checked
+  after every update, since it moves with the columns its expression reads. A reference to a partitioned PostgreSQL
+  table is checked through it, where a visible parent was refused for the partition it lives in; a partitioned table,
+  a partition and an inheritance parent or child are refused as write targets under a row policy for now, since a
+  key declared on a partition or a child, or pointing at one, was missed by a write through the table above it.
+- **`migrate up --app` brings an App all the way up.** With `--app`, `migrate status` prints the bootstrap plan
+  (migrations, stores, sign-in store, seed, check) and changes nothing, and `migrate up` carries it out: the stores
+  the App uses, with the `--commands`, `--jobs` and `--policy` it now takes, a `postgres://` `auth.store` (no more
+  `node -e migratePostgresAuthStore`), seed reported and never run, then the check. `up --dry-run` prints the plan,
+  `--json` prints it as data, and `up` exits 5 when a store could not be made. A missing store is no longer reported
+  as "the App no longer fits the schema": it is named, with the command that makes it.
+- **`check` exits 8 for a store the database lacks** (`store-pending`, whose fix is that `migrate up --app`), and
+  validation goes on beside it, so a real fault shows in the same run. A check that did not load a declared jobs or
+  policy module says so (`not-loaded`, info).
+- **The project profile.** An `app` block in `mistri.json` names the App and its `commands`, `jobs`, `policy` and
+  `entry` once, as paths from the file's folder; every App command finds the file by one rule (`--config`, the App's
+  own `mistri.json`, the working directory's, the person's own) and prints where each entry came from (`--json`:
+  `context`). A tenant App's policy named there is its enrollment. A build is served with the entries it was built
+  with, `mistri-deploy.json` falls back to the profile, and `mistri new` writes the block, so its package scripts
+  repeat no flag.
+- **A decimal column's sum is exact on SQLite.** SQLite stores a `NUMERIC(12,2)` value as an integer or a binary
+  float and summed it as a float, so a dashboard or breakdown over 0.10, 0.20, 0.07 and 100,000,000,000,000.00 said
+  `100000000000000.38`. A sum over a column declared with places is now added as whole units of its last place and
+  said as a decimal string with the column's places (`"100000000000000.37"`), as PostgreSQL says it; groups still
+  sort by the amount. Totals at very large amounts may change by a cent, to the right one. A sum over an integer
+  column, and arithmetic between measures, are unchanged.
+- **A command sums, groups and pages its rows.** A handler's `db.<table>.where(…)` now also answers `.sum(column)`,
+  `.aggregate({ n: count(), total: sum('amount') })`, `.groupBy('account', period.month('posted_on')).aggregate(…)`
+  with `.orderBy` and `.limit`, `.page({ after, size })` and `.iterate({ size })`, in the command's own transaction,
+  where a handler used to read every row and add them up. Sums and averages are exact decimal strings; keys, measures
+  and filters name the table's own columns. Each reads exactly what the same command's `where` reads: its footprint,
+  row policy, tenant and `elevate`. A page's `next` is plain data, read again under whoever passes it back. Past 1,000
+  groups without a limit or 100,000 rows in one walk the call is refused, never cut; a workflow pages across commands.
+- **`snapshot: true` on a command.** On PostgreSQL its transaction opens `REPEATABLE READ`, so a total and the rows
+  behind it agree while others write; a row that moved after the snapshot and is then written is refused as
+  `stale_record`, which jobs and workflows retry. On SQLite, where the writer already reads one moment, it changes
+  nothing and `mistri check` says so; on an HTTP source it is a check problem.
+- **Triggers a row-policy App names (Preview).** `resources.<t>.triggers: ['post_balance', …]` accepts those database
+  triggers on the table, where a command's write that fired one was refused before. A named trigger's statements must
+  be keyed effects (one row of another table, by a key equal to columns of `NEW` or `OLD`), and every row they reach
+  is proven inside the person's rows before the write, under its locks, up to four triggers deep; SQLite also checks a
+  session's changes after each write and before `COMMIT`, a trigger's write to a row the command wrote itself among
+  them (found by its key as stored, so a `NOCASE` key the command named in another case is still that row, and a
+  `BLOB` key by its bytes as the session names them). `mistri check --write-authority` records each one in `authority.lock` with its
+  definition's digest and its effects, and an App that names a trigger needs that lock: a changed definition, a
+  trigger with no line, or no lock at all is `[trigger-lock]`, the server refuses to start, and a write that fires it
+  is refused until it is approved. A key is the primary key on SQLite (a primary or unique key on PostgreSQL) whose
+  two sides match in type and collation, known before the write: an update, delete or read keyed by an id the database
+  assigns is refused, as is a key through a cast or under a nondeterministic collation, or one PostgreSQL compares by
+  an `=` that is not its column's own equality (one found ahead of `pg_catalog` on the search_path). A delete effect
+  is refused on any table a foreign key references, and on SQLite an insert or update effect on a table whose schema
+  declares a conflict clause such as `ON CONFLICT REPLACE`. Every table an effect reaches needs a primary key of a type
+  a key may be, whatever the effect keys it by. A command that writes a resource naming triggers carries
+  the person's row rule for every resource of that source, and its effects stay within those rows. `mistri check`
+  reads the facts the write reads (partitions and inheritance children, row-level security, rules, privileges,
+  conflict clauses), and a refusal names a collation with its schema. The rows a trigger changed are
+  kept in record history, named for the trigger and the command that fired it, and announced to live sync. New check
+  codes: `trigger-lock`, `trigger-unknown` and `trigger-double-write` (a command that also writes what its trigger
+  writes). An unnamed trigger is refused as before, and a validation-only trigger still needs no name. Design:
+  `docs/trigger-effects.md`.
+- **A write that fails after a validation trigger fired is said only once the trigger's proof still holds.** A
+  trigger's function can be replaced without a lock on its table, and a replacement that raised a hidden row's name
+  told the caller that name. After a failed write in a transaction that fired a trigger proven validation-only, the
+  proof is read again once it is rolled back, and a changed one answers the refusal instead of the trigger's text. A
+  tenant command's delete also counts the rows that reference it as the foreign key compares them, by the parent
+  key's collation, so a cascade cannot reach a row the command did not delete itself.
+- **Money is said to its currency's minor digits everywhere.** A cell, card, record field and headline, metric,
+  document, server-drawn public page and CSV now say `$24,495.00`, `$0.00`, `-$12.50` (yen whole), where some said
+  `≈ $28K` or `$5,917` beside `$5,917.40`; a metric is exact unless it says `compact`. **A listing that does not want
+  the cents says `whole: true` on its money rule**: an amount with no fractional part is then said without them
+  (`$24,495`), one that has cents still shows them, and a CSV stays exact. The whole-dollar sets (`centsAmong`,
+  `centsTogether`, a rule's `cents`) are gone. A figure is read by its digits, so a sum past 2^53 is never rounded.
+- **A command's `invalid_result` answers 500 on the App's routes, as on the App API.** It was 503 there, the status
+  every client, gateway and SDK retries, though the same request fails the same way on every try. `temporarily_unavailable`
+  and `row_locked` stay 503. A string `where` with extra arguments (`where('id <= {x}', { x })`) is refused as the
+  author's fault instead of binding nothing and matching the wrong rows; only the template and object forms bind values.
+- **Every account is made through `/api/accounts`.** Better Auth's own `/api/auth/admin/create-user` is closed with the
+  rest of its admin endpoints (it took any role string, left no trail and made an unverified account) and answers 404
+  naming the door to use; `shot --as` and the samples' tests moved to it. The sign-in page and the docs say which doors
+  make a verified account and how to see another person's rows under a row policy.
+- **`tenant grant` makes its account in the store `mistri dev` signs in to.** It opened the person's default store, so a
+  grant succeeded for an account `dev` never saw. One rule picks the store (the one the App names, else `dev`'s once
+  `dev` has started the App there, else a plain start's), and the command says which store it used.
+- **A form's review names a reference's record.** A `field.reference` answer was drawn as its key (`1`, `2`) in the
+  review, the stepper's review and the steps' summaries. It is now the record's name, read again by its key under the
+  field's own filter; a record the reader can no longer read is said to be no longer available, and the key is still what
+  is sent.
+- **A document says its dates as days and prints as paper.** A plain `DATE` read "yesterday" or "13 days ago" on a
+  statement, true the day it was read and false after. A document now says every date absolutely, and the new display
+  formats `date` and `datetime` say them so anywhere (a moment in the rule's `timezone`, else `ui.timezone`). The
+  sheet is its own token context, so captions and values read at 4.5:1 or better on the white sheet in dark mode, and a
+  printed page is the sheet alone, without the "Skip to content" link.
+- **`mistri grade` opens documents, says what it covered, and leads with what failed.** Each document is graded on the
+  screen and on paper under the record it opens; after the findings grade lists the pages, windows, look and role it
+  covered, what it skipped and why, and one passes-or-fails line with the score last (`--json`: `coverage`). Grade
+  reads a ring, padding, hit area and scroll under the density zoom, a drawing's shapes where they paint the same
+  pixels (a donut's slices no longer overlap one another), and an accessibility tree once it has stopped changing
+  instead of after a fixed 150 ms.
+- **Accessibility fixes grade found on the sample Apps.** A donut slice that drills wears the house 2px ring round its
+  own arc while the keyboard holds it, in every look. The page behind a New form's drawer is inert while it is open. A
+  list's filter rail keeps no scroll of its own (it is sticky while it fits and scrolls with the rows when taller), a
+  list's tab strip never gets narrower than its chosen tab and More, a grid head's sort ends where its resizer begins,
+  a form's fields, pickers, date buttons and sheet Close take a finger at 44px on a phone, and a list's search under a
+  band or hero head is a field on the surface, so its words and edge are the colors `check` measures.
+- **`check` names the fix for a menu mark and the rules a first App meets.** Where no shade of a menu mark's hue
+  passes, it names the nearest color the theme already wears that does, or the override to leave out. Five rules are
+  named up front: a resource segment named like a machine state, column or rollup; an editing role without a `fields`
+  list that leaves out `version`; a checklist's `checked` that is not a local boolean; a calendar `primary` that is not
+  text or a one-hop label path; and a role's field list naming a rollup or computed column.
+- **A banner, note or empty action opens a signed-in form.** A dashboard's note and banner, a record page's note and a
+  list's empty action each had their own rule for what they may open. They share one: a room, a list, a dashboard or a
+  signed-in form view, never a public form or the landing; `check` names an action a role cannot follow.
+- **Clearer CLI messages.** `migrate up --app` on an App with row policies no longer reports a false failure after a
+  clean migration (the check is named as skipped, with the command that runs it beside `--policy`). A command whose
+  write falls outside its read footprint leads with what to fix, on the terminal and in a test, with the caller's
+  sentence under it. `check --json` gives the automation listing its own code, `automation`, instead of `invalid-app`.
+- **A workflow step's timeout timer is cleared** when the step fails or the advance is killed, so a failed try no longer
+  holds the process for the timer's 30 seconds.
+
 ## 1.0.0-rc.10
 
 - **A tenant App's list pages again.** In a tenant App, every keyset-paged list's Next page locked the page with

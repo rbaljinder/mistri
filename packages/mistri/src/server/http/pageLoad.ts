@@ -52,7 +52,7 @@ export async function pageLoad(options: {
   account?: string;
   loaders: Readonly<Record<string, PageLoader>> | undefined;
   body: Record<string, unknown>;
-  reader: Pick<Adapter, 'query' | 'count'>;
+  reader: Pick<Adapter, 'query' | 'count' | 'aggregate'>;
   schema: DatabaseSchema;
   /** The reader's zone, where `ui.timezone` reads one (readerZone.ts). */
   zone?: string;

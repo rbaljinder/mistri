@@ -28,6 +28,7 @@ import {
   type SqliteStoreHost,
   type SqliteTransactionJournal,
   type StoreMeta,
+  type TriggerAcceptance,
 } from '@mistriwork/engine/adapters/storeHost.js';
 import { sameTables } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
 import type { SqliteScopeCatalog } from '@mistriwork/engine/adapters/scoped/sqliteScopeCatalog.js';
@@ -85,6 +86,17 @@ const POSTGRES_JOURNAL: StoreMeta = Object.freeze({
   version: POSTGRES_JOURNAL_VERSION,
 });
 
+/* A command's accepted triggers, copied once and frozen: no caller can change what the transaction accepts after
+   handing it over, and a runtime table is never one an App names (docs/trigger-effects.md). */
+function captureTriggerAcceptance(input: TriggerAcceptance, isRuntime: (table: string) => boolean): TriggerAcceptance {
+  const named = new Map<string, ReadonlyMap<string, string | undefined>>();
+  for (const [table, triggers] of input.named) {
+    if (isRuntime(table)) throw new Refusal('Reserved resources are runtime-only.');
+    named.set(table, new Map(triggers));
+  }
+  return Object.freeze({ named, ...(input.changed ? { changed: input.changed } : {}) });
+}
+
 /* A command's failure says whether it might have committed: a receipt's recovery depends on it. */
 const failure = (error: unknown, outcome: 'unknown' | 'not_applied') => new CommandTransactionFailure(error, outcome);
 
@@ -139,7 +151,12 @@ interface NativeCommands {
    * transaction (Adapter.scopeCommandTransaction). The journal is attested
    * before the catalog is read, so an unmigrated layout refuses before any
    * lock is taken. */
-  scopeCommandTransaction<T>(input: RowScope, run: ScopedCommandRun<T>, events?: CommandJournalAppScope): Promise<T>;
+  scopeCommandTransaction<T>(
+    input: RowScope,
+    run: ScopedCommandRun<T>,
+    events?: CommandJournalAppScope,
+    triggers?: TriggerAcceptance,
+  ): Promise<T>;
   /** Adapter.publicPlacementCommandTransaction. */
   publicPlacementCommandTransaction<T>(input: RowScope, admission: PublicPlacementAdmission, run: PublicPlacementRun<T>): Promise<T>;
   /** Adapter.publicPlacementReceipt. */
@@ -178,12 +195,13 @@ function sqliteCommands(host: SqliteStoreHost): SqliteCommands {
     // The host refuses a forged source, a proxied or non-function verifier and a closed adapter.
     verifiedCommandTransaction: (verify, run, events) =>
       host.journalTransaction(sqliteCommandJournal(events), run, { ordinaryVerify: verify }),
-    scopeCommandTransaction: async (input, run, events) => {
+    scopeCommandTransaction: async (input, run, events, triggers) => {
       const scope = captureRowScope(input);
       if (Object.keys(scope).some(isRuntimeTable)) throw new Refusal('Reserved resources are runtime-only.');
       if (host.closed()) throw new Refusal('This adapter is closed.');
       return host.journalTransaction(sqliteCommandJournal(events), (records, journal, catalog) => run(records, journal, catalog!), {
         scope,
+        ...(triggers ? { triggers: captureTriggerAcceptance(triggers, isRuntimeTable) } : {}),
       });
     },
     publicPlacementCommandTransaction: async (input, inputAdmission, run) => {
@@ -229,11 +247,12 @@ function postgresCommands(host: PostgresStoreHost): PostgresCommands {
       if (!host.verifiedSource()) throw new Refusal('This verified command transaction is unavailable.');
       return host.journalTransaction(postgresCommandJournal(events), run, { ordinaryVerify: capturePostgresCommandVerifier(verify) });
     },
-    scopeCommandTransaction: async (input, run, events) => {
+    scopeCommandTransaction: async (input, run, events, triggers) => {
       const scope = captureRowScope(input);
       if (Object.keys(scope).some(isRuntimeRelation)) throw new Refusal('Reserved resources are runtime-only.');
       return host.journalTransaction(postgresCommandJournal(events), (records, journal, catalog) => run(records, journal, catalog!), {
         scope,
+        ...(triggers ? { triggers: captureTriggerAcceptance(triggers, isRuntimeRelation) } : {}),
       });
     },
     publicPlacementCommandTransaction: async (input, inputAdmission, run) => {
@@ -317,12 +336,13 @@ function viewedCommandsOf(source: object): CommandSource | undefined {
       : {}),
     ...(scoped
       ? {
-          scopeCommandTransaction: ((scope, run, events) =>
+          scopeCommandTransaction: ((scope, run, events, triggers) =>
             scoped.call(
               under,
               scope,
               (records, journal, catalog) => run(view.records(records), journal, view.catalog(catalog)),
               events,
+              triggers,
             )) as Adapter['scopeCommandTransaction'],
         }
       : {}),

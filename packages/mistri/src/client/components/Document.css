@@ -12,11 +12,38 @@
 .doc-bar-paper { color: var(--ink-muted); font-size: var(--text-sm); }
 
 .doc-sheet {
+  /* Paper's inks, mixed from the system's Canvas and CanvasText, which color-scheme: light makes white and black.
+     The quietest words on it still read at 4.5:1 (WCAG 1.4.3), captions and a column's head included: the dim ink
+     is 6.2:1 and the faint 5:1. At 46% the faint was 3.45:1. */
   --doc-ink: CanvasText;
   --doc-dim: color-mix(in srgb, CanvasText 62%, Canvas);
-  --doc-faint: color-mix(in srgb, CanvasText 46%, Canvas);
+  --doc-faint: color-mix(in srgb, CanvasText 56%, Canvas);
   --doc-rule: color-mix(in srgb, CanvasText 11%, Canvas);
   --doc-ground: color-mix(in srgb, CanvasText 3.5%, Canvas);
+  /* The screen's tokens, said again as paper's. A value drawn on the sheet — a date, a figure, a status's word, an
+     App's own value component — names the screen's tokens (--ink, --ink-muted, --line, a status ink), and those are
+     the look's and the reader's scheme's: on a dark screen --ink is near white, and a date on the sheet read 1.2:1.
+     Here every one of them is paper's, whatever the look or the scheme, so whatever is drawn on the sheet with the
+     tokens is ink on white without knowing it is on paper. The status inks are the platform's light ones. */
+  --ground: Canvas;
+  --surface: Canvas;
+  --raised: var(--doc-ground);
+  --field-fill: Canvas;
+  --menu-ground: Canvas;
+  --ink: var(--doc-ink);
+  --ink-muted: var(--doc-dim);
+  --ink-subtle: var(--doc-faint);
+  --line: var(--doc-rule);
+  --line-strong: color-mix(in srgb, CanvasText 24%, Canvas);
+  --line-control: color-mix(in srgb, CanvasText 50%, Canvas);
+  --link: var(--doc-ink);
+  --accent-ink: var(--doc-ink);
+  --accent-soft: var(--doc-ground);
+  --focus: var(--doc-ink);
+  --status-good: #1f7a46;
+  --status-warning: #9a4b12;
+  --status-critical: #a12d2d;
+  --status-info: #7a5cc0;
   color-scheme: light;
   box-sizing: border-box; width: 100%; max-width: var(--doc-width);
   min-height: var(--doc-height);

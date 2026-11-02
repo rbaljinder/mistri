@@ -427,7 +427,7 @@ interface PageNote {
   /** `quiet`: small print, no mark. `callout`: a ground of its own. Absent: the plain note. */
   variant?: 'quiet' | 'callout';
   icon?: import('./appIcons.js').AppIconName;
-  /** One of the App's list or dashboard views to open. An App page only. */
+  /** One of the App's rooms to open: a list, a dashboard or a signed-in form view. An App page only. */
   action?: import('./appLinks.js').AppLinkAction;
   width?: SectionWidth;
   offsetLeft?: SectionOffset;

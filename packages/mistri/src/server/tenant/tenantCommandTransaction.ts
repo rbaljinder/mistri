@@ -2,6 +2,7 @@ import { isPromise, isProxy } from 'node:util/types';
 import {
   TransactionOperations,
   TransactionOutcomeUnknown,
+  type AggregateRequest,
   type TellRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
@@ -272,6 +273,20 @@ export async function runTenantCommandTransaction<T>(
         },
         true,
       ),
+    // Sums and groups read as `count` reads: a table of the command's footprint, the fields this kind may read.
+    ...(tx.aggregate
+      ? {
+          aggregate: (input: AggregateRequest) =>
+            invoke(
+              input,
+              (value) => {
+                assertStructuredReadFilter(value.filter, 'column');
+                return tx.aggregate!({ ...value, table: authorization.table(value.table) });
+              },
+              true,
+            ),
+        }
+      : {}),
     insert: (input) =>
       invoke(input, async (value) => {
         const table = authorization.table(value.table, true),

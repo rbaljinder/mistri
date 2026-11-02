@@ -20,15 +20,15 @@ Today dashboard is the worked example.
   `examples/apps/lintel/dashboards.ts:17`.
 - **When the board is read by period**, `windows` on the dashboard and
   `over` on each section they narrow —
-  `examples/apps/lintel/dashboards.ts:73`.
+  `examples/apps/lintel/dashboards.ts:74`.
 - **When a figure moves over time**, a `chart` over `auto`, which picks
-  the day, week, month or quarter the window calls for — `examples/apps/lintel/dashboards.ts:40`.
+  the day, week, month or quarter the window calls for — `examples/apps/lintel/dashboards.ts:41`.
 - **When a total divides by a vocabulary**, a `breakdown` at a third or
   half width, beside a donut of another division —
-  `examples/apps/lintel/dashboards.ts:49`.
+  `examples/apps/lintel/dashboards.ts:50`.
 - **When two divisions cross**, a `matrix`.
 - **When there is work waiting**, `rows` of it with a `limit`, two to a row —
-  `examples/apps/lintel/dashboards.ts:50`.
+  `examples/apps/lintel/dashboards.ts:51`.
 - **When a number needs a sentence**, a `note` last.
 
 The sections are in [Dashboards](/docs/dashboards/).

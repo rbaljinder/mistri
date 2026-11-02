@@ -410,6 +410,10 @@ export interface CommandDefinition<
       other tenant's. The field is a required text or reference field, asked whatever the record says. */
   readonly tenant?: keyof I & string;
   readonly audit?: BusinessCommandAudit;
+  /** Every read the handler makes sees the database as of one moment, so a total and the rows behind it agree while
+      others write (PostgreSQL REPEATABLE READ; SQLite's writer is one snapshot already). A row that moved after the
+      snapshot and is then written is refused as `stale_record`, which a job or workflow retries. */
+  readonly snapshot?: true;
   /** What the command keeps: `none`, `receipts` or `audit`; overrides the App's `track`. See BusinessCommand. */
   readonly track?: 'none' | 'receipts' | 'audit';
   readonly support?: 'refuse';
@@ -524,6 +528,8 @@ export interface BusinessCommand<Input, Output, I extends CommandInput = Command
    * declared, and one that records events keeps its audit.
    */
   readonly track?: 'none' | 'receipts' | 'audit';
+  /** Every read sees one snapshot (CommandDefinition.snapshot, snapshotRead.ts). */
+  readonly snapshot?: true;
   /**
    * Whether an operator inside a dealer may run this command. Commands are
    * allowed under a support session by default, because a session exists to get
@@ -614,6 +620,7 @@ const definitionKeys = new Set([
   'targets',
   'audit',
   'track',
+  'snapshot',
   'realm',
   'tenant',
   'support',
@@ -1089,6 +1096,8 @@ export function defineCommand<
   const audit = Object.hasOwn(value, 'audit') ? auditOption(value.audit) : undefined;
   if (Object.hasOwn(value, 'track') && !['none', 'receipts', 'audit'].includes(value.track as string))
     fail('Command track must be "none", "receipts" or "audit".');
+  if (Object.hasOwn(value, 'snapshot') && value.snapshot !== true)
+    fail('Command snapshot is true, or left out: a command reads one snapshot only when it asks to.');
   const when = Object.hasOwn(value, 'when') ? whenOption(value.when) : undefined;
   let enabledBy: CommandFlagGate | undefined;
   if (Object.hasOwn(value, 'enabledBy')) {
@@ -1166,6 +1175,7 @@ export function defineCommand<
     ...(value.tenant === undefined ? {} : { tenant: value.tenant as keyof I & string }),
     ...(audit === undefined ? {} : { audit }),
     ...(value.track === undefined ? {} : { track: value.track as 'none' | 'receipts' | 'audit' }),
+    ...(value.snapshot === true ? { snapshot: true as const } : {}),
     ...(value.support === undefined ? {} : { support: value.support as 'refuse' }),
     ...(value.appendOnly === true ? { appendOnly: true as const } : {}),
     handle: value.handle as BusinessCommand<Input, Output, I>['handle'],

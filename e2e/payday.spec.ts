@@ -134,11 +134,11 @@ test.describe('Payday payroll workflow', () => {
           await fresh.keyboard.press('ArrowRight');
           await expect(fresh.getByRole('tab', { name: 'Job & pay', exact: true })).toBeFocused();
           await expect(fresh.getByRole('tab', { name: 'Job & pay', exact: true })).toHaveAttribute('aria-selected', 'true');
-          // A lone whole rate is said whole (45aaa320: cents only where the figure has some).
-          await expect(fresh.getByText('$28/hr', { exact: true })).toBeVisible();
+          // A rate is money, said to the cent like every amount: $28.00/hr, never $28/hr beside $28.40/hr.
+          await expect(fresh.getByText('$28.00/hr', { exact: true })).toBeVisible();
           await fresh.keyboard.press('Home');
           await expect(fresh.getByRole('tab', { name: 'Overview', exact: true })).toBeFocused();
-          await expect(fresh.getByText('$28/hr', { exact: true })).toBeHidden();
+          await expect(fresh.getByText('$28.00/hr', { exact: true })).toBeHidden();
           expect(await fresh.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
           await fresh.keyboard.press('End');
           const onboardingTab = fresh.getByRole('tab', { name: 'Onboarding', exact: true });

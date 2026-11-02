@@ -18,8 +18,9 @@ import { dialectOf, openMigrationDb } from '@mistriwork/engine/server/migrate/da
 import { homeSourceOf, isTenantApp } from '../../shared/appModel.js';
 import { getCommandEffects, getCommandEvents } from '../commands/businessCommands.js';
 import { resolveTarget } from '@mistriwork/engine/server/migrate/target.js';
+import { projectContext } from '@mistriwork/engine/server/config/profile.js';
 import { appBinding } from '../cli/appBinding.js';
-import type { JobModule } from '../jobs/jobModule.js';
+import { runsJobs, type JobModule } from '../jobs/jobModule.js';
 import type { ProvisionStoresOptions } from '../maintenance.js';
 import type { AppTenantPolicy } from '../policy/appTenantPolicy.js';
 
@@ -181,6 +182,29 @@ export function storesUpCommand(
   return parts.join(' ');
 }
 
+/**
+ * `mistri migrate up --app …` with the entries a run was given, so the one command that applies the App's migrations
+ * and makes its stores (docs/bootstrap-plan.md) reaches the same databases and the same jobs. What `check` names as the
+ * fix for `store-pending`. A URL's password is never written.
+ */
+export function migrateUpCommand(
+  given: Readonly<{ app: string; config?: string; target?: string; commands?: string; jobs?: string; policy?: string }>,
+): string {
+  const word = (text: string) => (/^[\w@%+=:,./~-]+$/.test(text) ? text : `'${text.replaceAll("'", `'\\''`)}'`);
+  /* What the project profile gave, the same command finds again in mistri.json: it is not repeated. */
+  const context = projectContext();
+  const parts = ['mistri migrate up', ...(context?.app?.from === 'profile' ? [] : ['--app', word(given.app)])];
+  for (const [flag, value, profiled] of [
+    ['--commands', given.commands, context?.entries.commands?.from === 'profile'],
+    ['--jobs', given.jobs, context?.entries.jobs?.from === 'profile'],
+    ['--policy', given.policy, context?.entries.policy?.from === 'profile'],
+    ['--config', given.config, context?.config?.from === 'app'],
+  ] as const)
+    if (value && !profiled) parts.push(flag, word(value));
+  if (given.target) parts.push(word(withoutPassword(given.target)));
+  return parts.join(' ');
+}
+
 /** A tenant App's own stores (TENANT_ORDER's), as its policy declares them: what its start attests beside the
  * command journal, the sandboxes and the record history. */
 function tenantPolicyStores(policy: Pick<AppTenantPolicy, 'administration' | 'invitations' | 'support'>): string[] {
@@ -294,8 +318,10 @@ export async function runStores(sub: string, input: Parameters<typeof storeLocat
       await db.close();
     }
   }
-  if (sub === 'up' && input.loaded && code !== EXIT.couldNot)
+  if (sub === 'up' && input.loaded && code !== EXIT.couldNot) {
     code = Math.max(code, await provisionAppStores(input.registry, input.loaded, input.jobs, input.policy, write));
+    code = Math.max(code, await provisionSignInStore(input.loaded, write));
+  }
   if (sub === 'status')
     write(
       `${STORES.filter((store) => Object.keys(store.current).length > 0).length} stores known; \`mistri migrate stores up\` applies what is pending.`,
@@ -303,35 +329,55 @@ export async function runStores(sub: string, input: Parameters<typeof storeLocat
   return code;
 }
 
+/** What each store this App uses is called in a plan: the words a person reads, not the store list's id. */
+const STORE_WORDS: Readonly<Record<string, string>> = {
+  'command-journal': 'command journal',
+  'command-events': 'event store',
+  'event-delivery': 'event delivery',
+  jobs: 'job store',
+  workflows: 'workflow store',
+  integrations: 'integrations store',
+  inbox: 'notification store',
+  'record-history': 'record history',
+  assistant: 'assistant store',
+  'live-change': 'live sync',
+  'tenant-sandboxes': 'sandbox store',
+  'validation-record': 'validation record',
+};
+export const storeWords = (id: string): string => STORE_WORDS[id] ?? id;
+
+type StoreTargetOf = Readonly<{ sqlite: string }> | Readonly<{ postgres: string }>;
+/* Where a step provisions: the connection's address, its engine, and the store target a SQLite or PostgreSQL one has. */
+type StoreWhere = { url: string; dialect: string; target?: StoreTargetOf };
+/** One thing `up` makes for the App on one connection: the stores it leaves there (by id), and how. */
+interface AppStoreStep {
+  readonly connection: string;
+  /** The stores this step makes, by their id in the store list: what a plan reads to say whether it is pending. */
+  readonly ids: readonly string[];
+  run(where: StoreWhere): Promise<string | undefined>;
+}
+
+/** A store kept only in SQLite or PostgreSQL. */
+class Unkept extends Error {}
+
 /**
- * With `--app`, `up` also creates every store the App uses and the database
- * lacks, on the connection each belongs on: the notification store beside
- * the resources that notify, the record history beside the resources a page
- * shows the history of, the assistant's conversations where the App declares an assistant, the command journal on each connection its commands
- * run on, and, when a command records events, posts effects or `--jobs`
- * names a module, the App's event store, their delivery destinations, the
- * job, workflow and integrations stores beside them. The App is the binding
- * a bare database does not carry, so this is the one place all of them can
- * be made by one command. Each is idempotent: present, it is left as it is.
- * A tenant App's stores are bound to its policy: with `--policy`, `up` makes
- * what its start attests (the tenant store and the journals its policy
- * declares, the command journal, sandboxes, record history, and the event,
- * effect and job stores bound to every tenant); without it, it says so and
- * only upgrades what the database holds (above).
+ * The stores the App uses, each on the connection it belongs on: the notification store beside the resources that
+ * notify, the record history beside the resources a page shows the history of, the assistant's conversations where
+ * the App declares an assistant, the command journal on each connection its commands run on, and, when a command
+ * records events, posts effects or `--jobs` names a module, the App's event store, their delivery destinations, the
+ * job, workflow and integrations stores beside them. A tenant App's stores are bound to its policy: without one,
+ * there are none to name (`skipped` says so). `up` runs the steps (provisionAppStores); a plan reads which of their
+ * stores the database lacks (appStoresPlan), so both follow the one list.
  */
-async function provisionAppStores(
-  registry: Registry,
+async function appStoreSteps(
   loaded: LoadedApp,
   jobsFile: string | undefined,
   policyFile: string | undefined,
-  write: (line: string) => void,
-): Promise<number> {
+): Promise<{ steps: AppStoreStep[]; skipped?: string; refused?: string }> {
   const { app } = loaded;
   /* Without its policy a tenant App's stores have no binding to be made under: said, and the upgrade above stands. */
-  if (isTenantApp(app) && policyFile === undefined) {
-    write("  a tenant App's stores are bound to its policy: add --policy <file> to provision them.");
-    return EXIT.ok;
-  }
+  if (isTenantApp(app) && policyFile === undefined)
+    return { steps: [], skipped: "a tenant App's stores are bound to its policy: add --policy <file> to provision them." };
   const registryOf = loaded.commands?.registry;
   const commands = registryOf ? Object.values(registryOf) : [];
   const connectionOf = (source: string | undefined) =>
@@ -342,117 +388,86 @@ async function provisionAppStores(
     const named = dot > 0 ? resource.slice(0, dot) : undefined;
     return named !== undefined && app.sources?.[named] ? named : homeSourceOf(app);
   };
-  const [{ storeTargetOf }, maintenance, { historyRules }, { migrateSqliteCommandJournal }, { migratePostgresCommandJournal }] =
-    await Promise.all([
-      import('../commands/appCommandEvents.js'),
-      import('../maintenance.js'),
-      import('../recordHistory.js'),
-      import('../../adapters/commands/commandJournal.js'),
-      import('../../adapters/commands/postgresCommandJournal.js'),
-    ]);
-  const jobLoader = jobsFile !== undefined && registryOf ? await import('../jobs/jobLoader.js') : undefined;
+  const [maintenance, { historyRules }, { migrateSqliteCommandJournal }, { migratePostgresCommandJournal }] = await Promise.all([
+    import('../maintenance.js'),
+    import('../recordHistory.js'),
+    import('../../adapters/commands/commandJournal.js'),
+    import('../../adapters/commands/postgresCommandJournal.js'),
+  ]);
+  if (jobsFile !== undefined && !registryOf)
+    return { steps: [], refused: "jobs: a jobs module runs the App's commands, and this App has none" };
+  const jobLoader = jobsFile !== undefined ? await import('../jobs/jobLoader.js') : undefined;
   /* A tenant App's module is wrapped with its machine timers by the provisioning itself, as its start wraps it. */
   const jobs =
     jobLoader &&
     (isTenantApp(app) ? await jobLoader.loadJobModule(jobsFile!) : await jobLoader.servedJobModule(jobsFile!, app, registryOf!));
-  if (jobsFile !== undefined && !registryOf) {
-    write("  jobs: a jobs module runs the App's commands, and this App has none");
-    return EXIT.couldNot;
-  }
-  type Target = NonNullable<ReturnType<typeof storeTargetOf>>;
-  /* Where a step provisions: the connection's address, its engine, and the store target a SQLite or PostgreSQL one has. */
-  type Step = (where: { url: string; dialect: string; target?: Target }) => Promise<string | undefined>;
-  /** A store kept only in SQLite or PostgreSQL. */
-  class Unkept extends Error {}
-  const kept = (where: { target?: Target }, what: string): Target => {
+  const kept = (where: StoreWhere, what: string): StoreTargetOf => {
     if (!where.target) throw new Unkept(`${what} is kept in SQLite or PostgreSQL`);
     return where.target;
   };
-  /* What each connection holds, in the order a start attests them. */
-  const steps = new Map<string, Step[]>();
-  const add = (connection: string | undefined, step: Step) => {
-    if (connection === undefined) return;
-    steps.set(connection, [...(steps.get(connection) ?? []), step]);
+  const steps: AppStoreStep[] = [];
+  const add = (connection: string | undefined, ids: readonly string[], run: AppStoreStep['run']) => {
+    if (connection !== undefined) steps.push({ connection, ids, run });
   };
   const said = (what: string, outcome: { provisioned: boolean }) => `${what} ${outcome.provisioned ? 'provisioned' : 'present'}`;
   /* The store list's own provisioning (maintenance.ts provisionStores), on the database each store belongs in. */
-  const provision = (where: { url: string; dialect: string; target?: Target }, options: ProvisionStoresOptions) =>
-    maintenance.provisionStores(where.target!, options);
+  const provision = (where: StoreWhere, options: ProvisionStoresOptions) => maintenance.provisionStores(where.target!, options);
   /* A store the list keeps where a store target is (SQLite, PostgreSQL). */
-  const unbound = (id: string, what: string) => async (where: { url: string; dialect: string; target?: Target }) => {
+  const unbound = (id: string, what: string) => async (where: StoreWhere) => {
     kept(where, what);
     const made = (await provision(where, { only: [id] })).stores[id];
     return said(`${what} v${made.version}`, made);
   };
-  /* Each connection's steps, in order: a step that cannot be kept on its engine is said and the rest go on. */
-  const run = async (): Promise<number> => {
-    let code: number = EXIT.ok;
-    for (const [name, todo] of steps) {
-      const config = registry.configs().find((each) => each.id === name || each.name === name);
-      if (!config) {
-        write(`  stores: connection "${name}" is not in the config`);
-        code = EXIT.couldNot;
-        continue;
-      }
-      try {
-        const { url } = await resolveConnection(config.name, config.url, { secrets: true });
-        const where = { url, dialect: dialectOf(url), target: storeTargetOf(url) };
-        for (const step of todo) {
-          try {
-            const done = await step(where);
-            if (done !== undefined) write(`  ${config.name}: ${done}`);
-          } catch (error) {
-            if (!(error instanceof Unkept)) throw error;
-            write(`  ${config.name}: ${error.message}, and this connection is ${where.dialect}`);
-            if (code === EXIT.ok) code = EXIT.refused;
-          }
-        }
-      } catch (error) {
-        write(`  ${config.name}: the App's stores could not be provisioned: ${(error as Error).message}`);
-        code = EXIT.failed;
-      }
-    }
-    return code;
+  const journal = async (where: StoreWhere) => {
+    const target = kept(where, 'the command journal');
+    const made = 'sqlite' in target ? migrateSqliteCommandJournal(target.sqlite) : await migratePostgresCommandJournal(target.postgres);
+    return `command journal v${made.version} ${made.migrated ? 'provisioned' : 'present'}`;
   };
+  /* The module's own stores: a job store where it runs jobs, the deliveries its jobs listen on, a workflow store and
+     an integrations store where it declares them (maintenance.ts boundStores). */
+  const jobStores = jobs
+    ? [
+        ...(runsJobs(jobs) ? ['jobs'] : []),
+        ...([...jobs.jobs.values()].some((job) => job.from) ? ['event-delivery'] : []),
+        ...(jobs.workflows.size ? ['workflows'] : []),
+        ...(jobs.integrations || (!runsJobs(jobs) && jobs.inbound.size) ? ['integrations'] : []),
+      ]
+    : [];
   if (isTenantApp(app)) {
     const { loadAppTenantPolicy } = await import('../policy/appTenantPolicy.js');
     let policy: Awaited<ReturnType<typeof loadAppTenantPolicy>>;
     try {
       policy = await loadAppTenantPolicy(policyFile!);
     } catch (error) {
-      write(`  the tenant policy did not load: ${(error as Error).message}`);
-      return EXIT.couldNot;
+      return { steps: [], refused: `the tenant policy did not load: ${(error as Error).message}` };
     }
     const source = homeSourceOf(app)!,
       home = app.sources![source].connection;
     /* What the start attests (tenantFeature*.ts), bound as enrollment binds it (tenantEnrollment.ts). */
     const binding = { appId: app.id, source: { id: source, connection: home }, storeId: policy.storeId };
     const tenantStores = tenantPolicyStores(policy);
-    add(home, async (where) => {
+    add(home, tenantStores, async (where) => {
       kept(where, "a tenant App's stores");
       const made = await provision(where, { app: { id: app.id, tenant: binding }, only: tenantStores });
       return tenantStores.map((id) => said(`${id} v${made.stores[id].version}`, made.stores[id])).join(', ');
     });
-    if (registryOf)
-      add(home, async (where) => {
-        const target = kept(where, 'the command journal');
-        const journal =
-          'sqlite' in target ? migrateSqliteCommandJournal(target.sqlite) : await migratePostgresCommandJournal(target.postgres);
-        return `command journal v${journal.version} ${journal.migrated ? 'provisioned' : 'present'}`;
-      });
+    if (registryOf) add(home, ['command-journal'], journal);
     if (Object.values(app.resources ?? {}).some((resource) => resource.clone !== undefined))
-      add(home, unbound('tenant-sandboxes', 'sandbox store'));
-    if (historyRules(app, loaded.pages).size) add(home, unbound('record-history', 'record history'));
+      add(home, ['tenant-sandboxes'], unbound('tenant-sandboxes', 'sandbox store'));
+    if (historyRules(app, loaded.pages).size) add(home, ['record-history'], unbound('record-history', 'record history'));
     /* The assistant's conversations, beside the tenant source (tenantAssistant.ts), where its start looks for them. */
-    if (app.assistant) add(home, unbound('assistant', 'assistant store'));
+    if (app.assistant) add(home, ['assistant'], unbound('assistant', 'assistant store'));
     /* Live sync's change store, where every tenant's writes are told to the pages that show them. */
-    add(home, unbound('live-change', 'live sync store'));
+    add(home, ['live-change'], unbound('live-change', 'live sync store'));
     /* What a production build's start last validated (tenantValidationRecord.ts): PostgreSQL's only, and never
-       required — a database without it is checked in full at every start, so a SQLite one is passed over unsaid. */
-    add(home, async (where) => (where.dialect === 'postgres' ? await unbound('validation-record', 'validation record')(where) : undefined));
+       required — a database without it is checked in full at every start, so a SQLite one is passed over unsaid,
+       and a plan never waits on it. */
+    add(home, [], async (where) =>
+      where.dialect === 'postgres' ? await unbound('validation-record', 'validation record')(where) : undefined,
+    );
     /* The event store, the effects' destinations and the jobs' stores, each bound to every tenant of the App. */
     if (registryOf && (jobs || commands.some((command) => getCommandEvents(command) || getCommandEffects(command))))
-      add(home, async (where) => {
+      add(home, ['command-events', ...jobStores], async (where) => {
         kept(where, "the commands' event store");
         const made = await provision(where, {
           app: { id: app.id, tenant: binding, commands: registryOf, definition: app, pages: loaded.pages },
@@ -461,39 +476,33 @@ async function provisionAppStores(
         const stores = Object.entries(made.stores).map(([id, store]) => said(id, store));
         return [...stores, `${made.destinations.length} delivery destination(s)`].join(', ');
       });
-    return run();
+    return { steps };
   }
   const notifying = Object.entries(app.resources ?? {}).filter(([, resource]) => resource.notify?.length);
   for (const connection of new Set(notifying.map(([id]) => connectionOf(sourceOfResource(id)))))
-    add(connection, unbound('inbox', 'notification store'));
+    add(connection, ['inbox'], unbound('inbox', 'notification store'));
   /* A rule that emails an address the record holds queues its mail in the integrations store, in the write's transaction. */
   const emailing = notifying.filter(([, resource]) => resource.notify!.some((rule) => rule.send?.channel === 'email'));
   for (const connection of new Set(emailing.map(([id]) => connectionOf(sourceOfResource(id)))))
-    add(connection, unbound('integrations', 'integrations store'));
+    add(connection, ['integrations'], unbound('integrations', 'integrations store'));
   for (const connection of new Set([...historyRules(app, loaded.pages).keys()].map((id) => connectionOf(sourceOfResource(id)))))
-    add(connection, unbound('record-history', 'record history'));
+    add(connection, ['record-history'], unbound('record-history', 'record history'));
   /* The assistant's conversations, on the connection the App's entry point names (assistantStores.ts), where serving looks. */
-  if (app.assistant) add(connectionOf(undefined), unbound('assistant', 'assistant store'));
+  if (app.assistant) add(connectionOf(undefined), ['assistant'], unbound('assistant', 'assistant store'));
   /* Live sync's change store, on every database a resource is read from: a page showing any of them is told of its writes. */
   for (const connection of new Set(Object.keys(app.resources ?? {}).map((id) => connectionOf(sourceOfResource(id)))))
-    add(connection, unbound('live-change', 'live sync store'));
-  for (const connection of new Set(commands.map((command) => connectionOf(command.source))))
-    add(connection, async (where) => {
-      const target = kept(where, 'the command journal');
-      const journal =
-        'sqlite' in target ? migrateSqliteCommandJournal(target.sqlite) : await migratePostgresCommandJournal(target.postgres);
-      return `command journal v${journal.version} ${journal.migrated ? 'provisioned' : 'present'}`;
-    });
+    add(connection, ['live-change'], unbound('live-change', 'live sync store'));
+  for (const connection of new Set(commands.map((command) => connectionOf(command.source)))) add(connection, ['command-journal'], journal);
   const emitting = commands.find((command) => getCommandEvents(command));
   if (emitting)
-    add(connectionOf(emitting.source), async (where) => {
+    add(connectionOf(emitting.source), ['command-events'], async (where) => {
       kept(where, 'the event store');
       const events = (await provision(where, { app: { id: app.id, source: emitting.source } })).stores['command-events'];
       return said(`event store for App "${app.id}" v${events.version}`, events);
     });
   const posting = commands.find((command) => getCommandEffects(command));
   if (posting && registryOf)
-    add(connectionOf(posting.source), async (where) => {
+    add(connectionOf(posting.source), ['command-events', 'event-delivery'], async (where) => {
       kept(where, "effects' deliveries");
       const effects = await provision(where, { app: { id: app.id, commands: registryOf } });
       const added = effects.destinations.filter((each) => each.added).length;
@@ -509,7 +518,7 @@ async function provisionAppStores(
       jobs.jobs.size || jobs.workflows.size
         ? jobLoader!.jobDeployment(jobs, { appId: app.id, commands: registryOf }).sourceId
         : anchor?.source;
-    add(connectionOf(sourceId), async (where) => {
+    add(connectionOf(sourceId), jobStores, async (where) => {
       kept(where, "the jobs' stores");
       /* The module as the server runs it, its machine timers among its jobs: maintenance captures it again as it is. */
       const made = await provision(where, { app: { id: app.id, commands: registryOf }, jobs: jobs as unknown as JobModule });
@@ -526,5 +535,215 @@ async function provisionAppStores(
       return `jobs: ${parts.filter(Boolean).join(', ')}`;
     });
   }
-  return run();
+  return { steps };
+}
+
+/**
+ * With `--app`, `up` also creates every store the App uses and the database lacks (appStoreSteps), on the connection
+ * each belongs on. The App is the binding a bare database does not carry, so this is the one place all of them can be
+ * made by one command. Each is idempotent: present, it is left as it is. Without a tenant App's policy, it says so and
+ * only upgrades what the database holds (runStores, above).
+ */
+async function provisionAppStores(
+  registry: Registry,
+  loaded: LoadedApp,
+  jobsFile: string | undefined,
+  policyFile: string | undefined,
+  write: (line: string) => void,
+): Promise<number> {
+  const { steps, skipped, refused } = await appStoreSteps(loaded, jobsFile, policyFile);
+  if (skipped) {
+    write(`  ${skipped}`);
+    return EXIT.ok;
+  }
+  if (refused) {
+    write(`  ${refused}`);
+    return EXIT.couldNot;
+  }
+  const { storeTargetOf } = await import('../commands/appCommandEvents.js');
+  let code: number = EXIT.ok;
+  /* Each connection's steps, in the order a start attests them: a step that cannot be kept on its engine is said and the rest go on. */
+  for (const name of new Set(steps.map((step) => step.connection))) {
+    const config = registry.configs().find((each) => each.id === name || each.name === name);
+    if (!config) {
+      write(`  stores: connection "${name}" is not in the config`);
+      code = EXIT.couldNot;
+      continue;
+    }
+    try {
+      const { url } = await resolveConnection(config.name, config.url, { secrets: true });
+      const where = { url, dialect: dialectOf(url), target: storeTargetOf(url) };
+      for (const step of steps.filter((each) => each.connection === name)) {
+        try {
+          const done = await step.run(where);
+          if (done !== undefined) write(`  ${config.name}: ${done}`);
+        } catch (error) {
+          if (!(error instanceof Unkept)) throw error;
+          write(`  ${config.name}: ${error.message}, and this connection is ${where.dialect}`);
+          if (code === EXIT.ok) code = EXIT.refused;
+        }
+      }
+    } catch (error) {
+      write(`  ${config.name}: the App's stores could not be provisioned: ${(error as Error).message}`);
+      code = EXIT.failed;
+    }
+  }
+  return code;
+}
+
+/** One store this App uses, on one connection, as a plan reads it. */
+interface PlannedStore {
+  readonly connection: string;
+  readonly id: string;
+  /**
+   * `absent`: `up` makes it. `behind`: it is there at an older layout, and `up` brings it forward. `refused`: it is
+   * there in a layout `up` will not touch (newer than this mistri, or with no upgrade from it), said in `refused`.
+   */
+  readonly state: 'present' | 'absent' | 'behind' | 'refused';
+  readonly refused?: string;
+}
+
+/** What the bootstrap plan's stores phase reads: each store the App uses and whether the database has it. */
+export interface StoresPlan {
+  readonly stores: readonly PlannedStore[];
+  /** Why the App's own stores cannot be named (a tenant App without its policy). */
+  readonly skipped?: string;
+  /** What could not be read: a connection that did not open, a jobs module that did not load. */
+  readonly problems: readonly string[];
+}
+
+/**
+ * The stores phase of the bootstrap plan (docs/bootstrap-plan.md): which of the stores `up` would make for this App
+ * each database lacks, read without making any. It follows the steps `up` runs (appStoreSteps), so the plan and the
+ * run never disagree about what this App needs. The event store is attested for this App's own binding, as a start
+ * attests it: another App's event store in the same database is not this one's.
+ */
+export async function appStoresPlan(input: { registry: Registry; loaded: LoadedApp; jobs?: string; policy?: string }): Promise<StoresPlan> {
+  let found: Awaited<ReturnType<typeof appStoreSteps>>;
+  try {
+    found = await appStoreSteps(input.loaded, input.jobs, input.policy);
+  } catch (error) {
+    return { stores: [], problems: [(error as Error).message] };
+  }
+  if (found.skipped) return { stores: [], skipped: found.skipped, problems: [] };
+  if (found.refused) return { stores: [], problems: [found.refused] };
+  const stores: PlannedStore[] = [];
+  const problems: string[] = [];
+  const { storeTargetOf, appCommandEventStore } = await import('../commands/appCommandEvents.js');
+  for (const name of new Set(found.steps.map((step) => step.connection))) {
+    const config = input.registry.configs().find((each) => each.id === name || each.name === name);
+    if (!config) {
+      problems.push(`connection "${name}" is not in the config`);
+      continue;
+    }
+    let db: Awaited<ReturnType<typeof openMigrationDb>>;
+    let url: string;
+    const ids = [...new Set(found.steps.filter((step) => step.connection === name).flatMap((step) => step.ids))];
+    try {
+      url = (await resolveConnection(config.name, config.url, { secrets: true })).url;
+      /* A SQLite file not made yet holds none of them; `up` makes the file with its migrations. */
+      if (dialectOf(url) === 'sqlite' && !existsSync(url.replace(/^sqlite:(\/\/)?/i, ''))) {
+        stores.push(...ids.map((id) => ({ connection: config.name, id, state: 'absent' as const })));
+        continue;
+      }
+      db = await openMigrationDb(url, [], false);
+    } catch (error) {
+      problems.push(`${config.name}: ${(error as Error).message}`);
+      continue;
+    }
+    try {
+      const statuses = new Map((await storeStatuses(db)).map((status) => [status.id, status]));
+      for (const id of ids) {
+        const status = statuses.get(id);
+        if (status?.refused !== undefined) {
+          stores.push({ connection: config.name, id, state: 'refused', refused: status.refused });
+          continue;
+        }
+        let state: PlannedStore['state'] =
+          status === undefined || status.found === null ? 'absent' : status.pending.length ? 'behind' : 'present';
+        /* The event store is one per App: present for another App is absent for this one. */
+        if (id === 'command-events' && state === 'present' && !isTenantApp(input.loaded.app)) {
+          const emitting = Object.values(input.loaded.commands?.registry ?? {}).find((command) => getCommandEvents(command));
+          const target = storeTargetOf(url);
+          if (emitting && target && !(await eventStoreAttests(target, appCommandEventStore(input.loaded.app.id, emitting.source))))
+            state = 'absent';
+        }
+        stores.push({ connection: config.name, id, state });
+      }
+    } catch (error) {
+      problems.push(`${config.name}: ${(error as Error).message}`);
+    } finally {
+      await db.close().catch(() => {});
+    }
+  }
+  return { stores, problems };
+}
+
+/** Whether the database holds this App's own event store, read as a start attests it; never throws. */
+async function eventStoreAttests(target: StoreTargetOf, binding: { appId: string; storeId: string; sourceId: string }): Promise<boolean> {
+  try {
+    if ('sqlite' in target) {
+      const [{ DatabaseSync }, { assertSqliteCommandEventStore }] = await Promise.all([
+        import('node:sqlite'),
+        import('../../adapters/events/commandEventSchema.js'),
+      ]);
+      const db = new DatabaseSync(target.sqlite, { readOnly: true });
+      try {
+        assertSqliteCommandEventStore(db, binding);
+      } finally {
+        db.close();
+      }
+      return true;
+    }
+    const [{ PgConnectionManager }, { assertPostgresCommandEventStore }] = await Promise.all([
+      import('@mistriwork/engine/adapters/postgresPool.js'),
+      import('../../adapters/events/postgresCommandEventStore.js'),
+    ]);
+    const connection = new PgConnectionManager(target.postgres);
+    try {
+      await connection.withReadClient((client) => assertPostgresCommandEventStore(client, binding));
+    } finally {
+      await connection.close().catch(() => {});
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The App's PostgreSQL `auth.store` URL, when it signs people in and names one; a SQLite store is made by a start. */
+async function postgresSignInStore(loaded: LoadedApp): Promise<string | undefined> {
+  if (!loaded.app.auth) return undefined;
+  const [{ localAuthStore }, { isPostgresAuthStore }] = await Promise.all([import('../auth/auth.js'), import('../auth/authStore.js')]);
+  const { store } = localAuthStore(loaded);
+  return isPostgresAuthStore(store) ? store : undefined;
+}
+
+/** Whether the App's PostgreSQL `auth.store` holds the sign-in tables; undefined when it keeps none there. Throws when it cannot be read. */
+export async function signInStorePresent(loaded: LoadedApp): Promise<boolean | undefined> {
+  const store = await postgresSignInStore(loaded);
+  if (store === undefined) return undefined;
+  const db = await openMigrationDb(store, [], false);
+  try {
+    return (await storeStatuses(db)).some((status) => status.id === 'auth' && status.found !== null);
+  } finally {
+    await db.close().catch(() => {});
+  }
+}
+
+/**
+ * The App's PostgreSQL `auth.store`, made where it is absent (decision D4 of docs/bootstrap-plan.md): the one
+ * bootstrap step that was a `node -e` call to migratePostgresAuthStore. In its own transaction; its URL is never said.
+ */
+export async function provisionSignInStore(loaded: LoadedApp, write: (line: string) => void): Promise<number> {
+  try {
+    if ((await signInStorePresent(loaded)) !== false) return EXIT.ok;
+    const { migratePostgresAuthStore } = await import('../../adapters/auth/postgresAuthStore.js');
+    await migratePostgresAuthStore((await postgresSignInStore(loaded))!);
+    write('  auth.store: sign-in store provisioned');
+    return EXIT.ok;
+  } catch (error) {
+    write(`  auth.store: the sign-in store could not be provisioned, and its transaction rolled back: ${(error as Error).message}`);
+    return EXIT.failed;
+  }
 }

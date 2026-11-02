@@ -62,6 +62,10 @@ export async function postgresScopeStyle(db: PgQuery): Promise<SqlStyle> {
 }
 
 /** Schemas that are the server's own business, not the user's data. */
+/** pg_catalog's own equality, which no operator of the same name elsewhere on the search_path can stand in for. */
+const EQ = 'OPERATOR(pg_catalog.=)';
+const NE = 'OPERATOR(pg_catalog.<>)';
+
 export const SYSTEM_SCHEMAS = ['pg_catalog', 'information_schema', 'pg_toast'];
 
 /**
@@ -75,8 +79,8 @@ export const SYSTEM_SCHEMAS = ['pg_catalog', 'information_schema', 'pg_toast'];
  */
 export function notExtensionMember(alias: string): string {
   return `NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend ext
-                       WHERE ext.classid = 'pg_catalog.pg_class'::regclass AND ext.objid = ${alias}.oid
-                         AND ext.refclassid = 'pg_catalog.pg_extension'::regclass AND ext.deptype = 'e')`;
+                       WHERE ext.classid ${EQ} 'pg_catalog.pg_class'::regclass AND ext.objid ${EQ} ${alias}.oid
+                         AND ext.refclassid ${EQ} 'pg_catalog.pg_extension'::regclass AND ext.deptype ${EQ} 'e')`;
 }
 
 /** The adapter as its own description names it: the schemas it was pointed at,
@@ -130,7 +134,7 @@ export async function describePostgresCatalog(db: PgQuery, source: CatalogSource
        than `information_schema`, which is why it needs the join. */
     `SELECT c.table_schema, c.table_name, c.column_name, c.data_type,
             c.is_nullable, c.column_default, c.ordinal_position, c.is_identity, c.identity_generation, c.is_generated,
-            c.character_maximum_length,
+            c.character_maximum_length, c.numeric_scale,
             col_description(pc.oid, c.ordinal_position::int) AS comment,
             /* Cast to text before aggregating: enumlabel has type "name",
                and the driver hands a name[] back as the literal string
@@ -185,37 +189,49 @@ export async function describePostgresCatalog(db: PgQuery, source: CatalogSource
         as the raw string "{a,b}" rather than an array. The ::text casts are
         what make these come back as JavaScript arrays. */
   const keys = await db.query(
+    /* Its functions and operators named in pg_catalog, as the scope's own catalog reads are (scoped/postgresTriggers.ts
+       CAT): a `public.unnest(int2[])` or `public.array_agg(text)` would otherwise answer here before the built-in, and
+       a foreign key read with no columns is one a scoped write's parent check never makes. */
     `SELECT con.conname AS constraint_name,
             fn.nspname  AS from_schema,
             f.relname   AS from_table,
-            (SELECT array_agg(a.attname::text ORDER BY k.ord)
-               FROM unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
-               JOIN pg_attribute a ON a.attrelid = f.oid AND a.attnum = k.attnum) AS from_columns,
+            (SELECT pg_catalog.array_agg(a.attname::pg_catalog.text ORDER BY k.ord)
+               FROM pg_catalog.unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
+               JOIN pg_catalog.pg_attribute a ON a.attrelid ${EQ} f.oid AND a.attnum ${EQ} k.attnum) AS from_columns,
             tn.nspname  AS to_schema,
             t.relname   AS to_table,
-            (SELECT array_agg(a.attname::text ORDER BY k.ord)
-               FROM unnest(con.confkey) WITH ORDINALITY AS k(attnum, ord)
-               JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum) AS to_columns,
+            (SELECT pg_catalog.array_agg(a.attname::pg_catalog.text ORDER BY k.ord)
+               FROM pg_catalog.unnest(con.confkey) WITH ORDINALITY AS k(attnum, ord)
+               JOIN pg_catalog.pg_attribute a ON a.attrelid ${EQ} t.oid AND a.attnum ${EQ} k.attnum) AS to_columns,
             con.confdeltype AS delete_rule
-       FROM pg_constraint con
-       JOIN pg_class f      ON f.oid = con.conrelid
-       JOIN pg_namespace fn ON fn.oid = f.relnamespace
-       JOIN pg_class t      ON t.oid = con.confrelid
-       JOIN pg_namespace tn ON tn.oid = t.relnamespace
-      WHERE con.contype = 'f'
+       FROM pg_catalog.pg_constraint con
+       JOIN pg_catalog.pg_class f      ON f.oid ${EQ} con.conrelid
+       JOIN pg_catalog.pg_namespace fn ON fn.oid ${EQ} f.relnamespace
+       JOIN pg_catalog.pg_class t      ON t.oid ${EQ} con.confrelid
+       JOIN pg_catalog.pg_namespace tn ON tn.oid ${EQ} t.relnamespace
+      -- Never a clone that points at a partition: a foreign key to a partitioned table is copied once per partition of
+      -- it (conparentid names the original), each naming a partition the App and its policy never declare, which a
+      -- scoped parent check then counted through and refused. The original is the reference: an ordinary table's
+      -- write is checked through the partitioned table it names. A partition of a referencing table keeps its copy,
+      -- which names the same parent, so the partition shows its reference and a delete of the parent row sees it. A
+      -- key declared on a partition alone, or naming one, is read as declared; no scoped write targets a table in a
+      -- partition or inheritance hierarchy (postgresScopeCatalog.ts), so none is written through a table above it.
+      WHERE con.contype ${EQ} 'f'
+        AND NOT EXISTS (SELECT FROM pg_catalog.pg_constraint pc
+                         WHERE pc.oid ${EQ} con.conparentid AND pc.confrelid ${NE} con.confrelid)
       ORDER BY fn.nspname, f.relname, con.conname`,
   );
 
   const pks = await db.query(
     `SELECT n.nspname AS table_schema,
             c.relname AS table_name,
-            (SELECT array_agg(a.attname::text ORDER BY k.ord)
-               FROM unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
-               JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum) AS columns
-       FROM pg_constraint con
-       JOIN pg_class c      ON c.oid = con.conrelid
-       JOIN pg_namespace n  ON n.oid = c.relnamespace
-      WHERE con.contype = 'p'
+            (SELECT pg_catalog.array_agg(a.attname::pg_catalog.text ORDER BY k.ord)
+               FROM pg_catalog.unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
+               JOIN pg_catalog.pg_attribute a ON a.attrelid ${EQ} c.oid AND a.attnum ${EQ} k.attnum) AS columns
+       FROM pg_catalog.pg_constraint con
+       JOIN pg_catalog.pg_class c      ON c.oid ${EQ} con.conrelid
+       JOIN pg_catalog.pg_namespace n  ON n.oid ${EQ} c.relnamespace
+      WHERE con.contype ${EQ} 'p'
       ORDER BY n.nspname, c.relname, con.conname`,
   );
 
@@ -330,6 +346,8 @@ export async function describePostgresCatalog(db: PgQuery, source: CatalogSource
       primaryKey: pk.has(c.column_name),
       references: refByColumn.get(`${id}.${c.column_name}`),
       default: c.column_default ?? undefined,
+      /* The type string stays what the database calls it; the places a sum must say travel beside it. */
+      ...(c.data_type === 'numeric' && c.numeric_scale !== null && c.numeric_scale !== undefined ? { scale: Number(c.numeric_scale) } : {}),
       identity: c.is_identity === 'YES' ? (c.identity_generation === 'ALWAYS' ? 'always' : 'by-default') : undefined,
       comment: c.comment ?? undefined,
       // The database computes a generated column; nothing may write it (as sqlite.ts says of its own).
@@ -388,7 +406,10 @@ export interface Located {
 /** One column, as the write path needs it: name, type, null-ness, key-ness. */
 export interface PgColumnRow {
   name: string;
+  /** Its declared type, as format_type says it: a domain by its own name. What a protected edit compares by (updateGuard.ts). */
   type: string;
+  /** The type a value is coerced for (writtenType): a domain's base type. Used for input coercion only. */
+  written: string;
   notnull: boolean;
   is_pk: boolean;
 }
@@ -416,6 +437,22 @@ export interface PgColumnRow {
  * the connection opened is a column the editor should be able to write, and
  * one dropped since is one it must not.
  */
+/**
+ * A column's type as a write coerces a value for it (shared/schema.ts coerceForColumn), from the column's type and
+ * modifier expressions: with its domains unwrapped through pg_type.typbasetype, the modifier the innermost one that
+ * has one gives, said by format_type. A domain over integer is then an integer column, so "" is NULL and "7.0" is 7,
+ * as they are for a column declared integer; by the domain's own name the write sent them as text, which the domain's
+ * input refused. The scope's parent check coerces a reference by the same text (postgresScopeCatalog.ts). Every
+ * function and operator in pg_catalog, as the scope's reads name them.
+ */
+export const writtenType = (type: string, typmod: string) => `(WITH RECURSIVE d(type, typmod, depth) AS (
+         SELECT ${type}, ${typmod}, 0
+         UNION ALL
+         SELECT t.typbasetype, CASE WHEN t.typtypmod OPERATOR(pg_catalog.<>) -1 THEN t.typtypmod ELSE d.typmod END, d.depth OPERATOR(pg_catalog.+) 1
+           FROM d JOIN pg_catalog.pg_type t ON t.oid OPERATOR(pg_catalog.=) d.type
+          WHERE t.typtype OPERATOR(pg_catalog.=) 'd' AND d.depth OPERATOR(pg_catalog.<) 32)
+       SELECT pg_catalog.format_type(d.type, d.typmod) FROM d ORDER BY d.depth DESC LIMIT 1)`;
+
 export async function postgresColumnsOf(
   schema: string,
   name: string,
@@ -430,6 +467,7 @@ export async function postgresColumnsOf(
   const result = await db.query(
     `SELECT a.attname AS name,
               format_type(a.atttypid, a.atttypmod) AS type,
+              ${writtenType('a.atttypid', 'a.atttypmod')} AS written,
               a.attnotnull AS notnull,
               COALESCE(k.is_pk, false) AS is_pk
          FROM pg_attribute a

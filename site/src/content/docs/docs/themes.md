@@ -284,7 +284,7 @@ An App wears it as its own, `customThemes: [daybook]`, or starts from it: `defin
 ## Seeing and fixing a theme
 
 - `mistri theme show <id> --app .` prints every color, recipe, type and shape after `extends`, each inherited value marked; `--diff lumen` only what yours changes.
-- `mistri check` names each failing color on its own line in the theme, with the nearest color of its hue that passes; `mistri check --fix` writes it.
+- `mistri check` names each failing color on its own line in the theme, with the nearest color of its hue that passes (or of another hue the theme wears, where none of its own does); `mistri check --fix` writes it. Where leaving your own value or group out lets the look derive one that passes, it says that too.
 - `mistri shot --theme <id> --compare lumen` puts a page in your theme beside the look it starts from; `--palette <id>` shoots a palette.
 - `mistri shot --recipes <part> [page]` shoots the page once in each of that part's values, as one contact sheet.
 - `mistri grade --theme all --palette all` grades every look the App can wear as one table, each finding with the promise of [the theme contract](/docs/theme-contract/) it breaks.

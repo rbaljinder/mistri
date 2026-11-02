@@ -21,6 +21,7 @@ import { readFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assertAuthorityLock, AUTHORITY_LOCK, type AppAuthority } from './authorityLock.js';
+import { lockedTriggers } from '../commands/triggerLock.js';
 import type { DefinitionInput, LoadedApp } from './apps.js';
 import { holdLocalizer, localizerOf, type AppCatalogs } from './appMessages.js';
 import { checkPageLoaders } from './pageLoaderCheck.js';
@@ -348,6 +349,9 @@ export async function loadBuiltApp(dir: string, options: { lock?: 'enforce' | 'r
   const lock = Object.hasOwn(manifest.sha256, AUTHORITY_LOCK) ? await readFile(lockPath, 'utf8') : undefined;
   const authority: AppAuthority = { report, lockPath, ...(lock === undefined ? {} : { lock }) };
   if (options.lock !== 'report') assertAuthorityLock(authority);
+  /* The triggers it approved, pinned into each scoped command's transaction (triggerLock.ts). */
+  const approved = lockedTriggers(lock);
+  if (approved) app.approvedTriggers = Object.fromEntries(approved);
   assertAppApiContext(readApiApp(app));
   const entries = Object.fromEntries(Object.entries(manifest.entries).map(([kind, file]) => [kind, resolve(dir, file)]));
   /* Its entries' `mistri/…` imports are this mistri's, wherever the build was put (buildResolution.ts). */

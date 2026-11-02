@@ -468,6 +468,31 @@ test('lumen: a table anchors on its name, keeps its head in view, and its placeh
   expect(Math.abs(heights.skeleton - heights.row!)).toBeLessThan(1.5);
 });
 
+/* Lumen under a band or hero head, as Lintel wears it. The band steps what stands raised in it 7% into the ink, so a
+   chip stands apart from it, and Lumen's raised search stood on that step: a ground no palette color is, so check
+   passed what grade then read there — Lumen's own placeholder at 4.03:1 and its edge at 2.66:1, a field report's
+   theme 3.98:1 and 2.69:1. On the band the search is a field on the surface, which check measures. */
+for (const header of ['band', 'hero'] as const)
+  for (const mode of ['light', 'dark'] as const)
+    test(`lumen with a ${header} head, ${mode}: the list's search reads on the band, its placeholder at 4.5:1 and its edge at 3:1`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() => localStorage.setItem('mistri.visual-theme', 'lumen'));
+      await page.emulateMedia({ colorScheme: mode });
+      await page.goto(`${CRM}/lead`);
+      await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'lumen');
+      // The root attribute a theme's `recipes.header` writes (themeRecipes.ts), laid on the built-in look.
+      await page.locator('html').evaluate((root, value) => root.setAttribute('data-look-header', value), header);
+      const search = page.locator('.applist-controls .applist-search-input').first();
+      await expect(search).toBeVisible();
+      const hint = (await search.getAttribute('placeholder'))!;
+      const read = (await readings(page)).filter(
+        (reading) => reading.what === `placeholder "${hint}"` || reading.what.includes('applist-search-input'),
+      );
+      expect(read.map((reading) => reading.need).sort()).toEqual([3, 4.5]);
+      expect(read.filter((reading) => reading.ratio < reading.need)).toEqual([]);
+    });
+
 for (const mode of ['light', 'dark'] as const) {
   test(`the database browser ${mode}: every field's edge reads at 3:1 on the field and on its ground`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: mode });

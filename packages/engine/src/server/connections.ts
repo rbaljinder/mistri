@@ -363,6 +363,16 @@ export class Registry {
   }
 
   /**
+   * One connection's URL as opening it would read it (see `openableUrls`): what a store beside it must be
+   * located by, since the stored text may be a `${VAR}` reference.
+   */
+  openableUrlOf(id: string): string | undefined {
+    const entry = this.entries.get(id);
+    if (!entry) return undefined;
+    return entry.untrustedUrl ? entry.config.url : expandEnv(entry.config.url, this.environment);
+  }
+
+  /**
    * Each database connection's URL as opening it would read it: `${VAR}` references resolved through this
    * registry's captured environment (an untrusted URL as written), an API's left out. Read in one pass with no
    * await, so an update between reads cannot retarget a connection already visited.
@@ -371,7 +381,7 @@ export class Registry {
     const urls: string[] = [];
     for (const entry of this.entries.values()) {
       if (entry.config.http) continue;
-      urls.push(entry.untrustedUrl ? entry.config.url : expandEnv(entry.config.url, this.environment));
+      urls.push(this.openableUrlOf(entry.config.id)!);
     }
     return urls;
   }

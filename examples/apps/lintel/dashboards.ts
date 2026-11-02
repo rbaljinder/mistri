@@ -16,6 +16,7 @@ export const today = dashboard(
       query: 'kind = rent and status = paid',
       over: 'due_on',
       measure: 'sum amount as collected',
+      figure: 'compact',
       better: 'up',
       area: 'money',
       icon: 'bank',

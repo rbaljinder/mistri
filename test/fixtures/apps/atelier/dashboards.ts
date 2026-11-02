@@ -74,6 +74,7 @@ export const sales = dashboard(
     metric('Sales, last 30 days', 'sales_order', {
       query: `placed_at = last 30 days and ${LIVE}`,
       measure: 'sum total_amount',
+      figure: 'compact',
       compare: 'previous period',
       better: 'up',
       spark: true,

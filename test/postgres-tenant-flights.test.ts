@@ -403,7 +403,9 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       let answer = await ask();
       for (
         let again = 0;
-        again < 2 && (answer.statements.some((statement) => /md5\(string_agg/.test(statement.text)) || refreshed(answer));
+        again < 2 &&
+        (answer.statements.some((statement) => /(?:pg_catalog\.)?md5\((?:pg_catalog\.)?string_agg/.test(statement.text)) ||
+          refreshed(answer));
         again++
       )
         answer = await ask();

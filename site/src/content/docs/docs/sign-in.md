@@ -56,7 +56,7 @@ All keys: [the generated reference](/docs/dsl-auth/). Changing `auth` needs a re
 - A first account: `MISTRI_AUTH_ADMIN_EMAIL` and `MISTRI_AUTH_ADMIN_PASSWORD` make it, with `admin`, at the first start; or `signUp: 'open'`. Each example's README shows its seed step.
 - With a `postgres://` store, sessions are read once every few seconds rather than on every request ([the sign-in store](/docs/performance/#the-sign-in-store)): a sign-out elsewhere, such as on another instance, is honored here for up to `MISTRI_AUTH_SESSION_CACHE` seconds (default 5; `0` reads the store on every check). One made through this server takes effect at once.
 - For password resets and verified addresses, an [email service](/docs/email/). Without one, `MISTRI_AUTH_RESET=log` writes each reset link to the log under `mistri dev` only; a served App logs one line, with no link, saying a reset was requested and nothing was sent, and warns at startup.
-- With `signUp: 'open'`, an [email service](/docs/email/) too. A self-made account is matched to `me` (and to the rows a row policy finds by its email) and given notifications only once its address is verified; until then it is signed in as nobody in particular. An account an administrator makes is verified when made. `mistri check` fails on open sign-up with no email service ([`open-sign-up-unproven`](/docs/check-codes/#open-sign-up-unproven)).
+- With `signUp: 'open'`, an [email service](/docs/email/) too. A self-made account is matched to `me` (and to the rows a row policy finds by its email) and given notifications only once its address is verified; until then it is signed in as nobody in particular. An account made on the accounts screen, or with `POST /api/accounts`, is verified when made. `mistri check` fails on open sign-up with no email service ([`open-sign-up-unproven`](/docs/check-codes/#open-sign-up-unproven)).
 
 ### Managing accounts
 
@@ -67,6 +67,15 @@ other sessions and revokes its API tokens and OAuth grants, as a reset by
 link does; a reactivation brings none of them back. An administrator cannot remove their own `admin` or deactivate
 themself. What `admin` reads and writes in the App comes from its entry in
 `roles`, as for any role.
+
+A script makes the same changes, signed in as an administrator, with
+`POST /api/accounts` and `{ app, operation, … }`: `create` (`email`, `name`,
+`roles`, `password`), `setRoles` (`accountId`, `roles`), `deactivate`,
+`reactivate` and `setPassword` (`accountId`, `password`). `mistri dev` makes
+its accounts this way. Better Auth's own admin endpoints that make or change an
+account (`create-user`, `update-user`, `set-role`, `set-user-password`,
+`ban-user`, `unban-user`, `remove-user`, `impersonate-user`) answer 404 and say
+so.
 
 Every change is recorded in the sign-in store in the same transaction (who,
 when, the account, the fields before and after, never a password or a token);

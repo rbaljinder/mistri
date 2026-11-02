@@ -665,6 +665,34 @@
     "reason": "swatch-boundary"
   },
   {
+    "file": "packages/mistri/src/client/components/Document.css",
+    "context": ".doc-sheet",
+    "property": "--status-good",
+    "value": "#1f7a46",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/mistri/src/client/components/Document.css",
+    "context": ".doc-sheet",
+    "property": "--status-warning",
+    "value": "#9a4b12",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/mistri/src/client/components/Document.css",
+    "context": ".doc-sheet",
+    "property": "--status-critical",
+    "value": "#a12d2d",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/mistri/src/client/components/Document.css",
+    "context": ".doc-sheet",
+    "property": "--status-info",
+    "value": "#7a5cc0",
+    "reason": "palette"
+  },
+  {
     "file": "packages/mistri/src/client/components/builtInInputs.css",
     "context": ".signature-input-pad",
     "property": "background",

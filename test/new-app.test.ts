@@ -29,9 +29,13 @@ test('new writes a starter App that has rows, checks, and names its database for
     assert.ok(existsSync(join(dir, file)), file);
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   assert.equal(pkg.scripts.dev, 'mistri dev .');
+  /* The App is named once, in mistri.json's app block, so the scripts repeat no flag (docs/bootstrap-plan.md B1). */
+  assert.deepEqual([pkg.scripts.check, pkg.scripts.migrate], ['mistri check', 'mistri migrate up']);
   assert.deepEqual(Object.keys(pkg.dependencies).sort(), ['@mistriwork/mistri']);
   /* A path in a file is from that file's folder: the project moves as one. */
-  assert.equal(JSON.parse(readFileSync(join(dir, 'mistri.json'), 'utf8')).connections[0].url, 'house-chores.db');
+  const config = JSON.parse(readFileSync(join(dir, 'mistri.json'), 'utf8'));
+  assert.equal(config.connections[0].url, 'house-chores.db');
+  assert.deepEqual(config.app, { dir: '.' });
   const db = new DatabaseSync(join(dir, 'house-chores.db'), { readOnly: true });
   try {
     assert.equal((db.prepare('SELECT count(*) AS n FROM task').get() as { n: number }).n, 5);
@@ -40,8 +44,10 @@ test('new writes a starter App that has rows, checks, and names its database for
   }
 
   installTablewalk(join(dir, 'node_modules'));
-  const checked = await runCli(['check', '--app', dir, '--config', join(dir, 'mistri.json'), '--json']);
+  /* From another folder, --app alone finds the App's own mistri.json: the rule dev reads it by. */
+  const checked = await runCli(['check', '--app', dir, '--json']);
   assert.equal(JSON.parse(checked.out).ok, true, checked.out);
+  assert.equal(JSON.parse(checked.out).context.config.from, 'app');
 
   const again = await runCli(['new', 'House Chores', dir]);
   assert.equal(again.code, 1);

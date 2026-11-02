@@ -13,12 +13,14 @@ export const salesDashboard = dashboard(
     metric('Open pipeline', 'opportunity', {
       query: 'open_pipeline',
       measure: 'sum amount as pipeline',
+      figure: 'compact',
       width: 'third',
       over: 'close_date',
     }),
     metric('Won', 'opportunity', {
       query: 'stage = closed_won and close_date = last 90 days',
       measure: 'sum amount as won',
+      figure: 'compact',
       compare: 'previous period',
       width: 'third',
       better: 'up',
@@ -146,7 +148,7 @@ export const salesDashboard = dashboard(
 export const pipelineLayout = dashboard(
   'Pipeline layout',
   [
-    metric('Open pipeline', 'opportunity', { query: 'open_pipeline', measure: 'sum amount as pipeline', area: 'kpis' }),
+    metric('Open pipeline', 'opportunity', { query: 'open_pipeline', measure: 'sum amount as pipeline', figure: 'compact', area: 'kpis' }),
     metric('New leads', 'lead', {
       query: 'created_on = last 30 days',
       compare: 'previous period',
@@ -157,6 +159,7 @@ export const pipelineLayout = dashboard(
     metric('Won', 'opportunity', {
       query: 'stage = closed_won',
       measure: 'sum amount as won',
+      figure: 'compact',
       over: 'close_date',
       spark: true,
       area: 'kpis',

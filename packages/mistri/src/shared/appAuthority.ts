@@ -198,16 +198,22 @@ export function authorityReport(app: AppDef, origins?: AppOrigins, env: readonly
  * What changed from one report (or lock) to another, as `- ` and `+ ` lines:
  * by whole line, or by `facts` alone, which ignores who contributes a fact.
  * Comments and blank lines are never compared, and neither are a command's
- * `contract` lines or a workflow's `workflow` lines: they are the lock's record of
- * its commands' versions and its workflows' steps, judged by mistri check against
- * what depends on them (commandContracts.ts, workflowContracts.ts).
+ * `contract` lines, a workflow's `workflow` lines or a named trigger's `trigger`
+ * lines: they are the lock's record of its commands' versions, its workflows'
+ * steps and its triggers' definitions, judged by mistri check against what
+ * depends on them (commandContracts.ts, workflowContracts.ts, triggerLock.ts).
  */
 export function authorityDiff(before: string, after: string, compare: 'facts' | 'lines' = 'lines'): string[] {
   const read = (text: string) =>
     text
       .split(/\r?\n/)
+      // A trigger's effect lines, indented beneath it (server/commands/triggerLock.ts).
+      .filter((line) => !/^\s+(writes|inserts|deletes|reads) /.test(line))
       .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#') && !line.startsWith('contract ') && !line.startsWith('workflow '));
+      .filter(
+        (line) =>
+          line && !line.startsWith('#') && !line.startsWith('contract ') && !line.startsWith('workflow ') && !line.startsWith('trigger '),
+      );
   const key =
     compare === 'facts'
       ? (line: string) => (line.includes(SEPARATOR) ? line.slice(0, line.lastIndexOf(SEPARATOR)) : line)

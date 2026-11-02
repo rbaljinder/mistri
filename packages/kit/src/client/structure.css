@@ -348,7 +348,9 @@
   .applist-controls .tabs.folds {
     position: relative;
     flex: 0 0 var(--tabs-natural, auto);
-    min-width: 0;
+    /* Never narrower than the chosen tab and More beside it (useTabFold.ts): a phone's Records/Table switch takes the
+       next line instead, where at 320px the two were drawn over each other. */
+    min-width: var(--tabs-least, 0);
     overflow: clip;
   }
   .applist-controls:is([data-filters-spent], :not(:has(> .applist-filterbar))) > .tabs.folds {
@@ -825,12 +827,43 @@
       min-height: 44px;
     }
     /* A picker is a box round an input, and it is the input a finger lands on (and the grade measures): it was 25px
-     tall in a 44px box. It fills the box now, which keeps its height. */
-    body.app-mode :is(.insert-field, .page-field-edit) .picker:not(.lines-ref .picker) {
+     tall in a 44px box, then 40px inside the box's edge. It fills the box edge to edge now (the input draws no edge
+     or fill of its own), which keeps the box's 44px. A command's form the same: its pickers were 36px boxes round a
+     23px input beside 44px fields, which a field report's grade found on every form that had a reference. */
+    body.app-mode :is(.insert-field, .page-field-edit, .command-field) .picker:not(.lines-ref .picker) {
+      min-height: 44px;
       padding-block: 0;
     }
-    body.app-mode :is(.insert-field, .page-field-edit) .picker > .picker-input {
-      min-height: 40px;
+    body.app-mode :is(.insert-field, .page-field-edit, .command-field) .picker:not(.lines-ref .picker) > .picker-input {
+      min-height: 44px;
+      margin-block: calc(-1 * var(--control-border-w, 1px));
+    }
+    /* A switch's row and a command's choices are their labels, which a finger lands on: 36px and 16px tall. They
+     draw at 44px, the choices with no gap between their rows, as a breakdown's drill rows do below. */
+    body.app-mode .insert-switch,
+    .command-choice {
+      min-height: 44px;
+    }
+    .command-choices {
+      row-gap: 0;
+    }
+    /* A phone list's filter row the same way: its search is a field, so it draws at 44px, and the Filters and sort
+     beside it at its height, the row alike as it is at 40px without a finger (ListFilterBar.css). A breakdown's rows
+     that open their group are rows under a finger, as a list's are (--row-h), 44px with no gap between them: a hit
+     area drawn past a 28px row reached into its neighbor's, 5px away. A field report's grade found the search 40px
+     and the rows 28px on every page that had them. */
+    @media (max-width: 600px) {
+      .applist-search-input,
+      .applist-sheet-open,
+      .applist-sort .dd-button {
+        min-height: 44px;
+      }
+    }
+    .page-breakdown-rows:has(> .pbd-drill) {
+      row-gap: 0;
+    }
+    .pbd-drill {
+      min-height: 44px;
     }
     /* The command form's line pickers draw at the row's 30px. */
     .form-lines-grid .lines-ref:not(.has-sub) .picker-input {
@@ -841,7 +874,10 @@
      row's title are drawn 25–39px tall to the approved look and a finger still lands on them. The trail's
      steps, a Select's button, a reference's jump, a list's Export and + filter, a record's title and a lane's +
      too: a phone's grade found each 21–36px tall. A list's Filters and its saved views, a dashboard's windows (the segmented row and the one menu) and
-     an embedded view's heading link the same, and a record's related tabs, which a phone's grade found 22px tall. */
+     an embedded view's heading link the same, and a record's related tabs, which a phone's grade found 22px tall. The
+     phone bar's marks (the menu, search) are 40px squares, a phone list's Records/Table pair 40×32 and a record's metric
+     figure 37px and a plain banner's action 33px: a field report's grade found them on every page. A date's calendar
+     button is 30×40 inside its field and a New sheet's Close 23×25: the same grade found them on every form. */
     :where(
       .brand,
       .icon-button,
@@ -861,10 +897,19 @@
       .dash-window,
       .dash-window-button,
       .page-section-link,
-      .page-tab
+      .page-tab,
+      .tn-folded,
+      .tn-mobile-menu,
+      .tn-search,
+      .presentation-seg,
+      .page-metric-value,
+      .dashboard-note-action,
+      .peekpanel-close
     ) {
       position: relative;
     }
+    /* A date's calendar button is placed in its field already (@mistriwork/ui, a layer this unlayered rule would
+       outrank whatever its weight), so it is its own hit area's frame and is not made relative. */
     :is(
       .brand,
       .icon-button,
@@ -884,7 +929,15 @@
       .dash-window,
       .dash-window-button,
       .page-section-link,
-      .page-tab
+      .page-tab,
+      .tn-folded,
+      .tn-mobile-menu,
+      .tn-search,
+      .presentation-seg,
+      .page-metric-value,
+      .dashboard-note-action,
+      .date-field-trigger,
+      .peekpanel-close
     )::before {
       content: '';
       position: absolute;

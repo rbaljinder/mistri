@@ -451,7 +451,11 @@ or `unknown` when the server cannot tell (for example, an answer lost after
 commit). The owner's codes are 403 `forbidden`, 404 `not_found`, 409
 `stale_record`, `duplicate_record`, `ineligible_state` or
 `idempotency_conflict`, 410 `command_version_mismatch`, 422 `invalid_input`
-or `consumes_refused` (a line's `consumes` would take more than is left), and
+or `consumes_refused` (a line's `consumes` would take more than is left),
+500 `invalid_result` (the server's own fault: a handler returned what its
+declaration does not hold or wrote outside its footprint, or a stored value
+failed the platform's checks; the same request fails the same way, so it is
+not one to retry, and the App's own command routes answer it alike), and
 503 `temporarily_unavailable` or `row_locked` (a row the command needed
 was held by another transaction past the lock timeout; nothing was applied,
 and a `Retry-After` header says when to try again). A stale revision's refusal

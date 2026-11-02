@@ -251,6 +251,10 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
     const kind = typeof el.className === 'string' && el.className.trim() ? `.${el.className.trim().split(/\s+/)[0]}` : '';
     return `${el.tagName.toLowerCase()}${kind}${label ? ` "${label}"` : ''}`;
   };
+  /* The zoom an element is drawn under (the root's density zoom, density.js): a computed length or a box's scroll is in
+     its own layout pixels, a box on the screen, where everything here is measured. Same as the one ruler of the client
+     (packages/ui/src/internal/ruler.ts). */
+  const zoomOf = (el: Element) => (el as Element & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
   /* Drawn for the eye: not hidden, not for a screen reader alone (a visually hidden heading is clipped to a pixel on purpose). */
   const shown = (el: Element) =>
     el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) &&
@@ -375,10 +379,13 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
         break;
       }
     }
-    const room = scroller.scrollHeight - scroller.clientHeight;
+    /* A box's scroll is in its own layout pixels, which the root's density zoom scales on the screen where the boxes
+       below are read; the document's own scroll is in the window's pixels already. */
+    const scale = scroller === (document.scrollingElement ?? document.documentElement) ? 1 : zoomOf(scroller);
+    const room = (scroller.scrollHeight - scroller.clientHeight) * scale;
     const box = el.getBoundingClientRect(),
       edge = bar.getBoundingClientRect();
-    const at = scroller.scrollTop;
+    const at = scroller.scrollTop * scale;
     /* Scrolled to its end, the box rises furthest; scrolled to its start, it sinks furthest. */
     const highest = box.bottom - (room - at),
       lowest = box.top + at;
@@ -391,7 +398,9 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
   const inPadding = (field: Element, other: Element) => {
     if (!(field instanceof HTMLTextAreaElement || (field instanceof HTMLInputElement && TYPED.test(field.type)))) return false;
     const style = getComputedStyle(field);
-    const px = (value: string) => parseFloat(value) || 0;
+    /* A computed padding is in the field's layout pixels, its box on the screen: the density zoom between them. */
+    const zoom = zoomOf(field);
+    const px = (value: string) => (parseFloat(value) || 0) * zoom;
     const outer = field.getBoundingClientRect(),
       box = other.getBoundingClientRect();
     const pad = {
@@ -425,12 +434,20 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
       const height = Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top);
       if (width < 3 || height < 3) continue;
       const hit = document.elementFromPoint(Math.max(a.box.left, b.box.left) + width / 2, Math.max(a.box.top, b.box.top) + height / 2);
-      if (!hit || !(a.el.contains(hit) || b.el.contains(hit) || hit.contains(a.el) || hit.contains(b.el))) continue;
+      /* A shape inside a drawing is boxed by its whole geometry, not what it paints: a donut's slices are each a full
+         circle drawn as one arc, so every slice's box is the same square, and the point between them is the drawing's
+         own hole. There only a hit on one of the two shapes is two shapes drawn over the same pixels. */
+      const shape = (el: Element) => el instanceof SVGElement && !(el instanceof SVGSVGElement);
+      const under = !shape(a.el) && !shape(b.el) && hit && (hit.contains(a.el) || hit.contains(b.el));
+      if (!hit || !(a.el.contains(hit) || b.el.contains(hit) || under)) continue;
       const barA = pinned(a.el),
         barB = pinned(b.el);
-      if (barA !== barB && (!barA || !barB)) {
-        const bar = (barA ?? barB)!,
-          under = barA ? b.el : a.el;
+      /* One pinned in a layer the other scrolls in: the page's, or a sheet's (a New form's actions, sticky at the
+         foot of a drawer that is itself fixed, over the fields that scroll in it). */
+      if (barA !== barB && (!barA || !barB || barA.contains(barB) || barB.contains(barA))) {
+        const innerA = Boolean(barA && (!barB || barB.contains(barA)));
+        const bar = (innerA ? barA : barB)!,
+          under = innerA ? b.el : a.el;
         if (clears(under, bar)) continue;
       }
       overlaps.push({ a: say(a.el), b: say(b.el) });
@@ -453,13 +470,14 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
       const label = el.closest('label') ?? (el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null);
       const wrap = label?.getBoundingClientRect();
       /* A hit area drawn bigger than the control (structure.css, on a coarse pointer): an absolutely placed,
-         empty ::before or ::after that takes the taps around it. Its computed size is its used size. */
+         empty ::before or ::after that takes the taps around it. Its computed size is its used size, in the
+         control's layout pixels: on the screen it is that times the zoom it is drawn under. */
       const reach = (['::before', '::after'] as const).map((pseudo) => {
         const drawn = getComputedStyle(el, pseudo);
         if (drawn.content === 'none' || drawn.content === 'normal' || drawn.display === 'none' || drawn.pointerEvents === 'none')
           return { width: 0, height: 0 };
         if (drawn.position !== 'absolute' && drawn.position !== 'fixed') return { width: 0, height: 0 };
-        return { width: parseFloat(drawn.width) || 0, height: parseFloat(drawn.height) || 0 };
+        return { width: (parseFloat(drawn.width) || 0) * zoomOf(el), height: (parseFloat(drawn.height) || 0) * zoomOf(el) };
       });
       const width = Math.max(own.width, wrap?.width ?? 0, ...reach.map((box) => box.width));
       const height = Math.max(own.height, wrap?.height ?? 0, ...reach.map((box) => box.height));
@@ -702,12 +720,29 @@ function focusStop(input: { index: number }): { what: string; width: number; rat
   /* The browser's own ring (outline-style: auto) is drawn two-toned to read on any ground. */
   if (own.outlineStyle === 'auto') return { what: say(), width: Math.max(FOCUS_WIDTH, parseFloat(own.outlineWidth) || 0) };
   const ringOf = (host: Element) => {
+    /* A shape in a drawing takes no outline: its ring is a shape of its own, marked, drawn while it holds focus (a
+       donut's slice, Chart.tsx). Its width is on the screen: a stroke that scales is scaled by the drawing. */
+    const drawn = host instanceof SVGElement ? host.querySelector(':scope > [data-focus-ring]') : null;
+    if (drawn instanceof SVGGraphicsElement) {
+      const style = getComputedStyle(drawn);
+      if (style.display !== 'none' && style.visibility === 'visible' && style.stroke !== 'none') {
+        const scale =
+          style.vectorEffect === 'non-scaling-stroke' ? 1 : Math.hypot(drawn.getScreenCTM()?.a ?? 1, drawn.getScreenCTM()?.b ?? 0);
+        return { width: Math.round(parseFloat(style.strokeWidth) * scale * 100) / 100, color: style.stroke };
+      }
+    }
+    /* A computed width is in the element's own layout pixels, which a zoom on an ancestor (the root's density zoom,
+       density.js) scales on the way to the screen; the ring is read on the screen, as every box here is. An outline
+       is drawn in whole zoomed pixels: at the comfortable 1.12 a 2px ring is 2.24 snapped to 2, which the computed
+       style gives back as 1.786 and the screen shows as 2. A drawn ring above is read on the screen already. */
+    const zoom = (host as Element & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
+    const onScreen = (px: number) => Math.round(px * zoom * 100) / 100;
     for (const style of [getComputedStyle(host), getComputedStyle(host, '::after'), getComputedStyle(host, '::before')]) {
       if (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0)
-        return { width: parseFloat(style.outlineWidth), color: style.outlineColor };
+        return { width: onScreen(parseFloat(style.outlineWidth)), color: style.outlineColor };
       if (style.boxShadow && style.boxShadow !== 'none') {
         const spread = /(rgba?\([^)]*\)|#\w+)\s+(?:-?[\d.]+px\s+){3}([\d.]+)px/.exec(style.boxShadow);
-        if (spread && parseFloat(spread[2]!) > 0) return { width: parseFloat(spread[2]!), color: spread[1]! };
+        if (spread && parseFloat(spread[2]!) > 0) return { width: onScreen(parseFloat(spread[2]!)), color: spread[1]! };
       }
     }
     return null;

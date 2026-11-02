@@ -10,14 +10,15 @@
  * its figures one way, a chart's axis counts in round steps, a record's name
  * keeps to two lines on a phone. Each of those is a measurement, not a taste
  * call, so this serves the App the way `mistri shot` does (shot.ts), opens
- * every view and a record of each page at 1280, 768, 390 and 320 in light and at
- * 390 in dark, measures each in the page (gradeProbe.ts) and judges the
- * measurements here, where they can be tested without a browser.
+ * every view, a record of each page and each of its documents at 1280, 768, 390
+ * and 320 in light and at 390 in dark, measures each in the page (gradeProbe.ts)
+ * and judges the measurements here, where they can be tested without a browser.
  *
  * It prints what `check --brief` prints: one line per finding with its fix,
- * at the file and line that declares the page where one can be found. The run
- * ends with a score; an error-level finding fails it. Screenshots are left
- * for questions of taste.
+ * at the file and line that declares the page where one can be found, errors
+ * first. Then what it covered and what it passed over, and the verdict: an
+ * error-level finding fails it whatever the score, so the score is said last.
+ * Screenshots are left for questions of taste.
  */
 import { resolveTheme } from '@mistriwork/engine/shared/themeResolve.js';
 import { statSync } from 'node:fs';
@@ -50,7 +51,9 @@ import {
   MOTION,
   PHONE,
   scoreOf,
+  sayCoverage,
   sayFinding,
+  sayVerdict,
   TAP,
   foldedDisclosures,
   treeDifference,
@@ -131,6 +134,25 @@ const isDirectory = (path: string) => {
 };
 
 /**
+ * The page's accessibility tree once it has stopped changing: two reads a beat apart that agree (bounded). A strip of
+ * tabs or a filter bar folds on a ResizeObserver and a frame, and a disclosure's menu mounts after its click, so a single
+ * read on a loaded machine could catch either half-done, and C13 then named a different control on every run.
+ */
+async function steadyTree(page: Page): Promise<string | undefined> {
+  let last: string | undefined;
+  for (let read = 0; read < 12; read++) {
+    const now = await page
+      .locator('body')
+      .ariaSnapshot()
+      .catch(() => undefined);
+    if (now !== undefined && now === last) return now;
+    last = now;
+    await page.waitForTimeout(120);
+  }
+  return last;
+}
+
+/**
  * What a theme's capture holds behind its folds: each collapsed disclosure opened, the page read with it open, and
  * closed again. C13 finds a control the theme folded away there, or does not excuse it (field report T5).
  */
@@ -142,8 +164,7 @@ async function foldsOpened(page: Page, tree: string): Promise<string[]> {
         .getByRole(role as Parameters<Page['getByRole']>[0], { name, exact: true })
         .first()
         .click({ timeout: 2_000 });
-      await page.waitForTimeout(150);
-      held.push(await page.locator('body').ariaSnapshot());
+      held.push((await steadyTree(page)) ?? '');
     } catch {
       /* A fold that does not open holds nothing a reader reaches. */
     }
@@ -209,12 +230,7 @@ async function measure(
     const contrast = (await page.evaluate(inPage(contrastReadings, { states: [], text: true }))) as ContrastReading[];
     /* Every window is opened with motion reduced (shotContext): what moves there moves for a reader who asked it not to. */
     Object.assign(probe, (await page.evaluate(inPage(contractProbe, { reduced: true, ms: MOTION }))) as Partial<Probe>);
-    const tree = asked.tree
-      ? await page
-          .locator('body')
-          .ariaSnapshot()
-          .catch(() => undefined)
-      : undefined;
+    const tree = asked.tree ? await steadyTree(page) : undefined;
     /* Last, since opening a fold moves focus and the page: on screen, as a reader opens it. */
     const revealed = async () => {
       if (!look || !tree) return [];
@@ -331,12 +347,13 @@ export async function runGrade(
 ): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) {
     write(
-      `${GRADE_USAGE}\n\nServe the App as mistri shot does and open every view and a record of each page at 1280, 768, 390 and 320 wide,\n` +
-        'and at 390 in the dark scheme. Each is measured, not looked at: sideways scroll, figures and words cut off, controls\n' +
-        `drawn over each other, targets under ${TAP}px on a phone, text and field edges below the contrast rule, layout shift after\n` +
-        'the first paint, page errors and failed requests, empty sections, two number formats in one surface, chart axes in\n' +
-        "steps that are not round, and a record's name past two lines on a phone. One line per finding,\n" +
-        '`code file:line page@windows message — fix: …`, then a score. --json prints one JSON document instead.\n' +
+      `${GRADE_USAGE}\n\nServe the App as mistri shot does and open every view, a record of each page and each of its documents at 1280, 768,\n` +
+        '390 and 320 wide, and at 390 in the dark scheme. Each is measured, not looked at: sideways scroll, figures and words cut off,\n' +
+        `controls drawn over each other, targets under ${TAP}px on a phone, text and field edges below the contrast rule, layout shift\n` +
+        'after the first paint, page errors and failed requests, empty sections, two number formats in one surface, chart axes in\n' +
+        "steps that are not round, and a record's name past two lines on a phone. One line per finding, errors first,\n" +
+        '`code file:line page@windows message — fix: …`; then what was covered and what was skipped, and why; then the verdict,\n' +
+        'which an error fails whatever the score, and the score. --json prints one JSON document instead, its coverage included.\n' +
         "--theme <id> grades in a built-in look or one of the App's own themes instead of the one it wears; --palette <id> in one of its palettes.\n" +
         '--theme all grades every look the App can wear as one table, a row each, a column each window; --palette all adds each\n' +
         'palette at 390 in light and dark (color promises only); --as all a row for signed out and each role a person signs in as.\n' +
@@ -567,6 +584,13 @@ export async function runGrade(
       const errors = findings.filter((finding) => finding.severity === 'error').length;
       const warnings = findings.length - errors;
       const caused = findings.filter((finding) => finding.cause === 'theme').length;
+      const asked = options.routes.length > 0;
+      const coverage = {
+        pages: shots.map((shot) => ({ path: shot.path, ...(shot.kind ? { kind: shot.kind } : {}) })),
+        windows: WINDOWS.map((window) => window.label),
+        look: look?.label ?? wornLabel,
+        skipped: asked ? [] : opened.skipped,
+      };
       if (options.json) {
         write(
           JSON.stringify(
@@ -581,6 +605,7 @@ export async function runGrade(
               warnings,
               /* A theme graded by name gates on any error, whatever the score; `caused` counts the findings that are its own. */
               ...(look ? { theme: { id: look.theme, label: look.label, ok: errors === 0, caused } } : {}),
+              coverage,
               findings,
             },
             null,
@@ -588,10 +613,19 @@ export async function runGrade(
           ),
         );
       } else {
+        /* Errors first (merge), then what was covered and passed over, then the verdict, the failures before the score. */
         for (const finding of findings) write(sayFinding(finding));
-        write(
-          `grade: ${score}/100 — ${findings.length ? `${count(errors, 'error')}, ${count(warnings, 'warning')}` : 'nothing to fix'} over ${count(shots.length, 'page')} at ${WINDOWS.map((window) => window.label).join(', ')}${opened.as ? `, signed in as ${opened.as.role}` : session ? ', signed in' : ''}`,
-        );
+        if (findings.length) write('');
+        for (const line of sayCoverage({
+          shots,
+          skipped: coverage.skipped,
+          windows: coverage.windows,
+          look: coverage.look,
+          asked,
+          ...(opened.as ? { as: opened.as.role } : session ? { as: 'a signed-in person' } : {}),
+        }))
+          write(line);
+        write(sayVerdict(errors, warnings, score));
         /* The score is a share of checks passed; an error is a gate. With --theme, say which way the theme went. */
         if (look)
           write(

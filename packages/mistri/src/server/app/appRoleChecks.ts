@@ -23,7 +23,8 @@ import { dirname, relative } from 'node:path';
 import { appRollupRules, withRollups } from '../../shared/appRollups.js';
 import { appCommandGrants, grantsByRole, logicalResource, resolveAppAccess, resolveViews, type AppDef } from '../../shared/app.js';
 import { labelTemplateProblem } from '../../shared/appRecordLabels.js';
-import { isTenantApp, NAMED_PROVIDER } from '../../shared/appModel.js';
+import { isFormView, isTenantApp, NAMED_PROVIDER } from '../../shared/appModel.js';
+import { isRoom, servedView, servedViewKind } from '../../shared/appDestinations.js';
 import { assertNever, humanName } from '@mistriwork/engine/shared/model.js';
 import { ADMIN_ROLE } from '../../shared/accountAdministration.js';
 import { isLabelTemplate, parseLabelTemplate } from '@mistriwork/engine/shared/recordLabel.js';
@@ -544,6 +545,116 @@ export function appRoleWarnings(loaded: LoadedApp, schema: DatabaseSchema, comma
             (owned ? '' : `Add ${missing.length === 1 ? 'it' : 'them'} to roles.${role}.fields.${tableId}.write, `) +
             `make the rows with a command, or say the role edits and never creates them (roles.${role}.create).`,
         ),
+      );
+    }
+  }
+  return warnings;
+}
+
+/**
+ * An action whose destination some role that sees it cannot open. Every surface that opens a room by its key — a
+ * dashboard's note or banner, a record page's note, a list's or a related list's empty action — is drawn for a
+ * reader only where its destination is among the rooms that reader is served (appDestinations.ts): a view's
+ * `roles`, a signed-in form's command grant, a list's table. That is right at runtime, nothing is exposed, and the
+ * author found the missing button only by signing in as the role (a field report: a customer's banner and its
+ * form). Said once here, naming the roles, the action and why. A warning, since an action meant for some of a
+ * room's readers and not others is a way to write one.
+ */
+export function appDestinationWarnings(loaded: LoadedApp, schema: DatabaseSchema, jobRoles: ReadonlySet<string> = new Set()): string[] {
+  const app = loaded.app;
+  if (!grantsByRole(app)) return [];
+  const service = serviceRoles(app, jobRoles);
+  const manifest = relative(loaded.dir ?? dirname(loaded.path), loaded.path) || loaded.path;
+  const exact = (name: string) => schema.tables.find((table) => table.id === name) ?? tableNamed(schema, name);
+  type Opener = { role: string; reads: ReadonlySet<string>; commands: ReadonlySet<string> };
+  const openers: Opener[] = Object.keys(app.auth?.roles ?? {}).flatMap((role) => {
+    if (service.has(role)) return [];
+    try {
+      return [{ role, reads: resolveAppAccess(app, schema, [role]).readable, commands: appCommandGrants(app, [role]) }];
+    } catch {
+      return []; // An invalid grant is refused on its own, with its own reason.
+    }
+  });
+  /* Why this role is not served the room, or undefined when it is, in the order the projection judges it: the
+     view's roles, then a form's command grant or a list's table. Said for one role or several. */
+  type Shut = { roles: true } | { command: string } | { table: string };
+  const shut = (opener: Opener, key: string): Shut | undefined => {
+    const view = servedView(app.views, key);
+    const kind = servedViewKind(view);
+    if (!view || !isRoom(kind)) return undefined; // Not a room at all: the parse refuses it.
+    if (!opensTo(view as { roles?: string[] }, [opener.role], app.auth)) return { roles: true };
+    if (kind === 'form') {
+      const command = (view as { command: { id: string } }).command.id;
+      return opener.commands.has(command) ? undefined : { command };
+    }
+    if (kind === 'list') {
+      const table = exact((view as { table: string }).table);
+      return table && !opener.reads.has(table.id) ? { table: table.id } : undefined;
+    }
+    return undefined;
+  };
+  const because = (reason: Shut, many: boolean) =>
+    'roles' in reason
+      ? `its "roles" leave ${many ? 'them' : 'it'} out`
+      : 'command' in reason
+        ? `${many ? 'they are' : 'it is'} not granted command "${reason.command}"`
+        : `${many ? 'they do' : 'it does'} not read "${reason.table}"`;
+  const sees = (opener: Opener, source: { roles?: readonly string[] }, table: string | undefined): boolean => {
+    if (!opensTo(source, [opener.role], app.auth)) return false;
+    const base = table === undefined ? undefined : exact(table);
+    return !base || opener.reads.has(base.id);
+  };
+  type Destination = { at: string; source: { roles?: readonly string[] }; table?: string; to: string };
+  const destinations: Destination[] = [];
+  for (const [key, view] of Object.entries(app.views)) {
+    if ('sections' in view) {
+      const placed = [
+        ...view.sections.map((section, i) => ({ section, at: `views "${key}", section ${i + 1}` })),
+        ...(view.aside ?? []).map((section, i) => ({ section, at: `views "${key}", "aside", section ${i + 1}` })),
+      ];
+      for (const { section, at } of placed)
+        if (section.kind === 'note' && section.action && 'view' in section.action)
+          destinations.push({ at: `${at}, note action "${section.action.label}"`, source: view, to: section.action.view });
+    } else if (!isFormView(view) && view.empty?.action) {
+      destinations.push({
+        at: `views "${key}", empty action "${view.empty.action.label}"`,
+        source: view,
+        table: view.table,
+        to: view.empty.action.view,
+      });
+    }
+  }
+  for (const page of loaded.pages) {
+    page.sections.forEach((section, i) => {
+      const at = `pages "${page.id}", section ${i + 1}`;
+      if (section.kind === 'note' && section.action && 'view' in section.action)
+        destinations.push({ at: `${at}, note action "${section.action.label}"`, source: page, table: page.base, to: section.action.view });
+      if (section.kind === 'list' && section.empty?.action)
+        destinations.push({
+          at: `${at}, empty action "${section.empty.action.label}"`,
+          source: page,
+          table: page.base,
+          to: section.empty.action.view,
+        });
+    });
+  }
+  const warnings: string[] = [];
+  for (const { at, source, table, to } of destinations) {
+    // The roles that see the action and cannot follow it, gathered by why.
+    const why = new Map<string, { reason: Shut; roles: string[] }>();
+    for (const opener of openers) {
+      if (!sees(opener, source, table)) continue;
+      const reason = shut(opener, to);
+      if (!reason) continue;
+      const key = JSON.stringify(reason);
+      why.set(key, { reason, roles: [...(why.get(key)?.roles ?? []), opener.role] });
+    }
+    for (const { reason, roles } of why.values()) {
+      const many = roles.length > 1;
+      warnings.push(
+        `${manifest}: ${locateProblem(loaded.origins, `${at} [destination-unreachable]`)}: it opens "${to}", which ${whose(roles)} ` +
+          `cannot open: ${because(reason, many)}. The action is not drawn for ${many ? 'them' : 'that role'}; ` +
+          `open "${to}" to ${many ? 'them' : 'it'}, or point the action at a room ${many ? 'they open' : 'it opens'}.`,
       );
     }
   }

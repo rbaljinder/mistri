@@ -87,6 +87,17 @@
       "browser": true
     },
     { "id": "search", "surface": ["dsl: app: resources.*.search"], "tests": [{ "file": "test/app-search-paths.test.ts" }] },
+    {
+      "id": "trigger-effects",
+      "surface": ["dsl: app: resources.*.triggers"],
+      "tests": [
+        { "file": "test/trigger-effects.test.ts" },
+        { "file": "test/postgres-trigger-effects.test.ts" },
+        { "file": "test/trigger-effects-grammar.test.ts" },
+        { "file": "test/trigger-lock.test.ts" },
+        { "file": "test/trigger-effects-sync.test.ts" }
+      ]
+    },
     { "id": "unions", "surface": ["dsl: app: unions"], "tests": [{ "file": "test/app-union.test.ts" }] },
     {
       "id": "live",

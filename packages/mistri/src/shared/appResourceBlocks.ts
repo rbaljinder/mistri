@@ -88,6 +88,7 @@ export const RESOURCE_BLOCK_KEYS = [
   'types',
   'inputs',
   'validation',
+  'triggers',
   'text',
   'defined',
   'flows',
@@ -115,6 +116,24 @@ export const RESOURCE_BLOCK_KEYS = [
   'consumes',
   'restocks',
 ] as const;
+
+/* The database triggers a resource names (docs/trigger-effects.md): each by its name in the catalog, exactly, once. */
+function parseTriggerNames(value: unknown, at: string): string[] {
+  if (
+    !Array.isArray(value) ||
+    !value.length ||
+    value.some(
+      (name) =>
+        typeof name !== 'string' ||
+        !name.length ||
+        name !== name.trim() ||
+        [...name].some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f),
+    )
+  )
+    throw new Error(`${at} has a "triggers" that is not a list of trigger names, like triggers: ['ledger_entry_post'].`);
+  if (new Set(value).size !== value.length) throw new Error(`${at}, "triggers" names a trigger twice.`);
+  return [...(value as string[])];
+}
 
 /** What a resource slot needs to know to judge a dotted name, and what a page over a resource is called when it says nothing. */
 export interface SourceScope {
@@ -236,7 +255,7 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
       const raw = plainRecord(
         value,
         at,
-        'an object. A resource block is { physical?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, audit?, settings?, import?, notify? }',
+        'an object. A resource block is { physical?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, audit?, settings?, import?, notify? }',
       );
       allowKeys(raw, [...RESOURCE_BLOCK_KEYS, 'owner', 'clone', 'live'], at);
       if (dot < 0 && data.sources && !data.defaultSource) {
@@ -392,6 +411,7 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
         resource.inputs = inputs;
       }
       if (raw.validation !== undefined) resource.validation = parseFormRules(raw.validation, `${at}, validation`);
+      if (raw.triggers !== undefined) resource.triggers = parseTriggerNames(raw.triggers, at);
       if (raw.text !== undefined) resource.text = parseTextRules(raw.text, at);
       if (raw.defined !== undefined) resource.defined = parseDefined(raw.defined, at);
       if (raw.flows !== undefined) resource.flows = parseFlows(raw.flows, at);
@@ -1064,6 +1084,7 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     'format',
     'currency',
     'minor',
+    'whole',
     'unit',
     'tone',
     'bar',
@@ -1083,6 +1104,7 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     'scan',
     'signature',
     'face',
+    'timezone',
   ];
   for (const k of Object.keys(r)) {
     if (!takes.includes(k)) throw new Error(`${at} ${unknownKey(k, takes)}.`);
@@ -1221,6 +1243,11 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     if (r.format !== 'money')
       throw new Error(`${at} has "minor", which only format "money" carries: minor units are { format: 'money', minor: true }.`);
   }
+  /* Whole is money's too: a listing price that has no cents is said without them, and never hides the ones it has. */
+  if (r.whole !== undefined) {
+    if (r.whole !== true) throw new Error(`${at} has a "whole" that is not true; money said without whole-amount cents says whole: true.`);
+    if (r.format !== 'money') throw new Error(`${at} has "whole", which only format "money" carries: { format: 'money', whole: true }.`);
+  }
   /* The bar's scale is its value: `bar: true` for a percent, which fills
      against 100, and `bar: 5` for any other number, filled against 5. */
   let max: number | undefined;
@@ -1289,6 +1316,7 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     ...(r.currency === undefined || currencyColumn ? {} : { currency: (r.currency as string).toUpperCase() }),
     ...(currencyColumn ? { currencyColumn } : {}),
     ...(r.minor === true ? { minor: true as const } : {}),
+    ...(r.whole === true ? { whole: true as const } : {}),
     ...(r.unit === undefined ? {} : { unit: (r.unit as string).trim() }),
     ...(r.tone === undefined ? {} : { tone: r.tone as AppDisplayRule['tone'] }),
     ...(r.bar === undefined ? {} : { bar: true }),
@@ -1320,11 +1348,14 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
   };
 }
 
-/* The formats that draw a value as a thing of its own — stars, a swatch, a clock time, a month, a year, a tree, a
+/* The formats that draw a value as a thing of its own — stars, a swatch, a day, a moment, a clock time, a month, a year, a tree, a
    code — and the two figures' extras, a ring and a slider. Each is its own drawing: nothing else dresses it. */
-const OWN_DRAWINGS = ['rating', 'color', 'time', 'month', 'year', 'json', 'qr'];
+const OWN_DRAWINGS = ['rating', 'color', 'date', 'datetime', 'time', 'month', 'year', 'json', 'qr'];
 const DRESSINGS = ['currency', 'unit', 'tone', 'bar', 'avatar', 'icons', 'values', 'colors', 'icon'];
-function parseOwnDrawing(r: Record<string, unknown>, at: string): Pick<AppDisplayRule, 'outOf' | 'ring' | 'slider' | 'scan' | 'signature'> {
+function parseOwnDrawing(
+  r: Record<string, unknown>,
+  at: string,
+): Pick<AppDisplayRule, 'outOf' | 'ring' | 'slider' | 'scan' | 'signature' | 'timezone'> {
   const format = r.format as string | undefined;
   if (format && OWN_DRAWINGS.includes(format)) {
     const extra = DRESSINGS.filter((key) => r[key] !== undefined && !(format === 'rating' && key === 'tone'));
@@ -1333,7 +1364,7 @@ function parseOwnDrawing(r: Record<string, unknown>, at: string): Pick<AppDispla
         `${at} has format "${format}", which draws the value its own way; it takes no ${extra.map((key) => `"${key}"`).join(', ')}.`,
       );
   }
-  const out: Pick<AppDisplayRule, 'outOf' | 'ring' | 'slider' | 'scan' | 'signature'> = {};
+  const out: Pick<AppDisplayRule, 'outOf' | 'ring' | 'slider' | 'scan' | 'signature' | 'timezone'> = {};
   /* Two inputs of their own for a plain column: a code read by the camera into a text, and a signature drawn and
      kept as a picture in a file resource the column points at. Each is the whole of how the value is entered, so
      neither takes a format or a dressing. */
@@ -1348,6 +1379,19 @@ function parseOwnDrawing(r: Record<string, unknown>, at: string): Pick<AppDispla
     out[key] = true;
   }
   if (out.scan && out.signature) throw new Error(`${at} has "scan" and "signature": a column is entered one way.`);
+  /* The zone a moment is said in, where it is not the App's: a statement's office, a log's server. */
+  if (r.timezone !== undefined) {
+    if (format !== 'date' && format !== 'datetime')
+      throw new Error(`${at} has "timezone", the zone a moment is said in: add format: 'datetime' (or 'date').`);
+    let known = false;
+    try {
+      known = typeof r.timezone === 'string' && Boolean(new Intl.DateTimeFormat('en-US', { timeZone: r.timezone }));
+    } catch {
+      known = false;
+    }
+    if (!known) throw new Error(`${at} has a "timezone" of ${JSON.stringify(r.timezone)}, which is no IANA zone, like "America/New_York".`);
+    out.timezone = r.timezone as string;
+  }
   if (r.outOf !== undefined) {
     if (format !== 'rating') throw new Error(`${at} has "outOf", the stars of a rating: add format: 'rating'.`);
     if (typeof r.outOf !== 'number' || !Number.isInteger(r.outOf) || r.outOf < 3 || r.outOf > 10)

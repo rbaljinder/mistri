@@ -37,12 +37,18 @@ export function maskedLast4(value: string, mask?: string): string {
   return out + dotted.slice(used).join('');
 }
 
+/** A reference's record's name, where one is known for its key (referenceNames.ts); undefined where none is. */
+export type NameOf = (field: Extract<AppCommandField, { type: 'reference' }>, value: string | number) => string | undefined;
+
 /**
  * A value as the review reads it, as its field drew it: the choice's label, yes or no, a day in words, an amount in
- * the App's currency (`$450`), a masked text through its mask (`(303) 555-0142`), a group's rows.
+ * the App's currency (`$450`), a masked text through its mask (`(303) 555-0142`), a group's rows. A reference is its
+ * record's name where `nameOf` knows it, and its key nowhere it is given one.
  */
-export function sayInput(field: AppCommandField, value: unknown): string {
+export function sayInput(field: AppCommandField, value: unknown, nameOf?: NameOf): string {
   if (value === undefined || value === null || value === '') return '—';
+  if (field.type === 'reference' && nameOf)
+    return (typeof value === 'string' || typeof value === 'number' ? nameOf(field, value) : undefined) ?? '…';
   const mask = 'mask' in field && typeof field.mask === 'string' ? field.mask : undefined;
   if (sensitiveText(field)) return maskedLast4(String(value), field.mask);
   if (field.type === 'boolean') return value ? say('common.yes') : say('common.no');
@@ -58,7 +64,7 @@ export function sayInput(field: AppCommandField, value: unknown): string {
     return picked.map((each) => field.options.find((option) => option.value === each)?.label ?? String(each)).join(', ');
   }
   if (field.type === 'group') {
-    const lines = reviewLines(field, value);
+    const lines = reviewLines(field, value, nameOf);
     return lines.length ? lines.join('; ') : '—';
   }
   return String(value);
@@ -73,12 +79,21 @@ export const answered = (value: unknown) =>
  * the review says it, after one another. A yes-or-no question says its label when yes and nothing when no — a bare
  * "Yes" names nothing — and a sensitive answer keeps to its last four. Undefined when the step said nothing.
  */
-export function stepSaid(fields: readonly AppCommandField[], values: Readonly<Record<string, unknown>>): string | undefined {
+export function stepSaid(
+  fields: readonly AppCommandField[],
+  values: Readonly<Record<string, unknown>>,
+  nameOf?: NameOf,
+): string | undefined {
   const said = fields.flatMap((field) => {
     const value = values[field.name];
     if (!answered(value)) return [];
     if (field.type === 'boolean') return value ? [field.label] : [];
-    return [sayInput(field, value)];
+    // A choice whose name its picker has not read is left out: its key names nothing.
+    if (field.type === 'reference') {
+      const name = (typeof value === 'string' || typeof value === 'number') && nameOf ? nameOf(field, value) : undefined;
+      return name === undefined ? [] : [name];
+    }
+    return [sayInput(field, value, nameOf)];
   });
   return said.length ? said.join(', ') : undefined;
 }
@@ -89,13 +104,13 @@ export function stepSaid(fields: readonly AppCommandField[], values: Readonly<Re
  * left out, and a group of one member says its answer alone. A repeating group is a line per row, its members after
  * one another. Empty for a group with no answer.
  */
-export function reviewLines(field: Extract<AppCommandField, { type: 'group' }>, value: unknown): string[] {
+export function reviewLines(field: Extract<AppCommandField, { type: 'group' }>, value: unknown, nameOf?: NameOf): string[] {
   const said = (row: unknown) =>
     field.fields.flatMap((member) => {
       const held = (row as Record<string, unknown> | undefined)?.[member.name];
       if (!answered(held)) return [];
       // A group of one asks one thing, which its own label (the review's term) already names.
-      return [field.fields.length > 1 ? `${member.label}: ${sayInput(member, held)}` : sayInput(member, held)];
+      return [field.fields.length > 1 ? `${member.label}: ${sayInput(member, held, nameOf)}` : sayInput(member, held, nameOf)];
     });
   if (field.repeat) return (Array.isArray(value) ? value : []).map((row) => said(row).join(', ')).filter(Boolean);
   return said(value);

@@ -19,7 +19,7 @@ import { formatNumber } from '../locale.js';
 import { inAppPage, PageRenderContext, usePageApi, type SlotProps } from './pageContext.js';
 import { Loading, SectionBox } from './PageSectionBox.js';
 import { dressFor, groupLabel, withUnit, type DisplayRule } from './valueModel.js';
-import { barShare, CurrencyFigures, figureSayer, namedGroups, orderGroups, sayer } from './dashboardModel.js';
+import { barShare, CurrencyFigures, EXACT, figureSayer, namedGroups, orderGroups, sayer } from './dashboardModel.js';
 import { currencyPath } from '@mistriwork/engine/shared/money.js';
 import { onDemand, useArrived } from './onDemand.js';
 import { Empty } from './Notes.js';
@@ -146,7 +146,8 @@ export function MetricSection({ section, plan }: SlotProps) {
       : null;
   const dress = rule?.format === 'money' && !(value instanceof CurrencyFigures) ? dressFor(rule, value) : null;
   /* An average is said to one place at or past 1, as a dashboard's is: "3.3", not "3.333". */
-  const said = value === '—' ? value : dress?.text ? withUnit(dress.text, unit) : figureSayer(rule, unit)(value);
+  /* A record's own figure is exact, money to its currency's minor digits at any size, each currency's sum too. */
+  const said = value === '—' ? value : dress?.text ? withUnit(dress.text, unit) : figureSayer(rule, unit, EXACT)(value);
   return (
     <SectionBox
       section={section}

@@ -6,7 +6,7 @@
  */
 import { appExportable } from '../../shared/appAccess.js';
 import { sessionRoles } from '../../shared/appViewRoles.js';
-import { minorToMajor, rowCurrency } from '@mistriwork/engine/shared/money.js';
+import { majorText, minorToMajor, rowCurrency } from '@mistriwork/engine/shared/money.js';
 import { findTable } from '@mistriwork/engine/shared/schema.js';
 import { readMeSets, textsMentionMe } from '../app/appMe.js';
 import { appForConnection } from '../app/apps.js';
@@ -25,10 +25,12 @@ function exportsTable(post: PostContext): (tableId: string) => boolean {
 }
 
 /**
- * A CSV says an amount kept in minor units as the figure it is — 1999 cents
- * as 19.99, in the row's currency — so the file reads as a sheet and imports
- * back as it was (appImport.ts reads it the same way). JSON keeps the data
- * as stored: it is read by programs, which know the unit from the API.
+ * A CSV says an amount as the figure it is, to its currency's minor digits —
+ * 1999 cents as 19.99, 5917 dollars as 5917.00, in the row's currency — so the
+ * file reads as the screen says it and imports back as it was (appImport.ts
+ * reads it the same way). Padded by its digits, never rounded or run through
+ * Number(). JSON keeps the data as stored: it is read by programs, which know
+ * the unit from the API.
  */
 function csvAmounts(post: PostContext, tableId: string): ((row: Record<string, unknown>) => Record<string, unknown>) | undefined {
   const host = post.appHosts?.length
@@ -39,18 +41,18 @@ function csvAmounts(post: PostContext, tableId: string): ((row: Record<string, u
   const app = host.app.app;
   const resources = (app.resources ?? {}) as Record<string, { display?: Record<string, unknown> }>;
   const display = (resources[table.id] ?? resources[table.name])?.display ?? {};
-  const minor = Object.entries(display).filter(
+  const money = Object.entries(display).filter(
     (
       entry,
     ): entry is [
       string,
       {
         format: 'money';
-        minor: true;
+        minor?: true;
         currency?: string;
         currencyColumn?: string;
       },
-    ] => (entry[1] as { format?: string; minor?: true }).format === 'money' && (entry[1] as { minor?: true }).minor === true,
+    ] => (entry[1] as { format?: string }).format === 'money',
   );
   /* A column whose component draws the word says it in the file too, over the words its `label` gave (valueLabels.ts)
      and under the author's own `values`: a spreadsheet reader has no component to draw it. */
@@ -59,12 +61,15 @@ function csvAmounts(post: PostContext, tableId: string): ((row: Record<string, u
     const learned = (rule as { component?: unknown }).component ? app.valueLabels?.[`${resource}.${column}`] : undefined;
     return learned ? [[column, { ...learned, ...(rule as { values?: Record<string, string> }).values }] as const] : [];
   });
-  if (!minor.length && !spoken.length) return undefined;
+  if (!money.length && !spoken.length) return undefined;
   const fallback = app.ui?.currency ?? 'USD';
   return (row) => {
     const said = { ...row };
-    for (const [column, rule] of minor)
-      if (Object.hasOwn(row, column)) said[column] = minorToMajor(row[column], rowCurrency(rule, row, fallback)) ?? row[column];
+    for (const [column, rule] of money)
+      if (Object.hasOwn(row, column)) {
+        const currency = rowCurrency(rule, row, fallback);
+        said[column] = (rule.minor ? minorToMajor(row[column], currency) : majorText(row[column], currency)) ?? row[column];
+      }
     for (const [column, words] of spoken) {
       const stored = row[column];
       if (typeof stored === 'string' && Object.hasOwn(words, stored)) said[column] = words[stored];

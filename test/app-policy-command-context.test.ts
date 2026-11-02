@@ -49,11 +49,20 @@ const request = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
-function gate() {
+/* A gate rejects rather than wait forever: a failed assertion (or a command refused before it reaches its gate)
+   leaves a drain waiting on a release that never comes, and an unbounded wait stalls the whole `tsx --test` run
+   with nothing said. Five seconds is far past any release in these tests. */
+function gate(name: string, limit = 5000) {
   let release!: () => void;
-  const promise = new Promise<void>((resolve) => {
-    release = resolve;
+  const promise = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`the "${name}" gate was never released (waited ${limit} ms)`)), limit);
+    release = () => {
+      clearTimeout(timer);
+      resolve();
+    };
   });
+  // A gate nobody awaits any more must not be an unhandled rejection of its own.
+  promise.catch(() => {});
   return { promise, release };
 }
 function commandError(code: string, outcome = 'not_applied') {
@@ -135,7 +144,7 @@ async function fixture(t: TestContext) {
     control.actors.push(context.actor);
     assert.ok(Object.isFrozen(context.actor));
     assert.ok(Object.isFrozen(context.actor.roles));
-    assert.deepEqual(Reflect.ownKeys(context.tx).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+    assert.deepEqual(Reflect.ownKeys(context.tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
     assert.ok(!Reflect.ownKeys(context).some((key) => ['journal', 'authorize', 'binding'].includes(String(key))));
     if (control.handle) await control.handle(context);
     // The assignee is read again after the hook; the revision is the one the platform checked.
@@ -393,8 +402,8 @@ for (const mode of ['execute', 'status'] as const) {
   for (const retire of [false, true]) {
     test(`${mode} drains accepted completion after callback settlement${retire ? ' and retirement' : ''}`, async (t) => {
       const f = await fixture(t);
-      const committed = gate();
-      const held = gate();
+      const committed = gate('committed');
+      const held = gate('held');
       const original = commandsOf(f.anchor).scopeCommandTransaction!.bind(f.anchor);
       f.anchor.scopeCommandTransaction = async (scope, run) => {
         const result = await original(scope, run);
@@ -435,8 +444,8 @@ for (const mode of ['execute', 'status'] as const) {
 
 test('callback settlement refuses an accepted command still before commit and drains its rollback', async (t) => {
   const f = await fixture(t);
-  const entered = gate();
-  const held = gate();
+  const entered = gate('entered');
+  const held = gate('held');
   f.control.handle = async () => {
     entered.release();
     await held.promise;

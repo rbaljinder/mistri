@@ -67,8 +67,8 @@ test('a minor-unit money value is dressed as its figure; a decimal one is left a
   expect(minor.text).toBe('$19.99');
   const yen = dressFor({ format: 'money', minor: true, currency: 'JPY' }, 1999) as { text: string };
   expect(yen.text).toMatch(/1,999/);
-  // A whole figure alone says no cents; one with cents says them.
+  // A decimal figure is its own amount, said to the cent whether or not it has cents.
   const decimal = dressFor({ format: 'money', currency: 'USD' }, 1999) as { text: string };
-  expect(decimal.text).toBe('$1,999');
+  expect(decimal.text).toBe('$1,999.00');
   expect((dressFor({ format: 'money', currency: 'USD' }, '1999.50') as { text: string }).text).toBe('$1,999.50');
 });

@@ -22,7 +22,7 @@ indexes every key). The sample Apps the references and guides link, Tick, Lintel
 2. **Settle the hard-to-undo choices** with the person: [choices.md](references/choices.md),
    [security.md](references/security.md); a public form's human check, tenant placement and limits are among them.
 3. **Scaffold and seed** a disposable copy: `npx @mistriwork/mistri --config mistri.json --scaffold-app ./my-app`, then
-   `npx @mistriwork/mistri seed --app ./my-app --config mistri.json` (its connection `"writable": true`); a seed script
+   `npx @mistriwork/mistri migrate up --app ./my-app --config mistri.json` (migrations, the stores it uses, check) and `seed` with the same flags (its connection `"writable": true`); a seed script
    (outside the App's folder) only for rows it cannot make ([handback.md](references/handback.md)). The draft has a look, an Overview, a machine per status, sign-in for staff, and its recipe.
 4. **Aim for a finished first shot**: take the recipe the draft's README names, from [recipes.md](references/recipes.md)
    (CRM, service desk, inventory, forum, marketplace, admin tool) for the look, the home dashboard and each list's
@@ -60,14 +60,14 @@ indexes every key). The sample Apps the references and guides link, Tick, Lintel
   Change the schema only by migration: `npx @mistriwork/mistri migrate new <name> --app .`,
   `npx @mistriwork/mistri check --app . --pending`, then `npx @mistriwork/mistri migrate up --app .`;
   a database that already has tables is baselined first, with the person's word.
-- Name an action by its id (`actions: { withdraw: action('Withdraw application', …) }`)
-  and refer to the id everywhere: `header({ destructive: ['withdraw'] })`, a
-  role's `actions`. Keep actions inline in their resource.
+- Name an action by its id (`actions: { withdraw: action('Withdraw application', …) }`) and refer to the id
+  everywhere: `header({ destructive: ['withdraw'] })`, a role's `actions`. Keep actions inline in their resource.
 - A value worked out from the record's own columns is a computed column:
   `computed.boolean('due_on < today and not completed')`; one copied from a chosen record is `{ from: 'service_id.price' }`.
 - The server is the security boundary: `hidden`, `fields` ceilings, grants, row policies and
   database privileges protect; `show`, `when`, `masked` and a missing button only hide.
-- `auth: { rows: 'policy' }`: pass `--policy ./policy.ts` to every `check`, `dev`, `shot` and `grade`.
+- Five rules `check` refuses on a first App: a segment named like a machine state, column or rollup (rename it, keep the words in `label`); a role that edits a table a command writes without `fields: { table: { write: [...] } }` leaving `version` out; a checklist's `checked` that is not a local boolean column (`BOOLEAN` in SQLite); a calendar `primary` that is not text or a one-hop label path; a role's field list naming a rollup or computed column, or leaving out part of the primary key.
+- `auth: { rows: 'policy' }`, a tenant App or `--jobs`: name each once in the App's own `mistri.json` (`"app": { "dir": ".", "policy": "policy.ts", "jobs": "jobs.ts" }`), which every App command reads; a flag overrides it.
 - Writes are opt-in twice: `"writable": true` on the connection and `access: 'write'` on the
   resource. Credentials stay in `mistri.json` as `${VARIABLE}` references, never in `app.ts`.
   Never reseed, migrate or write to an existing database without asking.

@@ -500,7 +500,9 @@ test(
        before the BEGIN was answered, it is a 503, not applied. Cut inside the transaction, its ROLLBACK goes
        unanswered, and an unanswered ROLLBACK is an unknown outcome by the adapters' contract: the write is
        unconfirmed (200, outcome unknown), for the client to reconcile. */
-    const opening = 'BEGIN; LOCK TABLE "public"."ticket" IN ROW EXCLUSIVE MODE';
+    const opening =
+      'BEGIN; SET LOCAL DateStyle = ISO; SET LOCAL IntervalStyle = postgres; SET LOCAL extra_float_digits = 3; ' +
+      'LOCK TABLE "public"."ticket" IN ROW EXCLUSIVE MODE';
     for (const [label, bytes, answered] of [
       ['its BEGIN unsent', opening, false],
       ['its BEGIN run, the answer lost', opening, true],

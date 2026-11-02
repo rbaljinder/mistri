@@ -474,9 +474,77 @@ describe('a dashboard note may offer another App room', () => {
       /views "board", section 1, "action"\.label needs non-empty text\./,
     );
     assert.throws(
-      () => view({ kind: 'note', text: 'Read this', action: { label: 'Ask', to: 'form' } }),
-      /which is not a list or dashboard view/,
+      () => view({ kind: 'note', text: 'Read this', action: { label: 'Missing', to: 'missing' } }),
+      /views "board", section 1, note action names "missing", which is not a list, a dashboard or a signed-in form view\./,
     );
+  });
+
+  /* A field report: a banner refused the signed-in form the App's own openForm opened, while an empty list's action
+     took it. Every surface that names a room by its key judges it by one rule (appDestinations.ts). */
+  test('one destination rule: a signed-in form from a banner, a note, an empty list, a record page and its related list', () => {
+    const FORM = { kind: 'form', label: 'Ask', command: { id: 'ask', version: 1, input: { note: { label: 'Note', type: 'text' } } } };
+    const action = (to: string) => ({ label: 'Ask', to });
+    const raw = (to: string, publicForm = false, pageTo = to) => ({
+      resources: { customer: {} },
+      auth: { roles: { reader: { read: true, commands: ['ask'] } } },
+      views: {
+        board: {
+          kind: 'dashboard',
+          label: 'Board',
+          sections: [{ kind: 'note', variant: 'banner', title: 'Something to ask?', text: 'Ask the office.', action: action(to) }],
+          aside: [{ kind: 'note', text: 'Or ask here.', action: action(to) }],
+        },
+        tasks: { ...LIST, empty: { title: 'No tasks', action: action(to) } },
+        ask: { ...FORM, ...(publicForm ? { public: true } : {}) },
+      },
+      home: 'board',
+      nav: ['board', 'tasks'],
+      pages: {
+        customer: {
+          base: 'customer',
+          sections: [
+            { kind: 'note', text: 'Something wrong?', action: action(pageTo) },
+            { kind: 'list', from: 'task', whose: 'customer_id', empty: { title: 'No tasks', action: action(pageTo) } },
+          ],
+        },
+      },
+    });
+    const app = parse(raw('ask'));
+    const pages = orderAppPages(app, parseAppPages(raw('ask'), WHERE), WHERE);
+    const board = app.views.board as AppDashboardView;
+    assert.deepEqual(board.sections[0].kind === 'note' && board.sections[0].action, { label: 'Ask', view: 'ask' });
+    assert.deepEqual(board.aside?.[0].kind === 'note' && board.aside[0].action, { label: 'Ask', view: 'ask' });
+    assert.deepEqual((app.views.tasks as AppListView).empty?.action, { label: 'Ask', view: 'ask' });
+    const [note, related] = pages[0].sections;
+    assert.deepEqual(note.kind === 'note' && note.action, { label: 'Ask', view: 'ask' });
+    assert.deepEqual(related.kind === 'list' && related.empty?.action, { label: 'Ask', view: 'ask' });
+    // Reached through the banner of a dashboard nav reaches, the form is a served room, as nav would make it.
+    assert.ok(Object.hasOwn(app.views, 'ask'));
+    assert.deepEqual(withAvailableEmptyActions(servedApp(app, SCHEMA)).views.board, servedApp(app, SCHEMA).views.board);
+    // A reader not served the form (its roles, its command's grant) is drawn the banner without its action, as nav without it.
+    const { ask: _ask, ...withoutForm } = servedApp(app, SCHEMA).views;
+    const unserved = withAvailableEmptyActions({ ...servedApp(app, SCHEMA), views: withoutForm });
+    assert.equal((unserved.views.board as AppDashboardView).sections[0].action, undefined);
+    assert.equal((unserved.views.tasks as AppListView).empty?.action, undefined);
+
+    // A public form is no room on any of them, and each says so in the same words.
+    const outside = /names "ask", which is not a list, a dashboard or a signed-in form view: a public form is served at its own address/;
+    assert.throws(
+      () => parse(raw('ask', true, 'tasks')),
+      (error: Error) => {
+        const said = error.message.split('\n').filter((line) => outside.test(line));
+        assert.equal(said.length, 3, error.message);
+        assert.ok(said.some((line) => /views "tasks", "empty\.action\.view" names "ask"/.test(line)));
+        assert.ok(said.some((line) => /views "board", section 1, note action names "ask"/.test(line)));
+        assert.ok(said.some((line) => /views "board", "aside", section 1, note action names "ask"/.test(line)));
+        return true;
+      },
+    );
+    // On a record page, the views are a list and a dashboard; the page's note and its related list name the public form.
+    const onPage = raw('tasks', true, 'ask');
+    assert.throws(() => parse(onPage), outside);
+    const onPageNote = { ...onPage, pages: { customer: { ...onPage.pages.customer, sections: [onPage.pages.customer.sections[0]] } } };
+    assert.throws(() => orderAppPages(parse(onPageNote), parseAppPages(onPageNote, WHERE), WHERE), outside);
   });
 
   test('drops only a note action whose target is unavailable after final view pruning', () => {

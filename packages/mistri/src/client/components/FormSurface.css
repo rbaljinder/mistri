@@ -107,3 +107,5 @@ body.public-form-mode .public-sign-in { margin-left: auto; flex: none; }
 }
 /* A group's answers on a review, a line each by its label (ReviewValue.tsx). */
 .review-lines { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+/* A reference's second line on a review, beside its name: what tells two records of one name apart (CommandReference.tsx). */
+.review-detail { color: var(--ink-muted); }

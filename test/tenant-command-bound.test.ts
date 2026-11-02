@@ -19,25 +19,46 @@ import { captureTenantOwnership } from '../packages/mistri/src/server/tenant/ten
 import type { TenantReadSource } from '../packages/mistri/src/server/tenant/tenantReadSource.js';
 import { TenantWriteFailure, type TenantWriteSource } from '../packages/mistri/src/server/tenant/tenantWriteSource.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
-import { dropDedicatedPostgresDatabase, openTenantEngine, TENANT_DIALECTS, type TenantDialect } from './support/tenantDialects.js';
+import {
+  CASE_INSENSITIVE,
+  dropDedicatedPostgresDatabase,
+  openTenantEngine,
+  TENANT_DIALECTS,
+  type TenantDialect,
+} from './support/tenantDialects.js';
 
 const owner = { appId: 'service', source: { id: 'business', connection: 'owned-business' }, storeId: 'bound-fixture' };
 const SCHEMA = {
-  tables: ['cb_note', 'cb_tag', 'cb_lead', 'cb_dealer'],
+  tables: ['cb_pin', 'cb_folder', 'cb_note', 'cb_tag', 'cb_lead', 'cb_dealer'],
   sqlite: `PRAGMA foreign_keys = ON;
     CREATE TABLE cb_dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL);
     CREATE TABLE cb_lead (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES cb_dealer(id), owner_id TEXT NOT NULL,
       name TEXT NOT NULL);
     CREATE TABLE cb_note (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES cb_dealer(id), author TEXT NOT NULL,
       lead_id TEXT NOT NULL REFERENCES cb_lead(id), body TEXT NOT NULL);
-    CREATE TABLE cb_tag (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES cb_dealer(id), name TEXT NOT NULL);`,
+    CREATE TABLE cb_tag (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES cb_dealer(id), name TEXT NOT NULL);
+    CREATE TABLE cb_folder (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES cb_dealer(id),
+      code TEXT COLLATE NOCASE NOT NULL, UNIQUE (tenant_id, code));
+    CREATE TABLE cb_pin (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES cb_dealer(id), folder_code TEXT NOT NULL,
+      FOREIGN KEY (tenant_id, folder_code) REFERENCES cb_folder(tenant_id, code) ON DELETE CASCADE);`,
   postgres: `
     CREATE TABLE public.cb_dealer (id text PRIMARY KEY, name text NOT NULL);
     CREATE TABLE public.cb_lead (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.cb_dealer(id), owner_id text NOT NULL,
       name text NOT NULL);
     CREATE TABLE public.cb_note (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.cb_dealer(id), author text NOT NULL,
       lead_id text NOT NULL REFERENCES public.cb_lead(id), body text NOT NULL);
-    CREATE TABLE public.cb_tag (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.cb_dealer(id), name text NOT NULL);`,
+    CREATE TABLE public.cb_tag (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.cb_dealer(id), name text NOT NULL);
+    CREATE TABLE public.cb_folder (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.cb_dealer(id),
+      code text COLLATE public.${CASE_INSENSITIVE} NOT NULL, UNIQUE (tenant_id, code));
+    DO $$ BEGIN
+      CREATE TABLE public.cb_pin (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.cb_dealer(id), folder_code text NOT NULL,
+        FOREIGN KEY (tenant_id, folder_code) REFERENCES public.cb_folder(tenant_id, code) ON DELETE CASCADE);
+    EXCEPTION WHEN others THEN
+      -- PostgreSQL 18 has a reference to a nondeterministic key share its collation: there the counts never differed.
+      CREATE TABLE public.cb_pin (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.cb_dealer(id),
+        folder_code text COLLATE public.${CASE_INSENSITIVE} NOT NULL,
+        FOREIGN KEY (tenant_id, folder_code) REFERENCES public.cb_folder(tenant_id, code) ON DELETE CASCADE);
+    END $$;`,
 };
 const ROWS = `
     INSERT INTO cb_dealer VALUES ('north', 'North Motors'), ('south', 'South Auto');
@@ -52,10 +73,10 @@ after(async () => {
 
 /* Alice's row policy: her own leads only, every note and tag of her dealer. */
 const mine = { groups: [[{ column: 'owner_id', op: '=' as const, value: 'alice' }]] };
-const ALICE: RowScope = { dealer: true, lead: mine, note: true, tag: true };
+const ALICE: RowScope = { dealer: true, lead: mine, note: true, tag: true, folder: true, pin: true };
 /* The same, with notes narrowed to her own: a note she cannot read may point anywhere. */
 const NARROW: RowScope = { ...ALICE, note: { groups: [[{ column: 'author', op: '=' as const, value: 'alice' }]] } };
-const FOOTPRINT = ['lead', 'note', 'tag'];
+const FOOTPRINT = ['lead', 'note', 'tag', 'folder', 'pin'];
 const refused = (error: unknown) => error instanceof TenantWriteFailure && error.outcome === 'not_applied';
 const because = (pattern: RegExp) => (error: unknown) => refused(error) && pattern.test(refusalReasons(error).join(' | '));
 
@@ -89,7 +110,9 @@ async function fixture(t: TestContext, dialect: TenantDialect) {
     });
   });
   const physicalSchema = await engine.physicalSchema();
-  const resources = Object.fromEntries(['dealer', 'lead', 'note', 'tag'].map((logical) => [logical, engine.id(`cb_${logical}`)]));
+  const resources = Object.fromEntries(
+    ['dealer', 'lead', 'note', 'tag', 'folder', 'pin'].map((logical) => [logical, engine.id(`cb_${logical}`)]),
+  );
   const catalog = appResourceCatalog(physicalSchema, resources);
   const tenant = { kind: 'tenant' as const, column: 'tenant_id' };
   const ownership = captureTenantOwnership({
@@ -98,7 +121,7 @@ async function fixture(t: TestContext, dialect: TenantDialect) {
     schema: catalog.schema,
     physicalSchema,
     resources,
-    ownership: { dealer: { kind: 'platform' }, lead: tenant, note: tenant, tag: tenant },
+    ownership: { dealer: { kind: 'platform' }, lead: tenant, note: tenant, tag: tenant, folder: tenant, pin: tenant },
     profile: 'dealer',
   });
   const writer = await engine.openWrite(ownership, owner, () => 1000);
@@ -168,6 +191,21 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       });
       assert.deepEqual(await f.ids('lead'), ['n3', 's1']);
       assert.deepEqual(await f.ids('note'), ['sn1']);
+    });
+
+    /* A foreign key matches a reference as the parent key compares: SQLite by the parent column's collation, and
+       PostgreSQL by a nondeterministic parent key's, so a pin filed under 'PLANS' references the folder 'Plans'.
+       Counted as the child's column compares, that reference was none, and the delete's cascade removed the pin. */
+    test('a delete counts the rows referencing it as the foreign key matches them, not as the child column compares', async (t) => {
+      const f = await fixture(t, dialect);
+      await f.engine.exec("INSERT INTO cb_folder VALUES ('f1', 'north', 'Plans')");
+      await f.engine.exec("INSERT INTO cb_pin VALUES ('np1', 'north', 'PLANS')");
+      await assert.rejects(
+        f.command((tx) => tx.remove({ table: 'folder', key: { id: 'f1' } })),
+        because(/still references it/),
+      );
+      assert.deepEqual(await f.ids('pin'), ['np1']);
+      assert.deepEqual(await f.ids('folder'), ['f1']);
     });
 
     test("a delete is refused where a hidden row might reference it: a narrower policy, a table outside the footprint, another dealer's row", async (t) => {

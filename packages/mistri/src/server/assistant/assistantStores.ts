@@ -47,7 +47,7 @@ export function assistantStoreFor(registry: Registry, host: AppHost): Promise<As
   if (!store) {
     store = (async () => {
       const connection = appEntrypoint(host, registry);
-      const url = connection ? registry.configOf(connection)?.url : undefined;
+      const url = connection ? registry.openableUrlOf(connection) : undefined;
       if (!url)
         throw new AssistantStoreUnavailable(
           `${app.name} declares an assistant; it keeps its conversations on one connection, and none is configured.`,

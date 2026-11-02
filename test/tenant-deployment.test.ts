@@ -365,7 +365,15 @@ test('flat frozen deployment exposes only existing operations and a six-method r
   assert.deepEqual(Object.keys(retained!).sort(), ['capabilities', 'data', 'principal', 'schema', 'together']);
   assert.ok(Object.isFrozen(retained!.capabilities));
   assert.deepEqual(Object.keys(retained!.capabilities!).sort(), ['grantedCommands', 'resources', 'writable']);
-  assert.deepEqual(Object.keys(retained!.data).sort(), ['count', 'countBreakdown', 'countView', 'query', 'runBreakdown', 'runView']);
+  assert.deepEqual(Object.keys(retained!.data).sort(), [
+    'aggregate',
+    'count',
+    'countBreakdown',
+    'countView',
+    'query',
+    'runBreakdown',
+    'runView',
+  ]);
   assert.ok(Object.isFrozen(retained));
   assert.ok(Object.isFrozen(retained!.data));
   assert.deepEqual(plain(result.rows), [{ id: 'north-item', business_id: 'same-business', name: 'North item' }]);
@@ -374,7 +382,7 @@ test('flat frozen deployment exposes only existing operations and a six-method r
   await assert.rejects(retained!.data.count('item'), readFailure);
   assert.equal((await deployment.execute(request, north, f.body())).status, 'applied');
   assert.deepEqual([...f.control.seen!.actor.roles], ['operator']);
-  assert.deepEqual(Object.keys(f.control.seen!.tx).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+  assert.deepEqual(Object.keys(f.control.seen!.tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
   assert.equal('journal' in f.control.seen!, false);
 });
 

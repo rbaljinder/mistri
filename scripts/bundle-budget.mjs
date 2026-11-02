@@ -624,7 +624,33 @@ export const BUDGET = {
     /* rc.9 as published (@mistriwork/ui named again): public script 670,119 / 187,172 on a desk. CI's Linux build
        packed the App script past a brotli ceiling the desk had 43 bytes under, so both script brotli ceilings get back
        the 400 bytes of room kept for the compressor that packs worst. */
-    public: { script: { raw: 670_250, br: 187_575 }, style: { raw: 392_000, br: 52_650 } },
+    /* rc.11's touch targets and grid heads: a phone's bar marks, Records/Table pair, metric figure, banner action and
+       list filter row given 44px under a finger, a breakdown's drill rows 44px, and a text head that keeps its
+       resizer's strip as its own padding (structure.css, style.css). They are the first screen's chrome on every
+       page, so nothing could wait behind onDemand.tsx. Measured: public style 392,266 / 52,718, App style 392,147 /
+       52,689, Workbench style 377,469 / 51,515. The style ceilings keep about 250 bytes of room raw and 100 in brotli. */
+    /* rc.11's form review that names a reference's record rather than its key (a field report): the steps' summaries
+       say the name the picker read (referenceNames.ts) and the review hands a reference answer to the picker's chunk
+       (ReviewValue.tsx), so the read, its states and a group's lines wait behind onDemand.tsx; what stays is the
+       remembered names and the summary's lookup, which the first step's summary draws. Measured: public script
+       671,175 / 187,327, App script 1,397,739 / 383,209. The raw script ceilings keep about 250 bytes of room; brotli
+       did not move past its ceilings. */
+    /* rc.11's documents: a date said absolutely in a zone, the same words for any reader on any day (locale.ts
+       formatAbsolute, `format: 'date'` and `'datetime'` in every cell, Dressed.tsx), and money said to its currency's
+       minor digits by its decimal text (formatMoney, valueModel.ts, dashboardModel.ts; the old whole-dollar sets went).
+       A cell's date and amount are the first screen's own words, so nothing could wait behind onDemand.tsx. Measured:
+       public script 671,664 / 187,410 (+1,414 raw over its ceiling; brotli 165 bytes inside). The raw ceiling keeps
+       about 250 bytes of room, the brotli 400 for the compressor that packs worst. With the form review beside it
+       (merged), measured 657.0 KiB raw / 183.4 KiB brotli; the ceilings keep that room. */
+    /* rc.11's accessibility round (a field report): a form's pickers, switch rows, choices, date button and sheet Close
+       at 44px under a finger (structure.css), a band head's list search on the surface (themeFamilies.css) and a donut
+       slice's ring (Chart.css, Chart.tsx). Rules every form, list head and dashboard draws on its first screen, so none
+       can wait behind onDemand.tsx. Measured: public style 392,776 / 52,752 (+276 raw past its ceiling), App script
+       1,398,421 / 383,558 (+421 / +58), App style 392,657 / 52,723 (+257), Workbench style 377,941 / 51,567 (+241).
+       The raw ceilings keep about 250 bytes of room, the App script's brotli about 400. */
+    /* Merged with the touch targets and the donut's focus ring beside the documents and the form review: public script
+       657.3 KiB raw, 183.4 KiB brotli. The raw ceiling keeps about 250 bytes. */
+    public: { script: { raw: 673_400, br: 188_200 }, style: { raw: 393_030, br: 52_820 } },
     /* A one-click command's revision asked as the pointer or focus reaches its button (commandSend.ts readyCommand,
        Actions.tsx), so the click sends only the execute: about 500 raw bytes, 1335.1 KiB measured. The App script's
        raw ceiling moves to 1_367_400 and keeps about 250 bytes of room; its brotli did not move past its ceiling. */
@@ -674,7 +700,16 @@ export const BUDGET = {
        keep about 280 bytes of room raw and 110 in brotli. */
     /* rc.9 as published: App script 1,396,687 / 383,107 on a desk, 43 bytes under the brotli ceiling that CI's Linux
        build went past. Its brotli ceiling keeps 400 bytes of room again (see the public note). */
-    app: { script: { raw: 1_397_000, br: 383_500 }, style: { raw: 391_700, br: 52_650 } },
+    /* rc.11's touch targets and grid heads, as on the public first paint. */
+    /* rc.11's form review naming a reference's record, as on the public first paint. */
+    /* rc.11's documents, as on the public first paint: App script 1,398,306 / 383,316 (+1,306 raw over its ceiling;
+       brotli 184 bytes inside). The same room. With the form review beside it (merged), measured 1,366.4 KiB raw /
+       374.5 KiB brotli; the ceilings keep their room. With `whole: true` money (locale.ts formatWholeMoney, a cell's
+       own words, so first paint), measured 1,366.9 KiB raw; the raw ceiling keeps about 300 bytes. */
+    /* rc.11's accessibility round, as on the public first paint. */
+    /* Merged, as on the public first paint: App script 1,367.5 KiB raw, 375.0 KiB brotli; the ceilings keep about
+       300 bytes raw and 400 brotli. */
+    app: { script: { raw: 1_400_600, br: 384_400 }, style: { raw: 392_910, br: 52_800 } },
   },
   tablewalk: {
     /* The follow-up's grid head rules, as above. */
@@ -683,7 +718,9 @@ export const BUDGET = {
        brotli by 150. */
     /* rc.9 merged: the grid heads and the client review fixes together put the Workbench style past its brotli
        ceiling by under 0.1 KB (50.3 KB measured); the brotli ceiling moves to 51_800, a few hundred bytes of room. */
-    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 377_100, br: 51_800 } },
+    /* rc.11's touch targets and grid heads, as on the public first paint: the raw style ceiling moves; brotli holds. */
+    /* rc.11's accessibility round, as on the public first paint: the raw style ceiling moves; brotli holds. */
+    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 378_190, br: 51_800 } },
   },
 };
 

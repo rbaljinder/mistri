@@ -23,6 +23,9 @@ interface GridColumnSize {
   /** Measured in the first row: what a chip draws beyond its words (the dot, gap and padding of the look wearing it). */
   chipExtra?: number;
   controls?: boolean;
+  /** What the sort draws beside the label on its line, the gap before it included: a reference's arrow. A head that
+      wraps keeps it beside the label's line, so it is room on both floors. */
+  mark?: number;
   showTime?: boolean;
   /** The column that names the row: it is read whole before the others are. */
   title?: boolean;
@@ -81,10 +84,11 @@ export function columnSizeHint(
   measure?: TextMeasure,
   squeezeName = false,
 ): { minimum: number; wanted: number; least: number; whole?: number; twoLines?: number } {
-  /* A head with controls keeps room for its sort's padding and arrow; its menu caret and its move buttons stand past the
-     label's end where a pointer hovers (style.css), so they are not reserved. */
+  /* A head with controls keeps room for its sort's leading padding, its arrow and the resizer's 12px at its trailing
+     edge, which the sort never reaches under (style.css); a reference's arrow beside the label is room too (`mark`).
+     Its menu caret and its move buttons stand past the label's end where a pointer hovers, so they are not reserved. */
   const counted = Math.min(column.label.length, 22) * headChar;
-  const around = column.controls ? 34 : 28;
+  const around = (column.controls ? 34 : 28) + (column.mark ?? 0);
   const header = Math.ceil(column.headWidth === undefined ? counted : Math.min(column.headWidth, counted * 1.15)) + around;
   /* An App's head wraps before it widens its column: the floor is its two-line width, and the whole label stays
      what the column wants, so a table with room for it still draws every head on one line. */

@@ -38,9 +38,9 @@ import { fieldsColumns, listView, rowBody } from '@mistriwork/engine/shared/reco
 import type { AppPayloadDocument } from '../../shared/appPayload.js';
 import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { composeRecordPage } from '@mistriwork/kit/client/recordCompose.js';
-import { defaultCurrency, formatDate, formatLocale, formatMoney } from '@mistriwork/kit/client/locale.js';
+import { defaultCurrency, formatLocale, formatMoney, formatWholeMoney } from '@mistriwork/kit/client/locale.js';
 import { minorFigure, rowCurrency } from '@mistriwork/engine/shared/money.js';
-import { dressFor, maskedText, sayValue, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
+import { dressFor, maskedText, sayAbsolute, sayValue, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import { sumTerms } from './totalTerms.js';
 import { planColumn } from '@mistriwork/kit/client/columns.js';
 import { brandMark } from '../appBrand.js';
@@ -227,13 +227,16 @@ function Sheet({
 }
 
 /**
- * A value as paper says it: as the App dresses it, except a date it says
- * relatively. "3 days ago" is true the day it is read on screen and false on
- * every day after the sheet is printed, so paper says the day.
+ * A value as paper says it: as the App dresses it, except a date the screen
+ * says from today. "3 days ago" and "yesterday" are true the day the sheet is
+ * read and false on every day after it is saved or printed, so paper says the
+ * day, and a moment its day, time and zone, the same for every reader
+ * (sayAbsolute).
  */
 function PaperValue({ col, value, tableId, row }: { col: Column | undefined; value: unknown; tableId: string; row?: Row }) {
   const rule = columnDisplay(tableId, col?.name ?? '') as DisplayRule | null;
-  if (rule?.format === 'relative' && typeof value === 'string' && value) return <span>{formatDate(value)}</span>;
+  const day = maskedText(rule, value) === undefined ? sayAbsolute(col, value, rule) : null;
+  if (day) return <span className="date-value">{day}</span>;
   /* Money keeps its cents on paper, every figure of a column the same width: $198.00 over $84.65, not $198. A part
      taken off a total is said with the minus sign, not a hyphen, as the New form's summary says it. */
   const figure = typeof value === 'number' || (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)));
@@ -242,7 +245,10 @@ function PaperValue({ col, value, tableId, row }: { col: Column | undefined; val
     const major = rule.minor ? (minorFigure(value, currency) ?? value) : value;
     return (
       <span className="num-value">
-        {formatMoney(major as number | string, currency, { maximumFractionDigits: undefined }).replace(/^-/, '−')}
+        {(rule.whole ? formatWholeMoney : formatMoney)(major as number | string, currency, { maximumFractionDigits: undefined }).replace(
+          /^-/,
+          '−',
+        )}
       </span>
     );
   }
@@ -389,7 +395,10 @@ function PaperFields({ section, base, row, labels }: { section: Fields; base: Ta
       /* The totals: caption beside figure, the last the one that is owed, under a rule. A zero before it says nothing.
          Where the last is a sum of the others, a part it takes off is said negated (−$297.00), as the New form's
          summary says it. */
-      const rows = shown.filter((path, i) => i === shown.length - 1 || Number(row[path]) !== 0 || typeof row[path] !== 'number');
+      /* A zero as PostgreSQL's numeric hands it over ("0.00", "-0.00") is a zero too. */
+      const zero = (value: unknown) =>
+        (typeof value === 'number' || (typeof value === 'string' && /^\s*[+-]?\d+(\.\d+)?\s*$/.test(value))) && Number(value) === 0;
+      const rows = shown.filter((path, i) => i === shown.length - 1 || !zero(row[path]));
       const total = shown[shown.length - 1];
       const expr = total ? base.computed?.[total]?.expr : undefined;
       const terms = expr ? sumTerms(expr) : undefined;

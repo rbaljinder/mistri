@@ -474,6 +474,8 @@ describe('the codes and the paths', () => {
     const codes = [
       ...VALIDATION_CODES.map((entry) => entry.code),
       'invalid-app',
+      /* The automation listing, information under --json (check.ts). */
+      'automation',
       'deprecated',
       'could-not-check',
       'pending-migration',
@@ -500,6 +502,8 @@ describe('the codes and the paths', () => {
       ),
       /* A row-policy App's services and events (policyServiceChecks.ts, apiEventFeed.ts). */
       ...['service-unnamed', 'service-unused', 'service-rows', 'events-feed'].map((rule) => `policy-${rule}`),
+      /* A command whose writes fire a trigger a row policy cannot bound (commandTriggerChecks.ts). */
+      'command-trigger',
       /* The human check `auth.challenge` names (commands/challenges.ts, app/apps.ts). */
       'auth-challenge',
       /* Mail to an address a record holds (integrationChecks.ts contactEmailFindings). */

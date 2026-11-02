@@ -326,7 +326,7 @@ test('command-only membership prepares, executes and replays with no generic CRU
   assert.deepEqual(f.counts(), [1, 1]);
   assert.equal(f.control.calls, 1);
   assert.deepEqual([...f.control.seen!.actor.roles], ['manager']);
-  assert.deepEqual(Object.keys(f.control.seen!.tx).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+  assert.deepEqual(Object.keys(f.control.seen!.tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
   assert.equal('journal' in f.control.seen!, false);
   assert.equal('tenantId' in f.control.seen!.actor, false);
   assert.doesNotMatch(JSON.stringify(result), /tenant_id|PRIVATE_SENTINEL|db_item|SELECT|undoId/);

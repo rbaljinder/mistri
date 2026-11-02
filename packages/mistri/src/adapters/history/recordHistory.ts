@@ -42,6 +42,7 @@ import {
   type UpdateRequest,
   type UpdateResult,
 } from '@mistriwork/engine/adapters/adapter.js';
+import type { TriggerChange } from '@mistriwork/engine/adapters/storeHost.js';
 import { captureNotices, noticeBinding, type NoticeRow } from '../inbox/inbox.js';
 import type { QueuedChannelNotice } from '../integrations/integrationStore.js';
 import { currentWriteAttribution, WRITE_VIAS, type WriteVia } from '@mistriwork/engine/adapters/writeAttribution.js';
@@ -299,7 +300,13 @@ interface RecordHistoryCapture {
   remove(request: DeleteRequest, write: (request: DeleteRequest) => Promise<DeleteResult>): Promise<DeleteResult>;
   /** A flow's notify step: the record's `{ flow }` rules tell their people, in this transaction (WriteTransaction.tell). */
   tell(request: TellRequest): Promise<void>;
+  /** A row an accepted trigger changed (writeCapture.ts): its history, attributed to the trigger and the command that fired it. */
+  triggered(change: TriggerChange): Promise<void>;
 }
+
+/** What a trigger's change is called in a history: the trigger, and the action or command whose write fired it. */
+const triggeredAction = (action: string, trigger: string): string =>
+  (action ? `${action} (trigger ${trigger})` : `Trigger ${trigger}`).slice(0, RECORD_HISTORY_LIMITS.action);
 
 /**
  * One transaction's capture, or undefined where the adapter records nothing.
@@ -322,7 +329,7 @@ export function captureRecordHistory(
   const actorName = actor ? sayableActorName(attribution?.name) : '';
   const via: WriteVia = attribution?.via && WRITE_VIAS.includes(attribution.via) ? attribution.via : 'system';
   const action = (attribution?.action ?? '').slice(0, RECORD_HISTORY_LIMITS.action);
-  const append = (resource: string, key: Record<string, unknown>, kind: ChangeKind, changes: StoredChange[]) => {
+  const append = (resource: string, key: Record<string, unknown>, kind: ChangeKind, changes: StoredChange[], said = action) => {
     const appended = sink.append({
       writeId,
       at,
@@ -333,7 +340,7 @@ export function captureRecordHistory(
       actor,
       actorName,
       via,
-      action,
+      action: said,
     });
     // A change may start a flow (workflows/flowTail.ts): the jobs host in this process looks soon rather than at its longest wait.
     commandEventsAppended();
@@ -453,6 +460,34 @@ export function captureRecordHistory(
       const result = await write(request);
       if (result.affected === 1) await append(request.table, owned(rule, request.key, before), 'delete', []);
       return result;
+    },
+    /* The proof read the row before and after under the write's locks (triggerProof.ts), so these are the images a
+       write of the transaction's own would have read. A trigger's change tells nobody: notices follow what a person
+       did, and this is what the database did after it. An insert whose key the database assigned and nothing read
+       back names no record, so it has no history to join. */
+    async triggered(made) {
+      const rule = binding?.get(made.table);
+      if (!rule || !made.key) return;
+      const said = triggeredAction(action, made.trigger);
+      const key = owned(rule, made.key, made.before ?? made.after);
+      if (made.kind === 'delete') return append(made.table, key, 'delete', [], said);
+      const after = made.after ?? {};
+      if (made.kind === 'insert') {
+        const changes = Object.entries(after)
+          .filter(([column, value]) => value !== null && value !== undefined && !Object.hasOwn(made.key!, column) && column !== rule.owner)
+          .map(([column, value]) => change(rule, column, undefined, value, 'insert'));
+        return append(made.table, key, 'insert', changes, said);
+      }
+      const before = made.before ?? {};
+      const moved = Object.keys(after).filter((column) => !same(before[column], after[column]) && column !== rule.owner);
+      if (moved.some((column) => !rule.bookkeeping?.has(column)))
+        await append(
+          made.table,
+          key,
+          'update',
+          moved.map((column) => change(rule, column, before[column], after[column], 'update')),
+          said,
+        );
     },
     async tell(request) {
       const watched = notices?.columns(request.table);

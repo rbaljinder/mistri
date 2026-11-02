@@ -147,7 +147,8 @@ for (const dialect of ['postgres'] as const) {
       const reads = await f.adapter.scopeReads(policy(11));
       assert.deepEqual(
         Object.keys(reads).sort(),
-        ['query', 'count', 'countEach', 'runView', 'countView', 'runBreakdown', 'countBreakdown'].sort(),
+        // `aggregate` is a command's sum or group under the same scope (shared/aggregate.ts), proved in command-aggregates.
+        ['query', 'count', 'aggregate', 'countEach', 'runView', 'countView', 'runBreakdown', 'countBreakdown'].sort(),
       );
       for (const forbidden of [
         'runSql',

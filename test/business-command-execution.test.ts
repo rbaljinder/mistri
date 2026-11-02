@@ -170,7 +170,7 @@ async function fixture(
         },
         async handle(context, input) {
           control.calls++;
-          assert.deepEqual(Object.keys(context.tx).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+          assert.deepEqual(Object.keys(context.tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
           if (handler) return handler(context, input);
           if (control.delay) await new Promise((resolve) => setTimeout(resolve, control.delay));
           if (control.attackTable) await context.tx.query({ table: control.attackTable, limit: 1, offset: 0 });

@@ -260,9 +260,14 @@ export async function advance(env: EngineEnvironment, id: string): Promise<Advan
       return stop(next === undefined ? { status: 'overtaken' } : { status: 'continue', epoch: next });
     }
     const controller = new AbortController();
-    const forward = () => controller.abort();
-    env.signal?.addEventListener('abort', forward, { once: true });
     let timer: ReturnType<typeof setTimeout> | undefined;
+    /* The advance ended (a stop, a kill) while the step was running: the step's own answer may never come, and the
+       timer armed for it would hold the process for the rest of the step's timeout. */
+    const forward = () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+    env.signal?.addEventListener('abort', forward, { once: true });
     try {
       const timedOut = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
@@ -270,7 +275,9 @@ export async function advance(env: EngineEnvironment, id: string): Promise<Advan
           reject(new StepTimeout());
         }, timeoutMs);
       });
-      const output = await Promise.race([exec(controller.signal), timedOut]);
+      /* The timer is done with once the step has answered, or failed: the catch below suspends the advance on a
+         back-off and never returns to the finally, which left the step's timeout armed for its whole length. */
+      const output = await Promise.race([exec(controller.signal), timedOut]).finally(() => clearTimeout(timer));
       if (ended) return new Promise<never>(() => {});
       const json = await keep(name, output);
       await persist(name, {

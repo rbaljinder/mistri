@@ -6,6 +6,7 @@ import {
   Serial,
   TransactionOperations,
   TransactionOutcomeUnknown,
+  type AggregateRequest,
   type TellRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
@@ -203,6 +204,7 @@ function recording(records: WriteTransaction, wrote: TenantCommittedWrite[], own
   return Object.freeze<WriteTransaction>({
     query: (request) => records.query(request),
     count: (table, filter) => records.count(table, filter),
+    ...(records.aggregate ? { aggregate: (request: AggregateRequest) => records.aggregate!(request) } : {}),
     insert: async (request) => {
       const result = await records.insert(request);
       wrote.push({ table: request.table, key: result.key });
@@ -538,6 +540,9 @@ export async function openSqliteTenantWriteSource(
             const logical = Object.freeze<WriteTransaction>({
               query: (request) => records.query({ ...request, table: toPhysical(request.table) }),
               count: (table, filter) => records.count(toPhysical(table), filter),
+              ...(records.aggregate
+                ? { aggregate: (request: AggregateRequest) => records.aggregate!({ ...request, table: toPhysical(request.table) }) }
+                : {}),
               insert: (request) => records.insert({ ...request, table: toPhysical(request.table) }),
               update: (request) => records.update({ ...request, table: toPhysical(request.table) }),
               remove: (request) => records.remove({ ...request, table: toPhysical(request.table) }),
@@ -894,6 +899,14 @@ export async function openPostgresTenantWriteSource(
                 live();
                 return records.count(toPhysical(table), filter);
               },
+              ...(records.aggregate
+                ? {
+                    aggregate: (request: AggregateRequest) => {
+                      live();
+                      return records.aggregate!({ ...request, table: toPhysical(request.table) });
+                    },
+                  }
+                : {}),
               insert: (request) => {
                 live();
                 return records.insert({ ...request, table: toPhysical(request.table) });

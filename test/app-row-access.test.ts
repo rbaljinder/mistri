@@ -232,7 +232,19 @@ test('scoped facade exposes no writer, transaction, statistics, raw SQL, lifecyc
   for (const adapter of [guarded.adapter, guarded.forConnection('operations'), guarded.forConnection('inventory')]) {
     assert.deepEqual(
       Object.keys(adapter).sort(),
-      ['dialect', 'introspect', 'close', 'query', 'count', 'runView', 'countView', 'runBreakdown', 'countBreakdown', 'countEach'].sort(),
+      [
+        'aggregate',
+        'dialect',
+        'introspect',
+        'close',
+        'query',
+        'count',
+        'runView',
+        'countView',
+        'runBreakdown',
+        'countBreakdown',
+        'countEach',
+      ].sort(),
     );
     for (const key of [
       'profile',

@@ -10,10 +10,12 @@ import { richTextExcerpt, richTextImageAddress } from '@mistriwork/engine/shared
 import { MASK, displayWord, vocabularyWord } from '@mistriwork/engine/shared/model.js';
 import {
   defaultCurrency,
+  formatAbsolute,
   formatDate,
   formatDateTime,
   formatLocale,
   formatMoney,
+  formatWholeMoney,
   formatNumber,
   formatPercent,
   formatRelativeDay,
@@ -34,18 +36,22 @@ import { shellBody } from '../shellHost.js';
 export interface DisplayRule {
   /** The face the column's values are set in (`display: { vin: { face: 'code' } }`). */
   face?: 'data' | 'ui' | 'code';
-  format?: 'money' | 'percent' | 'number' | 'relative' | string;
+  format?: 'money' | 'percent' | 'number' | 'relative' | 'date' | 'datetime' | string;
+  /** With format "date" or "datetime": the IANA zone a moment is said in, over the App's `ui.timezone`. */
+  timezone?: string;
   /** A due date's row is still open (dueOpen.ts), set by whoever draws it from the row, as a row's currency is:
       a `relative` date that has passed is then overdue. Never authored. */
   open?: boolean;
   /** A `relative` column whose values are not all near today: every one is its date, none "6 days ago" beside a date
-      (centsAmong decides it for the values drawn together). Never authored. */
+      (datesAmong decides it for the values drawn together). Never authored. */
   absolute?: true;
   currency?: string;
   /** `currency: { column }`: the column of the row its currency code is read from (money.ts). */
   currencyColumn?: string;
   /** Money kept as minor units: 1999 is said as 19.99 dollars, in the currency's own decimals. */
   minor?: true;
+  /** Money said without its minor digits where it has none to say: "$24,495", but "$24,495.50" (a listing price). */
+  whole?: true;
   tone?: Record<string, string>;
   bar?: boolean;
   max?: number;
@@ -85,66 +91,37 @@ export interface DisplayRule {
   scan?: boolean;
   /** A signature kept as a row of a file resource (its table id and key column): drawn as the picture. */
   signature?: true | { table: string; key: string };
-  /**
-   * Money drawn among others (a grid's column, a card list's field, a metric strip): whether the set says its cents.
-   * Never authored; the drawer works it out with `centsAmong`. Left out, a figure says its cents only if it has some.
-   */
-  cents?: boolean;
-}
-
-/** Whether a figure in the major unit has cents that are not zero. */
-function fractional(major: unknown): boolean {
-  const n = Number(major);
-  return Number.isFinite(n) && Math.round(n * 100) % 100 !== 0;
-}
-
-/** A stored money value's cents: minor units are read in the major unit first. */
-function hasCents(rule: DisplayRule, value: unknown): boolean {
-  return fractional(rule.minor ? (minorFigure(value, rule.currency || defaultCurrency()) ?? value) : value);
 }
 
 /**
- * Whether a set of money figures drawn together says its cents: only where one of them has some. "$24,495" down a
- * column of prices, not "$24,495.00"; a column holding $0.00 and $24.50 says every figure to the cent, so "$24"
- * never stands beside "$0.50". Anything not money keeps its rule unchanged.
+ * How a set of dates drawn together is said: one way down a column. A relative date is said from today only where
+ * every value is near (a sentence of days), else every one is its date and the phrase stays its tooltip. Anything
+ * else keeps its rule. Money needs no such reading: every figure says the currency's minor digits (moneyText).
  */
-export function centsAmong<R extends DisplayRule | null | undefined>(rule: R, values: readonly unknown[]): R {
-  /* A relative date follows the same law: one way to say the column. Said from today only where every value is near
-     (a sentence of days), else every one is its date and the phrase stays its tooltip. */
-  if (rule?.format === 'relative') {
-    const far = values.some((value) => {
-      if (value === null || value === undefined || value === '') return false;
-      const days = daysFromToday(String(value));
-      return days !== null && Math.abs(days) > NEAR_DAYS;
-    });
-    if (!far) return rule;
-    return (apart.get(rule) ?? (apart.set(rule, { ...rule, absolute: true }), apart.get(rule)!)) as R;
-  }
-  if (!rule || rule.format !== 'money') return rule;
-  const cents = values.some((value) => value !== null && value !== undefined && value !== '' && hasCents(rule, value));
-  /* The same object for the same rule and answer: a grid keeps its columns while they are equal by identity, and a
-     fresh rule every paint redrew every cell on a keystroke. */
-  const known = settled.get(rule) ?? {};
-  settled.set(rule, known);
-  return (known[String(cents) as 'true' | 'false'] ??= { ...rule, cents }) as R;
+export function datesAmong<R extends DisplayRule | null | undefined>(rule: R, values: readonly unknown[]): R {
+  if (rule?.format !== 'relative') return rule;
+  const far = values.some((value) => {
+    if (value === null || value === undefined || value === '') return false;
+    const days = daysFromToday(String(value));
+    return days !== null && Math.abs(days) > NEAR_DAYS;
+  });
+  if (!far) return rule;
+  /* The same object for the same rule: a grid keeps its columns while they are equal by identity. */
+  return (apart.get(rule) ?? (apart.set(rule, { ...rule, absolute: true }), apart.get(rule)!)) as R;
 }
-const settled = new WeakMap<DisplayRule, { true?: DisplayRule; false?: DisplayRule }>();
 const apart = new WeakMap<DisplayRule, DisplayRule>();
 
-/**
- * Whether the money a record shows together — its fields, its headline — says its cents: where one figure has some,
- * every one does, so "$89" never stands beside "$145.45" on one page as it would where each figure decided alone.
- * Undefined where none of them is money, which leaves each value its own say.
- */
-export function centsTogether(figures: ReadonlyArray<readonly [DisplayRule | null | undefined, unknown]>): boolean | undefined {
-  const money = figures.filter(([rule, value]) => rule?.format === 'money' && value !== null && value !== undefined && value !== '');
-  return money.length ? money.some(([rule, value]) => hasCents(rule!, value)) : undefined;
-}
+/** A stored figure Intl can say exactly: a finite number, or a decimal's digits however long (formatMoney). */
+const exactFigure = (value: unknown) =>
+  (typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && /^\s*[+-]?\d+(\.\d+)?\s*$/.test(value));
 
-/** A money figure, already in its major unit, in its rule's form: to the cent where it (or its set) has cents, else whole. */
+/**
+ * A money figure, already in its major unit, to the currency's own minor digits wherever it stands: $5,917.00 in a
+ * grid, on a card, on a record and on paper, $0.00 and −$12.00 alike, a figure past 2^53 digit for digit. An amount
+ * is read to settle something, and "$5,917" beside "$5,917.40" reads as two kinds of figure.
+ */
 function moneyText(rule: DisplayRule, value: number | string): string {
-  const cents = rule.cents ?? fractional(value);
-  return formatMoney(value, rule.currency, cents ? {} : { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return rule.whole ? formatWholeMoney(value, rule.currency) : formatMoney(value, rule.currency);
 }
 
 /**
@@ -261,6 +238,8 @@ export type Dress =
   | { kind: 'signature'; src: string; text: string }
   | { kind: 'number'; text: string; title: string }
   | { kind: 'relative'; text: string; title: string; overdue?: true }
+  /* A day or a moment said absolutely (`format: 'date'`, `'datetime'`): the same words on any day, for any reader. */
+  | { kind: 'date'; text: string; title: string }
   | { kind: 'meter'; text: string; fill: number; tone: string | null; title: string }
   | { kind: 'avatar'; text: string; initials: string; hue: number; photo?: string }
   | { kind: 'items'; items: string[]; text: string }
@@ -412,8 +391,9 @@ export function dressFor(rule: DisplayRule | null | undefined, value: unknown): 
   }
   /* A numeric string past 2^53 falls through on purpose: Number() would
      round it, and a formatted wrong number beats an unformatted right one
-     nowhere. */
-  const safe = Number.isFinite(n) && Number.isSafeInteger(Math.trunc(n));
+     nowhere. Money is the exception that says it exactly: formatMoney reads
+     the digits, not the double. */
+  const safe = (Number.isFinite(n) && Number.isSafeInteger(Math.trunc(n))) || (rule.format === 'money' && exactFigure(value));
   /* A toned figure is still a figure: the pill says "104 h" and "$1,200",
      as the same value says untoned, not the bare stored digits. A word is
      said as the vocabulary says it. */
@@ -457,7 +437,7 @@ export function dressFor(rule: DisplayRule | null | undefined, value: unknown): 
       ? figureWord(rule, n)
       : undefined;
   if (named !== undefined) return { kind: 'word', text, label: named };
-  /* To the cent where the figure or its set has cents (centsAmong), else whole: "5294.00" alone is $5,294. */
+  /* To the currency's minor digits, always: "5294" is $5,294.00, "1999" cents $19.99. */
   if (rule.format === 'money' && safe)
     return { kind: 'money', text: withUnit(moneyText(rule, typeof value === 'string' ? text : n), rule.unit), title: text };
   if (rule.format === 'percent' && safe) {
@@ -505,8 +485,8 @@ const CLOCK = /^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/;
 const MONTH = /^(\d{4})-(\d{2})(?:-\d{2})?/;
 
 /**
- * The formats that draw a value their own way: stars, a swatch, a time of day, a month, a year, a JSON tree, a QR
- * code. Undefined for any other format; null where the value is not one the format can draw, which is then said as
+ * The formats that draw a value their own way: stars, a swatch, a day, a moment, a time of day, a month, a year, a
+ * JSON tree, a QR code. Undefined for any other format; null where the value is not one the format can draw, which is then said as
  * itself, never guessed at.
  */
 function ownDrawing(rule: DisplayRule, value: unknown, text: string): Dress | null | undefined {
@@ -536,6 +516,13 @@ function ownDrawing(rule: DisplayRule, value: unknown, text: string): Dress | nu
       );
       return { kind: 'number', text: said, title: text };
     }
+    /* A day or a moment as itself, never from today: what a statement, a ledger or a log says (formatAbsolute). */
+    case 'date':
+    case 'datetime': {
+      if (typeof value !== 'string' || !text.trim()) return null;
+      const said = formatAbsolute(text, { time: rule.format === 'datetime', zone: rule.timezone });
+      return said === text ? null : { kind: 'date', text: said, title: text };
+    }
     /* A year is a name, not a quantity: 2026, never "2,026". */
     case 'year':
       return /^\d{1,4}$/.test(text.trim()) ? { kind: 'number', text: text.trim(), title: text } : null;
@@ -555,6 +542,26 @@ function ownDrawing(rule: DisplayRule, value: unknown, text: string): Dress | nu
       return text.trim() ? { kind: 'qr', text } : null;
   }
   return undefined;
+}
+
+/**
+ * A date as paper says it: absolutely, the same words on any day and for any reader (formatAbsolute). A plain date
+ * column's value and a `relative` one's — which the screen says from today, true the day it is read and false every
+ * day after it is printed — are their day, a moment its day, time and zone; a midnight is the day it is, as sayValue
+ * reads it. Null for a value that is no date, or a column whose rule draws it another way (`date` and `datetime`
+ * already say it absolutely).
+ */
+export function sayAbsolute(col: ColumnMeta | undefined, value: unknown, rule: DisplayRule | null | undefined): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  if (rule?.format && rule.format !== 'relative') return null;
+  const type = (col?.type ?? '').toLowerCase();
+  const dated =
+    rule?.format === 'relative' ||
+    /date|time/.test(type) ||
+    (planColumn(col, col?.name ?? '', [{ [col?.name ?? '']: value }]) as { kind: string }).kind === 'date';
+  if (!dated) return null;
+  const said = formatAbsolute(value, { time: !/[ T]00:00(:00(\.0+)?)?$/.test(value.trim()) });
+  return said === value ? null : said;
 }
 
 /** What a plain value is best shown as, by the grid's own planner on a row of one. */

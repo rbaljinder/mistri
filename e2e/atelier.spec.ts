@@ -22,9 +22,9 @@ async function signIn(page: Page, sample: Sample, account: { email: string; pass
 
 async function asStaff(page: Page, sample: Sample) {
   await signIn(page, sample, ATELIER_ADMIN);
-  const made = await page.request.post(`${sample.origin}/api/auth/admin/create-user`, {
+  const made = await page.request.post(`${sample.origin}/api/accounts`, {
     headers: { origin: sample.origin },
-    data: { ...STAFF, name: 'Mara Quinn', role: 'staff' },
+    data: { app: 'atelier', operation: 'create', ...STAFF, name: 'Mara Quinn', roles: ['staff'] },
   });
   expect(made.ok(), await made.text()).toBe(true);
   await page.context().clearCookies();

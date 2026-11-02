@@ -13,6 +13,8 @@ import { appAddressBook, readAppSegments } from '../packages/mistri/src/shared/a
 import { tabWord } from '../packages/engine/src/shared/addressParams.js';
 import { validationCode } from '../packages/mistri/src/server/build/checkProblems.js';
 import type { PageSection } from '../packages/engine/src/shared/pageModel.js';
+import { NO_MOUNT } from '../packages/engine/src/shared/mount.js';
+import { addresses } from '../packages/mistri/src/server/build/shot.js';
 
 const where = 'app.ts: pages "invoice"';
 
@@ -141,6 +143,40 @@ test("a document is said where a record's tab is, and is never the page its reco
     tab: 'invoice',
     key: { id: '12' },
   });
+});
+
+/* A field report's full grade never opened the App's printed statement: a document has no route and no menu entry,
+   and grade opened routes and records. It is opened now under the record grade opens, and what is passed over is said. */
+test('grade and shot open each document under the record they open, and say what they could not open', async () => {
+  const pages = pagesOf({
+    order: { base: 'sales_order', sections: [{ kind: 'fields', show: ['total'] }] },
+    invoice: invoice(),
+    packing: { ...invoice(), document: { label: 'Packing slip' } },
+  });
+  const loaded = { app: { id: 'atelier', views: { orders: { table: 'sales_order' } } }, pages } as never;
+  const opened = async (key: string | undefined) => {
+    const skipped: Array<{ what: string; why: string }> = [];
+    const shots = await addresses([], loaded, bookOf(pages), async () => key, undefined, NO_MOUNT, skipped);
+    return { shots: shots.map((shot) => [shot.path, shot.kind, shot.page, shot.table]), skipped };
+  };
+  const found = await opened('12');
+  assert.deepEqual(
+    found.shots.filter(([, kind]) => kind === 'record' || kind === 'document'),
+    [
+      ['/atelier/orders/12', 'record', 'order', 'sales_order'],
+      ['/atelier/orders/12/invoice', 'document', 'invoice', 'sales_order'],
+      ['/atelier/orders/12/packing', 'document', 'packing', 'sales_order'],
+    ],
+  );
+  assert.deepEqual(found.skipped, []);
+  // A table with no rows has no record to open, and so no document: each is said, with why.
+  const empty = await opened(undefined);
+  assert.equal(empty.shots.filter(([, kind]) => kind === 'record' || kind === 'document').length, 0);
+  assert.deepEqual(empty.skipped, [
+    { what: '/atelier/orders/{id}', why: 'no row to open' },
+    { what: '/atelier/orders/{id}/invoice', why: 'its record was not opened' },
+    { what: '/atelier/orders/{id}/packing', why: 'its record was not opened' },
+  ]);
 });
 
 test("a document whose key is a tab of its record's page, or the page its record is said to open on, is refused", () => {

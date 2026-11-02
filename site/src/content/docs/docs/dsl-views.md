@@ -327,6 +327,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=metric].better` | `"up"` · `"down"` | Stable | Which way is good news, so the delta wears good/bad. Absent means neutral. Without "compare" or "over" there is no delta to color. One of `down`, `up`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=metric].compare` | string | Stable | A second query for the same measure; the card shows the delta. The phrase "previous period" derives it from the query's one "last N days/weeks/months/years" window; with no window in the query and an "over", it is the period before the window the reader picks. Unsaid on a metric with an "over", it is "previous period"; with neither an "over" nor a window in the query, "previous period" is refused. |
+| `views.*[kind=dashboard].sections[][kind=metric].figure` | `"exact"` · `"compact"` | Stable | How money is said on the card: exact (the default), to the currency's minor digits at any size ("$28,123.45", a balance read to the cent), or compact from a thousand ("$28.1K"). Its change and goal follow it; the card's title and what a screen reader hears are exact either way. One of `compact`, `exact`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `views.*[kind=dashboard].sections[][kind=metric].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Stable | metric: how the figure is said where its measure is not one column's: percent (the figure is 0–100, said with %), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=dashboard].sections[][kind=metric].kind` |  | Stable |  One of `metric`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `views.*[kind=dashboard].sections[][kind=metric].measure` | string | Stable | "count" (default), "sum amount as pipeline", "median amount" (PostgreSQL only), or a computed measure: aggregates and numbers joined by + - * /, "sum won / sum amount as win_rate". Used in `examples/apps/lintel/dashboards.ts`. |
@@ -913,10 +914,10 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].presentation[kind=checklist].checked` | string | Stable |  |
+| `views.*[kind=list].presentation[kind=checklist].checked` | string | Stable | The column a tick toggles: a local, readable boolean column of the list's table (declare it BOOLEAN in SQLite, where an INTEGER is a number), not a reference path. Anything else is refused at check. |
 | `views.*[kind=list].presentation[kind=checklist].kind` |  | Stable |  One of `checklist`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `views.*[kind=list].presentation[kind=checklist].lines` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `views.*[kind=list].presentation[kind=checklist].primary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].presentation[kind=checklist].primary` | string | Stable | The card's title: a local text column. Used in `examples/apps/lintel/tidelight.ts`. |
 
 ## `views.*[kind=list].presentation[kind=custom]`
 

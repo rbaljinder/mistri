@@ -18,6 +18,10 @@ import { isCapturedScopeCatalog } from '../../shared/scopeCatalog.js';
 import { ScopedRelations, snapshotRowScope, type RowScope } from '../../shared/rowScope.js';
 import { compileView, compileViewCount } from '../../shared/view.js';
 import { compileBreakdown, compileBreakdownCount } from '../../shared/breakdown.js';
+import { compileAggregate } from '../../shared/aggregate.js';
+import { readExactly, summed } from '../../shared/decimals.js';
+import { RequestFault } from '../../shared/refusal.js';
+import { storedTextOf, storedTextSelect } from './storedText.js';
 
 /** Structured read arguments must not retain mutable values across driver
  * waits. This is deliberately separate from stricter nonempty policy filters:
@@ -88,6 +92,8 @@ export function createScopedReads(
   style: SqlStyle,
   /** Execution formatting only: it never changes the compiled statement or scope. */
   execute: (statement: SqlFragment, hint?: { binary?: true }) => Promise<QueryResult>,
+  /** A scoped write's own guards: a condition may compare as a foreign key does (`Condition.equality`). Never an App's reads. */
+  references = false,
 ): ScopedReads {
   const schema = isCapturedScopeCatalog(catalog) ? catalog : structuredClone(catalog);
   const scope = snapshotRowScope(schema, input);
@@ -99,15 +105,20 @@ export function createScopedReads(
   const from = (id: string, filter?: Filter) => {
     const table = tableFor(id);
     const column = (name: string): string => {
-      if (!table.columns.some((column) => column.name === name)) throw new Refusal('Unknown column in scoped read.');
+      if (!table.columns.some((column) => column.name === name)) throw new RequestFault('Unknown column in scoped read.');
       return style.quote(name);
     };
     const relations = new ScopedRelations(schema, style, scope);
     const relation = relations.table(id);
     const prefix = relations.finish();
-    const where = buildWhere(filter, style, prefix.params.length + 1, column);
+    const where = buildWhere(filter, style, prefix.params.length + 1, column, undefined, undefined, undefined, references);
     return { table, column, relation, prefix, where, params: [...prefix.params, ...where.params] };
   };
+  /* A SQLite sum that cannot be exact says so in its cell (decimals.ts); PostgreSQL's numeric always is. */
+  const exact = <T extends { rows: readonly Record<string, unknown>[] }>(
+    run: () => Promise<T>,
+    measures: Parameters<typeof summed>[0],
+  ): Promise<T> => (style.dialect === 'sqlite' ? readExactly(run, summed(measures)) : run());
   const counted = async (statement: SqlFragment): Promise<number> => {
     const result = await execute(statement);
     return Number(result.rows[0]?.n ?? 0);
@@ -118,6 +129,9 @@ export function createScopedReads(
       const plan = from(request.table, request.filter);
       const names = request.columns?.length ? request.columns : plan.table.columns.map((column) => column.name);
       const columns = names.map(plan.column);
+      // A scoped write's own read: its reference columns' stored text too, as one more column (storedText.ts).
+      const texts = request.storedText ? storedTextOf(schema, plan.table) : undefined;
+      if (texts) columns.push(`${storedTextSelect(texts.columns, (name) => style.quote(name))} AS ${style.quote(texts.alias)}`);
       const order = orderClause(request.orderBy, plan.table, style, plan.params.length + 1, plan.column);
       const n = plan.params.length + order.params.length;
       const text =
@@ -145,7 +159,7 @@ export function createScopedReads(
       const planned = given.map((item) => {
         const table = tableFor(item.table);
         const column = (name: string): string => {
-          if (!table.columns.some((column) => column.name === name)) throw new Refusal('Unknown column in scoped read.');
+          if (!table.columns.some((column) => column.name === name)) throw new RequestFault('Unknown column in scoped read.');
           return style.quote(name);
         };
         return { relation: relations.table(item.table), column, filter: item.filter };
@@ -171,11 +185,17 @@ export function createScopedReads(
     },
     async runBreakdown(breakdown, offset = 0) {
       const compiled = compileBreakdown(schema, snapshotScopedData(breakdown), style, offset, scope);
-      const result = await execute(compiled);
+      const result = await exact(() => execute(compiled), breakdown.measures);
       return { ...result, columns: compiled.columns.map((column) => column.name), resolved: compiled.columns };
     },
     async countBreakdown(breakdown, limit) {
       return counted(compileBreakdownCount(schema, snapshotScopedData(breakdown), style, scope, limit));
+    },
+    /* The base table read through the scope's relation, as `count` reads it, and nothing else: an aggregate names
+       only its table's own columns (aggregate.ts), so no other table's relation is planned at all. */
+    async aggregate(request) {
+      const compiled = compileAggregate(schema, snapshotScopedData(request), style, 0, scope);
+      return { rows: (await exact(() => execute(compiled), request.measures)).rows };
     },
   } satisfies ScopedReads);
 }

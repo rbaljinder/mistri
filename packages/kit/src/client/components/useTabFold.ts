@@ -35,6 +35,17 @@ export function foldTabs(widths: readonly number[], room: number, more: number, 
   return shown;
 }
 
+/**
+ * The least a strip can be drawn at and still hold what it never folds: the chosen tab and, beside it, More, the gap
+ * between them (no more than every tab takes). Narrower, the chosen tab ran under More: Compass's contacts at 320px drew
+ * "Primary contacts 150" and More over each other, beside the Records/Table switch.
+ */
+export function leastStrip(widths: readonly number[], more: number, gap: number, active: number): number {
+  const natural = widths.reduce((sum, width) => sum + width, 0) + gap * Math.max(0, widths.length - 1);
+  const chosen = widths[active] ?? 0;
+  return Math.min(natural, chosen + (chosen ? gap : 0) + more);
+}
+
 /* A tab's width is fractional (its words), and a strip's room is whole pixels: what a sum of fractions may lose. */
 const SLACK = 0.5;
 
@@ -68,7 +79,8 @@ export function useTabFold(count: number, active: number): { strip: RefObject<HT
       const natural = widths.reduce((sum, width) => sum + width, 0) + gap * Math.max(0, widths.length - 1);
       const room = box.clientWidth - parseFloat(style.paddingLeft || '0') - parseFloat(style.paddingRight || '0');
       if (room <= 0) return;
-      const shown = new Set(foldTabs(widths, room + SLACK, more ? viewportBox(more).width : 0, gap, latest.current.active));
+      const moreWidth = more ? viewportBox(more).width : 0;
+      const shown = new Set(foldTabs(widths, room + SLACK, moreWidth, gap, latest.current.active));
       const next = new Set(widths.map((_, i) => i).filter((i) => !shown.has(i)));
       /* For a row that sizes the strip by its content (a list's controls): with nothing folded the strip is its tabs'
          width on its own; with some folded it goes on asking for every tab's, so it gives way only where the row
@@ -77,6 +89,18 @@ export function useTabFold(count: number, active: number): { strip: RefObject<HT
       const edges = box.offsetWidth - box.clientWidth + parseFloat(style.paddingLeft || '0') + parseFloat(style.paddingRight || '0');
       const basis = next.size ? `${Math.round((natural + edges) * 100) / 100}px` : '';
       const asked = box.style.getPropertyValue('--tabs-natural');
+      /* The strip's floor (`--tabs-least`, structure.css): a row that cannot hold it beside the strip's neighbors puts
+         the neighbor on the next line, or scrolls, rather than draw More over the chosen tab. */
+      const least = `${Math.ceil(leastStrip(widths, moreWidth, gap, latest.current.active) + edges)}px`;
+      const floor = box.style.getPropertyValue('--tabs-least');
+      if (floor !== least) {
+        if (from === 'observer' && floor) {
+          cancelAnimationFrame(frame);
+          frame = requestAnimationFrame(() => measure('frame'));
+          return;
+        }
+        box.style.setProperty('--tabs-least', least);
+      }
       if (asked !== basis) {
         /* A new width while folded resizes the strip itself, which a ResizeObserver's callback may not do to an
            element it has just been told about (the browser reports a loop, and drops what the page's other observers

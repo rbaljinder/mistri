@@ -1096,6 +1096,33 @@ export function StackedColumns({
 }
 
 /**
+ * The house ring round a donut's slice (design.md, Access): a shape takes no outline, so the ring is the outline of
+ * the slice's own arc, `from` and `length` in hundredths of the circle from 3 o'clock, drawn 2px off its stroke, `width`
+ * units wide as the look draws it (7, Lumen's line charts 4.5; the donut is 120px over 42 units; the ring's own 2px is a
+ * non-scaling stroke). A widened stroke was the ring once: the drawing's edge cut it, and on a pale slice it could not
+ * be told from the slice. Drawn off a 7-unit stroke round a 4.5-unit one, it stood 6px off the slice.
+ */
+export function sliceRing(center: number, radius: number, from: number, length: number, width = 7): string {
+  const off = width / 2 + 1.05;
+  const outer = radius + off;
+  const inner = radius - off;
+  const past = (100 * (1.05 / radius)) / (2 * Math.PI);
+  const n = (value: number) => Number(value.toFixed(3));
+  const point = (r: number, at: number) => {
+    const angle = (2 * Math.PI * at) / 100;
+    return `${n(center + r * Math.cos(angle))} ${n(center + r * Math.sin(angle))}`;
+  };
+  const circle = (r: number) =>
+    `M ${n(center + r)} ${center} A ${n(r)} ${n(r)} 0 1 1 ${n(center - r)} ${center} A ${n(r)} ${n(r)} 0 1 1 ${n(center + r)} ${center} Z`;
+  /* A slice that is (nearly) the whole circle has no ends: its ring is two circles. */
+  if (length + 2 * past >= 100) return `${circle(outer)} ${circle(inner)}`;
+  const start = from - past;
+  const end = from + length + past;
+  const large = end - start > 50 ? 1 : 0;
+  return `M ${point(outer, start)} A ${n(outer)} ${n(outer)} 0 ${large} 1 ${point(outer, end)} L ${point(inner, end)} A ${n(inner)} ${n(inner)} 0 ${large} 0 ${point(inner, start)} Z`;
+}
+
+/**
  * A donut with its legend: how the whole divides, said twice — arc length
  * and a labelled figure. Past six slices the tail is gathered into "others".
  */
@@ -1119,6 +1146,9 @@ export function DonutChart({
   /** The slices are steps of a scale, in its order: drawn in steps of one hue (rampInk), not in categorical ones. */
   ordered?: boolean;
 }) {
+  /* The slice's stroke as the look draws it (.chart-slice: 7 units, 4.5 in Lumen's line charts), read as a slice takes
+     the keyboard, the moment its ring is drawn: a look is picked while the page is open, and a stylesheet says it. */
+  const [sliceWidth, setSliceWidth] = useState(7);
   const all = rows
     .map((r) => ({ key: r.key == null ? '—' : label(r.key), raw: r.key, value: Number(r.value) }))
     .filter((p) => Number.isFinite(p.value) && p.value > 0);
@@ -1150,7 +1180,8 @@ export function DonutChart({
        a drillable slice carries the button's role, name and keyboard
        behaviour, and the legend button stays as the second way in. */
     const drillable = onPick && p.raw != null && !(rest.length && i === slices.length - 1);
-    const ring = (
+    const said = `${p.key}: ${say(p.value)} (${formatPercent(share, { maximumFractionDigits: 0 })})`;
+    const arc = (
       <circle
         key={i}
         className={`chart-slice${drillable ? ' chart-slice-drill' : ''}`}
@@ -1160,26 +1191,41 @@ export function DonutChart({
         strokeDasharray={`${drawn.toFixed(2)} ${(100 - drawn).toFixed(2)}`}
         strokeDashoffset={at.toFixed(2)}
         style={{ ...ramp(i), stroke: color(i), opacity: opacity(i) }}
-        {...(drillable
-          ? {
-              role: 'button',
-              tabIndex: 0,
-              'aria-label': `${p.key}: ${say(p.value)} (${formatPercent(share, { maximumFractionDigits: 0 })})`,
-              onClick: () => onPick!(p.raw),
-              onKeyDown: (event: React.KeyboardEvent) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onPick!(p.raw);
-                }
-              },
-            }
-          : {})}
       >
-        <title>{`${p.key}: ${say(p.value)} (${formatPercent(share, { maximumFractionDigits: 0 })})`}</title>
+        {!drillable && <title>{said}</title>}
       </circle>
     );
+    /* The door is the slice and its ring together: the ring is drawn (and read by grade) only while the door holds the
+       keyboard's focus. The dash starts at -offset along a path that begins at 3 o'clock. */
+    const door = drillable ? (
+      <g
+        key={i}
+        className="chart-slice-door"
+        role="button"
+        tabIndex={0}
+        aria-label={said}
+        onClick={() => onPick!(p.raw)}
+        onFocus={(event: React.FocusEvent<SVGGElement>) => {
+          const slice = event.currentTarget.querySelector('.chart-slice');
+          const width = slice ? parseFloat(getComputedStyle(slice).strokeWidth) : NaN;
+          if (width > 0 && width !== sliceWidth) setSliceWidth(width);
+        }}
+        onKeyDown={(event: React.KeyboardEvent) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onPick!(p.raw);
+          }
+        }}
+      >
+        <title>{said}</title>
+        {arc}
+        <path className="chart-slice-ring" data-focus-ring="" d={sliceRing(C, R, -at, drawn, sliceWidth)} />
+      </g>
+    ) : (
+      arc
+    );
     at -= share;
-    return ring;
+    return door;
   });
   /* A picture must not hold buttons: where any slice drills, the figure
      is a group holding buttons, not an image — axe's nested-interactive

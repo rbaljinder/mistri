@@ -147,3 +147,33 @@ test('on a phone the rail is a Filters sheet, applied by one button', async ({ p
   await expect(page.getByRole('button', { name: 'Filters · 1', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+test('the room is the one box that scrolls: a rail taller than it scrolls with the rows, a shorter one stands beside them', async ({
+  page,
+}) => {
+  /* Held to the window's height with a scroll of its own, the rail was a second scroller inside the room (grade's
+     double-scroll on Tasks at 1280×900), and its last facet sat under the window's edge. */
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const rail = await allTasks(page);
+  const read = () =>
+    rail.evaluate((box) => {
+      const room = box.closest<HTMLElement>('.content')!;
+      room.scrollTop = room.scrollHeight;
+      const facets = box.querySelectorAll('.facet');
+      const last = facets[facets.length - 1]!.getBoundingClientRect();
+      const style = getComputedStyle(box);
+      return {
+        own: box.scrollHeight > box.clientHeight + 1 && /auto|scroll/.test(style.overflowY),
+        position: style.position,
+        lastBottom: last.bottom,
+        roomBottom: room.getBoundingClientRect().bottom,
+      };
+    });
+  await expect.poll(async () => (await read()).position).toBe('static');
+  const long = await read();
+  expect(long.own, 'the rail has no scroll of its own').toBe(false);
+  expect(long.lastBottom, 'its last facet is reached by scrolling the room').toBeLessThanOrEqual(long.roomBottom + 0.5);
+  await page.setViewportSize({ width: 1280, height: 1400 });
+  await expect.poll(async () => (await read()).position, 'where it fits, it stands beside the rows as they scroll').toBe('sticky');
+  expect((await read()).own).toBe(false);
+});

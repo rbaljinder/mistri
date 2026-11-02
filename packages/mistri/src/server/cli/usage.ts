@@ -375,7 +375,9 @@ Checking an App while authoring it — the one command of the loop:
   (info)" line naming the Preview features the App uses; repeated warnings
   are a line a code and resource with a count (--warnings lists each).
   Exit codes: 1 could not check, 2 schema types, 3 typecheck, 4 validation,
-  5 components, 6 a pending migration failed on the copy, 7 --deploy refused. What each step
+  5 components, 6 a pending migration failed on the copy, 7 --deploy refused,
+  8 a store the App uses is not in its database (store-pending, with the
+  migrate up --app that makes it; validation still runs). What each step
   checks and the common fixes: mistri docs check-codes.
 
 Looking at an App — its pages as PNG files, for the agent that built it:
@@ -494,14 +496,17 @@ Grading an App — the rubric measured in a browser, not looked at:
                   [--as <role|email|all> [--tenant <id>]] [--theme <id|all> [--palette <id|all>]]
                   [--json] [--browser <path>]
 
-  Serves the App as shot does and opens every view and a record of each page
-  at 1280, 390 and 320 wide, and at 390 in the dark scheme. Each is measured:
+  Serves the App as shot does and opens every view, a record of each page and
+  each of its documents at 1280, 390 and 320 wide, and at 390 in the dark
+  scheme. Each is measured:
   sideways scroll, figures and words cut off, controls drawn over each other,
   targets under 44px on a phone, text and field edges below the contrast
   rule, layout shift after the first paint, page errors and failed requests,
   empty sections, two number formats in one surface, chart axes that are not
   round, a record's name past two lines on a phone. One line per finding,
-  "code file:line page@widths message — fix: …", then a score out of 100.
+  errors first, "code file:line page@widths message — fix: …"; then what it
+  covered and what it skipped, and why; then the verdict, which an error
+  fails whatever the score, and the score out of 100.
   The App is <app-dir>, else the current directory. An App with sign-in is
   graded as the role that reads the most, unless --as names one (or an
   account, as shot's --as <email> does).
@@ -538,13 +543,23 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
                   [--app <dir>] [<db> | --db <target> | --config <path>]
                   [--connection <name>] [--schema <name>] [--migrations <dir>]
                   [--history-table <name>] [--dry-run] [--tool flyway]
-                  [--schema-file <path>] [--dev-url <url>]
+                  [--schema-file <path>] [--dev-url <url>] [--json]
+                  [--commands <file>] [--jobs <file>] [--policy <file>]
 
   V3__add_payoff_quote.sql runs once, in version order, in its own
   transaction (a failure is recorded as failed); R__views.sql runs again whenever it changes.
-  up applies what is pending; with --app it then regenerates the App's schema
-  types and runs check, which names the view, page or command a dropped or
-  renamed column breaks. status lists what is applied and pending, the changes
+  up applies what is pending. With --app, status prints the App's bootstrap
+  plan and changes nothing, and up carries it out: 1 migrations, 2 stores
+  (the ones the App uses, as migrate stores up makes them, with the
+  --commands, --jobs and --policy it takes), 3 sign-in store (a postgres://
+  auth.store is made; a SQLite one is the first start's), 4 seed (reported,
+  never run: mistri seed --app .), 5 check, which names the view, page or
+  command a dropped or renamed column breaks. Each phase is done, applied,
+  pending, waiting, failed, skipped or passed, and the plan ends with what
+  changed. up --dry-run prints the plan; --json prints it as one document.
+  An App with row policies is checked with --policy <file>, as check takes
+  it; without it, up says the check was skipped.
+  status lists what is applied and pending, the changes
   made outside migrations (drift), and whether the App's types are older than
   the database. validate fails on a changed, missing or failed file, a pending
   one, or drift. baseline records a database that already has tables as
@@ -588,8 +603,9 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
   A run holds a lock — PostgreSQL: the advisory lock Flyway takes for the same
   table; SQLite: its write lock — so two deploys never migrate
   at once. Scoped to the App's schemas (or the connection's, or --schema).
-  Exit codes: 1 could not run, 2 files and history disagree, 3 a migration
-  failed, 4 applied but the App no longer checks.
+  Exit codes: 1 could not run, 2 files and history disagree (with --app,
+  validate: a phase pending), 3 a migration failed, 4 applied but the App no
+  longer checks, 5 a store or the sign-in store failed or is still absent.
 
   mistri migrate stores status | up
                   [--suite <suite.json>] [--app <dir> [--jobs <file>] [--policy <file>]]
@@ -685,7 +701,9 @@ A tenant App's first boot — after mistri migrate stores up --policy:
   with --tenant of that tenant, with that realm's --roles, for --days (default
   180, at most 366). An address with no account gets one in the App's auth
   store, its password read from MISTRI_ACCOUNT_PASSWORD, never the command
-  line. Exit codes: 1 could not run.
+  line: the store the App names, else mistri dev's once dev has started the
+  App there, else a plain start's; grant says which. Exit codes: 1 could
+  not run.
 
 A tenant App's sandboxes — a copy of a tenant to try changes in:
   mistri tenant clone <source> <sandbox> --app <dir> --policy <file> [--samples]
@@ -726,8 +744,9 @@ Building an App for production — optional; an App also runs from its source:
   A --config may list this App (and no other): its apps[].env is what the
   definition is built with. With --config reaching the App's database, it
   also writes the generated types and runs mistri check's validation on the build. Serve
-  it with --app <out>, and the build's own server/<kind>.mjs for --commands,
-  --jobs or --policy. A build is pinned to the mistri version that made
+  it with --app <out>: it is served with the entries it was built with,
+  and a --commands, --jobs or --policy given must name the build's own
+  server/<kind>.mjs. A build is pinned to the mistri version that made
   it and never watched.
   Exit codes: 1 could not build, 2 typecheck, 3 validation, 4 bundle.
 
@@ -743,7 +762,9 @@ Deploying an App to Cloudflare Containers — a Worker in front of one always-on
 
   init writes deploy/cloudflare/ (wrangler.jsonc, src/index.ts against
   @mistriwork/cloudflare, package.json and the build request) from the App's
-  build flags, naming every secret mistri.json reads. It creates nothing on
+  build flags, naming every secret mistri.json reads. What mistri.json's app
+  block names (the App, its config, entry, commands, jobs and policy) is read
+  from there at each deploy and not copied; --app is needed only without it. It creates nothing on
   Cloudflare and refuses to replace existing files without --force.
   deploy prints a plan and changes nothing until confirmed (--yes in CI;
   --dry-run stops after the plan). It refuses when check --deploy fails, a
@@ -850,8 +871,21 @@ An App's definition reads no environment unless the file lists it:
 
   { "apps": [ { "dir": "apps/ops", "env": ["REGION"] } ] }
 
-Looked for in ./mistri.json, ./.mistri.json, then
-$XDG_CONFIG_HOME/mistri/connections.json.
+The project profile names an App and its modules once:
+
+  { "app": { "dir": ".", "commands": "commands.ts", "jobs": "jobs.ts", "policy": "policy.ts" } }
+
+Looked for in --config, then <--app dir>/mistri.json, ./mistri.json,
+./.mistri.json, then $XDG_CONFIG_HOME/mistri/connections.json, with no
+walking up: the one rule a start, dev, check, build, migrate, seed, shot,
+grade, tenant, flows, jobs, decide and deploy read. Without --app, the app
+block's dir names the App. It takes dir, entry (--app-entry), commands,
+jobs and policy, as paths from the file's folder and nothing else: an
+unknown key, a \${NAME} or a missing file is refused. A flag beats it,
+and it beats the commands.ts beside the App; a tenant App's policy named
+there is its enrollment. Where it decided anything, the run prints its
+context, each entry with where it came from (flag, mistri.json,
+convention, build); check --json and migrate --json carry it as context.
 
 Watching what a --dev server did:
 

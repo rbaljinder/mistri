@@ -104,7 +104,8 @@ const APP_ONLY = {
 };
 const APP_AUTH = "is the App's: sign-in and row scoping are one security manifest, in the App's auth";
 /** What bounds what the App reads and writes. A feature restates the App's, and never states one it does not. */
-const CEILING_FACTS: readonly string[] = ['physical', 'access', 'delete', 'fields', 'owner'];
+/* `triggers` too: which triggers a row policy accepts is the App's own decision, like its ceilings (docs/trigger-effects.md). */
+const CEILING_FACTS: readonly string[] = ['physical', 'access', 'delete', 'fields', 'owner', 'triggers'];
 /** Why a whole fact is one value per resource, not merged. */
 const WHOLE: Record<string, string> = {
   form: 'A New form is one per resource, and its order, groups and steps span its columns, so it is not merged: keep it in one place.',

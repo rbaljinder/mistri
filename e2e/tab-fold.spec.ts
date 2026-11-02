@@ -95,6 +95,32 @@ for (const [where, size] of [
   });
 }
 
+test.describe('on the narrowest phone', () => {
+  test.use({ viewport: { width: 320, height: 640 }, hasTouch: true });
+
+  test('the chosen tab and More are never drawn over each other: the Records/Table switch takes the next line', async ({ page }) => {
+    /* Contacts' first tab, "Primary contacts 150", is wider than the room the Records/Table switch left the strip at
+       320px: the strip narrowed past it and More was drawn over its count (grade's overlap, a field report's error). */
+    const strip = await opened(page, '/contacts', '.applist-controls .tabs.folds');
+    await page.waitForTimeout(800);
+    const drawn = await strip.evaluate((box) => {
+      const chosen = box.querySelector('[role="tab"][aria-selected="true"]')!.getBoundingClientRect();
+      const more = box.querySelector<HTMLElement>('.tab-more:not([data-folded])')?.getBoundingClientRect();
+      const edge = box.getBoundingClientRect();
+      return {
+        shared: more ? Math.min(chosen.right, more.right) - Math.max(chosen.left, more.left) : 0,
+        past: chosen.right - edge.right,
+      };
+    });
+    expect(drawn.shared, 'More stands clear of the chosen tab').toBeLessThanOrEqual(0);
+    expect(drawn.past, 'the chosen tab ends inside its strip').toBeLessThanOrEqual(0.5);
+    const measured = await measure(strip);
+    expect(measured.scrolls).toBe(false);
+    expect(measured.past).toBe(false);
+    await expect(page.locator('.record-presentation')).toBeVisible();
+  });
+});
+
 /**
  * The strip as each frame drew it: read in a task the frame's animation callback posts, which runs once that frame's
  * layout, ResizeObservers and paint are done; a frame after which the page changed again before that task ran is left

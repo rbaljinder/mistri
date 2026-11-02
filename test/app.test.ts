@@ -1310,6 +1310,21 @@ describe('display rules and the export switch', () => {
       /"currency", which only format "money" carries/,
     );
     assert.throws(
+      () => parseAppConfig({ ...START, name: 'x', resources: { t: { display: { c: { format: 'number', whole: true } } } } }, WHERE),
+      /"whole", which only format "money" carries/,
+    );
+    assert.throws(
+      () => parseAppConfig({ ...START, name: 'x', resources: { t: { display: { c: { format: 'money', whole: false } } } } }, WHERE),
+      /"whole" that is not true/,
+    );
+    assert.equal(
+      parseAppConfig(
+        { ...START, name: 'x', resources: { ...START.resources, t: { display: { c: { format: 'money', whole: true } } } } },
+        WHERE,
+      ).resources!.t!.display!.c!.whole,
+      true,
+    );
+    assert.throws(
       () => parseAppConfig({ ...START, name: 'x', resources: { t: { display: { c: { glow: true } } } } }, WHERE),
       /has no "glow"/,
     );
@@ -1815,7 +1830,7 @@ test('display rules take a meter, an avatar and a second line, and refuse their 
   refused({ bar: 5, max: 5 }, /has no "max"/);
   refused({ avatar: 'yes' }, /"avatar" that is not true, false or \{ from, whose \}/);
   refused({ subtitle: 'account.name' }, /"subtitle" that is not one of the resource's own columns/);
-  refused({ sparkline: true }, /It takes: format, currency, minor, unit, tone, bar, avatar, icons, values, subtitle/);
+  refused({ sparkline: true }, /It takes: format, currency, minor, whole, unit, tone, bar, avatar, icons, values, subtitle/);
 });
 
 test('a list view takes totals over its own numeric columns and a density, and refuses their wrong shapes', () => {

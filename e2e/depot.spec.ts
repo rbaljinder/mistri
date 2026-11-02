@@ -180,9 +180,9 @@ test.describe('Depot inventory operations', () => {
     try {
       await signIn(page, sample.origin);
       const operator = { email: 'operator@depot.example.test', password: 'disposable-depot-operator-password' };
-      const made = await page.request.post(`${sample.origin}/api/auth/admin/create-user`, {
+      const made = await page.request.post(`${sample.origin}/api/accounts`, {
         headers: { origin: sample.origin },
-        data: { ...operator, name: 'Rosa Delgado', role: 'operator' },
+        data: { app: 'depot', operation: 'create', ...operator, name: 'Rosa Delgado', roles: ['operator'] },
       });
       expect(made.ok()).toBe(true);
       await page.context().clearCookies();
@@ -288,9 +288,9 @@ test.describe('Depot inventory operations', () => {
       // The buyer holds no stock command (Transfer and Adjust are the floor's and the manager's), so Stock is theirs to read only.
       await signIn(page, sample.origin);
       const purchaser = { email: 'buyer@depot.example.test', password: 'disposable-depot-buyer-password' };
-      const made = await page.request.post(`${sample.origin}/api/auth/admin/create-user`, {
+      const made = await page.request.post(`${sample.origin}/api/accounts`, {
         headers: { origin: sample.origin },
-        data: { ...purchaser, name: 'Bea Alvarez', role: 'purchaser' },
+        data: { app: 'depot', operation: 'create', ...purchaser, name: 'Bea Alvarez', roles: ['purchaser'] },
       });
       expect(made.ok()).toBe(true);
       await page.context().clearCookies();
@@ -410,9 +410,9 @@ test.describe('Depot inventory operations', () => {
     try {
       await signIn(page, sample.origin);
       const operator = { email: 'counter@depot.example.test', password: 'disposable-depot-counter-password' };
-      const made = await page.request.post(`${sample.origin}/api/auth/admin/create-user`, {
+      const made = await page.request.post(`${sample.origin}/api/accounts`, {
         headers: { origin: sample.origin },
-        data: { ...operator, name: 'Ari Novak', role: 'operator' },
+        data: { app: 'depot', operation: 'create', ...operator, name: 'Ari Novak', roles: ['operator'] },
       });
       expect(made.ok()).toBe(true);
       await page.context().clearCookies();
@@ -559,9 +559,9 @@ test.describe('Depot inventory operations', () => {
 
       // An operator makes counts, not orders or the catalog: one line.
       const operator = { email: 'operator@depot.example.test', password: 'disposable-depot-operator-password' };
-      const made = await page.request.post(`${sample.origin}/api/auth/admin/create-user`, {
+      const made = await page.request.post(`${sample.origin}/api/accounts`, {
         headers: { origin: sample.origin },
-        data: { ...operator, name: 'Rosa Delgado', role: 'operator' },
+        data: { app: 'depot', operation: 'create', ...operator, name: 'Rosa Delgado', roles: ['operator'] },
       });
       expect(made.ok()).toBe(true);
       await page.context().clearCookies();

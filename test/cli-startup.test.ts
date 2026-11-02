@@ -212,8 +212,17 @@ test('--mcp loads the MCP tools, not the HTTP server, the auth store or the tena
      adapters/writeAhead.ts, the statements a write sends ahead of its BEGIN, which recordWriteOperations.ts and
      the PostgreSQL adapter read synchronously around each write (an AsyncLocalStorage, so it cannot arrive late), and
      adapters/scoped/keyRows.ts, the keyset reader the PostgreSQL adapter's scoped reads stand on. 164 with
-     adapters/poolAdmission.ts, the leaf postgresPool.ts loads to take a pool's turns across accounts. */
-  assert.ok(mcp.length <= 164, `--mcp loaded ${mcp.length} modules:\n${mcp.join('\n')}`);
+     adapters/poolAdmission.ts, the leaf postgresPool.ts loads to take a pool's turns across accounts. 166 with
+     adapters/scoped/scopeTriggers.ts and the two trigger proofs it reads (sqliteTriggers.ts, postgresTriggers.ts),
+     which the adapters' scoped writes judge a write's triggers by. 169 with shared/aggregate.ts and
+     shared/decimals.ts, which the breakdown tool's exact decimal sums read, and adapters/snapshotRead.ts, the
+     adapters' one-moment read. 170 when postgres.ts gave its write-ahead statements a module of their own
+     (adapters/postgresWriteAhead.ts) to stay under its line limit: a move, nothing new loaded. 171 with
+     adapters/scoped/storedText.ts, the text PostgreSQL stored for a reference column, which a scoped read carries to the
+     parent check of a write; a leaf (no imports) that scopedReads.ts and scopedTransaction.ts both read. 172 with
+     adapters/scoped/keyTypes.ts, the column types a scoped write takes as a row's identity, which both scope catalogs
+     read before a write binds a key; a leaf (no imports). */
+  assert.ok(mcp.length <= 172, `--mcp loaded ${mcp.length} modules:\n${mcp.join('\n')}`);
 });
 
 /** Every module under src/ a serving start loads by the time it listens, then stopped. */

@@ -61,7 +61,7 @@ test('a unit follows its figure, and a leading slash joins it', () => {
   // An abbreviation, or a word whose own "s" ends it, is said as written.
   for (const kept of ['pcs', 'hrs', 'kWh', 'glass', 'bus', 'basis', 'm²', 'per day']) expect(withUnit('1', kept)).toBe(`1 ${kept}`);
   expect(dressFor({ format: 'number', unit: 'mi' }, 85780)).toMatchObject({ kind: 'number', text: '85,780 mi' });
-  expect(dressFor({ format: 'money', currency: 'USD', unit: '/mo' }, 237)).toMatchObject({ kind: 'money', text: '$237/mo' });
+  expect(dressFor({ format: 'money', currency: 'USD', unit: '/mo' }, 237)).toMatchObject({ kind: 'money', text: '$237.00/mo' });
 });
 
 test('a percent sign as a unit sits where the locale puts it: "100%" in en-US, not "100 %"', () => {
@@ -81,13 +81,13 @@ test('a toned figure keeps its format and unit in the pill', () => {
   });
   expect(dressFor({ format: 'money', currency: 'USD', unit: '/mo', tone: { '*': 'info' } }, 1200)).toMatchObject({
     kind: 'tone',
-    label: '$1,200/mo',
+    label: '$1,200.00/mo',
   });
   expect(dressFor({ format: 'percent', tone: { '< 50': 'bad' } }, 42)).toMatchObject({ kind: 'tone', tone: 'bad', label: '42%' });
   // A neutral figure is no tone at all, and a toned one is ink only (`figure`): neither is a pill with a dot.
   expect(dressFor({ unit: 'mi', tone: { '*': 'neutral' } }, 85780)).toMatchObject({ kind: 'number', text: '85,780 mi' });
   expect(dressFor({ format: 'money', currency: 'USD', tone: { '> 0': 'warn' } }, 1200)).toMatchObject({ kind: 'tone', figure: true });
-  expect(dressFor({ format: 'money', currency: 'USD', tone: { '> 0': 'warn' } }, 0)).toMatchObject({ kind: 'money', text: '$0' });
+  expect(dressFor({ format: 'money', currency: 'USD', tone: { '> 0': 'warn' } }, 0)).toMatchObject({ kind: 'money', text: '$0.00' });
   // A word stays the vocabulary's word, and an id past 2^53 is never rounded into a figure.
   expect(dressFor({ format: 'number', tone: { in_review: 'warn' } }, 'in_review')).toMatchObject({ kind: 'tone', label: 'In review' });
   expect(dressFor({ format: 'number', tone: { '*': 'info' } }, '9007199254740993')).toMatchObject({
@@ -149,56 +149,56 @@ test("a figure the author names is said as the word: a money column's zero as 'N
   expect(dressFor(rule, '12.50')).toMatchObject({ kind: 'money' });
 });
 
-test('money drawn as a set says its cents only where one of its figures has some', async () => {
-  const { centsAmong, dressFor } = await import('./valueModel.js');
+test("money is said to its currency's minor digits wherever it stands: whole, zero, negative and in minor units", async () => {
+  /* A field report found "$5,917" beside "$5,917.40": an amount is read to settle something, so it is one form. */
+  const { dressFor } = await import('./valueModel.js');
   const money: import('./valueModel.js').DisplayRule = { format: 'money', currency: 'USD' };
-  const said = (rule: object | null, value: unknown) => (dressFor(rule as never, value) as { text: string }).text;
-  // A column of prices, all whole: no ".00" down it.
-  const prices = centsAmong(money, ['24495.00', 10495, '22495']);
-  expect(['24495.00', 10495, '22495'].map((v) => said(prices, v))).toEqual(['$24,495', '$10,495', '$22,495']);
-  // One figure with cents and every figure says them, so "$24" never stands beside "$0.50".
-  const fees = centsAmong(money, ['0.00', '24.50', 24, null]);
-  expect(['0.00', '24.50', 24].map((v) => said(fees, v))).toEqual(['$0.00', '$24.50', '$24.00']);
-  // Minor units are read in the major unit: 1999 cents has cents, 2000 has none.
-  expect(centsAmong({ ...money, minor: true }, [2000, 1999])?.cents).toBe(true);
-  expect(centsAmong({ ...money, minor: true }, [2000, 3000])?.cents).toBe(false);
-  // The same rule and answer give the same object, so a grid keeps its columns between paints.
-  expect(centsAmong(money, [1, 2])).toBe(centsAmong(money, [3]));
-  // Anything that is not money is left as it was.
-  const plain = { format: 'number' };
-  expect(centsAmong(plain, [1.5])).toBe(plain);
+  const said = (rule: object, value: unknown) =>
+    (dressFor(rule as never, value) as { text: string } | null)?.text?.replace(/[\u00a0\u202f]/g, ' ');
+  expect(['24495.00', 10495, '22495', '24.5'].map((v) => said(money, v))).toEqual(['$24,495.00', '$10,495.00', '$22,495.00', '$24.50']);
+  expect([0, '0.00', '-0.00', -12, '-12.50'].map((v) => said(money, v))).toEqual(['$0.00', '$0.00', '$0.00', '-$12.00', '-$12.50']);
+  expect([2000, 1999, '-1250', 0].map((v) => said({ ...money, minor: true }, v))).toEqual(['$20.00', '$19.99', '-$12.50', '$0.00']);
+  // A currency's own digits: none for yen, three for dinars.
+  expect(said({ format: 'money', currency: 'JPY' }, 1500)).toBe('¥1,500');
+  expect(said({ format: 'money', currency: 'JPY', minor: true }, 1500)).toBe('¥1,500');
+  expect(said({ format: 'money', currency: 'KWD', minor: true }, 1999)).toMatch(/1\.999$/);
 });
 
-test("a record's money fields share one form: a labor rate of $89 beside a total of $145.45 says $89.00", async () => {
-  const { centsTogether, dressFor } = await import('./valueModel.js');
+test('whole money drops the minor digits only where they are zeros, and never hides cents', async () => {
+  const { dressFor } = await import('./valueModel.js');
+  const whole = { format: 'money', currency: 'USD', whole: true } as const;
+  const said = (rule: object, value: unknown) =>
+    (dressFor(rule as never, value) as { text: string } | null)?.text?.replace(/[\u00a0\u202f]/g, ' ');
+  expect(['24495.00', 24495, '22495', '0.00', 0].map((v) => said(whole, v))).toEqual(['$24,495', '$24,495', '$22,495', '$0', '$0']);
+  expect(['24495.50', 24495.5, '0.05', '24495.01'].map((v) => said(whole, v))).toEqual(['$24,495.50', '$24,495.50', '$0.05', '$24,495.01']);
+  expect([-12, '-12.00', '-12.50'].map((v) => said(whole, v))).toEqual(['-$12', '-$12', '-$12.50']);
+  // Minor units: 2449500 cents is a whole $24,495; 2449550 keeps its cents.
+  expect([2449500, 2449550].map((v) => said({ ...whole, minor: true }, v))).toEqual(['$24,495', '$24,495.50']);
+  // Past 2^53, by the digits.
+  expect(said(whole, '90071992547409931.00')).toBe('$90,071,992,547,409,931');
+  expect(said(whole, '90071992547409931.25')).toBe('$90,071,992,547,409,931.25');
+  // Currencies of their own digits: yen has none to drop, dinars have three.
+  expect(said({ format: 'money', currency: 'JPY', whole: true }, 1500)).toBe('¥1,500');
+  expect(said({ format: 'money', currency: 'KWD', whole: true }, '12.000')).toMatch(/12$/);
+  expect(said({ format: 'money', currency: 'KWD', whole: true }, '12.500')).toMatch(/12\.500$/);
+  expect(said({ format: 'money', currency: 'USD', whole: true, unit: '/mo' }, 242)).toBe('$242/mo');
+});
+
+test('money past 2^53 is said digit for digit, never through Number()', async () => {
+  const { dressFor } = await import('./valueModel.js');
   const money: import('./valueModel.js').DisplayRule = { format: 'money', currency: 'USD' };
-  const cents = centsTogether([
-    [money, 89],
-    [money, '145.45'],
-    [{ format: 'number' }, 2.5],
-    [money, null],
-  ]);
-  expect(cents).toBe(true);
-  expect((dressFor({ ...money, cents } as never, 89) as { text: string }).text).toBe('$89.00');
-  // All whole, all whole; a fraction in a column that is not money is not cents.
-  expect(
-    centsTogether([
-      [money, 89],
-      [money, '145.00'],
-      [{ format: 'number' }, 2.5],
-    ]),
-  ).toBe(false);
-  // No money at all leaves each value its own say.
-  expect(
-    centsTogether([
-      [{ format: 'number' }, 2.5],
-      [null, 'x'],
-    ]),
-  ).toBeUndefined();
+  const said = (rule: object, value: unknown) => (dressFor(rule as never, value) as { text: string } | null)?.text;
+  expect(said(money, '9223372036854775807')).toBe('$9,223,372,036,854,775,807.00');
+  expect(said(money, '90071992547409931.25')).toBe('$90,071,992,547,409,931.25');
+  expect(said(money, '-90071992547409931.25')).toBe('-$90,071,992,547,409,931.25');
+  // A sum of cents past 2^53: 9007199254740993 cents is $90,071,992,547,409.93, where Number() reads ...409.92.
+  expect(said({ ...money, minor: true }, '9007199254740993')).toBe('$90,071,992,547,409.93');
+  // What is not a figure is said as itself.
+  expect(dressFor(money, 'n/a')).toBeNull();
 });
 
 test('a relative date column says one way: from today only where every value is near, else every one is its date', async () => {
-  const { centsAmong, dressFor } = await import('./valueModel.js');
+  const { datesAmong, dressFor } = await import('./valueModel.js');
   const day = (offset: number) => {
     const d = new Date();
     d.setDate(d.getDate() + offset);
@@ -208,11 +208,11 @@ test('a relative date column says one way: from today only where every value is 
   const near = [day(-6), day(0), day(2)];
   const said = (set: string[], column: import('./valueModel.js').DisplayRule | null) =>
     set.map((value) => (dressFor(column, value) as { text: string }).text);
-  expect(centsAmong(rule, near)).toBe(rule);
-  expect(said(near, centsAmong(rule, near))).toEqual(['6 days ago', 'today', 'in 2 days']);
+  expect(datesAmong(rule, near)).toBe(rule);
+  expect(said(near, datesAmong(rule, near))).toEqual(['6 days ago', 'today', 'in 2 days']);
   const mixed = [day(-6), day(-40)];
-  const apart = said(mixed, centsAmong(rule, mixed));
+  const apart = said(mixed, datesAmong(rule, mixed));
   expect(apart.some((text) => /ago|today|in \d/.test(text))).toBe(false);
   expect(new Set(apart).size).toBe(2);
-  expect(centsAmong(rule, mixed)).toBe(centsAmong(rule, [day(-90)]));
+  expect(datesAmong(rule, mixed)).toBe(datesAmong(rule, [day(-90)]));
 });

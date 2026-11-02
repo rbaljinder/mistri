@@ -8,11 +8,11 @@
  * own was neither pooled with the App nor traced, and needed types for `pg`.
  *
  * Read-only by construction: the handles are built without a writer, and
- * the reader under them holds only `query` and `count`. It reads rows whole
+ * the reader under them holds only `query`, `count` and `aggregate`. It reads rows whole
  * and across every principal, because deciding who sees what is the policy's
  * job; what it returns is a row scope, which is judged like any other.
  */
-import type { Filter, QueryRequest } from '@mistriwork/engine/adapters/adapter.js';
+import type { AggregateRequest, Filter, QueryRequest } from '@mistriwork/engine/adapters/adapter.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import { commandCatalog, zonedCatalog, createCommandDb, type ReadTable, type UntypedRow } from '../commands/commandDb.js';
 
@@ -37,6 +37,11 @@ export function createPolicyDb(resources: RuntimeResources, zone?: string): Poli
   const reader = Object.freeze({
     query: (request: QueryRequest) => adapter(request.table).query(request),
     count: (table: string, filter?: Filter) => adapter(table).count(table, filter),
+    /* A sum or a group, read as `count` is: through the table's own connection, across every principal. A source that
+       cannot say one has none, and the handle refuses. */
+    ...(names.every((table) => typeof adapter(table).aggregate === 'function')
+      ? { aggregate: (request: AggregateRequest) => adapter(request.table).aggregate!(request) }
+      : {}),
   });
   return createCommandDb({ tx: reader, catalog, read: names, write: [], now: () => new Date() }) as PolicyDb;
 }

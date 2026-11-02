@@ -24,6 +24,8 @@ import { readRecords } from '@mistriwork/engine/server/resourceReadOperations.js
 import { getTenantHostIntent } from '../http/tenantHosts.js';
 import type { CompiledComponents } from '../app/appComponents.js';
 import { captureHttpPublicPlacement, createHttpPublicPlacement, type HttpPublicPlacementOptions } from '../http/publicPlacement.js';
+import { triggersAt } from '../commands/commandTriggerChecks.js';
+import { namesTriggers, triggerLockProblem } from '../commands/triggerLock.js';
 
 /** Unsupported operations are refused by the route allowlist, never bound to
  * an ordinary writer. Generic grants and command grants remain independent. */
@@ -57,6 +59,17 @@ export interface HttpAppPolicy {
   retire(): Promise<void>;
 }
 
+/**
+ * The App as the policy holds it, and as it compares a live definition with it. `valueLabels` is left out by name:
+ * it is display data the server learns from a value component's `label` after load (valueLabels.ts, at startup and on
+ * requests), never declared and never authority. Compared, the first learned word would make the live App differ from
+ * its snapshot and every signed-in request answer 503.
+ */
+function declaredApp(app: AppDef): AppDef {
+  const { valueLabels: _learned, ...declared } = app;
+  return snapshotScopedData(declared);
+}
+
 /** Server-owned deployment; the module filename and source bindings never
  * enter the public App payload. Changing the App requires retirement/restart. */
 export async function loadHttpAppPolicy(options: {
@@ -72,8 +85,10 @@ export async function loadHttpAppPolicy(options: {
   services?: ReadonlyMap<string, readonly string[]>;
   /** The App's issued event source (commandHost.ts), when its commands declare events. */
   events?: CommandJournalAppScope;
+  /** `false`: the named triggers are not held to authority.lock here (`mistri check`, which names each itself). */
+  triggerLock?: false;
 }): Promise<HttpAppPolicy> {
-  const app = snapshotScopedData(options.app);
+  const app = declaredApp(options.app);
   const liveApp = options.app;
   const commands = options.commands === undefined ? undefined : defineCommands(options.commands);
   assertHttpRowPolicyApp(app, commands !== undefined);
@@ -96,6 +111,21 @@ export async function loadHttpAppPolicy(options: {
     acquire: async (captured) => {
       const acquired = await acquireAppPolicyResources(registry, captured);
       mapping = acquired.resources;
+      /* A trigger it names whose definition authority.lock did not approve, or no lock: the server does not start (triggerLock.ts). */
+      if (options.triggerLock !== false && namesTriggers(app)) {
+        const naming = Object.keys(app.resources ?? {}).filter((resource) => app.resources![resource].triggers?.length);
+        let problem: string | undefined;
+        try {
+          problem = triggerLockProblem(app, await triggersAt(acquired.resources, naming, async (id) => (await registry.open(id)).adapter));
+        } catch (error) {
+          await acquired.release();
+          throw error;
+        }
+        if (problem) {
+          await acquired.release();
+          throw new Error(problem);
+        }
+      }
       return acquired;
     },
     ...(commands
@@ -146,7 +176,7 @@ export async function loadHttpAppPolicy(options: {
       ...(options.components ? { components: options.components } : {}),
       current: () => {
         try {
-          return !retired && isDeepStrictEqual(app, snapshotScopedData(liveApp));
+          return !retired && isDeepStrictEqual(app, declaredApp(liveApp));
         } catch {
           return false;
         }
@@ -176,7 +206,7 @@ export async function loadHttpAppPolicy(options: {
     },
     matches: (candidate: AppDef) => {
       try {
-        return !retired && isDeepStrictEqual(app, snapshotScopedData(candidate));
+        return !retired && isDeepStrictEqual(app, declaredApp(candidate));
       } catch {
         return false;
       }
@@ -264,6 +294,7 @@ export function httpPolicyReads(context: AppPolicyContext): { adapter: Adapter; 
       countView: data.countView,
       runBreakdown: data.runBreakdown,
       countBreakdown: data.countBreakdown,
+      ...(data.aggregate ? { aggregate: data.aggregate } : {}),
     }),
     access: {
       readable: new Set(context.schema.tables.map((table) => table.id)),

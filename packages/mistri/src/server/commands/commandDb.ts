@@ -15,7 +15,19 @@
  * handle's tables are those local to its source, and a command's `db` holds
  * exactly the tables its footprint names.
  */
-import { isWriteConflict, type Condition, type Filter, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import {
+  isWriteConflict,
+  type AggregateMeasure,
+  type AggregateRequest,
+  type Condition,
+  type Filter,
+  type WriteTransaction,
+} from '@mistriwork/engine/adapters/adapter.js';
+import { declaredScale, exactAverage, formatDecimal, parseDecimal } from '@mistriwork/engine/shared/decimals.js';
+import { continueGroups, keysetAfter, keysetOrder } from '@mistriwork/engine/shared/keysetPage.js';
+import { FORBIDDEN_ANSWER_NAMES } from '@mistriwork/engine/shared/aggregate.js';
+import { authorFault } from '@mistriwork/engine/shared/refusal.js';
+import type { DateUnit } from '@mistriwork/engine/shared/filter.js';
 import { parseQuery, type QueryPerson } from '@mistriwork/engine/shared/query.js';
 import {
   columnKind,
@@ -26,7 +38,7 @@ import {
   type DatabaseSchema,
   type TableMeta,
 } from '@mistriwork/engine/shared/schema.js';
-import { refuse } from './commandErrors.js';
+import { BusinessCommandExecutionError, refuse } from './commandErrors.js';
 import { fileValues } from '../http/fileRows.js';
 import type { AppFileRule } from '../../shared/app.js';
 import { zonedNow } from '../../shared/appZone.js';
@@ -82,12 +94,99 @@ export type Where<Row> = { readonly [C in keyof Row]?: Row[C] | readonly Exclude
 /** A where: an object, or the query language (`'status = new and year >= 2018'`). */
 type WhereInput<Row> = Where<Row> | string;
 
-/** A query over one table, run when awaited. */
-export interface Query<Row> extends PromiseLike<Row[]> {
+/** Rows of one table, read when awaited: what a lookup's `where` answers (commandLookup.ts), which reads rows only. */
+export interface RowQuery<Row> extends PromiseLike<Row[]> {
+  orderBy(column: keyof Row & string, direction?: 'asc' | 'desc'): RowQuery<Row>;
+  /** At most this many rows. Without it, more than 1,000 is refused rather than cut. */
+  limit(count: number): RowQuery<Row>;
+  first(): Promise<Row | undefined>;
+}
+
+/* The measures and keys below are constrained by what any table could name and checked against this one's columns in
+   the parameter, not in the constraint: a constraint on `Row` would make a typed table's query unassignable to an
+   untyped one (a handler's `db` as BusinessCommandContext says it), which every other method here allows. */
+type AnyMeasures = Readonly<Record<string, Measure>>;
+
+/** A query over one table in a command's transaction, run when awaited: rows, sums, groups and pages. */
+export interface Query<Row> extends RowQuery<Row> {
   orderBy(column: keyof Row & string, direction?: 'asc' | 'desc'): Query<Row>;
   /** At most this many rows. Without it, more than 1,000 is refused rather than cut. */
   limit(count: number): Query<Row>;
-  first(): Promise<Row | undefined>;
+  /** The matching rows' total of a number column: an exact decimal string for a decimal or an integer column
+      (`'1834.50'`, `'0.00'` over no rows), a number for a float column (`REAL`, `double precision`), whose digits are
+      not exact. SQLite refuses a decimal sum it cannot add exactly rather than answer it wrong. */
+  sum(column: keyof Row & string): Promise<string | number>;
+  /** Measures over every matching row, as one object: `aggregate({ entries: count(), posted: sum('amount') })`. */
+  aggregate<M extends AnyMeasures>(measures: M & Measures<Row>): Promise<Aggregated<Row, M>>;
+  /** One group per value of up to three columns (or a date's period, `period.month('posted_on')`), measured by `aggregate`. */
+  groupBy<const Keys extends readonly GroupKey<Row>[]>(...keys: Keys): GroupBy<Row, Keys[number]>;
+  /** One page in key order (or this query's order, the key appended), resumable from `next`, which is plain data. */
+  page(options: { readonly after?: Boundary | undefined; readonly size: number }): Promise<Page<Row>>;
+  /** Every matching row, a page at a time, in one command: at most 100,000, refused past that, never cut. */
+  iterate(options: { readonly size: number }): AsyncIterable<Row>;
+}
+
+/* ---------- sums, groups and pages: the types ---------- */
+
+type ColumnOf<Row> = keyof Row & string;
+/** What a measure says of its rows. */
+export type MeasureWord = 'count' | 'sum' | 'avg' | 'min' | 'max';
+/** One measure of an aggregate, made by `count`, `sum`, `avg`, `min` or `max`. */
+export interface Measure<Word extends MeasureWord = MeasureWord, Column extends string | undefined = string | undefined> {
+  readonly measure: Word;
+  readonly column: Column;
+}
+/** A date or timestamp column cut to a period, as a group's key: `period.month('posted_on')`. */
+export interface Period<Column extends string = string> {
+  readonly period: DateUnit;
+  readonly column: Column;
+}
+/** The measures an aggregate takes, by the names its answer carries them under. */
+export type Measures<Row> = Readonly<
+  Record<string, Measure<'count', ColumnOf<Row> | undefined> | Measure<'sum' | 'avg' | 'min' | 'max', ColumnOf<Row>>>
+>;
+/** A group's key: one of the table's own columns, or a date column's period. */
+export type GroupKey<Row> = ColumnOf<Row> | Period<ColumnOf<Row>>;
+type KeyName<K> = K extends Period<infer C> ? C : K;
+/* `Row` is looked up, never tested: TypeScript relates two deferred conditionals only when what they test is identical,
+   and measures `Row` invariant where it meets `keyof Row` there, either of which would make a typed table's answers
+   unassignable to an untyped one's (a handler's `db` as BusinessCommandContext says it). */
+type KeyValue<Row, K> = K extends Period ? string | number | null : Row[K & keyof Row];
+/** What each measure answers, by its word: a least or greatest value keeps its column's type. */
+type MeasureValues<Row, Column> = {
+  count: number;
+  /** An exact decimal string; a number over a float column. */
+  sum: string | number;
+  /** An exact decimal string (a decimal's places plus two, an integer's two); a number over a float column;
+      PostgreSQL's own text over an unconstrained numeric. */
+  avg: string | number | null;
+  min: Row[Column & keyof Row] | null;
+  max: Row[Column & keyof Row] | null;
+};
+/** An aggregate's answer: each measure by its name. */
+export type Aggregated<Row, M extends AnyMeasures> = {
+  readonly [N in keyof M]: MeasureValues<Row, M[N]['column']>[M[N]['measure']];
+};
+/** One group: its keys by their columns' names, then its measures. */
+export type GroupRow<Row, K, M extends AnyMeasures> = {
+  readonly [N in KeyName<K> & string]: KeyValue<Row, Extract<K, N | Period<N>>>;
+} & Aggregated<Row, M>;
+/** Groups, read when awaited. */
+export interface Grouped<T> extends PromiseLike<T[]> {
+  /** By a key's or a measure's name; the keys ascending when unsaid. */
+  orderBy(name: keyof T & string, direction?: 'asc' | 'desc'): Grouped<T>;
+  /** At most this many groups. Without it, more than 1,000 is refused rather than cut. */
+  limit(count: number): Grouped<T>;
+}
+export interface GroupBy<Row, K> {
+  aggregate<M extends AnyMeasures>(measures: M & Measures<Row>): Grouped<GroupRow<Row, K, M>>;
+}
+/** Where a page ends: the last row's values for each column of its order, plain data a caller keeps. */
+export type Boundary = Readonly<Record<string, string | number | boolean>>;
+export interface Page<Row> {
+  readonly rows: Row[];
+  /** The next page's `after`; absent on the last page. */
+  readonly next?: Boundary;
 }
 export interface ReadTable<Row> {
   /** The row with this key — a one-column key's value, or `{ column: value }` — or `not_found`. */
@@ -127,6 +226,48 @@ export interface WriteTable<Row> extends ReadTable<Row> {
   insertFile(file: { readonly name: string; readonly type?: string; readonly data: Uint8Array }, values?: Written<Row>): Promise<Row>;
 }
 
+/* ---------- the measures and periods a handler writes ---------- */
+
+const made = new WeakSet<object>();
+const measureOf = <W extends MeasureWord, C extends string | undefined>(measure: W, column: C): Measure<W, C> => {
+  const value = Object.freeze({ measure, column });
+  made.add(value);
+  return value;
+};
+/** The rows; with a column, the rows where it is not empty. */
+export function count(): Measure<'count', undefined>;
+export function count<C extends string>(column: C): Measure<'count', C>;
+export function count(column?: string): Measure<'count', string | undefined> {
+  return measureOf('count', column);
+}
+/** A number column's total, exact, as a decimal string with the column's places. */
+export const sum = <C extends string>(column: C): Measure<'sum', C> => measureOf('sum', column);
+/** A number column's mean from its exact total and count, half to even, at the column's places plus two; null over no values. */
+export const avg = <C extends string>(column: C): Measure<'avg', C> => measureOf('avg', column);
+/** The least value, in the column's own type; null over no values. */
+export const min = <C extends string>(column: C): Measure<'min', C> => measureOf('min', column);
+/** The greatest value, in the column's own type; null over no values. */
+export const max = <C extends string>(column: C): Measure<'max', C> => measureOf('max', column);
+
+const periods = new WeakSet<object>();
+const periodOf =
+  (unit: DateUnit) =>
+  <C extends string>(column: C): Period<C> => {
+    const value = Object.freeze({ period: unit, column });
+    periods.add(value);
+    return value;
+  };
+/** A date or timestamp column cut to a period, as a group's key: `groupBy(period.month('posted_on'))`. */
+export const period = Object.freeze({
+  hour: periodOf('hour'),
+  day: periodOf('day'),
+  week: periodOf('week'),
+  month: periodOf('month'),
+  quarter: periodOf('quarter'),
+  year: periodOf('year'),
+  weekday: periodOf('weekday'),
+});
+
 /** A command's tables: read `R`, written `W`. */
 export type CommandTables<Scope, R extends string, W extends string> = {
   readonly [T in R | W]: T extends W ? WriteTable<RowIn<Scope, T>> : ReadTable<RowIn<Scope, T>>;
@@ -144,6 +285,8 @@ interface CommandTable {
   readonly key: readonly string[];
   readonly kinds: Readonly<Record<string, ColumnKind>>;
   readonly meta: TableMeta;
+  /** The engine the table is read from: PostgreSQL's unconstrained numeric sums to exact text, SQLite's is a float. */
+  readonly dialect?: string;
   /** The rollups and computed columns a command's `when` may judge it by (commandWhen.ts); its handler reads columns. */
   readonly derived?: CommandDerived;
   /** How the App says this table's columns to a person (commandSaying.ts): a refusal's words, never the handler's `db`. */
@@ -180,6 +323,7 @@ export function commandCatalog(
       key: Object.freeze(meta.columns.filter((column) => column.primaryKey).map((column) => column.name)),
       kinds: Object.freeze(Object.fromEntries(meta.columns.map((column) => [column.name, columnKind(column.type)]))),
       meta: Object.freeze({ ...meta, id: name, name, schema: '' }),
+      dialect: schema.dialect,
     });
   }
   return Object.freeze(tables);
@@ -306,9 +450,206 @@ export function normalizeRow(table: CommandTable, row: Readonly<Record<string, u
   return Object.freeze(copy);
 }
 
+/* ---------- sums, groups and pages: the work ---------- */
+
+/** The most groups `.limit(n)` asks for, and the most rows `iterate` reads in one command: the reads' own ceiling. */
+const MOST_ROWS = 100_000;
+/** The page `iterate` asks for after `read` rows: never more than the bound leaves, so the walk never yields past it. */
+export const iterateSize = (size: unknown, read: number, bound: number = MOST_ROWS): unknown =>
+  typeof size === 'number' && Number.isSafeInteger(size) && size >= 1 ? Math.min(size, Math.max(bound - read, 1)) : size;
+/** The largest page. */
+const MOST_PAGE = 1000;
+const MEASURE_WORDS: readonly MeasureWord[] = ['count', 'sum', 'avg', 'min', 'max'];
+const PERIODS: readonly DateUnit[] = ['hour', 'day', 'week', 'month', 'quarter', 'year', 'weekday'];
+const ANSWER_NAME = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
+/* Types whose total or order the engine does not keep exact: money comes back formatted, JSON and bytes not as compared. */
+const NOT_SUMMED = /money|json|xml|bytea|blob|binary|interval|array|\[\]/i;
+
+/* A handler's misuse of its handle: refused, and told to the operator first as the App author's to fix
+   (refusal.ts authorFault); the caller hears the fixed sentence. */
+function authorMistake(message: string): never {
+  throw authorFault(new BusinessCommandExecutionError('invalid_result'), message);
+}
+
+/* The places a column holds: PostgreSQL's catalog says them beside the type, SQLite's type string says them itself. */
+const placesOf = (column: ColumnMeta): number => column.scale ?? declaredScale(column.type);
+
+/* How a number column is added and said. A decimal with places is exact text; an integer is exact text too (past
+   2^53 it is digits, never a rounded number); a float (REAL, double precision, SQLite's NUMERIC with no places) has
+   no exact digits to say, so its sum and mean are numbers; PostgreSQL's unconstrained numeric is exact, and its
+   own text is what it answers. */
+type NumberClass = 'decimal' | 'integer' | 'float' | 'numeric';
+function numberClass(table: CommandTable, column: ColumnMeta): NumberClass {
+  if (placesOf(column) > 0) return 'decimal';
+  if (column.scale === 0 || /int|serial/i.test(column.type) || /^\s*(?:decimal|numeric)\s*\(/i.test(column.type)) return 'integer';
+  if (table.dialect === 'postgres' && /^\s*(?:decimal|numeric)\s*$/i.test(column.type)) return 'numeric';
+  return 'float';
+}
+
+/* A float's digits without an exponent: 1e-7 is 0.0000001, so a total parses as a decimal. */
+function plainNumber(value: number): string {
+  if (Number.isInteger(value)) return BigInt(value).toString();
+  const text = String(value);
+  return /e/i.test(text) ? value.toFixed(20).replace(/0+$/, '').replace(/\.$/, '') : text;
+}
+
+/* A total as a decimal string with at least `scale` places, zero over no rows; undefined for a value that is not a
+   number. Never through Number(): a PostgreSQL numeric or bigint arrives as its exact text and stays it. */
+function decimalText(value: unknown, scale: number): string | undefined {
+  if (value === null || value === undefined) return formatDecimal(0n, scale);
+  const parsed =
+    typeof value === 'number'
+      ? Number.isFinite(value)
+        ? parseDecimal(plainNumber(value))
+        : undefined
+      : typeof value === 'string' || typeof value === 'bigint'
+        ? parseDecimal(value)
+        : undefined;
+  if (!parsed) return undefined;
+  const places = Math.max(scale, parsed.scale);
+  return formatDecimal(parsed.units * 10n ** BigInt(places - parsed.scale), places);
+}
+
+/* A count as a number: PostgreSQL reads count(*) as bigint text. */
+const countOf = (value: unknown): number =>
+  typeof value === 'number' ? value : typeof value === 'string' || typeof value === 'bigint' ? Number(value) : 0;
+
+/* A column's value as a row read through the handle says it: a boolean true or false, a decimal with its places
+   (SQLite reads an expression's MIN as a bare number; a row's column comes back scaled, sqliteDecimals.ts). */
+function columnValue(column: ColumnMeta, kind: ColumnKind | undefined, value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (kind === 'boolean' && (value === 0 || value === 1)) return value === 1;
+  const scale = placesOf(column);
+  if (scale > 0 && typeof value === 'number' && Number.isFinite(value) && Math.abs(value) < 1e21) return value.toFixed(scale);
+  /* toFixed spells a double's exact digits to 1e21 (String() would round them at 1e15); text and bigints are the database's own. */
+  if (scale > 0 && (typeof value === 'number' || typeof value === 'string' || typeof value === 'bigint'))
+    return decimalText(value, scale) ?? value;
+  return value;
+}
+
+interface AggregatePlan {
+  readonly by: NonNullable<AggregateRequest['by']>;
+  /** The measures asked of the engine; an `avg` ordered by asks for the engine's own mean too, for the order alone. */
+  measures(ordered: ReadonlySet<string>): AggregateMeasure[];
+  /** An answer's name as the statement orders it. */
+  orderName(name: string): string;
+  decode(row: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>>;
+}
+
+/*
+ * What a handler's keys and measures ask, checked against the table's own columns before anything is read: a
+ * measure is a word and one of this table's columns, a key a column or a date column's period. Read
+ * structurally, not by identity, since a handler may import a second copy of this module (commandErrors.ts).
+ */
+function planAggregate(table: CommandTable, keys: readonly unknown[], given: unknown): AggregatePlan {
+  const name = table.name;
+  const column = (value: unknown, what: string): ColumnMeta => {
+    const meta =
+      typeof value === 'string' && Object.hasOwn(table.kinds, value) ? table.meta.columns.find((c) => c.name === value) : undefined;
+    return meta ?? authorMistake(`${name}: ${what} names one of its own columns; "${String(value).slice(0, 80)}" is not one.`);
+  };
+  if (keys.length > 3) authorMistake(`${name}: groupBy takes at most 3 keys.`);
+  const answers = new Set<string>();
+  /* A key answers under its column's own name, whatever it is (the statement aliases it `k0`); a measure's name is the
+     handler's own and keeps to a plain identifier. Neither may be a name that reaches an object's prototype. */
+  const answer = (value: string, what: string, ownColumn = false) => {
+    if ((!ownColumn && !ANSWER_NAME.test(value)) || FORBIDDEN_ANSWER_NAMES.has(value) || answers.has(value))
+      authorMistake(`${name}: each key and measure answers under its own name; ${what} "${value.slice(0, 80)}" does not.`);
+    answers.add(value);
+  };
+  const by = keys.map((key, at) => {
+    if (typeof key === 'string') {
+      const meta = column(key, 'groupBy');
+      answer(meta.name, 'the key', true);
+      return { name: `k${at}`, answer: meta.name, meta, bucket: undefined };
+    }
+    const cut = key as Partial<Period> | null;
+    if (!cut || typeof cut !== 'object' || !PERIODS.includes(cut.period as DateUnit))
+      return authorMistake(`${name}: groupBy takes a column, or a period of one (period.month('posted_on')).`);
+    const meta = column(cut.column, `period.${cut.period}`);
+    if (table.kinds[meta.name] !== 'date')
+      authorMistake(`${name}: period.${cut.period} cuts a date or time column; "${meta.name}" is not one.`);
+    answer(meta.name, 'the key', true);
+    return { name: `k${at}`, answer: meta.name, meta, bucket: cut.period as DateUnit };
+  });
+  if (!given || typeof given !== 'object' || Array.isArray(given))
+    authorMistake(`${name}: aggregate takes its measures by name, { entries: count(), posted: sum('amount') }.`);
+  const asked = Object.entries(given as Record<string, unknown>);
+  if (!asked.length || asked.length > 32) authorMistake(`${name}: aggregate takes 1 to 32 measures.`);
+  const measures = asked.map(([said, value], at) => {
+    answer(said, 'the measure');
+    const measure = value as Partial<Measure> | null;
+    if (!measure || typeof measure !== 'object' || !MEASURE_WORDS.includes(measure.measure as MeasureWord))
+      return authorMistake(`${name}: "${said}" is a measure made by count(), sum(), avg(), min() or max().`);
+    const word = measure.measure as MeasureWord;
+    if (word === 'count' && measure.column === undefined) return { said, word, at, meta: undefined, kind: undefined, numbers: undefined };
+    const meta = column(measure.column, `${word}()`);
+    const kind = table.kinds[meta.name];
+    if ((word === 'sum' || word === 'avg') && (kind !== 'number' || NOT_SUMMED.test(meta.type)))
+      authorMistake(`${name}: ${word}("${meta.name}") adds a number column, and "${meta.name}" is ${meta.type || 'not one'}.`);
+    if ((word === 'min' || word === 'max') && (kind === 'other' || NOT_SUMMED.test(meta.type)))
+      authorMistake(`${name}: ${word}("${meta.name}") compares values, and a ${meta.type} column's are not compared as stored.`);
+    return { said, word, at, meta, kind, numbers: meta && (word === 'sum' || word === 'avg') ? numberClass(table, meta) : undefined };
+  });
+  const orderNames = new Map<string, string>([
+    ...by.map((key) => [key.answer, key.name] as const),
+    ...measures.map((measure) => [measure.said, measure.word === 'avg' ? `m${measure.at}a` : `m${measure.at}`] as const),
+  ]);
+  return {
+    by: by.map((key) => ({ name: key.name, column: key.meta.name, ...(key.bucket ? { bucket: key.bucket } : {}) })),
+    measures: (ordered) =>
+      measures.flatMap((measure): AggregateMeasure[] => {
+        const id = `m${measure.at}`;
+        const column = measure.meta ? { column: measure.meta.name } : {};
+        if (measure.word !== 'avg') return [{ name: id, fn: measure.word, ...column }];
+        /* A float's mean, and PostgreSQL's unconstrained numeric's, is the engine's own: no places to divide to. */
+        if (measure.numbers === 'float' || measure.numbers === 'numeric') return [{ name: `${id}a`, fn: 'avg' as const, ...column }];
+        /* An exact mean is its exact total over its count, divided here; the engine's own AVG (a float, rounded
+           differently on each engine) is asked only to order by, never answered. */
+        return [
+          { name: `${id}s`, fn: 'sum', ...column },
+          { name: `${id}n`, fn: 'count', ...column },
+          ...(ordered.has(`${id}a`) ? [{ name: `${id}a`, fn: 'avg' as const, ...column }] : []),
+        ];
+      }),
+    orderName: (said) =>
+      orderNames.get(said) ?? authorMistake(`${name}: groups order by one of their keys or measures, not "${said.slice(0, 80)}".`),
+    decode: (row) => {
+      const out: Record<string, unknown> = {};
+      for (const key of by)
+        out[key.answer] = key.bucket ? (row[key.name] ?? null) : columnValue(key.meta, table.kinds[key.meta.name], row[key.name]);
+      for (const measure of measures) {
+        const id = `m${measure.at}`;
+        const scale = measure.meta ? placesOf(measure.meta) : 0;
+        if (measure.word === 'count') out[measure.said] = countOf(row[id]);
+        else if (measure.word === 'sum' && measure.numbers === 'float' && (typeof row[id] === 'number' || row[id] == null))
+          out[measure.said] = row[id] ?? 0;
+        else if (measure.word === 'sum')
+          out[measure.said] =
+            decimalText(row[id], scale) ?? authorMistake(`${name}: the total of "${measure.meta!.name}" is not a number.`);
+        else if (measure.word === 'avg' && (measure.numbers === 'float' || measure.numbers === 'numeric')) {
+          const mean = row[`${id}a`];
+          out[measure.said] =
+            mean === null || mean === undefined
+              ? null
+              : typeof mean === 'number' || typeof mean === 'string'
+                ? mean
+                : authorMistake(`${name}: the mean of "${measure.meta!.name}" is not a number.`);
+        } else if (measure.word === 'avg') {
+          const n = countOf(row[`${id}n`]);
+          const total =
+            decimalText(row[`${id}s`], scale) ?? authorMistake(`${name}: the total of "${measure.meta!.name}" is not a number.`);
+          out[measure.said] = n > 0 ? exactAverage(total, n, scale + 2)! : null;
+        } else out[measure.said] = columnValue(measure.meta!, measure.kind, row[id]);
+      }
+      return Object.freeze(out);
+    },
+  };
+}
+
 /* ---------- the handle ---------- */
 
-type Reader = Pick<WriteTransaction, 'query' | 'count'>;
+type Reader = Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>;
 interface CommandDbOptions {
   readonly tx: Reader | WriteTransaction;
   readonly catalog: CommandCatalog;
@@ -404,6 +745,12 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       return found[0];
     },
     where(where?: unknown, ...values: readonly unknown[]): Query<UntypedRow> {
+      /* Only the template binds values. A string with a second argument would drop it and match the wrong rows
+         without a word, so it is the author's to fix. */
+      if (values.length && !isTemplate(where))
+        authorMistake(
+          `${name}: where("...", value) does not bind values; write the template form where\`id <= \${x}\` or the object form where({ id: x }).`,
+        );
       const order: { column: string; direction: 'asc' | 'desc' }[] = [];
       let cap: number | undefined;
       const run = async (limit?: number): Promise<UntypedRow[]> => {
@@ -414,6 +761,97 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
           throw new Error(`${name}: more than ${DEFAULT_CAP} rows match; say how many with .limit(n).`);
         }
         return found;
+      };
+      /* Sums and groups: every row the where matches, so the rows' own order and limit mean nothing here; the
+         groups have their own, after aggregate(). */
+      const measured = async (
+        keys: readonly unknown[],
+        given: unknown,
+        grouped: boolean,
+        groupOrder: readonly { name: string; direction: 'asc' | 'desc' }[] = [],
+        groupCap?: number,
+      ): Promise<Readonly<Record<string, unknown>>[]> => {
+        if (order.length || cap !== undefined)
+          authorMistake(`${name}: .orderBy and .limit order and count rows, and an aggregate reads every row its where matches.`);
+        const plan = planAggregate(table, keys, given);
+        const compiled = compileWhere(table, where, now(), values);
+        if (compiled.orderBy.length || compiled.limit !== undefined)
+          authorMistake(`${name}: an aggregate's where says which rows; leave "sort" and "limit" out of it.`);
+        const orderBy = groupOrder.map((o) => ({ name: plan.orderName(o.name), direction: o.direction }));
+        if (compiled.none) return grouped ? [] : [plan.decode({})];
+        /* Fail closed: a transaction that cannot say an aggregate under its scope (an HTTP source, a facade that
+           does not carry one) has none, and nothing here reads the rows to add them up instead. */
+        if (typeof tx.aggregate !== 'function') return authorMistake(`${name}: this command's source cannot sum or group rows.`);
+        const result = await tx.aggregate({
+          table: name,
+          filter: compiled.filter,
+          by: plan.by,
+          measures: plan.measures(new Set(orderBy.map((o) => o.name))),
+          ...(orderBy.length ? { orderBy } : {}),
+          limit: grouped ? (groupCap ?? DEFAULT_CAP + 1) : 1,
+        });
+        if (grouped && groupCap === undefined && result.rows.length > DEFAULT_CAP)
+          authorMistake(`${name}: more than ${DEFAULT_CAP} groups; say how many with .limit(n).`);
+        return result.rows.map((row) => plan.decode(row));
+      };
+      /* A page: the key appended to the order so it is total, the boundary an AND on the where, so every scope and
+         grant beneath checks it as it checks the where (keysetPage.ts). */
+      const pageOrder = (compiled: Compiled): { column: string; direction: 'asc' | 'desc' }[] => {
+        if (cap !== undefined || compiled.limit !== undefined)
+          authorMistake(`${name}: a page's size says how many rows; leave out the limit.`);
+        if (!table.key.length) authorMistake(`${name}: has no primary key, so a page cannot say where it ends.`);
+        const paged = [...compiled.orderBy, ...order];
+        if (new Set(paged.map((o) => o.column)).size !== paged.length) authorMistake(`${name}: a page orders by each column once.`);
+        for (const column of table.key) if (!paged.some((o) => o.column === column)) paged.push({ column, direction: 'asc' });
+        for (const o of paged) {
+          const meta = table.meta.columns.find((column) => column.name === o.column);
+          /* NULL sorts first on SQLite and last on PostgreSQL, so a boundary past an empty value would mean a
+             different row on each: a page orders by columns that always hold one. */
+          if (meta?.nullable && !meta.primaryKey)
+            authorMistake(
+              `${name}: a page orders by columns that are never empty, and "${o.column}" can be; order by the key or a NOT NULL column.`,
+            );
+        }
+        if (!keysetOrder(table.meta, paged, 'sqlite'))
+          authorMistake(
+            `${name}: a page orders by columns read back exactly as stored, and ${paged.map((o) => o.column).join(', ')} are not all.`,
+          );
+        return paged;
+      };
+      const page = async (after: unknown, size: unknown): Promise<Page<UntypedRow>> => {
+        if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 1 || size > MOST_PAGE)
+          authorMistake(`${name}: a page's size is a whole number from 1 to ${MOST_PAGE}.`);
+        const compiled = compileWhere(table, where, now(), values);
+        const paged = pageOrder(compiled);
+        let filter = compiled.filter;
+        if (after !== undefined) {
+          /* A position, not a capability: whoever asks reads the page past it under their own scope. One that names
+             other columns than the order is the caller's input, refused as such. */
+          const boundary = after as Record<string, unknown> | null;
+          if (
+            !boundary ||
+            typeof boundary !== 'object' ||
+            Array.isArray(boundary) ||
+            Object.keys(boundary).length !== paged.length ||
+            paged.some((o) => !Object.hasOwn(boundary, o.column)) ||
+            Object.values(boundary).some(
+              (value) => typeof value !== 'string' && typeof value !== 'boolean' && !(typeof value === 'number' && Number.isFinite(value)),
+            )
+          )
+            return refuse('invalid_input');
+          const tail = keysetAfter(table.meta, paged, boundary as Boundary, 'sqlite');
+          if (!tail) return refuse('invalid_input');
+          filter = { groups: continueGroups(compiled.filter.groups, tail) as Condition[][] };
+        }
+        const found = await rows({ filter, none: compiled.none, orderBy: [] }, (size as number) + 1, paged);
+        const shown = found.slice(0, size as number);
+        const last = shown.at(-1);
+        return found.length > shown.length && last
+          ? {
+              rows: shown,
+              next: Object.freeze(Object.fromEntries(paged.map((o) => [o.column, last[o.column] as string | number | boolean]))),
+            }
+          : { rows: shown };
       };
       const query: Query<UntypedRow> = {
         orderBy(column, direction = 'asc') {
@@ -427,6 +865,48 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
           return query;
         },
         first: async () => (await run(1))[0],
+        sum: async (column) => (await measured([], { total: sum(column) }, false))[0].total as string | number,
+        aggregate: async (measures) => (await measured([], measures, false))[0] as never,
+        groupBy(...keys) {
+          return {
+            aggregate(measures) {
+              const groupOrder: { name: string; direction: 'asc' | 'desc' }[] = [];
+              let groupCap: number | undefined;
+              const grouped: Grouped<never> = {
+                orderBy(answer, direction = 'asc') {
+                  groupOrder.push({ name: answer, direction: direction === 'desc' ? 'desc' : 'asc' });
+                  return grouped;
+                },
+                limit(count) {
+                  if (!Number.isSafeInteger(count) || count < 1 || count > MOST_ROWS)
+                    authorMistake(`${name}: a limit on groups is a whole number from 1 to ${MOST_ROWS}.`);
+                  groupCap = count;
+                  return grouped;
+                },
+                // eslint-disable-next-line unicorn/no-thenable -- read when awaited, after the chain is written, as a query is.
+                then: (resolve, reject) => measured(keys, measures, true, groupOrder, groupCap).then(resolve as never, reject),
+              };
+              return grouped;
+            },
+          };
+        },
+        page: (options) => page(options?.after, options?.size),
+        async *iterate(options) {
+          const size = options?.size;
+          let after: Boundary | undefined;
+          let read = 0;
+          for (;;) {
+            const next = await page(after, iterateSize(size, read));
+            read += next.rows.length;
+            yield* next.rows;
+            if (!next.next) return;
+            /* The bound is on what one command holds the writer for: past it, a walk pages across commands, its
+               place kept by a workflow (docs: commands). Refused, never cut short. */
+            if (read >= MOST_ROWS)
+              authorMistake(`${name}: iterate reads at most ${MOST_ROWS} rows in one command; page across commands with .page({ after }).`);
+            after = next.next;
+          }
+        },
         // Awaiting the query runs it: `await db.vehicle.where(...).limit(5)` reads once, after the chain is written.
         // eslint-disable-next-line unicorn/no-thenable -- the lazy thenable is the query's whole interface.
         then: (resolve, reject) => run().then(resolve, reject),

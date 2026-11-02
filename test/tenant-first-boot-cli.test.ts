@@ -12,6 +12,9 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import * as maintenance from '@mistriwork/mistri/maintenance';
+import { loadApp } from '../packages/mistri/src/server/app/apps.js';
+import { appAuthStore } from '../packages/mistri/src/server/auth/auth.js';
+import { prepareDev } from '../packages/mistri/src/server/cli/devMode.js';
 import { runTenantCommand } from '../packages/mistri/src/server/cli/tenantCommand.js';
 import { ADMINISTRATION_JOURNAL_TABLES as journal } from '../packages/mistri/src/server/tenant/tenantAdministrationJournal.js';
 import { TENANT_TABLES as tables } from '../packages/mistri/src/server/tenant/tenantStore.js';
@@ -20,7 +23,7 @@ import { scratch } from './support/scratch.js';
 const binding = { appId: 'lending', source: { id: 'business', connection: 'business-db' }, storeId: 'lending-store' };
 const PASSWORD = 'first-boot-password-123';
 
-async function fixture(t: TestContext, platform = true) {
+async function fixture(t: TestContext, platform = true, named = true) {
   const { directory } = scratch(t, 'tablewalk-tenant-first-boot-');
   const appDir = join(directory, 'app');
   mkdirSync(appDir);
@@ -42,7 +45,7 @@ async function fixture(t: TestContext, platform = true) {
       sources: { business: { connection: 'business-db' } },
       resources: { ...(platform ? { dealer: { owner: 'platform' } } : {}), lead: { owner: 'tenant' } },
       auth: {
-        store: join(directory, 'auth.db'),
+        ...(named ? { store: join(directory, 'auth.db') } : {}),
         signUp: 'invite',
         rows: 'tenant',
         tenancy: { label: 'Dealer', ...(platform ? { platform: { label: 'Lender' } } : {}) },
@@ -108,7 +111,7 @@ async function fixture(t: TestContext, platform = true) {
   const memberships = () =>
     read(`SELECT tenant_id AS tenant, account_id AS account, status, roles_json AS roles FROM "${tables.membership}" ORDER BY tenant_id`);
   const receipts = () => read(`SELECT actor_id AS actor, operation FROM "${journal.receipt}" ORDER BY completed_at, id`);
-  return { appDir, run, anchors, memberships, receipts };
+  return { directory, appDir, run, anchors, memberships, receipts };
 }
 
 test('init opens the platform realm and the named tenants, and a second run leaves them as they are', async (t) => {
@@ -163,7 +166,7 @@ test('grant makes the first operator account from the environment and grants it,
   assert.equal(lee.code, 0, lee.err);
   assert.match(
     lee.out,
-    /^lee@lender\.example: an account was made in lending's auth store\.\nlee@lender\.example: manager of the platform realm until \d{4}-\d\d-\d\d\. Receipt \S+\.$/,
+    /^lee@lender\.example: an account was made in the store lending names \(\S+auth\.db\)\.\nlee@lender\.example: manager of the platform realm until \d{4}-\d\d-\d\d\. Receipt \S+\.$/,
   );
   const sam = await f.run('grant', 'sam@north.example', '--roles', 'staff', '--tenant', 'north', '--days', '30');
   assert.equal(sam.code, 0, sam.err);
@@ -190,6 +193,60 @@ test('grant makes the first operator account from the environment and grants it,
   const wrong = await f.run('grant', 'kim@lender.example', '--roles', 'staff');
   assert.equal(wrong.code, 1);
   assert.equal(f.memberships().length, 2);
+});
+
+/* grant made its account in the store a plain start keeps, `mistri dev` signed in against its own under the App's
+   .mistri/, and the sign-in failed with the grant reported done (a field report). grant now keeps accounts by the
+   rule shot --as reads by, and says which store it wrote. */
+test('grant makes the account where mistri dev signs in once dev has started the App, and says which store', async (t) => {
+  const f = await fixture(t, true, false);
+  const xdg = process.env.XDG_CONFIG_HOME;
+  t.after(() => {
+    if (xdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = xdg;
+  });
+  // The person's own config directory, as ~/.config is.
+  const own = join(f.directory, 'home-config');
+  process.env.XDG_CONFIG_HOME = own;
+  const emails = (file: string) => {
+    const db = new DatabaseSync(file, { readOnly: true });
+    try {
+      return db
+        .prepare('SELECT email FROM "user" ORDER BY email')
+        .all()
+        .map((row) => String(row.email));
+    } finally {
+      db.close();
+    }
+  };
+  assert.equal((await f.run('init', 'north')).code, 0);
+  process.env.MISTRI_ACCOUNT_PASSWORD = PASSWORD;
+  const loaded = await loadApp(f.appDir);
+  const start = appAuthStore(loaded);
+
+  // Before dev has started the App here: a plain start's store, said so, and that dev keeps its own.
+  const ada = await f.run('grant', 'ada@north.example', '--roles', 'staff', '--tenant', 'north');
+  assert.equal(ada.code, 0, ada.err);
+  assert.ok(
+    ada.out.startsWith(`ada@north.example: an account was made in the store a start of lending keeps (${start}); mistri dev keeps its own`),
+    ada.out,
+  );
+  assert.deepEqual(emails(start), ['ada@north.example']);
+
+  // mistri dev's start: the folder it keeps, and the environment it serves under. Its sign-in reads this store.
+  const dev: NodeJS.ProcessEnv = { XDG_CONFIG_HOME: own };
+  prepareDev([f.appDir], dev);
+  const signsIn = appAuthStore(loaded, dev);
+  assert.notEqual(signsIn, start);
+  const north = await f.run('grant', 'north@example.test', '--roles', 'staff', '--tenant', 'north');
+  assert.equal(north.code, 0, north.err);
+  assert.ok(
+    north.out.startsWith(`north@example.test: an account was made in the store mistri dev keeps for lending (${signsIn}).\n`),
+    north.out,
+  );
+  assert.deepEqual(emails(signsIn), ['north@example.test']);
+  assert.deepEqual(emails(start), ['ada@north.example']);
+  assert.equal(process.env.XDG_CONFIG_HOME, own, 'the step leaves the environment as it found it');
 });
 
 test("init and grant refuse each other's options and a malformed address before anything opens", async (t) => {

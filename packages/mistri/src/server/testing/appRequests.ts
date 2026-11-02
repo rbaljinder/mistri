@@ -33,6 +33,9 @@ export interface TestRefusal {
   message: string;
   /** The field a refusal names, where it names one. */
   field?: string;
+  /** Why, where the server tells this reader (its administrator, at an App served from source on this machine:
+      refusalReport.ts). On a failure (5xx) it is also `message`, ahead of the fixed sentence, which names nothing to fix. */
+  cause?: string;
   body: unknown;
 }
 export interface TestSuccess<T> {
@@ -83,7 +86,7 @@ interface ServedSchema {
 type Send = (path: string, init: { method?: string; json?: unknown; headers?: Record<string, string> }) => Promise<Response>;
 
 /** The server's answer as a result: JSON success, or a refusal carrying what the server said. */
-async function readResult<T>(response: Response): Promise<TestResult<T>> {
+export async function readResult<T>(response: Response): Promise<TestResult<T>> {
   const text = await response.text();
   let body: unknown = text;
   try {
@@ -97,17 +100,23 @@ async function readResult<T>(response: Response): Promise<TestResult<T>> {
   const first = errors?.[0];
   const code = record?.code ?? first?.code;
   const field = record?.field ?? (Array.isArray(first?.fields) ? (first.fields[0] as { field?: unknown })?.field : undefined);
+  const said = String(
+    record?.message ??
+      record?.error ??
+      first?.message ??
+      (typeof body === 'string' && body ? body.slice(0, 500) : `HTTP ${response.status}`),
+  );
+  /* A command whose handler set a reference outside its footprint failed as "The command did not produce a valid
+     result.", and a test that printed `message` printed that, with what to fix only in `body.cause` (a field report).
+     A failure's cause, where the server tells it, leads; the fixed sentence follows it. */
+  const cause = typeof record?.cause === 'string' && record.cause ? record.cause : undefined;
   return {
     ok: false,
     status: response.status,
     ...(typeof code === 'string' ? { code } : {}),
-    message: String(
-      record?.message ??
-        record?.error ??
-        first?.message ??
-        (typeof body === 'string' && body ? body.slice(0, 500) : `HTTP ${response.status}`),
-    ),
+    message: cause && response.status >= 500 ? `${cause} (callers are told: ${said})` : said,
     ...(typeof field === 'string' ? { field } : {}),
+    ...(cause ? { cause } : {}),
     body,
   };
 }

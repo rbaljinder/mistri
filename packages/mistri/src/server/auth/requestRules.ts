@@ -21,8 +21,11 @@ export function nativeAdminPath(path: string): boolean {
   return folded === '/api/auth/admin' || folded.startsWith('/api/auth/admin/');
 }
 
-/* Better Auth's admin endpoints that change an account, or sign in as one, around the App's account administration. */
+/* Better Auth's admin endpoints that make or change an account, or sign in as one, around the App's account
+   administration. `create-user` among them: it took any role string and wrote no row of the trail, where the sign-in
+   page says every change is recorded (a field report); `POST /api/accounts` with `operation: 'create'` is the door. */
 const CLOSED_NATIVE_ADMIN = new Set([
+  'create-user',
   'set-role',
   'ban-user',
   'unban-user',

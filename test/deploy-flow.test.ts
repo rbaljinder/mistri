@@ -4,14 +4,14 @@
  * database server; the real runner (effects.ts) is the one file these do not reach.
  */
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { openMigrationDb } from '@mistriwork/engine/server/migrate/database.js';
 import { parseDeployArgs } from '../packages/mistri/src/server/deploy/args.js';
 import { runDeployCommand } from '../packages/mistri/src/server/deploy/command.js';
-import { parseJsonc } from '../packages/mistri/src/server/deploy/config.js';
+import { parseJsonc, readConfig, withProfile } from '../packages/mistri/src/server/deploy/config.js';
 import { initFiles, referencedNames, writeInit } from '../packages/mistri/src/server/deploy/init.js';
 import { sqlLedger } from '../packages/mistri/src/server/deploy/ledger.js';
 import { rollbackTarget } from '../packages/mistri/src/server/deploy/manage.js';
@@ -877,4 +877,49 @@ test('a probe that fails while the Durable Object resets itself sends no restart
   assert.deepEqual(await rollTo(made.runner, 'https://a.test', { deployId: NEW, buildId: 'build-new' }, TOKEN, 600_000), { ok: true });
   assert.ok(!made.calls.some((c) => c.startsWith('POST ')), made.said.join('\n'));
   assert.match(made.said.join('\n'), /verified: deploy 00000000 build build-new after 0 restarts/);
+});
+
+/* D11 of docs/bootstrap-plan.md: the project profile in mistri.json stands in for the deploy file's entry keys, so a
+   deploy serves the modules `check` and `dev` read, named once. */
+function profiled(): void {
+  mkdirSync('apps/shop', { recursive: true });
+  writeFileSync('apps/shop/jobs.ts', 'export default {};\n');
+  writeFileSync('apps/shop/policy.ts', 'export default {};\n');
+  writeFileSync(
+    'mistri.json',
+    JSON.stringify({
+      app: { dir: 'apps/shop', jobs: 'apps/shop/jobs.ts', policy: 'apps/shop/policy.ts' },
+      connections: [{ url: 'postgres://u:${APP_DB_PASSWORD}@h/db' }],
+    }),
+  );
+}
+
+test('the deploy file falls back to mistri.json for the App, its config and its entries; its own keys win', () => {
+  profiled();
+  writeFileSync('deploy/cloudflare/mistri-deploy.json', JSON.stringify({ secrets: ['BETTER_AUTH_SECRET'], policy: 'apps/shop/policy.ts' }));
+  /* Before: `needs "app" and "secrets"`, and the jobs the profile named were not served. */
+  const config = readConfig(join(dir, 'deploy/cloudflare'), {});
+  assert.deepEqual(
+    [config.app, config.config, config.jobs, config.policy, config.commands],
+    ['apps/shop', 'mistri.json', 'apps/shop/jobs.ts', 'apps/shop/policy.ts', undefined],
+  );
+  const { from } = withProfile({ policy: 'apps/shop/policy.ts' }, {});
+  assert.deepEqual(from, ['config', 'app', 'jobs']);
+  /* A mistri.json with no app block leaves the deploy file to say it all, as before. */
+  writeFileSync('mistri.json', JSON.stringify({ connections: [] }));
+  assert.deepEqual(withProfile({ app: 'apps/shop' }, {}), { config: { app: 'apps/shop' }, from: [] });
+});
+
+test('deploy init writes no key the profile gives, and says where it is read from', async () => {
+  profiled();
+  /* Before: "init needs --app <dir>". */
+  const made = await run(['init', 'cloudflare', '--force']);
+  assert.equal(made.code, 0, made.printed.join('\n'));
+  const stored = JSON.parse(readFileSync('deploy/cloudflare/mistri-deploy.json', 'utf8'));
+  assert.deepEqual(Object.keys(stored).sort(), ['optionalSecrets', 'secrets']);
+  assert.ok(stored.secrets.includes('APP_DB_PASSWORD'), JSON.stringify(stored));
+  assert.match(made.printed.join('\n'), /config, app, jobs, policy: read from mistri\.json's app block at each deploy/);
+  /* A flag still names a key, and that one is written. */
+  await run(['init', 'cloudflare', '--force', '--app', 'apps/shop']);
+  assert.equal(JSON.parse(readFileSync('deploy/cloudflare/mistri-deploy.json', 'utf8')).app, 'apps/shop');
 });

@@ -11,7 +11,7 @@ import { useContext, useEffect, type CSSProperties, type ReactNode } from 'react
 import { useQuery } from '@tanstack/react-query';
 import { readRecordSource, shareRecordSource } from '../recordSource.js';
 import { readPageFields } from './pageFieldsRead.js';
-import { centsTogether, dressFor, sayValue, type DisplayRule } from './valueModel.js';
+import { dressFor, sayValue, type DisplayRule } from './valueModel.js';
 import { pathEqualityFilter, recordKey as checkedRecordKey } from '../resourceRequests.js';
 import { columnDisplay, columnLabel, emptyWord, findTable, labelPath, primaryKey, rowLabel, state } from '../core.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
@@ -223,11 +223,6 @@ export function FieldsSection({
       | (ColumnMeta & { references?: { table: string; column: string } })
       | undefined;
   const captionOf = (path: string) => (columnLabel(base.id, path) as string | null) ?? humanName(path.split('.').pop() ?? path);
-  /* The section's money in one form: a price to the cent puts every figure beside it to the cent. Read the way Value
-     reads its rule, by the column's name. */
-  const cents = centsTogether(
-    paths.map((path) => [columnDisplay(base.id, columnAt(path)?.name ?? '') as DisplayRule | null, row[path]] as const),
-  );
   /* A fields section in the aside is a property rail unless it says otherwise: caption beside value is
      what a side panel holds. The main region keeps the summary grid. */
   const presentation = section.presentation ?? (section.region === 'aside' ? 'properties' : 'summary');
@@ -248,7 +243,7 @@ export function FieldsSection({
         row={row}
       />
     ) : (
-      <Value col={column} value={row[path]} tableId={base.id} compact={compact} row={row} cents={cents} />
+      <Value col={column} value={row[path]} tableId={base.id} compact={compact} row={row} />
     );
   };
   /* A headline is the record offered: its figure, its facts and what to do next. */
@@ -366,7 +361,7 @@ export function FieldsSection({
             {reference ? (
               jump('page-card-name')
             ) : filled(titlePath) ? (
-              <Value col={titleColumn} value={row[titlePath]} tableId={base.id} cents={cents} />
+              <Value col={titleColumn} value={row[titlePath]} tableId={base.id} />
             ) : (
               emptyWord()
             )}
@@ -469,7 +464,7 @@ export function FieldsSection({
           />
         ) : (
           /* A record's own field is where rich text is read whole; a list or a card shows its excerpt. */
-          <Value col={column} value={next} tableId={base.id} compact links wholeText cents={cents} />
+          <Value col={column} value={next} tableId={base.id} compact links wholeText />
         );
       dd = (
         <dd className="page-field-edit">
@@ -541,7 +536,7 @@ export function FieldsSection({
     } else {
       dd = (
         <dd>
-          <Value col={column} value={value} tableId={base.id} row={row} cents={cents} />
+          <Value col={column} value={value} tableId={base.id} row={row} />
           {adorned}
         </dd>
       );

@@ -158,8 +158,8 @@ Credit is given in the release notes unless you would rather it were not.
   menu: adds them, sets their roles, deactivates them, sets a new password.
   The route checks the verified session alone and Better Auth's admin plugin
   checks it again; an administrator cannot demote or deactivate themself.
-  Better Auth's own endpoints for the same changes (`/api/auth/admin/set-role`,
-  `ban-user`, `unban-user`, `set-user-password`, `update-user`, `remove-user`)
+  Better Auth's own endpoints for the same changes (`/api/auth/admin/create-user`,
+  `set-role`, `ban-user`, `unban-user`, `set-user-password`, `update-user`, `remove-user`)
   and for signing in as another account (`impersonate-user`) answer 404, so
   every change goes through the screen and its trail.
   Every change writes a row of the account-administration trail, the

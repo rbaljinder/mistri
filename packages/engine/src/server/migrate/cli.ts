@@ -32,14 +32,55 @@ import { migrateBaseline, migrateRepair, migrateUp, migrateValidate, migrationSt
 import { sayChange } from './snapshot.js';
 import { resolveTarget, targetDir, type TargetBinding } from './target.js';
 import { product } from '../product.js';
+import { claimContext, contextJson, contextLines, fromProfile, projectContext } from '../config/profile.js';
 
-/** What a run keeps of the App `--app` names: what it binds, and its two questions after a run. */
+/**
+ * One phase of the bootstrap plan (docs/bootstrap-plan.md): what `migrate status --app` reports and `migrate up --app`
+ * carries out, in order: migrations, stores, sign-in store, seed, check. One word for where it stands, one line
+ * beside it, and the names under it.
+ */
+export interface PlanPhase {
+  readonly phase: 'migrations' | 'stores' | 'sign-in store' | 'seed' | 'check';
+  /**
+   * `done` was in place before this run; `applied` this run changed it; `pending` up would change it; `waiting` an
+   * earlier phase is pending or failed; `failed` it was run and did not finish; `skipped` it cannot be run here, for
+   * the reason beside it; `passed` the check judged the App and it fits; `at start` the first start makes it;
+   * `—` reported, never run (seed), or nothing to do.
+   */
+  readonly status: 'done' | 'applied' | 'pending' | 'waiting' | 'failed' | 'skipped' | 'passed' | 'at start' | '—';
+  readonly detail: string;
+  readonly items: readonly string[];
+  readonly error?: string;
+}
+
+/** What the App framework hands the plan for the phases after the migrations (cli/appTargets.ts). */
+export interface BootstrapInput {
+  /** `plan`: read and say (status, validate, a dry run). `up`: carry out what is pending. */
+  readonly mode: 'plan' | 'up';
+  /** Where phase 1 stands: the stores wait on it when it is pending or failed. */
+  readonly migrations: PlanPhase;
+  readonly registry: Registry;
+  /** The database the migrations ran on. */
+  readonly target: Readonly<{ url: string; dialect: string; schemas: readonly string[] }>;
+  /** The start's flags this run was given (`--config`, `--commands`, `--jobs`, `--policy`…), which the check is given too. */
+  readonly rest: readonly string[];
+  readonly opts: Options;
+  /** Where a phase's own output goes (the check's findings, the stores step's lines). */
+  readonly write: (line: string) => void;
+}
+
+/** What a run keeps of the App `--app` names: what it binds, its types, and the phases after the migrations. */
 export interface MigrateApp {
   readonly binding: TargetBinding;
   /** `status`: say when the App's generated types are older than the database. */
   types(registry: Registry, write: (line: string) => void): Promise<void>;
-  /** After `up`: the App judged against the schema the run left, its problems written; false when it no longer fits. */
-  check(rest: string[], write: (line: string) => void): Promise<boolean>;
+  /**
+   * The phases after the migrations, planned or carried out: the stores this App uses, its sign-in store, a word on
+   * seed data, and the check. `title` names the App; `next` is the `migrate up --app …` that applies what is pending.
+   */
+  bootstrap(input: BootstrapInput): Promise<{ title: string; next: string; phases: PlanPhase[] }>;
+  /** The entries the App says itself (its commands.ts, a build's bundles), for the context the plan prints. */
+  readonly entries?: Parameters<typeof contextLines>[1];
 }
 
 /** What a host's command is handed: the database read the way a start reads it, and the App when one was named. */
@@ -90,7 +131,7 @@ const migrateUsage = () =>
   '[--schema-file <path>] [--dev-url <url>] [--dry-run] [--tool flyway] [--repeatable]';
 
 /** The exit codes: what went wrong, for CI. */
-const EXIT = { ok: 0, couldNot: 1, invalid: 2, failed: 3, app: 4 } as const;
+const EXIT = { ok: 0, couldNot: 1, invalid: 2, failed: 3, app: 4, stores: 5 } as const;
 
 const COMMANDS = ['new', 'diff', 'check', 'squash', 'status', 'up', 'validate', 'baseline', 'repair'] as const;
 type Command = (typeof COMMANDS)[number];
@@ -109,6 +150,9 @@ const PASSED: Record<string, boolean> = {
   '--policy': true,
   /* The App's commands module, where it is not the commands.ts beside the manifest: its journal is a store. */
   '--commands': true,
+  /* Its jobs module: the job store and the event deliveries it reads are stores `up --app` makes, and the check
+     judges the jobs beside the commands they run. */
+  '--jobs': true,
 };
 
 const shown = (path: string) => {
@@ -148,7 +192,11 @@ export async function runMigrate<A extends MigrateApp>(
         Object.entries(hosted)
           .map(([word, each]) => `  ${word.padEnd(11)} ${each.says}: ${each.usage.replace(`${product()} migrate `, '')}\n`)
           .join('') +
-        'Exit codes: 1 could not run, 2 files and history disagree, 3 a migration failed, 4 applied but the App no longer checks.\n' +
+        'With --app, status prints the bootstrap plan (migrations, stores, sign-in store, seed, check) and up carries it out:\n' +
+        '  the stores the App uses (--commands, --jobs, --policy name its modules), a PostgreSQL auth.store, then the check.\n' +
+        '  validate --app exits 2 while any phase is pending. --json prints the plan as data.\n' +
+        'Exit codes: 1 could not run, 2 files and history disagree, 3 a migration failed, 4 applied but the App no longer checks,\n' +
+        '5 a store step failed.\n' +
         'mistri docs migrate is the guide.',
     );
     return EXIT.ok;
@@ -164,6 +212,7 @@ export async function runMigrate<A extends MigrateApp>(
   let tool: string | undefined;
   let dryRun = false;
   let repeatable = false;
+  let json = false;
   let schemaFile: string | undefined;
   let devUrl: string | undefined;
   let sub: string | undefined;
@@ -224,6 +273,10 @@ export async function runMigrate<A extends MigrateApp>(
         repeatable = true;
         continue;
       }
+      if (arg === '--json') {
+        json = true;
+        continue;
+      }
       if ((command === 'new' || command === 'diff') && name === undefined && !arg.startsWith('-')) {
         name = arg;
         continue;
@@ -252,6 +305,9 @@ export async function runMigrate<A extends MigrateApp>(
     return fail(`${command} takes no migration-file options. ${own.usage}`);
   }
   if (repeatable && command !== 'new') return fail('--repeatable is for new: it names the file R__<name>.sql.');
+  if (json && (app === undefined || !['status', 'up', 'validate'].includes(command)))
+    return fail('--json is for status, up and validate with --app: it prints the bootstrap plan as data.');
+  if (json && tool) return fail('--json reads the plan the runner keeps; drop --tool flyway to see it as data.');
   if (dryRun && !own && !['up', 'baseline', 'repair'].includes(command))
     return fail(`--dry-run is for up, baseline and repair; ${command} changes nothing.`);
   if (tool && (command === 'new' || dryRun))
@@ -263,6 +319,9 @@ export async function runMigrate<A extends MigrateApp>(
 
   const opts = parseArgs(rest);
   if (opts.unknown) return fail(`unknown option "${opts.unknown}". ${migrateUsage()}`);
+  /* With --json the document is stdout's alone: the narration (the SQL, the check's findings) goes to stderr. */
+  const print = write;
+  if (json) write = (line) => process.stderr.write(`${line}\n`);
   const appDir = app !== undefined ? resolve(app) : undefined;
   if (appDir !== undefined && !host)
     return fail(
@@ -291,6 +350,10 @@ export async function runMigrate<A extends MigrateApp>(
       }
     }
     const flags = { connection, argument, migrations, table, schemas: opts.schemas };
+    /* Where the profile decided the App or its entries, the run says what it read before anything else
+       (docs/bootstrap-plan.md B4); --json carries it in the plan. */
+    if (loaded && !json && fromProfile(projectContext()) && claimContext())
+      for (const line of contextLines(projectContext(), loaded.entries)) write(line);
 
     if (own) {
       return await own.run(
@@ -340,13 +403,64 @@ export async function runMigrate<A extends MigrateApp>(
     const dialect = dialectOf(target.url);
     const appFlag = appDir !== undefined ? ` --app ${shown(appDir)}` : '';
     const where = `${target.connection.name} (${dialect}), history in ${target.table}, migrations in ${shown(target.dir)}`;
+    /* The bootstrap plan (docs/bootstrap-plan.md): phase 1 is this file's, the rest the App framework's. Printed
+       last, as the run's summary, with the line that says what changed; or, with --json, as the one document. */
+    const bootstrap = async (mode: 'plan' | 'up', migrations: PlanPhase) => {
+      const after = await loaded!.bootstrap({
+        mode,
+        migrations,
+        registry,
+        target: { url: target.url, dialect, schemas: target.schemas },
+        rest,
+        opts,
+        write,
+      });
+      return { ...after, phases: [migrations, ...after.phases] };
+    };
+    const sayPlan = (plan: Awaited<ReturnType<typeof bootstrap>>, mode: 'plan' | 'up', code: number): number => {
+      const database = dialect === 'sqlite' ? shown(target.url.replace(/^sqlite:(\/\/)?/i, '')) : target.connection.name;
+      const changed = plan.phases.some((phase) => phase.status === 'applied');
+      if (json) {
+        print(
+          JSON.stringify({
+            version: 1,
+            app: plan.title,
+            connection: target.connection.name,
+            dialect,
+            mode,
+            phases: plan.phases.map((phase) => ({
+              phase: phase.phase,
+              status: phase.status,
+              detail: phase.detail,
+              items: phase.items,
+              ...(phase.error !== undefined ? { error: phase.error } : {}),
+            })),
+            changed,
+            exit: code,
+            context: contextJson(projectContext(), loaded?.entries),
+          }),
+        );
+        return code;
+      }
+      write('');
+      write(`Bootstrap of "${plan.title}" (${dialect}, ${database})`);
+      plan.phases.forEach((phase, i) => {
+        write(`  ${i + 1} ${phase.phase.padEnd(14)} ${phase.status.padEnd(8)} ${phase.detail}`);
+        if (phase.error !== undefined) write(`                            ${phase.error}`);
+      });
+      write(sayChanged(plan.phases, mode, plan.next));
+      return code;
+    };
 
     if (tool) {
       write(`Running flyway ${FLYWAY_COMMANDS[command]} on ${where}`);
       const run = () => runFlyway(command, target, dialect, write);
       const code = command === 'up' || command === 'baseline' || command === 'repair' ? await recordAround(target, run) : await run();
       if (code !== 0) return command === 'up' ? EXIT.failed : command === 'validate' ? EXIT.invalid : EXIT.couldNot;
-      if (command === 'up' && loaded) return (await loaded.check(rest, write)) ? EXIT.ok : EXIT.app;
+      if (command === 'up' && loaded) {
+        const plan = await bootstrap('up', { phase: 'migrations', status: 'done', detail: 'run by flyway', items: [] });
+        return sayPlan(plan, 'up', planExit(plan.phases));
+      }
       return EXIT.ok;
     }
 
@@ -357,12 +471,12 @@ export async function runMigrate<A extends MigrateApp>(
       if (loaded) await loaded.types(registry, write);
       /* Never applied is not a state to report and pass: a deploy script that
          reads status before serving would serve an App with no tables. */
-      if (!status.started) {
-        if (!status.holds && !status.plan.pending.length)
-          write(`No migrations to apply: ${product()} migrate diff init${appFlag} writes the first from schema.sql.`);
-        return EXIT.invalid;
-      }
-      return EXIT.ok;
+      if (!status.started && !status.holds && !status.plan.pending.length)
+        write(`No migrations to apply: ${product()} migrate diff init${appFlag} writes the first from schema.sql.`);
+      const code = status.started ? EXIT.ok : EXIT.invalid;
+      /* A plan is a report: its exit is status's own, whatever is pending. */
+      if (loaded) return sayPlan(await bootstrap('plan', migrationsPhase(status)), 'plan', code);
+      return code;
     }
 
     if (command === 'validate') {
@@ -373,6 +487,12 @@ export async function runMigrate<A extends MigrateApp>(
       for (const file of status.plan.pending) write(`  pending: ${file.script} is not applied`);
       sayDrift(status, write);
       write(valid ? `Valid: ${plural(status.plan.history.versioned.size, 'migration')} applied, nothing pending, no drift.` : 'Not valid.');
+      /* With --app, CI's question is whether the database is ready for this App: any phase pending is not. */
+      if (loaded) {
+        const plan = await bootstrap('plan', migrationsPhase(status));
+        const ready = valid && !plan.phases.some((phase) => phase.status === 'pending' || phase.status === 'failed');
+        return sayPlan(plan, 'plan', ready ? EXIT.ok : EXIT.invalid);
+      }
       return valid ? EXIT.ok : EXIT.invalid;
     }
 
@@ -432,12 +552,29 @@ export async function runMigrate<A extends MigrateApp>(
     if (result.status.plan.problems.length) {
       sayProblems(result.status, write);
       write('Nothing was applied.');
+      if (loaded) return sayPlan(await bootstrap('up', migrationsPhase(result.status)), 'up', EXIT.invalid);
       return EXIT.invalid;
     }
     if (result.wouldRun) {
+      /* A dry run is the plan: the SQL first, then what up would do after it. */
+      const planned = async () =>
+        loaded
+          ? sayPlan(
+              await bootstrap('plan', {
+                phase: 'migrations',
+                status: result.wouldRun!.length ? 'pending' : 'done',
+                detail: result.wouldRun!.length
+                  ? result.wouldRun!.map((file) => file.script).join(', ')
+                  : `up to date${sayVersion(result.status)}`,
+                items: result.wouldRun!.map((file) => file.script),
+              }),
+              'plan',
+              EXIT.ok,
+            )
+          : EXIT.ok;
       if (!result.wouldRun.length) {
         write('Nothing to apply.');
-        return EXIT.ok;
+        return planned();
       }
       for (const file of result.wouldRun) {
         const how = file.transactional ? 'in one transaction' : 'statement by statement, outside a transaction';
@@ -449,21 +586,46 @@ export async function runMigrate<A extends MigrateApp>(
         write('');
       }
       write(`${plural(result.wouldRun.length, 'migration')} would be applied.`);
-      return EXIT.ok;
+      return planned();
     }
     for (const { file, ms } of result.applied) write(`  applied ${file.script} (${ms} ms)`);
+    const applied = result.applied.map(({ file }) => file.script);
     if (result.failure) {
       write(`  failed  ${result.failure.file.script}: ${result.failure.message}`);
       write(`${plural(result.applied.length, 'migration')} applied before it; the run stopped there.`);
+      if (loaded)
+        return sayPlan(
+          await bootstrap('up', {
+            phase: 'migrations',
+            status: 'failed',
+            detail: `${result.failure.file.script} failed and was rolled back${applied.length ? `; applied before it: ${applied.join(', ')}` : ''}`,
+            items: applied,
+            error: result.failure.message,
+          }),
+          'up',
+          EXIT.failed,
+        );
       return EXIT.failed;
     }
     if (!result.applied.length) {
       write(`Nothing to apply: up to date${sayVersion(result.status)}.`);
+      if (loaded) {
+        const plan = await bootstrap('up', {
+          phase: 'migrations',
+          status: 'done',
+          detail: `up to date${sayVersion(result.status)}`,
+          items: [],
+        });
+        return sayPlan(plan, 'up', planExit(plan.phases));
+      }
       return EXIT.ok;
     }
     write(`Applied ${plural(result.applied.length, 'migration')}: now${sayVersion(result.status)}.`);
     sayDrift(result.status, write);
-    if (loaded) return (await loaded.check(rest, write)) ? EXIT.ok : EXIT.app;
+    if (loaded) {
+      const plan = await bootstrap('up', { phase: 'migrations', status: 'applied', detail: applied.join(', '), items: applied });
+      return sayPlan(plan, 'up', planExit(plan.phases));
+    }
     return EXIT.ok;
   } catch (error) {
     return fail((error as Error).message);
@@ -529,6 +691,70 @@ async function runDesired(
     `It builds ${file}. A database migrated with the old files no longer matches its history: rebuild it, or ${product()} migrate repair.`,
   );
   return EXIT.ok;
+}
+
+/** Phase 1 as a status reads it: pending files, a failed or disagreeing history, or done. */
+function migrationsPhase(status: Status): PlanPhase {
+  const failed = status.plan.history.failed;
+  if (status.plan.problems.length || failed.length)
+    return {
+      phase: 'migrations',
+      status: 'failed',
+      detail: failed.length
+        ? `${failed.map((row) => row.script).join(', ')} failed: ${product()} migrate repair, then up`
+        : 'the files and the history disagree; nothing was applied',
+      items: failed.map((row) => row.script),
+      ...(status.plan.problems.length ? { error: status.plan.problems.join(' ') } : {}),
+    };
+  const pending = status.plan.pending.map((file) => file.script);
+  if (pending.length) return { phase: 'migrations', status: 'pending', detail: pending.join(', '), items: pending };
+  return {
+    phase: 'migrations',
+    status: status.started ? 'done' : '—',
+    detail: status.started ? `up to date${sayVersion(status)}` : 'none written yet',
+    items: [],
+  };
+}
+
+/** The exit of an `up --app` that applied its migrations: 5 when a store step failed, 4 when the check did, else 0. */
+function planExit(phases: readonly PlanPhase[]): number {
+  const failed = (name: PlanPhase['phase']) => phases.some((phase) => phase.phase === name && phase.status === 'failed');
+  if (failed('stores') || failed('sign-in store')) return EXIT.stores;
+  if (failed('check')) return EXIT.app;
+  return EXIT.ok;
+}
+
+/**
+ * The plan's last line: what this run changed, and what it did not (`Changed: 1 migration, 4 stores.`,
+ * `Nothing changed.`, `Changed: V1__task.sql. Not changed: stores (failed), check (waiting).`). A plan that only
+ * read says which phases `up` would carry out.
+ */
+function sayChanged(phases: readonly PlanPhase[], mode: 'plan' | 'up', next: string): string {
+  const numbered = phases.map((phase, i) => ({ ...phase, n: i + 1 }));
+  if (mode === 'plan') {
+    const pending = numbered.filter((phase) => phase.status === 'pending');
+    const failed = numbered.filter((phase) => phase.status === 'failed');
+    if (failed.length) return `Nothing changed. ${failed.map((phase) => phase.phase).join(' and ')} failed: see above.`;
+    if (!pending.length) return 'Nothing changed, and nothing is pending: the database is ready for this App.';
+    const which = pending.map((phase) => phase.n);
+    return `Nothing changed. ${next} applies ${which.length === 1 ? which[0] : `${which.slice(0, -1).join(', ')} and ${which[which.length - 1]}`}, then checks.`;
+  }
+  const failedAny = numbered.some((phase) => phase.status === 'failed');
+  const parts: string[] = [];
+  for (const phase of numbered) {
+    /* A migration run that failed part way still applied the files before the one that failed. */
+    if (phase.phase === 'migrations' && phase.status === 'failed' && phase.items.length) parts.push(phase.items.join(', '));
+    if (phase.status !== 'applied') continue;
+    if (phase.phase === 'migrations')
+      parts.push(failedAny ? phase.items.join(', ') || 'no migration' : plural(phase.items.length, 'migration'));
+    else if (phase.phase === 'stores') parts.push(plural(phase.items.length, 'store'));
+    else parts.push(phase.phase);
+  }
+  const not = numbered
+    .filter((phase) => phase.status === 'failed' || phase.status === 'waiting')
+    .map((phase) => `${phase.phase} (${phase.status})`);
+  const head = parts.length ? `Changed: ${parts.join(', ')}.` : 'Nothing changed.';
+  return not.length ? `${head} Not changed: ${not.join(', ')}.` : head;
 }
 
 function sayVersion(status: Status): string {

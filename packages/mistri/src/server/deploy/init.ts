@@ -108,6 +108,8 @@ interface InitRequest extends Omit<DeployConfig, 'secrets' | 'optionalSecrets'> 
   sourceTexts?: string[];
   /** The App's name, which the Worker is named after (slugged); absent, the App's directory. */
   appName?: string;
+  /** The keys mistri.json's app block gives (config.ts withProfile): read from there at each deploy, not written. */
+  profiled?: ReadonlyArray<keyof DeployConfig>;
   force: boolean;
 }
 
@@ -144,8 +146,9 @@ export function initFiles(request: InitRequest): Array<{ path: string; content: 
   const name = slug(request.appName ?? basename(resolve(request.app)));
   const { secrets, optionalSecrets, vars } = workerNeeds(request.configText, request.sourceTexts);
   const root = relative(dir, process.cwd()) || '.';
-  const { dir: _dir, configText: _text, sourceTexts: _sources, appName: _name, force: _force, ...build } = request;
-  const config: DeployConfig = { ...build, secrets, optionalSecrets };
+  const { dir: _dir, configText: _text, sourceTexts: _sources, appName: _name, force: _force, profiled = [], ...build } = request;
+  const config: Partial<DeployConfig> = { ...build, secrets, optionalSecrets };
+  for (const key of profiled) delete config[key];
   const list = (names: string[]) => names.map((each) => `'${each}'`).join(', ');
   return [
     { path: join(dir, CONFIG_FILE), content: `${JSON.stringify(config, null, 2)}\n` },

@@ -23,6 +23,8 @@ export interface ColumnRow {
   enum_labels: string[] | null;
   /** A `varchar(n)`'s n; null for any other type. */
   character_maximum_length: number | null;
+  /** A `numeric(p, s)`'s s; null for an unconstrained numeric and for every other type. */
+  numeric_scale?: number | null;
 }
 
 /** What the checks say of a text column's length and form (vocabulary.ts checkTextRule), the first of each. */

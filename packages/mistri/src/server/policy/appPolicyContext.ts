@@ -1,5 +1,11 @@
 import { isPromise, isProxy } from 'node:util/types';
-import { TransactionOutcomeUnknown, type Adapter, type ScopedReads, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import {
+  TransactionOutcomeUnknown,
+  type Adapter,
+  type AggregateRequest,
+  type ScopedReads,
+  type WriteTransaction,
+} from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import {
@@ -522,6 +528,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
       countView: (view) => track(() => adapter.countView!(view)),
       runBreakdown: (definition, offset) => track(() => adapter.runBreakdown!(definition, offset)),
       countBreakdown: (definition) => track(() => adapter.countBreakdown!(definition)),
+      ...(adapter.aggregate ? { aggregate: (request: AggregateRequest) => track(() => adapter.aggregate!(request)) } : {}),
       ...(adapter.insert && !server ? { insert: ((request) => track(() => adapter.insert!(request))) as WriteTransaction['insert'] } : {}),
       ...(adapter.update && !server ? { update: ((request) => track(() => adapter.update!(request))) as WriteTransaction['update'] } : {}),
       ...(adapter.remove && !server ? { remove: ((request) => track(() => adapter.remove!(request))) as WriteTransaction['remove'] } : {}),

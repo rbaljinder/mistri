@@ -42,6 +42,7 @@ import { viewPaths, withViewComputed } from './viewLabels.js';
 import { tableAtPrefix, tryResolvePath, type ViewDef } from './viewPaths.js';
 import type { ComputedPath } from './rollups.js';
 import { withViewReferences } from './declaredReferences.js';
+import { declaredScale, exactSqliteSum, sumsExactly } from './decimals.js';
 import { LABEL_SEGMENT, labelPrefix } from './recordLabel.js';
 
 /** What a measure can do. `count` is the only one that needs no column. `median` is PostgreSQL's
@@ -445,8 +446,11 @@ function compileBreakdownFresh(
     });
   }
 
-  /* One aggregate's SQL, and what its values are. */
-  const termSql = (term: MeasureTerm): { sql: string; path?: string; type: string } => {
+  /* A measure said as text whose order is a number: an exact SQLite sum, by its output name. */
+  const orderedBy = new Map<string, string>();
+  /* One aggregate's SQL, and what its values are. `exact` asks for a decimal column's sum as exact text where the
+     engine would add floats (decimals.ts): a measure on its own, never a term of arithmetic, which reads a number. */
+  const termSql = (term: MeasureTerm, exact = false): { sql: string; path?: string; type: string; order?: string } => {
     /* The function is written into the statement as a word, so it is one of
        the words: a structured def arrives from a request (`/api/breakdown`
        `def`), and anything else there would be SQL of the caller's own,
@@ -478,6 +482,12 @@ function compileBreakdownFresh(
     if (refused) throw new PathError(refused, term.path, term.path, 0);
     const resolved = paths.resolve(term.path);
     const read = aggregateInput(qualify(term.path), resolved.column.type, style.dialect);
+    /* SQLite adds a decimal column as floats, a cent off at large totals: summed in its smallest unit instead, and
+       said with its places, as PostgreSQL's exact numeric says it. */
+    if (exact && term.fn === 'sum' && style.dialect === 'sqlite' && sumsExactly(resolved.column.type)) {
+      const sum = exactSqliteSum(read, declaredScale(resolved.column.type), resolved.path);
+      return { sql: sum.text, path: resolved.path, type: resolved.column.type, order: sum.total };
+    }
     return {
       sql: term.fn === 'median' ? `percentile_cont(0.5) WITHIN GROUP (ORDER BY ${read})` : `${term.fn.toUpperCase()}(${read})`,
       path: resolved.path,
@@ -541,10 +551,11 @@ function compileBreakdownFresh(
         continue;
       }
     }
-    const head = termSql(measure);
+    const head = termSql(measure, !measure.steps?.length);
     if (!measure.steps?.length) {
       const name = nameFor(measureName(measure, head.path));
       select.push(`${head.sql} AS ${style.quote(name)}`);
+      if (head.order) orderedBy.set(name, head.order);
       columns.push({ name, kind: 'measure', fn: measure.fn, path: head.path, type: head.type });
       continue;
     }
@@ -605,7 +616,8 @@ function compileBreakdownFresh(
       throw new PathError(`Nothing called "${o.name}" is in this breakdown. It shows: ${[...names].join(', ')}.`, o.name, o.name, 0);
     }
     if (o.emptyLast) return `(${style.quote(o.name)} IS NULL) ASC`;
-    return `${style.quote(o.name)} ${o.direction === 'desc' ? 'DESC' : 'ASC'}`;
+    /* An exact sum is text; it sorts by the integer it says, never as text ("9.00" after "10.00"). */
+    return `${orderedBy.get(o.name) ?? style.quote(o.name)} ${o.direction === 'desc' ? 'DESC' : 'ASC'}`;
   });
 
   const limit = clampLimit(def.limit);

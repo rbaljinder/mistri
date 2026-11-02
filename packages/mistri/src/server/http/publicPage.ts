@@ -35,6 +35,7 @@ import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 import type { ResolvedSource } from '@mistriwork/engine/server/http/context.js';
 import type { PublicFact, PublicImage, PublicItem, PublicRoom } from '../../shared/publicDocument.js';
 import { unitWord } from '@mistriwork/engine/shared/unitWord.js';
+import { majorText, minorToMajor } from '@mistriwork/engine/shared/money.js';
 import { pictureKey, type PictureDetails } from './publicPictures.js';
 
 /** What one public address says beyond its title: the room, its description and its preview picture. */
@@ -76,7 +77,7 @@ async function run(reading: PublicReading, q: string, limit: number): Promise<Ro
 }
 
 /** A value as the App says it, in words: its vocabulary, money, a number with its unit, a percent, a date. */
-function said(rule: AppDisplayRule | undefined, value: unknown, ui: AppPayloadApp['ui']): string | undefined {
+export function said(rule: AppDisplayRule | undefined, value: unknown, ui: AppPayloadApp['ui']): string | undefined {
   if (value === null || value === undefined || value === '') return undefined;
   if (typeof value === 'object') return undefined;
   const text = String(value);
@@ -89,17 +90,25 @@ function said(rule: AppDisplayRule | undefined, value: unknown, ui: AppPayloadAp
   const withUnit = (figure: string) =>
     unit ? (unit.startsWith('/') ? `${figure}${unit}` : `${figure} ${unitWord(figure, unit)}`) : figure;
   try {
-    if (rule?.format === 'money' && safe) {
+    if (rule?.format === 'money') {
       const currency = (rule as { currency?: string }).currency ?? (ui as { currency?: string }).currency ?? 'USD';
-      /* As the client says one figure (valueModel.ts moneyText): to the cent where it has cents, else whole, so a
-         SQLite numeric(10,2) read back as "22495.00" is "$22,495". */
-      return withUnit(
-        new Intl.NumberFormat(locale, {
-          style: 'currency',
-          currency,
-          ...(Math.round(n * 100) % 100 ? {} : { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
-        }).format(n),
-      );
+      /* As the client says it (locale.ts formatMoney): to the currency's minor digits, whole amounts too, so a
+         SQLite numeric(10,2) read back as "22495.00" is "$22,495.00" on the page and in its words alike. The
+         figure goes to Intl as its decimal text, so one past 2^53 is said by its digits. */
+      const figure = (rule as { minor?: true }).minor ? minorToMajor(value, currency) : majorText(value, currency);
+      if (figure !== undefined) {
+        const options: Intl.NumberFormatOptions = { style: 'currency', currency, signDisplay: 'negative' };
+        /* `whole: true` drops the minor digits only where they are zeros (locale.ts formatWholeMoney). */
+        const fraction = new Intl.NumberFormat(locale, options)
+          .formatToParts(figure as Intl.StringNumericLiteral)
+          .find((part) => part.type === 'fraction')?.value;
+        const whole = (rule as { whole?: true }).whole && !/[^0]/.test(fraction ?? '');
+        return withUnit(
+          new Intl.NumberFormat(locale, whole ? { ...options, minimumFractionDigits: 0, maximumFractionDigits: 0 } : options).format(
+            figure as Intl.StringNumericLiteral,
+          ),
+        );
+      }
     }
     if (rule?.format === 'percent' && safe) return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(n)}%`;
     if (rule?.format === 'items') return text.split(/\r?\n/).filter(Boolean).join(', ');

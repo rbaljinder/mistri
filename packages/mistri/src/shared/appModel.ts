@@ -593,7 +593,7 @@ export interface AppDashSection {
   /** A curated mark: above a note's guidance, or in any other section's
       heading row, beside its title (a metric's label, a chart's, a list's). */
   icon?: AppIconName;
-  /** note: one link to an already-served list or dashboard. */
+  /** note: one link to one of the App's rooms: a list, a dashboard or a signed-in form view (appDestinations.ts). */
   action?: import('@mistriwork/engine/shared/appLinks.js').AppLinkAction;
   /** note: 'banner', the dashboard's introduction, dressed by the look's `banner` recipe. */
   variant?: 'banner';
@@ -621,6 +621,9 @@ export interface AppDashSection {
   format?: FigureFormat;
   /** metric, breakdown, chart and matrix: a word said after each figure ("days", "/mo"). */
   unit?: string;
+  /** metric: money said exact, to the currency's minor digits at any size (the default: a balance is read to the
+      cent), or `compact` from a thousand ("$28.1K"), for a revenue card glanced at. */
+  figure?: 'exact' | 'compact';
   /** metric and chart: a goal — a meter and the share reached on a card, a
       rule in the ink on a line or stacked bars. Never on a donut, which has
       no scale to rule. A metric's goal may be read from data: a second
@@ -783,6 +786,8 @@ export const DISPLAY_FORMATS = [
   'percent',
   'number',
   'relative',
+  'date',
+  'datetime',
   'items',
   'duration',
   'email',
@@ -923,6 +928,15 @@ export interface ResourceDef {
   /** Resource invariants, whichever form, action or command submits the write.
       Runtime activation requires authoritative writer enforcement. */
   validation?: FormRule[];
+  /**
+   * Under a row policy, the database triggers on this resource's table the App accepts: a command's write that fires
+   * one runs, and each row its keyed effects reach is proven inside the person's rows before and after the statement
+   * (docs/trigger-effects.md). The effects are read from the trigger, never declared; authority.lock records each
+   * named trigger's definition, and a changed one is refused until the lock is approved again. A trigger that only
+   * validates needs no name; one that is not named and writes stays refused.
+   * @preview
+   */
+  triggers?: string[];
   /** Column → how long its text may be and what form it takes (textRules.ts): judged as the form is typed and on
       every write, over what the database already says (`ColumnMeta.text`). */
   text?: Record<string, import('@mistriwork/engine/shared/textRules.js').TextRule>;
@@ -1130,6 +1144,9 @@ export interface AppDef {
       learned against the catalog the App is served on, never authored, and shared by reference with the definition
       said in a reader's other words so one learning serves every reader. */
   valueLabels?: Record<string, Record<string, string>>;
+  /** authority.lock's approved trigger digests, by "resource.trigger" (server/commands/triggerLock.ts): read with the
+      lock when the App loads, never authored; absent where the App keeps no lock. */
+  approvedTriggers?: Record<string, string>;
   /** Private control declarations; browser payloads serve decisions separately. */
   flags?: import('./appFlags.js').FlagCatalog['flags'];
   /** Named audiences that flag rules and experiment eligibility reach by name (appFlags.ts AudienceDefinition). */
@@ -1450,6 +1467,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'], readonly string[]> = {
     'to',
     'format',
     'unit',
+    'figure',
   ],
   breakdown: [
     'kind',

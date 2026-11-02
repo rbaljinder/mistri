@@ -685,8 +685,8 @@ every look, so the picture it keeps reads on whatever page shows it.
   changes, so no tab is seen in one place and then another. A strip that
   scrolled hid that there was more: A tenant App's ran 648px in a 627px room at a
   desk, and past a phone's edge.
-- **The App's own panes draw no scroll bar.** The content pane, the filter
-  rail, the list's control strip, every dialog, the navigation rail and a
+- **The App's own panes draw no scroll bar.** The content pane, the list's
+  control strip, every dialog, the navigation rail and a
   record's feeds and side panel hide theirs; popups and listboxes keep theirs. CSS cannot ask
   for "only while scrolling" — whether a bar fades or stands there is the
   operating system's setting, and a mouse attached to a Mac makes it
@@ -732,6 +732,9 @@ every look, so the picture it keeps reads on whatever page shows it.
 - A list may draw its filters as a rail beside the rows (`filterBar: 'rail'`):
   a column of at most 15rem behind one hairline, facets divided by hairlines,
   never boxed; counts in the faint ink with tabular figures, blank until known.
+  It stands beside the rows as they scroll while it fits the room, and scrolls
+  with them where it is taller: it has no scroll of its own, which was a
+  second scroller in the room whose last facet sat under the window's edge.
   On a phone the rail is a sheet over the list that applies on one button.
   Beside the rows the chips that say the selection head the results, with the
   Sort and one Clear all; the rail carries no second one.
@@ -1089,7 +1092,11 @@ every look, so the picture it keeps reads on whatever page shows it.
   desk) through the eyebrow, name, status and facts, or a list's title, tabs
   and filters, closed by a hairline, as an object page leads with its
   object; the contents keep their edge, and a band under the facts keeps
-  20px of its own before the body's margin. It is drawn as a border image
+  20px of its own before the body's margin. What stands raised in it steps
+  7% into the ink to stand apart from it, but a list's search, which raised
+  buttons draw on the raised ground, is a field on the surface there: on the
+  step its placeholder read 4.05:1 and its edge 2.67:1, on a ground no
+  palette pair measures. It is drawn as a border image
   whose outset reaches the pane's edges, which is ink overflow: it adds no
   scroll, clips nothing (a phone's verbs fixed at the foot of the screen
   are the head's) and needs nothing measured, so it stands from the first
@@ -1129,7 +1136,8 @@ every look, so the picture it keeps reads on whatever page shows it.
     presentation with no header row to hold it says "Select all", still
     without the count;
   - a grid's columns are arranged by their reader (Grid.tsx, gridArrange.ts): move buttons in each head, one step
-    at a time, and a resizer on the head's trailing edge, dragged with a pointer or stepped with arrow keys and
+    at a time, and a resizer on the head's trailing edge, a strip of its own that the head's sort never runs
+    under (its column's floor counts it, and a reference's arrow), dragged with a pointer or stepped with arrow keys and
     restored with a double-click or Alt+Backspace; Alt+arrows move a column from any control in its head. The
     arrangement lives only in that grid — a refetch never moves a placed column — and a scrolled grid takes a
     fixed layout only once a width is dragged, so a grid never arranged draws as it did;
@@ -1255,13 +1263,25 @@ every look, so the picture it keeps reads on whatever page shows it.
   last at the edge. What the bar offers beside the control at a desk (entering
   a tenant for support, its support visits) is the context dialog's on a phone.
 - A list's New is its one primary action and is filled, in the primary-action color, as a record's first action is; Export beside it stays quiet.
-- A stat card says money compact from a thousand up ("$27.3K", "$414.1K"), as
-  its axis and its change do, and whole below it; the exact figure is the
-  card's title and what a screen reader hears. Each card measures alone, so a
-  rule over its neighbours ("compact where one of them must be") could only be
-  kept after all had answered, by a figure changing form under the reader; a
-  strip said "$414.1K" beside "$27,300" instead. A table or a breakdown says
-  figures whole to a hundred thousand: there they are read against each other.
+- Money is said to its currency's minor digits wherever it is read to act on
+  — a cell, a card, a record, a stat card, a document, a CSV: "$24,495.00",
+  "$0.00", "-$12.50", never "$24,495" beside "$5,917.40". A figure is read
+  by its digits, so one past 2^53 is not the double `Number()` makes of it.
+  A stat card says its figure exact by default: a balance read as "≈ $28K"
+  is no balance (a field report). A card glanced at beside its trend, where
+  the size is the news, says `figure: 'compact'` — from a thousand up
+  ("$27.3K", "$414.1K"), as its axis and its change do, the exact figure
+  its title and what a screen reader hears. Each card measures alone, so a
+  rule over its neighbours ("compact where one of them must be") could only
+  be kept after all had answered, by a figure changing form under the
+  reader. A table or a breakdown on a dashboard says figures exact to a
+  hundred thousand and compact past it: there they are read against each
+  other. A chart's axis, and a filter's bound ("Price up to $15,000"), are
+  a scale and a question, not amounts, and stay round. A listing where
+  cents are noise (a car's price) says `whole: true` on its money rule:
+  an amount with no cents is "$24,495", one with cents is still "$24,495.50".
+  It drops zeros and never money, so it holds on every screen, a document and
+  the server-drawn page, and a CSV stays exact.
 - A dashboard's `areas` places sections in the named areas of a grid of equal columns (`structure.css`; a look dresses the sections in an area and never moves an area). Areas in one template row stand as tall as the tallest, the sections in an area stack, and the last of them takes the height that is left, so a boxed look's panels end on one line. The DOM is in the order the template reads, which is the one a narrow screen stacks in: below 13rem a column, asked of the grid's own room, not the window's. Metrics and pairs are made per area (nothing pairs in one). An area whose every section leaves out (`empty: 'hide'`) hands its cells to its left neighbour, and that is settled once for each pick the reader makes, when every tile has answered, never on a refresh.
 - A stat card is as tall as what it says: the trend's 32px slot is kept only
   when a trend is drawn, and the cards of a strip stand from one top edge
@@ -1452,16 +1472,25 @@ every look, so the picture it keeps reads on whatever page shows it.
 - A document (`document()`, components/Document.tsx) is paper on screen
   too: the sheet at its paper's width, ink on white in every look and mode
   (the system's Canvas and CanvasText, mixed for its quieter inks), its
-  margins as padding. Its hierarchy is the platform's, never the author's:
+  margins as padding. The sheet is its own token context: it says the
+  screen's tokens again as paper's (`--ink`, `--ink-muted`, `--ink-subtle`,
+  the grounds, the rules, the link and the status inks), so a value drawn
+  inside it, a custom value component's too, inks for white whatever the
+  look and mode outside. Every word on it, a caption and a column's head
+  included, reads at 4.5:1 (`e2e/documents.spec.ts` reads every look,
+  light and dark, on screen and in print). Its hierarchy is the platform's, never the author's:
   a letterhead (the App's mark and name, the sender's lines) across from
   the document's name and number under one hairline; captions in small
   capitals; lines as rows under a 2px rule in the ink with hairlines
   between, figures right-aligned in tabular numerals and money to the
   cent; the totals with the sum owed last and heaviest, under a rule in
   the ink. No shadow, no band, no box but the headline's quiet ground. A
-  date said relatively on screen is the day on paper. A look's table dress
+  date the screen says from today is its day on paper, and a moment its
+  day, time and zone, the same words for any reader on any day
+  (`sayAbsolute`; `format: 'date'` and `'datetime'` say it so on screen). A look's table dress
   is said away again in the look layer, and the room around the sheet in
-  the print layer, so no look moves paper.
+  the print layer, so no look moves paper. Printed, it is the sheet alone:
+  the skip link, the bars and every App navigation are said away in print.
 
 ### The intake style of a form with steps
 
@@ -1562,7 +1591,10 @@ found not to hold.
   In an App, anything the keyboard reaches that names no ring of its own
   still wears the house ring, never the browser's blue, and a popup that
   holds its menu's focus draws none round itself: the lit item says where
-  the keyboard is.
+  the keyboard is. A shape in a chart takes no outline, so a donut's slice
+  that drills wears the ring as the outline of its own arc, 2px off it
+  (`Chart.tsx`): a widened stroke was cut by the drawing's edge and, on a
+  pale slice, could not be told from the slice.
 - **Text reads at 4.5:1 on what it sits on**, hover and tints included.
   Placeholders are `--ink-subtle`, not the browser's grey. A loading bar
   stands a tenth into the text ink, at the look's corner (square in Mono):
@@ -1676,8 +1708,10 @@ found not to hold.
 - **Dialogs own focus and give it back.** A modal holds Tab and hands focus
   back on close (`Modal.tsx`); the palette is a named modal whose one Tab
   stop is its box. The New form's drawer keeps the list in sight but, like
-  a pointer on its scrim, lets nothing past it: it holds Tab, and when it
-  goes focus returns to the button that opened it. The glance (`open:
+  a pointer on its scrim, lets nothing past it: it holds Tab, the page behind
+  it is inert while it is open (out of the accessibility tree and under no
+  finger, as its `aria-modal` says), and when it goes focus returns to the
+  button that opened it. The glance (`open:
   'drawer'`) covers the list's right side too, so it is a modal: it takes the
   focus when it opens — on its title, where J, K and Tab start, and which
   wears no ring of its own since the glance's box says where the focus is —
@@ -1706,10 +1740,13 @@ found not to hold.
   box, a card's ⋯, a chip's × — take a 44px hit area without growing what
   they draw (structure.css), and so do the chrome's: the trail's steps, a
   Select's button, a list's Export, + filter and Filters, a record's title, a lane's
-  +, a dashboard's windows, a folding section's heading and a gantt's bars. A field cannot take one, so on a phone it is drawn at a target's
-  height: a list's search row at a Button's 40px, the sign-in card's fields
+  +, a dashboard's windows, a folding section's heading and a gantt's bars,
+  a date's calendar button and a New sheet's Close. A field cannot take one, so on a phone it is drawn at a target's
+  height: a list's search row (the search, and the Filters and sort beside it) at 44px, the sign-in card's fields
   at its submit's 44px, and on a touch screen an App form's fields (a New
-  form's, a record's in edit) at the 44px of the form's own actions. Two controls never share a box: a card's ⋯ stands
+  form's, a record's in edit, a command's) at the 44px of the form's own
+  actions — a reference's picker fills its box edge to edge, a switch's row
+  and a command's choices are 44px rows. Two controls never share a box: a card's ⋯ stands
   in its own column beside the button that opens the card, the
   password's Show beside its field, and a gallery's previous and next beside
   the button that opens the photo, which stops at their columns. A board is a group of lanes, and a

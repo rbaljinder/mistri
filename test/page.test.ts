@@ -2025,7 +2025,7 @@ describe('a page chart, note and embed', () => {
     assert.throws(
       () =>
         resolvePageEmbeds(app, [{ ...authored, sections: [{ kind: 'note', text: 'x', action: { label: 'Go', view: 'nope' } }] }], 'app.ts'),
-      /note whose action opens "nope", which is not a list or dashboard view/,
+      /section 1, note action names "nope", which is not a list, a dashboard or a signed-in form view\./,
     );
   });
 });

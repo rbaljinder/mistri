@@ -46,6 +46,7 @@ import { parseAppConfig, physicalBindings } from '../packages/mistri/src/shared/
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import { assertScopeCatalog, mapScopeCatalog } from '../packages/engine/src/shared/scopeCatalog.js';
 import { isRuntimeTable, runtimeName, runtimeSchema, runtimeTable } from '../packages/engine/src/shared/runtimeTables.js';
+import { refusalCause } from '../packages/engine/src/shared/refusal.js';
 import { liveSkip } from './live.js';
 import { commandsOf } from '../packages/mistri/src/server/stores/commandStores.js';
 
@@ -77,7 +78,7 @@ const ids = new Map([
 const RESET = [
   `DROP TABLE IF EXISTS public.scoped_item, public.scoped_owner, public.scoped_interleaved CASCADE`,
   `DROP SCHEMA IF EXISTS mistri CASCADE`,
-  `DROP FUNCTION IF EXISTS public.scoped_noop()`,
+  `DROP FUNCTION IF EXISTS public.scoped_effect(), public.scoped_check(), public.scoped_peek()`,
 ];
 const SETUP = [
   `CREATE TABLE public.scoped_owner (id integer PRIMARY KEY, tenant text NOT NULL, code text UNIQUE, name text)`,
@@ -88,7 +89,9 @@ const SETUP = [
   `INSERT INTO public.scoped_owner VALUES (1, 'a', 'A', 'Alice'), (2, 'b', 'B', 'Bob')`,
   `INSERT INTO public.scoped_item (id, tenant, name, owner_id) VALUES
      (1, 'a', 'Alpha', 1), (2, 'b', 'Beta', 2), (3, 'a', 'Hidden parent', 2)`,
-  `CREATE FUNCTION public.scoped_noop() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'`,
+  // A trigger function that writes: what a row policy cannot bound. A validation-only one does not block (scope-triggers.test.ts).
+  `CREATE FUNCTION public.scoped_effect() RETURNS trigger LANGUAGE plpgsql AS
+     'BEGIN UPDATE public.scoped_owner SET name = name WHERE false; RETURN NEW; END'`,
 ];
 
 /** Whether a promise settles within the window; a lock that holds does not. */
@@ -152,7 +155,7 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
       assert.equal(typeof adapter.scopeTransaction, 'function');
       assert.equal(typeof commandsOf(adapter).scopeCommandTransaction, 'function');
       const result = await adapter.scopeTransaction(rowsA(), async (tx, evidence) => {
-        assert.deepEqual(Object.keys(tx).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+        assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
         assert.ok(Object.isFrozen(evidence));
         assert.equal(evidence.dialect, 'postgres');
         assert.equal(await tx.count(ITEM), 2);
@@ -221,6 +224,36 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
       });
     });
   }
+
+  test('a hidden parent and a missing one answer alike, in the same words, and neither write is made', async () => {
+    // Before the write: a missing parent left to the database's own foreign key fails with its words, not the policy's.
+    await withAdapter(async (adapter) => {
+      const before = await items();
+      const said = (write: (tx: WriteTransaction) => Promise<unknown>) =>
+        adapter.scopeTransaction(rowsA(), write).then(
+          () => 'committed',
+          (error: unknown) => {
+            const code = (error as { code?: unknown }).code;
+            return `${(error as Error).constructor.name}: ${(error as Error).message}${code === undefined ? '' : ` [${String(code)}]`}`;
+          },
+        );
+      for (const [hidden, missing] of [
+        [
+          (tx: WriteTransaction) => tx.insert({ table: ITEM, values: { id: 5, owner_id: 2 } }),
+          (tx: WriteTransaction) => tx.insert({ table: ITEM, values: { id: 5, owner_id: 999 } }),
+        ],
+        [
+          (tx: WriteTransaction) => tx.update({ table: ITEM, key: { id: 1 }, values: { owner_id: 2 } }),
+          (tx: WriteTransaction) => tx.update({ table: ITEM, key: { id: 1 }, values: { owner_id: 999 } }),
+        ],
+      ]) {
+        const answer = await said(hidden);
+        assert.match(answer, /^ScopeRefusal: /);
+        assert.equal(await said(missing), answer);
+        assert.deepEqual(await items(), before);
+      }
+    });
+  });
 
   /* ---------- the current row under concurrency ---------- */
 
@@ -338,7 +371,10 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
   });
 
   for (const [name, ddl] of [
-    ['a trigger', `CREATE TRIGGER scoped_guard BEFORE UPDATE ON public.scoped_item FOR EACH ROW EXECUTE FUNCTION public.scoped_noop()`],
+    [
+      'a writing trigger',
+      `CREATE TRIGGER scoped_guard AFTER INSERT OR UPDATE OR DELETE ON public.scoped_item FOR EACH ROW EXECUTE FUNCTION public.scoped_effect()`,
+    ],
     ['a rule', `CREATE RULE scoped_rule AS ON DELETE TO public.scoped_item DO INSTEAD NOTHING`],
     ['row security', `ALTER TABLE public.scoped_item ENABLE ROW LEVEL SECURITY`],
     ['a policy', `CREATE POLICY scoped_policy ON public.scoped_item USING (true)`],
@@ -366,6 +402,105 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
       });
     });
   }
+
+  /* A field report: a validation-only trigger blocked every write to its table, though the write never fired it. A
+     trigger now blocks only the writes that fire it, and none if its function is proven to check NEW and OLD and
+     raise (postgresTriggers.ts). The grammar is held in scope-triggers.test.ts; this is the writer against a server. */
+  const CHECK = `CREATE FUNCTION public.scoped_check() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      IF NEW.version < 0 THEN
+        RAISE EXCEPTION 'Negative version' USING ERRCODE = 'check_violation';
+      END IF;
+      RETURN NEW;
+    END $$`;
+  const causeOf = (promise: Promise<unknown>) =>
+    promise.then(
+      () => assert.fail('the write was not refused'),
+      (error: unknown) => String(refusalCause(error)),
+    );
+
+  test('a validation-only trigger blocks no write, and still refuses the value it checks', async () => {
+    await withAdapter(async (adapter) => {
+      await control.query(CHECK);
+      await control.query(
+        `CREATE TRIGGER scoped_version BEFORE UPDATE OF version ON public.scoped_item FOR EACH ROW
+           WHEN (NEW.version < 0) EXECUTE FUNCTION public.scoped_check()`,
+      );
+      // The field report's write: a column the trigger does not name.
+      await adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Restricted' } }));
+      // The trigger's own column: valid is written, invalid is refused by the trigger.
+      await adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 1 }, values: { version: 4 } }));
+      await assert.rejects(
+        adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 1 }, values: { version: -1 } })),
+        /Negative version/,
+      );
+      assert.deepEqual([(await item(1)).name, (await item(1)).version], ['Restricted', 4]);
+      await adapter.scopeTransaction(rowsA(), async (tx) => {
+        await tx.insert({ table: ITEM, values: { id: 8 } });
+        await tx.remove({ table: ITEM, key: { id: 8 } });
+      });
+      // The row policy still holds.
+      await assert.rejects(
+        adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 2 }, values: { name: 'x' } })),
+        Refusal,
+      );
+    });
+  });
+
+  test('a writing trigger blocks only the writes that fire it, and one that reads another table blocks too', async () => {
+    await withAdapter(async (adapter) => {
+      await control.query(
+        `CREATE TRIGGER scoped_audit AFTER INSERT ON public.scoped_item FOR EACH ROW EXECUTE FUNCTION public.scoped_effect()`,
+      );
+      await adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Fine' } }));
+      assert.match(
+        await causeOf(adapter.scopeTransaction(rowsA(), (tx) => tx.insert({ table: ITEM, values: { id: 9 } }))),
+        /an insert fires the trigger "scoped_audit" \(it writes rows\)/,
+      );
+      assert.equal(await item(9), undefined);
+      // Whether it raises says whether the other tenant has an owner: the policy cannot bound that.
+      await control.query(`CREATE FUNCTION public.scoped_peek() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM public.scoped_owner WHERE tenant = 'b') THEN RAISE EXCEPTION 'seen'; END IF;
+          RETURN NEW;
+        END $$`);
+      await control.query(
+        `CREATE TRIGGER scoped_peek BEFORE UPDATE ON public.scoped_item FOR EACH ROW EXECUTE FUNCTION public.scoped_peek()`,
+      );
+      assert.match(
+        await causeOf(adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Peek' } }))),
+        /an update of name fires the trigger "scoped_peek" \(it reads another table\)/,
+      );
+      assert.equal((await item(1)).name, 'Fine');
+    });
+  });
+
+  /* CREATE OR REPLACE FUNCTION takes no lock the pinned table conflicts with, so a function proven at the catalog read
+     may be replaced before COMMIT. A write that fired a validation trigger reads the function's version again before
+     COMMIT and refuses if it moved. */
+  test('a validation trigger function replaced during the transaction refuses it at COMMIT', async () => {
+    await withAdapter(async (adapter) => {
+      await control.query(CHECK);
+      await control.query(
+        `CREATE TRIGGER scoped_version BEFORE UPDATE ON public.scoped_item FOR EACH ROW EXECUTE FUNCTION public.scoped_check()`,
+      );
+      await assert.rejects(
+        adapter.scopeTransaction(rowsA(), async (tx) => {
+          await tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Raced' } });
+          await control.query(`CREATE OR REPLACE FUNCTION public.scoped_check() RETURNS trigger LANGUAGE plpgsql AS
+            'BEGIN UPDATE public.scoped_owner SET name = ''Leaked'' WHERE id = 2; RETURN NEW; END'`);
+        }),
+        Refusal,
+      );
+      assert.equal((await item(1)).name, 'Alpha');
+      // The replaced function writes: the next update is refused before it runs.
+      await assert.rejects(
+        adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Again' } })),
+        Refusal,
+      );
+      assert.equal((await control.query('SELECT name FROM public.scoped_owner WHERE id = 2')).rows[0].name, 'Bob');
+    });
+  });
 
   /* One adapter describes the catalog again only when the catalog digest has
      moved (PostgresAdapter.describeScoped). What must hold is that a change
@@ -418,11 +553,11 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
         assert.equal(called, false, ddl);
       });
     }
-    // A trigger on the target is not a catalog drift but a reason to refuse the write; the kept description must not hide it.
+    // A writing trigger on the target is not a catalog drift but a reason to refuse the write; the kept description must not hide it.
     await withAdapter(async (adapter) => {
       await primed(adapter);
       await control.query(
-        `CREATE TRIGGER scoped_guard BEFORE UPDATE ON public.scoped_item FOR EACH ROW EXECUTE FUNCTION public.scoped_noop()`,
+        `CREATE TRIGGER scoped_guard BEFORE UPDATE ON public.scoped_item FOR EACH ROW EXECUTE FUNCTION public.scoped_effect()`,
       );
       await assert.rejects(
         adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Blocked' } })),
@@ -482,7 +617,7 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
       const scoped = adapter.scopeTransaction(rowsA(), async (tx) => {
         await tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Pinned' } });
         trigger = control.query(
-          `CREATE TRIGGER scoped_late BEFORE UPDATE ON public.scoped_item FOR EACH ROW EXECUTE FUNCTION public.scoped_noop()`,
+          `CREATE TRIGGER scoped_late BEFORE UPDATE ON public.scoped_item FOR EACH ROW EXECUTE FUNCTION public.scoped_effect()`,
         );
         assert.equal(await settles(trigger), false, 'CREATE TRIGGER must wait for the pin');
         hold.release();
@@ -491,7 +626,7 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
       await scoped;
       await trigger;
       assert.equal((await item(1)).name, 'Pinned');
-      // The next transaction sees the trigger and refuses the table as a target.
+      // The next transaction sees the trigger and refuses the update it fires on.
       await assert.rejects(
         adapter.scopeTransaction(rowsA(), (tx) => tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'After' } })),
         Refusal,

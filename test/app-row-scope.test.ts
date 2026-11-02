@@ -14,9 +14,9 @@ import type { ViewDef } from '../packages/engine/src/shared/view.js';
 const query = (table: string) => ({ table, limit: 20, offset: 0 });
 const rule = (value: number): Filter => ({ groups: [[{ column: 'tenant_id', op: '=', value }]] });
 const view = (base: string): ViewDef => ({ id: 'scoped', name: 'Scoped', base, columns: [{ path: 'id' }, { path: 'owner_id.name' }] });
-const six = ['query', 'count', 'countEach', 'runView', 'countView', 'runBreakdown', 'countBreakdown'].sort();
+const readKeys = ['aggregate', 'query', 'count', 'countEach', 'runView', 'countView', 'runBreakdown', 'countBreakdown'].sort();
 const surface = (reads: ScopedReads) => {
-  assert.deepEqual(Reflect.ownKeys(reads).sort(), six);
+  assert.deepEqual(Reflect.ownKeys(reads).sort(), readKeys);
   assert.equal(Object.isFrozen(reads), true);
 };
 
@@ -52,7 +52,7 @@ async function fixture(t: TestContext) {
   };
 }
 
-test('logical scoped reads map all aliases and expose exactly six read functions', async (t) => {
+test('logical scoped reads map all aliases and expose exactly the read functions', async (t) => {
   const { logical } = await fixture(t);
   const { adapter } = logical();
   const reads = await adapter.scopeReads!({ people: rule(1), tickets: rule(1) });

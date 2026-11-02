@@ -7,6 +7,8 @@ import {
   projectApiCommandAnswer,
   REFUSAL_STATUS,
 } from '../packages/mistri/src/server/api/apiCommandResponse.js';
+import { businessCommandHttpError } from '../packages/mistri/src/server/commands/businessCommandHttp.js';
+import { BusinessCommandExecutionError } from '../packages/mistri/src/server/commands/commandErrors.js';
 
 test('pre-owner transport problems have fixed titles and never an outcome', () => {
   for (const [code, status] of [
@@ -126,4 +128,18 @@ test('the refusal table is the design table, and titles are the platform message
   });
   // An invalid field path is dropped by the class's own check, never echoed.
   assert.equal('field' in commandProblem('invalid_input', 'not_applied', 'bad path!'), false);
+});
+
+/* A command's invalid_result answered 503 on the App's own route and 500 on the App API. 503 is what every client
+   that retries reads as "try again" (the session check retries 502/503/504; so do gateways and SDKs), and an
+   invalid result is the server's own fault, the same on every try. Both routes now say 500; what a retry can cure
+   stays 503 on both. */
+test("the App's command routes and the App API answer a server's fault and a retryable refusal alike", () => {
+  for (const code of ['invalid_result', 'temporarily_unavailable', 'row_locked'] as const) {
+    const app = businessCommandHttpError(new BusinessCommandExecutionError(code, 'unknown'));
+    assert.equal(app.status, REFUSAL_STATUS[code], code);
+    assert.equal(commandProblem(code, 'unknown').status, REFUSAL_STATUS[code], code);
+  }
+  assert.equal(REFUSAL_STATUS.invalid_result, 500);
+  assert.ok(![502, 503, 504].includes(businessCommandHttpError(new BusinessCommandExecutionError('invalid_result')).status));
 });

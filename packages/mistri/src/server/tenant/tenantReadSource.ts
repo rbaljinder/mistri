@@ -13,6 +13,7 @@ import {
   Refusal,
   Serial,
   TransactionOutcomeUnknown,
+  type AggregateRequest,
   type ScopedReads,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
@@ -355,6 +356,7 @@ export function advisoryRecords(reads: ScopedReads): WriteTransaction {
   return Object.freeze<WriteTransaction>({
     query: (request) => reads.query(request),
     count: (table, filter) => reads.count(table, filter),
+    ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => reads.aggregate!(request) } : {}),
     insert: refuse,
     update: refuse,
     remove: refuse,
@@ -436,6 +438,10 @@ async function readBatch<T>(
       run([breakdown, offset] as [typeof breakdown, typeof offset], (value, boundOffset) => bound.runBreakdown(value, boundOffset)),
     countBreakdown: (breakdown, limit) =>
       run([breakdown, limit] as [typeof breakdown, typeof limit], (value, boundLimit) => bound.countBreakdown(value, boundLimit)),
+    /* A sum or a group, captured and run on the batch's snapshot as `count` is. */
+    ...(bound.aggregate
+      ? { aggregate: (request: AggregateRequest) => run([request] as [typeof request], (value) => bound.aggregate!(value)) }
+      : {}),
   });
   let result: T;
   try {
@@ -667,6 +673,8 @@ export function openSqliteTenantReadSource(
         countView: (view, limit) => run([view, limit], reads.countView),
         runBreakdown: (breakdown, offset) => run([breakdown, offset], reads.runBreakdown),
         countBreakdown: (breakdown, limit) => run([breakdown, limit], reads.countBreakdown),
+        // Revalidated and bounded by the tenant's rows as `count` is.
+        ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => run([request], reads.aggregate!) } : {}),
       } satisfies ScopedReads);
     };
     /* A batch is one queued snapshot: its reads run inside it, on the handle
@@ -1643,6 +1651,11 @@ export async function openPostgresTenantReadSource(
         countBreakdown: (breakdown, limit) =>
           run([breakdown, limit] as [typeof breakdown, typeof limit], (bound, value, boundLimit) =>
             bound.countBreakdown(value, boundLimit),
+          ),
+        // On the same snapshot, under the same fence, as `count` is.
+        aggregate: (request) =>
+          run([request] as [typeof request], (bound, value) =>
+            bound.aggregate ? bound.aggregate(value) : Promise.reject(new TenantContextError()),
           ),
       } satisfies ScopedReads);
     };

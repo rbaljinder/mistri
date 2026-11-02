@@ -1,11 +1,13 @@
 import {
   Refusal,
   type Adapter,
+  type AggregateRequest,
   type DeleteRequest,
   type ScopedReads,
   type TellRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import type { TriggerAcceptance, TriggerChange } from '@mistriwork/engine/adapters/storeHost.js';
 import { nativeVerifiedCommandRunner, type VerifiedCommandRunner } from '../commands/verifiedCommandRunner.js';
 import { isRuntimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -253,6 +255,7 @@ export function mapAppScopedReads(reads: ScopedReads, catalog: AppResourceCatalo
     countView: (view, limit) => reads.countView(resourceView(view, catalog), limit),
     runBreakdown: (breakdown, offset) => reads.runBreakdown(resourceBreakdown(breakdown, catalog), offset),
     countBreakdown: (breakdown) => reads.countBreakdown(resourceBreakdown(breakdown, catalog)),
+    ...(reads.aggregate ? { aggregate: (request) => reads.aggregate!({ ...request, table: toPhysical(request.table) }) } : {}),
     ...(reads.countEach
       ? {
           countEach: (items, limit) =>
@@ -400,6 +403,7 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
     ...(tx.lockRecord ? { lockRecord: (request: DeleteRequest) => tx.lockRecord!(mapWrite(request)) } : {}),
     query: (request) => tx.query(mapWrite(request)),
     count: (table, filter) => tx.count(toPhysical(table), filter),
+    ...(tx.aggregate ? { aggregate: (request: AggregateRequest) => tx.aggregate!(mapWrite(request)) } : {}),
     insert: (request) => tx.insert(mapWrite(request)),
     update: (request) => tx.update(mapWrite(request)),
     remove: (request) => tx.remove(mapWrite(request)),
@@ -439,10 +443,24 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
       });
     };
   if (typeof commandsOf(physicalAdapter).scopeCommandTransaction === 'function')
-    adapter.scopeCommandTransaction = async (input, run, events) => {
+    adapter.scopeCommandTransaction = async (input, run, events, triggers) => {
       const scope = snapshotRowScope(scopedCatalog.schema, input);
       const mapped: Record<string, RowScope[string]> = Object.create(null);
       for (const [table, rule] of Object.entries(scope)) mapped[toPhysical(table)] = rule;
+      // Named triggers travel by physical table, and what they changed comes back by resource.
+      const physicalTriggers: TriggerAcceptance | undefined = triggers && {
+        named: new Map([...triggers.named].map(([table, named]) => [toPhysical(table), named])),
+        ...(triggers.changed
+          ? {
+              changed: (change: TriggerChange) =>
+                triggers.changed!({
+                  ...change,
+                  table: evidenceIds.get(change.table) ?? change.table,
+                  on: evidenceIds.get(change.on) ?? change.on,
+                }),
+            }
+          : {}),
+      };
       return commandsOf(physicalAdapter).scopeCommandTransaction!(
         Object.freeze(mapped),
         (tx, journal, actual) => {
@@ -456,6 +474,7 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
           return runScopedTransactionFacade(transaction(tx), (records) => run(records, journal, evidence));
         },
         events,
+        physicalTriggers,
       );
     };
   // Placement is a captured source-owner capability, never dynamically looked
@@ -552,6 +571,8 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
     adapter.runBreakdown = (breakdown, offset) => physicalAdapter.runBreakdown!(resourceBreakdown(breakdown, catalog), offset);
   if (physicalAdapter.countBreakdown)
     adapter.countBreakdown = (breakdown, limit) => physicalAdapter.countBreakdown!(resourceBreakdown(breakdown, catalog), limit);
+  if (physicalAdapter.aggregate)
+    adapter.aggregate = (request) => physicalAdapter.aggregate!({ ...request, table: toPhysical(request.table) });
   if (physicalAdapter.countEach)
     adapter.countEach = (items, limit) =>
       physicalAdapter.countEach!(

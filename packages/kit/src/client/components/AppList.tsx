@@ -24,7 +24,7 @@ import { useMessageLanguage } from './useMessageLanguage.js';
 import { createPortal } from 'react-dom';
 import { listControlsRef, useCrumbSlots } from './crumbSlot.js';
 import { FavoriteStar } from './FavoriteStar.js';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, columnLabel, labelPath, pageSize, recordLabel, state as walk, toast } from '../core.js';
 import { say } from '../copy/lists/components/AppList.js';
@@ -576,6 +576,23 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
      rows, with the Sort and one Clear all — not under the heading, a column
      away from the facets that set them. The phone's sheet keeps them above. */
   const beside = railed && !railNarrow && Boolean(railProps);
+  /* The rail stays beside the rows as they scroll while it fits the room; taller, it scrolls with them (`data-long`,
+     FilterRail.css), so the room is the one box that scrolls. A rail held to the window's height and scrolling on its
+     own was a second scroller in every room it was taller than: 900px under a 50px bar, so the room scrolled for it
+     too (grade's double-scroll on Compass's tasks). */
+  useLayoutEffect(() => {
+    const box = rail.current;
+    const room = box?.closest<HTMLElement>('.content');
+    if (!box || !room) return;
+    /* Its own top (Lumen stands it 12px down) is room it does not have. */
+    const fit = () => box.toggleAttribute('data-long', box.offsetHeight + (parseFloat(getComputedStyle(box).top) || 0) > room.clientHeight);
+    fit();
+    if (typeof ResizeObserver === 'undefined') return;
+    const watch = new ResizeObserver(fit);
+    watch.observe(box);
+    watch.observe(room);
+    return () => watch.disconnect();
+  }, [beside]);
   /* The bar says what is applied in its own row, where it was set. */
   const chipsInBar = spec.filterBar !== 'none' && !railed && Boolean(table);
   const narrowed = boxes.filter((box) => facetActive(refinement, box.column, tabQuery)).length;

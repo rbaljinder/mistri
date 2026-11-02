@@ -8,6 +8,7 @@
 /** Key paths of the App DSL (the inventory's section 1) that are Preview. A path matches when any rule matches it. */
 export const PREVIEW_PATHS: readonly RegExp[] = [
   /^resources\.\*\.search(\.|$)/, // a search pack, which ships after 1.0
+  /^resources\.\*\.triggers(\[|$)/, // triggers a row policy accepts, their effects proven per write (docs/trigger-effects.md)
   /^ui\.pwa(\.|$)/, // an installable PWA: manifest, worker and offline page, but no offline data
   /^(flags|audiences|experiments|analytics)(\.|\[|$)/,
   /^auth\.roles\.\*\.(flags|experiments)(\.|\[|$)/,
@@ -71,13 +72,14 @@ interface PreviewApp {
   ui?: { pwa?: unknown };
   auth?: { roles?: Record<string, { flags?: unknown; experiments?: unknown; operations?: readonly string[] } | undefined> };
   views?: Record<string, { presentation?: { kind?: string } } | undefined>;
+  resources?: Record<string, { triggers?: readonly unknown[] } | undefined>;
 }
 
 const filled = (value: unknown) => (value && typeof value === 'object' ? Object.keys(value).length > 0 : Boolean(value));
 
 /** The Preview keys an App uses, in a stable order: what `check` lists in its `preview-feature` finding. */
 export function previewKeysUsed(app: unknown): string[] {
-  const { flags, audiences, experiments, analytics, ui, auth, views } = app as PreviewApp;
+  const { flags, audiences, experiments, analytics, ui, auth, views, resources } = app as PreviewApp;
   const used: string[] = [];
   if (filled(flags)) used.push('flags');
   if (filled(audiences)) used.push('audiences');
@@ -89,5 +91,6 @@ export function previewKeysUsed(app: unknown): string[] {
   if (roles.some((role) => filled(role?.experiments))) used.push('auth.roles.*.experiments');
   if (roles.some((role) => role?.operations?.includes('analytics'))) used.push('auth.roles.*.operations: analytics');
   if (Object.values(views ?? {}).some((view) => view?.presentation?.kind === 'gantt')) used.push("presentation kind: 'gantt'");
+  if (Object.values(resources ?? {}).some((resource) => filled(resource?.triggers))) used.push('resources.*.triggers');
   return used;
 }

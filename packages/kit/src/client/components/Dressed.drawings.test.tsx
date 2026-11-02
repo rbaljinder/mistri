@@ -47,6 +47,24 @@ describe('own drawings', () => {
     expect(dressFor({ format: 'year' }, 'soon')).toBeNull();
   });
 
+  test('a day and a moment are said absolutely: never from today, a moment in its zone, the stored value in the title', () => {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const said = dressFor({ format: 'date' }, yesterday) as { kind: string; text: string; title: string };
+    expect(said).toMatchObject({ kind: 'date', title: yesterday });
+    expect(said.text).not.toMatch(/yesterday|ago/);
+    expect(said.text).toBe(
+      new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${yesterday}T00:00:00Z`)),
+    );
+    const moment = dressFor({ format: 'datetime', timezone: 'America/New_York' }, '2026-09-04T21:30:00Z') as { text: string };
+    expect(moment.text.replace(/[\u00a0\u202f]/g, ' ')).toMatch(/5:30 PM EDT$/);
+    expect((dressFor({ format: 'date', timezone: 'Pacific/Auckland' }, '2026-09-04T21:30:00Z') as { text: string }).text).toMatch(
+      /Sep\w* 5/,
+    );
+    expect(dressFor({ format: 'date' }, 'soon')).toBeNull();
+    const { container } = render(<Dressed dress={dressFor({ format: 'date' }, '2026-09-04')!} />);
+    expect(container.querySelector('.date-value')?.getAttribute('title')).toBe('2026-09-04');
+  });
+
   test('a JSON document is a short excerpt in a list and a tree in a record; a bare word is not a tree', async () => {
     const doc = JSON.stringify({ provider: 'CDK', sync: { inventory: true } });
     const dress = dressFor({ format: 'json' }, doc)!;

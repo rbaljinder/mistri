@@ -19,6 +19,7 @@ import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { astParser, pageFiles, placePages, readPageFiles, scanPageSource } from '../packages/mistri/src/server/app/appPages.js';
 import { checkPageLoaders } from '../packages/mistri/src/server/app/pageLoaderCheck.js';
 import { defineLoader, defineLoaders, LOADER_RESULT_MOST, type PageLoader } from '../packages/mistri/src/server/commands/pageLoaders.js';
+import { count, max } from '../packages/mistri/src/server/commands/commandDb.js';
 import { runPageLoader } from '../packages/mistri/src/server/commands/pageLoaderRun.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
@@ -66,8 +67,11 @@ const LOADERS = defineLoaders({
   board: defineLoader({
     reads: ['ticket', 'desk'],
     async load({ db, params }) {
-      const tickets = await db.ticket.where(params.desk ? { desk_id: Number(params.desk) } : {}).orderBy('id');
-      return { tickets: tickets.map((row) => String(row.name)) };
+      const where = params.desk ? { desk_id: Number(params.desk) } : {};
+      const tickets = await db.ticket.where(where).orderBy('id');
+      /* The same rows summed: a count through the reader's aggregate, under its row policy as the rows are. */
+      const { n } = await db.ticket.where(where).aggregate({ n: count() });
+      return { tickets: tickets.map((row) => String(row.name)), counted: n };
     },
   }),
   notes: defineLoader({ reads: ['note'], load: async ({ db }) => ({ notes: (await db.note.where({})).length }) }),
@@ -282,6 +286,24 @@ describe('a loader reads as the reader, never writes, and ends', () => {
   const loader = (load: PageLoader['load'], options: { timeout?: '1 second' } = {}) =>
     defineLoader({ reads: ['ticket'], ...options, load: load as never }) as unknown as PageLoader;
 
+  test('it sums and groups through its reader, as the reader counts', async (t) => {
+    const at = await reader(t);
+    const answer = await run(
+      loader(async ({ db }) => ({
+        total: await db.ticket.where().aggregate({ n: count(), top: max('id') }),
+        byDesk: await db.ticket.where().groupBy('desk_id').aggregate({ n: count() }),
+      })),
+      at,
+    );
+    assert.deepEqual(JSON.parse(JSON.stringify(answer)), {
+      total: { n: 3, top: 3 },
+      byDesk: [
+        { desk_id: 1, n: 2 },
+        { desk_id: 2, n: 1 },
+      ],
+    });
+  });
+
   test('it cannot write: every write on its handles is refused, and it has no transaction, adapter or SQL to reach for', async (t) => {
     const at = await reader(t);
     for (const write of ['insert', 'update', 'remove', 'insertFile'] as const) {
@@ -360,7 +382,10 @@ describe('a loader reads as the reader, never writes, and ends', () => {
     const app = parse();
     const ask = (body: Record<string, unknown>, roles: string[] = ['clerk'], signedIn = true) =>
       pageLoad({ app, roles, signedIn, loaders: LOADERS, body, reader: at.adapter, schema: at.schema });
-    assert.deepEqual(await ask({ page: 'board', params: { desk: '2' } }), { status: 200, body: { data: { tickets: ['South one'] } } });
+    assert.deepEqual(await ask({ page: 'board', params: { desk: '2' } }), {
+      status: 200,
+      body: { data: { tickets: ['South one'], counted: 1 } },
+    });
     assert.equal((await ask({ page: 'settle' })).body.code, 'page_undeclared', 'a page that names no loader has none to run');
     assert.equal((await ask({ page: 'board', params: { tab: 'x' } })).body.code, 'page_undeclared', 'only the parameters it keeps');
     assert.equal((await ask({ page: 'notes' }, ['reader'])).status, 404, "a page the reader's roles are not offered is not found");
@@ -479,11 +504,11 @@ describe('over HTTP, under a row policy', () => {
     const { control, call } = await serve(t);
     const north = await call('/api/pages/load', { page: 'board' });
     assert.equal(north.status, 200, JSON.stringify(north.body));
-    assert.deepEqual(north.body.data, { tickets: ['North one', 'North two'] });
+    assert.deepEqual(north.body.data, { tickets: ['North one', 'North two'], counted: 2 });
     // Asking for the other desk's rows by parameter changes nothing: the policy is on the reader, below the loader.
-    assert.deepEqual((await call('/api/pages/load', { page: 'board', params: { desk: '2' } })).body.data, { tickets: [] });
+    assert.deepEqual((await call('/api/pages/load', { page: 'board', params: { desk: '2' } })).body.data, { tickets: [], counted: 0 });
     control.identity = { id: 'south', who: 'south@example.test', role: 'reader' };
-    assert.deepEqual((await call('/api/pages/load', { page: 'board' })).body.data, { tickets: ['South one'] });
+    assert.deepEqual((await call('/api/pages/load', { page: 'board' })).body.data, { tickets: ['South one'], counted: 1 });
     const stray = await call('/api/view/run', { view: { base: 'note' }, count: false }, { 'x-mistri-page': 'board' });
     assert.equal(stray.status, 403);
     assert.equal(stray.body.code, 'page_undeclared');

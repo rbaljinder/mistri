@@ -17,6 +17,7 @@ import { MISTRI } from './usage.js';
 import type { Main } from '@mistriwork/engine/server/cli/startup.js';
 import { runSubcommand, subcommandIn } from '@mistriwork/engine/server/cli/subcommand.js';
 import { setProduct } from '@mistriwork/engine/server/product.js';
+import type { ProfileTakes } from '@mistriwork/engine/server/config/profile.js';
 
 /** The command line as it was typed, for the `npx tablewalk …` that runs it: each word quoted only where a shell needs it. */
 const typed = (argv: readonly string[]) =>
@@ -34,6 +35,26 @@ async function refuseBrowser(what: string, argv: readonly string[], registry?: {
   );
   process.exitCode = 2;
 }
+
+/** Flags that print and exit, which read no file. */
+const PRINT_ONLY = new Set(['--help', '-h', '--version', '-v', '-V']);
+
+/**
+ * What each App command takes of the project profile (engine config/profile.ts): the App when no --app names one,
+ * and the entries it reads, each where no flag names it. The table is docs/bootstrap-plan.md's, per command.
+ */
+const PROFILE_TAKES: Record<string, ProfileTakes & { bare?: boolean }> = {
+  check: { entries: ['commands', 'jobs', 'policy', 'entry'], says: true, bare: true },
+  migrate: { entries: ['commands', 'jobs', 'policy', 'entry'], says: true },
+  build: { entries: ['commands', 'jobs', 'policy', 'entry'], bare: true },
+  shot: { entries: ['commands', 'jobs', 'policy'], bare: true },
+  grade: { entries: ['commands', 'jobs', 'policy'], bare: true },
+  seed: { entries: ['entry'], bare: true },
+  tenant: { entries: ['policy'] },
+  flows: { entries: ['jobs', 'policy'] },
+  jobs: { entries: ['jobs'] },
+  decide: { entries: ['jobs'] },
+};
 
 export const main: Main = async () => {
   /* Before any flag is read: the variables both binaries read are said in this one's name (MISTRI_*). */
@@ -54,7 +75,32 @@ export const main: Main = async () => {
     process.argv = [...process.argv.slice(0, 2), ...process.argv.slice(3).filter((arg) => arg !== '--brief'), '--export', 'brief'];
   }
   const command = subcommandIn(MISTRI_COMMANDS, process.argv.slice(2));
-  if (command) return runSubcommand(command, process.argv.slice(3), 'mistri');
+  if (command) {
+    /* The project profile (docs/bootstrap-plan.md, Part B): the App and its entries named once in mistri.json, found
+       by the one rule, applied under the flags this command takes. */
+    /* `migrate new`, `diff`, `check` and `squash` read files and the config's connection, not the App. */
+    const appless = process.argv[2] === 'migrate' && ['new', 'diff', 'check', 'squash'].includes(process.argv[3] ?? '');
+    const takes: (ProfileTakes & { bare?: boolean }) | undefined = appless ? { entries: [], app: false } : PROFILE_TAKES[process.argv[2]];
+    let argv = process.argv.slice(3);
+    /* A command whose first word is a verb (`migrate up`, `jobs run`) is left alone when typed bare: its usage says
+       what it takes, where a flag added under it would read as the verb. */
+    if (takes && (argv.length || takes.bare)) {
+      const { applyProfile, contextLines, fromProfile, projectContext, ProfileRefusal } =
+        await import('@mistriwork/engine/server/config/profile.js');
+      try {
+        argv = applyProfile(argv, takes);
+      } catch (error) {
+        if (!(error instanceof ProfileRefusal)) throw error;
+        console.error(`mistri: ${error.message}`);
+        process.exitCode = 2;
+        return;
+      }
+      /* check and migrate print the context in their own output (and --json); another command says it on stderr,
+         where it never mixes with what the command prints, when the profile gave it something. */
+      if (!takes.says && fromProfile(projectContext())) for (const line of contextLines(projectContext())) console.error(line);
+    }
+    return runSubcommand(command, argv, 'mistri');
+  }
   /* Past the commands, a start: what it needs is loaded now, and not for a command above. */
   const [{ CHECK_VALIDATION, parseArgs }, { configureWriteOrder }, { apiReadStartupOptions, appMcpStartupOptions, readAppMcpToken }] =
     await Promise.all([
@@ -69,10 +115,34 @@ export const main: Main = async () => {
   ]);
   /* `mistri dev`: the serve path below with a dev environment settled first (cli/devMode.ts), not a server of its own. */
   let dev: import('./devMode.js').DevSession | undefined;
+  /* A start reads the profile as every App command does: dev with the App as its first word, a plain start with
+     --app. A child a command started (check's validation) was given its entries as flags, so nothing is added. */
+  const profiled = async (argv: string[], positional: boolean): Promise<string[] | undefined> => {
+    /* A print-and-exit flag reads no file, so it does not load the profile's reader either (cli-startup.test.ts). */
+    if (argv.some((arg) => PRINT_ONLY.has(arg))) return argv;
+    const { applyProfile, contextLines, fromProfile, projectContext, ProfileRefusal } =
+      await import('@mistriwork/engine/server/config/profile.js');
+    try {
+      const applied = applyProfile(argv, {
+        entries: positional ? ['commands', 'jobs', 'policy'] : ['commands', 'jobs', 'policy', 'entry'],
+        positional,
+      });
+      /* Said before the start's own lines, where the profile decided any of it. */
+      if (fromProfile(projectContext())) for (const line of contextLines(projectContext())) console.log(line);
+      return applied;
+    } catch (error) {
+      if (!(error instanceof ProfileRefusal)) throw error;
+      console.error(`mistri${positional ? ' dev' : ''}: ${error.message}`);
+      process.exitCode = 2;
+      return undefined;
+    }
+  };
   if (process.argv[2] === 'dev') {
     const { prepareDev, DevRefusal } = await import('./devMode.js');
+    const argv = await profiled(process.argv.slice(3), true);
+    if (!argv) return;
     try {
-      dev = prepareDev(process.argv.slice(3));
+      dev = prepareDev(argv);
     } catch (error) {
       console.error(`mistri dev: ${(error as Error).message}`);
       process.exitCode = error instanceof DevRefusal ? 2 : 1;
@@ -86,6 +156,11 @@ export const main: Main = async () => {
     console.error('mistri: there is no serve command: a start serves. Run mistri --app <dir> [--config <path>] …, or mistri dev <dir>.');
     process.exitCode = 2;
     return;
+  }
+  if (!dev && process.env[CHECK_VALIDATION] !== '1') {
+    const argv = await profiled(process.argv.slice(2), false);
+    if (!argv) return;
+    process.argv.splice(2, Infinity, ...argv);
   }
   const opts = parseArgs(process.argv.slice(2));
   if (process.env[CHECK_VALIDATION] === '1') opts.checkApp = true;

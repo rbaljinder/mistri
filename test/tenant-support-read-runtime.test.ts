@@ -254,11 +254,43 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
     assert.deepEqual(ids, ['n1', 'n2']);
   });
 
+  test(`${dialect}: a session sums what its count counts: its dealer's rows, and none of another's`, { skip }, async (t) => {
+    const f = await fixture(t, dialect);
+    const answers = await f.runtime.withContext(f.request, f.evidence, async (context) => ({
+      counted: await context.data.count('lead'),
+      summed: Number((await context.data.aggregate!({ table: 'lead', measures: [{ name: 'n', fn: 'count' }], limit: 1 })).rows[0]!.n),
+      byName: (
+        await context.data.aggregate!({
+          table: 'lead',
+          by: [{ name: 'who', column: 'name' }],
+          measures: [{ name: 'n', fn: 'count' }],
+          limit: 10,
+        })
+      ).rows.map((row) => [row.who, Number(row.n)]),
+    }));
+    assert.deepEqual(JSON.parse(JSON.stringify(answers)), {
+      counted: 2,
+      summed: 2,
+      byName: [
+        ['North one', 1],
+        ['North two', 1],
+      ],
+    });
+  });
+
   test(`${dialect}: a read is never writable, whatever the dealer role allows a member`, { skip }, async (t) => {
     const f = await fixture(t, dialect);
     await f.runtime.withContext(f.request, f.evidence, (context) => {
       // The role grants write on lead, yet the context offers only reads.
-      assert.deepEqual(Object.keys(context.data).sort(), ['count', 'countBreakdown', 'countView', 'query', 'runBreakdown', 'runView']);
+      assert.deepEqual(Object.keys(context.data).sort(), [
+        'aggregate',
+        'count',
+        'countBreakdown',
+        'countView',
+        'query',
+        'runBreakdown',
+        'runView',
+      ]);
       assert.equal(
         context.schema.tables.every((table) => table.deletable !== true),
         true,

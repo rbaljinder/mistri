@@ -226,6 +226,7 @@ test('sidecar exposes only logical data and preserves physical source flags and 
       'writeFields',
     ]);
     assert.deepEqual(Reflect.ownKeys(context.data).sort(), [
+      'aggregate',
       'count',
       'countBreakdown',
       'countView',

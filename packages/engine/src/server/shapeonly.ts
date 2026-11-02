@@ -97,6 +97,11 @@ export function shapeOnly(adapter: Adapter, name: string): Adapter {
     wrapped.runBreakdown = () => {
       throw why(name, 'grouping rows');
     };
+  /* A sum or a group is a function of row values, as a breakdown is. */
+  if (adapter.aggregate)
+    wrapped.aggregate = () => {
+      throw why(name, 'summing rows');
+    };
   if (adapter.countBreakdown) wrapped.countBreakdown = from('countBreakdown') as Adapter['countBreakdown'];
 
   /* Profile keeps the numbers and loses the values. "52% null, 4,100

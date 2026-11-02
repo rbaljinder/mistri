@@ -4,7 +4,7 @@
  * it lives here rather than with the adapters that run the statements.
  */
 import { LIKE_ESCAPE, likePattern } from './like.js';
-import { Refusal } from './refusal.js';
+import { RequestFault } from './refusal.js';
 
 /** One condition in a filter. Values are bound, never interpolated. */
 export interface Condition {
@@ -40,7 +40,35 @@ export interface Condition {
    * `op` is `isNotNull` for `any`, `isNull` for `no`.
    */
   any?: AnyRows;
+  /**
+   * Compare as a PostgreSQL foreign key compares a reference with its parent's key: by its own operator, named with
+   * its schema, the value cast to the referencing column's type and each side to the operator's, as the database's
+   * own check is written (ri_triggers.c). Read from the catalog for a scoped write's parent check
+   * (scopedTransaction.ts); SQL text, so only a builder that asks for it (`buildWhere`'s `references`) compiles it,
+   * and everywhere else it is refused.
+   */
+  equality?: ConditionEquality;
 }
+
+/** A foreign key's comparison of one column (`Condition.equality`): each part SQL as the catalog gave it. */
+export interface ConditionEquality {
+  /** `schema.operator`, the schema quoted where it needs it. */
+  readonly operator: string;
+  /** The type the value is read as: the referencing column's, typmod and all. */
+  readonly type: string;
+  /** The operator's left type, where the parent column's is another. */
+  readonly left?: string;
+  /** The operator's right type, where the referencing column's is another. */
+  readonly right?: string;
+}
+
+/* A type as the scope catalog names one (postgresScopeCatalog.ts sqlType): a chain of identifiers, each a word or
+   quoted, then at most a modifier of one or two integers and the brackets of an array — `pg_catalog."numeric"(10,2)`,
+   `"s"."my type"`, `pg_catalog."varchar"(3)[]`. Nothing else, so no text can end the cast and start an expression;
+   and an operator as `schema.=`. */
+const IDENTIFIER = '(?:"(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)';
+const SQL_TYPE = new RegExp(`^${IDENTIFIER}(?:\\.${IDENTIFIER})*(?:\\(\\d+(?:,-?\\d+)?\\))?(?:\\[\\])*$`);
+const SQL_OPERATOR = /^(?:"(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)\.[+\-*<>=~!@#%^&|`?]{1,63}$/;
 
 /**
  * The child rows an `any` condition asks about: the reference they point
@@ -336,7 +364,7 @@ export function orderClauseSql(terms: readonly (OrderTerm | string)[], style: Sq
  */
 export function collate(expression: string, collation: unknown, style: SqlStyle): string {
   if (collation === undefined) return expression;
-  if (collation !== 'binary' || !style.binaryText) throw new Refusal('This comparison cannot be made by bytes on this database.');
+  if (collation !== 'binary' || !style.binaryText) throw new RequestFault('This comparison cannot be made by bytes on this database.');
   return `${expression}${style.binaryText}`;
 }
 
@@ -368,6 +396,8 @@ export function buildWhere(
   membership?: (name: string, holes: readonly string[]) => string,
   /** How an `any` condition is written: an EXISTS over the child's rows, binding nothing of its own; absent, one is refused. */
   exists?: (rows: AnyRows) => string,
+  /** Whether a condition may compare as a foreign key does (`Condition.equality`): a scoped write's own reads only. */
+  references = false,
 ): SqlFragment {
   if (!filter?.groups.length) return { text: '', params: [] };
   const params: unknown[] = [];
@@ -393,20 +423,20 @@ export function buildWhere(
     group
       .map((c) => {
         if (c.collation !== undefined && !COMPARISONS.has(c.op)) {
-          throw new Refusal('Only a comparison can compare text by bytes.');
+          throw new RequestFault('Only a comparison can compare text by bytes.');
         }
         /* Before the column is written: child rows are no column of this row. Their
            values are bound where their relation is planned (rowScope.ts `filtered`),
            so the EXISTS carries no parameter here and the numbering is untouched. */
         if (c.any !== undefined) {
           if (!exists || typeof c.any !== 'object' || c.any === null)
-            throw new Refusal('This read cannot ask about the rows that point at it.');
+            throw new RequestFault('This read cannot ask about the rows that point at it.');
           /* `no task …` is the same rows asked the other way: none of them matches. */
           return c.op === 'isNull' ? `NOT ${exists(c.any)}` : exists(c.any);
         }
         /* Before the column is written: a record's tags are no column. */
         if (c.op === 'has') {
-          if (!membership || c.other !== undefined) throw new Refusal("This read cannot ask a record's tags.");
+          if (!membership || c.other !== undefined) throw new RequestFault("This read cannot ask a record's tags.");
           const labels = (Array.isArray(c.value) ? c.value : [c.value]).filter((v) => typeof v === 'string' || typeof v === 'number');
           if (!labels.length) return '1 = 0';
           const holes = labels.map((v) => {
@@ -415,10 +445,25 @@ export function buildWhere(
           });
           return membership(c.column, holes);
         }
+        if (c.equality !== undefined) {
+          const { operator, type, left, right } = (c.equality ?? {}) as Partial<ConditionEquality>;
+          if (
+            !references ||
+            c.op !== '=' ||
+            c.collation !== undefined ||
+            c.other !== undefined ||
+            typeof operator !== 'string' ||
+            !SQL_OPERATOR.test(operator) ||
+            ![type, left, right].every((part, at) => (at > 0 && part === undefined) || (typeof part === 'string' && SQL_TYPE.test(part)))
+          )
+            throw new RequestFault('This read cannot compare as a foreign key does.');
+          params.push(c.value ?? null);
+          return `${column(c.column, c)}${left ? `::${left}` : ''} OPERATOR(${operator}) ${next()}::${type}${right ? `::${right}` : ''}`;
+        }
         const col = collate(column(c.column, c), c.collation, style);
         if (c.other !== undefined) {
           if (!other || typeof c.other !== 'string' || !COMPARISONS.has(c.op)) {
-            throw new Refusal('This read cannot compare two columns.');
+            throw new RequestFault('This read cannot compare two columns.');
           }
           return `${col} ${c.op} ${collate(other(c.other), c.collation, style)}`;
         }
@@ -464,7 +509,7 @@ export function buildWhere(
                  Checked here rather than at each caller: one choke point
                  covers the four endpoints and anything added later. */
             if (!OPS.has(c.op)) {
-              throw new Refusal(`"${String(c.op)}" is not an operator this tool knows.`);
+              throw new RequestFault(`"${String(c.op)}" is not an operator this tool knows.`);
             }
             params.push(c.value ?? null);
             return `${col} ${c.op} ${next()}`;
@@ -490,7 +535,15 @@ export function buildWhere(
 /** The same condition, field for field: what may be said once for every group. */
 function sameCondition(a: Condition, b: Condition): boolean {
   if (a === b) return true;
-  if (a.column !== b.column || a.op !== b.op || a.collation !== b.collation || a.other !== b.other || a.any !== b.any) return false;
+  if (
+    a.column !== b.column ||
+    a.op !== b.op ||
+    a.collation !== b.collation ||
+    a.other !== b.other ||
+    a.any !== b.any ||
+    a.equality !== b.equality
+  )
+    return false;
   if (Array.isArray(a.value) || Array.isArray(b.value)) {
     return (
       Array.isArray(a.value) &&

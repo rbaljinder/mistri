@@ -303,6 +303,15 @@ describe('a build is started with what it was built with', () => {
     assert.match(jobs.err, /was built without --jobs, so it has no jobs entry\. Rebuild it with mistri build --jobs <file>\./);
   });
 
+  test('with no flag, a build is started with its own entries, and the start says so (D9)', async () => {
+    /* Before: the build's commands bundle was not served unless --commands named it again. */
+    const ran = await run(['--no-config', '--app', out, VALIDATE]);
+    assert.match(ran.out + ran.err, /served as built: no reload; commands from: build/);
+    /* This build was made without its row policy, and the start still refuses that, after the commands were taken. */
+    assert.equal(ran.code, 1);
+    assert.match(ran.err, /Row policies require --policy <file>/);
+  });
+
   test("--write-authority is the source's to do", async () => {
     const ran = await run(['--no-config', '--app', out, VALIDATE, '--write-authority']);
     assert.equal(ran.code, 1);

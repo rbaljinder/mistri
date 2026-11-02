@@ -268,7 +268,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       let records!: WriteTransaction;
       await source.transaction(await f.evidence(), allow, (tx) => {
         records = tx;
-        assert.deepEqual(Reflect.ownKeys(tx).sort(), ['count', 'insert', 'query', 'remove', 'update']);
+        assert.deepEqual(Reflect.ownKeys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
         assert.ok(Object.isFrozen(tx));
       });
       await assert.rejects(records.count('item'));

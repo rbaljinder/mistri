@@ -328,7 +328,10 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
       if (typeof resources.forConnection(owner).scopeTransaction !== 'function') throw new AppAccessDenied();
     }
   }
-  const { schema, assertRead, assertWrite, assertAllFields, queryFor, filterFor, viewFor, breakdownFor } = resourceChecks(full, access);
+  const { schema, assertRead, assertWrite, assertAllFields, queryFor, filterFor, viewFor, breakdownFor, aggregateFor } = resourceChecks(
+    full,
+    access,
+  );
   const wrap = (underlying: Adapter, owner?: string): Adapter => {
     if (rows !== undefined) {
       if (!underlying.scopeReads) throw new AppAccessDenied();
@@ -414,6 +417,13 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
           read(
             () => breakdownFor(def),
             (bound, checked) => bound.countBreakdown(checked, limit),
+          ),
+        /* A sum or a group, read under the same rows and the same granted columns as `count`; a reader whose scope
+           cannot say one refuses, never reads the rows to add them up. */
+        aggregate: (request) =>
+          read(
+            () => aggregateFor(request),
+            (bound, checked) => (bound.aggregate ? bound.aggregate(checked) : Promise.reject(new AppAccessDenied())),
           ),
       };
       const writable = [...access.writable, ...(access.actions?.keys() ?? [])].some(
@@ -525,6 +535,7 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
     if (underlying.countView) guarded.countView = (view, limit) => underlying.countView!(viewFor(view), limit);
     if (underlying.runBreakdown) guarded.runBreakdown = (def, offset) => underlying.runBreakdown!(breakdownFor(def), offset);
     if (underlying.countBreakdown) guarded.countBreakdown = (def, limit) => underlying.countBreakdown!(breakdownFor(def), limit);
+    if (underlying.aggregate) guarded.aggregate = (request) => underlying.aggregate!(aggregateFor(request));
     /* Each item checked as `count` checks one — the table readable, every
        filtered field granted — before any of them reaches the statement. */
     if (underlying.countEach)

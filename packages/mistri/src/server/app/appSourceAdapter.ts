@@ -2,6 +2,7 @@ import {
   Refusal,
   type Adapter,
   type CountItem,
+  type AggregateRequest,
   type DeleteRequest,
   type TellRequest,
   type ScopedReads,
@@ -188,6 +189,9 @@ export function createAppSourceAdapter(
             if (!anchor) checkStitchedBreakdown(stitching, breakdown);
             return reads(breakdown.base).countBreakdown(breakdown);
           },
+          ...([...bound.values()].every((each) => typeof each.aggregate === 'function')
+            ? { aggregate: async (request: AggregateRequest) => reads(request.table).aggregate!(request) }
+            : {}),
           countEach: (items, limit) =>
             countedBySource(items, anchor, (resource) => {
               const source = reads(resource);
@@ -243,6 +247,12 @@ export function createAppSourceAdapter(
         if (!target.adapter.countBreakdown) return unsupported(target.source, 'breakdown counts');
         return target.adapter.countBreakdown(breakdown, limit);
       };
+    if (supports('aggregate'))
+      adapter.aggregate = async (request) => {
+        const target = targetFor(request.table, anchor);
+        if (!target.adapter.aggregate) return unsupported(target.source, 'sums and groups');
+        return target.adapter.aggregate(request);
+      };
     if (supports('insert'))
       adapter.insert = async (request) => {
         const target = targetFor(request.table, anchor, true);
@@ -283,6 +293,7 @@ export function createAppSourceAdapter(
           targetFor(table, anchor);
           return transaction.count(table, filter);
         },
+        ...(transaction.aggregate ? { aggregate: (request: AggregateRequest) => transaction.aggregate!(check(request, false)) } : {}),
         insert: (request) => transaction.insert(check(request)),
         update: (request) => transaction.update(check(request)),
         remove: (request) => transaction.remove(check(request)),
@@ -297,12 +308,13 @@ export function createAppSourceAdapter(
         );
       };
     if (group.writable && commandsOf(facade).scopeCommandTransaction)
-      adapter.scopeCommandTransaction = async (input, run, events) => {
+      adapter.scopeCommandTransaction = async (input, run, events, triggers) => {
         snapshotRowScope(scopeSchema, input);
         return commandsOf(facade).scopeCommandTransaction!(
           input,
           (records, journal, evidence) => runScopedTransactionFacade(anchoredRecords(records), (tx) => run(tx, journal, evidence)),
           events,
+          triggers,
         );
       };
     const place = commandsOf(facade).publicPlacementCommandTransaction?.bind(facade);
