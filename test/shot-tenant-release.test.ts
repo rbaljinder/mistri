@@ -100,23 +100,12 @@ async function fixture(t: TestContext) {
   writeFileSync(join(directory, 'mistri.json'), JSON.stringify({ connections: [{ name: 'db', url: path }] }));
   const shoot = async (args: string[]) => {
     const err: string[] = [];
-    /* The browser's scratch goes in the fixture's directory, which the test removes, as shot-interaction.test.ts
-       says: CI's Node legs run before Playwright installs its browser, and the runner's Chrome it falls back to
-       leaves its profile in TMPDIR, which the lane's leak check fails. */
-    const temp = mkdtempSync(join(directory, 'tmp-'));
-    const was = process.env.TMPDIR;
-    process.env.TMPDIR = temp;
-    try {
-      const code = await runShot(
-        ['--app', app, '--config', join(directory, 'mistri.json'), '--policy', policy, ...args],
-        () => {},
-        (line) => err.push(line),
-      );
-      return { code, err: err.join('\n') };
-    } finally {
-      if (was === undefined) delete process.env.TMPDIR;
-      else process.env.TMPDIR = was;
-    }
+    const code = await runShot(
+      ['--app', app, '--config', join(directory, 'mistri.json'), '--policy', policy, ...args],
+      () => {},
+      (line) => err.push(line),
+    );
+    return { code, err: err.join('\n') };
   };
   return { account, memberships, receipts, shoot };
 }

@@ -389,23 +389,40 @@ export function installedChromiums(
 /**
  * The browser shot opens: the one named (`--browser`, else `CHROME`) and nothing else; else Playwright's own, the
  * machine's Chrome, and then any Chromium another Playwright installed here.
+ *
+ * Every attempt is made over `scratch`, a temporary folder of the run's own that it deletes once the browser is
+ * closed. Playwright makes a profile and an artifacts folder in the temporary folder before it finds the browser it
+ * was asked for is not installed, and leaves both there when it is not: on a machine with Chrome and no Playwright
+ * shell, each shot left two folders in /tmp for good. Chrome on Linux leaves one of its own
+ * (`com.google.Chrome.chrome_url_fetcher_…`). Playwright reads the temporary folder in this process and Chrome
+ * inherits it, so the environment says `scratch` while the attempts are made.
  */
-async function launch(chromium: BrowserType, named?: string): Promise<Browser> {
-  if (named) return chromium.launch({ executablePath: named });
+async function launch(chromium: BrowserType, scratch: string, named?: string): Promise<Browser> {
+  mkdirSync(scratch, { recursive: true });
+  const kept = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP };
+  process.env.TMPDIR = process.env.TMP = process.env.TEMP = scratch;
   try {
-    return await chromium.launch();
-  } catch (first) {
+    if (named) return await chromium.launch({ executablePath: named });
     try {
-      return await chromium.launch({ channel: 'chrome' });
-    } catch {
-      for (const executablePath of installedChromiums()) {
-        try {
-          return await chromium.launch({ executablePath });
-        } catch {
-          /* another build; the next */
+      return await chromium.launch();
+    } catch (first) {
+      try {
+        return await chromium.launch({ channel: 'chrome' });
+      } catch {
+        for (const executablePath of installedChromiums()) {
+          try {
+            return await chromium.launch({ executablePath });
+          } catch {
+            /* another build; the next */
+          }
         }
+        throw first;
       }
-      throw first;
+    }
+  } finally {
+    for (const [name, value] of Object.entries(kept)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
   }
 }
@@ -1493,7 +1510,7 @@ class ShotRun {
         },
       );
       this.child = started.child;
-      const browser = (this.browser = await launch(chromium, options.browser).catch((error) => {
+      const browser = (this.browser = await launch(chromium, join(this.xdg, 'tmp'), options.browser).catch((error) => {
         if (error instanceof Refusal) throw error;
         const said = (error as Error).message.split('\n')[0];
         /* Playwright is there and its browser is not: the one line that installs it, not the package again. */

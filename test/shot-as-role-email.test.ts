@@ -1,5 +1,5 @@
 /**
- * `shot --as <role>:<email>` (Meridian WP1, F18-M): an account of the role made with that address, through the
+ * `shot --as <role>:<email>` (a field report): an account of the role made with that address, through the
  * accounts door (so verified), signed in, so a row policy that finds a household by email has one to show. Before,
  * `--as` took a bare role (a fresh `shot-<role>@example.invalid`, which owns nothing) or an account already made.
  */

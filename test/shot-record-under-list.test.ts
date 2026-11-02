@@ -1,5 +1,5 @@
 /**
- * `shot` and `grade` name a record under any list over its table, as the browser does (Meridian WP1, F20-M): the
+ * `shot` and `grade` name a record under any list over its table, as the browser does (a field report): the
  * address is rewritten to the table's canonical record route (shared/appAddress.ts: the resource's `view`, else the
  * first plain list in menu order) and the run says which one it shot. It used to refuse "`/jobs` has no records under it".
  */

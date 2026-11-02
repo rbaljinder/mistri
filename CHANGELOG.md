@@ -69,6 +69,8 @@ desktop app has its own version in `desktop/package.json`.
   `--as <role>:<email>` signs in as a verified account of that role. `@mistriwork/mistri/testing`'s `base` covers API and
   sign-in calls, and a command is sent at the version the session is served it. Under `mistri dev` an icon name that
   names no icon is drawn as a house and said once in the console with the nearest name; `mistri grade` counts it.
+  `shot` and `grade` keep the browser's temporary folders in the run's own and delete them with it: on a machine with
+  Chrome and no Playwright browser, each run left a profile and an artifacts folder in /tmp.
 - **The source server finds a page's libraries before the first request.** Under `mistri dev` (and the repository's own
   dev server) Vite found the page's libraries one request at a time, so a part loaded on demand re-ran the optimizer
   under a new hash: a form could hold React twice (`useId` of null), an open dialog was lost to the reload, and a browser
