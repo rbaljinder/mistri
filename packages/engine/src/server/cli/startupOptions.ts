@@ -101,9 +101,11 @@ export function exposureLines(
 ): string[] {
   if (/^(localhost|127\.0\.0\.1|::1)$/i.test(host)) return [];
   if (authProxyHeader) return [];
-  const remedy = 'Bind --host 127.0.0.1, put it behind a proxy that signs people in (--auth-proxy-header), or give the App sign-in.';
+  const way = 'Bind --host 127.0.0.1, put it behind a proxy that signs people in (--auth-proxy-header)';
+  /* No App is served (the database browser, or a Workbench): there is no App sign-in to give. */
   if (!apps.length)
-    return [`Warning: bound to ${host}, beyond loopback, with no sign-in. Anyone who can reach this port can read the database. ${remedy}`];
+    return [`Warning: bound to ${host}, beyond loopback, with no sign-in. Anyone who can reach this port can read the database. ${way}.`];
+  const remedy = `${way}, or give the App sign-in.`;
   return apps.map((app) =>
     !app.auth
       ? `Warning: bound to ${host}, beyond loopback, and "${app.name}" signs no one in: anyone who can reach this port reads what it shows. ${remedy}`

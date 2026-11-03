@@ -158,7 +158,7 @@ export function SchemaSummary({ shape, label, id }: { shape: Shape; label: strin
           {say('common.tables', { count: counts.tables }) + (counts.views ? `, ${say('views', { count: counts.views })}` : '')}
         </span>
         {/* The one line that survives collapsing. */}
-        {shape.hubs.length ? <span className="shape-gist">{say('centres', { name: (shape.hubs[0].table as TableMeta).name })}</span> : null}
+        {shape.hubs.length ? <span className="shape-gist">{say('centers', { name: (shape.hubs[0].table as TableMeta).name })}</span> : null}
         {start ? (
           <button
             type="button"
@@ -174,7 +174,7 @@ export function SchemaSummary({ shape, label, id }: { shape: Shape; label: strin
         <ul className="shape-lines">
           {shape.hubs.length ? (
             /* First, because it is the answer to "what is this database about". */
-            <Line label={say('centresOnLabel')}>
+            <Line label={say('centersOnLabel')}>
               <Link table={shape.hubs[0].table as TableMeta} />
               {say('referencedByOtherTables', { incoming: shape.hubs[0].incoming })}
               {shape.hubs.length > 1 ? (

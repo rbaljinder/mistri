@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/kit",
-  "version": "1.0.0-rc.13",
+  "version": "1.0.0-rc.14",
   "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -489,6 +489,34 @@
       "mistri-built": "./dist/client/firstPaint.js",
       "default": "./src/client/firstPaint.ts"
     },
+    "./client/fonts/barlow-400.woff2": {
+      "mistri-built": "./dist/client/fonts/barlow-400.woff2",
+      "default": "./src/client/fonts/barlow-400.woff2"
+    },
+    "./client/fonts/barlow-600.woff2": {
+      "mistri-built": "./dist/client/fonts/barlow-600.woff2",
+      "default": "./src/client/fonts/barlow-600.woff2"
+    },
+    "./client/fonts/barlow-semi-condensed-700.woff2": {
+      "mistri-built": "./dist/client/fonts/barlow-semi-condensed-700.woff2",
+      "default": "./src/client/fonts/barlow-semi-condensed-700.woff2"
+    },
+    "./client/fonts/faces.css": {
+      "mistri-built": "./dist/client/fonts/faces.css",
+      "default": "./src/client/fonts/faces.css"
+    },
+    "./client/fonts/ibm-plex-mono-400.woff2": {
+      "mistri-built": "./dist/client/fonts/ibm-plex-mono-400.woff2",
+      "default": "./src/client/fonts/ibm-plex-mono-400.woff2"
+    },
+    "./client/fonts/ibm-plex-mono-500.woff2": {
+      "mistri-built": "./dist/client/fonts/ibm-plex-mono-500.woff2",
+      "default": "./src/client/fonts/ibm-plex-mono-500.woff2"
+    },
+    "./client/fonts/inter-latin.woff2": {
+      "mistri-built": "./dist/client/fonts/inter-latin.woff2",
+      "default": "./src/client/fonts/inter-latin.woff2"
+    },
     "./client/help.js": {
       "mistri-built": "./dist/client/help.js",
       "default": "./src/client/help.js"
@@ -701,8 +729,8 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.13",
-    "@mistriwork/ui": "1.0.0-rc.13",
+    "@mistriwork/engine": "1.0.0-rc.14",
+    "@mistriwork/ui": "1.0.0-rc.14",
     "intl-messageformat": "12.1.2",
     "qrcode-generator": "^2.0.4"
   },

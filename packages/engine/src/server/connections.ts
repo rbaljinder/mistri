@@ -19,7 +19,7 @@
  */
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { connect } from '../adapters/connect.js';
+import { connect, MYSQL_REFUSAL } from '../adapters/connect.js';
 import { UNTRUSTED_NETWORK } from '../adapters/net/untrustedDatabase.js';
 import { configLocations } from './config/locations.js';
 import { redact, scrubSecrets } from './connectionRedaction.js';
@@ -601,6 +601,10 @@ export class Registry {
         entry.warning = opened.warning;
         adapter = opened.adapter;
       } else {
+        /* Before any secret is looked for: a mysql:// address has no password worth resolving, and "no password
+           found" said first hid the refusal that is the actual answer. connect() says it again for a reference
+           that only resolves to one. */
+        if (/^(mysql|mariadb):\/\//i.test(entry.config.url)) throw new Error(MYSQL_REFUSAL);
         resolved = await resolveConnection(entry.config.name, entry.config.url, {
           secrets: !entry.untrustedUrl,
           environment: this.environment,

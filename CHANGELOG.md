@@ -5,6 +5,34 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.14
+
+- **A mysql:// connection hears the MySQL refusal first.** The registry refuses a `mysql://` or `mariadb://` address
+  with the paused-MySQL message before it looks for a password, so a user-only URL no longer fails with "no password
+  found".
+- **A host product reports its own version.** `setProduct(name, version)` (`@mistriwork/engine/server/product.js`)
+  takes the host's version; `packageVersion()` (`--version`, MCP `serverInfo`, telemetry) then reports it. Without one
+  it is the engine's, as before, and `runtimeVersion()`, which pins a build, still reads the engine.
+- **The beyond-loopback warning fits the case.** With no App served (the database browser) it no longer says "or give
+  the App sign-in"; with Apps it still does.
+- **A host product can offer looks of its own.** `registerHostLooks` (`@mistriwork/kit/client/visualTheme.js`) declares
+  a host's looks by name, label and stylesheet (an address or a module); Preferences offers them beside the native
+  default and the built-in looks, a pick is kept with the Workbench's others, the page is held until its sheet is in,
+  and the root carries `data-host-look` while one is worn. The startup veil's cached colors are already keyed by that
+  pick, so switching looks no longer opens on the last one's ground.
+- **A look can set the data face.** `--data-face` on the root sets the data in a face of the look's choosing, the
+  Workbench grid's short values included, which were pinned to the code face; the reader's explicit Typography (Mono or
+  Sans) wins over it, and unset it is the code face as before.
+- **The kit's fonts are published.** `@mistriwork/kit/client/fonts/faces.css` declares Barlow, Barlow Semi Condensed, IBM
+  Plex Mono and Inter (SIL Open Font License, the text beside each), and each `.woff2` is a subpath of its own, so a host's
+  look can name them. They are on the host list with `registerHostLooks`.
+- **On a phone, the Workbench's key column shows its name and its KEY.** A device that cannot hover keeps a head's caret
+  and move buttons beside its label, and the key's short label gave way whole ("ID KEY ↓" drew as "KEY ↓"); its column
+  now keeps their room. Every other head, and an App's, is sized as before.
+- **The kit's and engine's words are in American spelling.** The database browser's summary said "centres on", its
+  composer "Summarise…" and its diagram "neighbourhood", and three refusals of a view's summary said "summarise"; they
+  now read "centers on", "Summarize…", "neighborhood" and "summarize".
+
 ## 1.0.0-rc.13
 
 - **The database browser moved to its own repository.** It lives at https://github.com/rbaljinder/tablewalk and is

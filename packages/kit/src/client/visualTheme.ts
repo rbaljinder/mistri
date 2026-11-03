@@ -41,6 +41,31 @@ let inApp = false;
 let locked = false;
 let isolated = false;
 
+/**
+ * A look a host product declares for its own screens (the database browser's Workbench): its own stylesheet, worn
+ * over the native tokens rather than over a kit look. The reader picks it in Preferences beside the native default and
+ * the built-in looks; it persists as the Workbench's other picks do (`WORKBENCH_VISUAL_THEME_KEY`, which the startup
+ * veil's signature already reads, so its first paint is cached apart from every other look's), and while it is worn
+ * the root carries `data-host-look="<id>"` and no kit look attribute. Every rule in its sheet keys on that attribute,
+ * so a sheet left on the page after the reader picks another look draws nothing. An App's screens never offer one: an
+ * App is dressed by its own theme.
+ * @public
+ */
+export interface HostLook {
+  /** Lowercase letters, digits and dashes, starting with a letter: the attribute's value and what is stored. */
+  id: string;
+  /** What Preferences calls it, in the host's words. */
+  label: string;
+  /** Its stylesheet: an address the page links, or a module that loads it (`() => import('./looks/blueprint.css')`). */
+  sheet: string | (() => Promise<unknown>);
+  /** Up to three colors the picker shows beside its name. */
+  swatches?: readonly string[];
+}
+/** The attribute a worn host look sets on the root. */
+const HOST_LOOK_ATTRIBUTE = 'data-host-look';
+const LOOK_ID = /^[a-z][a-z0-9-]{0,47}$/;
+let hostLooks: readonly HostLook[] = [];
+
 const swatches = (theme: ThemeDefinition) =>
   [theme.light.navGround ?? theme.light.surface, theme.light.accent, theme.light.chart2 ?? theme.light.ink] as const;
 
@@ -53,7 +78,53 @@ export function visualThemeOptions(): Array<{ value: string; label: string; swat
       label: theme.label,
       swatches: swatches(effectiveThemeDefinition(theme, paletteChoiceFor(theme))),
     }));
-  return inApp ? themes : [{ value: 'default', label: say('workbenchDefault'), swatches: [] }, ...themes];
+  if (inApp) return themes;
+  return [
+    { value: 'default', label: say('workbenchDefault'), swatches: [] },
+    ...hostLooks.map((look) => ({ value: look.id, label: look.label, swatches: look.swatches?.slice(0, 3) ?? [] })),
+    ...themes,
+  ];
+}
+
+/** The host look this screen wears, where it wears one. */
+const wornHostLook = (): HostLook | undefined => (inApp ? undefined : hostLooks.find((look) => look.id === workbenchPreferred));
+
+/** Whether a kit look dresses this screen: always in an App; outside one, only the built-in look its reader picked, never
+    the native default or a host look, which are worn over the native tokens. */
+const kitLookWorn = () => inApp || Boolean(workbenchPreferred && themePreset(workbenchPreferred));
+
+/** The host look worn, or undefined: the native default, a kit look, or an App's screen. @public */
+export function hostLookChoice(): string | undefined {
+  return wornHostLook()?.id;
+}
+
+/**
+ * The looks a host product offers on its own screens (`HostLook`), called once from its main before its shell boots:
+ * the stored pick is read again, since the page's look was worn before the main ran (shellStart.js), and a pick of a
+ * look the host no longer declares falls back to the native default for this page and stays stored.
+ * @public
+ */
+export function registerHostLooks(looks: readonly HostLook[]) {
+  const ids = new Set<string>();
+  for (const look of looks) {
+    if (!LOOK_ID.test(look.id)) throw new Error(say('hostLookId', { id: look.id }));
+    if (look.id === 'default' || themePreset(look.id) || ids.has(look.id)) throw new Error(say('hostLookTaken', { id: look.id }));
+    ids.add(look.id);
+  }
+  hostLooks = [...looks];
+  workbenchPreferred = storedWorkbenchLook();
+  apply();
+  window.dispatchEvent(new Event(VISUAL_THEME_REGISTRY_EVENT));
+}
+
+/** The Workbench's stored pick, while it names a built-in look or a host look this page declares. */
+function storedWorkbenchLook(): string | undefined {
+  try {
+    const value = window.localStorage.getItem(WORKBENCH_VISUAL_THEME_KEY);
+    return value && (themePreset(value) || hostLooks.some((look) => look.id === value)) ? value : undefined;
+  } catch {
+    return undefined; /* Native Workbench needs no storage. */
+  }
 }
 
 const offered = (value: unknown): value is string =>
@@ -116,7 +187,7 @@ const ownColorsArePalette = (theme: ThemeDefinition) =>
 
 /** Palette choices belong to their theme, not to an unrelated App using the same slug. */
 export function visualPaletteOptions(): Array<{ value: string; label: string; swatches: readonly string[] }> {
-  if (!inApp && !workbenchPreferred) return [];
+  if (!kitLookWorn()) return [];
   const theme = selectedThemeBase();
   return [
     ...(ownColorsArePalette(theme) ? [] : [{ value: 'default', label: say('default'), swatches: swatches(theme) }]),
@@ -142,7 +213,7 @@ function paletteChoiceFor(theme: ThemeDefinition): string {
 }
 
 export function visualPaletteChoice(): string {
-  if (!inApp && !workbenchPreferred) return 'default';
+  if (!kitLookWorn()) return 'default';
   return paletteChoiceFor(selectedThemeBase());
 }
 
@@ -285,6 +356,37 @@ function themeSheet(href: string | undefined): Promise<void> | undefined {
   return arriving;
 }
 
+/* A host look's sheet, fetched once: linked where it is an address, imported where it is a module. Like a kit look's,
+   one that cannot come leaves the native tokens, which read; it is not worth a failed boot. */
+const hostSheets = new Map<string, Promise<void>>();
+function hostSheet(look: HostLook): Promise<void> {
+  let arriving = hostSheets.get(look.id);
+  if (!arriving) {
+    const failed = (error?: unknown) => console.error(`The ${look.id} look's sheet did not load.`, error ?? '');
+    if (typeof look.sheet === 'function') arriving = look.sheet().then(() => undefined, failed);
+    else {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = look.sheet;
+      link.dataset.hostLook = look.id;
+      arriving = new Promise<void>((settle) => {
+        link.addEventListener('load', () => settle(), { once: true });
+        link.addEventListener(
+          'error',
+          () => {
+            failed();
+            settle();
+          },
+          { once: true },
+        );
+      });
+      document.head.append(link);
+    }
+    hostSheets.set(look.id, arriving);
+  }
+  return arriving;
+}
+
 function wearSheets(styles: readonly string[], ...also: (Promise<void> | undefined)[]) {
   const arriving = [...styles.map(sheet), ...also].filter((value): value is Promise<void> => value !== undefined);
   lookSheet = arriving.length ? Promise.all(arriving).then(() => undefined) : Promise.resolve();
@@ -317,10 +419,14 @@ const LOOK_ATTRIBUTES = [
 
 function apply() {
   const root = shellRoot();
-  /* Native Workbench has no look attributes. Explicit picks use the same
-     definitions, token owner and sheets as the App looks. */
-  if (!inApp && !workbenchPreferred) {
+  /* Native Workbench has no look attributes, and a host look only its own. Explicit picks of a built-in look use the
+     same definitions, token owner and sheets as the App looks. */
+  const host = wornHostLook();
+  if (host) root.setAttribute(HOST_LOOK_ATTRIBUTE, host.id);
+  else root.removeAttribute(HOST_LOOK_ATTRIBUTE);
+  if (!kitLookWorn()) {
     for (const name of LOOK_ATTRIBUTES) root.removeAttribute(name);
+    wearSheets([], host && hostSheet(host));
     void wearIconWeight(undefined);
     facesStyle?.remove();
     facesStyle = undefined;
@@ -372,12 +478,7 @@ export function initVisualTheme() {
   } catch {
     preferred = null; /* The default needs no storage. */
   }
-  try {
-    const value = window.localStorage.getItem(WORKBENCH_VISUAL_THEME_KEY);
-    workbenchPreferred = value && themePreset(value) ? value : undefined;
-  } catch {
-    workbenchPreferred = undefined; /* Native Workbench needs no storage. */
-  }
+  workbenchPreferred = storedWorkbenchLook();
   customPreferences = new Map();
   try {
     const entries: unknown = JSON.parse(window.localStorage.getItem(CUSTOM_THEME_KEY) ?? '[]');
@@ -476,7 +577,8 @@ export function setVisualTheme(value: string) {
 
 /** The look's own radius and data face; an App's authored values win over them in appnav. */
 export function visualThemeOverrides(): { radius?: string; font: string; square: boolean; density?: string } {
-  if (!inApp && !workbenchPreferred) return { font: 'var(--code)', square: false };
+  /* The native data face: a host look's `--data-face` where it sets one, else the code face (tokens.css). */
+  if (!kitLookWorn()) return { font: 'var(--data-face, var(--code))', square: false };
   const definition = selectedThemeDefinition();
   return {
     ...(definition.density ? { density: definition.density } : {}),
@@ -499,13 +601,13 @@ export function visualThemePalette(dark: boolean): ThemePalette {
 /** The worn theme's part styles as custom properties, written where the App's accent is (appTheme.js) so a part in
     `accent` is the App's own accent; none outside an App or for a theme without parts. */
 export function customThemePartTokens(): Record<string, string> {
-  if (!inApp && !workbenchPreferred) return {};
+  if (!kitLookWorn()) return {};
   return partTokens(selectedThemeDefinition().parts);
 }
 
 /** Values only; appnav remains the sole writer of inline theme tokens. */
 export function customThemeTokens(dark: boolean): Record<string, string> {
-  if (!inApp && !workbenchPreferred) return {};
+  if (!kitLookWorn()) return {};
   const definition = selectedThemeDefinition();
   const tokens: Record<string, string> = {};
   for (const [key, value] of Object.entries(definition[dark ? 'dark' : 'light'])) {

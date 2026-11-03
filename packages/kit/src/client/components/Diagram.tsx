@@ -452,7 +452,7 @@ export function NeighbourhoodDiagram({ tableId, expandable = true }: { tableId: 
         size={{ width, height }}
         focus={{ x: midX + NODE_W / 2, y: focusAnchor }}
         svgRef={svg}
-        label={say('foreignKeyNeighbourhood', { tableId })}
+        label={say('foreignKeyNeighborhood', { tableId })}
         expand={expandable ? () => setFull(true) : undefined}
       >
         {drawing}

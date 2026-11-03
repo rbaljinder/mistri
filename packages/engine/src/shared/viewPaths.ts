@@ -522,7 +522,7 @@ export function resolveAggregate(schema: DatabaseSchema, baseId: string, aggrega
   let column: ColumnMeta | undefined;
   if (aggregate.fn !== 'count') {
     if (!aggregate.column) {
-      fail(`${aggregate.fn} needs a column on ${child!.name} to summarise.`, aggregate.via);
+      fail(`${aggregate.fn} needs a column on ${child!.name} to summarize.`, aggregate.via);
     }
     column = child!.columns.find((c) => c.name === aggregate.column);
     if (!column) {

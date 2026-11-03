@@ -62,8 +62,8 @@ test('says where the domain centres, and every name is a door', async () => {
   const { shape } = draw();
   expect(summaryLines(shape)).toBeGreaterThan(0);
   expect(document.querySelector('.shape-counts')).toHaveTextContent('5 tables');
-  expect(document.querySelector('.shape-gist')).toHaveTextContent('centres on customer');
-  const centre = screen.getByText('Centres on').nextElementSibling!;
+  expect(document.querySelector('.shape-gist')).toHaveTextContent('centers on customer');
+  const centre = screen.getByText('Centers on').nextElementSibling!;
   expect(centre).toHaveTextContent('customer, referenced by 2 other tables');
   await user.click(centre.querySelector('.shape-link')!);
   expect(gone).toEqual([[{ kind: 'table', table: 'customer' }, 'reset']]);

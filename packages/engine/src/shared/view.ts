@@ -1078,7 +1078,7 @@ function parseAggregates(raw: unknown, at: string, name: string): ViewAggregate[
     }
     if (typeof a.via !== 'string' || !a.via.trim()) throw new Error(`${where} has no "via".`);
     if (a.fn !== 'count' && (typeof a.column !== 'string' || !a.column.trim())) {
-      throw new Error(`${where} is a ${a.fn} and needs a "column" to summarise.`);
+      throw new Error(`${where} is a ${a.fn} and needs a "column" to summarize.`);
     }
     if (a.on !== undefined && typeof a.on !== 'string') {
       throw new Error(`${where} has an "on" that is not a string.`);

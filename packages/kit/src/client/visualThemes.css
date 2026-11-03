@@ -373,7 +373,8 @@
 /* Only new preference controls and explicit Mono use unscoped rules. */
 .dd-swatches { display: inline-flex; flex: none; gap: var(--space-1h); margin-right: var(--space-2); }
 .dd-swatches > span { display: block; width: 9px; height: 14px; border: 1px solid #80808050; border-radius: min(2px, var(--radius)); }
-body.type-mono { --mono: var(--code); }
+/* The reader's Mono wins over a host look's data face (tokens.css). */
+body.type-mono { --mono: var(--code); --data-face: var(--code); }
 /* Code surfaces keep the code face; a textarea of prose (a description, a reason) keeps the interface's. */
 :root[data-visual-theme] .app-mode :is(.ddl, .explain, #query, .applist-filter, pre, .sql-input, .composer-text, .agent-json) { font-family: var(--code); }
 /* A list's search box, in the kit with every other field (moved from ListFilterBar.css, which stands in the base). */

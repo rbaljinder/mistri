@@ -236,7 +236,7 @@ export class HttpAdapter implements Adapter {
     const refuse = (why: string) => {
       throw new Refusal(`${view.base} comes from an API, so a view over it ${why}`);
     };
-    if (view.aggregates?.length || view.orderBy?.some((order) => order.alias)) refuse('cannot summarise the records that point at it.');
+    if (view.aggregates?.length || view.orderBy?.some((order) => order.alias)) refuse('cannot summarize the records that point at it.');
     if (view.filter?.groups.some((group) => group.some((condition) => condition.any)))
       refuse('cannot ask about the records that point at it.');
     const deep = compiled.columns.find((column) => column.hops > 1);

@@ -10,11 +10,20 @@
 type ProductName = 'tablewalk' | 'mistri';
 
 let current: ProductName = 'mistri';
+let hostVersion: string | undefined;
 
-/** Say which product this process is. A main calls it first. */
-export function setProduct(name: ProductName): void {
+/**
+ * Say which product this process is. A main calls it first. A host product that runs the engine from npm passes
+ * its own version too: `--version`, MCP's serverInfo and telemetry (`packageVersion`) then report it, where the
+ * engine's number is the framework's and moves on its own schedule. Left out, they report the engine's.
+ */
+export function setProduct(name: ProductName, version?: string): void {
   current = name;
+  hostVersion = version;
 }
+
+/** The version the host said it is, if it said one (`setProduct`). */
+export const productVersion = (): string | undefined => hostVersion;
 
 export const product = (): ProductName => current;
 

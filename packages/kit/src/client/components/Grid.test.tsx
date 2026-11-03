@@ -225,6 +225,42 @@ test('fit samples joined labels instead of raw keys', () => {
   expect(Number.parseInt(document.querySelector('col')!.style.width)).toBeGreaterThan(150);
 });
 
+test("on a phone the key's head keeps room for the caret and moves beside it, so its name and its KEY both show", () => {
+  const keyWidth = () => {
+    const view = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Grid table={invoice} data={data} sizing="fit" />
+      </QueryClientProvider>,
+    );
+    const heads = [...document.querySelectorAll('thead th')];
+    const at = heads.findIndex((th) => th.querySelector('.pk'));
+    const width = Number.parseFloat(document.querySelectorAll('col')[at]!.style.width);
+    const others = [...document.querySelectorAll('col')].map((col) => col.style.width).filter((_, index) => index !== at);
+    view.unmount();
+    return { width, others };
+  };
+  const desk = keyWidth();
+  /* A device that cannot hover keeps a head's caret and two moves in its flow (style.css, @media (hover: none)). */
+  const media = window.matchMedia;
+  window.matchMedia = ((query: string) => ({
+    ...media.call(window, query),
+    matches: query === '(hover: none)',
+  })) as typeof window.matchMedia;
+  try {
+    const phone = keyWidth();
+    expect(phone.width).toBe(desk.width + 3 * 24);
+    // Only the key's: any other head's label still gives way to its controls, as it was designed to.
+    expect(phone.others).toEqual(desk.others);
+    // An App draws no KEY on its key's head (features.css), and keeps its fit.
+    appMode = true;
+    const app = keyWidth();
+    window.matchMedia = media;
+    expect(app).toEqual(keyWidth());
+  } finally {
+    window.matchMedia = media;
+  }
+});
+
 test('fit follows container resizing and disconnects its observer when switched to scroll', () => {
   const callbacks: Array<() => void> = [];
   const disconnect = vi.fn();

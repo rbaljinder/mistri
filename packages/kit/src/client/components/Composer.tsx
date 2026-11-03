@@ -481,7 +481,7 @@ function summaryLabel(fn: string, column: string, isDate: boolean) {
 }
 
 function SummariseMenu({ fk, child }: { fk: Fk; child: TableMeta }) {
-  const items = [{ value: '', label: say('summarise'), detail: say('aTotalAnAverage') }];
+  const items = [{ value: '', label: say('summarize'), detail: say('aTotalAnAverage') }];
   for (const column of child.columns) {
     if (column.primaryKey || column.references) continue;
     const type = column.type.toLowerCase();
@@ -500,7 +500,7 @@ function SummariseMenu({ fk, child }: { fk: Fk; child: TableMeta }) {
       <Dropdown
         items={items}
         value=""
-        ariaLabel={say('summariseName', { name: child.name })}
+        ariaLabel={say('summarizeName', { name: child.name })}
         onChange={(value) => {
           if (!value) return;
           const [fn, column] = value.split(':');
