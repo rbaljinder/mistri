@@ -444,7 +444,13 @@ for (const mode of ['app', 'db'] as const) {
       for (const field of ['rows', 'outcome', 'sql']) assert.equal(Object.hasOwn(invalid.body, field), false);
     });
   });
+}
 
+/* Writes over the bare registry (`db`) were the database browser's, with its journal, public Undo and restore; they
+   are kept in its own repository. The engine's journaled writes are held here through the engine's own routes
+   (test/record-write-operations-http.test.ts), and the App's wire below. The `db` branches stay as the contrast. */
+const WRITE_MODES: readonly ('app' | 'db')[] = ['app'];
+for (const mode of WRITE_MODES) {
   test(`${mode} resource wire: ordinary update acknowledgements, legacy form, expected guard and ${mode === 'db' ? 'public Undo' : 'no Undo'}`, async () => {
     await fixture(mode, async (f) => {
       const saved = success(

@@ -1,16 +1,10 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
-// e2e-client: source — imports the database browser's connmanager.js from the page
-import { fileURLToPath } from 'node:url';
-import { COMPASS, DEMO, expect, type Page, test } from './support/ownServers';
-
-/* The database browser's module lives in the tablewalk package, outside the kit's client root: Vite serves it by path. */
-const CONNMANAGER = `/@fs${fileURLToPath(new URL('../packages/tablewalk/src/client/connmanager.js', import.meta.url))}`;
+import { COMPASS, expect, type Page, test } from './support/ownServers';
 
 // This spec controls API responses; exercise boot through its fetch fallback.
 test.use({ carryFirstPaint: false });
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
-test.use({ servers: ['explorer', 'crm'] });
+test.use({ servers: ['crm'] });
 
 const CRM = COMPASS;
 
@@ -71,12 +65,6 @@ test('an app has no Workbench, connection management or database-switch commands
     await search.fill('Workbench');
     await expect(page.getByRole('option', { name: /Workbench/ })).toHaveCount(0);
     await page.keyboard.press('Escape');
-    await page.evaluate(async (path) => {
-      const module = await import(/* @vite-ignore */ path);
-      await module.openConnections();
-      module.addConnection(() => {});
-    }, CONNMANAGER);
-    await noConnectionControls(page);
   }
   expect(managementRequests).toEqual([]);
   const denied = await page.request.get(`${new URL(CRM).origin}/api/connections`);
@@ -84,60 +72,36 @@ test('an app has no Workbench, connection management or database-switch commands
   expect(await denied.json()).not.toHaveProperty('connections');
 });
 
-test('standalone Workbench keeps the manager and its add-connection wizard', async ({ page }) => {
-  await page.goto(`/${DEMO}/customer`);
-  await page.getByRole('button', { name: 'Manage connections', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Connections', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '+ Add', exact: true }).click();
-  await expect(page.getByLabel('Connection URL or file path')).toBeVisible();
-});
-
 /* An address naming no App is a wrong address, not a database failure: the
-   screen says so and links the Apps served. An App server's page: the
-   Workbench's draws no App screen (packages/tablewalk/src/client/workbenchShell.js). */
+   screen says so and links the Apps served. */
 test('an address naming no App lists the Apps served instead of blaming the database', async ({ page }) => {
   /* The server answers for another App than the one its page names (its root's, `compass`). */
   await page.route('**/api/runtime', (route) =>
-    route.fulfill({ json: { active: DEMO, apps: [{ id: DEMO, name: 'Example app', writable: false }], appConfigured: true } }),
+    route.fulfill({ json: { active: 'example', apps: [{ id: 'example', name: 'Example app', writable: false }], appConfigured: true } }),
   );
   await page.goto(CRM);
   await expect(page.getByRole('heading', { name: 'No App named "compass" here', exact: true })).toBeVisible();
   await expect(page.getByText('could not connect to its database')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Example app', exact: true })).toHaveAttribute('href', `/${DEMO}`);
+  await expect(page.getByRole('link', { name: 'Example app', exact: true })).toHaveAttribute('href', '/example');
   await noConnectionControls(page);
 });
 
-for (const metadata of ['app', 'unavailable', 'standalone'])
+for (const metadata of ['app', 'unavailable'])
   test(`cold database failure: ${metadata} metadata chooses the correct recovery screen`, async ({ page }) => {
     await page.route(/\/api\/schema(?:\?|$)/, (route) => route.fulfill({ status: 409, json: { error: 'No connection is open.' } }));
     await page.route('**/api/runtime', (route) =>
       metadata === 'unavailable'
         ? route.fulfill({ status: 503, json: { error: 'Metadata unavailable' } })
         : route.fulfill({
-            json:
-              metadata === 'app'
-                ? { active: 'compass', apps: [{ id: 'compass', name: 'Compass', writable: false }], appConfigured: true }
-                : { appConfigured: false },
+            json: { active: 'compass', apps: [{ id: 'compass', name: 'Compass', writable: false }], appConfigured: true },
           }),
     );
     await page.route('**/api/connections', (route) => route.fulfill({ json: { active: null, connections: [] } }));
-    /* App metadata is an App server's page; the Workbench's is the database browser's (packages/tablewalk/src/client/workbenchShell.js). */
-    await page.goto(metadata === 'standalone' ? `/${DEMO}` : CRM);
+    await page.goto(CRM);
     await expect(page.locator('html')).not.toHaveAttribute('data-starting');
-    if (metadata === 'standalone') {
-      await expect(page.getByRole('button', { name: 'Connect a database', exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Open the sample database', exact: true })).toBeVisible();
-    } else {
-      /* Under the App's name where its payload arrived before the schema's refusal, the generic word where not. */
-      await expect(page.getByRole('heading', { name: /^(?:Compass|Application) is unavailable$/ })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
-      await noConnectionControls(page);
-      await expect(page.getByRole('button', { name: 'Open the sample database', exact: true })).toHaveCount(0);
-      await page.evaluate(async (path) => {
-        const module = await import(/* @vite-ignore */ path);
-        await module.openConnections();
-        module.addConnection(() => {});
-      }, CONNMANAGER);
-      await noConnectionControls(page);
-    }
+    /* Under the App's name where its payload arrived before the schema's refusal, the generic word where not. */
+    await expect(page.getByRole('heading', { name: /^(?:Compass|Application) is unavailable$/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+    await noConnectionControls(page);
+    await expect(page.getByRole('button', { name: 'Open the sample database', exact: true })).toHaveCount(0);
   });

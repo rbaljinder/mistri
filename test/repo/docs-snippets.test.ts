@@ -39,7 +39,6 @@ const FILES = [
   ...markdownUnder('docs'),
   ...markdownUnder('site/src/content/docs'),
   'README.md',
-  'packages/tablewalk/README.md',
   'packages/mistri/README.md',
   ...markdownUnder('examples/apps').filter((file) => file.endsWith('README.md')),
 ].sort();

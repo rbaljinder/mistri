@@ -6,7 +6,7 @@
  * the 75th percentile of real visits. Nothing here had ever measured any of
  * the three (test/load's README said so), and layout shift was the thing the
  * maintainer noticed first. This starts the compiled server
- * (`node --conditions=mistri-built packages/{tablewalk,mistri}/dist/server/index.js`) the way test/built-client-browser.mjs does —
+ * (`node --conditions=mistri-built packages/mistri/dist/server/index.js`) the way test/built-client-browser.mjs does —
  * its own ports, its own temporary data — and records, with the browser's own
  * PerformanceObserver:
  *
@@ -19,11 +19,11 @@
  *     says why it is scaled).
  *
  * Every surface's first paint, cold and warm (a public form, the landing, an
- * App's shell, the Workbench); rooms (a list, a record, a dashboard, a board
+ * App's shell); rooms (a list, a record, a dashboard, a board
  * and a calendar); and the interactions a person repeats all day (open a
  * record from a list, Back, open a related record, filter, sort, a column's
  * menu, type in search, switch tab, open a dialog). On Compass, Forecourt
- * (public pages, photographs), the Workbench and, where TABLEWALK_TEST_PG
+ * (public pages, photographs) and, where TABLEWALK_TEST_PG
  * names a PostgreSQL server, Ignition (a tenant App and its public intake);
  * at a desk (1280) and on a phone (390). Each is the median of --runs visits.
  *
@@ -50,15 +50,10 @@ import { chromium } from '@playwright/test';
 import { readyBrowserChild } from './support/ownedBrowserChild.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-/* Each binary's compiled entry: an App's start is mistri's, a database's tablewalk's. */
-const built = {
-  tablewalk: join(root, 'packages/tablewalk/dist/server/index.js'),
-  mistri: join(root, 'packages/mistri/dist/server/index.js'),
-};
+/* The binary's compiled entry. The database browser's Workbench is measured in its own repository. */
+const built = { mistri: join(root, 'packages/mistri/dist/server/index.js') };
 assert.ok(
-  existsSync(built.tablewalk) &&
-    existsSync(built.mistri) &&
-    ['tablewalk', 'mistri'].every((product) => existsSync(join(root, `packages/${product}/dist/client/index.html`))),
+  existsSync(built.mistri) && existsSync(join(root, 'packages/mistri/dist/client/index.html')),
   'Build the package first: npm run build.',
 );
 
@@ -131,27 +126,23 @@ const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-vitals-'));
 /* The copy of an App this run serves from inside the repository (APPS['compass-trail']), removed with the scratch. */
 let trailCopy;
 
-/** The compiled server, as `npx tablewalk` runs it. */
+/** The compiled server, as `npx mistri` runs it. */
 async function start(name, serveArgs, env = {}) {
   const port = await freePort();
-  const child = spawn(
-    process.execPath,
-    ['--conditions=mistri-built', serveArgs.includes('--app') ? built.mistri : built.tablewalk, ...serveArgs, '--port', String(port)],
-    {
-      cwd: root,
-      env: {
-        ...process.env,
-        TMPDIR: scratch,
-        XDG_CONFIG_HOME: join(scratch, `${name}-xdg`),
-        TABLEWALK_OPEN: '0',
-        MISTRI_OPEN: '0',
-        TABLEWALK_CLOCK: `${TODAY}T16:00:00.000Z`,
-        MISTRI_CLOCK: `${TODAY}T16:00:00.000Z`,
-        ...env,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+  const child = spawn(process.execPath, ['--conditions=mistri-built', built.mistri, ...serveArgs, '--port', String(port)], {
+    cwd: root,
+    env: {
+      ...process.env,
+      TMPDIR: scratch,
+      XDG_CONFIG_HOME: join(scratch, `${name}-xdg`),
+      TABLEWALK_OPEN: '0',
+      MISTRI_OPEN: '0',
+      TABLEWALK_CLOCK: `${TODAY}T16:00:00.000Z`,
+      MISTRI_CLOCK: `${TODAY}T16:00:00.000Z`,
+      ...env,
     },
-  );
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   const owner = await readyBrowserChild(child, name, { startupMs: 60000 });
   return { origin: `http://127.0.0.1:${port}`, stop: owner.stop };
 }
@@ -302,9 +293,6 @@ const APPS = {
         MISTRI_AUTH_ADMIN_PASSWORD: 'disposable-built-client-password',
       },
     );
-  },
-  async workbench() {
-    return start('workbench', ['--demo', '--no-config']);
   },
   /* A tenant App: Ignition, PostgreSQL-only, deployed the way its browser
      specs deploy it (e2e/support/ignitionServer.ts), but from the build. Run
@@ -560,46 +548,6 @@ const SCENARIOS = [
     act: async (page) => {
       await page.getByRole('link', { name: 'Schedule a test drive' }).click();
       await page.getByRole('dialog').waitFor();
-    },
-  },
-
-  // The Workbench, the database browser's own first page and grid.
-  { app: 'workbench', kind: 'load', name: 'landing', path: '/' },
-  { app: 'workbench', kind: 'load', name: 'grid', path: '/demo/invoice' },
-  {
-    app: 'workbench',
-    kind: 'act',
-    room: true,
-    name: 'open a record from the grid',
-    path: '/demo/invoice',
-    phone: false,
-    act: async (page) => {
-      await shown(page, '#content tbody tr td:nth-child(3)').click();
-      await page.waitForURL(/~\d+/);
-    },
-  },
-  {
-    app: 'workbench',
-    kind: 'act',
-    name: 'sort',
-    path: '/demo/invoice',
-    phone: false,
-    act: async (page) => {
-      await page.locator('#content .th-sort', { hasText: 'total' }).click();
-      await page.waitForURL(/sort/);
-    },
-  },
-  {
-    app: 'workbench',
-    kind: 'act',
-    room: true,
-    name: 'filter by typing',
-    path: '/demo/invoice',
-    act: async (page) => {
-      const box = shown(page, '#content .applist-quick-text');
-      await box.pressSequentially('12', { delay: 60 });
-      await box.press('Enter');
-      await page.waitForURL(/12/);
     },
   },
 

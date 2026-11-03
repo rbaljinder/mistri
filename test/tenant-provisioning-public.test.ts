@@ -21,7 +21,7 @@ import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { publishedDeclarations } from './support/installedTablewalk.js';
+import { publishedDeclarations } from './support/installedMistri.js';
 import * as commands from '../packages/mistri/src/server/commands.js';
 import * as maintenance from '../packages/mistri/src/server/maintenance.js';
 import { provisionStores, type MaintenanceTarget } from '../packages/mistri/src/server/maintenance.js';

@@ -1,10 +1,8 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
-import { COMPASS, DEMO, expect, type Page, test } from './support/ownServers';
-import { open } from './support/app';
+import { COMPASS, expect, type Page, test } from './support/ownServers';
 import { startSample } from './support/sampleServer';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
-test.use({ servers: ['explorer', 'crm'] });
+test.use({ servers: ['crm'] });
 
 /* Three things a reader does without a mouse, or does a second way: peek and
    step through records, arrange a board, and fold the menu to a rail. Each
@@ -17,10 +15,12 @@ const focusedRow = (page: Page) =>
   page.evaluate(() => document.activeElement?.closest<HTMLElement>('tbody tr[data-row]')?.dataset.row ?? null);
 
 test('records by keyboard: Space peeks the focused row, Escape returns, and j and k step through the list', async ({ page }) => {
-  await open(page, DEMO, 'customer');
+  await page.goto(`${CRM}/lead`);
   const grid = page.locator('.table-wrap table').first();
+  await expect(grid.locator('tbody tr[data-row]').nth(3)).toBeVisible();
   // Focus lands the cursor on a row; Space peeks whichever row that is.
   await grid.focus();
+  await page.keyboard.press('ArrowDown');
   await page.keyboard.press(' ');
   const peek = page.getByRole('dialog', { name: /a glance/ });
   await expect(peek).toBeVisible();

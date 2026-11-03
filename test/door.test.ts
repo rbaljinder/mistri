@@ -1,4 +1,3 @@
-// test-package: shared — the door's one table, sent to every dispatcher of both products (scripts/test-owners.mjs).
 /**
  * The one door (http/trust.ts `doorRefusal`): every HTTP surface asks it, and
  * this file is the list of them. Each row names a module, the rule it asks
@@ -25,7 +24,6 @@ import { after, before, describe, test } from 'node:test';
 import { doorRefusal, vouchForOrigin, type Bound, type DoorRule } from '../packages/engine/src/server/http/trust.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
-import { BROWSER_DISPATCHERS } from '../packages/tablewalk/src/server/http/dispatchers.js';
 import { APP_DISPATCHERS } from '../packages/mistri/src/server/http/dispatchers.js';
 import { createSuite } from '../packages/mistri/src/server/http/suite.js';
 import { createHandler } from '../packages/mistri/src/server/handler.js';
@@ -131,7 +129,7 @@ describe('the rule', () => {
 const SURFACES: Record<string, { rules: string[]; why: string }> = {
   'packages/engine/src/server/http/door.ts': {
     rules: ['{ writing: false }', '{ writing: true }'],
-    why: 'The engine door both products’ dispatchers hold — the database browser’s (http/browserHandler.ts), which has no session part, and the App framework’s (http/handler.ts, and embed/handler.ts and a suite’s Apps through it): the Host first, then a write’s Origin and body after the product’s session part (an App’s, gate.ts) has said whether its Origin is vouched for.',
+    why: 'The engine door every product’s dispatchers hold — here the App framework’s (http/handler.ts, and embed/handler.ts and a suite’s Apps through it); a product with no session part (the database browser, in its own repository) holds it the same way: the Host first, then a write’s Origin and body after the product’s session part (an App’s, gate.ts) has said whether its Origin is vouched for.',
   },
   'packages/mistri/src/server/http/gate.ts': {
     rules: ["{ writing: writes(req), origin: ownProof ? 'none' : 'writes', sameSite: true, json: false }"],
@@ -315,13 +313,6 @@ const stub = {} as never;
 const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-door-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
-async function workbench(): Promise<{ port: number; close: () => Promise<void> }> {
-  const where: Bound = { host: '127.0.0.1', port: 0 };
-  const server = createApp({ registry: new Registry(), bound: where });
-  where.port = await listening(server);
-  return { port: where.port, close: () => new Promise((resolve) => server.close(() => resolve())) };
-}
-
 /** An App with no sign-in over one writable SQLite table, served as the App framework's start serves it. */
 async function appServer(): Promise<{ port: number; close: () => Promise<void> }> {
   const directory = mkdtempSync(join(scratch, 'app-'));
@@ -475,13 +466,6 @@ async function tenantHost(): Promise<{ port: number; close: () => Promise<void> 
 }
 
 const ROWS: Row[] = [
-  {
-    name: 'http/browserHandler.ts, the database browser (the Workbench)',
-    start: workbench,
-    dispatchers: ['packages/tablewalk/src/server/http/browserHandler.ts'],
-    read: { path: '/api/connections' },
-    write: { path: '/api/query', body: '{}' },
-  },
   {
     name: 'http/handler.ts, through the gate (an App)',
     start: appServer,
@@ -736,7 +720,7 @@ describe('the dispatchers', () => {
   const rows = ROWS.filter((row) => row.dispatchers);
 
   test('each the router names is stood up by a row here', () => {
-    const named = [...BROWSER_DISPATCHERS, ...APP_DISPATCHERS].map((each) => each.module).sort();
+    const named = APP_DISPATCHERS.map((each) => each.module).sort();
     assert.deepEqual([...new Set(rows.flatMap((row) => row.dispatchers!))].sort(), named);
     for (const module of named) assert.ok(modules.has(module), module);
   });

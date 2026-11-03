@@ -1,7 +1,7 @@
 {
   "name": "tablewalk-storybook",
   "private": true,
-  "description": "The component library, drawn from src/client. A package of its own so the tablewalk package never depends on Storybook.",
+  "description": "The component library, drawn from src/client. A package of its own so no published package depends on Storybook.",
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

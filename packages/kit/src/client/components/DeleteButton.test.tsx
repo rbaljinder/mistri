@@ -21,7 +21,7 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock('../core.js', () => ({ api: mock.api, go: mock.go, toast: mock.toast, state: mock.state }));
 vi.mock('../delete.js', () => ({ canDelete: () => true }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: mock.refresh, undoToast: mock.undoToast }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo: mock.refresh, undoToast: mock.undoToast }));
 vi.mock('@mistriwork/ui/Modal.js', () => ({ Modal: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div> }));
 const { DeleteButton } = await import('./DeleteButton.js');
 const table: TableMeta = { id: 'ticket', name: 'Ticket', schema: '', isView: false, columns: [] };

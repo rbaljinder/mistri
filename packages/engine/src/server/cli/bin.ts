@@ -1,6 +1,6 @@
 /**
- * What each binary's entry does before its main, the one way: `tablewalk` (packages/tablewalk/src/server/index.ts)
- * and `mistri` (packages/mistri/src/server/index.ts) each call `runBin` with their own main, and nothing else.
+ * What each binary's entry does before its main, the one way: `mistri` (packages/mistri/src/server/index.ts) and
+ * `tablewalk` (the database browser's, in its own repository) each call `runBin` with their own main, and nothing else.
  *
  * Two binaries, not one bin that hands a start across: a person types `npx tablewalk <db>` for the database browser
  * and `npx @mistriwork/mistri dev` for an App, and each refuses the other's start by the other's name. Neither entry imports the

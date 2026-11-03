@@ -1,28 +1,33 @@
 # Working in this repo
 
-This repository builds two products. tablewalk is a read-only-by-default
-database browser (SQLite, Postgres) that serves a web UI and speaks MCP
-to coding agents. `npx tablewalk <db>` is the whole deployment of the database
-browser — there is no build step for it. mistri is the App framework: an App
-runs from its source directory the same way (`npx @mistriwork/mistri --app <dir>`,
-`npx @mistriwork/mistri dev`); `mistri build` (`packages/mistri/src/server/build/`) is an
-optional production step for one — typecheck, validation, a bundle pinned to
-the mistri version that made it — and serving never requires it.
+This repository builds mistri, the App framework: an App runs from its source
+directory (`npx @mistriwork/mistri --app <dir>`, `npx @mistriwork/mistri dev`);
+`mistri build` (`packages/mistri/src/server/build/`) is an optional production
+step for one — typecheck, validation, a bundle pinned to the mistri version
+that made it — and serving never requires it.
+
+The database browser lives in rbaljinder/tablewalk
+(https://github.com/rbaljinder/tablewalk): `npx tablewalk <db>`, its MCP, its
+desktop app and its container image are built and released there, from the
+engine, the kit and ui as this repository publishes them. Nothing here imports
+it; `mistri` refuses a start only the browser serves and names the command.
 
 An App's own names are mistri's: `mistri.json` beside it, `.mistri/` for
 `mistri dev`, `~/.config/mistri`, `mistri-schema.d.ts`, the `MISTRI_*`
 variables, and `__mistri_*` runtime tables (there is no rename or upgrade path
 before 1.0: a database from an earlier build is wiped and reseeded).
-The browser keeps `tablewalk.json`, `~/.config/tablewalk` and `TABLEWALK_*`. A
-variable both binaries read is read in the running one's name
-(`packages/engine/src/server/product.ts`). The repository's own harness
+The browser keeps `tablewalk.json`, `~/.config/tablewalk` and `TABLEWALK_*`,
+which the engine still reads under it: a variable both binaries read is read in
+the running one's name (`packages/engine/src/server/product.ts`). The repository's own harness
 variables (`TABLEWALK_TEST_PG`, `TABLEWALK_REQUIRE_LIVE`,
 `MISTRI_BUILT_CLIENT`, …) keep their names.
 
 ## Active app-platform work: next-session reading order
 
-The repository ships an engineer-first TypeScript DSL app framework beside the
-browser; the standalone database browser must remain independently launchable.
+The repository ships an engineer-first TypeScript DSL app framework. The
+engine, the kit and ui are the database browser's too: every name it imports
+is on the host list (`scripts/boundary/entries.json`, `docs/boundary.md`), held
+to the published exports, and comes off only by a deliberate edit.
 
 Maintainer working notes (status, plans, backlog, review evidence) are not in
 the repository, which is public. A maintainer may keep them in a local,
@@ -45,18 +50,17 @@ every file that owns whatever database it touches, and a serial lane for the
 files that still work in the one database `TABLEWALK_TEST_PG` names. The lane is read off the source, so a new file
 reaching a shared engine runs serially by default; `node scripts/test-node.mjs
 --lanes` prints the partition. Every test belongs to one package
-(`scripts/test-owners.mjs`, read off what it reaches; one that holds both
-products to one rule says `test-package: shared`), and `--package=<name>`
+(`scripts/test-owners.mjs`, read off what it reaches), and `--package=<name>`
 keeps either gate to that package's tests and the shared ones. The browser gate is two lanes on the same
 principle (`scripts/test-e2e.mjs`, `scripts/e2e-lanes.mjs`): specs that start
 their own server on a `listen(0)` port over a `mkdtemp` database run several at
-once, and the ones that address the three servers `playwright.config.ts` starts
-run one at a time, because a tablewalk process has one active connection. The
+once, and the ones that address the two servers `playwright.config.ts` starts
+run one at a time, because they share those servers' stores. The
 lane is read off the spec's source — a spec naming a shared port, navigating to
 a `baseURL`-relative path, or importing a shared fixture database is serial by
 default — and the parallel lane runs with no shared server at all, so a spec
 that lands there wrongly fails on a refused connection rather than racing.
-A spec that needs the explorer, Field Ops or Compass server can own a copy:
+A spec that needs the Field Ops or Compass server can own a copy:
 import `test` from `e2e/support/ownServers.ts` and name them with
 `test.use({ servers: [...] })`; each worker starts its own over copies of the
 fixture databases, so the spec runs in the parallel lane. Most specs do; the
@@ -83,8 +87,8 @@ paths, the shared rules), `@mistriwork/ui` (the standalone primitives: Modal,
 DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField, the tokens and
 their stylesheet, and the zoom-aware ruler),
 `@mistriwork/kit` (the shared React client), `@mistriwork/mistri` (the App framework and its
-bin, `mistri`), `create-mistri` (`npm create mistri`, which runs `mistri new`) and `tablewalk` (the database browser and its bin, `tablewalk`,
-which never depends on mistri). The root is private and
+bin, `mistri`), `create-mistri` (`npm create mistri`, which runs `mistri new`) and `@mistriwork/cloudflare`
+(the Worker glue `mistri deploy init cloudflare` writes against). The root is private and
 publishes nothing. Each package's `exports` answers from its `src/` in the
 checkout and from its `dist/` under `--conditions=mistri-built`, which a pack
 makes the only form (`scripts/pack-manifest.mjs`); a release publishes all
@@ -96,17 +100,15 @@ package's `dist/` by one `npm run build` (`scripts/build-packages.mjs`). The
 the TypeScript under `src/shared/` directly — one rule for what a row is
 called, how a record's columns group, where a condition ends, on both sides.
 That is runnable because of `vite.config.ts`: `npm run build` bundles the
-client once per product (`config/vite.tablewalk.config.ts`, `config/vite.mistri.config.ts`)
-into that product's `dist/client` through the kit's preset (`@mistriwork/kit/vite`), each with only its own main, with a
-first-paint budget per binary (`scripts/bundle-budget.mjs`) — minified, content-named and precompressed, with its source
+client (`config/vite.mistri.config.ts`) into mistri's `dist/client` through the kit's
+preset (`@mistriwork/kit/vite`, which the database browser builds its own with), with a
+first-paint budget per surface (`scripts/bundle-budget.mjs`) — minified, content-named and precompressed, with its source
 maps shipped beside it. The entry (`boot.js`, `shellStart.js`) starts the
-main its product's build names (`virtual:mistri/shell-main`), one of two: the App framework's (`appShell.js`, in the entry's chunk) or the
-database browser's (`workbenchShell.js`, its `workbench` chunk; from source, where the page
+main the build names (`virtual:mistri/shell-main`): the App framework's (`appShell.js`, in the entry's chunk; from source, the page
 carries the `mistri-shell` meta). A first page is the entry and its
 surface's chunks (`surfaces` in the preset): `public` (a public form,
 the landing, the sign-in screen); an App's the kit's shell (`shell`,
-`app.js`) and the App's chrome (`chrome`, `appnav.js`); the Workbench's the
-shell and its main, never the chrome. A tenant's flows (`tenantShell.js`)
+`app.js`) and the App's chrome (`chrome`, `appnav.js`). A tenant's flows (`tenantShell.js`)
 load where they are used. The build writes a page per surface that preloads
 its chunks and the server sends the one an address needs
 (`packages/engine/src/server/clientSurface.ts`); the rest are parts loaded on demand
@@ -117,16 +119,16 @@ keep the traces readable. Under tsx — `npm run dev`, the
 Vitest and Node suites, `npm run smoke` — the server serves `src/client`
 through Vite's middleware (`packages/engine/src/server/devclient.ts`), so an edit is a reload
 away and nothing has to be built first. `npm run e2e` is the exception: it runs
-`vite build` once per product (skipped while both products' `dist/client` are newer than every
+`vite build` once (skipped while mistri's `dist/client` is newer than every
 package's `src/client` and `src/shared`; `--no-build` skips it) and starts its servers with
 `MISTRI_BUILT_CLIENT=1`, so each serves that build instead of owning a
 Vite. A spec that imports a client module by its source name or rewrites one
-on its way to the page says `e2e-client: source` and runs unbuilt. A person running `npx tablewalk` still has no build step.
+on its way to the page says `e2e-client: source` and runs unbuilt. A person serving an App from its source still has no build step.
 `test/check-client-types.mjs` type-checks the client via JSDoc, and
 `test/check-client-geometry.mjs` enforces the one zoom-aware ruler; `oxlint`
-catches a name used and never imported. The five layers are held by
+catches a name used and never imported. The layers are held by
 `scripts/check-boundary.mjs` (`docs/boundary.md`): `engine` and `ui` ← `kit` ←
-`browser` / `mistri`, a module's layer being the package it sits in, each
+`mistri`, and `cloudflare` on its own, a module's layer being the package it sits in, each
 package's entry points in `scripts/boundary/entries.json`, and an empty
 allowlist that stays empty. The kit reaches App features through the
 shell's answers (`shellMode.ts`: `slots`, `rooms`), never by import. `test/agreement.test.ts` holds what
@@ -155,31 +157,19 @@ left by hand and why.
 ## Facts that are written in more than one place — keep them in sync
 
 These are the things that went stale before. Each lives in the code **and** in
-prose (each package's `README.md`, the site's `site/src/content/docs/docs/database-browser.md`, each
-binary's `USAGE` in `packages/<bin>/src/server/cli/usage.ts`). When you change the code, change the prose in the same
-commit. `test/prose.test.ts` and `test/prose-<bin>.test.ts` enforce the tool count, the USAGE↔README
-flag list, and the dialect keywords on every `npm test` — it found five
+prose (each package's `README.md`, the site, mistri's `USAGE` in
+`packages/mistri/src/server/cli/usage.ts`). When you change the code, change the prose in the same
+commit. `test/prose.test.ts` and `test/prose-mistri.test.ts` enforce the USAGE↔README
+flag list and the dialect keywords on every `npm test` — they found five
 missing flags and a missing dialect the day it was written. The manual
 commands below remain the way to *see* the live values.
 
-- **MCP tool count and names.** The database MCP is the browser's: stated in `packages/tablewalk/README.md` ("Twenty-three tools…")
-  and the site's `site/src/content/docs/docs/database-browser.md` ("up to twenty-three tools"). The source of truth is
-  `packages/tablewalk/src/server/mcp.ts`. A read-only connection lists only the reading tools; a
-  `"writable": true` connection also lists the writing ones. Verify the full
-  set:
-  ```sh
-  printf '%s\n%s\n' \
-    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"x","version":"0"}}}' \
-    '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-    | npx tsx packages/tablewalk/src/server/index.ts --mcp --config <a-writable-config>.json 2>/dev/null | tail -1 \
-    | node -e 'const t=JSON.parse(require("fs").readFileSync(0)).result.tools; const r=t.filter(x=>x.annotations?.readOnlyHint); console.log(t.length,"tools:",r.length,"read,",t.length-r.length,"write")'
-  ```
-  If the number or a tool's name changes, update both prose files.
+- **The database browser's facts** (its MCP tool count and names, its
+  `USAGE`, its README) live with it in rbaljinder/tablewalk and are held
+  there.
 
 - **Deep-link URL format.** The app uses **path** routing (`pushState` +
-  `popstate`), not hash routing. In the Workbench a record is
-  `/{connection}/{table}/~{id}`, a page `/{connection}/@{page}~{id}`, and the
-  query language stays in the path (`/demo/invoice%20total%20%3E%20500`). An
+  `popstate`), not hash routing. An
   App has one canonical address per thing (`packages/mistri/src/shared/appAddress.ts`, read by
   the client's `publicAddress.ts`, the server's `http/publicHead.ts` and
   `mistri check --routes`): a record is its id under the first view that
@@ -194,8 +184,8 @@ commands below remain the way to *see* the live values.
   `packages/mistri/src/client/publicAddress.ts`), `q=` only for what those cannot say. A
   natural key (`/label/bug`) and a public slug
   (`/vehicles/1-2024-toyota-corolla-le`) are opt-in. The walk rides
-  in `history.state`, never the path. A query-language or `@`/`~` address — an
-  App's too — still opens and is rewritten to the canonical one. A `#/…` link
+  in `history.state`, never the path. A query-language or `@`/`~` address (the
+  database browser's spelling) still opens and is rewritten to the canonical one. A `#/…` link
   is not read at all, so any `#/…` example in prose is stale. **Where an App is
   mounted** is one rule, `packages/engine/src/shared/mount.ts`: a server serving one App serves
   it at the root (the addresses above); several each keep `/{app}`
@@ -206,19 +196,18 @@ commands below remain the way to *see* the live values.
   through `outward`, and the client does the same at its edges
   (`packages/kit/src/client/addressMount.js`: the address bar, links, fetches), from the
   `<meta name="mistri-mount">` the page carries. There are no aliases: the
-  spelling that applies is the only one. The standalone database browser
-  mounts nothing; a tenant App is mounted by the same rule.
+  spelling that applies is the only one. A tenant App is mounted by the same rule.
 
 - **Supported dialects.** SQLite (built in) and Postgres (`pg`); MySQL and
-  MariaDB are not supported. Listed in the Databases table of `packages/tablewalk/README.md`, the site, and the
-  `tablewalk` package's keywords (`packages/tablewalk/package.json`). Adding
+  MariaDB are not supported. Said in `packages/mistri/README.md` and on the
+  site (`test/prose.test.ts` holds the README to it). Adding
   one is a new file under `packages/engine/src/adapters/` plus
   a case in `packages/engine/src/adapters/connect.ts`.
 
-- **CLI flags.** Each binary's `USAGE` (`packages/tablewalk/src/server/cli/usage.ts`,
-  `packages/mistri/src/server/cli/usage.ts`), the Options block of that package's README
-  (`packages/<bin>/README.md`), and the site's CLI pages (`scripts/cli-reference.mjs`) must
-  agree. `npx tsx packages/<bin>/src/server/index.ts --help` prints the live version.
+- **CLI flags.** mistri's `USAGE` (`packages/mistri/src/server/cli/usage.ts`), the
+  Options block of its README (`packages/mistri/README.md`), and the site's CLI page
+  (`scripts/cli-reference.mjs`) must agree.
+  `npx tsx packages/mistri/src/server/index.ts --help` prints the live version.
 
 - **The read-only / write-opt-in claim.** Browsing is read-only; editing is
   per-connection opt-in (`"writable": true`) and enforced on the server — in
@@ -231,19 +220,19 @@ commands below remain the way to *see* the live values.
   (that silently rounds them). Both display formatters — the grid's `Cell` in
   `packages/kit/src/client/components/Grid.tsx` and `sayValue` in
   `packages/kit/src/client/components/valueModel.ts`, which `Value.tsx` draws — guard this;
-  keep any new value renderer consistent. Covered by `e2e/grid.spec.ts`.
+  keep any new value renderer consistent. Covered by the kit's `Grid.test.tsx`
+  and `Value.test.tsx`.
 
 ## After any client edit
 
-`npm run smoke` (~5s) walks every room in a real browser — explorer and
-app mode — asserting each one paints and nothing throws. The client is
+`npm run smoke` (~5s) walks every room of an App in a real browser,
+asserting each one paints and nothing throws. The client is
 buildless, so nothing executes it until a browser does: a constructor-time
 throw in a shared module (a dropdown, a grid helper) blanks whole views
 while tsc, the check scripts and the unit suite all stay green. That
 happened; the smoke run exists so it is a five-second test failure next
 time. Every e2e test also fails on any uncaught page error now
-(e2e/support/harness.ts) — mutations.spec is the one deliberate
-exception, since injecting broken client code is its job.
+(e2e/support/harness.ts).
 
 `package.json` has no `overrides` block, and one should not come back to
 quiet a peer warning. The last one pinned Better Auth's optional Vitest peer
@@ -251,8 +240,8 @@ to ours until 1.7.10 widened its range to Vitest 5: the image build's
 `npm prune --omit=dev` removes our Vitest and then tries to satisfy every
 remaining peer with a version of its own, which npm 11.17 refuses where the
 range excludes what the lockfile has. Local `npm ci` cannot catch this — npm
-11.12 accepts it and only the newer npm in `node:24-alpine` does not — so the
-Docker job is the check; when a dependency's peer range lags ours, an
+11.12 accepts it and only the newer npm in `node:24-alpine` does not — so an
+image build (`examples/docker`) is the check; when a dependency's peer range lags ours, an
 `overrides` entry naming `$<the dependency>` is the fix, and it goes when the
 range widens.
 
@@ -284,7 +273,7 @@ range widens.
   the matrix's captures and filling the rest; `--mode`, `--device`, `--width`.
   Read across a row for drift between kinds: label, field, button order, words.
 - `npm run build` runs `scripts/bundle-budget.mjs` and `scripts/type-budget.mjs`: each surface's first
-  paint (public, App, Workbench) has script and stylesheet ceilings, raw and
+  paint (public, App, Workshop) has script and stylesheet ceilings, raw and
   in brotli, and
   `npm run test:built:browser` holds what a cold visit fetches for a real
   room. Raise a ceiling only where it is set, with the reason beside it.
@@ -292,8 +281,8 @@ range widens.
   client: CLS with the nodes that moved, LCP with its element, and INP with
   the CPU slowed to a quarter of the reference machine's (scaled to the
   machine it runs on), for every surface's first paint cold and warm, the
-  rooms, and a list's everyday interactions, on Compass, Forecourt, the
-  Workbench and, where `TABLEWALK_TEST_PG` names a server, Ignition; desk and
+  rooms, and a list's everyday interactions, on Compass, Forecourt and,
+  where `TABLEWALK_TEST_PG` names a server, Ignition; desk and
   phone, the median of three runs. The budgets (`BUDGET` in the file: CLS
   0.01, LCP 1.2 s, INP 100 ms, each tighter than Google's "good"; an
   interaction that starts a room over, which the navigation hold pictures, at
@@ -325,29 +314,13 @@ range widens.
 
 ## Pending before / after 1.0
 
-The npm, Docker and desktop release pipelines are all proven (validated on the
-throwaway 0.0.1–0.0.4). What is left:
+The desktop app, its Mac and Windows signing, and the container image moved
+with the database browser to rbaljinder/tablewalk; their release pipelines
+and what is left of them are kept there.
 
-- **Mac signing and notarization.** `desktop/package.json` is configured for it
-  (`hardenedRuntime: true`, `notarize: true`, the entitlements) and
-  `desktop-release.yml` signs and notarises with the repository's `CSC_LINK`,
-  `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and
-  `APPLE_TEAM_ID` secrets. Confirm a signed build shipped from the current
-  workflow before pointing the site's Download links at `/releases/latest`.
-
-- **Windows code signing — post-launch.** Unsigned Windows is a mild
-  SmartScreen "More info → Run anyway", so it does not gate the launch. The
-  modern path is **Azure Trusted Signing** (~$10/month, CI-friendly);
-  electron-builder supports it via `azureSignOptions`. OV/EV certs are the
-  alternative but need a cloud HSM and, for individuals, a multi-year identity
-  history.
-
-- **Deploy the site with a signed release.** The replacement Markdown/Starlight
-  site lives in `site/src/content/docs/`, builds to `site/dist/`, and is not
-  deployed until explicitly requested. Its Download links point at `/releases` (the list,
-  which shows pre-releases). Once a signed build ships as a full release,
-  consider pointing them at `/releases/latest` again so the newest signed
-  build is the default.
+- **Deploy the site.** The Markdown/Starlight site lives in
+  `site/src/content/docs/`, builds to `site/dist/`, and is not deployed until
+  explicitly requested.
 
 ## Public Examples
 

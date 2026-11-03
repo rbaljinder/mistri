@@ -33,7 +33,7 @@ vi.mock('../core.js', () => ({
 vi.mock('../requestIdentity.js', () => ({ ownedBy: () => ({}) }));
 vi.mock('../insert.js', () => ({ canInsert: () => mocks.editable }));
 vi.mock('../delete.js', () => ({ canDelete: () => mocks.editable }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: vi.fn() }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo: vi.fn() }));
 vi.mock('./RecordPicker.js', () => ({
   RecordPicker: ({ onChange, ariaLabel }: { onChange: (value: string) => void; ariaLabel: string }) => (
     <button type="button" onClick={() => onChange('3')}>{`${ariaLabel}: pick`}</button>

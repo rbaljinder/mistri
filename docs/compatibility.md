@@ -20,7 +20,7 @@ A change to any of these is **breaking**:
 - **The HTTP and App API.** Routes, request and response shapes, error codes,
   and the contract of a command (`authority.lock`) and its receipts.
 - **MCP tools.** A tool's name, arguments, result shape and read-only or
-  writing annotation, for the database browser's server and an App's.
+  writing annotation, for an App's server.
 - **The address format.** Canonical App addresses (`packages/mistri/src/shared/appAddress.ts`).
   An older address that still opens is rewritten to the canonical one; the
   canonical form does not change.
@@ -77,7 +77,8 @@ Console, behavior analytics, SCIM, the Gantt presentation, and a resource's
 `search` (its packs ship after 1.0). The release did promote the ones that had
 been preview before it: mounting in a host's server, sign-in from a host app,
 embedding in a React app, free-form pages and read replicas. Everything else the
-status page lists is covered, as is the database browser and its MCP server.
+status page lists is covered. The database browser and its MCP server are
+promised in their own repository (https://github.com/rbaljinder/tablewalk).
 The preview features stay outside the promise until a release promotes them, and
 so does any feature added in a 1.x release that ships as preview.
 

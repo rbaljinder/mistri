@@ -10,27 +10,17 @@ count, in one line the address keeps.
 invoice total >= 500 sort total desc
 ```
 
-Type it into the bar above any table. Every example on this page runs against
-`npx tablewalk --demo`.
-
-![The query bar holding invoice total >= 500 sort total desc, the line said as chips above the rows, and the invoices sorted by total.](../../../assets/screens/browser-query.webp)
-
-## What you'll see
-
-- Only the matching rows, with a count that stops at 10,000 and says so.
-- The line written into the address (`/demo/invoice%20total%20%3E%3D%20500…`),
-  so a copied link reruns it.
-- **SQL** beside the result shows the statement it compiled to, with every
-  value bound as a parameter.
+An App's list tabs, filters, `when` conditions and typed query strings are
+written in it (`mistri check` reads every one), and so is a list's address
+when its parameters cannot say a search. The examples here are over a small
+invoicing schema: customers, invoices and their lines.
 
 ## When to use it
 
-- Use the query bar when you know the condition, not the record: overdue,
-  over a limit, missing an email.
-- Use the [walk](/docs/database-browser/) instead when you start from one record and want
-  what is around it.
-- Use raw **SQL** only for what the language cannot say (window functions,
-  unions); it shows the same result grid but checks nothing for you.
+- Use it when you know the condition, not the record: overdue, over a limit,
+  missing an email.
+- Use raw SQL only for what the language cannot say (window functions,
+  unions); it checks nothing for you.
 
 ## Conditions
 
@@ -119,7 +109,5 @@ names a column of the answer (`billed`), not a path.
 
 ## Related
 
-- [tablewalk, the database browser](/docs/database-browser/): follow one record's references by clicking.
-- [MCP for coding agents](/docs/mcp/): `query` and `breakdown` take these lines verbatim.
-- [Keyboard](/docs/keyboard/): `/` focuses the bar; `⌘/` opens it as a panel.
+- [tablewalk, the database browser](https://tablewalk.dev): its query bar and its MCP tools take these lines verbatim.
 - [Lists](/docs/lists/): an App's tabs and filters are written in this language.

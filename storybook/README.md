@@ -1,10 +1,10 @@
-# tablewalk component library (Storybook)
+# mistri component library (Storybook)
 
 The components under `../src/client/components`, drawn one at a time in
 each built-in look, light and dark, with no server behind them.
 
-This is a package of its own on purpose. The `tablewalk` package, its
-lockfile, and everything `npx tablewalk` installs never mention Storybook.
+This is a package of its own on purpose. The published packages, their
+lockfile, and everything an App installs never mention Storybook.
 Storybook's peers (React, react-dom, Vite, TypeScript) are not installed
 here either (`.npmrc`: `legacy-peer-deps`). They resolve upward to the
 repository root's copies, so a story runs on the same single React as the

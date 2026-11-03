@@ -57,7 +57,7 @@ vi.mock('../sessionIdentity.js', () => ({
   subscribeTenantLease: () => () => {},
   subscribeSessionIdentity: () => () => {},
 }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: vi.fn() }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo: vi.fn() }));
 vi.mock('../../../../mistri/src/client/appState.js', () => ({ activeApp: () => ({ grantedCommands: [], resources: mocks.resources }) }));
 /* The kit reads the App through the shell's answers (shellMode.ts), which the mock above gives it. */
 beforeEach(bridgeShell);

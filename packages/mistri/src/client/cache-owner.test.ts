@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { ReactElement } from 'react';
-import type { PageBuilderProps } from '../../../tablewalk/src/client/components/PageBuilder.js';
 import type { LayoutBuilderProps } from '../../../kit/src/client/components/LayoutBuilder.js';
 
 const mocks = vi.hoisted(() => ({
@@ -67,9 +66,8 @@ vi.mock('../../../kit/src/client/components/appListModel.js', () => ({
 vi.mock('../../../kit/src/client/connectionScope.js', () => ({ canUseDatabaseTools: () => true }));
 
 let identity: typeof import('../../../kit/src/client/sessionIdentity.js');
-let pages: typeof import('../../../tablewalk/src/client/pagebuilder.js') & typeof import('../../../kit/src/client/savedPages.js');
+let pages: typeof import('../../../kit/src/client/savedPages.js');
 let layouts: typeof import('../../../kit/src/client/template.js');
-let sql: typeof import('../../../tablewalk/src/client/sqlsaved.js');
 let lists: typeof import('./applist.js');
 let peek: typeof import('../../../kit/src/client/peek.js');
 let queryClient: (typeof import('../../../kit/src/client/components/mount.js'))['queryClient'];
@@ -102,7 +100,6 @@ function select(tenantId = 'north') {
     expiresAt: Date.now() + 60000,
   });
 }
-const editor = () => (mocks.mount.mock.calls.at(-1)![1] as ReactElement<PageBuilderProps>).props;
 const layoutEditor = () => (mocks.mount.mock.calls.at(-1)![1] as ReactElement<LayoutBuilderProps>).props;
 const disk = () => Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)]);
 
@@ -117,11 +114,9 @@ beforeEach(async () => {
   identity.establishSessionIdentity({ signedIn: true, appId: 'app', accountId: 'ada' });
   select();
   ({ queryClient } = await import('../../../kit/src/client/components/mount.js'));
-  (await import('../../../kit/src/client/surfaces.js')).registerSurface('pageBuilder', () => null);
-  pages = { ...(await import('../../../tablewalk/src/client/pagebuilder.js')), ...(await import('../../../kit/src/client/savedPages.js')) };
+  pages = await import('../../../kit/src/client/savedPages.js');
   pages.whenSavedPagesChange(mocks.changed);
   layouts = await import('../../../kit/src/client/template.js');
-  sql = await import('../../../tablewalk/src/client/sqlsaved.js');
   lists = await import('./applist.js');
   peek = await import('../../../kit/src/client/peek.js');
 });
@@ -132,22 +127,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test('same-connection tenant selection retires synchronous page/layout/SQL/filter/peek caches', async () => {
+test('same-connection tenant selection retires synchronous page/layout/filter/peek caches', async () => {
   mocks.api.mockResolvedValueOnce({ pages: { saved: page('North page') } });
   await pages.loadSavedPages();
   mocks.api.mockResolvedValueOnce({ layouts: { item: layout('North layout') } });
   await layouts.loadTemplates();
-  mocks.api.mockResolvedValueOnce({ queries: [{ name: 'North SQL', sql: 'SELECT private_north' }] });
-  await sql.loadSavedSql();
   queryClient.setQueryData(['filters', 'same-connection'], { private: 'north' });
   queryClient.setQueryData(['peek', 'same-connection', 'item'], { name: 'North row' });
   expect(pages.savedPages()[0].name).toBe('North page');
   expect(layouts.savedTemplate('item')?.name).toBe('North layout');
-  expect(sql.savedStatements()).toHaveLength(1);
   select('south');
   expect(pages.savedPages()).toEqual([]);
   expect(layouts.savedTemplate('item')).toBeNull();
-  expect(sql.savedStatements()).toEqual([]);
   expect(queryClient.getQueryData(['filters', 'same-connection'])).toBeUndefined();
   expect(queryClient.getQueryData(['peek', 'same-connection', 'item'])).toBeUndefined();
   select('north');
@@ -161,57 +152,29 @@ test('tenant selection cannot fall back to the old account-wide storage mirrors'
   await pages.savePage(page('Account-wide page'));
   mocks.api.mockResolvedValueOnce({ layouts: { item: layout('Account-wide layout') } });
   await layouts.loadTemplates();
-  sql.saveStatement('Account-wide SQL', 'SELECT secret');
   expect(pages.savedPages()).toHaveLength(1);
   expect(layouts.hasSavedTemplate('item')).toBe(true);
   identity.requireTenantSelection();
   expect(pages.savedPages()).toEqual([]);
   expect(layouts.savedTemplate('item')).toBeNull();
-  expect(sql.savedStatements()).toEqual([]);
   select();
   expect(pages.savedPages()).toEqual([]);
   expect(layouts.savedTemplate('item')).toBeNull();
-  expect(sql.savedStatements()).toEqual([]);
 });
 
-test.each(['pages', 'layouts', 'SQL'])('late successful %s reads cannot overwrite a newer owner mirror or storage', async (kind) => {
+test.each(['pages', 'layouts'])('late successful %s reads cannot overwrite a newer owner mirror or storage', async (kind) => {
   const read = deferred();
   mocks.api.mockReturnValueOnce(read.promise);
-  const loading = kind === 'pages' ? pages.loadSavedPages() : kind === 'layouts' ? layouts.loadTemplates() : sql.loadSavedSql();
+  const loading = kind === 'pages' ? pages.loadSavedPages() : layouts.loadTemplates();
   select('south');
-  mocks.api.mockResolvedValueOnce(
-    kind === 'pages'
-      ? { pages: { saved: page('South') } }
-      : kind === 'layouts'
-        ? { layouts: { item: layout('South') } }
-        : { queries: [{ name: 'South', sql: 'SELECT south' }] },
-  );
-  await (kind === 'pages' ? pages.loadSavedPages() : kind === 'layouts' ? layouts.loadTemplates() : sql.loadSavedSql());
+  mocks.api.mockResolvedValueOnce(kind === 'pages' ? { pages: { saved: page('South') } } : { layouts: { item: layout('South') } });
+  await (kind === 'pages' ? pages.loadSavedPages() : layouts.loadTemplates());
   const before = disk();
-  read.resolve(
-    kind === 'pages'
-      ? { pages: { saved: page('North') } }
-      : kind === 'layouts'
-        ? { layouts: { item: layout('North') } }
-        : { queries: [{ name: 'North', sql: 'SELECT north' }] },
-  );
+  read.resolve(kind === 'pages' ? { pages: { saved: page('North') } } : { layouts: { item: layout('North') } });
   await loading;
   expect(disk()).toEqual(before);
   if (kind === 'pages') expect(pages.savedPages()[0].name).toBe('South');
-  else if (kind === 'layouts') expect(layouts.savedTemplate('item')?.name).toBe('South');
-  else expect(sql.savedStatements()[0].name).toBe('South');
-});
-
-test('late SQL rejection cannot clear a newer owner config cache', async () => {
-  const read = deferred();
-  mocks.api.mockReturnValueOnce(read.promise);
-  const loading = sql.loadSavedSql();
-  select('south');
-  mocks.api.mockResolvedValueOnce({ queries: [{ name: 'South', sql: 'SELECT south' }] });
-  await sql.loadSavedSql();
-  read.reject(new Error('Old connection lost'));
-  await loading;
-  expect(sql.savedStatements()[0].name).toBe('South');
+  else expect(layouts.savedTemplate('item')?.name).toBe('South');
 });
 
 test.each(['save', 'delete'])('late page %s acknowledgement cannot update a newer owner or announce success', async (operation) => {
@@ -230,59 +193,6 @@ test.each(['save', 'delete'])('late page %s acknowledgement cannot update a newe
   expect(disk()).toEqual(before);
   expect(mocks.changed).not.toHaveBeenCalled();
   expect(mocks.toast).not.toHaveBeenCalled();
-});
-
-test('late page relations and name prompt cannot mount an old-owner builder', async () => {
-  const relations = deferred();
-  mocks.api.mockReturnValueOnce(relations.promise);
-  const opening = pages.openBuilder(page('North'));
-  select('south');
-  relations.resolve({ relations: [{ private: 'north' }] });
-  await opening;
-  expect(mocks.mount).not.toHaveBeenCalled();
-  const name = deferred();
-  mocks.prompt.mockReturnValueOnce(name.promise);
-  const creating = pages.newPage('item');
-  select('north');
-  name.resolve('South draft');
-  await creating;
-  expect(mocks.mount).not.toHaveBeenCalled();
-});
-
-test('identity transition closes page editor and retained callbacks cannot close or clear the newer editor', async () => {
-  await pages.openBuilder(page('North'));
-  const old = editor();
-  old.onDraftChange?.(page('North draft'));
-  select('south');
-  expect(document.querySelector('.host-contents')).toBeNull();
-  await pages.openBuilder(page('South'));
-  const current = editor();
-  current.onDraftChange?.(page('South draft'));
-  const before = disk();
-  old.onDiscard?.();
-  old.onClose();
-  old.onDraftChange?.(page('Late north'));
-  expect(document.querySelector('.host-contents')).not.toBeNull();
-  expect(disk()).toEqual(before);
-  await expect(old.onSave(page('Late north'))).rejects.toThrow(/changed/);
-});
-
-test('a page editor pending save cannot clear recovery or callback into the next owner', async () => {
-  const onSaved = vi.fn();
-  await pages.openBuilder(page('North'), { onSaved });
-  const old = editor();
-  const reply = deferred();
-  mocks.api.mockReturnValueOnce(reply.promise);
-  const saving = old.onSave(page('North'));
-  select('south');
-  await pages.openBuilder(page('South'));
-  editor().onDraftChange?.(page('South draft'));
-  const before = disk();
-  reply.resolve({ ok: true });
-  await saving;
-  expect(onSaved).not.toHaveBeenCalled();
-  expect(disk()).toEqual(before);
-  expect(document.querySelector('.host-contents')).not.toBeNull();
 });
 
 test('layout drafts and memory-only recovery are not inherited by the next tenant', () => {

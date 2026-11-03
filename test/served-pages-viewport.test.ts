@@ -9,13 +9,9 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { withHead, groundsMeta } from '../packages/engine/src/server/clientHttp.js';
 
-const files = execFileSync(
-  'grep',
-  ['-rl', 'name="viewport"', ...['kit', 'mistri', 'engine', 'tablewalk', 'ui'].map((p) => `packages/${p}/src`)],
-  {
-    encoding: 'utf8',
-  },
-)
+const files = execFileSync('grep', ['-rl', 'name="viewport"', ...['kit', 'mistri', 'engine', 'ui'].map((p) => `packages/${p}/src`)], {
+  encoding: 'utf8',
+})
   .split('\n')
   .filter(Boolean);
 

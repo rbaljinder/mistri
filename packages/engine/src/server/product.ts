@@ -2,7 +2,7 @@
  * Which product this process is: the database browser (`tablewalk`) or the App framework (`mistri`). The engine is
  * both binaries', and what an operator sets is said in the binary's own name: `TABLEWALK_READ_POOL` for the
  * browser, `MISTRI_READ_POOL` for an App, read by the same code here. Each main says which it is before it reads a
- * flag (packages/tablewalk/src/server/cli/browserMain.ts, packages/mistri/src/server/cli/mistriMain.ts); anything
+ * flag (packages/mistri/src/server/cli/mistriMain.ts here, the database browser's main in its own repository); anything
  * else that runs the engine — an App mounted in a host's server (`createHandler`), a test — is an App's.
  *
  * Only the variables both binaries read go through here. A variable one product alone reads names itself.

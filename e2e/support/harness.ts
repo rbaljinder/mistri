@@ -10,10 +10,6 @@
  * whichever test was running, with the error in the failure. So does a
  * section its error boundary caught (`[data-section-error]`), and any
  * Content-Security-Policy violation the browser reports.
- *
- * mutations.spec.ts imports Playwright's raw test on purpose — its whole
- * job is injecting broken client code and proving the suite notices, so
- * page errors there are the experiment, not the accident.
  */
 import { test as base, expect } from '@playwright/test';
 

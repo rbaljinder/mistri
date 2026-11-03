@@ -18,6 +18,8 @@ import { briefLines } from '../packages/mistri/src/server/build/check.js';
 import { APP_ICONS } from '../packages/engine/src/shared/appIcons.js';
 import { codeRows, documentedFix } from '../packages/mistri/src/server/build/checkCodes.js';
 import { entryFor } from './support/bins.js';
+import { connect } from '../packages/engine/src/adapters/connect.js';
+import { toMarkdown } from '../packages/engine/src/shared/schematext.js';
 
 const ROOT = resolve('.');
 const work = mkdtempSync(join(tmpdir(), 'tablewalk-brief-'));
@@ -34,7 +36,7 @@ function run(args: string[]): Promise<{ code: number; out: string; err: string }
       { cwd: ROOT, env, timeout: 180_000, killSignal: 'SIGKILL' },
       (error, out, err) => {
         if (error && (error as { killed?: boolean }).killed) {
-          reject(new Error(`tablewalk ${args.join(' ')} did not exit`));
+          reject(new Error(`mistri ${args.join(' ')} did not exit`));
           return;
         }
         done({ code: (error as { code?: number } | null)?.code ?? 0, out, err });
@@ -128,12 +130,18 @@ describe('schema --brief', () => {
     }
   });
 
-  test('the command reads the connection like --export does, and is shorter than the markdown', async () => {
+  test('the command reads the connection, and is shorter than the markdown export of the same schema', async () => {
     const brief = await run(['schema', '--brief', db]);
     assert.equal(brief.code, 0, brief.err);
     assert.match(brief.out, /^task\(.*\)$/m);
-    const markdown = await run([db, '--export', 'md']);
-    assert.ok(brief.out.length < markdown.out.length, `${brief.out.length} vs ${markdown.out.length}`);
+    // The markdown is the engine's export, read here rather than through the database browser's `--export md`.
+    const adapter = connect(db);
+    try {
+      const markdown = toMarkdown(await adapter.introspect(), undefined);
+      assert.ok(brief.out.length < markdown.length, `${brief.out.length} vs ${markdown.length}`);
+    } finally {
+      await adapter.close();
+    }
   });
 });
 

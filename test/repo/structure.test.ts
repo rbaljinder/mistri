@@ -34,7 +34,6 @@ const PACKAGE_DIRS: Record<string, string> = {
   '@mistriwork/kit': 'packages/kit',
   '@mistriwork/ui': 'packages/ui',
   '@mistriwork/mistri': 'packages/mistri',
-  tablewalk: 'packages/tablewalk',
 };
 /** Where an import lands, as a repository path: a relative name, or a workspace package's module by its path. */
 function landing(file: string, specifier: string): string | undefined {
@@ -42,7 +41,7 @@ function landing(file: string, specifier: string): string | undefined {
     return relative(root, resolve(join(root, dirname(file)), specifier))
       .split('\\')
       .join('/');
-  const named = /^(@mistriwork\/[a-z]+|tablewalk)\/((?:client|server|shared|adapters|embed|schema)\/.+)$/.exec(specifier);
+  const named = /^(@mistriwork\/[a-z]+)\/((?:client|server|shared|adapters|embed|schema)\/.+)$/.exec(specifier);
   if (!named || !PACKAGE_DIRS[named[1]]) return undefined;
   return `${PACKAGE_DIRS[named[1]]}/${named[2].startsWith('schema/') ? '' : 'src/'}${named[2]}`;
 }
@@ -282,8 +281,6 @@ const FIRST_PAINT_ROOTS = [
   'packages/mistri/src/client/publicSurface.js',
   'packages/kit/src/client/app.js',
   'packages/mistri/src/client/appnav.js',
-  'packages/tablewalk/src/client/workbenchShell.js',
-  'packages/tablewalk/src/client/workbench.js',
   'packages/mistri/src/client/tenantShell.js',
 ];
 const MANIFEST_PARSER = [
@@ -397,7 +394,6 @@ const CLIENT_CROSSINGS = [
   'AccountControl',
   // The App's action bar and reach, installed as the shell's slots (shellMode.ts) by appnav.js at boot.
   'Actions',
-  'AgentConsole',
   // The App's home, named as the shell's `rooms` (shellMode.ts) by appnav.js: drawn by Content when the walk is empty.
   'AppHome',
   'AppIssues',
@@ -405,15 +401,11 @@ const CLIENT_CROSSINGS = [
   'AppReloadProblem',
   // A call to action into another App of the suite, installed as the shell's slots by appnav.js.
   'AppTargetAction',
-  'Ask',
   // The assistant's page, named as the shell's `rooms` by appnav.js and fetched on demand.
   'AssistantPanel',
   // The bar's assistant button: a few lines in the shell, its panel fetched on demand behind it.
   'AssistantTrigger',
   'Composer',
-  'ConnectionDialog',
-  'ConnectionManager',
-  'ConnectionPicker',
   'Content',
   // An embedded list's own component (sdk/), installed as the shell's slots by appnav.js and fetched on demand.
   'CustomList',
@@ -426,7 +418,6 @@ const CLIENT_CROSSINGS = [
   // The dev observer (observe/) is a React page of its own, and wears the tool's listbox.
   'Dropdown',
   'EnterDealerDialog',
-  'FindValue',
   // A New form's lines, installed as the shell's slots by appnav.js and fetched the first time a form has them.
   'FormLines',
   // A saved form's account screen and status check, each fetched when its page is shown.
@@ -454,7 +445,6 @@ const CLIENT_CROSSINGS = [
   // The OAuth consent page: oauthConsent.js is a chunk shellStart.js loads only for a sign-in address with ?authorize=.
   'OAuthConsent',
   'OverflowMenu',
-  'PageBuilder',
   'Palette',
   'Peek',
   'PeekPanel',
@@ -467,13 +457,11 @@ const CLIENT_CROSSINGS = [
   'RecordModal',
   // A public form saved on every step, fetched when one is shown.
   'SavedFormSurface',
-  'ShapeCheck',
   'Sidebar',
   'SignIn',
   // A split's record room, named as the shell's `rooms` by appnav.js.
   'SplitRecordRoom',
   'TimelineComposer',
-  'SqlPane',
   // Which of a suite's Apps opens first, installed as the shell's slots by appnav.js.
   'SuiteAppPreference',
   'SupportBanner',
@@ -488,7 +476,6 @@ const CLIENT_CROSSINGS = [
   // The form a headline link opens over its record (`open: 'modal'`), a public form or a signed-in one, installed as
   // the shell's slots by appnav.js and fetched on demand.
   'ViewFormDialog',
-  'Welcome',
   'WriteConfirm',
   'appListModel',
   'appRooms',
@@ -504,7 +491,6 @@ const CLIENT_CROSSINGS = [
   'myViews',
   'navCounts',
   'navigationTree',
-  'pageDraft',
   'pageModel',
   'recordSurface',
   'sidebarModel',
@@ -704,16 +690,11 @@ test('every test belongs to exactly one package, and the owner map reads the fil
   );
   const unowned = Object.values(all)
     .flat()
-    .map((file) => ({ file, ...ownerOf(file) }))
-    .filter(({ owner }) => !owner)
-    .map(({ file, why }) => `${file}: ${why}`);
+    .filter((file) => !ownerOf(file).owner);
   assert.deepEqual(unowned, [], "A test with no one owner runs in no package's suite.");
-  /* Each product walks its own rooms: the smoke walk is one spec per binary, not one spec that needs both. */
-  assert.equal(ownerOf('e2e/smoke-tablewalk.spec.ts').owner, 'tablewalk');
+  /* The smoke walk and a phone's width are an App's. And a helper a spec starts by its path (Ladle's host, an App
+     embedded in a site) is the server it is about, as an imported one is. */
   assert.equal(ownerOf('e2e/smoke-mistri.spec.ts').owner, 'mistri');
-  /* So is a phone's width: the Workbench's half and an App's. And a helper a spec starts by its path (Ladle's host,
-     an App embedded in a site) is the server it is about, as an imported one is. */
-  assert.equal(ownerOf('e2e/workbench-responsive.spec.ts').owner, 'tablewalk');
   assert.equal(ownerOf('e2e/app-responsive.spec.ts').owner, 'mistri');
   assert.equal(ownerOf('e2e/ladle.spec.ts').owner, 'mistri');
 });

@@ -16,11 +16,18 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const CLI = fileURLToPath(new URL('../packages/tablewalk/src/server/index.ts', import.meta.url));
+const CLI = fileURLToPath(new URL('../packages/mistri/src/server/index.ts', import.meta.url));
+/** A small App over the demo database `--demo` builds, in the test's own directory. */
+const APP = ['--demo', '--app', 'test/fixtures/apps/fieldops', '--no-config'];
+const served = (dir: string): NodeJS.ProcessEnv => ({
+  ...process.env,
+  XDG_CONFIG_HOME: join(dir, 'xdg'),
+  MISTRI_OPEN: '0',
+  MISTRI_DEMO_DB: join(dir, 'demo.db'),
+});
 
 function start(args: string[], env: NodeJS.ProcessEnv): Promise<{ child: ChildProcess; port: number; output: () => string }> {
   const child = spawn(process.execPath, ['--import', 'tsx', CLI, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -45,16 +52,8 @@ function start(args: string[], env: NodeJS.ProcessEnv): Promise<{ child: ChildPr
 }
 
 test('SIGTERM with a request in flight on a keep-alive connection exits within seconds', { timeout: 120_000 }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-shutdown-'));
-  const db = join(dir, 'shop.db');
-  const sqlite = new DatabaseSync(db);
-  sqlite.exec("CREATE TABLE product(id INTEGER PRIMARY KEY, name TEXT); INSERT INTO product VALUES (1, 'Lamp');");
-  sqlite.close();
-  const server = await start(['--db', db, '--port', '0', '--no-config'], {
-    ...process.env,
-    XDG_CONFIG_HOME: join(dir, 'xdg'),
-    TABLEWALK_OPEN: '0',
-  });
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-shutdown-'));
+  const server = await start([...APP, '--port', '0'], served(dir));
   const exited = new Promise<number>((resolve) => server.child.once('exit', () => resolve(Date.now())));
   const socket = connect(server.port, '127.0.0.1');
   try {
@@ -68,7 +67,7 @@ test('SIGTERM with a request in flight on a keep-alive connection exits within s
     });
     socket.on('error', () => {});
     // The headers and half the body: the server has the request and waits.
-    const body = JSON.stringify({ connection: 'shop', table: 'product', key: { id: 1 }, values: { name: 'Lamp' } });
+    const body = JSON.stringify({ table: 'customer', key: { id: 1 }, values: { name: 'Lamp' } });
     socket.write(
       `POST /api/update HTTP/1.1\r\nHost: localhost:${server.port}\r\nContent-Type: application/json\r\n` +
         `Content-Length: ${Buffer.byteLength(body)}\r\nConnection: keep-alive\r\n\r\n${body.slice(0, 10)}`,
@@ -78,7 +77,7 @@ test('SIGTERM with a request in flight on a keep-alive connection exits within s
     server.child.kill('SIGTERM');
     await new Promise((resolve) => setTimeout(resolve, 300));
     socket.write(body.slice(10));
-    // Whatever the answer (a read-only connection refuses the write), one comes.
+    // Whatever the answer (the demo connection is read-only and refuses the write), one comes.
     const answered = await Promise.race([
       new Promise<boolean>((resolve) => {
         const poll = setInterval(() => {
@@ -109,16 +108,8 @@ test('SIGTERM with a request in flight on a keep-alive connection exits within s
 });
 
 test('--drain-delay keeps answering, with /readyz failing, before the listener closes', { timeout: 120_000 }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-drain-'));
-  const db = join(dir, 'shop.db');
-  const sqlite = new DatabaseSync(db);
-  sqlite.exec('CREATE TABLE product(id INTEGER PRIMARY KEY);');
-  sqlite.close();
-  const server = await start(['--db', db, '--port', '0', '--no-config', '--drain-delay', '2', '--shutdown-grace', '3'], {
-    ...process.env,
-    XDG_CONFIG_HOME: join(dir, 'xdg'),
-    TABLEWALK_OPEN: '0',
-  });
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-drain-'));
+  const server = await start([...APP, '--port', '0', '--drain-delay', '2', '--shutdown-grace', '3'], served(dir));
   const exited = new Promise<number>((resolve) => server.child.once('exit', () => resolve(Date.now())));
   try {
     // Not keep-alive: a pooled socket would be closed by the listener's close and read as the refusal under test.

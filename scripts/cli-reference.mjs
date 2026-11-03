@@ -2,15 +2,15 @@
 /**
  * The command-line reference, generated from the help text.
  *
- * Each binary's `--help` (USAGE in packages/tablewalk/src/server/cli/usage.ts, the database browser's, and
- * packages/mistri/src/server/cli/usage.ts, the App framework's) is the one statement of its commands and
- * flags; test/prose.test.ts already holds each README to it. This lays the same text out as a page per binary: the commands, every server flag as a row,
+ * The binary's `--help` (USAGE in packages/mistri/src/server/cli/usage.ts, the App framework's) is the one statement
+ * of its commands and flags; test/prose-mistri.test.ts already holds its README to it. This lays the same text out as
+ * a page: the commands, every server flag as a row,
  * each later section (check, shot, migrate, build, …) as its own heading with
  * its text as written, and an index naming the section of every flag. It
  * fails when a CLI name the public-surface inventory lists has no entry, so a
  * flag cannot ship without a line here.
  *
- *   node scripts/cli-reference.mjs           regenerate site/src/content/docs/docs/cli.md and cli-browser.md
+ *   node scripts/cli-reference.mjs           regenerate site/src/content/docs/docs/cli.md
  *   node scripts/cli-reference.mjs --check   fail if the committed page differs (test/docs-site.test.ts runs this)
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -20,12 +20,11 @@ import GithubSlugger from 'github-slugger';
 import { readInventory, usageText } from './public-surface.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-/** Each binary's page: the App framework's is the reference's Command line, the database browser's beside it. */
+/** The binary's page: the reference's Command line. The database browser's is on its own site (https://tablewalk.dev). */
 export const PAGES = {
   mistri: join(ROOT, 'site/src/content/docs/docs/cli.md'),
-  tablewalk: join(ROOT, 'site/src/content/docs/docs/cli-browser.md'),
 };
-const WHAT = { mistri: 'the App framework', tablewalk: 'the database browser' };
+const WHAT = { mistri: 'the App framework' };
 
 /** The column the lead's descriptions start at. */
 const SAYS = 34;
@@ -90,7 +89,7 @@ const dedent = (lines) => {
   return body.map((line) => line.slice(Math.min(indent, /^ */.exec(line)[0].length)));
 };
 
-/** One binary's page, and every flag and command it names (for the inventory check across both). */
+/** The binary's page, and every flag and command it names (for the inventory check). */
 function page(bin) {
   const usage = usageText(bin);
   if (!usage) throw new Error(`cli-reference: USAGE moved in packages/${bin}/src/server/cli/usage.ts`);
@@ -107,7 +106,7 @@ function page(bin) {
 
   const out = [
     '---',
-    bin === 'mistri' ? 'title: Command line' : 'title: "Command line: database browser"',
+    'title: Command line',
     `description: "Every ${bin} command and flag, ${WHAT[bin]}'s, laid out from the help text the command prints: what each does, and where its section is."`,
     '---',
     '',
@@ -117,9 +116,7 @@ function page(bin) {
     `prints: what each does, and where its section is. \`npx ${bin} --help all\``,
     `prints the same text, \`npx ${bin} --help\` the commands and common options`,
     `on one screen, and \`npx ${bin} <command> --help\` one command's.`,
-    bin === 'mistri'
-      ? "Browsing a database with no App is the database browser's: [its command line](/docs/cli-browser/)."
-      : "An App is the App framework's: [its command line](/docs/cli/).",
+    "Browsing a database with no App is the [database browser](https://tablewalk.dev)'s, which has its own.",
     '',
     `The first line of the help says it: *${cell(lead.lines.find((line) => line.trim()) ?? '')}*`,
     '',
@@ -128,15 +125,12 @@ function page(bin) {
     '| Command | What it does |',
     '| --- | --- |',
   ];
-  for (const { usage: line, says } of commands(lead.lines, bin))
-    out.push(`| ${code(line)} | ${cell(says) || 'Open it in the database browser.'} |`);
+  for (const { usage: line, says } of commands(lead.lines, bin)) out.push(`| ${code(line)} | ${cell(says)} |`);
   out.push(
     '',
     '## Options',
     '',
-    bin === 'mistri'
-      ? "The server's flags: where the data is, how it is served, and what an App adds."
-      : "The server's flags: where the data is, and how it is served.",
+    "The server's flags: where the data is, how it is served, and what an App adds.",
     '',
     '| Flag | What it does |',
     '| --- | --- |',
@@ -174,7 +168,7 @@ function page(bin) {
   return { text: out.join('\n'), where };
 }
 
-/** Both pages, by binary; fails when a public CLI name is on neither. */
+/** The page, by binary; fails when a public CLI name is not on it. */
 export function build() {
   const pages = Object.fromEntries(Object.keys(PAGES).map((bin) => [bin, page(bin)]));
   const missing = Object.keys(readInventory().sections.cli).filter((name) => {

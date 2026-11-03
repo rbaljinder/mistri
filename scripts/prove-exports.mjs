@@ -5,13 +5,13 @@
  * resolved to a file that is there and imported.
  *
  * The kit once named its client modules at dist paths a published kit never carried (`@mistriwork/kit/client/…`), and
- * the browser package its `tablewalk/*` twins at files outside its `files` list: both installed, and both failed
- * at the first import. A pattern (`./*`) names no file of its own, so it is listed, not proven. An import that
+ * the browser package (then in this tree) its `tablewalk/*` twins at files outside its `files` list: both installed,
+ * and both failed at the first import. A pattern (`./*`) names no file of its own, so it is listed, not proven. An import that
  * fails only for a peer the package declares (React for a component module, the Containers class for the Cloudflare
  * glue) is said as such: the project that uses that subpath installs the peer. Each JavaScript subpath must also be typed by a declaration file the package
  * ships (scripts/export-types.mjs). A subpath only a bundler reads (the kit's client modules, scripts/pack-manifest.mjs
- * `BUNDLER_ONLY`: they import stylesheets) is proven by its files and types, not imported; the tarball proof
- * (scripts/prove-browser-from-tarballs.mjs) bundles them.
+ * `BUNDLER_ONLY`: they import stylesheets) is proven by its files and types, not imported; the database browser's
+ * repository (https://github.com/rbaljinder/tablewalk) bundles them from the tarballs.
  *
  *   node scripts/prove-exports.mjs                 pack every workspace package (run `npm run build` first)
  *   node scripts/prove-exports.mjs <tarball>…      prove those tarballs instead
@@ -126,11 +126,7 @@ function isOptionalPeerOfInstalled(project, name) {
       const file = join(base, entry, 'package.json');
       if (!existsSync(file)) continue;
       const manifest = JSON.parse(readFileSync(file, 'utf8'));
-      if (
-        !['tablewalk', '@mistriwork/mistri'].includes(manifest.name) &&
-        !manifest.name?.startsWith('@mistriwork/') &&
-        manifest.name !== '@mistriwork/ui'
-      )
+      if (manifest.name !== '@mistriwork/mistri' && !manifest.name?.startsWith('@mistriwork/') && manifest.name !== '@mistriwork/ui')
         continue;
       if (manifest.peerDependenciesMeta?.[name]?.optional) return true;
     }

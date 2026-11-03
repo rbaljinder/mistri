@@ -22,7 +22,7 @@ Dependencies are watched in two places and triaged by one rule.
 | High or critical, runtime dependency we do not reach (a code path we never call) | `audit` job | Still fails the job; the fix is the upgrade. If none exists, record the advisory id, the reason it is unreachable and a review date in the pull request that unblocks the release, never a silent ignore |
 | Moderate, runtime | `npm audit` | Waits for the weekly Renovate pull request; fix in the next release |
 | Any severity, dev or build-only | `npm audit` (full) | Waits for the weekly pull request; blocks a release only if it can reach the published packages or the image |
-| The container image's base or its packages | The pinned `NODE_IMAGE` in the `Dockerfile` | No scan runs in CI; take the newer pinned base when one is announced, and treat a high or critical one as blocking |
+| The container image's base or its packages | The pinned `NODE_IMAGE` in `examples/docker/Dockerfile` and the Dockerfile `mistri build --dockerfile` writes | No scan runs in CI; take the newer pinned base when one is announced, and treat a high or critical one as blocking |
 | A malicious package, or a compromised maintainer | Anyone | Stop the release, rotate what the build could read, and publish an advisory |
 
 Triage is weekly, with the Renovate pull requests. A finding that waits is

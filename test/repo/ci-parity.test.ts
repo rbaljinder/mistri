@@ -1,12 +1,12 @@
 /**
- * scripts/ci-parity.mjs reads the Dockerfile and the build the way CI's Docker
- * job does. 0.9.2's image build failed on a COPY of examples/apps/compass
+ * scripts/ci-parity.mjs reads the sample image's Dockerfile and the build the way
+ * CI's Docker job does. 0.9.2's image build failed on a COPY of examples/apps/compass
  * after the App moved; these hold that the check would have named it.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildInputs, dockerCopySources } from '../../scripts/ci-parity.mjs';
+import { DOCKERFILE, buildInputs, dockerCopySources } from '../../scripts/ci-parity.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 
@@ -37,7 +37,7 @@ test('what npm run build reads includes the type budget fixtures and the scripts
 });
 
 test('every build input is copied by the real Dockerfile', () => {
-  const copied = dockerCopySources(readFileSync(`${ROOT}Dockerfile`, 'utf8'))
+  const copied = dockerCopySources(readFileSync(`${ROOT}${DOCKERFILE}`, 'utf8'))
     .filter((source) => source.stage === 'build')
     .map((source) => source.path);
   const missing = buildInputs().filter((path) => !copied.some((source) => path === source || path.startsWith(`${source}/`)));

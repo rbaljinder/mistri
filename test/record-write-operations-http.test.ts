@@ -1,8 +1,7 @@
-// test-package: shared — holds the database browser and the App framework to one rule (scripts/test-owners.mjs).
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
-import type { Server } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -11,8 +10,10 @@ import type { Adapter, QueryRequest } from '../packages/engine/src/adapters/adap
 import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
-import { clearJournal, history } from '../packages/engine/src/server/journal.js';
-import { runTool } from '../packages/tablewalk/src/server/mcp.js';
+import { clearJournal, history, lastRevertible, revert } from '../packages/engine/src/server/journal.js';
+import { recordWriteRoutes } from '../packages/engine/src/server/http/recordWrites.js';
+import type { PostContext } from '../packages/engine/src/server/http/context.js';
+import { send } from '../packages/engine/src/server/http/reply.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 
 const appId = 'recorded-http';
@@ -33,7 +34,8 @@ type Fixture = {
 
 async function fixture(
   options: {
-    browser?: boolean;
+    /** A host with Undo: the engine's record write routes with no App's rules, so every write is journaled. */
+    undoable?: boolean;
     fields?: boolean;
     multi?: boolean;
     denied?: boolean;
@@ -141,7 +143,7 @@ async function fixture(
       },
     };
     const bound = { host: '127.0.0.1', port: 0 };
-    server = createApp({ registry, bound, ...(options.browser ? {} : { apps: [host] }) });
+    server = options.undoable ? journaledWrites(registry) : createApp({ registry, bound, apps: [host] });
     server.listen(0, bound.host);
     await once(server, 'listening');
     const address = server.address();
@@ -153,7 +155,7 @@ async function fixture(
       databases,
       adapters,
       session,
-      table: options.browser ? physical : 'item',
+      table: options.undoable ? physical : 'item',
       row: (source = 'ops', id = 1) => {
         const row = databases[source]!.prepare(`SELECT * FROM ${physical} WHERE id = ?`).get(id);
         return row ? { ...row } : undefined;
@@ -163,7 +165,7 @@ async function fixture(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: AbortSignal.timeout(5_000),
-          body: JSON.stringify({ ...(options.browser ? { conn: owners.ops } : { app: appId }), ...body }),
+          body: JSON.stringify({ ...(options.undoable ? { conn: owners.ops } : { app: appId }), ...body }),
         });
         return { status: response.status, body: await response.json() };
       },
@@ -183,6 +185,48 @@ async function fixture(
   }
 }
 
+/**
+ * The engine's record write routes (http/recordWrites.ts) as a host with Undo
+ * composes them — no App's rules, so every write is journaled — over the
+ * connection the body names. What it refuses by throwing, its host answers;
+ * here, as a 400 or a 409. The database browser is such a host, in its own
+ * repository; its Undo route is the engine's `revert` over the same journal.
+ */
+function journaledWrites(registry: Registry): Server {
+  return createServer(async (req, res) => {
+    try {
+      let text = '';
+      for await (const chunk of req) text += chunk;
+      const body = JSON.parse(text || '{}') as Record<string, unknown>;
+      const connection = String(body.conn);
+      const { adapter, schema } = await registry.open(connection);
+      const post = {
+        res,
+        path: new URL(req.url ?? '/', 'http://host').pathname,
+        body,
+        adapter,
+        schema,
+        registry,
+        connection,
+        configPages: [],
+        rowPolicy: false,
+        appConfigured: false,
+        appNow: () => new Date(),
+      } satisfies PostContext;
+      if (!(await recordWriteRoutes(post, { gates: { write: () => null } }))) send(res, 404, { error: 'No such route.' });
+    } catch (error) {
+      if (!res.headersSent) send(res, (error as { status?: number }).status ?? 400, { error: (error as Error).message });
+    }
+  });
+}
+
+/** Undo the newest write, as the host's Undo does: the engine's `revert`, only when it is the one the history offers. */
+async function undo(f: Fixture, expectedId: number) {
+  const next = lastRevertible(f.owners.ops);
+  assert.equal(next?.id, expectedId);
+  assert.equal((await revert(f.adapters.ops!, f.owners.ops, next!)).reverted, true);
+}
+
 function successful(reply: Reply) {
   assert.equal(reply.status, 200, JSON.stringify(reply.body));
   assert.ok(!reply.body.errors?.length, JSON.stringify(reply.body));
@@ -191,10 +235,6 @@ function successful(reply: Reply) {
 
 async function rename(f: Fixture, name: string) {
   return successful(await f.call('/api/update', { table: f.table, key: { id: 1 }, values: { name } }));
-}
-
-async function undo(f: Fixture, expectedId: number) {
-  assert.equal(successful(await f.call('/api/revert', { confirm: true, expectedId })).reverted, true);
 }
 
 function ordinaryWriteSpy(adapter: Adapter) {
@@ -211,7 +251,7 @@ function ordinaryWriteSpy(adapter: Adapter) {
 }
 
 test('recorded HTTP update captures the original after a competing writer reaches transaction entry', async () => {
-  await fixture({ browser: true }, async (f) => {
+  await fixture({ undoable: true }, async (f) => {
     const adapter = f.adapters.ops!;
     const transaction = adapter.transaction!.bind(adapter);
     const ordinary = ordinaryWriteSpy(adapter);
@@ -233,7 +273,7 @@ test('recorded HTTP update captures the original after a competing writer reache
 });
 
 test('recorded HTTP delete restores the complete writer-entry image, not its earlier preview', async () => {
-  await fixture({ browser: true }, async (f) => {
+  await fixture({ undoable: true }, async (f) => {
     successful(await f.call('/api/delete', { table: f.table, key: { id: 1 } }));
     assert.deepEqual(history(f.owners.ops), []);
     const adapter = f.adapters.ops!;
@@ -258,7 +298,7 @@ test('recorded HTTP delete restores the complete writer-entry image, not its ear
 });
 
 test('recorded HTTP expected numeric coercion never becomes the stored Undo original', async () => {
-  await fixture({ browser: true }, async (f) => {
+  await fixture({ undoable: true }, async (f) => {
     const saved = successful(
       await f.call('/api/update', {
         table: f.table,
@@ -492,7 +532,7 @@ test('recorded HTTP refuses every ordinary mutation without transaction support 
 
 for (const kind of ['update', 'delete'] as const) {
   test(`recorded HTTP ${kind} refuses a transaction without record locking before reading or mutating`, async () => {
-    await fixture({ browser: true }, async (f) => {
+    await fixture({ undoable: true }, async (f) => {
       const older = await rename(f, 'older saved');
       const before = f.row();
       const journal = structuredClone(history(f.owners.ops));
@@ -573,7 +613,7 @@ test('an App save refuses a transaction without record locking before reading or
 
 for (const kind of ['update', 'insert', 'delete'] as const) {
   test(`recorded HTTP ${kind} with a lost commit acknowledgement leaves a value-free barrier without retry`, async () => {
-    await fixture({ browser: true }, async (f) => {
+    await fixture({ undoable: true }, async (f) => {
       const older = await rename(f, 'older saved');
       const adapter = f.adapters.ops!;
       const transaction = adapter.transaction!.bind(adapter);
@@ -638,14 +678,15 @@ for (const kind of ['update', 'insert', 'delete'] as const) {
       adapter.transaction = async () => {
         assert.fail('history must block retrying the older inverse');
       };
-      assert.equal(successful(await f.call('/api/revert')).next, undefined);
-      assert.equal((await f.call('/api/revert', { confirm: true, expectedId: older.undoId })).status, 409);
+      // The barrier: the history offers nothing to undo, so the older write's inverse is never tried.
+      assert.equal(lastRevertible(f.owners.ops), undefined);
+      assert.ok(history(f.owners.ops).some((entry) => entry.id === older.undoId));
     });
   });
 }
 
 test('recorded HTTP rollback uncertainty cannot unwrap a constraint into a safe rejection', async () => {
-  await fixture({ browser: true }, async (f) => {
+  await fixture({ undoable: true }, async (f) => {
     const older = await rename(f, 'older saved');
     const adapter = f.adapters.ops!;
     const transaction = adapter.transaction!.bind(adapter);
@@ -668,35 +709,7 @@ test('recorded HTTP rollback uncertainty cannot unwrap a constraint into a safe 
     assert.equal(Reflect.get(adapter, 'writeDb'), null);
     assert.equal(history(f.owners.ops)[0].undoState, 'unknown');
     assert.deepEqual(history(f.owners.ops)[0].steps, [{ table: physical }]);
-    assert.equal(successful(await f.call('/api/revert')).next, undefined);
-    assert.equal((await f.call('/api/revert', { confirm: true, expectedId: older.undoId })).status, 409);
-  });
-});
-
-test('recorded HTTP and MCP writes share physical history and can undo each other in browser mode', async () => {
-  await fixture({ browser: true }, async (f) => {
-    const saved = await rename(f, 'HTTP saved');
-    const preview = await runTool(f.registry, 'revert', { connection: f.owners.ops });
-    assert.equal(preview.isError, false);
-    assert.ok(preview.structuredContent);
-    assert.equal((preview.structuredContent.next as { id: number }).id, saved.undoId);
-    const reverted = await runTool(f.registry, 'revert', { connection: f.owners.ops, confirm: true, expectedId: saved.undoId });
-    assert.equal(reverted.isError, false);
-    assert.equal(reverted.structuredContent?.reverted, true);
-    assert.equal(f.row()?.name, 'ops original');
-    const changed = await runTool(f.registry, 'update', {
-      connection: f.owners.ops,
-      table: physical,
-      key: { id: 1 },
-      set: { name: 'MCP saved' },
-    });
-    assert.equal(changed.isError, false, changed.content[0]?.text);
-    assert.equal(changed.structuredContent?.affected, 1);
-    assert.equal(f.row()?.name, 'MCP saved');
-    const entry = history(f.owners.ops)[0];
-    assert.equal(successful(await f.call('/api/revert')).next.id, entry.id);
-    await undo(f, entry.id);
-    assert.equal(f.row()?.name, 'ops original');
-    assert.deepEqual(history(f.owners.ops), []);
+    assert.equal(lastRevertible(f.owners.ops), undefined);
+    assert.ok(history(f.owners.ops).some((entry) => entry.id === older.undoId));
   });
 });

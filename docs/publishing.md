@@ -1,8 +1,11 @@
-# Publishing tablewalk
+# Publishing mistri
 
-Releases use the checked-in GitHub Actions workflows. The package, container
-image and desktop installers share the root `package.json` version. The
-standalone database browser must remain independently installable and usable.
+Releases use the checked-in GitHub Actions workflows. The six framework
+packages (`@mistriwork/engine`, `@mistriwork/ui`, `@mistriwork/kit`,
+`@mistriwork/mistri`, `create-mistri` and `@mistriwork/cloudflare`) share the
+root `package.json` version. This repository publishes no container image and
+no installer: the database browser, its image and its desktop installers are
+released from their own repository (https://github.com/rbaljinder/tablewalk).
 
 ## Prepare and review
 
@@ -17,7 +20,7 @@ standalone database browser must remain independently installable and usable.
    `schema`, README, LICENSE and package metadata. Never include runtime
    credentials, private databases, maintainer notes or development fixtures.
 4. Open the release PR and wait for CI: all test/browser shards, installed
-   package checks, container startup and desktop staging must pass. Keep the
+   package checks and the example App's image build must pass. Keep the
    working branch as one amended commit; check remote state before a leased
    force push. Merge only the reviewed, passing revision.
 
@@ -28,20 +31,14 @@ release changelog entry, then push that tag. Publication requires explicit
 maintainer authorization. Never move a published release tag or attempt to
 reuse an npm version.
 
-- `release.yml` checks the version and tarball, reruns live tests and browser
-  tests, publishes npm, then builds and pushes the container image. Full releases
-  update `latest`; prereleases leave the container's `latest` tag unchanged.
+- `release.yml` checks the version and tarballs, reruns live tests and browser
+  tests, then publishes the six packages to npm in dependency order. Full
+  releases update `latest`; prereleases publish under `next`.
 - npm uses the trusted publisher configured for this repository and workflow.
   The workflow authenticates through GitHub OIDC; it does not require copying
   a local npm token into repository secrets.
-- `desktop-release.yml` builds Windows, Linux and universal macOS installers and
-  attaches them to the GitHub release. macOS uses the configured Developer ID
-  certificate and notarization credentials. Windows and Linux are unsigned.
-- Wait for every desktop upload before setting the final release notes, because
-  those upload steps also write the release body.
 
-See the workflow files for the exact prerequisites and ordering. An installer
-appearing on GitHub does not establish that npm or container publication finished.
+See the workflow file for the exact prerequisites and ordering.
 
 ## Verify what users receive
 
@@ -56,11 +53,7 @@ After the version is visible:
 - Verify the exact npm version and, for a full release, the `latest` dist-tag.
   Install the public package in a fresh directory outside the source checkout.
   Check `--version`, server startup, the first-run page and its client assets.
-- Verify the public container version and `latest` manifests have the expected
-  digest. A successful authenticated push does not prove anonymous pulls work.
-- Verify the GitHub release tag and all expected installer assets. Confirm
-  macOS signing/notarization from the build result; keep unsigned Windows
-  instructions accurate.
+- Verify the GitHub release tag.
 - Link the final release notes to the shipped behavior and state any actual
   remaining limitations. Preserve an evidence record in private maintainer notes.
 

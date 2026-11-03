@@ -54,7 +54,7 @@ describe('the sidebar', () => {
 
   test('has the target groups, in order', () => {
     const labels = [...config.matchAll(/^ {8}\{\s*label: '([^']+)',\s*items:/gm)].map((match) => match[1]);
-    assert.deepEqual(labels, ['Start', 'Build', 'Behavior', 'Data', 'UI', 'Ship', 'Reference', 'Database browser']);
+    assert.deepEqual(labels, ['Start', 'Build', 'Behavior', 'Data', 'UI', 'Ship', 'Reference']);
   });
 });
 
@@ -80,21 +80,17 @@ describe('pictures', () => {
     }
   });
 
-  test('every manifest entry names a sample App with a seed, a database the browser opens, or a library story, and a route', async () => {
-    const { SEEDS, WORKBENCH, appDirectory } = await import('../scripts/docs-shots.mjs');
+  test('every manifest entry names a sample App with a seed or a library story, and a route', async () => {
+    const { SEEDS, appDirectory } = await import('../scripts/docs-shots.mjs');
     for (const entry of manifest as Array<Record<string, any>>) {
       /* A story is the component library's own fixture, cut from the built library: it has no App and no route. */
       if (entry.story) {
         assert.match(entry.story, /^[a-z0-9-]+--[a-z0-9-]+$/, `${entry.file}: a story is a library story id`);
-        assert.ok(!entry.app && !entry.workbench, `${entry.file}: a story names no App`);
+        assert.ok(!entry.app, `${entry.file}: a story names no App`);
         continue;
       }
-      if (entry.workbench)
-        assert.ok(entry.workbench in WORKBENCH && !entry.app, `${entry.file}: no database ${entry.workbench} for the browser`);
-      else {
-        assert.ok(entry.app in SEEDS, `${entry.file}: no seed for ${entry.app}`);
-        assert.ok(existsSync(join(ROOT, appDirectory(entry.app))), `${entry.file}: no App ${appDirectory(entry.app)}`);
-      }
+      assert.ok(entry.app in SEEDS, `${entry.file}: no seed for ${entry.app}`);
+      assert.ok(existsSync(join(ROOT, appDirectory(entry.app))), `${entry.file}: no App ${appDirectory(entry.app)}`);
       assert.match(entry.route, /^\//, `${entry.file}: a route starts with /`);
       assert.ok(['desk', 'phone'].includes(entry.viewport), `${entry.file}: viewport is desk or phone`);
     }
@@ -266,14 +262,6 @@ describe('every public name has an entry', () => {
   test('each check code is a row of mistri check, with the anchor its docs link lands on', () => {
     const text = page('check-codes');
     const missing = Object.keys(inventory.checkCodes).filter((code) => !text.includes(`<span id="${code}"></span>`));
-    assert.deepEqual(missing, []);
-  });
-
-  test('each MCP tool is named on the MCP page', () => {
-    const text = page('mcp');
-    const missing = Object.keys(inventory.mcp)
-      .map((name) => name.replace(/^tool /, ''))
-      .filter((tool) => !text.includes(`\`${tool}\``));
     assert.deepEqual(missing, []);
   });
 });

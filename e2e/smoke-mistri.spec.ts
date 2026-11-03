@@ -14,8 +14,7 @@
  * Fast on purpose (one pass, no data assertions), so it is cheap to run
  * after any client edit: `npm run smoke`.
  *
- * An App's rooms, as mistri serves them; e2e/smoke-tablewalk.spec.ts walks the database browser's. One walk per
- * binary, so each package's suite carries its own (scripts/test-owners.mjs).
+ * An App's rooms, as mistri serves them.
  */
 import { test, expect, type Page } from './support/harness';
 

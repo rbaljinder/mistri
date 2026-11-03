@@ -56,7 +56,7 @@ vi.mock('../../../../kit/src/client/sessionIdentity.js', () => ({
   subscribeSessionIdentity: () => () => {},
   subscribeTenantLease: () => () => {},
 }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: vi.fn() }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo: vi.fn() }));
 vi.mock('../commandAvailability.js', () => ({ useCommandAvailability: (checks: unknown[]) => checks.map(() => true) }));
 vi.mock('../appState.js', () => ({ activeApp: () => ({ grantedCommands: [] }) }));
 /* The kit reads the App through the shell's answers (shellMode.ts), which the mock above gives it. */

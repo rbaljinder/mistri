@@ -688,7 +688,13 @@ export function backTo(index) {
   render();
 }
 
-/** A table view, optionally filtered. The query text is what the bar shows. */
+/**
+ * A table view, optionally filtered. The query text is what the bar shows.
+ *
+ * @param {*} tableId
+ * @param {*} [query]
+ * @param {*} [tab]
+ */
 export function tableView(tableId, query, tab) {
   return { kind: 'table', table: tableId, query: query ?? tableId, tab: tab ?? 'rows' };
 }
@@ -716,6 +722,11 @@ export function rowView(tableId, key, label) {
  * `table` is the page's base rather than a table being browsed, so that the
  * sidebar highlights the right thing and a page can find its way back to a
  * suggested layout when the id names no configured page.
+ *
+ * @param {*} pageId
+ * @param {*} [tableId]
+ * @param {*} [key]
+ * @param {*} [label]
  */
 export function pageView(pageId, tableId, key, label) {
   return { kind: 'page', pageId, table: tableId, key, label };
@@ -1079,6 +1090,10 @@ export function quote(value) {
  * and sending them to a menu to find Undo wastes the seconds in which they
  * still remember what they did. Anything that needs more than one verb belongs
  * in a dialog rather than here.
+ *
+ * @param {*} message
+ * @param {string} [tone]
+ * @param {*} [action]
  */
 export function toast(message, tone = 'info', action) {
   const host = $('toast');

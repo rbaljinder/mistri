@@ -8,9 +8,9 @@
  *
  * It runs in two places, the release's preflight and CI's package job, from
  * this one file. It lived only in the release once, inline, and kept asking
- * for files the tablewalk tarball had stopped shipping when the package
- * split; nothing ran it between releases, so the first tag after the split
- * would have failed there. CI runs it on every change now.
+ * for files a tarball had stopped shipping when the packages split; nothing
+ * ran it between releases, so the first tag after the split would have
+ * failed there. CI runs it on every change now.
  */
 import { readFileSync } from 'node:fs';
 
@@ -22,9 +22,8 @@ if (!report) {
 const packs = Object.fromEntries(JSON.parse(readFileSync(report, 'utf8')).map((p) => [p.name, p.files.map((f) => f.path)]));
 /* The client entry is named for its content, so it is found the way a browser
    finds it: by the module script index.html names. Its compressed copies are
-   what the server sends, and its map is what a trace reads. Each product
-   builds its own client (config/vite.tablewalk.config.ts,
-   config/vite.mistri.config.ts). */
+   what the server sends, and its map is what a trace reads. The App
+   framework builds its own client (config/vite.mistri.config.ts). */
 const client = (product) => {
   const html = readFileSync(`packages/${product}/dist/client/index.html`, 'utf8');
   const entry = /<script type="module"[^>]*\ssrc="\/(assets\/[^"]+\.js)"/.exec(html)?.[1];
@@ -38,13 +37,11 @@ const client = (product) => {
 };
 const common = ['package.json', 'README.md', 'LICENSE'];
 /* `schema/` is in mistri's exports map (`@mistriwork/mistri/app`, the JSON
-   schemas): a tarball without it installs and then fails at the first import.
-   tablewalk ships dist/ alone (its `files`): the App schema and typings are
-   mistri's since the split. */
+   schemas): a tarball without it installs and then fails at the first import. */
 const need = {
   '@mistriwork/engine': [...common, 'dist/server/connections.js'],
-  /* The kit's client, as modules a product outside this repository bundles with the preset
-     (scripts/prove-browser-from-tarballs.mjs builds the database browser so). */
+  /* The kit's client, as modules a product outside this repository bundles with the preset (the database browser,
+     https://github.com/rbaljinder/tablewalk, builds so from the published packages). */
   '@mistriwork/kit': [
     ...common,
     'dist/clientFiles.js',
@@ -69,7 +66,6 @@ const need = {
   ],
   'create-mistri': [...common, 'bin.js'],
   '@mistriwork/cloudflare': [...common, 'dist/index.js', 'dist/index.d.ts'],
-  tablewalk: [...common, ...client('tablewalk'), 'dist/server/index.js'],
 };
 let failed = false;
 for (const [name, files] of Object.entries(packs)) {

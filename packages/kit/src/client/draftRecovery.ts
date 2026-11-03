@@ -1,6 +1,9 @@
 import { captureScopedStorage } from './sessionIdentity.js';
 
-/** Browser recovery is a separate document from acknowledged server state. */
+/**
+ * Browser recovery is a separate document from acknowledged server state.
+ * @public the database browser's (scripts/boundary/entries.json, "host")
+ */
 export interface RecoveredDraft<T> {
   version: 1;
   original: string;

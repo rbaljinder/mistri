@@ -56,7 +56,7 @@ vi.mock('../sessionIdentity.js', () => ({
   subscribeSessionIdentity: () => () => {},
   subscribeTenantLease: () => () => {},
 }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: vi.fn(), undoLast: vi.fn() }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo: vi.fn(), undoLast: vi.fn() }));
 const { GridCellEdit, ValueControl } = await import('./GridCellEditor.js');
 const { editableCells, editableColumns } = await import('./gridCellModel.js');
 const { updateAttempts } = await import('../updateAttempts.js');

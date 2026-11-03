@@ -21,7 +21,10 @@ import type { PostContext } from './context.js';
 const DESCRIBE = '/api/http/operations';
 const TRY = '/api/http/operation';
 
-/** Why this request cannot try an API, or undefined when it can. */
+/**
+ * Why this request cannot try an API, or undefined when it can.
+ * @public the database browser's (scripts/boundary/entries.json, "host")
+ */
 export function operationRefusal(request: {
   appConfigured: boolean;
   dialect: string;

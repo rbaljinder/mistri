@@ -4234,11 +4234,6 @@
         "entry @mistriwork/kit/vite"
       ]
     },
-    "package tablewalk": {
-      "public": [
-        "entry tablewalk"
-      ]
-    },
     "cli": {
       "public": [
         "command agent",
@@ -4258,7 +4253,6 @@
         "command migrate",
         "command new",
         "command observe",
-        "command postgres",
         "command schema",
         "command seed",
         "command shot",
@@ -4314,7 +4308,6 @@
         "flag --dry",
         "flag --dry-run",
         "flag --export",
-        "flag --fail-on",
         "flag --fail-on-design-warning",
         "flag --fix",
         "flag --flow",
@@ -4329,7 +4322,6 @@
         "flag --json",
         "flag --light",
         "flag --limit",
-        "flag --lint",
         "flag --locale",
         "flag --lock-timeout",
         "flag --matrix",
@@ -4347,7 +4339,6 @@
         "flag --openapi",
         "flag --operator",
         "flag --out",
-        "flag --output-schema",
         "flag --palette",
         "flag --pending",
         "flag --pending-on",
@@ -4384,7 +4375,6 @@
         "flag --text",
         "flag --theme",
         "flag --tool",
-        "flag --tools",
         "flag --trust-proxy",
         "flag --trust-proxy-cloudflare",
         "flag --trust-proxy-hops",
@@ -4409,33 +4399,6 @@
         "command flags",
         "command suite",
         "flag --reindex"
-      ]
-    },
-    "mcp": {
-      "public": [
-        "tool breakdown",
-        "tool change_impact",
-        "tool connections",
-        "tool delete",
-        "tool delete_graph",
-        "tool diff",
-        "tool explain",
-        "tool find",
-        "tool fixture",
-        "tool insert",
-        "tool insert_graph",
-        "tool lint",
-        "tool order",
-        "tool profile",
-        "tool query",
-        "tool record",
-        "tool refresh",
-        "tool revert",
-        "tool schema_summary",
-        "tool sql",
-        "tool table",
-        "tool tables",
-        "tool update"
       ]
     },
     "checkCodes": {

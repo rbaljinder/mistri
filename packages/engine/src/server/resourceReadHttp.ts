@@ -712,6 +712,7 @@ async function runViewForBar(
  * The adapter picks its own style when it runs the statement; this is the
  * copy the user reads, and it has to agree with what actually ran or the
  * panel is teaching the wrong thing.
+ * @public the database browser's (scripts/boundary/entries.json, "host")
  */
 export function styleFor(schema: DatabaseSchema): SqlStyle {
   if (schema.dialect === 'postgres') return POSTGRES_STYLE;

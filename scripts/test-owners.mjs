@@ -1,20 +1,16 @@
 /**
  * Which package each test belongs to: the partition that lets a package run its own suites
- * (`node scripts/test-node.mjs --package=tablewalk`, `npm run e2e -- --package=mistri`,
- * `TABLEWALK_TEST_PACKAGE=kit npm run test:components`), and the one each package's suites will move with when the packages
- * leave this tree.
+ * (`node scripts/test-node.mjs --package=kit`, `npm run e2e -- --package=mistri`,
+ * `TABLEWALK_TEST_PACKAGE=kit npm run test:components`).
  *
  * Read off the source, like the lanes, so a new test lands in a package by what it reaches rather than by somebody
  * remembering. A file reaches a package when it, or a helper it imports from `test/` or `e2e/`, names that package's
  * source (`packages/mistri/…`), imports it by name (`mistri/…`, `@mistriwork/kit/…`), or serves an App (`--app`, an App under `examples/apps` or `test/fixtures/apps`, the App servers the
  * Playwright config starts). The owner is the package furthest down the dependency graph among those it reaches:
- * engine ← ui ← kit ← (mistri | tablewalk). A test that reaches mistri and engine tests mistri, which is engine's
- * dependent. A test that reaches both products has no one owner: it is two tests, one per product, which is what
- * the smoke walk and the prose checks became — or it says `test-package: shared` in its own text, because what it
- * holds is an agreement between the two (the door's table sent to every dispatcher, one keyboard model in the
- * Workbench and an App), and it runs with each product's suite. The declaration is required, so a test does not
- * become shared by drifting into a second product's source; the shared ones are the list to cut when the packages
- * leave this tree.
+ * engine ← ui ← kit ← mistri. A test that reaches mistri and engine tests mistri, which is engine's dependent. A test
+ * may say `test-package: <owner>` in its own text where the rule cannot see what it reaches. The database browser,
+ * which stands on engine, ui and kit as a host, keeps its own tests in its own repository
+ * (https://github.com/rbaljinder/tablewalk).
  *
  * A test that reaches no package at all checks the repository itself (its scripts, its docs, its layout) and is
  * `shared` too.
@@ -29,12 +25,9 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /** Every owner, in dependency order: each one's tests may reach the ones before it. `shared` is no package's. */
-export const OWNERS = ['shared', 'engine', 'ui', 'kit', 'mistri', 'tablewalk'];
-/** A file's own say, for a file that reaches both products or reaches a package the rule cannot see. */
-const DECLARED = /test-package:\s*(shared|engine|ui|kit|mistri|tablewalk)\b/;
-
-/** A helper's say that it serves whichever product its caller is about. */
-const DISPATCH = 'test-package: dispatch';
+export const OWNERS = ['shared', 'engine', 'ui', 'kit', 'mistri'];
+/** A file's own say, for a file that reaches a package the rule cannot see. */
+const DECLARED = /test-package:\s*(shared|engine|ui|kit|mistri)\b/;
 
 /** Source without its comments: a header that mentions `--app` in a sentence is not serving one. */
 const code = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
@@ -55,9 +48,6 @@ function reach(file, seen = new Set()) {
       return '';
     }
   }
-  /* A helper that hands a test either product's server by what the test passes (support/createApp.ts) reaches
-     neither on the test's behalf: the test's own imports say which product it is about. */
-  if (seen.size > 1 && text.includes(DISPATCH)) return ` ${DISPATCH} `;
   let all = code(text);
   for (const [, specifier] of text.matchAll(/(?:from|import)\s*\(?\s*'(\.[^']+)'/g)) {
     const target = join(dirname(absolute), specifier).replace(/\.js$/, '.ts');
@@ -73,33 +63,26 @@ function reach(file, seen = new Set()) {
 /** The packages a text reaches. */
 function reached(text) {
   const found = new Set();
-  for (const [, name] of text.matchAll(/packages\/(engine|ui|kit|mistri|tablewalk)\//g)) found.add(name);
+  for (const [, name] of text.matchAll(/packages\/(engine|ui|kit|mistri)\//g)) found.add(name);
   for (const [, scoped, ui] of text.matchAll(/'(?:@mistriwork\/(engine|kit)|mistri-(ui))[/']/g)) found.add(scoped ?? ui);
   if (/'@mistriwork\/mistri[/']/.test(text)) found.add('mistri');
   if (/--app\b|fixtures\/apps\/|examples\/apps\/|TABLEWALK_E2E_(?:APP|CRM)_PORT/.test(text)) found.add('mistri');
   /* The App servers support/ownServers.ts and support/fixtures.ts start or describe, by the names a spec uses. */
   if (/\b(?:FIELDOPS|CRM|COMPASS|APP_DEMO_DB|CRM_DB|CRM_CONFIG|CRM_CLOCK|CRM_TODAY)\b|'(?:fieldops|crm)'/.test(text)) found.add('mistri');
-  /* The Playwright config's explorer, ownServers' own, and support/app's `open()`, which navigates there. */
-  if (/TABLEWALK_E2E_PORT\b|\bEXPLORER\b|'explorer'|\bopen\b[^}]*\}\s*from\s*'\.\/support\/app'/.test(text)) found.add('tablewalk');
   return found;
 }
 
-/** The owner of one test file, or a sentence saying why it has none. */
+/** The owner of one test file: the package it sits in, the last one it reaches, or `shared`. */
 export function ownerOf(file) {
   const own = readFileSync(resolve(ROOT, file), 'utf8');
   const declared = DECLARED.exec(own)?.[1];
   if (declared) return { owner: declared };
   /* A component test under a package's source is that package's; an App's own tests are mistri's. */
-  const under = /^packages\/(engine|ui|kit|mistri|tablewalk)\//.exec(file)?.[1];
+  const under = /^packages\/(engine|ui|kit|mistri)\//.exec(file)?.[1];
   if (under) return { owner: under };
   if (/^(examples\/apps|test\/fixtures\/apps)\//.test(file)) return { owner: 'mistri' };
   const text = reach(file);
   const found = reached(text);
-  if (found.has('mistri') && found.has('tablewalk'))
-    return { owner: undefined, why: 'reaches both mistri and tablewalk: split it per product, or say `test-package: shared`' };
-  /* A test that stands a server up through the dispatching helper and reaches no App is the database browser's:
-     that is the server the helper hands it. */
-  if (!found.has('mistri') && text.includes(DISPATCH)) found.add('tablewalk');
   const owner = [...OWNERS].reverse().find((name) => found.has(name)) ?? 'shared';
   return { owner };
 }

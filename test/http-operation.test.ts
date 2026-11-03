@@ -6,14 +6,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, before, test } from 'node:test';
-import { DEFAULT_POLICY } from '../packages/engine/src/adapters/http/egress.js';
-import { HttpAdapter } from '../packages/engine/src/adapters/http/httpAdapter.js';
-import { draftDescription } from '../packages/engine/src/adapters/http/httpDescription.js';
-import { readOpenApi } from '../packages/engine/src/adapters/http/openapi.js';
-import { Registry } from '../packages/engine/src/server/connections.js';
-import { operationRefusal } from '../packages/engine/src/server/http/httpOperationRoutes.js';
+import { DEFAULT_POLICY } from '@mistriwork/engine/adapters/http/egress.js';
+import { HttpAdapter } from '@mistriwork/engine/adapters/http/httpAdapter.js';
+import { draftDescription } from '@mistriwork/engine/adapters/http/httpDescription.js';
+import { readOpenApi } from '@mistriwork/engine/adapters/http/openapi.js';
+import { Registry } from '@mistriwork/engine/server/connections.js';
+import { operationRefusal } from '@mistriwork/engine/server/http/httpOperationRoutes.js';
 import { createApp } from './support/createApp.js';
-import { Refusal } from '../packages/engine/src/shared/refusal.js';
+import { Refusal } from '@mistriwork/engine/shared/refusal.js';
 import { startFakeRest } from './support/fakeRest.js';
 
 /* The explorer's API tab, server side: a resource's documented reads,

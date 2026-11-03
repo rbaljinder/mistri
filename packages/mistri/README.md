@@ -375,8 +375,9 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
       --dev                   serve the dev observer at /_mistri/observe
                               (loopback only, in memory, credentials masked)
                               and, with an App, the theme bench at /_theme
-      --mcp                   speak MCP on stdio instead of serving HTTP
-                              (the database browser's tools; no App)
+      --mcp                   the database browser's MCP server: refused,
+                              naming npx tablewalk --mcp (an App's MCP is
+                              --app-mcp)
       --export <fmt>          print the schema as md, mermaid, json, brief or types
                               (a .d.ts of this connection's names for the app
                               DSL), then exit; openapi exports one App's API

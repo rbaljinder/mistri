@@ -1,15 +1,10 @@
 /**
- * HTTP connections for the browser, each with its own directory, ports and
- * config; never the shared E2E config.
+ * An App over an HTTP connection, with its own directory, ports and config;
+ * never the shared E2E config.
  *
- * `startHttpSource` is the fake Desk API of test/support/fakeRest.ts in this
- * process, its description drafted from the fixture spec, and a tablewalk
- * reading it whose token is a `${VAR}` reference. `startParcel` is the Parcel
- * sample as its README runs it: test/fixtures/apps/parcel/source/api.mjs behind a
- * bearer token, and the sample App over it through the committed description.
- *
- * test-package: dispatch — the explorer is the database browser's and Parcel mistri's, so a spec is owned by
- * which of the two it starts (scripts/test-owners.mjs).
+ * `startParcel` is the Parcel sample as its README runs it:
+ * test/fixtures/apps/parcel/source/api.mjs behind a bearer token, and the
+ * sample App over it through the committed description.
  */
 import { spawn } from './spawned';
 import { once } from 'node:events';
@@ -17,12 +12,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { draftDescription } from '../../packages/engine/src/adapters/http/httpDescription.js';
-import { readOpenApi } from '../../packages/engine/src/adapters/http/openapi.js';
-import { startFakeRest } from '../../test/support/fakeRest.js';
 
-/** The token the config names by reference; a test asserts it never reaches the page. */
-export const DESK_TOKEN = 'e2e-desk-token-3c9';
 const PARCEL_TOKEN = 'e2e-parcel-token-71d';
 
 type Child = ReturnType<typeof spawn>;
@@ -87,11 +77,11 @@ async function started(what: string, args: string[], env: NodeJS.ProcessEnv, rea
   return child;
 }
 
-/* The database browser for the explorer, mistri for an App over the same source: each refuses the other's start. */
-const tablewalk = (config: string, port: number, extra: string[] = []) => [
+/* mistri, serving the sample App over its HTTP source. */
+const mistri = (config: string, port: number, extra: string[] = []) => [
   '--import',
   'tsx',
-  extra.includes('--app') ? 'packages/mistri/src/server/index.ts' : 'packages/tablewalk/src/server/index.ts',
+  'packages/mistri/src/server/index.ts',
   '--config',
   config,
   ...extra,
@@ -99,50 +89,8 @@ const tablewalk = (config: string, port: number, extra: string[] = []) => [
   String(port),
 ];
 
-export async function startHttpSource() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-http-browser-'));
-  const api = await startFakeRest();
-  let server: Child | undefined;
-  const stop = async () => {
-    await stopChild(server);
-    await api.close();
-    rmSync(directory, { recursive: true, force: true });
-  };
-  try {
-    const spec = JSON.parse(readFileSync('test/fixtures/http/openapi.json', 'utf8'));
-    writeFileSync(join(directory, 'desk.http.json'), JSON.stringify(draftDescription(readOpenApi(spec))));
-    const config = join(directory, 'connections.json');
-    writeFileSync(
-      config,
-      JSON.stringify({
-        connections: [
-          {
-            name: 'desk',
-            kind: 'http',
-            url: `${api.origin}/v1/`,
-            description: 'desk.http.json',
-            insecure: true,
-            auth: { bearer: '${DESK_E2E_TOKEN}' },
-          },
-        ],
-      }),
-    );
-    const port = await reservePort();
-    server = await started(
-      'HTTP source server',
-      tablewalk(config, port),
-      { ...process.env, DESK_E2E_TOKEN: DESK_TOKEN, XDG_CONFIG_HOME: join(directory, 'xdg'), TABLEWALK_OPEN: '0' },
-      'Listening on ',
-    );
-    return { origin: `http://127.0.0.1:${port}`, api, stop };
-  } catch (error) {
-    await stop();
-    throw error;
-  }
-}
-
 export async function startParcel() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-parcel-browser-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-parcel-browser-'));
   let api: Child | undefined;
   let server: Child | undefined;
   const stop = async () => {
@@ -161,7 +109,7 @@ export async function startParcel() {
     const config = join(directory, 'parcel.json');
     writeFileSync(config, JSON.stringify(sample));
     const port = await reservePort();
-    server = await started('Parcel server', tablewalk(config, port, ['--app', 'test/fixtures/apps/parcel']), env, 'Listening on ');
+    server = await started('Parcel server', mistri(config, port, ['--app', 'test/fixtures/apps/parcel']), env, 'Listening on ');
     return { origin: `http://127.0.0.1:${port}`, stop };
   } catch (error) {
     await stop();

@@ -112,7 +112,7 @@ stable.
 | Package | What it is | Status |
 | --- | --- | --- |
 | `mistri` | The App framework and its command (`npx @mistriwork/mistri`) | Stable |
-| `tablewalk` | The [database browser](/docs/database-browser/) and its MCP server (`npx tablewalk`) | Stable |
+| `tablewalk` | The [database browser](https://tablewalk.dev) and its MCP server (`npx tablewalk`), released from [its own repository](https://github.com/rbaljinder/tablewalk) | Stable |
 | `@mistriwork/ui` | The React primitives both are drawn with, usable [on their own](/docs/mistri-ui/) | Preview |
 | `@mistriwork/cloudflare` and `mistri deploy` | The [Cloudflare Containers roll](/docs/build-and-deploy/#deploy-to-cloudflare): one target, proven on one deployment so far | Preview |
 | `@mistriwork/engine`, `@mistriwork/kit` | The engine and the shared client both install; internal, with no promise to an App's author | Internal |

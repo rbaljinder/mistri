@@ -70,7 +70,7 @@ vi.mock('../../../../kit/src/client/url.js', () => ({ syncHash: () => {} }));
 vi.mock('../../../../kit/src/client/prefs.js', () => ({ relatedRows: () => 10 }));
 vi.mock('../../../../kit/src/client/pagemarks.js', () => ({ isPinned: () => false, togglePinned: () => true }));
 vi.mock('../../../../kit/src/client/prompt.js', () => ({ ask: vi.fn(), confirmFor: vi.fn() }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({
+vi.mock('../../../../../test/hostUndo.js', () => ({
   refreshUndo: model.refresh,
   undoLast: async () => {},
   undoEntry: async () => undefined,

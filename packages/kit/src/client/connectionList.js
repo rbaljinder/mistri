@@ -127,7 +127,10 @@ export async function refreshConnections() {
  * @type {{ draw(picker: HTMLElement): void, retire(picker: HTMLElement): void } | null}
  */
 let controls = null;
-/** @param {{ draw(picker: HTMLElement): void, retire(picker: HTMLElement): void }} next */
+/**
+ * @param {{ draw(picker: HTMLElement): void, retire(picker: HTMLElement): void }} next
+ * @public the database browser's (scripts/boundary/entries.json, "host")
+ */
 export function whenConnectionControls(next) {
   controls = next;
 }

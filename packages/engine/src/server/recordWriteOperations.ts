@@ -426,7 +426,8 @@ async function touchesDependents(tx: WriteTransaction, key: Record<string, unkno
 }
 
 /** The incoming references a deletion of `table` would change rows through:
- * every rule but a refusal, an unreported one included. */
+ * every rule but a refusal, an unreported one included.
+ * @public the database browser's (scripts/boundary/entries.json, "host") */
 export function changingReferences(schema: DatabaseSchema, table: string): ForeignKey[] {
   return referencesTo(schema, table).filter((fk) => !fk.declared && fk.onDelete !== 'restrict' && fk.onDelete !== 'no action');
 }

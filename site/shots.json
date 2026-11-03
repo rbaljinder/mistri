@@ -1,5 +1,5 @@
 {
-  "note": "Read by scripts/docs-shots.mjs. file is under site/src/assets; clip is in CSS pixels (the picture is twice that); viewport is desk (1280 wide) or phone (390), and width, when given, is the window's width instead. An entry with workbench (a database name) instead of app is the database browser over that database. An entry with story (a story id in the component library) is that story, cut to what it draws, from the built library: run npm run build:site first. served: true takes the App signed out at an address shot does not take (the sign-in screen); click presses a named button before the picture.",
+  "note": "Read by scripts/docs-shots.mjs. file is under site/src/assets; clip is in CSS pixels (the picture is twice that); viewport is desk (1280 wide) or phone (390), and width, when given, is the window's width instead. An entry with story (a story id in the component library) is that story, cut to what it draws, from the built library: run npm run build:site first. served: true takes the App signed out at an address shot does not take (the sign-in screen); click presses a named button before the picture.",
   "shots": [
     {
       "file": "guide/list.webp",
@@ -156,30 +156,6 @@
         "y": 0,
         "width": 1024,
         "height": 740
-      }
-    },
-    {
-      "file": "screens/browser-record.webp",
-      "workbench": "demo",
-      "route": "/demo/customer/~1",
-      "viewport": "desk",
-      "clip": {
-        "x": 0,
-        "y": 0,
-        "width": 1280,
-        "height": 800
-      }
-    },
-    {
-      "file": "screens/browser-query.webp",
-      "workbench": "demo",
-      "route": "/demo/invoice%20total%20%3E%3D%20500%20sort%20total%20desc",
-      "viewport": "desk",
-      "clip": {
-        "x": 0,
-        "y": 0,
-        "width": 1280,
-        "height": 560
       }
     },
     {

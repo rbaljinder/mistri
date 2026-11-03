@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { installTablewalk } from './installedTablewalk.js';
+import { installMistri } from './installedMistri.js';
 
 export const ENTRY = resolve('packages/mistri/src/server/index.ts');
 const ROOT = resolve('.');
@@ -35,7 +35,7 @@ export function bootstrapApp(t: { after(fn: () => void): void }, options: Bootst
   const dir = mkdtempSync(join(tmpdir(), 'mistri-bootstrap-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   // An App's modules import the package, as one beside an installed mistri does.
-  installTablewalk(join(dir, 'node_modules'));
+  installMistri(join(dir, 'node_modules'));
   const app = join(dir, 'app');
   mkdirSync(join(app, 'migrations'), { recursive: true });
   const db = join(app, 'desk.db');

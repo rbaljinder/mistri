@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { browserInstallLine, installedChromiums, runShot } from '../packages/mistri/src/server/build/shot.js';
 import { runAgent } from '../packages/mistri/src/server/cli/agentInit.js';
-import { installTablewalk } from './support/installedTablewalk.js';
+import { installMistri } from './support/installedMistri.js';
 import { entryFor } from './support/bins.js';
 
 const ROOT = resolve('.');
@@ -28,7 +28,7 @@ const ROOT = resolve('.');
 const work = mkdtempSync(join(tmpdir(), 'tablewalk-first-run-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 mkdirSync(join(work, 'node_modules'));
-installTablewalk(join(work, 'node_modules'));
+installMistri(join(work, 'node_modules'));
 
 interface Ran {
   code: number;

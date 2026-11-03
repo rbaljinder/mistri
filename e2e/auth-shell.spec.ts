@@ -1,10 +1,9 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
-import { DEMO, expect, type Page, test } from './support/ownServers';
-import { open } from './support/app';
+import { expect, type Page, test } from './support/ownServers';
 import { SESSION_APP_ID, startSessionApp } from './support/sessionServer';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
-test.use({ servers: ['explorer'] });
+// The session App is the spec's own; the fixture still needs one server to name a baseURL.
+test.use({ servers: ['crm'] });
 
 async function signedOutShell(page: Page) {
   await expect(page.locator('html')).not.toHaveAttribute('data-starting');
@@ -80,26 +79,5 @@ for (const width of [1440, 390]) {
     } finally {
       await app.stop();
     }
-  });
-
-  test(`standalone shell at ${width}px preserves its header and usable table sidebar`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 844 });
-    await open(page, DEMO);
-    await expect(page.locator('.topbar .brand-name')).toHaveText('tablewalk');
-    await expect(page).toHaveTitle('demo — tablewalk');
-    await expect(page.locator('#home-button')).toBeEnabled();
-    await expect(page.getByRole('button', { name: 'Database connection', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Database connection', exact: true })).toContainText(DEMO);
-    await expect(page.locator('.topbar-actions')).toBeVisible();
-    await expect(page.getByRole('combobox', { name: 'Query', exact: true })).toBeVisible();
-    // Standalone phone navigation intentionally starts collapsed.
-    if (width === 390) await page.getByRole('button', { name: 'Show the table list', exact: true }).click();
-    await expect(page.getByRole('navigation', { name: 'Tables', exact: true })).toBeVisible();
-    const filter = page.getByRole('searchbox', { name: 'Filter tables', exact: true });
-    await expect(filter).toBeVisible();
-    await filter.fill('invoice');
-    await expect(page.locator('#table-list button[data-table="invoice"]')).toBeVisible();
-    await expect(page.locator('#table-list button[data-table="customer"]')).toHaveCount(0);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   });
 }

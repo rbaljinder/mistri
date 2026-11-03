@@ -31,7 +31,10 @@ export function crawlerAsks(req: IncomingMessage, res: ServerResponse, path: str
   return false;
 }
 
-/** The answer of a server with nothing public: crawl nothing, list nothing. False for any other address. */
+/**
+ * The answer of a server with nothing public: crawl nothing, list nothing. False for any other address.
+ * @public the database browser's (scripts/boundary/entries.json, "host")
+ */
 export function closedToCrawlers(req: IncomingMessage, res: ServerResponse, path: string): boolean {
   if (path !== ROBOTS_PATH && path !== SITEMAP_PATH) return false;
   if (crawlerAsks(req, res, path)) return true;

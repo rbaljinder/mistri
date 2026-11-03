@@ -2,18 +2,20 @@
 
 ## Reporting
 
-tablewalk opens databases. If you find a way for it to read, write or reach
+mistri opens databases. If you find a way for it to read, write or reach
 something it should not, please report it privately rather than in a public
 issue, by email to security@mistriwork.dev. You will get an acknowledgement
 within a few days and a fix or a reasoned answer as soon as one exists.
 Credit is given in the release notes unless you would rather it were not.
+The database browser, in its own repository
+(https://github.com/rbaljinder/tablewalk), is reported the same way.
 
 ## The model, in short
 
 - **Read-only by default, per connection.** Writes exist only behind
   `"writable": true` in the config, checked by the server in every route
-  and tool that writes (the Workbench's write routes, the MCP write tools,
-  an App's saves and commands) before a statement reaches the database; the
+  and tool that writes (an App's saves and commands, and on the same engine
+  the database browser's write routes and MCP write tools) before a statement reaches the database; the
   adapter does not check it, and runs whatever it is handed. Every read runs
   in a read-only transaction. The database role is the limit that holds
   whatever the server does, so connect as one that can only read where
@@ -40,8 +42,8 @@ Credit is given in the release notes unless you would rather it were not.
 - **An app directory is code.** `app.mjs` / `app.ts` manifests are
   evaluated in a worker with the server's privileges and hot-reloaded on
   save. Keep the directory writable only by the account running mistri.
-- **The page talks to its own server alone.** The shell every App and the
-  Workbench are drawn in carries a Content-Security-Policy: scripts come from
+- **The page talks to its own server alone.** The shell every App is drawn
+  in carries a Content-Security-Policy: scripts come from
   the server (and its inline startup scripts, pinned by hash), requests
   go to the server (`connect-src 'self'`), no plugin or frame of another
   origin loads, and no other site may frame the page. Images may still come
@@ -90,10 +92,10 @@ Credit is given in the release notes unless you would rather it were not.
   visitor never exports or reads a history; an export is refused inside a
   row-policy App and a tenant host.
 - **A hidden column is never served.** A resource's `hidden` (with sign-in
-  or without) and a connection's `"hidden"` in tablewalk.json cut columns
+  or without) and a connection's `"hidden"` in the config cut columns
   from the catalog the server answers with, at the choke point every read
   goes through: the App's authorized reader, and for the connection the
-  adapter itself, so the Workbench, MCP and every App on it inherit it. A
+  adapter itself, so every App on it, and the database browser, inherit it. A
   query, filter, sort, walk, export or count that names one is refused as
   naming a column that is not there, a history keeps no value of it, and raw
   SQL is refused on a connection that hides columns. It is not a database

@@ -3,7 +3,7 @@
  * imported until its command runs, so the table costs a start nothing (test/cli-startup.test.ts counts).
  *
  * `migrate` and `seed` are the engine's commands with the App's part handed in (cli/appTargets.ts): the database
- * browser has its own, without `--app` (packages/tablewalk/src/server/cli/browserCommands.ts).
+ * browser has its own, without `--app`, in its own repository.
  */
 import type { Subcommands } from '@mistriwork/engine/server/cli/subcommand.js';
 

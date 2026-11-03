@@ -6,12 +6,15 @@ for the App layer's rules read [Apps on mistri](apps.md).
 
 ## The promise that shapes everything
 
-`npx tablewalk <db>` is the whole deployment. A person running it has no
-build step, no config to write first and no schema to declare — the server
-reads the catalog on connect. Everything below is arranged so that promise
-stays true while the repository itself does get compiled. An App is served
-from its source the same way; `mistri build` is an optional production
+An App is served from its source: `npx @mistriwork/mistri --app <dir>` is the
+whole deployment, with no build step first — the server reads the catalog on
+connect. Everything below is arranged so that promise stays true while the
+repository itself does get compiled; `mistri build` is an optional production
 step for one, never a requirement.
+
+The database browser (`tablewalk`) keeps the same promise in its own
+repository, [rbaljinder/tablewalk](https://github.com/rbaljinder/tablewalk),
+built from the engine, the kit and ui as this repository publishes them.
 
 ## Packages
 
@@ -23,10 +26,10 @@ layer of [the import boundary](boundary.md) (the sixth is `create-mistri`), each
 |---|---|---|
 | `@mistriwork/engine` | `packages/engine` | the adapters, the server's data paths, the HTTP kit, the shared rules; no React |
 | `@mistriwork/ui` | `packages/ui` | the standalone primitives (Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon, DateField), the tokens and the primitives' stylesheet, and the zoom-aware ruler; words and icons as props, no server |
-| `@mistriwork/kit` | `packages/kit` | the shared React client both shells are drawn with: the page, the boot and the shell each product builds its client from |
+| `@mistriwork/kit` | `packages/kit` | the shared React client: the page, the boot and the shell each product builds its client from (mistri here, the database browser in its own repository) |
 | `@mistriwork/mistri` | `packages/mistri` | the App framework and its bin, `mistri`; its published types and JSON schemas (`schema/`), `@mistriwork/mistri/ui`, `@mistriwork/mistri/react` |
 | `create-mistri` | `packages/create-mistri` | `npm create mistri`: a bin that runs `mistri new` from the `@mistriwork/mistri` it depends on, at the same version |
-| `tablewalk` | `packages/tablewalk` | the database browser and its bin, `tablewalk`; depends on the engine, ui and the kit, never on mistri |
+| `@mistriwork/cloudflare` | `packages/cloudflare` | the Worker glue `mistri deploy init cloudflare` writes against; imports nothing of the repository |
 
 In the checkout a package's `exports` answer from its `src/`, so the packages
 import each other's sources under tsx and Vite; under `--conditions=mistri-built`
@@ -36,7 +39,7 @@ form, and a release publishes all six at one version, the packages naming
 each other at exactly it. Every package names each module it
 exports by its path, with no `./*` pattern (but `mistri`'s shipped schemas), and `check-boundary` refuses an
 import of one they do not export (docs/boundary.md, Entries); the engine and
-the kit are plumbing for the two products, ui's exports its public API.
+the kit are plumbing for the products built on them, ui's exports its public API.
 
 ## Server
 
@@ -44,21 +47,18 @@ TypeScript under each package's `src/server/`, compiled into its `dist/` by
 `npm run build`: one tsc program over every package (`config/tsconfig.build.json`),
 since a declaration graph crosses packages, split back into each package's
 `dist/` by `scripts/build-packages.mjs`.
-It serves the web UI, answers the HTTP API, and speaks MCP on stdio when
-started with `--mcp` — the database MCP runs the same tools behind the same
-code path as the HTTP API.
+It serves the web UI and answers the HTTP API.
 
-Two bins, one per product. `packages/tablewalk/src/server/index.ts` and
-`packages/mistri/src/server/index.ts` are only entries: each calls the engine's
-`runBin` (`cli/bin.ts`), which runs that product's main when the entry is the
-invoked script — the database browser's (`cli/browserMain.ts`) or the App
-framework's (`cli/mistriMain.ts`). Neither hands a start to the other: each
-refuses the other's starts by the other's name (`tablewalk --app` names `npx
-mistri`, `mistri --db` names `npx tablewalk`), so installing one never loads or
-installs the other. Each main has a table of its commands
-(`cli/browserCommands.ts`, `cli/mistriCommands.ts`), run one way (the engine's
-`cli/subcommand.ts`), and its own `cli/usage.ts`, that bin's words; what they
-share about words and starting is the engine's (`cli/usage.ts`, `cli/startup.ts`). The
+One bin here, `mistri`. `packages/mistri/src/server/index.ts` is only an
+entry: it calls the engine's `runBin` (`cli/bin.ts`), which runs the App
+framework's main (`cli/mistriMain.ts`) when the entry is the invoked script;
+the database browser's `tablewalk` does the same with its own main, in its
+own repository. Neither hands a start to the other: each refuses the other's
+starts by the other's name (`mistri --db` names `npx tablewalk`), so
+installing one never loads or installs the other. The main has a table of
+its commands (`cli/mistriCommands.ts`), run one way (the engine's
+`cli/subcommand.ts`), and its own `cli/usage.ts`, the bin's words; what the
+two bins share about words and starting is the engine's (`cli/usage.ts`, `cli/startup.ts`). The
 pieces live beside them: `cli/` (the flag parser, the config and apps at startup, and each
 mode: the HTTP server, MCP, tenant serving, commands and jobs, `--reindex`,
 and the print-and-exit modes), `http/trust.ts` (the Host, Origin and
@@ -66,14 +66,10 @@ proxy-identity checks every transport runs — the tenant servers import from
 here), `http/reply.ts` (JSON replies, the bounded body read, `HttpError`),
 `http/door.ts` (the one door every dispatcher holds a request to: the Host,
 the proxy's identity, then a write's Origin and body) and `http/serverCore.ts`
-(what both servers share). Each product has its own dispatcher and server:
-the database browser's `http/browserHandler.ts` and `http/browserServer.ts`,
-which load none of sign-in, the App runtime or the embed door, so an
-App-only address asked of it is a plain `404`; and the App framework's
-`http/handler.ts` (`handle` and `handlePost`: the ordered dispatch skeleton
+(what every server built on the engine shares). The App framework's dispatcher
+and server are `http/handler.ts` (`handle` and `handlePost`: the ordered dispatch skeleton
 and the row-policy wrapper around it) and `http/server.ts` (`createApp`, the
-wired-but-not-listening server the tests stand up; `test/support/createApp.ts`
-picks either). The App framework's routes are the modules beside its
+wired-but-not-listening server the tests stand up, through `test/support/createApp.ts`). The App framework's routes are the modules beside its
 handler, each an `async (ctx) => boolean` that answers `true` when it
 replied, tried in this fixed order:
 `http/context.ts` is the `RequestContext` every route reads (the request,
@@ -121,13 +117,13 @@ reads, then `http/dataWriteRoutes.ts` (update, insert, SQL, revert, delete).
   value. The page reads the stream with `fetch` (a tenant's lease and an embed's bearer are headers), merges events for
   150 ms and asks again the queries a change touches (`liveInvalidate.ts`), narrowed by the `mistri-reads` header
   each read answered with (`liveReads.ts`). It never reloads and never patches a row. A list its reader works in is
-  held behind a pill (`liveEngagement.ts`), and a record with a draft is never read over it. The Workbench has none.
+  held behind a pill (`liveEngagement.ts`), and a record with a draft is never read over it.
 - **App builds** (`src/server/build/`, read back by `packages/mistri/src/server/app/appBuild.ts`):
   `mistri build` typechecks an App, validates it through the same loader,
   bundles its definition and server entries (Rolldown, an optional peer, or
   per-file type stripping without it) and writes the compiled App. `loadApp`
   reads a build without evaluating a module; a build is pinned to the
-  tablewalk version that made it, hash-checked, and never watched.
+  mistri version that made it, hash-checked, and never watched.
 - **Tenant Apps** (`src/server/tenant/`): an `auth.rows: 'tenant'` App is
   served by its own host over one SQLite or PostgreSQL source, never through
   the ordinary registry adapter. Enrollment attests the tenant store and binds
@@ -177,17 +173,15 @@ reads, then `http/dataWriteRoutes.ts` (update, insert, SQL, revert, delete).
 ## Client
 
 Each package's `src/client/` is served two ways from the same source. `npm run build` bundles
-it with Vite once per product (`config/vite.tablewalk.config.ts`, `config/vite.mistri.config.ts`, both
-the kit's preset, `@mistriwork/kit/vite` in `packages/kit/src/vite.ts`) into that product's `dist/client`: the browser's pages
-are the index and the Workbench, mistri's the index, the public pages, the App shell and
-a tenant's; neither bundle holds the other product's main. Minified, with source maps (sources inside)
+it with Vite (`config/vite.mistri.config.ts`, through the kit's preset, `@mistriwork/kit/vite` in
+`packages/kit/src/vite.ts`, which the database browser builds its own bundle with) into mistri's
+`dist/client`: the index, the public pages, the App shell and a tenant's. Minified, with source maps (sources inside)
 shipped beside it so a stack trace still maps to the line; content-named under
 `assets/` so the server can let a browser keep each file for a year; and with a
 `.br` and `.gz` beside every text file, which the server picks by
-Accept-Encoding (`packages/engine/src/server/clientHttp.ts`). The Workbench's tools, the
+Accept-Encoding (`packages/engine/src/server/clientHttp.ts`). The
 builders, boards, charts and the tenancy dialogs load on demand
-(`components/onDemand.tsx`), so an App's first page does not wait for them;
-an App never loads the Workbench's at all.
+(`components/onDemand.tsx`), so an App's first page does not wait for them.
 Under `tsx` —
 `npm run dev` and every test suite — the server serves `src/client` through
 Vite's middleware (`packages/engine/src/server/devclient.ts`), so an edit is a reload away and
@@ -231,17 +225,16 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   URL (`url.js`, `deeplink.js`), the query-bar completer and the per-room
   stores. A vanilla module that still needs to draw crosses over through
   `components/mount.tsx`.
-- **Two mains over one kit shell.** `boot.js` runs `shellStart.js`, which
+- **A product's main over one kit shell.** `boot.js` runs `shellStart.js`, which
   wears the look and starts the main of the product that built the page
-  (`virtual:mistri/shell-main`, which each product's build answers):
+  (`virtual:mistri/shell-main`, which the product's build answers): here
   `appShell.js` (an App's public pages, sign-in, then the shell with the App's
-  chrome, `appnav.js`) or `workbenchShell.js` (the shell with the Workbench's
-  tools, `workbench.js`). Each hands the kit's shell (`app.js`) its chrome
-  through `shells.ts`, and answers the kit's questions — the visitor, the
-  tenant, an App's parts in a list or a record page (`slots`, `rooms`) —
-  through `shellMode.ts`, so no kit component imports either product. Each
-  page preloads its chunks (the kit's preset, `surfaces`): an App's the shell
-  and the chrome, the Workbench's the shell and its main.
+  chrome, `appnav.js`); the database browser's build names its own. The main
+  hands the kit's shell (`app.js`) its chrome through `shells.ts`, and answers
+  the kit's questions — the visitor, the tenant, an App's parts in a list or a
+  record page (`slots`, `rooms`) — through `shellMode.ts`, so no kit component
+  imports a product. Each page preloads its chunks (the kit's preset,
+  `surfaces`): an App's the shell and the chrome.
 - **Headless controls** come from Base UI, dressed in the tool's own classes:
   `Modal.tsx` for every dialog, `DropMenu.tsx`/`OverflowMenu.tsx`/`ThMenu.tsx`/
   `TopNav.tsx` for every menu, `Dropdown.tsx` for the listbox, `Typeahead.tsx`
@@ -281,9 +274,7 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   walk's globals; `Value`'s drawing rules moved to `components/Dressed.tsx`
   so the kit can share them. A section's declared reads are planned like a
   related list's (`customReadView` in `packages/engine/src/shared/pagePaths.ts`).
-- **Routing is by path**, not hash. The Workbench writes the whole walk in
-  the query language: a record is `/{connection}/{table}/~{id}`, a page
-  `/{connection}/@{page}~{id}`. An App has one canonical address per thing,
+- **Routing is by path**, not hash. An App has one canonical address per thing,
   from one book (`packages/mistri/src/shared/appAddress.ts`) that the client
   (`publicAddress.ts`), the server's public-page head and redirect
   (`http/publicHead.ts`) and `mistri check --routes` all read: a record
@@ -319,23 +310,22 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   that nothing reaches; what it cannot see — a module loaded by path, a name
   reached through a namespace — is an entry or an `ignoreIssues` line there.
 - `scripts/check-boundary.mjs` gives every module the layer of the package it
-  sits in — `engine`, `ui`, `kit`, `browser`, `mistri` — and fails on an
-  import that goes the wrong way (engine and ui ← kit ← browser, mistri). There are none: the allowlist is empty and stays so, and
+  sits in — `engine`, `ui`, `kit`, `mistri`, `cloudflare` — and fails on an
+  import that goes the wrong way (engine and ui ← kit ← mistri). There are none: the allowlist is empty and stays so, and
   `--entries` holds each package's entry points (`scripts/boundary/entries.json`)
   to their layers. [The import boundary](boundary.md) has the layers, the rule
   and how to place a new file.
 - `test/agreement.test.ts` holds the client readings of server rules that are
   not copies (the chip splitter, the path walker, the export rewrite) and
   still have to agree.
-- `npm run smoke` walks every room in a real browser after any client edit,
-  one walk per binary (`e2e/smoke-tablewalk.spec.ts`, `e2e/smoke-mistri.spec.ts`),
-  because a constructor-time throw in a shared module blanks whole views while
+- `npm run smoke` walks every room of an App in a real browser after any client edit
+  (`e2e/smoke-mistri.spec.ts`), because a constructor-time throw in a shared module blanks whole views while
   every static check stays green.
 - Every test belongs to one package (`scripts/test-owners.mjs`, read off what it
   reaches), and each package runs its own: `--package=<name>` on
   `scripts/test-node.mjs` and `npm run e2e`, `TABLEWALK_TEST_PACKAGE` for
-  `npm run test:components`. A test that holds both products to one rule says
-  `test-package: shared` and runs with each.
+  `npm run test:components`. A test that reaches no package's sources is
+  `shared` and runs with each.
 
 ## What ships
 
@@ -350,8 +340,9 @@ stylesheet scoped to that element in one `@layer tablewalk`
 package ships its `dist` and what its `files` allowlist names; a pack builds
 nothing and refuses a package without a `dist/`. mistri's `schema/` carries
 the App DSL's types and JSON Schemas and is in its exports map, so it must
-stay; the `tablewalk` package carries the JSON schemas, the agent skill and
-the sample Apps in from elsewhere in the checkout (`CARRIED` in
-`scripts/pack-manifest.mjs`). The Docker image and the desktop app install
-the same packages the way `npm install tablewalk` lays them out
-(`scripts/install-packages.mjs`) and run `tablewalk`'s `dist/server`.
+stay; the `mistri` package carries the agent skill and the sample Apps in
+from elsewhere in the checkout (`CARRIED` in `scripts/pack-manifest.mjs`).
+`examples/docker` installs the same packages the way an install lays them
+out (`scripts/install-packages.mjs`). This repository publishes no container
+image of its own: an App's is `mistri build --dockerfile`'s, and the database
+browser's is built in its repository.

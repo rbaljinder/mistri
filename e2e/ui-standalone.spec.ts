@@ -1,6 +1,6 @@
 /**
  * @mistriwork/ui on a page of its own: the primitives, rendered to markup, and its stylesheet (packages/ui/src/style.css)
- * are all the page has — no kit, no server, no tablewalk stylesheet — and each one is drawn styled. The sheet stands in
+ * are all the page has — no kit, no server, no other stylesheet — and each one is drawn styled. The sheet stands in
  * the `mistri-ui` layer, so a rule of the page's own wins over it whatever its specificity.
  */
 import { execFileSync } from 'node:child_process';

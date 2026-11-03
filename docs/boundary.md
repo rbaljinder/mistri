@@ -1,11 +1,10 @@
 # The import boundary
 
-The repository is one tree today, and it is to be cut into separate packages:
-the database browser (`tablewalk`), the App framework (`mistri`), and the two
-layers both of them stand on. A cut like that can be made only once, and only
-after the tree stops growing new imports across the line. So the line is
-drawn now, in the tree, and `scripts/check-boundary.mjs` holds it on every
-`npm run test:static`.
+The repository is the App framework (`mistri`) and the layers it stands on,
+which the database browser (`tablewalk`) stands on too, from its own
+repository ([rbaljinder/tablewalk](https://github.com/rbaljinder/tablewalk)).
+The line between them was drawn in one tree before the browser was cut out,
+and `scripts/check-boundary.mjs` still holds it on every `npm run test:static`.
 
 ## Five layers
 
@@ -14,24 +13,28 @@ drawn now, in the tree, and `scripts/check-boundary.mjs` holds it on every
 | `engine` | the adapters, the server's data paths, the HTTP kit, and the shared rules (filter, schema, query language, view, row scopes, and the looks: the built-in looks, their tokens and which one a page wears, which the server reads to send a first page already in its look, with the looks' published types, `packages/engine/schema/theme.d.ts`). `migrate` and `seed` are engine. No React. | `@mistriwork/engine` |
 | `ui` | the standalone primitives: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, the tokens and the stylesheet they are drawn with, the anchor their popups are placed by and the zoom-aware ruler it measures with (`packages/ui/src`). A primitive reads no walk, address, transport, resource request or copy catalog: its words, icons and answers are props. Each renders under Vitest with no server. | `@mistriwork/ui` |
 | `kit` | the shared React client: the walk, the address, Grid, Value, the record page, lists, filters, the menus that read the walk (OverflowMenu, ThMenu), the date field, charts, the client's UI tokens and stylesheets, and the client that applies a look | `@mistriwork/kit` |
-| `browser` | the database browser: the Workbench's own rooms (query and SQL panes, the connection manager, Peek, Ask, FindValue, ShapeCheck, the agent console, Welcome), the database MCP, lint, diff, impact | `tablewalk` |
 | `mistri` | the App framework: every App directory under `src/server`, the tenant shell, auth, the API, commands, jobs, workflows, the App stores, the public surface, `@mistriwork/mistri/ui`, `src/embed`, and the rest of `schema/` | `mistri` |
+| `cloudflare` | the Worker glue `mistri deploy init cloudflare` writes against; it imports nothing of the repository | `@mistriwork/cloudflare` |
 
-The kit is a layer of its own because the Workbench's record view *is* the App
-record page: the two shells share most of the client, and that client needs
+The database browser's own rooms (the query and SQL panes, the connection
+manager, the database MCP, lint, diff, impact) are its repository's, built
+over the published engine, kit and ui.
+
+The kit is a layer of its own because the database browser's record view *is*
+the App record page: the two products share most of the client, and that client needs
 React, which a server-only consumer of the engine must not have to install.
 
 ## The rule
 
 ```
-engine  <-  kit  <-  browser
-ui      <-       <-  mistri
+engine  <-  kit  <-  mistri
+ui      <-
 ```
 
 - `engine` imports only `engine`, and `ui` only `ui`.
 - `kit` imports `kit`, `ui` and `engine`.
-- `browser` and `mistri` each import themselves, `kit`, `ui` and `engine`, and
-  never each other.
+- `mistri` imports itself, `kit`, `ui` and `engine`.
+- `cloudflare` imports only itself.
 
 Every import counts: `import`, `export … from`, `import x = require()`, and an
 `import()` or `require()` with a literal name. A type-only import counts too,
@@ -47,9 +50,9 @@ A module's layer is the package it sits in (`scripts/boundary/entries.json`
 package, and a file under `packages/kit/` is the kit's however it is named.
 
 To place a file, ask who would install it. If only the database browser needs
-it, it is `browser`; only an App, `mistri`; both shells' client, `kit`; a
-primitive that draws with no walk, address, transport or catalog behind it,
-`ui`; both servers, or a rule both read, `engine`. If the answer is "both, but
+it, it belongs in the browser's repository; only an App, `mistri`; the client
+both products draw with, `kit`; a primitive that draws with no walk, address,
+transport or catalog behind it, `ui`; both servers, or a rule both read, `engine`. If the answer is "both, but
 it imports one side", the import is what should move, not the file.
 
 Each package's `schema/` is its published types and is the package's like
@@ -69,27 +72,23 @@ shell's answers (`packages/kit/src/client/shellMode.ts`, `slots` and `rooms`).
 
 ## The mains
 
-Each product is a binary of its own. `tablewalk`
-(`packages/tablewalk/src/server/index.ts`) runs the database browser's main,
-`cli/browserMain.ts`, and nothing else; `mistri`
-(`packages/mistri/src/server/index.ts`) runs the App framework's,
-`cli/mistriMain.ts`. Neither names the other product: a start that is the
-other's is refused with the other's command (`npx @mistriwork/mistri --app <dir>`,
-`npx tablewalk <db>`), never handed across, so installing one never loads
-or installs the other. Both entries are the engine's `runBin`
+Each product is a binary of its own: `mistri`
+(`packages/mistri/src/server/index.ts`) runs the App framework's main,
+`cli/mistriMain.ts`, and `tablewalk` runs the database browser's, in its own
+repository. Neither names the other product: a start that is the other's is
+refused with the other's command (`npx tablewalk <db>`, and from the browser
+`npx @mistriwork/mistri --app <dir>`), never handed across, so installing one
+never loads or installs the other. Both entries are the engine's `runBin`
 (`cli/bin.ts`) with their own main.
 
 The page names neither product either. Its entry, `packages/kit/src/client/shellStart.js`, wears the
 kit's look and starts `virtual:mistri/shell-main`, a name no file of the kit's answers: each product's build
-answers it with its own main through the kit's Vite preset (`@mistriwork/kit/vite`, `shellMain`) — the
-database browser's `workbenchShell.js` (`config/vite.tablewalk.config.ts`), the App framework's `appShell.js`
-(`config/vite.mistri.config.ts`) — so a product's bundle holds only its own main and builds over the published
-kit. Each main hands the kit's shell (`app.js`) its chrome, and the Workbench its tools, through the shell API in
-`shells.ts`; neither the kit nor one product imports the other. This repository serves both products from one
-source tree, so its own `vite.config.ts` answers the name with a module that picks by the page (the
-`mistri-shell` meta the database browser's pages carry). That module is the server's configuration, not a
-module of any package, and the check holds every module to its layer with no exception: an `import()` of
-another layer's main is a crossing like any other.
+answers it with its own main through the kit's Vite preset (`@mistriwork/kit/vite`, `shellMain`) — here the
+App framework's `appShell.js` (`config/vite.mistri.config.ts`) — so a product's bundle holds only its own
+main and builds over the published kit. The main hands the kit's shell (`app.js`) its chrome through the
+shell API in `shells.ts`; the kit imports no product. The repository's own `vite.config.ts` answers the name
+when the server runs from source. That module is the server's configuration, not a module of any package,
+and the check holds every module to its layer with no exception.
 
 ## Entries
 
@@ -97,9 +96,9 @@ another layer's main is a crossing like any other.
 by: every `mistri/*` entry, `@mistriwork/engine` (`packages/engine/src/engine.ts`: connect, the
 catalog, the query language, keyset pages), `@mistriwork/ui`
 (`packages/ui/src/index.ts`: the primitives), `@mistriwork/kit`
-(`packages/kit/src/client/kit.ts`: the shell API and the UI tokens), and `tablewalk`, the
-database browser's bin. Each entry gives its layer, its `source` and its
-`types`. The browser publishes none of the App framework's names: an App
+(`packages/kit/src/client/kit.ts`: the shell API and the UI tokens), and
+`@mistriwork/cloudflare`. Each entry gives its layer, its `source` and its
+`types`. The database browser publishes none of the App framework's names: an App
 imports `mistri/*`, and `mistri check` refuses a `tablewalk/*` import with
 the `mistri/*` name it means.
 
@@ -139,12 +138,13 @@ ones under `tsc`. A new `mistri/*` export is a new entry, a stub
 
 ## The host list
 
-The database browser is to build from the published engine, kit and ui, in a
-repository of its own. What it imports of them is the host list,
-`host` in `scripts/boundary/entries.json`: `importers` are where its imports
-are read from (`packages/tablewalk/src`, and the Vite config such a checkout
-builds with, `scripts/browser-from-tarballs/vite.config.ts`), and `exports`
-are the names, by package, each reviewed.
+The database browser builds from the published engine, kit and ui, in its
+own repository. What it imports of them is the host list, `host` in
+`scripts/boundary/entries.json`: `exports` are the names, by package, each
+reviewed. Its imports are read in its own repository, so here the list is
+data: an `importers` table (where a host's imports are read from) is read
+only when those paths are in this tree, and nothing comes off the list for
+want of an importer here.
 
 The kit's client modules are for a bundler, not for Node: they import their
 stylesheets. The build writes them one by one, with their declarations,
@@ -157,20 +157,18 @@ kit names only the client modules on the host list
 for the listed ones to import, never by name. Its server modules and the
 preset are exported as before.
 
-`node scripts/check-boundary.mjs` refuses an importer's name of the engine,
-the kit or ui that is not on the list, or that the package as published does
-not export, and a name on the list that nothing imports any more.
+`node scripts/check-boundary.mjs` refuses a name on the list that the package
+as published does not export (and, where an importer is in the tree, an
+imported name that is not on the list, or a listed one nothing imports).
 `scripts/audit-exports.mjs` counts every name a listed module exports as used:
 the host's files are not always here to mention it. Adding a name is a line
 in review; removing one breaks the host, so it waits for a release that says
 so in `CHANGELOG.md`.
 
-`node scripts/prove-browser-from-tarballs.mjs` is the proof: it packs the
-four packages, installs the tarballs into a fresh project with the
-database browser's sources, compiles its server and builds its page there,
-then serves a SQLite file and loads a table's rows in Chromium — once with
-that build and once with the installed `tablewalk` package. CI's `built` job
-runs it on the tarballs it packs.
+The proof that the browser builds and serves from the tarballs runs in its
+repository, against the packages this one publishes; the kit's and the
+engine's exported names it uses that nothing here imports carry an `@public`
+tag in their JSDoc, so `knip` keeps them.
 
 ## The allowlist is empty
 

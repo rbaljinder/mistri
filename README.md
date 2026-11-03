@@ -383,8 +383,8 @@ npm run build     # emit dist/, runnable by plain node
 The repository's `.node-version` names the minimum Node (24.22.1) for version managers.
 
 The packages live under `packages/` (`mistri`, `create-mistri`,
-`@mistriwork/engine`, `@mistriwork/ui`, `@mistriwork/kit`,
-`@mistriwork/cloudflare` and `tablewalk`); how they depend on one another is
+`@mistriwork/engine`, `@mistriwork/ui`, `@mistriwork/kit` and
+`@mistriwork/cloudflare`); how they depend on one another is
 in [docs/boundary.md](docs/boundary.md), and what runs where in
 [docs/architecture.md](docs/architecture.md). [CONTRIBUTING.md](CONTRIBUTING.md)
 says which constraints are load-bearing.
@@ -395,7 +395,8 @@ MIT.
 
 ---
 
-This repository also builds **tablewalk**, a standalone database browser that
-is read-only by default: `npx tablewalk <db>` opens a SQLite or PostgreSQL
-database with its foreign keys as links. See [tablewalk.dev](https://tablewalk.dev)
-and [its README](packages/tablewalk/README.md).
+**tablewalk**, a standalone database browser that is read-only by default
+(`npx tablewalk <db>` opens a SQLite or PostgreSQL database with its foreign
+keys as links), is built on the same engine and lives in its own repository:
+[rbaljinder/tablewalk](https://github.com/rbaljinder/tablewalk), with its site
+at [tablewalk.dev](https://tablewalk.dev).

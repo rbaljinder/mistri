@@ -1,6 +1,6 @@
 /**
  * The same folder in every workspace package, for a test that reads the sources as the one tree did: `src/client`
- * is packages/kit/src/client, packages/mistri/src/client and packages/tablewalk/src/client, relative to the
+ * is packages/kit/src/client and packages/mistri/src/client, relative to the
  * repository's root as the test's own paths are (scripts/workspace.mjs walks them for the check scripts).
  */
 import { existsSync, readdirSync } from 'node:fs';

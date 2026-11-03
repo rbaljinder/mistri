@@ -131,29 +131,3 @@ test.each([
   await nav.loadAppNav();
   expect(appState.activeApp()).toBeNull();
 });
-
-test.each(['resolved', 'rejected'] as const)('a %s old SQL load cannot overwrite a newer load after an A/B/A switch', async (outcome) => {
-  const sql = await import('../../../tablewalk/src/client/sqlsaved.js');
-  const old = deferred();
-  api.mockReturnValueOnce(old.promise);
-  const loading = sql.loadSavedSql();
-  state.activeConnection = 'b';
-  transitions.beginConnectionTransition().finish();
-  state.activeConnection = 'a';
-  transitions.beginConnectionTransition().finish();
-  api.mockResolvedValueOnce({ connection: 'a', queries: [{ name: 'New A', sql: 'select 2' }] });
-  await sql.loadSavedSql();
-  if (outcome === 'resolved') old.resolve({ connection: 'a', queries: [{ name: 'Old A', sql: 'select 1' }] });
-  else old.reject(new Error('Offline'));
-  await loading;
-  expect(sql.savedStatements()).toEqual([{ name: 'New A', sql: 'select 2', source: 'config' }]);
-});
-
-test('SQL names from another connection do not reserve names in this one', async () => {
-  const sql = await import('../../../tablewalk/src/client/sqlsaved.js');
-  api.mockResolvedValueOnce({ connection: 'a', queries: [{ name: 'Report', sql: 'select 1' }] });
-  await sql.loadSavedSql();
-  state.activeConnection = 'b';
-  expect(sql.saveStatement('Report', 'select 2')).toBe(true);
-  expect(sql.savedStatements()).toEqual([{ name: 'Report', sql: 'select 2', source: 'saved' }]);
-});

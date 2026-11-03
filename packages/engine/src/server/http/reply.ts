@@ -352,6 +352,7 @@ export class HttpError extends Error {
  * reads `.error` showed a blank message on exactly the endpoints where the
  * message mattered most. Both are sent — the list stays the shape the view
  * editor reads, and `error` is the first of them.
+ * @public the database browser's (scripts/boundary/entries.json, "host")
  */
 export function refuse(res: ServerResponse, status: number, messages: string[]): void {
   send(res, status, {

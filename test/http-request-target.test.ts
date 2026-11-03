@@ -39,8 +39,9 @@ test('malformed targets return a bounded 400 and leave the server responsive', {
     const refusal = await raw(bound.port, target, 'attacker.example');
     assert.match(refusal, /^HTTP\/1\.1 400 /, target);
     assert.equal(refusal.slice(refusal.indexOf('\r\n\r\n') + 4), '{"error":"Invalid request target."}');
-    const healthy = await raw(bound.port, '/api/connections', `127.0.0.1:${bound.port}`);
+    // An ordinary API read after each refusal: the same pipeline, still answering.
+    const healthy = await raw(bound.port, '/api/whoami', `127.0.0.1:${bound.port}`);
     assert.match(healthy, /^HTTP\/1\.1 200 /);
-    assert.deepEqual(JSON.parse(healthy.slice(healthy.indexOf('\r\n\r\n') + 4)).connections, []);
+    assert.equal(typeof JSON.parse(healthy.slice(healthy.indexOf('\r\n\r\n') + 4)), 'object');
   }
 });

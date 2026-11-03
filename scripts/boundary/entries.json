@@ -1,7 +1,7 @@
 {
   "$comment": [
     "The names each package is imported by (docs/boundary.md, \"Entries\"). Each entry is the name an importer writes: its layer, the module it starts at (`source`) and the file its types are read from (`types`).",
-    "`packages` are the workspaces under packages/, each owning its sources: a module's layer is the package it sits in. Each entry is in its package's `exports`, pointed at its source; `node scripts/check-boundary.mjs --entries` holds the manifests and each entry's import closure to it. The database browser (`tablewalk`) publishes none of the App framework's names: an App imports `mistri/*`, and the browser installs and runs without mistri.",
+    "`packages` are the workspaces under packages/, each owning its sources: a module's layer is the package it sits in. Each entry is in its package's `exports`, pointed at its source; `node scripts/check-boundary.mjs --entries` holds the manifests and each entry's import closure to it. The database browser (`tablewalk`) lives in its own repository (https://github.com/rbaljinder/tablewalk) and publishes none of the App framework's names: an App imports `mistri/*`, and the browser installs and runs without mistri.",
     "The JSON schemas under `./schema/*.json` are files, not modules: mistri owns and publishes them."
   ],
   "packages": {
@@ -10,8 +10,7 @@
     "@mistriwork/kit": { "dir": "packages/kit", "layer": "kit" },
     "@mistriwork/mistri": { "dir": "packages/mistri", "layer": "mistri" },
     "create-mistri": { "dir": "packages/create-mistri", "layer": "mistri" },
-    "@mistriwork/cloudflare": { "dir": "packages/cloudflare", "layer": "cloudflare" },
-    "tablewalk": { "dir": "packages/tablewalk", "layer": "browser" }
+    "@mistriwork/cloudflare": { "dir": "packages/cloudflare", "layer": "cloudflare" }
   },
   "entries": {
     "@mistriwork/mistri": { "layer": "mistri", "source": "packages/mistri/src/server/index.ts", "types": null },
@@ -116,20 +115,22 @@
       "source": "packages/kit/src/client/kit.ts",
       "types": "packages/kit/src/client/kit.ts"
     },
-    "@mistriwork/kit/vite": { "layer": "kit", "source": "packages/kit/src/vite.ts", "types": "packages/kit/src/vite.ts" },
-    "tablewalk": { "layer": "browser", "source": "packages/tablewalk/src/server/index.ts", "types": null }
+    "@mistriwork/kit/vite": { "layer": "kit", "source": "packages/kit/src/vite.ts", "types": "packages/kit/src/vite.ts" }
   },
   "host": {
     "$comment": [
-      "The host list: every name of the engine, the kit and ui a product outside this repository imports, today the database browser (`tablewalk`), which is to build from the published packages. `importers` are where its imports are read from; `exports` are the names, by package, each reviewed.",
-      "The kit's client modules are published only where they are on this list (scripts/pack-manifest.mjs): the kit builds them module by module, with their declarations and stylesheets, for a product's bundler (config/tsconfig.kit-client.json, `@mistriwork/kit/vite`). `node scripts/check-boundary.mjs` refuses an importer's name that is not on the list or not in the package as published, and a name on the list nothing imports any more.",
-      "Removing a name is a breaking change for the host: it waits for a release that says so in CHANGELOG.md (docs/boundary.md, \"The host list\")."
+      "The host list: every name of the engine, the kit and ui a product outside this repository imports, today the database browser (`tablewalk`, https://github.com/rbaljinder/tablewalk), which builds from the published packages. Its imports are read in its own repository; here the list is data, by package, each name reviewed, and `node scripts/check-boundary.mjs` holds every name on it to its package's exports as published.",
+      "The kit's client modules are published only where they are on this list (scripts/pack-manifest.mjs): the kit builds them module by module, with their declarations and stylesheets, for a product's bundler (config/tsconfig.kit-client.json, `@mistriwork/kit/vite`). An `importers` table (a product to the paths its imports are read from) is read only where those paths are in this tree, so nothing here comes off the list for want of an importer.",
+      "Removing a name is a breaking change for the host: it is a deliberate edit to this list, in a release that says so in CHANGELOG.md (docs/boundary.md, \"The host list\")."
     ],
-    "importers": { "tablewalk": ["packages/tablewalk/src", "scripts/browser-from-tarballs"] },
     "exports": {
       "@mistriwork/engine": [
         "./adapters/adapter.js",
         "./adapters/connect.js",
+        "./adapters/http/egress.js",
+        "./adapters/http/httpAdapter.js",
+        "./adapters/http/httpDescription.js",
+        "./adapters/http/openapi.js",
         "./adapters/net/untrustedDatabase.js",
         "./adapters/replicas.js",
         "./adapters/statementControl.js",
@@ -209,6 +210,7 @@
         "./client/components/Dropdown.js",
         "./client/components/FieldArranger.js",
         "./client/components/Grid.js",
+        "./client/components/NewRecord.js",
         "./client/components/Page.js",
         "./client/components/Prompt.js",
         "./client/components/mount.js",
@@ -221,10 +223,12 @@
         "./client/copy/shell/startup.js",
         "./client/core.js",
         "./client/deeplink.js",
+        "./client/delete.js",
         "./client/density.js",
         "./client/draftRecovery.js",
         "./client/help.js",
         "./client/historyToken.js",
+        "./client/insert.js",
         "./client/locale.js",
         "./client/menu.js",
         "./client/messages.js",
@@ -233,7 +237,9 @@
         "./client/peek.js",
         "./client/peekpanel.js",
         "./client/prompt.js",
+        "./client/recordEditValidation.js",
         "./client/recordSource.js",
+        "./client/recordWriteRefresh.js",
         "./client/requestIdentity.js",
         "./client/resourceRequests.js",
         "./client/savedPages.js",
@@ -244,16 +250,13 @@
         "./client/startup.js",
         "./client/surfaces.js",
         "./client/theme.js",
+        "./client/url.js",
         "./client/visualTheme.js",
         "./client/write.js",
         "./clientFiles.js",
         "./vite"
       ],
-      "@mistriwork/ui": [
-        "./Button.js",
-        "./DropMenu.js",
-        "./Modal.js"
-      ]
+      "@mistriwork/ui": ["./Button.js", "./DropMenu.js", "./Modal.js"]
     }
   }
 }

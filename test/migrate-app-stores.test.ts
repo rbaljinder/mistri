@@ -14,14 +14,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { runMigrate } from '../packages/engine/src/server/migrate/cli.js';
 import { MIGRATE_APPS } from '../packages/mistri/src/server/cli/appTargets.js';
-import { installTablewalk } from './support/installedTablewalk.js';
+import { installMistri } from './support/installedMistri.js';
 
 test('migrate stores up --app provisions every store the App uses, once', { timeout: 120_000 }, async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-stores-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   // An App's modules import the package, as one beside an installed tablewalk does.
   mkdirSync(join(directory, 'node_modules'));
-  installTablewalk(join(directory, 'node_modules'));
+  installMistri(join(directory, 'node_modules'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE item (id INTEGER PRIMARY KEY, title TEXT NOT NULL, owner TEXT, status TEXT NOT NULL DEFAULT 'open',
@@ -114,7 +114,7 @@ test('migrate stores up --app --commands reads the commands module it names, as 
   const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-stores-commands-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, 'node_modules'));
-  installTablewalk(join(directory, 'node_modules'));
+  installMistri(join(directory, 'node_modules'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE item (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',

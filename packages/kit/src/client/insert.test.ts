@@ -36,7 +36,7 @@ vi.mock('./core.js', () => ({
   },
 }));
 vi.mock('./url.js', () => ({ syncHash: vi.fn() }));
-vi.mock('../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: vi.fn(), undoToast }));
+vi.mock('../../../../test/hostUndo.js', () => ({ refreshUndo: vi.fn(), undoToast }));
 vi.mock('./components/NewRecord.js', () => ({ NewRecordDrawer: () => null, NewRecordDialog: () => null }));
 vi.mock('./components/mount.js', () => ({
   mount: (_host: Element, tree: ReactElement<NewRecordProps>) => mounted.push(tree.props),

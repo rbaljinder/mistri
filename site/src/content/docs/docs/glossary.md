@@ -8,16 +8,16 @@ The words this documentation uses, one line each, with the page that explains
 each one.
 
 - **[mistri](/docs/getting-started/)**: the App framework, and the `npx @mistriwork/mistri` command that serves, checks and builds an App.
-- **[tablewalk](/docs/database-browser/)**: the database browser, a product of its own; it serves no App.
+- **[tablewalk](https://tablewalk.dev)**: the database browser, a product of its own in its own repository; it serves no App.
 - **[App](/docs/quickstart-app/)**: a database's workspace, written in the TypeScript DSL and run from its source directory.
-- **[Workbench](/docs/database-browser/)**: tablewalk's tools for one database (rows, schema, diagram); an App never serves it.
+- **[Workbench](https://tablewalk.dev)**: tablewalk's tools for one database (rows, schema, diagram); an App never serves it.
 - **[Resource](/docs/access-model/)**: a table an App serves, with its access, display and form rules.
 - **[View](/docs/dsl-views/)**: anything a visitor opens by address: a list, a dashboard, a landing, a form or a room.
 - **[Page](/docs/pages/)**: a record page: the sections that show one record.
 - **[Section](/docs/dsl-pages/)**: one block of a page or dashboard.
 - **[Feature](/docs/dsl-features/)**: a bundle of resources, views, pages and grants an App merges in as one unit.
 - **[Look](/docs/looks/)**: a built-in visual theme for an App.
-- **[Walk](/docs/database-browser/)**: following a link from one record or table to the next; the path taken.
+- **[Walk](https://tablewalk.dev)**: following a link from one record or table to the next; the path taken.
 - **[Source](/docs/sources/)**: a connection an App reads, a database or an HTTP service.
 - **[Role](/docs/roles/)**: a named set of grants a signed-in account holds.
 - **[Grant](/docs/roles/)**: what a role may read, write or run.

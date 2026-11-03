@@ -35,7 +35,7 @@ See it in the sample (`examples/apps/lintel/resources.ts:19`) (other keys left o
 
 - Declare every table a view, page, label path or rollup reads; `{}` is enough, because a declared resource reads by default.
 - Use `hidden` for a column no one may ever receive (a password hash, a cost); use a role's `fields` instead when some signed-in readers may see it ([roles and field access](/docs/roles/)).
-- Use the standalone [database browser](/docs/database-browser/) instead for tables nobody curates: raw SQL, the schema browser and the connection manager are its tools, never an App's.
+- Use the standalone [database browser](https://tablewalk.dev) instead for tables nobody curates: raw SQL, the schema browser and the connection manager are its tools, never an App's.
 
 ## Options
 

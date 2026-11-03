@@ -5,7 +5,7 @@ import type { Plugin, PluginOption } from 'vite';
 /* The component library, drawn from ../src/client. Every story renders with
    the App's own stylesheets and looks, and the client's API is answered by
    the fixtures a story registers (../mocks/core.js), so nothing needs a
-   server. A package of its own: tablewalk never depends on Storybook. */
+   server. A package of its own: no published package depends on Storybook. */
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const CORE = fileURLToPath(new URL('../../packages/kit/src/client/core.js', import.meta.url));
 const FIXTURES = fileURLToPath(new URL('../mocks/core.js', import.meta.url));

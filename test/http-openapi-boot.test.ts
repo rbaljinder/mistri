@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -73,69 +70,4 @@ test('a spec at a URL is fetched, and a relative server resolves against it', as
   const connection = await openapiConnection(`${api.origin}/openapi-servers.json`, {}, quiet);
   assert.equal(connection.url, `${api.origin}/v1`);
   assert.equal(connection.http.insecure, true);
-});
-
-test("tablewalk --openapi boots and serves the API's lists, sending --api-token-env's variable as its bearer", async () => {
-  const reservation = createServer().listen(0, '127.0.0.1');
-  await once(reservation, 'listening');
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise((resolve) => reservation.close(resolve));
-  const child = spawn(
-    process.execPath,
-    [
-      '--import',
-      'tsx',
-      'packages/tablewalk/src/server/index.ts',
-      '--no-config',
-      '--openapi',
-      FIXTURE,
-      '--api-url',
-      `${api.origin}/v1/`,
-      '--api-token-env',
-      'DESK_BOOT_BEARER',
-      '--port',
-      String(port),
-    ],
-    {
-      env: {
-        ...process.env,
-        XDG_CONFIG_HOME: join(dir, 'xdg'),
-        TABLEWALK_OPEN: '0',
-        DATABASE_URL: '',
-        DESK_BOOT_BEARER: 'boot-bearer-91c',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  try {
-    let log = '';
-    child.stdout!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    child.stderr!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    while (!log.includes('Listening on')) {
-      if (child.exitCode !== null) assert.fail(`tablewalk exited: ${log}`);
-      await once(child.stdout!, 'data');
-    }
-    assert.match(log, /2 resources drafted from Desk API/);
-    const base = `http://127.0.0.1:${port}`;
-    const listed = (await (await fetch(`${base}/api/connections`)).json()) as { connections: Array<{ id: string; dialect: string }> };
-    assert.equal(listed.connections[0].dialect, 'http');
-    const run = (await (
-      await fetch(`${base}/api/run`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ q: 'contacts', conn: listed.connections[0].id }),
-      })
-    ).json()) as { rows: unknown[] };
-    assert.equal(run.rows.length, 20);
-    // The list was read with the variable's value as the bearer, and only ever that.
-    const read = api.seen.filter((request) => request.path.startsWith('/v1/contacts'));
-    assert.ok(read.length > 0);
-    for (const request of read) assert.equal(request.headers.authorization, 'Bearer boot-bearer-91c');
-  } finally {
-    child.kill();
-  }
 });

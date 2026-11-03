@@ -5,6 +5,22 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## Unreleased
+
+- **The database browser moved to its own repository.** It lives at https://github.com/rbaljinder/tablewalk and is
+  published from there as `tablewalk`, built from the installed `@mistriwork/engine`, `@mistriwork/kit` and
+  `@mistriwork/ui`. This repository publishes the six framework packages (`@mistriwork/engine`, `@mistriwork/ui`,
+  `@mistriwork/kit`, `@mistriwork/mistri`, `create-mistri` and `@mistriwork/cloudflare`) and no container image: an App
+  builds its own with `mistri build --dockerfile`. `mistri` still refuses a start only the browser serves, naming the
+  `npx tablewalk` command that does.
+- **The kit's and engine's published declarations and exports now serve a host product outside this repository.** The
+  database browser, built from the installed packages, imports the kit's `client/insert.js`, `delete.js`, `url.js`,
+  `recordWriteRefresh.js`, `recordEditValidation.js` and `components/NewRecord.js`, and the engine's HTTP source adapter,
+  description and OpenAPI reader, which are now on the host list and published. A JavaScript function's optional
+  parameters (`toast`'s tone and action, `savedPages`, `tableView`, `pageView`, the connection of `savePage` and
+  `deletePage`) are marked optional in their JSDoc, so the declarations a consumer reads no longer require them, and the
+  tarball proof type-checks the browser's client against those declarations as well as its server.
+
 ## 1.0.0-rc.12
 
 - **An App's scoped reads on PostgreSQL compare with the database's own operators.** A row policy and the reader's

@@ -13,7 +13,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
 import { SESSION_SECRET, runCli, serveApi, tokenCli } from './appApiCli.js';
-import { installTablewalk } from './support/installedTablewalk.js';
+import { installMistri } from './support/installedMistri.js';
 import { VALIDATE } from './support/validation.js';
 
 test('new --api writes an API App that checks, takes a token, serves and answers', { timeout: 300000 }, async (t) => {
@@ -72,7 +72,7 @@ test('new --api writes an API App that checks, takes a token, serves and answers
   // A second run never writes over the first.
   assert.notEqual((await runCli(['new', '--api', 'Field Notes', dir])).code, 0);
   // As an installed project resolves it.
-  installTablewalk(join(dir, 'node_modules'));
+  installMistri(join(dir, 'node_modules'));
   const config = join(dir, 'mistri.json'),
     commands = join(dir, 'commands.ts');
   const checked = await runCli(['check', '--app', dir, '--config', config, '--json']);

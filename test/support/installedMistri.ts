@@ -1,10 +1,9 @@
 /**
- * tablewalk as `npm install` leaves it in a project's node_modules, for a
+ * mistri as `npm install` leaves it in a project's node_modules, for a
  * test that typechecks an App importing `@mistriwork/mistri/commands`.
  *
- * An install is four packages: `tablewalk`, whose `@mistriwork/mistri/commands` is a
- * stub re-exporting `@mistriwork/mistri/commands`, and mistri, @mistriwork/kit and
- * @mistriwork/engine beneath it. Each installed manifest is the one a pack ships
+ * An install is every workspace package: `@mistriwork/mistri`, with
+ * @mistriwork/kit, @mistriwork/ui and @mistriwork/engine beneath it. Each installed manifest is the one a pack ships
  * (scripts/pack-manifest.mjs): its exports name dist/, where the server
  * entries' declarations are, and only `npm run build` writes dist/. A
  * developer's checkout usually has one — often a stale one — and CI's
@@ -30,8 +29,8 @@ import { project, typecheck } from './tsc.js';
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const TSC = join(dirname(createRequire(import.meta.url).resolve('typescript/package.json')), 'bin', 'tsc');
 
-/** Installs every workspace package into `nodeModules`; returns the `tablewalk` package's folder there. */
-export function installTablewalk(nodeModules: string): string {
+/** Installs every workspace package into `nodeModules`; returns the `@mistriwork/mistri` package's folder there. */
+export function installMistri(nodeModules: string): string {
   mkdirSync(nodeModules, { recursive: true });
   const stage = join(nodeModules, `.declarations-${randomUUID()}`);
   // --noCheck, as the build emits it: test:static has typechecked the source. No build info: parallel tests share the checkout's.
@@ -46,27 +45,27 @@ export function installTablewalk(nodeModules: string): string {
       }),
     );
     const emitted = spawnSync(process.execPath, [TSC, '-p', config, '--pretty', 'false'], { encoding: 'utf8', timeout: 300_000 });
-    if (emitted.status !== 0) throw new Error(`tablewalk declarations were not emitted: ${emitted.stdout}${emitted.stderr}`);
+    if (emitted.status !== 0) throw new Error(`declarations were not emitted: ${emitted.stdout}${emitted.stderr}`);
     installPackages(nodeModules, { distOf: (dir) => join(stage, dir, 'src') });
   } finally {
     rmSync(config, { force: true });
     rmSync(stage, { recursive: true, force: true });
   }
-  return join(nodeModules, 'tablewalk');
+  return join(nodeModules, '@mistriwork', 'mistri');
 }
 
 /**
  * A consumer's source checked against the declarations the package publishes,
- * and the names one of them exports: what a project that installed tablewalk
- * sees through `tablewalk/<entry>`. `types` is the entry's declarations as an
+ * and the names one of them exports: what a project that installed mistri
+ * sees through `@mistriwork/mistri/<entry>`. `types` is the entry's declarations as an
  * install's node_modules holds them (`@mistriwork/mistri/dist/server/commands.d.ts`), the
  * path its published exports map gives under the package's name.
  */
 export function publishedDeclarations(consumer: string, types: string): { report: string; exports: string[] } {
   /* Real, as the compiler names files: /var is a link to /private/var on macOS. */
-  const work = realpathSync(mkdtempSync(join(tmpdir(), 'tablewalk-consumer-')));
+  const work = realpathSync(mkdtempSync(join(tmpdir(), 'mistri-consumer-')));
   try {
-    installTablewalk(join(work, 'node_modules'));
+    installMistri(join(work, 'node_modules'));
     mkdirSync(join(work, 'node_modules', '@types'), { recursive: true });
     symlinkSync(join(ROOT, 'node_modules', '@types', 'node'), join(work, 'node_modules', '@types', 'node'), 'dir');
     const file = join(work, 'consumer.ts');

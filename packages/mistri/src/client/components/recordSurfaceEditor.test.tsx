@@ -49,7 +49,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   viewportBox: (node: Element) => node.getBoundingClientRect(),
   viewportSize: () => ({ width: 1000, height: 800 }),
 }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({
+vi.mock('../../../../../test/hostUndo.js', () => ({
   refreshUndo: () => {},
   undoLast: async () => {},
   undoEntry: async () => undefined,

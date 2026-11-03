@@ -2,25 +2,24 @@
  * The browser suite in two lanes, because `workers: 1` was set for a reason
  * that binds only part of it.
  *
- * A tablewalk server holds *one* active connection for the whole process
- * (`registry.setActive`, packages/tablewalk/src/server/http/connectionRoutes.ts), and the client
- * never names a connection per request. Two browsers on the three servers
- * `playwright.config.ts` starts therefore fight over one global, which is why
- * the whole suite ran one worker at a time.
+ * The two App servers `playwright.config.ts` starts keep one store each —
+ * saved filters, layouts, the records a spec writes — and two browsers on them
+ * therefore fight over one global, which is why the whole suite ran one worker
+ * at a time.
  *
  * But most of the tenant, session, sample and Ignition specs never touch those
  * servers: each starts its own on a `listen(0)` port over a `mkdtemp`
  * database, and shares nothing with any other spec. Those were being serialised
  * for somebody else's global.
  *
- * So: a spec that addresses one of the config-file, app or CRM servers runs in
+ * So: a spec that addresses the app or CRM server runs in
  * the `shared` lane, one worker at a time, exactly as before. Everything else
  * runs in the `owned` lane, several at once. The rule is read off the spec's
  * own source rather than kept as a list, so a new spec that reaches a shared
  * server lands in the serial lane by default rather than by somebody
  * remembering — and the failure mode of the rule is slowness, not a race.
  *
- * A spec can own the three servers too: support/ownServers.ts starts a set per
+ * A spec can own the two servers too: support/ownServers.ts starts a set per
  * worker, on ports of its own over copies of the fixture databases, and a
  * spec whose `test` comes from there is in the `owned` lane however it
  * navigates — unless it still names a shared port or a shared fixture path.
@@ -47,21 +46,20 @@ import { resolve } from 'node:path';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
-/** The three servers `playwright.config.ts` starts, as a spec names their ports. */
-const SHARED_PORTS = ['TABLEWALK_E2E_PORT', 'TABLEWALK_E2E_APP_PORT', 'TABLEWALK_E2E_CRM_PORT'];
+/** The two servers `playwright.config.ts` starts, as a spec names their ports. */
+const SHARED_PORTS = ['TABLEWALK_E2E_APP_PORT', 'TABLEWALK_E2E_CRM_PORT'];
 
 /* The two disposable *paths* under e2e/.tmp. Every other name `fixtures.ts`
-   exports is one of the shared fixture databases or the connection names the
-   config server serves them under, so importing one is addressing that server
-   even when no port is spelled out. */
+   exports is one of the shared fixture databases, so importing one is
+   addressing a server that serves it even when no port is spelled out. */
 const DISPOSABLE_FIXTURES = new Set(['TMP', 'SEEN_TOUR']);
 
 /** A file's own escape hatch, for a collision this rule cannot see. */
 const DECLARED_SHARED = 'e2e-lane: shared';
 
 /* A spec whose `test` is support/ownServers' addresses its worker's own
-   explorer, Field Ops and Compass: `baseURL` is one of them, so a path, and
-   `open()`, go there rather than to the config's server. */
+   Field Ops and Compass: `baseURL` is one of them, so a path goes there
+   rather than to the config's server. */
 const OWN_SERVERS = /import\s*\{[^}]*\btest\b[^}]*\}\s*from\s*'\.\/support\/ownServers'/;
 
 /** Does this spec address one of the servers the config starts? */
@@ -73,9 +71,6 @@ function reachesShared(text) {
      `use.baseURL`, which is the config server. An own-server spec always has
      an origin to put in front. */
   if (!own && /\.(goto|get|post|put|patch|delete|fetch|head)\(\s*[`'"]\//.test(text)) return true;
-  /* `open()` from support/app is such a navigation one call deep, and it is
-     how most of the explorer specs reach the config server. */
-  if (!own && /import\s*\{[^}]*\bopen\b[^}]*\}\s*from\s*'\.\/support\/app'/.test(text)) return true;
   for (const [, names] of text.matchAll(/import\s*\{([^}]*)\}\s*from\s*'\.\/support\/fixtures'/g))
     if (
       names

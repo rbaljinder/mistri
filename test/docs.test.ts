@@ -1,7 +1,6 @@
-// test-package: shared — a check of the repository that names both binaries (scripts/test-owners.mjs).
 /**
- * The reference the package ships: the site's Markdown, read by `tablewalk
- * docs` and the MCP shelf, and every pointer at it that must land.
+ * The reference the package ships: the site's Markdown, read by `mistri
+ * docs` and the App framework's agent server, and every pointer at it that must land.
  *
  * An author holding only the npm package once found every App link in the
  * README and `--help` naming a file the package does not carry, and
@@ -16,9 +15,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DOC_TOPICS, docPage, docPages, docsDir, renderDoc, runDocs, searchDocs } from '../packages/mistri/src/server/docs.js';
-import { listResources, readResource } from '../packages/tablewalk/src/server/mcp/shelf.js';
 import { DOC_TEMPLATE, docResources, docTopicNames, readDoc } from '../packages/mistri/src/server/observe/docShelf.js';
-import { Registry } from '../packages/engine/src/server/connections.js';
 import { inPackages } from './support/packages.js';
 
 const capture = (argv: string[]) => {
@@ -145,13 +142,13 @@ describe('the shipped reference', () => {
     ];
     const named = new Set<string>();
     for (const file of texts) {
-      for (const match of readFileSync(file, 'utf8').matchAll(/(?:tablewalk|mistri) docs ([a-z][a-z0-9-]+)/g)) named.add(match[1]);
+      for (const match of readFileSync(file, 'utf8').matchAll(/mistri docs ([a-z][a-z0-9-]+)/g)) named.add(match[1]);
     }
     assert.ok(named.has('relationships') && named.has('secrets'), 'the scan found the refusals');
     for (const name of named) assert.ok(docPage(name), `"mistri docs ${name}" names no shipped page`);
   });
 
-  test("the App framework's agent server lists the topics and reads any page; the database MCP lists none", async () => {
+  test("the App framework's agent server lists the topics and reads any page", () => {
     const uris = docResources().map((resource) => resource.uri);
     assert.ok(uris.includes('mistri://docs/topic/build-with-an-agent'));
     for (const { topic } of DOC_TOPICS) assert.ok(uris.includes(`mistri://docs/topic/${topic}`), topic);
@@ -161,17 +158,5 @@ describe('the shipped reference', () => {
     assert.match(read('mistri://docs/topic/app-dsl').contents![0].text, /^# DSL reference/);
     assert.match(read('mistri://docs/topic/../README').error!, /No page at/);
     assert.ok(docTopicNames().includes('access-model'));
-    // The database browser's server serves no App, so it shelves no App reference.
-    const registry = new Registry();
-    let listed: { resources: Array<{ uri: string }> } | undefined;
-    listResources(registry, { queries: [], pages: [] }, (reply) => {
-      listed = (reply as { result: typeof listed }).result;
-    });
-    assert.deepEqual(listed!.resources, []);
-    let answered: { error?: { message: string } } | undefined;
-    await readResource(registry, { queries: [], pages: [] }, { uri: 'mistri://docs/topic/access-model' }, (reply) => {
-      answered = reply as typeof answered;
-    });
-    assert.match(answered!.error!.message, /No resource at/);
   });
 });

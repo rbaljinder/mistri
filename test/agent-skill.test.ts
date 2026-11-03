@@ -1,11 +1,10 @@
-// test-package: shared — a check of the repository that names both binaries (scripts/test-owners.mjs).
 /**
  * The agent skill (skills/mistri), held to what it names.
  *
  * A skill is prose an agent obeys without checking, so every claim in it that
  * a machine can check is checked here: its frontmatter is what the Agent
- * Skills format reads; every `tablewalk` command, flag and `mistri docs`
- * topic it names is one this tablewalk has; every sample line it links still
+ * Skills format reads; every `mistri` command, flag and `mistri docs`
+ * topic it names is one this mistri has; every sample line it links still
  * exists and still says what the rule beside it names (the line is opened,
  * not only the file); every screenshot it names ships; and its rubric is the
  * agent guide's, word for word. Then `mistri agent init` is run into a
@@ -20,7 +19,6 @@ import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { docPage } from '../packages/mistri/src/server/docs.js';
 import { runAgent } from '../packages/mistri/src/server/cli/agentInit.js';
-import { BROWSER_COMMANDS } from '../packages/tablewalk/src/server/cli/browserCommands.js';
 import { MISTRI_COMMANDS } from '../packages/mistri/src/server/cli/mistriCommands.js';
 
 const ROOT = new URL('../', import.meta.url);
@@ -31,15 +29,12 @@ const SKILL = 'skills/mistri/';
 const files = ['SKILL.md', ...readdirSync(new URL(`${SKILL}references/`, ROOT)).map((name) => `references/${name}`)];
 const texts = files.map((file) => ({ file, text: read(`${SKILL}${file}`) }));
 
-/* Both binaries' words: the skill names an App's commands (mistri's) and the database browser's. */
-const USAGE = ['tablewalk', 'mistri']
-  .map((bin) => /const USAGE = `([\s\S]*?)`/.exec(read(`packages/${bin}/src/server/cli/usage.ts`))![1])
-  .join('\n');
+/* The binary's words: the skill names an App's commands, which are mistri's. */
+const USAGE = /const USAGE = `([\s\S]*?)`/.exec(read('packages/mistri/src/server/cli/usage.ts'))![1];
 const FLAGS = new Set([...USAGE.matchAll(/--[a-z][a-z-]+/g)].map((match) => match[0]));
 /* The subcommands are the words a main reads before any flag: its table's, and the two the App framework's main
    reads itself (`dev`, `schema --brief`). */
 const SUBCOMMANDS = new Set([
-  ...Object.keys(BROWSER_COMMANDS),
   ...Object.keys(MISTRI_COMMANDS),
   ...[...read('packages/mistri/src/server/cli/mistriMain.ts').matchAll(/process\.argv\[2\] === '([a-z-]+)'/g)].map((match) => match[1]),
 ]);
@@ -67,23 +62,23 @@ function items(text: string): string[] {
   return out;
 }
 
-/** What a text names that this tablewalk does not have: a command, a flag, a docs topic or a guide screenshot. */
+/** What a text names that this mistri does not have: a command, a flag, a docs topic or a guide screenshot. */
 function unknownNames(file: string, text: string): string[] {
   const problems: string[] = [];
   for (const piece of code(text)) {
-    for (const match of piece.matchAll(/(?:^|[\s(])(tablewalk|mistri)\s+([^\s`]+)(?:\s+([^\s`]+))?/g)) {
+    for (const match of piece.matchAll(/(?:^|[\s(])(mistri)\s+([^\s`]+)(?:\s+([^\s`]+))?/g)) {
       const [, bin, word, next] = match;
-      // A database path or URL is the start form, `tablewalk <sqlite-file>`, not a subcommand.
+      // A database path or URL is a start form, `mistri <sqlite-file> --app …`, not a subcommand.
       const database = /^(\.{0,2}\/|[a-z]+:\/\/)|\.(db|sqlite3?)$/.test(word);
       if (!word.startsWith('-') && !database && !SUBCOMMANDS.has(word)) problems.push(`${file}: "${bin} ${word}" is not a command`);
       if (word === 'docs' && next && !next.startsWith('-') && !next.startsWith('<') && !docPage(next))
         problems.push(`${file}: mistri docs ${next} has no page`);
       if (word === 'agent' && next !== 'init') problems.push(`${file}: "mistri agent ${next}" is not a command`);
     }
-    const at = piece.search(/\b(tablewalk|mistri)\b/);
+    const at = piece.search(/\bmistri\b/);
     const flags =
       at >= 0 ? [...piece.slice(at).matchAll(/(?<=\s)--[a-z][a-z-]+/g)].map((m) => m[0]) : /^--[a-z][a-z-]+$/.test(piece) ? [piece] : [];
-    for (const flag of flags) if (!FLAGS.has(flag)) problems.push(`${file}: ${flag} is not a flag either binary takes`);
+    for (const flag of flags) if (!FLAGS.has(flag)) problems.push(`${file}: ${flag} is not a flag mistri takes`);
     if (/^compose-[a-z-]+$/.test(piece) && !docPage(piece)) problems.push(`${file}: ${piece} is not a docs topic`);
   }
   for (const match of text.matchAll(/mistri docs ([a-z][a-z0-9-]+)/g)) {
@@ -96,7 +91,7 @@ function unknownNames(file: string, text: string): string[] {
 }
 
 /* A sample line, cited one of two ways: the skill links the shipped file's path (`../../../examples/apps/…`, which
-   resolves inside node_modules/tablewalk, offline and at the installed version); the site's pages name it in a
+   resolves inside node_modules/@mistriwork/mistri, offline and at the installed version); the site's pages name it in a
    code span (`examples/apps/lintel/views.ts:65`), because the repository is private and a link would be a 404. */
 const SAMPLE = /\[([^\]]+)\]\((?:(?:\.\.\/)+)examples\/apps\/([^)#]+)#L(\d+)\)|`examples\/apps\/([^`:]+):(\d+)(?:[–-]\d+)?`/g;
 /** A match as [whole, label, path, line]; a code span is labelled by what it says. */
@@ -205,7 +200,7 @@ describe('the agent skill', () => {
     }
   });
 
-  test('every command, flag and docs topic it names is one this tablewalk has', () => {
+  test('every command, flag and docs topic it names is one this mistri has', () => {
     assert.deepEqual(
       texts.flatMap(({ file, text }) => unknownNames(file, text)),
       [],
@@ -213,7 +208,7 @@ describe('the agent skill', () => {
   });
 
   /* The field report that moved them: every sample link pointed at GitHub, which a sandboxed agent could not reach and
-     which shows main, not the tablewalk installed. The samples' sources ship (package.json `files`), so the skill
+     which shows main, not the mistri installed. The samples' sources ship (package.json `files`), so the skill
      links the file in the package, by a path relative to the skill's own file. */
   test('every sample it links is a file the package ships, linked by its path in the package', () => {
     const shipped: string[] = JSON.parse(read('packages/mistri/package.json')).files;
