@@ -18,7 +18,7 @@ const view = (extra: Partial<ViewDef> = {}): ViewDef => ({ id: 'items', name: 'I
 const breakdown: BreakdownDef = { base: 'item', by: [{ path: 'tenant' }], measures: [{ fn: 'count', alias: 'n' }] };
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-sqlite-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-sqlite-'));
   const path = join(directory, 'scope.db');
   const db = new DatabaseSync(path);
   db.exec(`

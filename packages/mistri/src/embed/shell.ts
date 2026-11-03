@@ -81,17 +81,17 @@ function ownNoLandmark(body: HTMLElement): void {
 function makeRoot(): { frame: HTMLElement; root: HTMLElement; body: HTMLElement; portals: HTMLElement } {
   /* The window, the root's <html> and its <body>; embedReset.css says why the frame. */
   const frame = document.createElement('div');
-  frame.className = 'tw-frame';
+  frame.className = 'mistri-frame';
   const root = document.createElement('div');
-  root.className = 'tw-root';
+  root.className = 'mistri-root';
   root.setAttribute('data-mistri', '');
   root.setAttribute('data-starting', '');
   const body = document.createElement('div');
-  body.className = 'tw-body';
+  body.className = 'mistri-body';
   body.innerHTML = skeleton;
   ownNoLandmark(body);
   const portals = document.createElement('div');
-  portals.className = 'tw-portals';
+  portals.className = 'mistri-portals';
   body.append(portals);
   root.append(body);
   frame.append(root);

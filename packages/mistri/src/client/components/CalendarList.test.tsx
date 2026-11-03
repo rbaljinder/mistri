@@ -524,3 +524,175 @@ test("a line that is a reference draws the referenced record's name, not its key
   expect(within(card).getByText('Trek FX 3')).toBeInTheDocument();
   expect(within(card).queryByText('18')).toBeNull();
 });
+
+/* ---------- A week or a day: the time grid (`span`) ---------- */
+const meeting: TableMeta = {
+  id: 'meeting',
+  name: 'meeting',
+  schema: '',
+  isView: false,
+  columns: [
+    { name: 'id', type: 'INTEGER', nullable: false, primaryKey: true },
+    { name: 'title', type: 'TEXT', nullable: false, primaryKey: false },
+    { name: 'starts_at', type: 'TIMESTAMP', nullable: false, primaryKey: false },
+    { name: 'ends_at', type: 'TIMESTAMP', nullable: true, primaryKey: false },
+  ],
+};
+const localDay = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+const today = localDay(now);
+const monday = (() => {
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+  return localDay(date);
+})();
+const sunday = (() => {
+  const [y, m, d] = monday.split('-').map(Number);
+  return localDay(new Date(y!, m! - 1, d! + 6));
+})();
+const meetings = [
+  { id: 1, title: 'Standup', starts_at: `${today}T09:00:00`, ends_at: `${today}T09:30:00` },
+  { id: 2, title: 'Design review', starts_at: `${today}T09:00:00`, ends_at: `${today}T10:30:00` },
+  { id: 3, title: 'Lunch', starts_at: `${today}T12:00:00`, ends_at: null },
+];
+const week: AppCalendarList = { kind: 'calendar', date: 'starts_at', end: 'ends_at', span: 'week', primary: 'title' };
+function drawTimed(drawn: AppCalendarList = week) {
+  mocks.found = meeting;
+  mocks.api.mockImplementation(async () => ({ rows: meetings }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <CalendarList table={meeting} spec={drawn} entry={{ kind: 'table', table: 'meeting', query: '' }} label="Meetings" />
+    </QueryClientProvider>,
+  );
+}
+const boxOf = (name: RegExp) => screen.getByRole('button', { name }).closest('li')!;
+
+test('a week is asked for its seven days, and its records stand in their hours, side by side where they overlap', async () => {
+  drawTimed();
+  await screen.findByRole('button', { name: /Standup/ });
+  const q = String(mocks.api.mock.calls[0][1].q);
+  expect(q).toContain(
+    `starts_at < ${localDay(new Date(Number(sunday.slice(0, 4)), Number(sunday.slice(5, 7)) - 1, Number(sunday.slice(8)) + 1))}`,
+  );
+  expect(q).toContain(`ends_at >= ${monday}`);
+  expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(new Date(now).getFullYear().toString());
+  expect(document.querySelectorAll('.calendar-time-column')).toHaveLength(7);
+  // Standup and the review start together: each takes half the column; lunch, alone, all of it.
+  const standup = boxOf(/Standup/);
+  const review = boxOf(/Design review/);
+  expect([standup.style.width, review.style.width]).toEqual(['50%', '50%']);
+  expect(new Set([standup.style.left, review.style.left])).toEqual(new Set(['0%', '50%']));
+  expect(boxOf(/Lunch/).style.width).toBe('100%');
+  // The review is three half hours tall, standup one: drawn by their ends.
+  expect(review.style.height).not.toBe(standup.style.height);
+  expect(standup.closest('.calendar-time-column')).toHaveAttribute('data-date', today);
+  expect(within(standup).getByText(/9:00/)).toBeInTheDocument();
+  // A week is stepped by a week.
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Next week' }));
+  await vi.waitFor(() => expect(String(mocks.api.mock.lastCall![1].q)).not.toBe(q));
+});
+
+test('a record dropped on another half hour starts there, its end moved with it', async () => {
+  drawTimed();
+  const standup = await screen.findByRole('button', { name: /Standup/ });
+  expect(standup).toHaveAttribute('data-draggable', 'true');
+  const two = document.querySelector(`.calendar-time-slot[data-date="${today}"][data-minute="840"]`)!;
+  const drag = pressToDrag(standup);
+  drag.over(two);
+  expect(document.querySelector('.calendar-time-landing')).not.toBeNull();
+  drag.drop();
+  await vi.waitFor(() =>
+    expect(mocks.apply).toHaveBeenCalledWith(
+      { connection: 'crm', table: 'meeting' },
+      { starts_at: `${today}T14:00:00`, ends_at: `${today}T14:30:00` },
+      [{ key: { id: 1 }, label: 'Standup', expected: { starts_at: `${today}T09:00:00`, ends_at: `${today}T09:30:00` } }],
+      expect.any(Function),
+    ),
+  );
+  expect(mocks.toast).toHaveBeenCalledWith(expect.stringMatching(/^Moved “Standup” to /), 'ok');
+});
+
+test('the records are one Tab stop; Alt and an arrow move one by a half hour, and Alt, Shift and an arrow its end', async () => {
+  drawTimed();
+  const user = userEvent.setup();
+  const review = await screen.findByRole('button', { name: /Design review/ });
+  const focusable = [...document.querySelectorAll('.calendar-time-card')].filter((card) => card.getAttribute('tabindex') === '0');
+  expect(focusable).toHaveLength(1);
+  review.focus();
+  // A bare arrow walks: down the day to lunch.
+  await user.keyboard('{ArrowDown}');
+  expect(document.activeElement?.textContent).toMatch(/Standup|Lunch/);
+  review.focus();
+  await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+  await vi.waitFor(() =>
+    expect(mocks.apply).toHaveBeenLastCalledWith(
+      expect.anything(),
+      { starts_at: `${today}T09:30:00`, ends_at: `${today}T11:00:00` },
+      expect.anything(),
+      expect.anything(),
+    ),
+  );
+  await vi.waitFor(() => expect(screen.getByRole('button', { name: /Design review/ })).not.toHaveClass('is-moving'));
+  screen.getByRole('button', { name: /Design review/ }).focus();
+  // Its end, from where the move left it (this fixture's server is read again after the last write only).
+  await user.keyboard('{Alt>}{Shift>}{ArrowDown}{/Shift}{/Alt}');
+  await vi.waitFor(() =>
+    expect(mocks.apply).toHaveBeenLastCalledWith(expect.anything(), { ends_at: `${today}T11:30:00` }, expect.anything(), expect.anything()),
+  );
+  expect(mocks.toast).toHaveBeenLastCalledWith(expect.stringMatching(/^“Design review” now ends /), 'ok');
+  // Lunch has no end: drawn a half hour long, its foot moved writes its end for the first time.
+  await vi.waitFor(() => expect(screen.getByRole('button', { name: /Lunch/ })).not.toHaveClass('is-moving'));
+  screen.getByRole('button', { name: /Lunch/ }).focus();
+  await user.keyboard('{Alt>}{Shift>}{ArrowDown}{/Shift}{/Alt}');
+  await vi.waitFor(() =>
+    expect(mocks.apply).toHaveBeenLastCalledWith(expect.anything(), { ends_at: `${today}T13:00:00` }, expect.anything(), expect.anything()),
+  );
+});
+
+test('a day is one column; a phone reads the week as an agenda, each record with its hours', async () => {
+  const { unmount } = drawTimed({ ...week, span: 'day' });
+  await screen.findByRole('button', { name: /Standup/ });
+  expect(document.querySelectorAll('.calendar-time-column')).toHaveLength(1);
+  expect(screen.getByRole('button', { name: 'Previous day' })).toBeInTheDocument();
+  unmount();
+  mocks.phone = true;
+  drawTimed();
+  const card = await screen.findByRole('button', { name: /Design review/ });
+  expect(document.querySelector('.calendar-time')).toBeNull();
+  expect(card.closest('.calendar-agenda')).not.toBeNull();
+  expect(within(card).getByText(/9:00.*10:30/)).toBeInTheDocument();
+});
+
+test('a time grid lays records that overlap side by side, and one past midnight in both days', async () => {
+  const { layDay, piecesOf } = await import('./CalendarTimeGrid.js');
+  const record = (id: string, from: number, to: number) => ({
+    id,
+    title: id,
+    start: { day: '2026-11-03', minute: from },
+    end: { day: '2026-11-03', minute: to },
+  });
+  const laid = layDay(
+    [record('a', 540, 600), record('b', 570, 660), record('c', 600, 630), record('d', 720, 750)].flatMap((r) =>
+      piecesOf(r, ['2026-11-03']),
+    ),
+  );
+  const place = Object.fromEntries(laid.map((piece) => [piece.record.id, [piece.column, piece.columns]]));
+  // a and b overlap; c starts as a ends, taking a's place beside b; d stands alone.
+  expect(place).toEqual({ a: [0, 2], b: [1, 2], c: [0, 2], d: [0, 1] });
+  const late = { id: 'late', title: 'late', start: { day: '2026-11-03', minute: 1380 }, end: { day: '2026-11-04', minute: 60 } };
+  expect(piecesOf(late, ['2026-11-03', '2026-11-04']).map((piece) => [piece.day, piece.from, piece.to, piece.last])).toEqual([
+    ['2026-11-03', 1380, 1440, false],
+    ['2026-11-04', 0, 60, true],
+  ]);
+  const midnight = { ...late, end: { day: '2026-11-04', minute: 0 } };
+  expect(piecesOf(midnight, ['2026-11-03', '2026-11-04']).map((piece) => [piece.day, piece.last])).toEqual([['2026-11-03', true]]);
+});
+
+test('a moved moment keeps the form it is stored in: its separator, its seconds and its offset', async () => {
+  const { momentOf, shifted } = await import('./calendarTime.js');
+  expect(shifted('2026-11-03T09:00:00Z', 30)).toBe('2026-11-03T09:30:00Z');
+  expect(shifted('2026-11-03 23:45:00.000+10', 30)).toBe('2026-11-04 00:15:00.000+10');
+  expect(shifted('2026-11-03T09:00', -60)).toBe('2026-11-03T08:00');
+  expect(momentOf('2026-11-03 09:15:00')).toEqual({ day: '2026-11-03', minute: 555 });
+  expect(momentOf('not a day')).toBeNull();
+});

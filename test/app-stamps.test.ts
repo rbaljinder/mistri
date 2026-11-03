@@ -48,7 +48,7 @@ const APP = {
 const NOW = new Date('2026-09-08T02:30:00Z');
 
 async function catalog(t: import('node:test').TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-stamps-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-stamps-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'stamps.db');
   const db = new DatabaseSync(file);

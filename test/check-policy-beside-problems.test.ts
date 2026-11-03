@@ -14,7 +14,7 @@ import { test } from 'node:test';
 const ENTRY = resolve('packages/mistri/src/server/index.ts');
 
 test("check says a policy's refusal beside the App's own problems, not instead of them", { timeout: 60_000 }, (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-check-policy-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-check-policy-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const db = new DatabaseSync(join(dir, 'ops.db'));
   db.exec('CREATE TABLE job(id INTEGER PRIMARY KEY, title TEXT NOT NULL);');

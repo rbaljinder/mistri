@@ -192,7 +192,7 @@ export default defineCommands({
 });`;
 
 async function check(t: TestContext, postgres: boolean): Promise<{ code: number; output: string }> {
-  const { directory, stopping } = scratch(t, 'tablewalk-command-trigger-');
+  const { directory, stopping } = scratch(t, 'mistri-command-trigger-');
   let url: string;
   if (postgres) {
     const owned = await uuidPostgresDatabase('tw_command_trigger');
@@ -282,7 +282,7 @@ const judgedBy = async (adapter: Adapter, logical: string) => {
 };
 
 test("check refuses an effect into a table whose schema declares a conflict clause, as the write's catalog does", async (t) => {
-  const { directory } = scratch(t, 'tablewalk-check-conflict-');
+  const { directory } = scratch(t, 'mistri-check-conflict-');
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE note (id INTEGER PRIMARY KEY, hist_id INTEGER);

@@ -53,7 +53,7 @@ function deeplyFrozen(value: unknown) {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-context-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-context-'));
   const physical = new Map<Source, SqliteAdapter>();
   const databases = new Map<Source, DatabaseSync>();
   t.after(async () => {

@@ -278,7 +278,7 @@ test("an App whose only commands are its API's generic writes loads without a co
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const { loadApp } = await import('../packages/mistri/src/server/app/apps.js');
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-crud-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-crud-'));
   try {
     writeFileSync(
       join(dir, 'app.json'),

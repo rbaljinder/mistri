@@ -22,7 +22,7 @@ import {
 } from '../packages/mistri/src/adapters/commands/commandSequences.js';
 
 function database(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-sequences-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-sequences-'));
   const path = join(directory, 'sequences.db');
   new DatabaseSync(path).close();
   const db = new DatabaseSync(path);

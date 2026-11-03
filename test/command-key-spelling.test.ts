@@ -38,7 +38,7 @@ const SPELLINGS = [
 ] as const;
 
 test('a plain App prepares and runs a command on an integer key spelled either way', { timeout: 30_000 }, async (t) => {
-  const { directory, stopping } = scratch(t, 'tablewalk-key-spelling-app-');
+  const { directory, stopping } = scratch(t, 'mistri-key-spelling-app-');
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE account (id INTEGER PRIMARY KEY, name TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 0);
@@ -173,7 +173,7 @@ async function freePort() {
 }
 
 async function servedTenantApp(t: TestContext) {
-  const { directory, stopping } = scratch(t, 'tablewalk-key-spelling-tenant-');
+  const { directory, stopping } = scratch(t, 'mistri-key-spelling-tenant-');
   const appDir = join(directory, 'app');
   mkdirSync(appDir);
   const data = join(directory, 'data.db'),

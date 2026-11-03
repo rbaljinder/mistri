@@ -33,7 +33,7 @@ export function eventDeliveryPolicy(eventCount = 1, scope: 'app' | 'tenant' = 't
  * from one bound to the App's own event source. The separate native fixture
  * proves producer authority through native login/enrollment. */
 export function eventDeliveryFixture(t: TestContext, policy = eventDeliveryPolicy(), provision = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-event-delivery-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-event-delivery-')),
     path = join(directory, 'source.db');
   let db = new DatabaseSync(path);
   db.exec('CREATE TABLE effects (id INTEGER PRIMARY KEY, executions INTEGER NOT NULL); INSERT INTO effects VALUES (1,0)');

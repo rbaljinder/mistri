@@ -21,7 +21,7 @@ import { TENANT_TABLES as tables } from '../packages/mistri/src/server/tenant/te
 const binding = { appId: 'lending', source: { id: 'business', connection: 'db' }, storeId: 'lending-store' };
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-shot-tenant-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-shot-tenant-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const saved = process.env.XDG_CONFIG_HOME;
   process.env.XDG_CONFIG_HOME = join(directory, 'config');

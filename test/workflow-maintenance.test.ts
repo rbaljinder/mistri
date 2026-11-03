@@ -286,7 +286,7 @@ describe('declarations are refused when they cannot be kept', () => {
 });
 
 describe('maintenance on a provisioned database', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-workflow-maintenance-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-workflow-maintenance-'));
   after(() => rmSync(directory, { recursive: true, force: true }));
   const database = join(directory, 'business.db');
 

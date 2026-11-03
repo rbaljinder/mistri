@@ -135,7 +135,7 @@ export default defineCommands({
 });`;
 
 async function ledger(t: TestContext, postgres: boolean) {
-  const { directory, stopping } = scratch(t, 'tablewalk-trigger-lock-');
+  const { directory, stopping } = scratch(t, 'mistri-trigger-lock-');
   let url: string;
   let change: () => Promise<void>;
   if (postgres) {

@@ -5,7 +5,7 @@
  *   <Route path="/crm/*" element={<Crm />} />
  *   function Crm() {
  *     return (
- *       <Provider endpoint="/api/tw" navigator={useReactRouterNavigator()}>
+ *       <Provider endpoint="/api/mistri" navigator={useReactRouterNavigator()}>
  *         <App app="compass" basePath="/crm" />
  *       </Provider>
  *     );

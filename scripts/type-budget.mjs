@@ -9,9 +9,9 @@
  * An outside review asked whether a large App's typecheck could break an
  * agent's edit loop, and the only number anyone had was misleading: Ignition's
  * tsconfig in this repository maps `@mistriwork/mistri/commands` to src/, so `tsc` there
- * checks tablewalk's own server as well (543 files, 113k types, where a user's
+ * checks mistri's own server as well (543 files, 113k types, where a user's
  * copy of the same App makes 34k). So each App is measured here the way a
- * user's project holds it: copied out of the repository, `tablewalk` resolved
+ * user's project holds it: copied out of the repository, mistri resolved
  * through the packages' exports maps (schema/*.d.ts and dist's declarations),
  * `@types/node` beside it, no `paths`. The Apps are Compass, Ignition with its
  * server modules, and a generated one of 150 tables (scripts/synthetic-app.mjs),
@@ -301,10 +301,10 @@ export function calibrate() {
 
 /* ---------- the projects, as a user's ---------- */
 
-/** A directory that holds `tablewalk` the way an installed package does: its exports map, its built declarations. */
+/** A directory that holds mistri the way an installed package does: its exports map, its built declarations. */
 async function project() {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-type-budget-'));
-  /* An App is ES modules, as `tablewalk scaffold` writes its package.json. */
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-type-budget-'));
+  /* An App is ES modules, as `mistri new` writes its package.json. */
   writeFileSync(join(dir, 'package.json'), `${JSON.stringify({ name: 'type-budget', private: true, type: 'module' })}\n`);
   mkdirSync(join(dir, 'node_modules', '@types'), { recursive: true });
   /* The packages an install brings, each with its built declarations: what a project types against. */

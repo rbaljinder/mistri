@@ -37,7 +37,7 @@ test(
   'an admin account already in the store with another password is said to be unchanged, and where the store is',
   { timeout: 60_000 },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-admin-env-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-admin-env-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const store = join(directory, 'auth.db');
     const loaded = {

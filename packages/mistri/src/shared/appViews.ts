@@ -78,6 +78,8 @@ import {
 } from '@mistriwork/engine/shared/model.js';
 import {
   CALENDAR_BACKDROPS_MAX,
+  CALENDAR_SPANS,
+  type CalendarSpan,
   type AppBoardFact,
   type AppCalendarBackdrop,
   type AppListPresentation,
@@ -213,6 +215,7 @@ export const LIST_VIEW_KEYS = [
   'quickAdd',
   'favorite',
   'totals',
+  'group',
   'density',
   'rowActions',
   'editable',
@@ -250,7 +253,7 @@ export const PRESENTATION_KEYS = {
   checklist: ['kind', 'primary', 'checked', 'lines'],
   queue: ['kind', 'primary', 'lines', 'properties', 'badge', 'openLabel'],
   board: ['kind', 'by', 'lanes', 'order', 'swimlanes', 'limits', 'primary', 'lines', 'category', 'footer', 'sum', 'folded'],
-  calendar: ['kind', 'date', 'end', 'primary', 'lines', 'badge', 'backdrop'],
+  calendar: ['kind', 'date', 'end', 'span', 'primary', 'lines', 'badge', 'backdrop'],
   tree: ['kind', 'parent', 'primary', 'lines'],
   gantt: ['kind', 'start', 'end', 'primary', 'by', 'progress'],
   cards: ['kind', 'primary', 'description', 'value', 'badge', 'icon', 'properties', 'facts', 'footer', 'image', 'media'],
@@ -742,6 +745,21 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
     if (presentation) throw new Error(`${at} has "totals" and a ${presentation.kind} presentation; a footer of totals belongs to a grid.`);
     totals = v.totals as string[];
   }
+  /* A grid's groups, by one of its own columns: the heads are a breakdown of that column, and the rows are read in its
+     order (listQuestion.ts groupedQuestion). A record page's related list groups with an object, `{ by }`, because it
+     pages its groups and reads the grouped record's facts; a list view's groups are its rows', so a column says it. */
+  let group: string | undefined;
+  if (v.group !== undefined) {
+    if (typeof v.group !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(v.group.trim()))
+      throw new Error(`${at}: "group" must name one of the resource's own columns: group: 'stage'.`);
+    if (presentation)
+      throw new Error(`${at} has "group" and a ${presentation.kind} presentation; heads over groups of rows belong to a grid.`);
+    if (v.order !== undefined)
+      throw new Error(
+        `${at} has "group" and "order": a hand order ranks the whole list, and grouped rows stand by their group first. Keep one.`,
+      );
+    group = v.group.trim();
+  }
   if (v.rowActions !== undefined) {
     if (typeof v.rowActions !== 'boolean') throw new Error(`${at}: "rowActions" must be true (a ⋯ menu on each row) or false.`);
     if (v.rowActions && presentation)
@@ -929,6 +947,7 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
     ...(v.quickAdd === true ? { quickAdd: true as const } : {}),
     ...(favoriteFlag(v.favorite, at) ? { favorite: true as const } : {}),
     ...(totals ? { totals } : {}),
+    ...(group ? { group } : {}),
     ...(v.density === undefined ? {} : { density: v.density as 'comfortable' | 'compact' }),
     ...(v.rowActions === true ? { rowActions: true as const } : {}),
     ...(editable ? { editable } : {}),
@@ -1186,12 +1205,19 @@ export function parsePresentation(raw: unknown, at: string): AppListPresentation
     const end = raw.end === undefined ? undefined : localColumn(raw, 'end', here);
     if (end !== undefined && end === date)
       throw new Error(`${here}: "end" names "${end}", the same column as "date"; a range needs the column its last day is in.`);
+    /* A month is what a calendar always was, so it is said by leaving the span out: the model keeps a week or a day. */
+    if (raw.span !== undefined && !CALENDAR_SPANS.includes(raw.span as CalendarSpan))
+      throw new Error(
+        `${here}: "span" must be ${CALENDAR_SPANS.map((one) => `"${one}"`).join(', ')}: what one page of the calendar shows.`,
+      );
+    const span = raw.span === undefined || raw.span === 'month' ? undefined : (raw.span as Exclude<CalendarSpan, 'month'>);
     const badge = raw.badge === undefined ? undefined : queueColumn(raw.badge, 'badge', here);
     const backdrop = raw.backdrop === undefined ? undefined : parseCalendarBackdrop(raw.backdrop, `${here}, backdrop`);
     return {
       kind,
       date,
       ...(end === undefined ? {} : { end }),
+      ...(span ? { span } : {}),
       primary,
       ...(lines.length ? { lines } : {}),
       ...(badge === undefined ? {} : { badge }),

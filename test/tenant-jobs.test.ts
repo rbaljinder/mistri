@@ -286,7 +286,7 @@ interface Lab {
 const lost = () => new Error('injected: the acknowledgement was lost');
 
 async function sqliteLab(t: TestContext): Promise<Lab> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-jobs-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-jobs-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   t.after(() => {
@@ -1215,7 +1215,7 @@ export const jobs = defineJobs({
 }, { principals: { 'tenant-clock': { roles: [${JSON.stringify(grant)}] }, 'lender-desk': { roles: ['desk'] } }, store: { namespace: 'tenant-jobs' } });
 `;
   async function fixture(t: TestContext, options: { provision: boolean; grant?: string }) {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-jobs-cli-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-jobs-cli-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const appDir = join(directory, 'app'),
       data = join(directory, 'data.db'),

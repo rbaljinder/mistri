@@ -7,6 +7,7 @@ import { TimelineSection } from '../../packages/kit/src/client/components/PageTi
 import { RecordHistory } from '../../packages/kit/src/client/components/PageHistory.js';
 import { SectionBox } from '../../packages/kit/src/client/components/PageSectionBox.js';
 import { api } from '../../packages/kit/src/client/core.js';
+import { registerCommandHost } from '../../packages/kit/src/client/uiBridge.js';
 import { fixture } from '../mocks/core.js';
 
 const table: TableMeta = {
@@ -229,6 +230,94 @@ export const Conversation: StoryObj = {
               detail: 'kind',
               view: view('message', 'message', ['at', 'body', 'by', 'kind']),
             },
+          ],
+        },
+      )}
+    />
+  ),
+};
+/* A thread's posts with their reactions: the reader liked the first, and a press gives one or takes it back through
+   the App's command, here a stand-in that keeps the reactions in the story. */
+const posts = () => [
+  { id: 41, at: ago(3), body: 'Swapped the sensor and the readings settled within the hour.', by: 'Maya Chen' },
+  { id: 40, at: ago(27), body: 'Has anyone tried recalibrating before replacing it?', by: 'Owen Brooks' },
+];
+let reactions: Array<[number, string, string]> = [];
+const tallied = (text: string) => {
+  const mine = text.includes('= me');
+  const counts = new Map<string, number>();
+  for (const [post, kind, who] of reactions) {
+    if (mine && who !== 'me') continue;
+    counts.set(`${post} ${kind}`, (counts.get(`${post} ${kind}`) ?? 0) + 1);
+  }
+  return {
+    columns: ['post_id', 'kind', 'count'],
+    rows: [...counts].map(([key, count]) => ({ post_id: Number(key.split(' ')[0]), kind: key.split(' ')[1], count })),
+  };
+};
+export const Reactions: StoryObj = {
+  beforeEach: () => {
+    reactions = [
+      [41, 'thanks', 'me'],
+      [41, 'thanks', 'ana'],
+      [41, 'thanks', 'li'],
+      [41, 'helpful', 'ana'],
+      [40, 'like', 'li'],
+    ];
+    fixture({
+      tables: [table, person],
+      writable: false,
+      answer: {
+        '/api/view/run': ({ view: definition }: { view: ViewDef }) => ({
+          view: definition,
+          columns: definition.columns.map((column) => column.path),
+          rows: posts(),
+          resolved: [],
+          errors: [],
+          more: false,
+          limit: 20,
+          offset: 0,
+        }),
+        '/api/breakdown': ({ text }: { text: string }) => tallied(text),
+      },
+    });
+    registerCommandHost({
+      command: () => ({
+        label: 'React',
+        granted: true,
+        available: async () => true,
+        run: async (key, input) => {
+          const post = Number(key.id);
+          const kind = String(input?.kind);
+          const at = reactions.findIndex(([p, k, who]) => p === post && k === kind && who === 'me');
+          if (at >= 0) reactions.splice(at, 1);
+          else reactions.push([post, kind, 'me']);
+          return { status: 'applied' };
+        },
+        open: async () => ({ status: 'closed' }),
+      }),
+      openForm: () => {},
+    });
+  },
+  render: () => (
+    <TimelineSection
+      {...slot(
+        {
+          kind: 'timeline',
+          title: 'Posts',
+          reactions: {
+            from: 'reaction',
+            kinds: ['like', 'thanks', 'helpful', 'laugh'],
+            command: 'reactToPost',
+            whose: 'post_id',
+            by: 'member_id',
+            column: 'kind',
+          },
+        },
+        {
+          index: 0,
+          streams: [
+            { from: 'post', at: 'at', show: 'body', by: 'by', reacts: 'id', view: view('post', 'post', ['at', 'body', 'by', 'id']) },
           ],
         },
       )}

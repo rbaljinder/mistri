@@ -1,6 +1,6 @@
 /**
  * A React app's server with tablewalk mounted in it: the handler answers
- * tablewalk's requests under `/api/tw` (createHandler), and every
+ * tablewalk's requests under `/api/mistri` (createHandler), and every
  * other address is the host's own page, a React app (./embed-react-host)
  * that shows Compass at `/crm` through @mistriwork/mistri/react. The host's page is
  * served from source through Vite's middleware with the embed's plugins
@@ -27,7 +27,7 @@ const PAGE = join(HERE, 'embed-react-host');
 const [config, port, app = 'test/fixtures/apps/crm'] = process.argv.slice(2);
 const origin = `http://127.0.0.1:${port}`;
 
-const tw = createHandler({ config, basePath: '/api/tw', publicOrigin: origin, app });
+const mistri = createHandler({ config, basePath: '/api/mistri', publicOrigin: origin, app });
 const SECRET = process.env.PORTAL_EMBED_SECRET;
 const vite = await createVite({
   configFile: false,
@@ -40,11 +40,11 @@ const vite = await createVite({
   server: { middlewareMode: true, hmr: false, fs: { allow: [REPO] } },
 });
 
-const ours = (url: string) => url === '/api/tw' || url.startsWith('/api/tw/') || url.startsWith('/api/tw?');
+const ours = (url: string) => url === '/api/mistri' || url.startsWith('/api/mistri/') || url.startsWith('/api/mistri?');
 
 const server = createServer((req, res) => {
   const url = req.url ?? '/';
-  if (ours(url)) return void tw.node(req, res);
+  if (ours(url)) return void mistri.node(req, res);
   if (SECRET && url === '/host/assertion' && req.method === 'POST') {
     /* The host's own server, which knows who is signed in to it: a statement for this page's origin, never the key. */
     const said = mintEmbedAssertion({
@@ -65,10 +65,10 @@ const server = createServer((req, res) => {
   });
 });
 
-await tw.ready;
+await mistri.ready;
 server.listen(Number(port), '127.0.0.1', () => console.log(`Host listening on ${port}`));
 
 process.once('SIGTERM', async () => {
-  await Promise.all([tw.close(), vite.close()]);
+  await Promise.all([mistri.close(), vite.close()]);
   server.close(() => process.exit(0));
 });

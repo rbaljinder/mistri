@@ -49,7 +49,7 @@ export const FORM_OPEN = ['drawer', 'page'] as const;
 export const FORM_STYLES = ['stepper', 'intake'] as const;
 /** How a vocabulary or a flag may be drawn on a New form (`fields.<column>.as`). */
 const FORM_FIELD_AS = ['cards', 'buttons', 'radios', 'select'] as const;
-export const FORM_FIELD_KEYS = ['label', 'help', 'placeholder', 'multiline', 'as', 'where'] as const;
+export const FORM_FIELD_KEYS = ['label', 'help', 'placeholder', 'multiline', 'as', 'where', 'tree'] as const;
 /** A narrowed reference compares at most this many columns. */
 export const MAX_FORM_WHERE = 4;
 const MAX_FORM_DESCRIPTION = 500;
@@ -182,6 +182,7 @@ function parseFormField(raw: unknown, name: string, where: string): AppFormField
     }
     result.where = frozen(Object.fromEntries(pairs.map(([target, local]) => [field(target, here), field(local, here)])));
   }
+  if (Object.hasOwn(f, 'tree')) result.tree = field(f.tree, `${here}, "tree"`);
   return frozen(result);
 }
 
@@ -777,6 +778,7 @@ export function validateAppForm(
         );
     }
     if (dress.where) problems.push(...narrowingProblems(name, column, dress.where, table, context.schema));
+    if (dress.tree) problems.push(...treeProblems(name, column, dress.tree, context.schema));
   }
   for (const [name, value] of Object.entries(defaults)) {
     const column = columnNamed(table.columns, name);
@@ -815,6 +817,29 @@ function narrowingProblems(
       problems.push(`Form: fields "${name}", "where" names "${remote}", which is not a column of ${target.name}.`);
   }
   return problems;
+}
+
+/* A tree picker draws the referenced table as the hierarchy one of its columns makes, so that column must name a
+   row of the same table: a parent read from anywhere else would open a branch onto another table's keys. */
+function treeProblems(name: string, column: ColumnMeta, tree: string, schema?: DatabaseSchema): string[] {
+  if (!column.references) return [`Form: fields "${name}" is drawn as a tree, which only a reference is; "${name}" refers to nothing.`];
+  if (!schema) return [];
+  const target = schema.tables.find((candidate) => candidate.id === column.references!.table);
+  if (!target)
+    return [
+      `Form: fields "${name}" refers to ${column.references.table}, which this catalog does not read, so it cannot be drawn as a tree.`,
+    ];
+  const parent = columnNamed(target.columns, tree);
+  if (!parent) return [`Form: fields "${name}", "tree" names "${tree}", which is not a column of ${target.name}.`];
+  const to =
+    parent.references?.table ??
+    schema.foreignKeys.find((key) => key.from.table === target.id && key.from.columns.length === 1 && key.from.columns[0] === tree)?.to
+      .table;
+  if (to !== target.id)
+    return [
+      `Form: fields "${name}", "tree" names "${tree}", which ${to ? `refers to ${to}` : 'refers to nothing'}; a tree's column names a parent row of ${target.name} itself.`,
+    ];
+  return [];
 }
 
 function referencedTable(to: string | undefined, schema: DatabaseSchema | undefined): TableMeta | undefined {

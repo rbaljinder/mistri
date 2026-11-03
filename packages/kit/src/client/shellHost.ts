@@ -8,7 +8,7 @@
  * Served, the page is the shell's own, and each of these is exactly the
  * global it names. They are gathered here so that the shell can one day run
  * inside a page that is not its own — a React host's route, with the host's
- * router owning the history, the host's `<title>`, a `.tw-root` element in
+ * router owning the history, the host's `<title>`, a `.mistri-root` element in
  * place of `<html>` — by changing this module rather than four hundred call
  * sites. test/check-client-host.mjs keeps it the only place: a new
  * `window.history`, `document.title`, `document.documentElement`, `document.body`,

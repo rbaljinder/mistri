@@ -72,7 +72,7 @@ const APP = {
 };
 
 const inDir = (files: Record<string, string>, run: (dir: string) => void) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-fix-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-fix-'));
   try {
     for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
     run(dir);

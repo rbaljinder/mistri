@@ -582,9 +582,9 @@ describe('the handler refuses a mount it could not keep apart', () => {
     for (const basePath of ['/api', '/assets/tw', '/tw/api', '/healthz', '/readyz', '/crm/assets']) {
       assert.throws(handler({ basePath }), /one of the paths mistri answers itself/, basePath);
     }
-    // Under the host's own API is a place of the host's: /api/tw is not /api.
+    // Under the host's own API is a place of the host's: /api/mistri is not /api.
     assert.doesNotThrow(() => {
-      const tw = handler({ basePath: '/api/tw' })();
+      const tw = handler({ basePath: '/api/mistri' })();
       tw.ready.catch(() => {});
       void tw.close();
     });

@@ -12,6 +12,7 @@ import { commandActionLabel } from '../recordHistory.js';
 import { sessionActorWords } from '../app/appStamps.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { captureHttpCommandFlags } from '../flags/httpRuntime.js';
+import { stageFileHttp } from '../commands/stagedFileHttp.js';
 
 /**
  * `body`: the command's body where it was read already — availability asked
@@ -49,7 +50,8 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
       return true;
     }
     if (policyContext) {
-      if (!policyContext.commands) {
+      /* A row policy's commands run in its own transaction and journal, which hold no files: its forms take none. */
+      if (!policyContext.commands || path === COMMAND_ROUTES.files) {
         commandRefusal('forbidden');
         return true;
       }
@@ -72,6 +74,20 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
       return true;
     }
     res.setHeader('x-mistri-app', signedIn.app.app.id);
+    const actor = {
+      id: identity.id,
+      appId: signedIn.app.app.id,
+      roles: (identity.role ?? '')
+        .split(',')
+        .map((role) => role.trim())
+        .filter(Boolean),
+      ...sessionActorWords(identity),
+    };
+    /* A file held for a command's files field, under the grant that runs the command (stagedFiles.ts). */
+    if (path === COMMAND_ROUTES.files) {
+      await stageFileHttp(ctx, connection, actor);
+      return true;
+    }
     const result = await dispatchBusinessCommandHttp({
       req,
       res,
@@ -84,15 +100,7 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
       ...(commands.events ? { events: commands.events } : {}),
       label: (body) => commandActionLabel(signedIn.app.app, body),
       ...given,
-      actor: {
-        id: identity.id,
-        appId: signedIn.app.app.id,
-        roles: (identity.role ?? '')
-          .split(',')
-          .map((role) => role.trim())
-          .filter(Boolean),
-        ...sessionActorWords(identity),
-      },
+      actor,
     });
     send(res, 200, result);
     return true;

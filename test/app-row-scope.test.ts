@@ -21,7 +21,7 @@ const surface = (reads: ScopedReads) => {
 };
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-row-scope-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-row-scope-'));
   const opened: Adapter[] = [];
   t.after(async () => {
     await Promise.all(opened.map((adapter) => adapter.close()));

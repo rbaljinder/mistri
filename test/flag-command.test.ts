@@ -136,7 +136,7 @@ async function fixture(
   }) => Promise<void>,
   track?: 'none' | 'receipts' | 'audit',
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-flag-command-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-flag-command-'));
   const path = join(directory, 'desk.db'),
     db = new DatabaseSync(path),
     registry = new Registry();

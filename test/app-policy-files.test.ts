@@ -21,7 +21,7 @@ const appId = 'policy-files';
 const account = (id: string, role = 'reader'): Identity => ({ id, who: `${id}@example.test`, role });
 
 async function fixture(t: TestContext, failAfterRead = false) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-files-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-files-'));
   const file = join(directory, 'files.db');
   const db = new DatabaseSync(file);
   for (const table of ['asset', 'public_asset', 'hidden_asset']) {

@@ -16,7 +16,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { productEnv } from './product.js';
+import { product, productEnv } from './product.js';
 
 const SCHEMA = `
 CREATE TABLE country (
@@ -137,7 +137,7 @@ INSERT INTO shipment (id, invoice_id, line_no, shipped_on) VALUES
 `;
 
 /**
- * Where `--demo` builds its database. A fixed `$TMPDIR/tablewalk-demo.db` was
+ * Where `--demo` builds its database. A fixed `$TMPDIR/<product>-demo.db` was
  * a machine-global path that every boot deletes and rebuilds, so two people —
  * or two test runs, or a run beside a demo someone left open — silently
  * corrupted each other. Observed as twelve browser failures that looked
@@ -153,7 +153,7 @@ export function demoDatabaseFile(): string {
   const named = productEnv('DEMO_DB')?.trim();
   if (named) return named;
   if (chosen) return chosen;
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-demo-'));
+  const directory = mkdtempSync(join(tmpdir(), `${product()}-demo-`));
   // The demo is disposable by definition: nothing here outlives the process
   // that built it, and leaving a directory per run in $TMPDIR would be litter.
   process.on('exit', () => {

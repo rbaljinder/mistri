@@ -5,7 +5,7 @@
  *   const crm = createRoute({ getParentRoute: () => root, path: '/crm/$', component: Crm });
  *   function Crm() {
  *     return (
- *       <Provider endpoint="/api/tw" navigator={useTanStackNavigator()}>
+ *       <Provider endpoint="/api/mistri" navigator={useTanStackNavigator()}>
  *         <App app="compass" basePath="/crm" />
  *       </Provider>
  *     );

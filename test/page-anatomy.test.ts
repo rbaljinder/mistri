@@ -166,7 +166,7 @@ test('the anatomy is a page: header, summary, lists as tabs, the rail and the hi
 });
 
 test("served: an App's resource with no page opens on the anatomy, in the App's words, and plans as it is served", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-anatomy-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-anatomy-'));
   const path = join(directory, 'homes.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE unit (id INTEGER PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, rent NUMERIC);

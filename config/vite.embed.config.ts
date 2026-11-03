@@ -9,7 +9,7 @@
  *     src/embed/seams/, which answers from the host the shell is bound to
  *     (packages/mistri/src/embed/binding.ts). The served client's bytes do not change.
  *   - the stylesheets. Every sheet the shell imports becomes a module that
- *     hands its text, scoped to `.tw-root` and nested in `@layer tablewalk`
+ *     hands its text, scoped to `.mistri-root` and nested in `@layer mistri`
  *     (scripts/embed-css.mjs), to the Provider's adopted sheets
  *     (packages/mistri/src/embed/styles.ts). A host imports no CSS of ours, and none of ours
  *     reaches the host's elements.
@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { PRODUCT_CLIENTS, jsMayBeTs, noDevtoolsClient, ownSourcesOnly, shortCatalogKeys } from '../vite.config.js';
 import { shellMain } from '../packages/kit/src/vite.ts';
 import { KIT_CLIENT } from '../packages/kit/src/clientFiles.ts';
-import { tablewalkScope } from '../scripts/embed-css.mjs';
+import { mistriScope } from '../scripts/embed-css.mjs';
 
 /* The repository root, whatever directory this file sits in. */
 const HERE = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -70,7 +70,7 @@ function seamsForEmbed(): Plugin {
   };
 }
 
-const ADOPT = '\0tablewalk-adopt:';
+const ADOPT = '\0mistri-adopt:';
 const STYLES = resolve(EMBED, 'styles.ts');
 
 /**
@@ -203,8 +203,8 @@ export function embedPlugins(): Plugin[] {
       name: 'mistri:embed-settings',
       config: () => ({
         define: { __MISTRI_VERSION__: JSON.stringify(VERSION) },
-        /* Only tablewalk's own sheets (and what they import) are scoped. */
-        css: { postcss: { plugins: [tablewalkScope({ only: (file: string) => SRC.test(file) })] } },
+        /* Only mistri's own sheets (and what they import) are scoped. */
+        css: { postcss: { plugins: [mistriScope({ only: (file: string) => SRC.test(file) })] } },
       }),
     },
   ];

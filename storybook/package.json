@@ -1,5 +1,5 @@
 {
-  "name": "tablewalk-storybook",
+  "name": "mistri-storybook",
   "private": true,
   "description": "The component library, drawn from src/client. A package of its own so no published package depends on Storybook.",
   "type": "module",

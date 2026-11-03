@@ -36,7 +36,7 @@ const app = (tags: unknown) =>
   );
 
 async function catalog(t: import('node:test').TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tags-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tags-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'tags.db'));
   db.exec(SQL);

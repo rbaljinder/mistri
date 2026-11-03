@@ -55,7 +55,7 @@ import { appThemeWarnings } from '@mistriwork/engine/shared/theme.js';
 import { readAppFonts, type AppFonts } from './appFonts.js';
 import { readAppBrand, type AppBrand } from './appBrand.js';
 import { checkThemeWithFixes, type FixedThemeProblem } from '../../shared/themeFix.js';
-import { validatePage, type PageDef } from '@mistriwork/engine/shared/page.js';
+import { reactionEntryTable, validatePage, type PageDef } from '@mistriwork/engine/shared/page.js';
 import type { PageFields } from '@mistriwork/engine/shared/pageModel.js';
 import { publicPrefillProblems } from '../forms/publicPrefill.js';
 import {
@@ -1192,6 +1192,30 @@ export function appProblems(loaded: LoadedApp, schema: DatabaseSchema): string[]
             `Add one to resources.${p.base}.actions: ${name}: action('${mode === 'reply' ? 'Reply' : 'Add note'}', { command: '${name}' }).`,
         );
       }
+    }
+    /* A timeline's reactions run the App's own command on the entry, found the way a composer's is: through an action
+       of the entry's resource that offers it, the kind handed to it as its input of the kind column's name. A name no
+       action offers is a row of kinds that can never be pressed. */
+    for (const section of checked.error ? [] : checked.sections) {
+      if (section.kind !== 'timeline' || !section.reactions?.whose || !section.reactions.column) continue;
+      const { command: name, column } = section.reactions;
+      const where = `${at(loaded.sources[p.id] ?? loaded.path)}: ${feature ? `features "${feature}", ` : ''}page "${p.name}": the reactions' command "${name}"`;
+      const entryId = reactionEntryTable(schema, section.reactions);
+      const entry = entryId === undefined ? undefined : findTable(schema, entryId)?.name;
+      const [resource, block] =
+        Object.entries(loaded.app.resources ?? {}).find(([key]) => entryId !== undefined && tableNamed(schema, key)?.id === entryId) ?? [];
+      const offered = block?.actions?.find((action) => 'command' in action && action.command?.id === name);
+      if (!offered || !('command' in offered) || !offered.command) {
+        problems.push(
+          `${where} is offered by no action of "${resource ?? entry}", the entry a reaction is to. ` +
+            `Add one to resources.${resource ?? entry}.actions: react: action('React', { command: '${name}' }).`,
+        );
+        continue;
+      }
+      if (tableNamed(schema, offered.command.target)?.id !== entryId)
+        problems.push(`${where} acts on "${offered.command.target}", not on "${resource}", the entry a reaction is to.`);
+      else if (!offered.command.input.some((field) => field.name === column))
+        problems.push(`${where} takes no "${column}" input: the kind pressed is handed to it as "${column}", the column it is held in.`);
     }
     /* A gallery draws image files: over rows that are not files it would be
        a grid pretending, so the page names which section and why. */

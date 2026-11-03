@@ -55,7 +55,7 @@ function refusal(outcome: 'unknown' | 'not_applied', code?: string) {
 }
 
 async function fixture(t: TestContext, events = true, provision = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-event-execution-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-event-execution-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path);
   const owner = { appId: 'event-app', storeId: 'event-store', source: { id: 'business', connection: 'business-db' } };

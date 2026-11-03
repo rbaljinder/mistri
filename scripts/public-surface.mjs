@@ -246,7 +246,7 @@ async function packageSection() {
   /* TypeScript 7 has no in-process `createProgram`: its API client (unstable until the compiler's API settles) opens a project and asks the checker. */
   const { API, SymbolFlags } = await import('typescript/unstable/sync');
   const api = new API({ cwd: ROOT });
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-surface-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-surface-'));
   try {
     /* The names the `mistri` package answers as an install reads them (scripts/pack-manifest.mjs): each entry by its
        name, and the JSON schemas its `./schema/*` pattern carries. A pattern is no name an App writes. */

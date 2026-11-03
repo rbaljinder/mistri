@@ -13,7 +13,7 @@ import { delimiter, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { after, before, test } from 'node:test';
 
-const root = mkdtempSync(join(tmpdir(), 'tablewalk-cli-open-'));
+const root = mkdtempSync(join(tmpdir(), 'mistri-cli-open-'));
 const db = join(root, 'tick.db');
 /* The test's environment without what would decide for it: MISTRI_OPEN (TABLEWALK_OPEN too) has the last word on opening. */
 const env = () => {

@@ -135,7 +135,7 @@ test(
   "the --bump flow: check writes the lines, a published command's change fails the check until it is bumped",
   { timeout: 600_000 },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-contracts-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-contracts-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const env = { XDG_CONFIG_HOME: join(directory, 'config') };
     const db = join(directory, 'desk.db');

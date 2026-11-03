@@ -19,7 +19,7 @@ import { readLayouts, layoutsFor, writeLayout } from '../packages/engine/src/ser
 // Every directory a case makes, removed when the file is done.
 const made: string[] = [];
 const directory = async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'tablewalk-layouts-'));
+  const dir = await mkdtemp(join(tmpdir(), 'mistri-layouts-'));
   made.push(dir);
   return dir;
 };
@@ -59,7 +59,7 @@ describe('stored layouts', () => {
   });
 
   test('a missing file reads as no layouts, not an error', async () => {
-    assert.deepEqual(await readLayouts(join(tmpdir(), 'tablewalk-does-not-exist.json')), {});
+    assert.deepEqual(await readLayouts(join(tmpdir(), 'mistri-does-not-exist.json')), {});
   });
 
   test('a corrupt file reads as no layouts rather than breaking the page', async () => {

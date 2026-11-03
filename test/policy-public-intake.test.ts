@@ -30,7 +30,7 @@ const refusal =
   };
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-intake-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-intake-'));
   const file = join(directory, 'intake.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE desk(id INTEGER PRIMARY KEY, name TEXT NOT NULL);

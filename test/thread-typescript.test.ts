@@ -793,7 +793,7 @@ test('Thread: TypeScript preserves the complete reviewed normalized contract', a
 });
 
 test('Thread: disposable seed validates the app, reproduces types and refuses overwrites', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-thread-typescript-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-thread-typescript-'));
   const file = join(directory, 'thread.db');
   const script = resolve('test/fixtures/databases/thread/seed.mjs');
   let adapter: SqliteAdapter | undefined;

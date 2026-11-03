@@ -27,7 +27,7 @@ import { field } from '../packages/mistri/src/server/commands/commandFields.js';
 import { bool } from '../packages/mistri/src/server/commands/commandShapes.js';
 
 test('a command asks the questions its rows define, and is held to them where it runs', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-defined-input-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-defined-input-'));
   const file = join(directory, 'catalog.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE catalog_item (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

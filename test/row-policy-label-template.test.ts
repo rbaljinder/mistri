@@ -19,7 +19,7 @@ import { createApp } from './support/createApp.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 
 test('a one-column record label reads the same under a row policy as without one', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-label-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-label-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'homes.db');
   const db = new DatabaseSync(file);

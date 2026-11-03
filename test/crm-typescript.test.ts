@@ -10,7 +10,7 @@ import { typesForSchema } from '../packages/mistri/src/server/typegen.js';
 import { appCeilingWarnings, withRollups } from '../packages/mistri/src/shared/app.js';
 
 test('CRM: TypeScript DSL matches its seeded schema and generated authoring types', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-crm-typescript-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-crm-typescript-'));
   let adapter: SqliteAdapter | undefined;
   try {
     const file = join(directory, 'crm.db');

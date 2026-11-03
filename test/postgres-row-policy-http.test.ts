@@ -80,7 +80,7 @@ describe('the HTTP row-policy runtime on PostgreSQL, against a real server', { s
     }) => Promise<void>,
   ) {
     for (const statement of [...RESET, ...SETUP]) await control.query(statement);
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-postgres-row-policy-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-postgres-row-policy-'));
     const registry = new Registry();
     const servers: Server[] = [];
     const policies: HttpAppPolicy[] = [];

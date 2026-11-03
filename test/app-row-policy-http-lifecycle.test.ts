@@ -45,7 +45,7 @@ async function bounded<T>(promise: Promise<T>): Promise<T> {
 }
 
 async function fixture(t: TestContext, relations = false) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-http-policy-lifecycle-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-http-policy-lifecycle-'));
   const registry = new Registry();
   let policy: HttpAppPolicy | undefined;
   let server: Server | undefined;

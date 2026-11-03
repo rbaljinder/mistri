@@ -187,7 +187,7 @@ describe('SCIM provisioning', () => {
   const log = console.log;
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-scim-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-scim-'));
     workforce = await startMockOidc({ clientId: 'workforce-client', path: '/workforce' });
     partners = await startMockOidc({ clientId: 'partners-client', path: '/partners' });
     process.env.TEST_WORKFORCE_SECRET = workforce.clientSecret;

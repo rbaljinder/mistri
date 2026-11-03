@@ -31,7 +31,7 @@ const page = (figures: object, extra: object = {}): PageDef =>
 const section = (definition: PageDef) => definition.sections[0] as unknown as { aggregates?: Record<string, object> };
 
 async function database(t: { after(run: () => void): void }, rows: number) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-totals-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-totals-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'sales.db');
   const db = new DatabaseSync(file);

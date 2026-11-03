@@ -20,7 +20,7 @@ const otherStaff = { id: 'staff-two', appId: 'forecourt', roles: ['staff'] };
 const shopper = { id: 'shopper-one', appId: 'forecourt', roles: ['shopper'] };
 
 test('Forecourt: public intake, staff reply and closure are durable, authorized and atomic', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-forecourt-workflow-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-forecourt-workflow-'));
   const file = join(directory, 'market.db');
   let registry = new Registry();
   let deployment: AppPolicyDeployment<typeof staff | null> | undefined;

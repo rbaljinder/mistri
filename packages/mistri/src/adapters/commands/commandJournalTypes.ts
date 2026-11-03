@@ -3,6 +3,7 @@ import type { PublicPlacementAdmission, PublicPlacementOwner, PublicPlacementRun
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import type { TriggerAcceptance } from '@mistriwork/engine/adapters/storeHost.js';
+import type { StagedFileRow, StagedLimits, StagedTake, TakenFile } from './commandStaging.js';
 
 /** Portable contracts only; SQLite storage and migration live in commandJournal.ts. */
 /** Bound by the private source owner, never supplied in receipt/lookup DTOs.
@@ -87,6 +88,12 @@ export interface CommandJournal {
    * `start` is the least number this call may take: the handler's start, or
    * past the highest its rows already hold. */
   nextNumber?(appId: string, name: string, per: string, start: number): Promise<number>;
+  /** Holds one file for a command, in the owner's transaction and this journal's namespace (commandStaging.ts),
+   * unless its sender holds `most` already. Absent where the store holds no files; a form's files are then refused. */
+  stage?(appId: string, row: StagedFileRow, most: StagedLimits, now: number): Promise<void>;
+  /** Takes held files for the command running in the owner's transaction: every one, deleted, or none and refused
+   * (StagedFileRefused). A rollback holds them again. */
+  takeStaged?(appId: string, take: StagedTake): Promise<readonly TakenFile[]>;
   /**
    * Whether a receipt under this scope is there, in one statement and taking
    * no lock: the check before a handler runs on the path that keeps receipts

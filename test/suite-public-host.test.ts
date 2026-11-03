@@ -491,7 +491,7 @@ test('mapped ordinary public saved forms retain draft cookies alongside a privat
     body: { input: { name: 'Applicant' }, submission: randomUUID() },
   });
   assert.equal(saved.status, 200, saved.text);
-  const draft = saved.cookies.find((value) => value.startsWith('tw_form_apply='))?.split(';')[0];
+  const draft = saved.cookies.find((value) => value.startsWith('mistri_form_apply='))?.split(';')[0];
   assert.ok(draft);
   for (const cookie of [draft, `${f.cookie}; ${draft}`]) {
     const resumed = await call(f.port, 'shop.example', '/api/forms/apply/resume', { cookie, body: {} });

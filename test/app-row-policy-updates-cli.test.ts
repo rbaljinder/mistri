@@ -13,7 +13,7 @@ const entry = join(root, 'packages/mistri/src/server/index.ts');
 const appId = 'scoped-update-cli';
 
 function fixture(t: TestContext, role: 'user' | 'inactive' = 'user') {
-  const { directory } = scratch(t, 'tablewalk-scoped-update-cli-');
+  const { directory } = scratch(t, 'mistri-scoped-update-cli-');
   const app = join(directory, 'app');
   mkdirSync(app);
   const config = join(directory, 'mistri.json');

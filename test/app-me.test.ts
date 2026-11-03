@@ -59,7 +59,7 @@ const DESK = {
 };
 
 test('a tab, a count and a view read as the signed-in person, and an action is theirs to take', { timeout: 20_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-me-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-me-'));
   const previous = process.env.XDG_CONFIG_HOME;
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
@@ -166,7 +166,7 @@ test('me is refused where it can mean nobody, and judged against the catalog whe
   );
   assert.doesNotThrow(without(DESK.views));
 
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-me-catalog-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-me-catalog-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'desk.db'));
   db.exec(`CREATE TABLE employee (id INTEGER PRIMARY KEY, email TEXT NOT NULL);

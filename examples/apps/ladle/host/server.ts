@@ -1,7 +1,7 @@
 /**
  * The cooking school's own server: one Node `http` server, one port, three owners of its addresses.
  *
- *   /api/tw/…        the Ladle App (createHandler from @mistriwork/mistri/handler): its API, sign-in and files
+ *   /api/mistri/…        the Ladle App (createHandler from @mistriwork/mistri/handler): its API, sign-in and files
  *   /schedule.json   the host's own JSON (schedule.ts), code of the school's and no part of mistri
  *   everything else  the school's React site (index.html, main.tsx), which shows the App for staff under /staff
  *
@@ -21,7 +21,7 @@ import { scheduleRoute } from './schedule.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** Where the handler is mounted: under the host's API, never one of mistri's own paths (`/api` alone). */
-export const MOUNT = '/api/tw';
+export const MOUNT = '/api/mistri';
 
 export interface HostOptions {
   /** The mistri config file: the `ladle` connection, as the seed writes it. */
@@ -45,7 +45,7 @@ function databaseOf(config: string): string {
 
 export async function startHost(options: HostOptions): Promise<{ server: Server; origin: string; close(): Promise<void> }> {
   const origin = options.publicOrigin ?? `http://127.0.0.1:${options.port}`;
-  const tw = createHandler({ config: options.config, basePath: MOUNT, publicOrigin: origin, app: resolve(HERE, '..') });
+  const mistri = createHandler({ config: options.config, basePath: MOUNT, publicOrigin: origin, app: resolve(HERE, '..') });
   const schedule = scheduleRoute(databaseOf(options.config));
   const vite = await createVite({
     configFile: false,
@@ -61,7 +61,7 @@ export async function startHost(options: HostOptions): Promise<{ server: Server;
 
   const server = createServer((req, res) => {
     const url = req.url ?? '/';
-    if (ours(url)) return void tw.node(req, res);
+    if (ours(url)) return void mistri.node(req, res);
     if (url === '/schedule.json' || url.startsWith('/schedule.json?')) return schedule(req, res);
     vite.middlewares(req, res, async () => {
       /* Not a module Vite serves: an address of the site, which is its one page. */
@@ -71,7 +71,7 @@ export async function startHost(options: HostOptions): Promise<{ server: Server;
     });
   });
 
-  await tw.ready;
+  await mistri.ready;
   await new Promise<void>((done) => server.listen(options.port, '127.0.0.1', done));
   return {
     server,
@@ -80,7 +80,7 @@ export async function startHost(options: HostOptions): Promise<{ server: Server;
       const closed = new Promise<void>((done) => server.close(() => done()));
       server.closeAllConnections();
       await closed;
-      await Promise.all([tw.close(), vite.close()]);
+      await Promise.all([mistri.close(), vite.close()]);
     },
   };
 }

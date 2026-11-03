@@ -125,7 +125,7 @@ test('provider restart can replace its watcher and renderer without escaping fin
 });
 
 test("a start sweeps optimizer directories whose process is gone, and keeps a live one's", async () => {
-  const root = mkdtempSync(join(tmpdir(), 'tablewalk-vite-sweep-'));
+  const root = mkdtempSync(join(tmpdir(), 'mistri-vite-sweep-'));
   try {
     const gone = spawnSync(process.execPath, ['-e', '0']).pid!;
     const unnamedOld = join(root, 'client-Ab12Cd');

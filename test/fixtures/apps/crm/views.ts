@@ -32,6 +32,18 @@ export const views = {
       { label: 'All', sort: 'close_date desc' },
     ],
   }),
+  // The same deals as a ledger by stage: each stage's deals under a head with how many there are and what they are
+  // worth, a stage folded away from its head. The heads count every deal the tab matches, not the page.
+  'deals-by-stage': listView('Deals by stage', 'opportunity', {
+    icon: 'handshake',
+    show: ['name', 'account_id.name', 'amount', 'weighted', 'close_date', 'owner_id.name'],
+    totals: ['amount', 'weighted'],
+    group: 'stage',
+    tabs: [
+      { segment: 'open_pipeline', sort: 'close_date' },
+      { label: 'All', sort: 'close_date' },
+    ],
+  }),
   // The open deals as lanes of the stage machine: a card is dragged, or moved from its ⋯ menu or with Alt+←/→,
   // into a stage its verbs lead to — a lane it cannot enter dims while it is dragged — and the verb is the write.
   pipeline: listView('Pipeline', 'opportunity', {

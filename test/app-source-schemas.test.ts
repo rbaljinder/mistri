@@ -120,7 +120,7 @@ async function serveSqlite(
   rest: Record<string, unknown>,
   run: (base: string, dbs: Record<'ops' | 'stock', DatabaseSync>, registry: Registry) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-source-names-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-source-names-'));
   const dbs = { ops: new DatabaseSync(join(directory, 'ops.db')), stock: new DatabaseSync(join(directory, 'stock.db')) };
   const registry = new Registry();
   let server: Server | undefined;
@@ -517,7 +517,7 @@ describe('a source per PostgreSQL schema', { skip: liveSkip('postgres', LIVE_PG)
     '--scaffold-app over one database with several schemas drafts a source per schema on that one connection',
     { timeout: 120_000 },
     async () => {
-      const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scaffold-schemas-'));
+      const directory = mkdtempSync(join(tmpdir(), 'mistri-scaffold-schemas-'));
       try {
         const config = join(directory, 'mistri.json');
         writeFileSync(config, JSON.stringify({ connections: [{ name: 'main', url }] }));

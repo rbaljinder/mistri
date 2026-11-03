@@ -24,7 +24,7 @@ function safe(error: unknown): boolean {
   return true;
 }
 function fixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-bootstrap-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-bootstrap-'));
   const path = join(dir, 'business.db'),
     db = new DatabaseSync(path);
   const sources: TenantReadSource[] = [];

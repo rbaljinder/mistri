@@ -15,7 +15,7 @@ import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
 
 test('the words a label gave are served with the rule and written in a CSV, and JSON keeps the stored value', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-value-label-served-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-value-label-served-'));
   mkdirSync(join(directory, 'node_modules'));
   mkdirSync(join(directory, 'node_modules', '@mistriwork'), { recursive: true });
   symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(directory, 'node_modules', '@mistriwork', 'mistri'), 'dir');

@@ -40,7 +40,7 @@ const BIN = {
 
 /** Every module under a package's src/ a start of `bin` loads, as paths relative to that src/. */
 function startup(args: string[], input = '', cwd = ROOT, bin: keyof typeof BIN = 'mistri') {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-startup-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-startup-'));
   const list = join(directory, 'modules.txt');
   /* A synchronous load hook in the process itself: it sees every module,
      whichever loader (tsx here, Node's own for the build) resolved it. */
@@ -85,7 +85,7 @@ test('help lists flags and experiment provisioning', () => {
 });
 
 test('experiments help is lazy and invalid operations never become database filenames', (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-experiments-cli-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-experiments-cli-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   writeFileSync(join(directory, 'tablewalk.json'), 'invalid config must not be read');
   for (const args of [[], ['--help'], ['-h'], ['invalid']]) {
@@ -189,5 +189,5 @@ test('a startup warning is said once per process, whatever reaches it again', ()
   for (let i = 0; i < 3; i++) warnOnce('test-once', SHARED_RATE_LIMIT_WARNING, (line) => lines.push(line));
   assert.deepEqual(lines, [`mistri: warning: ${SHARED_RATE_LIMIT_WARNING}`]);
   assert.match(SHARED_RATE_LIMIT_WARNING, /every visitor shares one sign-in rate limit/);
-  assert.match(SHARED_RATE_LIMIT_WARNING, /tw\.fetch\(request, \{ clientAddress \}\)/);
+  assert.match(SHARED_RATE_LIMIT_WARNING, /mistri\.fetch\(request, \{ clientAddress \}\)/);
 });

@@ -73,7 +73,7 @@ function publicOutputProblem(id: string, command: AnyBusinessCommand, role: 'sub
  * A public form's reference input is a picker a visitor reads its choices
  * through: the same signed-out read a public page makes, so its rows are only
  * those `auth.public` opens (a row policy's public rows, where there is one)
- * and the picker asks its key and its label, nothing else. It is refused,
+ * and the picker asks its key and its label (and a tree's parent column), nothing else. It is refused,
  * by name, where that read could not answer: a resource `auth.public` does not
  * open, or a key or label column its `fields` leave out. Its `query` is read
  * the same way, so a column the visitor cannot read refuses the choices there.
@@ -102,10 +102,12 @@ function publicPickerProblem(
     const table = findTable(schema, resource);
     const keys = table ? primaryKey(table) : [];
     const ceilings = [opened.fields?.[resource]?.read, app.resources?.[resource]?.fields?.read].filter((read) => read !== undefined);
-    for (const column of new Set([field.by, field.labelColumn])) {
+    /* A tree picker reads each row's parent too, to draw the hierarchy and say a choice's path. */
+    const tree = declared.type === 'reference' && declared.tree ? [declared.tree] : [];
+    for (const column of new Set([field.by, field.labelColumn, ...tree])) {
       if (keys.includes(column)) continue;
       if (ceilings.some((read) => !read.includes(column)))
-        return `${at}, and a visitor may not read its column "${column}". Name it in "auth.public.fields.${resource}", or pick by and label columns the public reads.`;
+        return `${at}, and a visitor may not read its column "${column}". Name it in "auth.public.fields.${resource}", or pick by, label and tree columns the public reads.`;
     }
   }
   return undefined;

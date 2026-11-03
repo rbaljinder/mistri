@@ -30,7 +30,7 @@ async function serve(
     seen: { handler: unknown[]; initial: unknown[]; availability: unknown[] },
   ) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-and-edit-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-and-edit-'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE lead (id INTEGER PRIMARY KEY, name TEXT NOT NULL, phone TEXT, ssn TEXT,

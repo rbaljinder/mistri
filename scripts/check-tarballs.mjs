@@ -74,7 +74,7 @@ for (const [name, files] of Object.entries(packs)) {
     console.error(`::error::${name} tarball is missing:`, missing.join(', '));
     failed = true;
   }
-  const leak = files.filter((p) => /(^|\/)(\.env|credentials\.json|tablewalk\.json)$|(^|\/)\.demo\//.test(p));
+  const leak = files.filter((p) => /(^|\/)(\.env|credentials\.json|mistri\.json|tablewalk\.json)$|(^|\/)\.demo\//.test(p));
   if (leak.length) {
     console.error(`::error::${name} tarball would ship something private:`, leak.join(', '));
     failed = true;

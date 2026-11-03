@@ -27,7 +27,7 @@ import { bool } from '../packages/mistri/src/server/commands/commandShapes.js';
 const me = { auto: 'me' } as const;
 
 test("a keyless command's form prepares over no record, and a granted one no form runs is served by name", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-keyless-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-keyless-'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE change_request (id INTEGER PRIMARY KEY, title TEXT NOT NULL, risk TEXT NOT NULL, window TEXT, raised_by TEXT);

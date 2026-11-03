@@ -125,7 +125,7 @@ async function proves(adapter: Adapter, schema: DatabaseSchema, table: string): 
 }
 
 test('weeks on SQLite: Monday weeks by default, Sunday ones when asked, timestamps and dates alike', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-week-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-week-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'visit.db'));
   db.exec(`CREATE TABLE visit (id INTEGER PRIMARY KEY, at TIMESTAMP NOT NULL, on_day DATE NOT NULL); ${SEED('visit')};`);

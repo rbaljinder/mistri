@@ -54,7 +54,7 @@ function safe(outcome: 'not_applied' | 'unknown') {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-write-runtime-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-write-runtime-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   const runtimes: Runtime[] = [];

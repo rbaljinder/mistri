@@ -21,7 +21,7 @@ import { withCondition } from '../packages/kit/src/client/filterbar.js';
 import { moreTail, numberRangeTail, rangeTail, valuesTail } from '../packages/kit/src/client/components/filterRailModel.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
-const DIR = mkdtempSync(join(tmpdir(), 'tablewalk-colmenu-'));
+const DIR = mkdtempSync(join(tmpdir(), 'mistri-colmenu-'));
 const FILE = join(DIR, 'tasks.db');
 let adapter: SqliteAdapter;
 let schema: DatabaseSchema;

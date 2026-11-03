@@ -281,7 +281,7 @@ describe('a load names every refusal in one run', () => {
 });
 
 /* The command line, outside the checkout, as a project that ran npm install would be. */
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-loop-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-loop-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 function run(args: string[], cwd = ROOT): Promise<{ code: number; out: string; err: string }> {
   return new Promise((done, reject) => {

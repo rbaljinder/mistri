@@ -38,7 +38,7 @@ export async function scratch(engine: Engine, label: string): Promise<Scratch> {
     const database = await uuidPostgresDatabase(label.replaceAll('-', '_').slice(0, 20));
     return { url: database.url, drop: database.drop };
   }
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-layout-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-layout-'));
   const path = join(directory, 'store.db');
   new DatabaseSync(path).close();
   return {
@@ -214,6 +214,14 @@ export const PROVISION: Readonly<Record<string, Provisioners>> = {
     },
   },
   'command-sequences': {
+    sqlite: async (path) => {
+      (await import('../../packages/mistri/src/adapters/commands/commandJournal.js')).migrateSqliteCommandJournal(path);
+    },
+    postgres: async (url) => {
+      await (await import('../../packages/mistri/src/adapters/commands/postgresCommandJournal.js')).migratePostgresCommandJournal(url);
+    },
+  },
+  'command-staging': {
     sqlite: async (path) => {
       (await import('../../packages/mistri/src/adapters/commands/commandJournal.js')).migrateSqliteCommandJournal(path);
     },
@@ -552,13 +560,16 @@ export async function applyFixture(engine: Engine, url: string, text: string): P
 
 /** The stores a fixture holds only because its store stands on them, and which of their objects. The store beneath is
  * held by its own fixtures and version, so a comparison with this store's fixture leaves its objects out of both sides. */
-const BENEATH: Readonly<Record<string, { readonly store: string; readonly only?: RegExp }>> = {
-  'api-tokens': { store: 'auth' },
-  // Provisioning a journal also leaves its sequences, which have a version of their own; the fixture of the journal's
-  // store does not change when the sequences' do.
-  'command-journal': { store: 'command-sequences', only: /^(\w+\.)?(__mistri_)?sequence_/ },
-  'command-events': { store: 'command-sequences', only: /^(\w+\.)?(__mistri_)?sequence_/ },
-  'event-delivery': { store: 'command-sequences', only: /^(\w+\.)?(__mistri_)?sequence_/ },
+const SEQUENCES = { store: 'command-sequences', only: /^(\w+\.)?(__mistri_)?sequence_/ } as const;
+const STAGING = { store: 'command-staging', only: /^(\w+\.)?(__mistri_)?staged_/ } as const;
+const BENEATH: Readonly<Record<string, readonly { readonly store: string; readonly only?: RegExp }[]>> = {
+  'api-tokens': [{ store: 'auth' }],
+  // Provisioning a journal also leaves its sequences and its held files, which have versions of their own; the
+  // fixture of the journal's store does not change when theirs do, nor the sequences' when the held files' do.
+  'command-journal': [SEQUENCES, STAGING],
+  'command-events': [SEQUENCES, STAGING],
+  'event-delivery': [SEQUENCES, STAGING],
+  'command-sequences': [STAGING],
 };
 
 /** The tables a fixture creates, as the lines of `describeLayout` name them: bare on SQLite, schema-qualified on PostgreSQL. */
@@ -570,11 +581,14 @@ const tablesOf = (text: string, engine: Engine): string[] =>
 
 /** `lines` of a layout without the objects `store` only stands on. */
 export function withoutBeneath(store: string, engine: Engine, lines: readonly string[]): string[] {
-  const beneath = BENEATH[store];
-  const current = beneath && currentOf(beneath.store, engine);
-  const file = current === undefined ? undefined : fixtureFiles(beneath!.store, engine).find((each) => each.version === current);
-  if (!beneath || !file) return [...lines];
-  const tables = new Set(tablesOf(readFileSync(file.path, 'utf8'), engine).filter((name) => !beneath.only || beneath.only.test(name)));
+  const tables = new Set<string>();
+  for (const beneath of BENEATH[store] ?? []) {
+    const current = currentOf(beneath.store, engine);
+    const file = current === undefined ? undefined : fixtureFiles(beneath.store, engine).find((each) => each.version === current);
+    if (!file) continue;
+    for (const name of tablesOf(readFileSync(file.path, 'utf8'), engine)) if (!beneath.only || beneath.only.test(name)) tables.add(name);
+  }
+  if (!tables.size) return [...lines];
   const kept: string[] = [];
   let dropping = false;
   for (const [index, line] of lines.entries()) {

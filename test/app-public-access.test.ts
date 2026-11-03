@@ -58,7 +58,7 @@ test('a public grant names every resource it opens, within the ceiling, and writ
 });
 
 test("a signed-out visitor's access is the public grant: its reads, its columns, no writes", async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-public-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-public-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'lot.db'));
   db.exec(SQL);
@@ -105,7 +105,7 @@ async function serve(
   run: (call: (path: string, body?: object) => Promise<{ status: number; body: any }>) => Promise<void>,
   sql = SQL,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-public-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-public-http-'));
   const file = join(directory, 'lot.db');
   const db = new DatabaseSync(file);
   db.exec(sql);

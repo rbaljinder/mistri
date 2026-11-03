@@ -32,7 +32,7 @@ const REFUSED = 'ScopeRefusal: This operation is not available in the current ro
 const plain = (rows: readonly object[]) => rows.map((row) => ({ ...row }));
 
 async function fixture(t: TestContext, sql: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scoped-references-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-scoped-references-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(sql);

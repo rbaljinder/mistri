@@ -31,7 +31,7 @@ async function absent(evidence) {
 }
 
 test('failed owned CLI startup still permits exact captured PG database cleanup', { skip: !enabled, timeout: 60000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-pg-load-failed-start-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-pg-load-failed-start-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const fixture = await seedPostgresFixture(directory, 100);
   try {
@@ -55,7 +55,7 @@ test(
   { skip: !enabled, timeout: 60000 },
   async (t) => {
     // The run's artifacts and its browser's profile, in a TMPDIR of the test's own (lifecycle.test.mjs says why).
-    const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-pg-load-sigint-'));
+    const scratch = mkdtempSync(join(tmpdir(), 'mistri-pg-load-sigint-'));
     t.after(() => rmSync(scratch, { recursive: true, force: true }));
     const entry = pathToFileURL(join(ROOT, 'test/load/run.mjs')).href;
     const source = `import { main } from ${JSON.stringify(entry)}; process.exitCode = await main(['--production','--smoke','--arrival-rps','10','--users','2'], {postgres:true});`;

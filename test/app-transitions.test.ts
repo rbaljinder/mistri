@@ -37,7 +37,7 @@ const APP = parseAppConfig(
 );
 
 async function fixture(t: import('node:test').TestContext, app: AppDef = APP) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-transitions-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-transitions-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'transitions.db');
   const db = new DatabaseSync(file);
@@ -124,7 +124,7 @@ test("a new record starts in the machine's first state", async (t) => {
 });
 
 test('a machine the server could not enforce fails to compile, never becomes an unchecked write', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-transitions-schema-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-transitions-schema-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'schema.db');
   const db = new DatabaseSync(file);
@@ -195,7 +195,7 @@ test("a machine's clocks are its own: no write sets its since or a state's stamp
     },
     'clocks',
   );
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-clocks-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-clocks-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'clocks.db');
   const db = new DatabaseSync(file);

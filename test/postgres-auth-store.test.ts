@@ -162,7 +162,7 @@ describe('the authentication store on PostgreSQL', { skip: liveSkip('postgres', 
     await createDatabase(ELSEWHERE);
     LIVE = otherDatabase(SERVER!, DATABASE);
     control = await client(LIVE);
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-pg-auth-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-pg-auth-'));
     business = join(tmp, 'app.db');
     makeDemoDatabase(business);
     seedDemoDatabase(business, { scale: 3 });

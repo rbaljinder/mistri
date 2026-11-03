@@ -103,7 +103,7 @@ async function database(directory: string) {
 }
 
 test('the binding refuses a when over a rollup it cannot judge in a transaction, naming why', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-when-rollup-bind-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-when-rollup-bind-'));
   const { db, registry: connections } = await database(directory);
   try {
     const manifest = parseAppConfig(app(), 'when', {
@@ -130,7 +130,7 @@ test('the binding refuses a when over a rollup it cannot judge in a transaction,
 });
 
 test('availability, prepare and the run judge a rollup or a computed column in the when as the rows stand', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-when-rollup-run-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-when-rollup-run-'));
   const { db, registry: connections } = await database(directory);
   const manifest = parseAppConfig(app(), 'when', {
     commands: catalogOf(Object.fromEntries(COMMANDS.map((id) => [id, { target: 'job' }]))),

@@ -157,7 +157,7 @@ async function wordsApp(directory: string) {
 }
 
 async function fixture(t: TestContext, options: FixtureOptions = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-public-reads-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-public-reads-'));
   const business = join(directory, 'business.db');
   const db = new DatabaseSync(business);
   try {
@@ -619,7 +619,7 @@ test('on a mapped host the host places the visitor, and an address there is refu
 });
 
 test('startup refuses a platform-owned resource in auth.public, and public reads without their policy half', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-public-reads-startup-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-public-reads-startup-'));
   try {
     assert.throws(() => app(directory, { public: { read: ['listing', 'dealer'] } }), /"dealer", a platform-owned resource/);
     assert.throws(

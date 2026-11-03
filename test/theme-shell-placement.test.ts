@@ -86,7 +86,7 @@ test("the bench's frames stand the menu where the theme being written suggests, 
 });
 
 const ROOT = resolve('.');
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-shell-placement-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-shell-placement-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 
 test("check says in one line that the App's placement overrides the one its theme suggests", async () => {

@@ -2,7 +2,7 @@
 // oxlint-disable-next-line typescript/triple-slash-reference
 /// <reference path="./css.d.ts" />
 /**
- * `@mistriwork/mistri/ui`: what a custom component imports from tablewalk.
+ * `@mistriwork/mistri/ui`: what a custom component imports from mistri.
  *
  * The page's own React (re-exported, so a component takes its hooks from here
  * or from `react` and either way gets the one copy the page runs), the kit a

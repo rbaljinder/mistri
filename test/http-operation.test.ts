@@ -35,7 +35,7 @@ before(async () => {
     auth: { header: 'x-api-key', value: KEY },
     policy: { ...DEFAULT_POLICY, insecure: true },
   });
-  dir = mkdtempSync(join(tmpdir(), 'tablewalk-http-operation-'));
+  dir = mkdtempSync(join(tmpdir(), 'mistri-http-operation-'));
 });
 after(async () => {
   await api.close();

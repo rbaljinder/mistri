@@ -107,7 +107,7 @@ const sqlite: JobEngine = {
   name: 'sqlite',
   skip: false,
   async fixture(t, policy, provision = true) {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-job-store-')),
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-job-store-')),
       path = join(directory, 'app.db');
     const db = new DatabaseSync(path);
     for (const sql of BUSINESS) db.exec(sql);

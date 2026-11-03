@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/kit",
-  "version": "1.0.0-rc.14",
+  "version": "1.0.0-rc.15",
   "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -108,6 +108,10 @@
     "./client/components/FieldArranger.js": {
       "mistri-built": "./dist/client/components/FieldArranger.js",
       "default": "./src/client/components/FieldArranger.tsx"
+    },
+    "./client/components/FilePreview.js": {
+      "mistri-built": "./dist/client/components/FilePreview.js",
+      "default": "./src/client/components/FilePreview.tsx"
     },
     "./client/components/Grid.js": {
       "mistri-built": "./dist/client/components/Grid.js",
@@ -217,6 +221,10 @@
       "mistri-built": "./dist/client/components/TableView.js",
       "default": "./src/client/components/TableView.tsx"
     },
+    "./client/components/TreePicker.js": {
+      "mistri-built": "./dist/client/components/TreePicker.js",
+      "default": "./src/client/components/TreePicker.tsx"
+    },
     "./client/components/Value.js": {
       "mistri-built": "./dist/client/components/Value.js",
       "default": "./src/client/components/Value.tsx"
@@ -284,6 +292,10 @@
     "./client/components/favorites.js": {
       "mistri-built": "./dist/client/components/favorites.js",
       "default": "./src/client/components/favorites.ts"
+    },
+    "./client/components/filePreviewModel.js": {
+      "mistri-built": "./dist/client/components/filePreviewModel.js",
+      "default": "./src/client/components/filePreviewModel.ts"
     },
     "./client/components/gridCellModel.js": {
       "mistri-built": "./dist/client/components/gridCellModel.js",
@@ -729,8 +741,8 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.14",
-    "@mistriwork/ui": "1.0.0-rc.14",
+    "@mistriwork/engine": "1.0.0-rc.15",
+    "@mistriwork/ui": "1.0.0-rc.15",
     "intl-messageformat": "12.1.2",
     "qrcode-generator": "^2.0.4"
   },

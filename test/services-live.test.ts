@@ -31,19 +31,19 @@ const valkey = () => {
 test('valkey: values with a time to live, and windows that expire on their own', { skip: liveSkip('valkey', valkeyUrl) }, async () => {
   const store = valkey();
   try {
-    await store.set(`tw:test:${run}:k`, 'v', 60_000);
-    assert.equal(await store.get(`tw:test:${run}:k`), 'v');
-    await store.delete(`tw:test:${run}:k`);
-    assert.equal(await store.get(`tw:test:${run}:k`), undefined);
-    await store.set(`tw:test:${run}:short`, 'v', 50);
+    await store.set(`mistri:test:${run}:k`, 'v', 60_000);
+    assert.equal(await store.get(`mistri:test:${run}:k`), 'v');
+    await store.delete(`mistri:test:${run}:k`);
+    assert.equal(await store.get(`mistri:test:${run}:k`), undefined);
+    await store.set(`mistri:test:${run}:short`, 'v', 50);
     await new Promise((resolve) => setTimeout(resolve, 120));
-    assert.equal(await store.get(`tw:test:${run}:short`), undefined);
-    assert.equal((await store.incr(`tw:test:${run}:w`, 200)).count, 1);
-    const second = await store.incr(`tw:test:${run}:w`, 200);
+    assert.equal(await store.get(`mistri:test:${run}:short`), undefined);
+    assert.equal((await store.incr(`mistri:test:${run}:w`, 200)).count, 1);
+    const second = await store.incr(`mistri:test:${run}:w`, 200);
     assert.equal(second.count, 2);
     assert.ok(second.ttlMs > 0 && second.ttlMs <= 200);
     await new Promise((resolve) => setTimeout(resolve, 260));
-    assert.equal((await store.incr(`tw:test:${run}:w`, 200)).count, 1);
+    assert.equal((await store.incr(`mistri:test:${run}:w`, 200)).count, 1);
   } finally {
     await store.close();
   }

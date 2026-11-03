@@ -34,9 +34,10 @@ import { defaultCurrency, formatLocale, formatTimezone } from '@mistriwork/kit/c
 import { onDemand, useArrived } from '@mistriwork/kit/client/components/onDemand.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
-import { InputSlot } from '@mistriwork/kit/client/components/inputRenderers.js';
+import { InputSlot, builtInInputId } from '@mistriwork/kit/client/components/inputRenderers.js';
 import { say } from '../copy/forms/components/CommandFields.js';
 import type { DefinedField } from '@mistriwork/engine/shared/definedFields.js';
+import type { HeldTarget } from './HeldFiles.js';
 
 /** A form's values while it is filled in: one per field, an object per group, rows per repeating group, a grid's lines. */
 export type CommandValues = { [name: string]: CommandValue | CommandValues | CommandValues[] | LineDraft[] | undefined };
@@ -125,6 +126,10 @@ const isLines = (value: unknown): value is LineDraft[] =>
    neither it nor the combobox. */
 const CommandReferenceField = onDemand(() => import('./CommandReference.js'), 'CommandReferenceField', { quiet: true });
 
+/* Files and a signature, each held for the command as it is sent (HeldFiles.tsx): the drop area and the pad are
+   fetched the first time a form asks one, so no first page carries either. */
+const HeldInput = onDemand(() => import('./HeldFiles.js'), 'HeldInput', { quiet: true });
+
 /* Questions defined in rows, drawn and judged (CommandAnswers.tsx): only a signed-in record's command asks them, so a
    first page carries none of it. The answers are judged here once it has arrived, which it has by the time they are
    drawn; the server judges them again in any case. */
@@ -207,6 +212,8 @@ export function prefilledCommandValues(fields: readonly AppCommandField[], initi
   for (const field of fields) {
     if (!Object.hasOwn(initial, field.name)) continue;
     const value = initial[field.name];
+    // A held file is sent from this page, never named by an address or a prepare: its id is its sender's alone.
+    if (field.type === 'files' || field.type === 'signature') continue;
     if (field.type === 'defined') {
       if (isValues(value)) values[field.name] = { ...value };
     } else if (field.type === 'lines') {
@@ -290,6 +297,8 @@ function submitted(fields: readonly AppCommandField[], values: CommandValues, wh
 }
 
 const FORMAT_SENTENCES = { email: say('anEmailAddress'), url: say('aWebAddressStarting'), phone: say('aPhoneNumber') } as const;
+/** A time's bound and a sibling time are said as a date's are: before, after, on or after. */
+const dated = (type: string) => type === 'date' || type === 'datetime' || type === 'time';
 
 /** A field's sentence for what is wrong with it: its own label, and the rule it did not meet; a sibling rule names the sibling. */
 function sentence(fields: readonly AppCommandField[], path: string, reason: CommandInputReason): string {
@@ -307,7 +316,7 @@ function sentence(fields: readonly AppCommandField[], path: string, reason: Comm
   const field = commandFieldAt(fields, path);
   if (!field) return say('theFormHasAnInput');
   const label = field.label;
-  const date = field.type === 'date' || field.type === 'datetime';
+  const date = dated(field.type);
   // A moment's bound is said in the App's time zone, as the field asks for it.
   const bound = (at: string | undefined) =>
     at && field.type === 'datetime'
@@ -328,7 +337,13 @@ function sentence(fields: readonly AppCommandField[], path: string, reason: Comm
     case 'too_long':
       return say('mustBeCharactersOrFewer', { label, maxLength: most ?? '' });
     case 'format':
-      return text?.message ?? say('must', { label, value: text?.format ? FORMAT_SENTENCES[text.format] : say('inTheFormItTakes') });
+      return (
+        text?.message ??
+        say('must', {
+          label,
+          value: text?.format ? FORMAT_SENTENCES[text.format] : text?.as === 'color' ? say('aColor') : say('inTheFormItTakes'),
+        })
+      );
     case 'pattern':
       return text?.message ?? say('isNotInTheForm', { label });
     case 'not_below': {
@@ -356,10 +371,12 @@ function sentence(fields: readonly AppCommandField[], path: string, reason: Comm
     case 'choice':
       return say('chooseLabel', { label });
     case 'too_few': {
+      if (field.type === 'files') return say('needsAtLeastFiles', { label, count: field.min ?? 1 });
       const min = field.type === 'group' ? (field.repeat?.min ?? 0) : field.type === 'lines' ? (field.min ?? 0) : 0;
       return say('needsAtLeastRows', { label, count: min });
     }
     case 'too_many':
+      if (field.type === 'files') return say('takesAtMostFiles', { label, count: field.max });
       return say('takesAtMostRows', {
         label,
         max: (field.type === 'group' ? field.repeat?.max : field.type === 'lines' ? field.max : 0) ?? '',
@@ -370,7 +387,7 @@ function sentence(fields: readonly AppCommandField[], path: string, reason: Comm
         : field.type === 'boolean'
           ? say('mustBeYes', { label })
           : date
-            ? say(field.type === 'datetime' ? 'mustBeADateAndTime' : 'mustBeADate', { label })
+            ? say(field.type === 'datetime' ? 'mustBeADateAndTime' : field.type === 'time' ? 'mustBeATime' : 'mustBeADate', { label })
             : field.type === 'reference'
               ? say('chooseLabel', { label })
               : say('isNotInAForm', { label });
@@ -673,6 +690,20 @@ export function CommandFieldControl({
       />
     );
   }
+  /* A time of day in the browser's own picker, as a column's time format is edited: the value is what it writes, HH:MM. */
+  if (field.type === 'time') {
+    return (
+      <input
+        {...common}
+        className="field-control time-input"
+        type="time"
+        min={field.min}
+        max={field.max}
+        value={typeof value === 'string' ? value : ''}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  }
   if (field.type === 'number') {
     const whole = field.integer || (field.step !== undefined && Number.isInteger(field.step));
     return marked(
@@ -707,8 +738,19 @@ export function CommandFieldControl({
 /* A box the valid check stands in: a text or number box, an amount, a text typed through its mask. A sensitive value
    keeps its show button there, and a slider and every chooser say their state their own way. */
 const markable = (field: AppCommandField): boolean =>
-  ((field.type === 'money' || field.type === 'number') && field.as !== 'slider') ||
-  (field.type === 'text' && field.sensitive === undefined);
+  ((field.type === 'money' || field.type === 'number') && field.as !== 'slider' && field.as !== 'rating') ||
+  (field.type === 'text' && field.sensitive === undefined && field.as !== 'color' && field.as !== 'scan');
+
+/**
+ * The platform's own input a field is asked with where its kind is drawn as a column's format is — stars, a code
+ * the camera reads, a color — the same component a record's form draws (builtInInputs.tsx), fetched the first time
+ * one is drawn; the plain box stands in until it is here, and the shared reader judges what either sends.
+ */
+export function builtInInputName(field: AppCommandField): 'rating' | 'scan' | 'color' | undefined {
+  if (field.type === 'number' && field.as === 'rating') return 'rating';
+  if (field.type === 'text' && (field.as === 'scan' || field.as === 'color')) return field.as;
+  return undefined;
+}
 
 /* Whether an answer given is one its field's own rules take: its kind, its pattern, its bounds — judged alone, so a
    condition on another answer (`when`) does not hide it from the judging. */
@@ -743,6 +785,8 @@ export interface CommandFieldsShared {
   questions?: CommandQuestions;
   /** How the form around the fields is drawn: the intake style turns the valid check on, the stepper leaves it off. */
   presentation?: 'stepper' | 'intake';
+  /** Where a files or signature input's files are held: the command's, or a public form's. Absent, none can be sent. */
+  held?: HeldTarget;
 }
 
 type Entry = CommandValues[string];
@@ -898,6 +942,7 @@ function FieldEntry({
   );
   const radios = field.type === 'choice' && asRadios(field);
   const listbox = field.type === 'choice' && !radios;
+  const held = field.type === 'files' || field.type === 'signature';
   /* One Field: the label over the control, the help and then the problem
      under it, wired into the control's description. Radios and a listbox's
      button are named by the caption rather than a <label>. */
@@ -907,12 +952,15 @@ function FieldEntry({
   const declared = path.replace(/\[\d+\]/g, '');
   /* The form's own choice of component for this input first, then the field's (`input`, every form that asks it, a
      public one's too: its page loads the ones its payload says are served, sdk/publicInputs.ts). */
+  const builtIn = builtInInputName(field);
   const custom =
     shared.inputs && Object.hasOwn(shared.inputs, declared)
       ? shared.inputs[declared]
       : 'input' in field && typeof field.input === 'string'
         ? { id: field.input }
-        : undefined;
+        : builtIn
+          ? { id: builtInInputId(builtIn) }
+          : undefined;
   /* A consent beside its statement is drawn whole by its control, the box and the paragraph (IntakeControls): the label
      stays the box's name and the review's, read but not drawn, so it never stands as a narrow column beside them. */
   const stated = field.type === 'boolean' && field.statement !== undefined && !custom;
@@ -929,66 +977,81 @@ function FieldEntry({
       id={id}
       hint={field.help}
       problem={problem}
-      group={radios || listbox || pair}
+      group={radios || listbox || pair || held}
       check={check}
       labelHidden={stated}
       className="command-field"
     >
       {(control) =>
-        field.type === 'reference'
-          ? (shared.connection !== undefined || shared.visitor) && (
-              <CommandReferenceField
-                field={bound === undefined ? field : { ...field, query: bound ?? '' }}
+        held ? (
+          <HeldInput
+            field={field}
+            id={id}
+            describedBy={control['aria-describedby']}
+            labelledBy={control['aria-labelledby']}
+            invalid={Boolean(problem)}
+            disabled={shared.disabled === true}
+            target={shared.held}
+            value={value}
+            onChange={(next: CommandValue | undefined) => onChange(next, path)}
+          />
+        ) : field.type === 'reference' ? (
+          (shared.connection !== undefined || shared.visitor) && (
+            <CommandReferenceField
+              field={bound === undefined ? field : { ...field, query: bound ?? '' }}
+              id={id}
+              describedBy={control['aria-describedby']}
+              invalid={Boolean(problem)}
+              connection={shared.connection ?? { visitor: shared.visitor! }}
+              identityEpoch={shared.identityEpoch}
+              disabled={shared.disabled === true || bound === null}
+              value={scalar}
+              isCurrent={shared.isCurrent}
+              onChange={(next) => onChange(next, path)}
+            />
+          )
+        ) : (
+          (() => {
+            const marks = shared.presentation === 'intake' && markable(field);
+            const platform = (
+              <CommandFieldControl
+                field={field}
                 id={id}
                 describedBy={control['aria-describedby']}
                 invalid={Boolean(problem)}
-                connection={shared.connection ?? { visitor: shared.visitor! }}
-                identityEpoch={shared.identityEpoch}
-                disabled={shared.disabled === true || bound === null}
+                {...(marks
+                  ? { valid: left && !problem && ownRulesTake(field, scalar as CommandValue | undefined), onLeave: () => setLeft(true) }
+                  : {})}
                 value={scalar}
-                isCurrent={shared.isCurrent}
+                disabled={shared.disabled}
                 onChange={(next) => onChange(next, path)}
+                {...(shared.connection === undefined ? {} : { connection: shared.connection })}
+                {...(shared.visitor ? { visitor: shared.visitor } : {})}
+                {...(shared.record ? { record: shared.record } : {})}
               />
-            )
-          : (() => {
-              const marks = shared.presentation === 'intake' && markable(field);
-              const platform = (
-                <CommandFieldControl
-                  field={field}
-                  id={id}
-                  describedBy={control['aria-describedby']}
-                  invalid={Boolean(problem)}
-                  {...(marks
-                    ? { valid: left && !problem && ownRulesTake(field, scalar as CommandValue | undefined), onLeave: () => setLeft(true) }
-                    : {})}
-                  value={scalar}
-                  disabled={shared.disabled}
-                  onChange={(next) => onChange(next, path)}
-                  {...(shared.connection === undefined ? {} : { connection: shared.connection })}
-                  {...(shared.visitor ? { visitor: shared.visitor } : {})}
-                  {...(shared.record ? { record: shared.record } : {})}
-                />
-              );
-              /* The App's own input, where it names one for this input: the form still keeps, checks and sends the value. */
-              return custom ? (
-                <InputSlot
-                  component={custom.id}
-                  fallback={platform}
-                  value={Array.isArray(scalar) ? null : ((scalar as string | number | boolean | undefined) ?? null)}
-                  onChange={(next) => onChange(next as CommandValue, path)}
-                  id={id}
-                  describedBy={control['aria-describedby']}
-                  invalid={Boolean(problem)}
-                  disabled={shared.disabled === true}
-                  required={field.required === true}
-                  label={field.label}
-                  field={{ name: field.name }}
-                  context="command"
-                />
-              ) : (
-                platform
-              );
-            })()
+            );
+            /* The App's own input, where it names one for this input: the form still keeps, checks and sends the value. */
+            return custom ? (
+              <InputSlot
+                component={custom.id}
+                fallback={platform}
+                value={Array.isArray(scalar) ? null : ((scalar as string | number | boolean | undefined) ?? null)}
+                onChange={(next) => onChange(next as CommandValue, path)}
+                id={id}
+                describedBy={control['aria-describedby']}
+                invalid={Boolean(problem)}
+                disabled={shared.disabled === true}
+                required={field.required === true}
+                label={field.label}
+                /* A built-in input reads its rule from the column it stands for; a command's field carries its own. */
+                field={{ name: field.name, ...(field.type === 'number' && field.outOf ? { rule: { outOf: field.outOf } } : {}) }}
+                context="command"
+              />
+            ) : (
+              platform
+            );
+          })()
+        )
       }
     </Field>
   );

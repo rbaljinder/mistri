@@ -51,7 +51,7 @@ async function fixture(
   mutate?: (loaded: LoadedApp, opts: { baseURL: string; trustedOrigins: string[] }) => void,
   commands?: LoadedApp['commands'],
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-auth-binding-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-auth-binding-'));
   let runtime: AppAuthRuntime | undefined, binding: AppAuthRuntimeBinding | undefined;
   const server = createServer((req, res) => {
     if (!binding) {
@@ -486,7 +486,7 @@ test('capture refusal itself does not close caller-owned auth', async (t) => {
 });
 
 test('hostile config, options and paths refuse before import waits or file acquisition', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-auth-binding-input-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-auth-binding-input-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   let hooks = 0;
   const trap = () => {

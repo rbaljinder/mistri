@@ -595,7 +595,7 @@ export class Registry {
         const opened = await openHttp(entry.config.name, entry.config.url, entry.config.http, {
           secrets: !entry.untrustedUrl,
           environment: this.environment,
-          ...(entry.config.http.cache ? { cache: scopedCache(this.cache(), `tw:http:${entry.config.id}:`) } : {}),
+          ...(entry.config.http.cache ? { cache: scopedCache(this.cache(), `${product()}:http:${entry.config.id}:`) } : {}),
         });
         entry.secret = opened.secret;
         entry.warning = opened.warning;

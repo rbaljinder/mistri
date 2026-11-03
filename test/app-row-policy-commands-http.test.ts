@@ -45,7 +45,7 @@ const privateFree = (value: unknown) =>
   assert.doesNotMatch(JSON.stringify(value), /PRIVATE|HIDDEN|physical_|private-scoped-command|__mistri_command|"(?:sql|stack|cause|undo)"/);
 
 async function fixture(t: TestContext, options: { defer?: boolean; migrated?: boolean; writable?: boolean } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-command-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-command-http-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   const registry = new Registry();

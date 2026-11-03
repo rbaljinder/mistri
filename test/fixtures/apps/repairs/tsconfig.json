@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    /* commands.ts imports `@mistriwork/mistri/commands` the way a deployment writes it.
+       The package's exports map types that from dist/, which a fresh checkout
+       has not built; this mirrors the root tsconfig and reads the source. */
+    "paths": {
+      "@mistriwork/mistri/commands": ["../../../../packages/mistri/src/server/commands.ts"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

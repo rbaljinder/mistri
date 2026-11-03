@@ -70,7 +70,7 @@ async function fixture(
     apps?: AppHost[];
   } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-live-binding-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-live-binding-'));
   const files = {
     ops: join(directory, 'ops.db'),
     stock: join(directory, 'stock.db'),
@@ -173,7 +173,7 @@ const changeRows = (file: string) => {
 };
 
 test('marking an App opens, leases and asks nothing; the adapter is bound when something else dials it', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-live-mark-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-live-mark-'));
   const file = join(directory, 'ops.db');
   const db = new DatabaseSync(file);
   db.exec('CREATE TABLE incident (id INTEGER PRIMARY KEY, name TEXT NOT NULL)');

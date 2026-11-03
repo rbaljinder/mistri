@@ -205,7 +205,7 @@ function opened(): Promise<void> {
        user who made the folder first could plant a picture under a public photo's name. mkdtemp makes one that is
        ours alone (mode 0700), and it goes when the process does, as nothing in it outlives what it was made for. */
     if (current.dir === undefined) {
-      const made = await mkdtemp(join(tmpdir(), 'tablewalk-image-cache-'));
+      const made = await mkdtemp(join(tmpdir(), 'mistri-image-cache-'));
       current.dir = made;
       process.once('exit', () => rmSync(made, { recursive: true, force: true }));
     } else await mkdir(current.dir, { recursive: true });

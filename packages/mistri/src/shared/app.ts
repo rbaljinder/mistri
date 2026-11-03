@@ -125,6 +125,9 @@ export type { ServedFlowDiagram, ServedMachine, ServedResource } from '@mistriwo
 
 /** Addresses the server answers itself, before any App; `_mistri` and the rest of shared/mount.ts SERVER_SEGMENTS are refused as mounts there. */
 const RESERVED_IDS = new Set(['api', 'healthz', 'readyz']);
+/* A column that holds a moment, not only a day: Postgres's timestamp (with or without its zone), SQLite's declared
+   TIMESTAMP or DATETIME. */
+const TIMESTAMP_TYPE = /timestamp|datetime/i;
 import { keyHomesFor } from './appKeyHomes.js';
 import { apiCrossConnectionProblems, parseAppApi, type AppApiDef } from './appApi.js';
 import { parseAppAssistant } from './appAssistant.js';
@@ -1018,6 +1021,15 @@ export function listProblem(
       if (!/date|time/i.test(end.type ?? ''))
         return `Calendar end: "${list.end}" is ${end.type || 'untyped'}; a record's last day is a date column.`;
     }
+    /* A week or a day places a record by its hour, which a column holding only a day does not have: the grid would
+       stand every record at midnight. */
+    if (list.span) {
+      for (const [key, name] of [['date', list.date], ...(list.end === undefined ? [] : [['end', list.end]])] as const) {
+        const type = table.columns.find((column) => column.name === name)?.type ?? '';
+        if (!TIMESTAMP_TYPE.test(type))
+          return `Calendar ${key}: "${name}" is ${type || 'untyped'}; a ${list.span} places records by their time, so it needs a timestamp column.`;
+      }
+    }
     const named = [
       ['primary', list.primary],
       ...(list.badge === undefined ? [] : [['badge', list.badge]]),
@@ -1796,6 +1808,19 @@ function resolveListView(
       if (table.rollups && Object.hasOwn(table.rollups, name)) return columnKind(table.rollups[name].type) !== 'number';
       return !(table.computed && Object.hasOwn(table.computed, name) && table.computed[name].type === 'number');
     });
+    /* A group is one of the table's own values, as a board's lane is: the rows are read in its order and its heads
+       are a breakdown of it. The key names one row apiece, and a document or bytes have no value to stand under. */
+    const groupColumn = view.group === undefined ? undefined : table.columns.find((c) => c.name === view.group);
+    const groupError =
+      view.group === undefined
+        ? undefined
+        : !groupColumn
+          ? `This view's group: "${view.group}" must be a local column of "${table.name}"; its rows stand under its values.`
+          : groupColumn.primaryKey
+            ? `This view's group names "${view.group}", the primary key: every group would be one row. Group by a value rows share.`
+            : /json/i.test(groupColumn.type) || isBinaryType(groupColumn.type)
+              ? `This view's group names "${view.group}", a ${groupColumn.type} column, whose values rows do not stand under. Group by a column of words, numbers or dates.`
+              : undefined;
     const listError = view.presentation && listProblem(view.presentation, table, schema, files, icons);
     /* A hand order is kept in a number of the resource's own — never its key, which names the row while its place changes. */
     const orderColumn = view.order === undefined ? undefined : table.columns.find((c) => c.name === view.order);
@@ -1840,6 +1865,8 @@ function resolveListView(
       error = suggestError;
     } else if (listError) {
       error = listError;
+    } else if (groupError) {
+      error = groupError;
     } else if (orderError) {
       error = orderError;
     } else if (editableError) {

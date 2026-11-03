@@ -22,7 +22,7 @@ export const rel = (path) => relative(ROOT, path).split('\\').join('/');
 // import/export clause: default, namespace, or a brace list, with an optional leading default.
 const CLAUSE = String.raw`(?:\*(?:\s+as\s+[\w$]+)?|\{[^}]*\}|[\w$]+(?:\s*,\s*(?:\*\s+as\s+[\w$]+|\{[^}]*\}))?)`;
 /* A relative specifier, or a workspace package's name: what the graph follows. */
-const OURS = String.raw`(\.[^'"]+|(?:@mistriwork\/[\w-]+|tablewalk)(?:\/[^'"]*)?)`;
+const OURS = String.raw`(\.[^'"]+|@mistriwork\/[\w-]+(?:\/[^'"]*)?)`;
 const STATEMENT = new RegExp(String.raw`(?:^|[;{}\n])\s*(import|export)\s+(type\s+)?(${CLAUSE})\s*from\s*['"]${OURS}['"]`, 'g');
 const SIDE_EFFECT = new RegExp(String.raw`^\s*import\s+['"]${OURS}['"]`, 'gm');
 const DYNAMIC = new RegExp(String.raw`(typeof\s+)?import\(\s*['"]${OURS}['"]\s*\)(?:\s*\.\s*([\w$]+))?`, 'g');

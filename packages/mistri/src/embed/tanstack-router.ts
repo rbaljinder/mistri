@@ -6,7 +6,7 @@
  * the history's subscription.
  *
  *   const navigator = useTanStackNavigator();
- *   <Provider endpoint="/api/tw" navigator={navigator}>…
+ *   <Provider endpoint="/api/mistri" navigator={navigator}>…
  */
 import { useEffect, useMemo } from 'react';
 import { useRouter } from '@tanstack/react-router';

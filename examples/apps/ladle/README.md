@@ -30,11 +30,11 @@ code everywhere else. It shows the three seams in one small project:
 /                 the school's page, its schedule from /schedule.json   (host)
 /schedule.json    the school's JSON route                                (host)
 /staff/…          the Ladle App inside the school's header              (@mistriwork/mistri/react)
-/api/tw/…         the App's API, sign-in and files                       (@mistriwork/mistri/handler)
+/api/mistri/…         the App's API, sign-in and files                       (@mistriwork/mistri/handler)
 ```
 
 The App's id is `ladle` and its connection `ladle`. Staff sign in to the App
-itself, inside the site, with mistri's session cookie under `/api/tw`. A
+itself, inside the site, with mistri's session cookie under `/api/mistri`. A
 host that already knows who is at the desk signs them in with an
 [embed assertion](../../../site/src/content/docs/docs/embed-sign-in.md)
 instead.

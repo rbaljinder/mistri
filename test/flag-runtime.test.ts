@@ -43,7 +43,7 @@ function lifetime() {
   } satisfies FlagRequestLifetime & { retire(): void };
 }
 async function fixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-flag-runtime-')),
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-flag-runtime-')),
     secret = 'flag-runtime-test-secret-at-least-thirty-two-characters';
   const app = parseTestApp(
     {

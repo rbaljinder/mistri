@@ -54,7 +54,7 @@ export const CLAIM_GONE = 'There is no application waiting to be added here. It 
 export const ALREADY_LINKED = 'This application is already linked to an account.';
 
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
-const claimCookieName = (form: string) => `tw_claim_${form}`;
+const claimCookieName = (form: string) => `mistri_claim_${form}`;
 const hashOf = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
 
 /** A fresh claim: the browser's token, the root's hash, and when it stops counting. */

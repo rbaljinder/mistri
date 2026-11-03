@@ -119,7 +119,7 @@ export async function pendingCopy(
       how = 'the scratch database --pending-on names';
       drop = nothing;
     } else if (dialect === 'sqlite') {
-      const dir = mkdtempSync(join(tmpdir(), 'tablewalk-pending-'));
+      const dir = mkdtempSync(join(tmpdir(), 'mistri-pending-'));
       const copy = join(dir, basename(sqlitePath(target.url)));
       const source = new DatabaseSync(sqlitePath(target.url), { readOnly: true });
       try {

@@ -69,7 +69,7 @@ async function fixture(
     source: { id: 'business', connection: 'business-db' },
     storeId: settings.storeId ?? 'fixture-store',
   };
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-commands-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-commands-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path),
     services: Service[] = [],

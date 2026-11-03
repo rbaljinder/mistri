@@ -21,7 +21,7 @@ const appId = 'desks';
 const owner = 'desk-db';
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-import-policy-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-import-policy-'));
   const file = join(directory, 'desks.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE ticket(id INTEGER PRIMARY KEY, desk INTEGER NOT NULL DEFAULT 1, name TEXT NOT NULL UNIQUE, status TEXT DEFAULT 'open');

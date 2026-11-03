@@ -16,7 +16,7 @@ import { MIGRATE_APPS } from '../packages/mistri/src/server/cli/appTargets.js';
 import { buildApp } from '../packages/mistri/src/server/build/build.js';
 
 test('migrate stores up --app <build> provisions every store the built App uses, from its own entries', { timeout: 180_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-built-app-stores-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-built-app-stores-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);

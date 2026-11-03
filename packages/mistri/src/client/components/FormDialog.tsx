@@ -77,6 +77,7 @@ export function FormDialog({
             inDialog
             // A reference input's choices: what the App opens to a signed-out visitor, read as one (publicForm.js).
             visitor={{ app: asked.data!.app.id, ...(via ? { via } : {}) }}
+            held={{ form: form.id, ...(via ? { via } : {}) }}
             submit={(submission, input, guard) => submitPublicForm(form.id, submission, input, via, guard)}
           />
         ))}

@@ -13,9 +13,9 @@ const title = vi.fn();
 
 beforeEach(() => {
   const root = document.createElement('div');
-  root.className = 'tw-root';
+  root.className = 'mistri-root';
   const body = document.createElement('div');
-  body.className = 'tw-body';
+  body.className = 'mistri-body';
   body.innerHTML = '<main id="content"><input id="search"></main>';
   const portals = document.createElement('div');
   body.append(portals);
@@ -27,7 +27,7 @@ beforeEach(() => {
     portals,
     navigator: memoryNavigator('/crm/leads/127?tab=notes'),
     address: { base: '/crm', apps: { compass: '' } },
-    endpoint: '/api/tw',
+    endpoint: '/api/mistri',
     authorization: () => undefined,
     title,
   };
@@ -86,9 +86,9 @@ describe('the embed’s seams', () => {
     expect(address.herePath()).toBe('/compass/leads/127');
     expect(address.hereSearch()).toBe('?tab=notes');
     expect(address.shown('/compass/leads/128')).toBe('/crm/leads/128');
-    expect(address.served('/api/apps')).toBe('/api/tw/api/apps');
+    expect(address.served('/api/apps')).toBe('/api/mistri/api/apps');
     // An App's own file is the endpoint's, not the host's address: a component chunk under /crm was the host's page.
-    expect(address.appFile('/compass/_components/page-pick-walk-0a1b.js')).toBe('/api/tw/_components/page-pick-walk-0a1b.js');
+    expect(address.appFile('/compass/_components/page-pick-walk-0a1b.js')).toBe('/api/mistri/_components/page-pick-walk-0a1b.js');
     host.navPush('/crm/leads/128', { step: 3 });
     expect(host.navState()).toEqual({ step: 3 });
   });
@@ -96,12 +96,12 @@ describe('the embed’s seams', () => {
   it('ask the endpoint, with the bearer when the session has one', async () => {
     const fetched = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
     await transport.fetchServer('/api/me', { headers: { accept: 'application/json' } });
-    expect(fetched).toHaveBeenLastCalledWith('/api/tw/api/me', { headers: { accept: 'application/json' } });
+    expect(fetched).toHaveBeenLastCalledWith('/api/mistri/api/me', { headers: { accept: 'application/json' } });
 
     bound.authorization = () => 'Bearer t1';
     await transport.fetchServer('/api/me', { headers: { accept: 'application/json' } });
     const [url, init] = fetched.mock.calls.at(-1)!;
-    expect(url).toBe('/api/tw/api/me');
+    expect(url).toBe('/api/mistri/api/me');
     expect(init?.credentials).toBe('omit');
     expect(new Headers(init?.headers).get('authorization')).toBe('Bearer t1');
     expect(new Headers(init?.headers).get('accept')).toBe('application/json');

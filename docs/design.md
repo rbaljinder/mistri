@@ -1,4 +1,4 @@
-# The tablewalk design system
+# The mistri design system
 
 The official record of how this product looks, moves, and refuses to
 look. It was practice before it was law: everything here is extracted
@@ -318,7 +318,7 @@ scrolled 213px sideways in Mono at comfortable). A person's own saved density
 choice wins over any look's start. A
 built-in by name with the App's `accent` (one colour, or `{ light, dark }`),
 `radius` and `font` remains the short spelling for "this look, my colour".
-One validator (`packages/mistri/src/shared/themeCheck.ts`) holds every theme at `tablewalk
+One validator (`packages/mistri/src/shared/themeCheck.ts`) holds every theme at `mistri
 check`, at `build` and at a tenant's save: text at 4.5:1 and controls at 3:1
 on their effective grounds in light and dark and every palette, and adjacent
 chart series at least 8 apart (OKLab ΔE×100) for protanopia and
@@ -1233,7 +1233,7 @@ every look, so the picture it keeps reads on whatever page shows it.
 - The browser tab names the room, then the App ("Purchase orders ·
   Inventory"), with no vendor suffix; signing in is "Sign in · Inventory".
   An App that names no logo is its initial in a square of the navigation's
-  accent, never tablewalk's own mark, and the tab's icon is the App's mark.
+  accent, never mistri's own mark, and the tab's icon is the App's mark.
   The workspace mark in a sidebar's foot says its name's words' initials in
   the sidebar's own ink.
 - The header's controls say what they are: in an App the search is a box — a

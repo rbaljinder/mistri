@@ -33,7 +33,7 @@ const CSS = 'body{color:red}';
 const FONT = 'wOF2' + 'x'.repeat(60);
 const SECRET = 'outside the client directory';
 
-const root = mkdtempSync(join(tmpdir(), 'tablewalk-client-serving-'));
+const root = mkdtempSync(join(tmpdir(), 'mistri-client-serving-'));
 const dir = join(root, 'client');
 let server: Server;
 let port = 0;

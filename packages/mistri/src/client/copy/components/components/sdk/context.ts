@@ -2,6 +2,6 @@
 import { defineMessages } from '@mistriwork/kit/client/messages.js';
 
 export const say = defineMessages({
-  tablewalkUiIsDrawn:
+  uiIsDrawnByASection:
     '@mistriwork/mistri/ui is drawn by a custom section or a value renderer; in a test, render through @mistriwork/mistri/ui/testing.',
 });

@@ -4,6 +4,7 @@ import { AvatarText, Dressed, Value } from '../../packages/kit/src/client/compon
 import { LeadMark } from '../../packages/kit/src/client/components/Dressed.js';
 import { QrCode } from '../../packages/kit/src/client/components/QrCode.js';
 import { dressFor, type DisplayRule } from '../../packages/kit/src/client/components/valueModel.js';
+import { applicationFixture } from '../mocks/core.js';
 
 const meta = { title: 'Values/Field display' } satisfies Meta;
 export default meta;
@@ -140,4 +141,45 @@ export const QrValue: StoryObj = {
       if (!canvasElement.querySelector('svg.qr-value-code')) throw new Error('The QR code has not arrived');
     });
   },
+};
+
+/* `copy: true`: a copy button after the value. At a desk it waits for the pointer or keyboard focus, as a field's
+   pencil does; on touch it stays. Shown here with the button focused, so the picture has it. */
+const shipment = (display: Record<string, unknown>) =>
+  applicationFixture({
+    tables: [],
+    app: { id: 'depot', name: 'Depot', ui: {}, nav: [], views: {}, resources: { shipment: { table: 'shipment', display } } },
+  });
+const text = (name: string) => ({ name, type: 'TEXT', primaryKey: false, nullable: true });
+export const CopyAValue: StoryObj = {
+  beforeEach: async () => {
+    await shipment({ tracking_number: { copy: true }, order_id: { copy: true, face: 'code' } });
+  },
+  render: () => (
+    <dl className="page-properties">
+      {fact('Tracking number', <Value col={text('tracking_number')} value="1Z999AA10123456784" tableId="shipment" />)}
+      {fact('Order', <Value col={text('order_id')} value="9007199254740993" tableId="shipment" />)}
+      {fact('Carrier', <Value col={text('carrier')} value="UPS Ground" tableId="shipment" />)}
+    </dl>
+  ),
+  play: async ({ canvasElement }) => {
+    canvasElement.querySelector<HTMLButtonElement>('.value-copy')?.focus({ focusVisible: true } as FocusOptions);
+  },
+};
+
+/* `format: 'address'`: a postal address on its lines, one link to a map search for it; nothing is fetched to draw it.
+   With `copy`, the button stands after the last line's block. */
+export const PostalAddress: StoryObj = {
+  beforeEach: async () => {
+    await shipment({ ship_to: { format: 'address', copy: true }, bill_to: { format: 'address' } });
+  },
+  render: () => (
+    <dl className="page-properties">
+      {fact(
+        'Ship to',
+        <Value col={text('ship_to')} value={'Harbor Supply Co.\n2200 Marina Blvd, Suite 4\nOakland, CA 94607'} tableId="shipment" />,
+      )}
+      {fact('Bill to', <Value col={text('bill_to')} value={'PO Box 118\nPortland, OR 97207'} tableId="shipment" />)}
+    </dl>
+  ),
 };

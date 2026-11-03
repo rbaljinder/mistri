@@ -40,7 +40,7 @@ test('stdout is exactly the description, hashed from the bytes read; notes go to
 });
 
 test('a spec it cannot read is refused with the reason and exit 1, and stdout stays empty', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-openapi-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-openapi-'));
   try {
     const cases: Array<[string, string, RegExp]> = [
       ['spec.yaml', 'openapi: 3.1.0\npaths: {}\n', /is not JSON .*convert a YAML one first/],

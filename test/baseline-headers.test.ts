@@ -18,7 +18,7 @@ let server: Server;
 let origin = '';
 
 before(async () => {
-  tmp = mkdtempSync(join(tmpdir(), 'tablewalk-baseline-headers-'));
+  tmp = mkdtempSync(join(tmpdir(), 'mistri-baseline-headers-'));
   const db = join(tmp, 'demo.db');
   makeDemoDatabase(db);
   const registry = new Registry();

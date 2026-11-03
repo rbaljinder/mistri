@@ -1,5 +1,5 @@
 /**
- * `@mistriwork/mistri/ui`: everything a custom component imports from tablewalk. The
+ * `@mistriwork/mistri/ui`: everything a custom component imports from mistri. The
  * host's own React (re-exported, so a component can take its hooks from here
  * and never resolve a React of its own), the kit (kit.tsx) and the hooks
  * (hooks.ts). Nothing else of the client is reachable through it: no store,

@@ -46,7 +46,7 @@ import { CONFIG_SECTIONS } from '../packages/mistri/src/server/serviceConnection
    race — see the same note at the top of language.test.ts. Made for this run
    and removed after it — never `.demo/`, where a developer's demo databases
    and credentials are. */
-const DB_DIR = mkdtempSync(join(tmpdir(), 'tablewalk-http-db-'));
+const DB_DIR = mkdtempSync(join(tmpdir(), 'mistri-http-db-'));
 const RO_DB = join(DB_DIR, 'http-readonly.db');
 const RW_DB = join(DB_DIR, 'http-writable.db');
 
@@ -208,7 +208,7 @@ before(async () => {
   /* Layouts and the default config location both live under the user's config
      directory, and this suite writes to both. Pointed at a temp directory so a
      test run cannot touch the layouts of whoever is running it. */
-  tmp = mkdtempSync(join(tmpdir(), 'tablewalk-http-'));
+  tmp = mkdtempSync(join(tmpdir(), 'mistri-http-'));
   process.env.XDG_CONFIG_HOME = join(tmp, 'config');
 
   makeDemoDatabase(RO_DB);

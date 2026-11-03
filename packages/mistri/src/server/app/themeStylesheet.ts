@@ -4,7 +4,7 @@
  * selector and each declaration is matched against the short grammar below, and the sheet that is served is
  * re-serialized from what matched, so a comment, an escape or a stray brace cannot smuggle a second rule past it.
  * No CSS library: the grammar is small because the allowlist is, and a native parser would be a binary in every
- * `npx tablewalk` (the maintainer's call, 0.9.4).
+ * `npx @mistriwork/mistri` (the maintainer's call, 0.9.4).
  *
  * What it admits (contract 1): rules on published parts, `[data-part="stat"]`, with `:hover`, `:focus-visible`,
  * `[aria-current]`, `[aria-selected="true"]` or `[aria-expanded="true"]`, under an optional `[data-mode="dark"]`; and

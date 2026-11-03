@@ -59,6 +59,7 @@ import {
 } from './appListModel.js';
 import { boxTail, boxesFor, type Box, type BoxEdit } from './FilterBoxes.js';
 import { onDemand } from './onDemand.js';
+import { useGridGroups } from './useGridGroups.js';
 
 const DefinedBoxes = onDemand(() => import('./DefinedFields.js'), 'DefinedBoxes', { quiet: true });
 
@@ -501,6 +502,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
             ...subtitleColumns(entry.table, [...chosen]),
             ...editedReferences(spec),
             ...(spec.opens ? [spec.opens] : []),
+            ...(spec.group ? [spec.group] : []),
             ...named,
           ]),
         ].filter((name) => !chosen.has(name))
@@ -541,6 +543,14 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
     spec.totals?.length && !spec.presentation
       ? Object.fromEntries(spec.totals.map((column, i) => [column, totalAnswers[i]?.data]))
       : undefined;
+  /* A grouped grid's heads: one breakdown over what the conditions match, never a read per group (useGridGroups.ts). */
+  const gridGroup = useGridGroups({
+    column: spec.presentation ? undefined : spec.group,
+    table,
+    query: entry.query,
+    totals: spec.totals,
+    connection,
+  });
   const onGrid = (result: ResourceHttpSuccess<'/api/run'>) => {
     setGridResult({
       query: entry.query,
@@ -769,6 +779,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
               hide={keptHide}
               referenceLabels={referenceLabels}
               totals={keptTotals}
+              {...(gridGroup ? { group: gridGroup } : {})}
               density={spec.density}
               /* A ⋯ with nothing a reader may run is a dead control and a reserved column; the App payload already says what they may run. */
               rowActions={Boolean(
@@ -811,6 +822,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
       keptHide,
       referenceLabels,
       keptTotals,
+      gridGroup,
       inCrumbs,
       keptOnGrid,
       authoredEmpty,

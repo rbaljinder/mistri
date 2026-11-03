@@ -192,7 +192,7 @@ async function serve(
     catalog: (who: string) => Promise<string[]>,
   ) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-rollups-two-hops-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-rollups-two-hops-'));
   const path = join(directory, 'tracker.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

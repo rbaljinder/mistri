@@ -62,7 +62,7 @@ function gate() {
 }
 
 async function fixture(t: TestContext, secondary = false) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scoped-command-access-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-scoped-command-access-'));
   const sources: Record<string, AppAdapterSource> = {};
   const databases = new Map<string, DatabaseSync>();
   t.after(async () => {

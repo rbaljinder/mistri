@@ -44,7 +44,7 @@ const denied = (run: () => unknown) => assert.rejects(async () => run(), sanitiz
 const definition = () => ({ appId: 'deleted-records', resolveRows: (): RowScope => ({ note: true }) });
 
 async function fixture(t: TestContext, readonlySource = false) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-deleted-policy-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-deleted-policy-'));
   const registry = new Registry();
   t.after(async () => {
     await registry.closeAll();

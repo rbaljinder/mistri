@@ -1007,7 +1007,7 @@ async function main() {
   if (!process.env.TABLEWALK_TEST_PG && only !== 'stories')
     console.warn('Ignition is skipped: TABLEWALK_TEST_PG names no PostgreSQL server.');
   const started = Date.now();
-  const temp = mkdtempSync(join(tmpdir(), 'tablewalk-visual-'));
+  const temp = mkdtempSync(join(tmpdir(), 'mistri-visual-'));
   const apps = [];
   const browser = await chromium.launch();
   try {

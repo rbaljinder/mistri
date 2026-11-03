@@ -65,7 +65,7 @@ function writeApp(directory: string, store: string, patch: (manifest: Record<str
 }
 
 async function fixture(t: TestContext, dialect: TenantDialect) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-maintenance-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-maintenance-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const app = writeApp(directory, join(directory, 'auth.db'));
   let where: maintenance.TenantMaintenanceTarget, all: (sql: string, ...params: unknown[]) => Promise<Row[]>;

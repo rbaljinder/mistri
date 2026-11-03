@@ -26,7 +26,7 @@ test(
   'suite scheduled jobs reject foreign App provenance and drain cancelled handlers before closing stores',
   { timeout: 15_000 },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-jobs-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-jobs-'));
     let active: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
     const stores: ReturnType<typeof openSqliteJobStore>[] = [];
     const releases: (() => void)[] = [];

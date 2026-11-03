@@ -25,6 +25,8 @@ import { Value } from './Value.js';
 import { listColumn } from './listColumn.js';
 import type { ColumnMeta } from '@mistriwork/engine/shared/schema.js';
 import { say } from '../copy/record/components/PageTimeline.js';
+import { useReactionTally, type ReactionEntry, type ReactionTally } from './reactionTally.js';
+import type { TimelineReactions } from '@mistriwork/engine/shared/pageModel.js';
 
 /**
  * What a merged row says it is: its resource's noun ("Call", "Note"), the word
@@ -52,7 +54,12 @@ interface TimelineRow {
   compact?: boolean;
   /** The other party's, as the section's `side` says: drawn against the far edge. */
   other?: boolean;
+  /** What the section's reactions name this row by, where they are to its stream's rows. */
+  entry?: ReactionEntry;
 }
+
+/** The section's reactions and the page's tally of them, handed to each message. */
+type Reacted = { reactions: TimelineReactions; tally: ReactionTally } | undefined;
 
 /** A row no person wrote, as the section's `compact` rule says: a row without an author is not one (a customer's
     message may have none where the author is the agent). */
@@ -93,11 +100,13 @@ function Row({
   multi,
   conversation,
   continued = false,
+  reacted,
 }: {
   r: TimelineRow;
   multi: boolean;
   conversation: boolean;
   continued?: boolean;
+  reacted?: Reacted;
 }) {
   const words =
     r.text == null || r.text === '' ? (
@@ -137,6 +146,7 @@ function Row({
         <When at={r.when} />
       </span>
       <div className="timeline-text prose">{words}</div>
+      {reacted && r.entry && <Reactions reactions={reacted.reactions} entry={r.entry} tally={reacted.tally} />}
     </li>
   );
 }
@@ -165,11 +175,14 @@ function Fold({ rows, multi, conversation }: { rows: TimelineRow[]; multi: boole
 /** The record's activity as one stream, merged newest-first (or, as a conversation, oldest-first) across its streams. */
 /* The other side's stylesheet, a part of its own: only a section with a `side` (its own or a stream's) asks for it. */
 const Sides = onDemand(() => import('./TimelineSides.js'), 'TimelineSides', { quiet: true });
+/* An entry's reactions, a part of their own with their stylesheet: only a section with `reactions` asks for it. */
+const Reactions = onDemand(() => import('./TimelineReactions.js'), 'ReactionRow', { quiet: true });
 
 export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
   /* Rows with sides wait for their dress, under the section's one skeleton, so nothing moves when it comes. */
   const sided = Boolean(section.side || section.streams?.some((stream) => stream.side));
   const sidesHere = useArrived(Sides, sided);
+  const reactionsHere = useArrived(Reactions, Boolean(section.reactions));
   const api = usePageApi();
   const { preview, isCurrent, openRelated } = useContext(PageRenderContext);
   const queries = useQueryClient();
@@ -224,6 +237,7 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
           const detailCol = stream.detail ? (cols[names.indexOf(stream.detail)] ?? stream.detail) : null;
           const byCol = byPath ? (cols[names.indexOf(byPath)] ?? byPath) : null;
           const markCol = (name: string) => cols[names.indexOf(name)] ?? name;
+          const entryCol = stream.reacts ? markCol(stream.reacts) : undefined;
           const shown = table && listColumn(table, stream.show);
           const detailed = table && stream.detail ? listColumn(table, stream.detail) : undefined;
           return got.rows.map((row): TimelineRow => ({
@@ -235,6 +249,9 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
             table: table?.id ?? stream.from,
             by: byCol && row[byCol] != null ? String(row[byCol]) : null,
             source: streamSource(stream.from, table),
+            ...(entryCol && (typeof row[entryCol] === 'string' || typeof row[entryCol] === 'number')
+              ? { entry: { column: stream.reacts!, value: row[entryCol] as string | number } }
+              : {}),
             /* A column's value picks the tone, and a one-line row: the section's rules read each row's own columns,
                where the stream says neither for all its rows. */
             ...(() => {
@@ -314,7 +331,13 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
     atFoot.current = true;
     scroller.scrollTop = scroller.scrollHeight;
   }, [conversation, scroller, data.data]);
-  if (data.isPending || (sided && !sidesHere)) return <Loading section={section} />;
+  /* Reactions are counted for the entries on the page, once they are known: one read for all of them. */
+  const entries = [...new Set((data.data ?? []).flatMap((r) => (r.entry && !isEvent(r) ? [r.entry.value] : [])))];
+  const { tally, waiting } = useReactionTally(section.reactions, entries);
+  const reacted: Reacted = section.reactions && tally ? { reactions: section.reactions, tally } : undefined;
+  /* Rows with reactions wait for them too, under the same skeleton: a row of kinds arriving later pushed every message
+     below it down. */
+  if (data.isPending || (sided && !sidesHere) || (section.reactions && (!reactionsHere || waiting))) return <Loading section={section} />;
   if (data.isError) return <SectionBox section={section} body={null} foldable={false} broken={(data.error as Error).message} />;
   const rows = conversation ? [...(data.data ?? [])].reverse() : (data.data ?? []);
   /* A message names its stream only where the messages come from more than one: a conversation whose second stream
@@ -399,6 +422,7 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
                             multi={multi}
                             conversation={conversation}
                             continued={sided && runsOn(item, items[i - 1])}
+                            reacted={reacted}
                           />
                         ),
                       )}

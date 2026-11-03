@@ -312,7 +312,8 @@ function applyBrand() {
   const inApp = shell().inApp();
   sayBrandName(shellQuery('.brand-name'), app ? app.name : 'tablewalk', app?.shortName);
   sayShellWords();
-  setTabTitle(say('common.documentTitle', { title: app ? app.name : state.schema.label }));
+  /* An App's tab carries the App's name alone (appChrome.js puts the room before it); the wordmark is the Workbench's. */
+  setTabTitle(app ? app.name : say('common.documentTitle', { title: state.schema.label }));
   chrome.brand();
   /* The class is the seam the stylesheet hides explorer chrome behind, the
      way `first-run` already does. The app's colours ride the same switch. */

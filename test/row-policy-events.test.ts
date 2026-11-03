@@ -40,7 +40,7 @@ const manifest = {
 };
 
 test('a scoped command records its events, and the job on them runs as its service in the policy rows', { timeout: 120_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-events-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-events-'));
   const file = join(directory, 'desk.db');
   const raw = new DatabaseSync(file);
   raw.exec(`CREATE TABLE item (id INTEGER PRIMARY KEY, desk INTEGER NOT NULL, status TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 0);

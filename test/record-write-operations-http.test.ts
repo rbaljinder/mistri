@@ -44,7 +44,7 @@ async function fixture(
   },
   run: (f: Fixture) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-recorded-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-recorded-http-'));
   const owners = { ops: `${basename(directory)}-ops`, stock: `${basename(directory)}-stock` };
   const databases: Fixture['databases'] = {};
   const adapters: Fixture['adapters'] = {};

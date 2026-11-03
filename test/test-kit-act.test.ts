@@ -28,7 +28,7 @@ const desk: Identity = { id: 'account-desk', who: 'desk@example.test', role: 'de
 const COMMANDS = ['handOver', 'fit'];
 
 test('act runs a command on a record its when admits and its handler takes, past those that come first', { timeout: 30_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-kit-act-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-kit-act-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE repair (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready',

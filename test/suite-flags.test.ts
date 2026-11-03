@@ -46,7 +46,7 @@ test(
     timeout: 120_000,
   },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-flags-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-flags-'));
     const owned = await uuidPostgresDatabase('suite_flags'),
       pg = await pgClient(owned.url);
     let suite: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;

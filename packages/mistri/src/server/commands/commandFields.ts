@@ -15,6 +15,7 @@ import type {
   CommandDateField,
   CommandDateTimeField,
   CommandDefinedField,
+  CommandFilesField,
   CommandGroupField,
   CommandInput,
   CommandLinesField,
@@ -23,7 +24,9 @@ import type {
   CommandNumberField,
   CommandReferenceField,
   CommandRichTextField,
+  CommandSignatureField,
   CommandTextField,
+  CommandTimeField,
 } from '../../../schema/command.js';
 import { vocabularyWord } from '@mistriwork/engine/shared/model.js';
 import type { PickerGuard, ShowGuard } from '../../../schema/query.js';
@@ -62,7 +65,7 @@ function choiceSpec(
 }
 
 export const field: {
-  /** A line of text: `min`/`max` characters, a `format`, a `pattern` (with the `message` a mismatch shows) and a `case`. */
+  /** A line of text: `min`/`max` characters, a `format`, a `pattern` (with the `message` a mismatch shows) and a `case`; `as: 'scan'` reads a code with the camera, `as: 'color'` asks a `#rrggbb` color. */
   text<const O extends TextOptions = {}>(options?: O): CommandTextField & { type: 'text' } & Optional<O>;
   /** Text over several lines; tabs and line breaks are kept. */
   textarea<const O extends TextOptions = {}>(options?: O): CommandTextField & { type: 'textarea' } & Optional<O>;
@@ -74,7 +77,7 @@ export const field: {
   phone<const O extends FormatOptions = {}>(options?: O): CommandTextField & { type: 'text' } & Optional<O>;
   /** A web address, http or https. */
   url<const O extends FormatOptions = {}>(options?: O): CommandTextField & { type: 'text' } & Optional<O>;
-  /** A number: `min`, `max`, `integer`, a `step` it is rounded to, `below`/`above` a sibling. */
+  /** A number: `min`, `max`, `integer`, a `step` it is rounded to, `below`/`above` a sibling; `as: 'rating'` asks it as stars, `outOf` of them. */
   number<const O extends Omit<CommandNumberField, 'type'> = {}>(options?: O): CommandNumberField & Optional<O>;
   /** An amount of money in the App's currency (or the field's own `currency`), from 0 unless `min` says less, in cents unless `step` says otherwise; `minor: true` hands the command the exact minor units; `as: 'slider'` between `min` and `max`. */
   money<const O extends Omit<CommandMoneyField, 'type'> = {}>(options?: O): CommandMoneyField & Optional<O>;
@@ -84,6 +87,8 @@ export const field: {
   date<const O extends Omit<CommandDateField, 'type'> = {}>(options?: O): CommandDateField & Optional<O>;
   /** A date and a time of day: the form asks in the App's time zone, the handler receives the UTC instant (`2026-10-12T13:30:00.000Z`); `min`, `max`, `below`/`above` a sibling datetime. */
   datetime<const O extends Omit<CommandDateTimeField, 'type'> = {}>(options?: O): CommandDateTimeField & Optional<O>;
+  /** A time of day, `HH:MM` on a 24-hour clock, asked with the browser's time picker: `min`, `max`, `below`/`above` a sibling time. */
+  time<const O extends Omit<CommandTimeField, 'type'> = {}>(options?: O): CommandTimeField & Optional<O>;
   /** Yes or no; `accept: true` for a box that must be checked to send (consent, terms). */
   bool<const O extends Omit<CommandBooleanField, 'type'> = {}>(
     options?: O,
@@ -112,7 +117,7 @@ export const field: {
   choices<const O extends Omit<CommandChoicesField, 'type' | 'options' | 'from' | 'labelColumn'> & { from: string; label: string }>(
     source: O,
   ): CommandChoicesField & { from: O['from'] } & Optional<O>;
-  /** A picker over a resource: `field.reference('customer', { by: 'id', labelColumn: 'name' })`, its key column (`by`) and the column it is shown by; a `query` may name the target's own columns (`'sales_order_id = record.id'`). On a public form, over a resource `auth.public` opens: the visitor's choices are the rows it reads, by key and label. */
+  /** A picker over a resource: `field.reference('customer', { by: 'id', labelColumn: 'name' })`, its key column (`by`) and the column it is shown by; a `query` may name the target's own columns (`'sales_order_id = record.id'`); `tree: 'parent_id'` offers the rows as the hierarchy that column makes, each choice said with its path. On a public form, over a resource `auth.public` opens: the visitor's choices are the rows it reads, by key and label. */
   reference<const R extends string, const O extends Omit<CommandReferenceField, 'type' | 'from'>>(
     from: R,
     options: O & NoInfer<PickerGuard<R, O>>,
@@ -127,6 +132,19 @@ export const field: {
     from: R,
     options: O & { show: S & NoInfer<ShowGuard<R, S>> },
   ): { type: 'lines'; from: R; show: S } & O;
+  /** Files attached to the form, landing in the file resource `from` (among the command's `write`):
+      `field.files('repair_photo', { max: 5, accept: 'image/*' })`. Each is held as it is picked; the handler receives
+      them and stores each with `db.<from>.insertFile(file, values)`. Never in a group. */
+  files<const R extends string, const O extends Omit<CommandFilesField, 'type' | 'from'> = {}>(
+    from: R,
+    options?: O,
+  ): { type: 'files'; from: R } & O;
+  /** A signature drawn on a pad, kept as a PNG of the file resource `from`: `field.signature('signature_file')`. The
+      handler receives one file and stores it with `db.<from>.insertFile(file, values)`. Never in a group. */
+  signature<const R extends string, const O extends Omit<CommandSignatureField, 'type' | 'from'> = {}>(
+    from: R,
+    options?: O,
+  ): { type: 'signature'; from: R } & O;
   /** A section of fields, or with `repeat` its rows. */
   group<const F extends CommandInput, const O extends Omit<CommandGroupField, 'type' | 'fields'> = {}>(
     fields: F,
@@ -144,6 +162,7 @@ export const field: {
   month: (options?: object) => spec('month', options as Record<string, unknown>),
   date: (options?: object) => spec('date', options as Record<string, unknown>),
   datetime: (options?: object) => spec('datetime', options as Record<string, unknown>),
+  time: (options?: object) => spec('time', options as Record<string, unknown>),
   bool: (options?: object) => spec('boolean', options as Record<string, unknown>),
   /* A bare value is said as words, as a display vocabulary says it: `wont_fix` is "Wont fix"; an all-caps code stays as written. */
   choice: (values: unknown, options: Record<string, unknown> = {}) => choiceSpec('choice', values, options),
@@ -151,5 +170,7 @@ export const field: {
   reference: (from: string, options: object) => spec('reference', { from, ...options }),
   defined: (from: string, options: object = {}) => spec('defined', { from, ...options }),
   lines: (from: string, options: object) => ({ type: 'lines', from, ...options }) as never,
+  files: (from: string, options: object = {}) => ({ type: 'files', from, ...options }) as never,
+  signature: (from: string, options: object = {}) => ({ type: 'signature', from, ...options }) as never,
   group: (fields: object, options: object = {}) => ({ type: 'group', ...options, fields }) as never,
 });

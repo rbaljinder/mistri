@@ -177,7 +177,13 @@ export async function taskApp({
           };
         }
         if (fail) throw fail;
-        const found = empty ? [] : narrowed(text);
+        /* The first field of a sort is honoured, as a grouped list's rows are read by their group first. */
+        const sort = /\bsort (\w+)( desc)?/.exec(text);
+        const found = (empty ? [] : narrowed(text)).toSorted((a, b) => {
+          if (!sort) return 0;
+          const [x, y] = [a[sort[1] as keyof typeof a], b[sort[1] as keyof typeof b]];
+          return (x < y ? -1 : x > y ? 1 : 0) * (sort[2] ? -1 : 1);
+        });
         return {
           table: 'task',
           columns: ['id', ...taskColumns],
@@ -213,6 +219,25 @@ export async function taskApp({
       '/api/breakdown': ({ text }: { text?: string }) => {
         const t = String(text);
         const of = empty ? [] : narrowed(t.replace(/\bby\b.*$/, ''));
+        /* A grouped grid's heads: each value's rows counted and each total summed (useGridGroups.ts). */
+        if (t.includes('count as group_rows')) {
+          const key = /\bby (\w+)/.exec(t)![1] as keyof (typeof rows)[number];
+          const sums = [...t.matchAll(/sum (\w+) as (total_\d+)/g)];
+          const values = [...new Set(of.map((row) => row[key]))];
+          return {
+            columns: [key, 'group_rows', ...sums.map((sum) => sum[2])],
+            rows: values.map((value) => {
+              const held = of.filter((row) => row[key] === value);
+              return {
+                [key]: value,
+                group_rows: held.length,
+                ...Object.fromEntries(
+                  sums.map(([, column, alias]) => [alias, held.reduce((n, row) => n + Number(row[column as keyof typeof row]), 0)]),
+                ),
+              };
+            }),
+          };
+        }
         for (const key of ['status', 'priority', 'is_urgent'] as const) {
           if (t.includes(`by ${key}`))
             return { columns: [key, 'count'], rows: counts(key, of).map(([value, count]) => ({ [key]: value, count })) };

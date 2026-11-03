@@ -14,6 +14,7 @@ export const say = defineMessages({
   typedSignature: '{label}, typed',
   typeYourName: 'Type your full name',
   keptSignature: '{label}: the kept signature',
+  signatureKept: 'Signed',
   undoStroke: 'Undo',
   clearSignature: 'Clear',
   typeInstead: 'Type instead',

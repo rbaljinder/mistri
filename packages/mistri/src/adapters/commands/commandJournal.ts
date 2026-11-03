@@ -19,6 +19,14 @@ import type { CommandEventBatch, CommandEventManifest, CommandEventOwner } from 
 import { captureCommandEventManifest } from '../events/commandEventCapture.js';
 import { BULK_LIMIT } from '../../shared/command.js';
 import { nextSqliteCommandNumber, provisionSqliteCommandSequences } from './commandSequences.js';
+import {
+  provisionSqliteCommandStaging,
+  stageSqliteFile,
+  takeSqliteStaged,
+  type StagedFileRow,
+  type StagedLimits,
+  type StagedTake,
+} from './commandStaging.js';
 import type {
   CommandReceiptScope,
   StoredCommandReceipt,
@@ -71,8 +79,9 @@ export function migrateSqliteCommandJournal(existingPath: string): { version: 1;
         result = { version: 1, migrated: true };
       }
       assertSqliteCommandJournal(db);
-      // The sequences a handler numbers from live beside the journal.
+      // The sequences a handler numbers from live beside the journal, and the files a form holds for its command.
       if (provisionSqliteCommandSequences(db)) result = { version: 1, migrated: true };
+      if (provisionSqliteCommandStaging(db)) result = { version: 1, migrated: true };
       db.exec('COMMIT');
       return result;
     } catch (error) {
@@ -712,6 +721,23 @@ export function createSqliteCommandJournal(
         text(input.appId, 'application', 128);
         if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
         return nextSqliteCommandNumber(db, { appId: input.appId, namespace, name: input.name, per: input.per }, input.start);
+      }),
+    // In the journal's namespace too, so a tenant's held files are its own.
+    stage: (appId: string, row: StagedFileRow, most: StagedLimits, now: number) => {
+      // The bytes are copied whole, not captured key by key as the rest is: a file is millions of them.
+      const data = row?.data instanceof Uint8Array ? new Uint8Array(row.data) : undefined;
+      const { data: _bytes, ...said } = row ?? ({} as StagedFileRow);
+      return invoke({ appId, said, most, now }, async (input) => {
+        text(input.appId, 'application', 128);
+        if (!data || (member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        stageSqliteFile(db, input.appId, namespace, { ...input.said, data }, input.most, input.now);
+      });
+    },
+    takeStaged: (appId: string, take: StagedTake) =>
+      invoke({ appId, take }, async (input) => {
+        text(input.appId, 'application', 128);
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return takeSqliteStaged(db, input.appId, namespace, input.take);
       }),
     kept: (appId: string, commandId: string, commandVersion: number) =>
       invoke({ appId, commandId, commandVersion }, async (input) => {

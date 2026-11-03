@@ -58,6 +58,8 @@ const schema = {
         column('stock_number', 'TEXT', { nullable: false }),
         column('price', 'INTEGER'),
         column('featured', 'INTEGER', { nullable: false, default: '0' }),
+        // A vehicle listed under another (a trim under its model), for a picker drawn as that hierarchy.
+        column('parent_id', 'INTEGER', { references: { table: 'vehicle', column: 'id' } }),
       ],
     },
     {
@@ -429,6 +431,31 @@ describe('a public form picks only from what auth.public opens', () => {
     // The key stays readable however the fields narrow it, as a public read keeps it.
     assert.equal(
       publicFormProblems(app({ read: ['vehicle'], fields: { vehicle: { read: ['stock_number'] } } }), registry, schema),
+      undefined,
+    );
+  });
+
+  test("a tree picker's visitor reads each row's parent too, so the public must open that column as well", () => {
+    const trees = defineCommands({
+      ask: defineCommand({
+        targets: 'none',
+        source: 'main',
+        target: 'saved',
+        public: true,
+        read: ['vehicle'],
+        input: { vehicle: { ...vehicle, tree: 'parent_id' } },
+        output: shape({ reference: text() }),
+        async handle() {
+          return { reference: 'A-1' };
+        },
+      }),
+    });
+    assert.match(
+      publicFormProblems(app({ read: ['vehicle'], fields: { vehicle: { read: ['id', 'stock_number'] } } }), trees, schema) ?? '',
+      /\[public-form-picker\][^\n]*a visitor may not read its column "parent_id"/,
+    );
+    assert.equal(
+      publicFormProblems(app({ read: ['vehicle'], fields: { vehicle: { read: ['stock_number', 'parent_id'] } } }), trees, schema),
       undefined,
     );
   });

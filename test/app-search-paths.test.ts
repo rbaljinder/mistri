@@ -25,7 +25,7 @@ import { plugSearch } from '../packages/mistri/src/server/app/searchProvider.js'
 const KEY = 'app-search-paths-key';
 const connection = 'search-paths';
 const appId = 'paths';
-const directory = mkdtempSync(join(tmpdir(), 'tablewalk-search-paths-'));
+const directory = mkdtempSync(join(tmpdir(), 'mistri-search-paths-'));
 const path = join(directory, 'desk.db');
 let fake: FakeTypesense;
 let registry: Registry;

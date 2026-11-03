@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import { sourceLocator } from '../packages/mistri/src/server/build/checkProblems.js';
 
 test('a finding is placed in the modules the App loads, and one about a command at its definition', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-locator-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-locator-'));
   try {
     mkdirSync(join(dir, 'commands'));
     const app = [
@@ -73,7 +73,7 @@ test('a finding is placed in the modules the App loads, and one about a command 
 });
 
 test("a finding about a role is placed at the role's declaration, not at a job that names it as a string", async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-locator-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-locator-'));
   try {
     writeFileSync(
       join(dir, 'app.ts'),

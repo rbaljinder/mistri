@@ -192,7 +192,7 @@ test('the lines are written by the command, so they are among its write', () => 
 });
 
 test("a command takes an order's lines: typed for its handler, written in its transaction, refused by the cell", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-lines-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-lines-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE product (id INTEGER PRIMARY KEY, title TEXT NOT NULL, price NUMERIC NOT NULL, active INTEGER NOT NULL);

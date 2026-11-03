@@ -32,7 +32,7 @@ const ROOT = resolve('.');
 /* An App's starts are mistri's (test/support/bins.ts). */
 const ENTRY = join(ROOT, 'packages', 'mistri', 'src', 'server', 'index.ts');
 const INTER = join(ROOT, 'packages/kit/src/client/fonts/inter-latin.woff2');
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-theme-tooling-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-theme-tooling-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 
 /* A draft with a failure of every kind: an orange too light on white as the text its accent is drawn in, a red too

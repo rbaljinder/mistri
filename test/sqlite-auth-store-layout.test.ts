@@ -9,7 +9,7 @@ import { createAppAuth, type AppAuthRuntime } from '../packages/mistri/src/serve
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 
 async function fixture(t: TestContext, defaultRole = 'user', before?: (store: string) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-auth-layout-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-auth-layout-'));
   const names = ['BETTER_AUTH_SECRET', 'MISTRI_AUTH_ADMIN_EMAIL', 'MISTRI_AUTH_ADMIN_PASSWORD'] as const;
   const prior = names.map((name) => [name, process.env[name]] as const);
   let runtime: AppAuthRuntime | undefined, db: DatabaseSync | undefined;

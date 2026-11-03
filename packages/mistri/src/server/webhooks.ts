@@ -2,7 +2,7 @@
  * A webhook connection in the config file: where a command's effects are
  * POSTed once it has committed.
  *
- *   { "name": "dealer-hooks", "kind": "webhook", "url": "https://hooks.example/tablewalk",
+ *   { "name": "dealer-hooks", "kind": "webhook", "url": "https://hooks.example/mistri",
  *     "auth": { "bearer": "${DEALER_HOOK_TOKEN}" } }
  *
  * The name is what `post('dealer-hooks', …)` names. The URL is https, or

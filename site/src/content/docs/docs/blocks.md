@@ -306,6 +306,17 @@ See it in the sample (`examples/apps/lintel/views.ts:93`); the picture is a CRM'
 
 ![A CRM App: tasks on their due dates in a month grid.](../../../assets/gallery/calendar.webp)
 
+A week or a day is a time grid instead: the hours down the side, each record placed by its start and its `end`,
+records that overlap side by side, and a line at the present moment. Both columns are timestamps.
+
+```ts
+presentation: calendar('starts_at', 'title', { span: 'week', end: 'ends_at' })
+```
+
+A record is dragged to another time or day, and its foot to change its end (Alt and an arrow moves it half an hour or
+a day; Alt, Shift and an arrow moves its end); each move is the ordinary update, refused where the reader may not
+write. A phone reads the week or the day as an agenda, each record with its hours.
+
 ### Tree
 
 Each record folded under the one its self-reference names.
@@ -430,6 +441,16 @@ pass_code: { format: 'qr' }
 
 No sample App that runs on SQLite draws this one, so there is no picture; Ignition (PostgreSQL) uses it.
 
+### Address
+
+A postal address on its lines, as an envelope has it, linking to a map search for it. No map is drawn and nothing is fetched; a list says it on one line.
+
+```ts
+ship_to: { format: 'address', copy: true }
+```
+
+A warehouse App says where a shipment goes this way.
+
 ### Scan
 
 A Scan button reads a barcode or QR code from the camera where the browser can; the box stays for a scanner gun or the keyboard.
@@ -449,6 +470,16 @@ signature_id: { signature: true }
 ```
 
 A warehouse App takes proof of delivery on a pick list this way. The pad is in the edit form, so there is no picture.
+
+### Copy
+
+A copy button after the value on a record, for a value a reader pastes somewhere else: a tracking number, an account number. The toast says it was copied.
+
+```ts
+tracking_number: { copy: true }
+```
+
+The button waits for the pointer or keyboard focus at a desk, so a still picture does not show it.
 
 ## Related
 

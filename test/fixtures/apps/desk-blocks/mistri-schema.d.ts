@@ -6,17 +6,20 @@ import type { TypedAppConfig, TypedFeature } from '@mistriwork/mistri/app';
 /** Every table, and every column it had when this file was written. */
 export type Tables = {
   canned_reply: "id" | "title" | "body";
+  category: "id" | "name" | "parent_id";
   change: "id" | "name" | "starts_on" | "ends_on";
   freeze: "id" | "name" | "starts_on" | "ends_on";
   holiday: "id" | "name" | "starts_on" | "ends_on";
   message: "id" | "name" | "ticket_id" | "body" | "kind" | "sent_at" | "author_id";
   person: "id" | "name";
-  ticket: "id" | "name" | "requester" | "status" | "priority" | "caller_id" | "agent_id" | "opened_at";
+  ticket: "id" | "name" | "requester" | "status" | "priority" | "caller_id" | "agent_id" | "opened_at" | "category_id";
+  visit: "id" | "name" | "starts_at" | "ends_at";
 };
 
 /** Each table's row as a command handler reads it. */
 export type Rows = {
   canned_reply: { id: number; title: string; body: string };
+  category: { id: number; name: string; parent_id: number | null };
   change: { id: number; name: string; starts_on: string; ends_on: string };
   freeze: { id: number; name: string; starts_on: string; ends_on: string };
   holiday: { id: number; name: string; starts_on: string; ends_on: string };
@@ -31,7 +34,9 @@ export type Rows = {
     caller_id: number | null;
     agent_id: number | null;
     opened_at: string;
+    category_id: number | null;
   };
+  visit: { id: number; name: string; starts_at: string; ends_at: string | null };
 };
 
 export type App = TypedAppConfig<Tables>;

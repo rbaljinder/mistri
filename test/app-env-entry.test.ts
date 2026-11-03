@@ -22,7 +22,7 @@ import { parseArgs } from '../packages/engine/src/server/cli/args.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { CONFIG_SECTIONS } from '../packages/mistri/src/server/serviceConnections.js';
 
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-app-env-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-app-env-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 
 function dir(name: string, files: Record<string, string>): string {

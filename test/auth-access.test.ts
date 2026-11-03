@@ -13,7 +13,7 @@ import { clearJournal, history } from '../packages/engine/src/server/journal.js'
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 
 test('real Better Auth sessions enforce access ceilings and revoked cookies cannot authorize requests', { timeout: 30_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-auth-access-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-auth-access-'));
   const path = join(directory, 'data.db');
   const store = join(directory, 'sessions.db');
   const connection = 'private-auth-database';

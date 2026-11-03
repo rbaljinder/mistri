@@ -8,7 +8,7 @@
  * the row, a click that goes there.
  */
 import { Fragment, type ReactNode } from 'react';
-import { api, columnDisplay, emptyWord, findTable, openRecord, refsFrom, state } from '../core.js';
+import { api, columnDisplay, columnLabel, emptyWord, findTable, humanName, openRecord, refsFrom, state, toast } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
 import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { dressFor, linkFor, maskedText, ruleSays, type DisplayRule } from './valueModel.js';
@@ -19,6 +19,7 @@ import { jsonValueOf, previewOf } from './jsonModel.js';
 import { TAGS_TYPE, tagChips } from '@mistriwork/engine/shared/tagLists.js';
 import { AvatarText, Dressed, Said } from './Dressed.js';
 import { ValueSlot } from './valueRenderers.js';
+import { Icon } from './Icon.js';
 import { say } from '../copy/record/components/Value.js';
 import { shellBody } from '../shellHost.js';
 
@@ -27,6 +28,17 @@ export { AvatarText, Dressed };
 
 /** A value that is a link: mail, a call, or a web page, which opens beside the App rather than in place of it. */
 function ValueLink({ link }: { link: NonNullable<ReturnType<typeof linkFor>> }) {
+  /* An address is drawn on its lines, as it is written on an envelope, and opens a map search beside the App. */
+  if (link.kind === 'address')
+    return (
+      <a className="value-link value-address" href={link.href} target="_blank" rel="noopener noreferrer" title={say('findOnAMap')}>
+        {(link.lines ?? [link.text]).map((line, index) => (
+          <span key={index} className="value-address-line">
+            {line}
+          </span>
+        ))}
+      </a>
+    );
   const text = breakable(link.text);
   /* The break points are not words: the link is named by its text whole. */
   const named = { title: link.text, ...(typeof text === 'string' ? {} : { 'aria-label': link.text }) };
@@ -76,8 +88,54 @@ interface ValueProps {
 
 /** A value as the record and the page show it: dressed when the app says, plain otherwise. */
 export function Value(props: ValueProps) {
-  const { col, value, tableId, compact = false } = props;
+  const { col, value, tableId, compact = false, links = !compact } = props;
   const rule = tableId === undefined ? null : (columnDisplay(tableId, col?.name ?? '') as DisplayRule | null);
+  const drawn = <DrawnValue {...props} rule={rule} />;
+  /* A rule's `copy` puts a copy button beside the value — not where the value stands inside a target of its own (a
+     card, a row that opens: a button in a button is neither), and not for a value a mask hides. */
+  if (
+    !rule?.copy ||
+    !links ||
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    maskedText(rule, value) !== undefined ||
+    !shellBody().classList.contains('app-mode')
+  )
+    return drawn;
+  return (
+    <span className="value-copyable">
+      {drawn}
+      <CopyValue value={value} label={columnLabel(tableId!, col?.name ?? '') ?? humanName(col?.name ?? '')} />
+    </span>
+  );
+}
+
+/** The stored value to the clipboard, as stored: an id past 2^53 arrives as a string and is copied as one. */
+function CopyValue({ value, label }: { value: unknown; label: string }) {
+  const named = say('copyValue', { label });
+  return (
+    <button
+      type="button"
+      className="value-copy"
+      aria-label={named}
+      title={named}
+      onClick={() => {
+        const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        navigator.clipboard
+          .writeText(text)
+          .then(() => toast(say('copiedValue', { label })))
+          /* The clipboard can be refused — an insecure origin, a permission denied; the value is on screen. */
+          .catch(() => toast(say('common.theBrowserRefusedClipboard'), 'error'));
+      }}
+    >
+      <Icon name="copy" size={16} />
+    </button>
+  );
+}
+
+function DrawnValue(props: ValueProps & { rule: DisplayRule | null }) {
+  const { col, value, tableId, compact = false, rule } = props;
   /* The App's own renderer, where its display rule names one: the value drawn
      the platform's way until it has arrived, and whenever it cannot draw. An
      empty value is the platform's to say, as it is in a grid cell. */

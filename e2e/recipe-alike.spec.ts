@@ -49,7 +49,7 @@ test('a sheet’s pictures are compared pixel by pixel, and only the near-alike 
 
 test('shot --recipes on a page that draws nothing of the part says so once, beside the sheet', async () => {
   test.setTimeout(180_000);
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-recipe-alike-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-recipe-alike-'));
   try {
     const db = join(directory, 'thread.db');
     const seeded = spawnSync(process.execPath, [resolve('test/fixtures/databases/thread/seed.mjs'), db], { encoding: 'utf8' });

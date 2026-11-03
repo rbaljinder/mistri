@@ -110,7 +110,7 @@ test('the authority lock says each granted action', () => {
 });
 
 async function fixture(t: import('node:test').TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-action-grants-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-action-grants-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const path = join(directory, 'grants.db');
   const db = new DatabaseSync(path);

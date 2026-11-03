@@ -38,7 +38,7 @@ const TABLE = { packages: PACKAGES, entries: {} as Record<string, object> };
 
 /** A workspace with one module per layer, every import the right way, and an empty allowlist. */
 function tree(files: Record<string, string> = {}, { allow = {} as Record<string, string> | null, table = TABLE as object } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'tablewalk-boundary-test-'));
+  const root = mkdtempSync(join(tmpdir(), 'mistri-boundary-test-'));
   const all: Record<string, string> = {
     'packages/engine/package.json': manifest('@fixture/engine'),
     'packages/ui/package.json': manifest('@fixture/ui'),

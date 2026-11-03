@@ -49,7 +49,7 @@ const failed = (error: unknown) => {
 };
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-admission-cache-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-admission-cache-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   db.exec(`CREATE TABLE db_item (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, name TEXT NOT NULL);

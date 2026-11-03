@@ -91,7 +91,7 @@ export function createTenantBrandingService(options: {
   const declaration = app.branding;
   if (!declaration) throw new Error('Branding is served only for an App that declares it.');
   const now = options.now ?? Date.now;
-  const key = (tenant: string) => `tw:branding:${app.id}:${tenant}`;
+  const key = (tenant: string) => `mistri:branding:${app.id}:${tenant}`;
 
   /** The stored value, parsed against today's declaration; a value it no longer admits is none. */
   const load = async (tenant: string): Promise<TenantBrandingState> => {

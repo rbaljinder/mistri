@@ -560,7 +560,7 @@ for (const engine of jobEngines)
 
 describe('job store on SQLite only', () => {
   const file = (t: { after(run: () => void): void }) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-job-store-sqlite-')),
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-job-store-sqlite-')),
       path = join(directory, 'app.db');
     new DatabaseSync(path).close();
     t.after(() => rmSync(directory, { recursive: true, force: true }));

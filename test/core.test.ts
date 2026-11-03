@@ -20,7 +20,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { makeDemoDatabase, seedDemoDatabase } from './make-demo-db.js';
 /* The credentials file falls back to the config home, and with no keychain
    (above) that is where a stored secret lands: never the developer's own. */
-const configHome = mkdtempSync(join(tmpdir(), 'tablewalk-core-config-'));
+const configHome = mkdtempSync(join(tmpdir(), 'mistri-core-config-'));
 process.env.XDG_CONFIG_HOME = configHome;
 after(() => rmSync(configHome, { recursive: true, force: true }));
 import { Registry, redact, loadConfig, saveConfig, storeSecret } from '../packages/engine/src/server/connections.js';
@@ -81,7 +81,7 @@ import { deriveTemplate, fieldPaths, isEmpty, resolveLists } from '../packages/e
 
 /* Every file this suite makes lives here, made for this run and removed after
    it — never `.demo/`, where a developer's demo databases and credentials are. */
-const SCRATCH = mkdtempSync(join(tmpdir(), 'tablewalk-core-'));
+const SCRATCH = mkdtempSync(join(tmpdir(), 'mistri-core-'));
 const DB_FILE = join(SCRATCH, 'test.db');
 let adapter: SqliteAdapter;
 let schema: DatabaseSchema;

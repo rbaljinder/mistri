@@ -11,7 +11,7 @@ import type { ViewDef } from '../packages/engine/src/shared/view.js';
 
 for (const mode of ['logical', 'default', 'secondary'] as const) {
   test(`${mode}: scoped validation and reverse paths ignore later presentation-catalog mutation`, async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scope-catalog-lifetime-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-scope-catalog-lifetime-'));
     const adapters: SqliteAdapter[] = [];
     t.after(async () => {
       await Promise.all(adapters.map((adapter) => adapter.close()));

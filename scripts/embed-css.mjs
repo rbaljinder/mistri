@@ -9,15 +9,15 @@
  *
  *   1. Layer names are global per document. Tailwind declares `base` and
  *      `components` too, and ours would merge with the host's. So every sheet
- *      is wrapped in `@layer tablewalk { … }`: ours become `mistri.base`,
+ *      is wrapped in `@layer mistri { … }`: ours become `mistri.base`,
  *      `mistri.look`, and so on, in their own order, and the host places
- *      `tablewalk` among its layers.
+ *      `mistri` among its layers.
  *   2. Our `:root`, `html`, `body` and element rules would restyle the host.
- *      So `:root` becomes `.tw-root` (the element that stands for `<html>`),
- *      `html` becomes `div:where(.tw-root)` and `body` `div:where(.tw-body)` —
+ *      So `:root` becomes `.mistri-root` (the element that stands for `<html>`),
+ *      `html` becomes `div:where(.mistri-root)` and `body` `div:where(.mistri-body)` —
  *      each with the specificity it had, so the order inside a layer holds —
  *      and every other selector's first compound gains
- *      `:where(.tw-root, .tw-root *)`, which adds none. A selector can then
+ *      `:where(.mistri-root, .mistri-root *)`, which adds none. A selector can then
  *      match only the root and what is inside it; test/embed-css.test.ts
  *      parses the output and fails on one that could match outside.
  *   3. A host's *unlayered* rules beat any layered rule of ours. That is not
@@ -30,10 +30,10 @@
  */
 
 /** The class of the element that stands for `<html>`, and of the one for `<body>`. */
-export const ROOT_CLASS = 'tw-root';
-export const BODY_CLASS = 'tw-body';
+export const ROOT_CLASS = 'mistri-root';
+export const BODY_CLASS = 'mistri-body';
 /** The element the root sits in, which stands for the window: packages/mistri/src/embed/embedReset.css starts it from nothing. */
-export const FRAME_CLASS = 'tw-frame';
+export const FRAME_CLASS = 'mistri-frame';
 const OURS = new RegExp(`\\.(${ROOT_CLASS}|${FRAME_CLASS})(?![\\w-])`);
 
 const SCOPE = `:where(.${ROOT_CLASS}, .${ROOT_CLASS} *)`;
@@ -165,7 +165,7 @@ function scoped(rule) {
  * `only` says, by file, which sheets are the shell's.
  * @param {{ layer?: string, only?: (file: string) => boolean }} [options]
  */
-export function tablewalkScope({ layer = 'tablewalk', only = () => true } = {}) {
+export function mistriScope({ layer = 'mistri', only = () => true } = {}) {
   return {
     postcssPlugin: 'mistri-embed-scope',
     OnceExit(root, { AtRule }) {
@@ -189,4 +189,4 @@ export function tablewalkScope({ layer = 'tablewalk', only = () => true } = {}) 
     },
   };
 }
-tablewalkScope.postcss = true;
+mistriScope.postcss = true;

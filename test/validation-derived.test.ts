@@ -22,7 +22,7 @@ import { parseAppConfig, resolveResources, resolveValidation } from '../packages
 const clerk: Identity = { id: 'account-clerk', who: 'clerk@example.test', role: 'clerk' };
 
 test('validation and a form default read computed columns, the record’s own and a referenced record’s', { timeout: 30_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-validation-derived-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-validation-derived-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE service (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price INTEGER NOT NULL);
@@ -138,7 +138,7 @@ test('validation and a form default read computed columns, the record’s own an
 });
 
 test('a computed column worked out of other rows is refused, saying which, in a validation and a form’s value', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-validation-refused-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-validation-refused-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE service (id INTEGER PRIMARY KEY, price INTEGER NOT NULL);

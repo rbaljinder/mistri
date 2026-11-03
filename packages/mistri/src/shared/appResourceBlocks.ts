@@ -1105,6 +1105,7 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     'signature',
     'face',
     'timezone',
+    'copy',
   ];
   for (const k of Object.keys(r)) {
     if (!takes.includes(k)) throw new Error(`${at} ${unknownKey(k, takes)}.`);
@@ -1120,6 +1121,12 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
       throw new Error(
         `${at} has "masked: true", which draws a placeholder instead of the value; it takes no ${dressing.map((key) => `"${key}"`).join(', ')}.`,
       );
+  }
+  /* A value a reader copies to use elsewhere — a tracking number, an account number — takes a copy button beside it.
+     A signature is a picture, not text to paste. */
+  if (r.copy !== undefined) {
+    if (r.copy !== true) throw new Error(`${at} has a "copy" that is not true; a value with a copy button says copy: true.`);
+    if (r.signature !== undefined) throw new Error(`${at} has "copy" beside "signature": a signature is a picture, not text to copy.`);
   }
   /* A unit is said after a figure, so it belongs to the formats that make one. */
   if (r.unit !== undefined) {
@@ -1344,13 +1351,14 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     ...(mentions ? { mentions } : {}),
     ...(r.images === undefined ? {} : { images: r.images as string }),
     ...(r.face === undefined ? {} : { face: r.face as AppDisplayRule['face'] }),
+    ...(r.copy === true ? { copy: true as const } : {}),
     ...own,
   };
 }
 
 /* The formats that draw a value as a thing of its own — stars, a swatch, a day, a moment, a clock time, a month, a year, a tree, a
-   code — and the two figures' extras, a ring and a slider. Each is its own drawing: nothing else dresses it. */
-const OWN_DRAWINGS = ['rating', 'color', 'date', 'datetime', 'time', 'month', 'year', 'json', 'qr'];
+   code, an address on its lines — and the two figures' extras, a ring and a slider. Each is its own drawing: nothing else dresses it. */
+const OWN_DRAWINGS = ['rating', 'color', 'date', 'datetime', 'time', 'month', 'year', 'json', 'qr', 'address'];
 const DRESSINGS = ['currency', 'unit', 'tone', 'bar', 'avatar', 'icons', 'values', 'colors', 'icon'];
 function parseOwnDrawing(
   r: Record<string, unknown>,

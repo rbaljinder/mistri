@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { columnLabel, keyOf, labelPath, openRecord, recordLabel, rowLabel, state } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
@@ -7,10 +7,11 @@ import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js'
 import type { TrailList } from '../recordTrail.js';
 import { Value } from './Value.js';
 import { rowOpensTarget, useRowOpens } from './rowOpens.js';
-import type { GridData } from './Grid.js';
+import type { GridData, GridGroup } from './Grid.js';
 import { presentationColumns } from './columnPresentation.js';
 import { splitConditions, splitQuery } from '../clauses.js';
 import { say } from '../copy/record/components/RecordSummaries.js';
+import { formatNumber } from '../locale.js';
 
 /**
  * The columns a question holds to one value (`status = new`, a tab's own
@@ -128,6 +129,7 @@ export function RecordSummaries({
   query,
   parent,
   adornFact,
+  group,
 }: {
   table: TableMeta;
   data: GridData;
@@ -152,6 +154,8 @@ export function RecordSummaries({
    * wraps, so anything wider arriving later would move the facts after it.
    */
   adornFact?: (row: Record<string, unknown>, column: string) => ReactNode | undefined;
+  /** The rows' groups (a list view's `group`): a head where a run of one value begins, as the grid draws one. */
+  group?: GridGroup;
 }) {
   useMessageLanguage();
   const fixed = fixedColumns(query);
@@ -196,7 +200,12 @@ export function RecordSummaries({
   return (
     <ul className="record-summaries" aria-label={say('common.records')}>
       {items.map(({ row, key, label: title, opensTable }, index) => {
-        return (
+        /* A grouped list's head, read as the grid's is: the value, its whole count and each subtotal by its caption. */
+        const head =
+          group && (index === 0 || String(items[index - 1].row[group.column] ?? '\u0000') !== String(row[group.column] ?? '\u0000'))
+            ? group.head(row[group.column])
+            : undefined;
+        const summary = (
           <li
             key={key ? JSON.stringify(key) : index}
             className={`record-summary${key ? ' is-navigable' : ''}`}
@@ -244,6 +253,22 @@ export function RecordSummaries({
               })}
             </dl>
           </li>
+        );
+        if (!head) return summary;
+        return (
+          <Fragment key={key ? JSON.stringify(key) : index}>
+            <li className="record-summary-group">
+              <span className="record-summary-group-name">{head.label}</span>
+              {head.count !== undefined && <span className="record-summary-group-count">{formatNumber(head.count)}</span>}
+              {Object.entries(head.sums ?? {}).map(([name, figure]) => (
+                <span key={name} className="record-summary-group-sum">
+                  {labels?.[name] ?? columnLabel(table.id, name) ?? humanName(name)}{' '}
+                  <Value tableId={table.id} col={presentationColumns(state.schema, table, [name]).get(name)} value={figure} compact />
+                </span>
+              ))}
+            </li>
+            {summary}
+          </Fragment>
         );
       })}
     </ul>

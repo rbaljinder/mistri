@@ -357,7 +357,7 @@ const identity = (role: string): Identity => ({ id: `account-${role}`, who: `${r
 const sessions: Record<string, Identity> = { manager: identity('manager'), buyer: identity('buyer') };
 
 test("served: a breakdown and a two-hop rollup read the rows under the reader's grants, and a request brings no rollup of its own", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-rollups-everywhere-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-rollups-everywhere-'));
   const path = join(directory, 'orders.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE vendor (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

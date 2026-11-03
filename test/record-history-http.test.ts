@@ -33,7 +33,7 @@ async function fixture(
   }) => Promise<void>,
   options: { provision?: boolean } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-history-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-history-http-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE person (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

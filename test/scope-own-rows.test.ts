@@ -113,7 +113,7 @@ function proofs(name: string, open: () => Promise<{ engine: Engine; tables: Tabl
 }
 
 proofs('own rows on SQLite', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-own-rows-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-own-rows-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(`

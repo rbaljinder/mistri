@@ -38,7 +38,7 @@ See it in the sample (`examples/apps/tick/app.ts:36`). The resource says `access
 | `groups` | `{ label, description?, fields }`; the inputs are the groups' fields, in order, rows as in `show` | none | Stable |
 | `show` | The inputs, in order, when there are no `groups` or `steps`; an inner list is a row, side by side: `[['email', 'phone'], 'company']` | every writable column | Stable |
 | `defaults` | Values a new record starts with; `today`, `now` and `me` from `@mistriwork/mistri/app` | none | Stable |
-| `fields` | Per input: `label`, `help`, `placeholder`, `multiline`, a reference's `where`, `as` (`'cards'`, `'buttons'`, `'radios'` or `'select'` for a vocabulary or a flag; `category: { as: 'cards' }`) | the column's | Stable |
+| `fields` | Per input: `label`, `help`, `placeholder`, `multiline`, a reference's `where` and `tree` (its own table's parent column, `parent_id: { tree: 'parent_id' }`: picked from the hierarchy, said with its path), `as` (`'cards'`, `'buttons'`, `'radios'` or `'select'` for a vocabulary or a flag; `category: { as: 'cards' }`) | the column's | Stable |
 | `when` | `{ salary: 'pay_type = salary' }`: an input shown only while the draft matches; a computed column is worked out from the draft | always | Stable |
 | `steps` | `{ label, fields }` a step at a time, under a progress bar; `fields` takes rows as `show` does | none | Stable |
 | `open`, `description` | `'drawer'` or `'page'`; one sentence under the heading | by size | Stable |

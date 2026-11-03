@@ -267,7 +267,7 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     await administer(async (admin) => {
       for (const tenantId of ['north', 'south']) await admin.putTenant({ tenantId, status: 'active', expectedVersion: null });
     });
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-postgres-tenant-http-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-postgres-tenant-http-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const appPath = join(directory, 'app.json'),
       policyFile = join(directory, 'policy.mjs'),

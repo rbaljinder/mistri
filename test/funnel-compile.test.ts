@@ -135,7 +135,7 @@ test('one statement on every dialect, the conditions bound in the order the text
 });
 
 test('the counts are the separate counts, from one statement', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-funnel-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-funnel-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'funnel.db'));
   db.exec(`CREATE TABLE application (id INTEGER PRIMARY KEY, store TEXT, status TEXT, submitted_at DATE, docs_ok INTEGER, test_drive INTEGER, funded_at DATE);

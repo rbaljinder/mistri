@@ -24,7 +24,7 @@ const gate = () => {
 };
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-row-transaction-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-row-transaction-'));
   const opened: Adapter[] = [];
   t.after(async () => {
     try {

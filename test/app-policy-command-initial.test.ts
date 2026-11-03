@@ -32,7 +32,7 @@ const refused = (code: string) => (error: unknown) => {
 };
 
 async function fixture(t: TestContext, mode: Mode) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-initial-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-initial-'));
   const path = join(directory, 'initial.db');
   const db = new DatabaseSync(path);
   const registry = new Registry();

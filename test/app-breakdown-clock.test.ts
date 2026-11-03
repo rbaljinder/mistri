@@ -24,7 +24,7 @@ const appId = 'clock-app';
 const viewer: Identity = { id: 'account-viewer', who: 'viewer@example.test', role: 'viewer' };
 
 test("an App breakdown and a view's query read a date phrase by the request clock, as its list does", { timeout: 10_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-breakdown-clock-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-breakdown-clock-'));
   const previous = { clock: process.env.MISTRI_CLOCK, config: process.env.XDG_CONFIG_HOME };
   const path = join(directory, 'tasks.db');
   const db = new DatabaseSync(path);

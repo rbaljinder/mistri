@@ -284,7 +284,7 @@ interface Lab {
 }
 
 async function sqliteLab(t: TestContext): Promise<Lab> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-automation-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-automation-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   t.after(() => {

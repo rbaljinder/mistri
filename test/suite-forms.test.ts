@@ -33,7 +33,7 @@ function publicCommand(id: string, table: string, gate?: { entered: string; rele
 test('suite serves ordinary public forms on independent Apps and isolates their keys', { timeout: 20_000 }, async (t) => {
   resetPublicFormLimits();
   t.after(() => resetPublicFormLimits());
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-forms-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-forms-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const socket = createServer();
   await new Promise<void>((resolve) => socket.listen(0, '127.0.0.1', resolve));
@@ -225,7 +225,7 @@ test(
   async (t) => {
     resetPublicFormLimits();
     t.after(() => resetPublicFormLimits());
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-policy-forms-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-policy-forms-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const socket = createServer();
     await new Promise<void>((resolve) => socket.listen(0, '127.0.0.1', resolve));

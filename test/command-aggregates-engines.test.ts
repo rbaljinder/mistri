@@ -56,7 +56,7 @@ async function answers(adapter: Adapter, table: string) {
 }
 
 test('a decimal’s places are the same on SQLite and PostgreSQL, over no rows and over some', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-aggregate-engines-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-aggregate-engines-'));
   const file = join(directory, 'engines.db');
   const db = new DatabaseSync(file);
   db.exec(

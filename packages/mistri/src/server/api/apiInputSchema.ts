@@ -1,6 +1,6 @@
 /** Private raw-JSON declaration preview, not command admission or execution. */
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
-import { isIsoDate } from '../../shared/command.js';
+import { isIsoDate, STAGED_FILE_ID } from '../../shared/command.js';
 import { parseCommandInput } from '../../shared/commandInputParse.js';
 import { DEFINED_KEY, DEFINITIONS_MOST } from '@mistriwork/engine/shared/definedFields.js';
 import { RICH_TEXT_MOST } from '@mistriwork/engine/shared/richText.js';
@@ -68,6 +68,10 @@ function textSchema(field: Extract<Field, { type: 'text' | 'textarea' }>, requir
   if (field.minLength !== undefined || field.maxLength !== undefined) notes.push('Its length is counted after trimming.');
   if (field.format !== undefined)
     notes.push(field.format === 'email' ? 'An email address.' : field.format === 'url' ? 'A web address (URL).' : 'A phone number.');
+  if (field.as === 'color') {
+    const schema = Object.freeze({ type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' });
+    return described(required ? schema : optionalScalar(schema), ['A color, # and six hex digits (#1d6a5a); kept in lower case.']);
+  }
   if (field.pattern !== undefined) notes.push(`Matches /${field.pattern}/ once trimmed${field.case ? ' and cased' : ''}.`);
   if (field.message !== undefined) notes.push(field.message);
   if (field.case !== undefined) notes.push(`Kept in ${field.case} case.`);
@@ -171,6 +175,14 @@ function scalarSchema(
     });
     return described(required ? schema : Object.freeze({ anyOf: Object.freeze([NULL, schema]) }), notes);
   }
+  if (field.type === 'time') {
+    if (field.min !== undefined) notes.push(`At or after ${field.min}.`);
+    if (field.max !== undefined) notes.push(`At or before ${field.max}.`);
+    sibling('below', field.below);
+    sibling('above', field.above);
+    const schema = Object.freeze({ type: 'string', pattern: '^(?:[01]\\d|2[0-3]):[0-5]\\d$' });
+    return described(required ? schema : optionalScalar(schema), notes);
+  }
   if (field.type === 'month') {
     if (field.min !== undefined) notes.push(`On or after ${field.min}.`);
     if (field.max !== undefined) notes.push(`On or before ${field.max}.`);
@@ -249,6 +261,18 @@ function scalarSchema(
         field.whose ? `, those whose ${quoted(field.whose)} names the record and those that name none` : ''
       }. Which are asked and required, and what each takes, is judged where the command runs.`,
     });
+  }
+  /* Held files' ids: each file is sent on its own first (POST /api/commands/files), and named here by the id it was
+     given. Only the person who sent it may use it, once, for this command's field, within a day. */
+  if (field.type === 'files' || field.type === 'signature') {
+    const id = Object.freeze({ type: 'string', pattern: STAGED_FILE_ID.source });
+    const held =
+      `Sent first to POST /api/commands/files as { command, field: ${quoted(field.name)}, file: { name, type, data } } (the bytes ` +
+      `base64), and named here by the id it answers: usable once, by whoever sent it, within a day. Each lands in ${quoted(field.from)}.`;
+    if (field.type === 'signature') return described(required ? id : optionalScalar(id), [`A signature, a PNG picture. ${held}`, ...notes]);
+    const list = Object.freeze({ type: 'array', items: id, uniqueItems: true, minItems: field.min ?? 1, maxItems: field.max });
+    const accepted = field.accept ? ` Of the types ${field.accept.map(quoted).join(', ')}.` : '';
+    return described(required ? list : optionalScalar(list), [`Files. ${held}${accepted}`, ...notes]);
   }
   const cause = `an input of type ${quoted(String((field as { type: unknown }).type))} has no JSON Schema description`;
   undescribed.push(Object.freeze({ path, cause }));

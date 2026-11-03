@@ -40,7 +40,7 @@ export async function startSessionApp(
     postgres?: string;
   } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-session-browser-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-session-browser-'));
   let database = join(directory, 'tickets.db');
   let dropDatabase: (() => Promise<void>) | undefined;
   let child: ReturnType<typeof spawn> | undefined;

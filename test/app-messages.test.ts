@@ -57,7 +57,7 @@ import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { LIVE_PG, ownedPostgresDatabase, pgControl } from './support/jobStoreEngines.js';
 import { liveSkip } from './live.js';
 
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-messages-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-messages-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 
 const EN = {
@@ -416,6 +416,10 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       'command.d.ts CommandGroupField.description',
       'command.d.ts CommandLinesField.label',
       'command.d.ts CommandLinesField.description',
+      'command.d.ts CommandFilesField.label',
+      'command.d.ts CommandFilesField.help',
+      'command.d.ts CommandSignatureField.label',
+      'command.d.ts CommandSignatureField.help',
       'model.d.ts CommandValueBase.label',
       'model.d.ts CommandValueBase.help',
       'model.d.ts AppCommandLines.label',

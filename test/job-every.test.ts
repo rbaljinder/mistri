@@ -125,7 +125,7 @@ test(
   'two servers over one job store run each slot once; a fresh store runs no slot missed before its first start',
   { timeout: 600_000 },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-every-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-every-'));
     const children: ChildProcess[] = [];
     t.after(async () => {
       for (const child of children) {

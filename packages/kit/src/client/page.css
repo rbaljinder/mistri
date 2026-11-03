@@ -3675,10 +3675,11 @@
   }
   /* An address is read whole or cut with an ellipsis (its title says the rest), never broken mid-word across two lines
    in a column of 8rem: an email takes the card's row. */
-  .page-card-fact:has(> dd > a.value-link:is([href^='mailto:'], [href^='http'])) {
+  .page-card-fact:has(> dd > a.value-link:is([href^='mailto:'], [href^='http']):not(.value-address)) {
     grid-column: 1 / -1;
   }
-  .page-card-fact > dd > a.value-link:is([href^='mailto:'], [href^='http']) {
+  /* A postal address is not cut: it stands on its own lines (Value.tsx). */
+  .page-card-fact > dd > a.value-link:is([href^='mailto:'], [href^='http']):not(.value-address) {
     display: block;
     overflow: hidden;
     text-overflow: ellipsis;

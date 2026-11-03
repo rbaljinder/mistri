@@ -47,6 +47,8 @@ export function publicFormRoute(host: AppHost | undefined, path: string): boolea
   const { views } = host.app.app;
   if (match.id === undefined) return publicForms(host.app.app).length > 0;
   if (!Object.hasOwn(views, match.id) || !isPublicForm(views[match.id])) return false;
+  // A file held for the form's command (formRoutes.ts): the route says no to a form whose command takes none.
+  if (match.action === 'files') return true;
   // A multistep form's step check (formRoutes.ts), for a step it has.
   if (match.action === 'check')
     return ((views[match.id] as AppFormView).steps ?? []).some((step) => (step as { id: string }).id === match.step);

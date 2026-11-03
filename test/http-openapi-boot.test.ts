@@ -15,7 +15,7 @@ const quiet = { write: () => true };
 let dir: string;
 let api: Awaited<ReturnType<typeof startFakeRest>>;
 before(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'tablewalk-openapi-boot-'));
+  dir = mkdtempSync(join(tmpdir(), 'mistri-openapi-boot-'));
   api = await startFakeRest();
 });
 after(async () => {

@@ -61,7 +61,7 @@ const refused = (code: string) => (error: unknown) => error instanceof BusinessC
 
 /** The connection file a deployment is started with, naming both sources. */
 function serverConfig(t: TestContext, lending: IgnitionLending): string {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-ignition-tenancy-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-ignition-tenancy-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const where = (source: IgnitionLending['source']) => source.url ?? source.existingPath!;
   const path = join(directory, 'server.json');

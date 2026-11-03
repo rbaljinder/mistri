@@ -131,13 +131,17 @@ export interface AppBoardFact {
 }
 
 /** A month of records by one date column, each on its day — or, with `end`, across the days from one date
-    column to another; a phone reads it as an agenda. */
+    column to another; a phone reads it as an agenda. With a `span` of a week or a day, a time grid: the hours down
+    the side, a record placed by its start and end. */
 export interface AppCalendarList {
   kind: 'calendar';
   /** The date (or timestamp) column a record sits on, or starts on when it has an `end`. */
   date: string;
-  /** A local date column holding a record's last day: the record is drawn across every day between. */
+  /** A local date column holding a record's last day: the record is drawn across every day between. In a week or a
+      day, a timestamp column holding the record's end, so it is drawn from its start to it. */
   end?: string;
+  /** What one page of the calendar shows: a week or a day as a time grid, read by timestamp columns. Absent, a month. */
+  span?: Exclude<CalendarSpan, 'month'>;
   /** A local text column or one-hop reference label path. */
   primary: string;
   /** At most one local column or one-hop label path beneath the primary. */
@@ -161,6 +165,10 @@ export interface AppCalendarBackdrop {
   /** The span's shade, in a display tone; absent, the quiet neutral. */
   tone?: (typeof DISPLAY_TONES)[number];
 }
+
+/** What one page of a calendar shows: a month of days, or a week or a day of hours. */
+export const CALENDAR_SPANS = ['month', 'week', 'day'] as const;
+export type CalendarSpan = (typeof CALENDAR_SPANS)[number];
 
 /** How many kinds of span one calendar shades. */
 export const CALENDAR_BACKDROPS_MAX = 4;

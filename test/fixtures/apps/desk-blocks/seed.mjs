@@ -1,7 +1,8 @@
 /**
  * The Desk blocks fixture's database: three tickets, one with a conversation (two messages from its caller, an
  * agent's reply, an internal note and a system line), and this month's changes with the freezes and holidays behind
- * them. People are agents and callers both: a message's author is a person, and so is a ticket's caller.
+ * them. People are agents and callers both: a message's author is a person, and so is a ticket's caller. Tickets
+ * are filed under categories three levels deep, two of one name under different parents (Batteries).
  *
  *   node --import tsx test/fixtures/apps/desk-blocks/seed.mjs <new-file.db>
  *
@@ -18,11 +19,13 @@ import { migrateSqliteCommandJournal } from '@mistriwork/mistri/maintenance';
 
 const SCHEMA = `PRAGMA foreign_keys=ON; BEGIN;
   CREATE TABLE person (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+  CREATE TABLE category (id INTEGER PRIMARY KEY, name TEXT NOT NULL, parent_id INTEGER REFERENCES category(id));
   CREATE TABLE ticket (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, requester TEXT NOT NULL,
     status TEXT NOT NULL CHECK(status IN ('open','pending','solved')),
     priority TEXT NOT NULL CHECK(priority IN ('low','normal','urgent')),
-    caller_id INTEGER REFERENCES person(id), agent_id INTEGER REFERENCES person(id), opened_at TIMESTAMP NOT NULL
+    caller_id INTEGER REFERENCES person(id), agent_id INTEGER REFERENCES person(id), opened_at TIMESTAMP NOT NULL,
+    category_id INTEGER REFERENCES category(id)
   );
   CREATE TABLE message (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, ticket_id INTEGER NOT NULL REFERENCES ticket(id),
@@ -33,11 +36,15 @@ const SCHEMA = `PRAGMA foreign_keys=ON; BEGIN;
   CREATE TABLE change (id INTEGER PRIMARY KEY, name TEXT NOT NULL, starts_on DATE NOT NULL, ends_on DATE NOT NULL);
   CREATE TABLE freeze (id INTEGER PRIMARY KEY, name TEXT NOT NULL, starts_on DATE NOT NULL, ends_on DATE NOT NULL);
   CREATE TABLE holiday (id INTEGER PRIMARY KEY, name TEXT NOT NULL, starts_on DATE NOT NULL, ends_on DATE NOT NULL);
+  CREATE TABLE visit (id INTEGER PRIMARY KEY, name TEXT NOT NULL, starts_at TIMESTAMP NOT NULL, ends_at TIMESTAMP);
   CREATE INDEX message_ticket ON message(ticket_id);`;
 
 /* A day of the month it is seeded in, as the calendar reads a date. */
 const now = new Date();
 const day = (n) => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(n).padStart(2, '0')}`;
+/* Today at a time of day, as the week's time grid reads a timestamp with no zone: the wall clock it was written with. */
+const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+const at = (time) => `${today}T${time}:00`;
 
 function insert(db, table, rows) {
   const columns = Object.keys(rows[0]);
@@ -59,6 +66,19 @@ export function seed(path) {
       { id: 2, name: 'Ana Pereira' },
       { id: 3, name: 'Bo Chen' },
       { id: 4, name: 'Cy Dunn' },
+    ]);
+    insert(db, 'category', [
+      { id: 1, name: 'Hardware', parent_id: null },
+      { id: 2, name: 'Software', parent_id: null },
+      { id: 3, name: 'Network', parent_id: null },
+      { id: 4, name: 'Laptops', parent_id: 1 },
+      { id: 5, name: 'Printers', parent_id: 1 },
+      { id: 6, name: 'Batteries', parent_id: 4 },
+      { id: 7, name: 'Screens', parent_id: 4 },
+      { id: 8, name: 'Batteries', parent_id: 5 },
+      { id: 9, name: 'Email', parent_id: 2 },
+      { id: 10, name: 'VPN', parent_id: 3 },
+      { id: 11, name: 'Wi-Fi', parent_id: 3 },
     ]);
     const opened = (daysAgo) => new Date(now.getTime() - daysAgo * 86_400_000).toISOString();
     insert(db, 'ticket', [
@@ -151,6 +171,12 @@ export function seed(path) {
     ]);
     insert(db, 'freeze', [{ id: 1, name: 'Quarter-end freeze', starts_on: day(8), ends_on: day(12) }]);
     insert(db, 'holiday', [{ id: 1, name: 'Office closed', starts_on: day(25), ends_on: day(26) }]);
+    // Today's site visits: two that overlap, and one with no end of its own.
+    insert(db, 'visit', [
+      { id: 1, name: 'Boiler service', starts_at: at('09:00'), ends_at: at('10:00') },
+      { id: 2, name: 'Router swap', starts_at: at('09:30'), ends_at: at('11:00') },
+      { id: 3, name: 'Badge reader check', starts_at: at('13:00'), ends_at: null },
+    ]);
     db.exec('COMMIT');
   } finally {
     db.close();

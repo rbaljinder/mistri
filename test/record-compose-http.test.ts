@@ -33,7 +33,7 @@ const token = 'HIDDEN_TOKEN_SENTINEL';
 type Call = (path: string, body?: object) => Promise<{ status: number; body: any; text: string }>;
 
 async function fixture(run: (f: { call: Call; as: (role: string | null) => void }) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-compose-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-compose-'));
   const file = join(directory, 'records.db');
   const db = new DatabaseSync(file);
   db.exec(`

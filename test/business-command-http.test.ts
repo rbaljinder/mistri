@@ -58,7 +58,7 @@ async function fixture(
   migrated = true,
   availability?: () => readonly boolean[],
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-http-'));
   const file = join(directory, 'commands.db');
   const db = new DatabaseSync(file);
   const registry = new Registry();
@@ -451,7 +451,7 @@ test('startup validates registry metadata and the durable command capability wit
 });
 
 test('command loader refuses unregistered module defaults and suppresses private import errors', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-loader-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-loader-'));
   try {
     const bad = join(directory, 'bad.mjs');
     writeFileSync(bad, "throw new Error('PRIVATE IDENTITY MAPPING');");
@@ -468,7 +468,7 @@ test('command loader refuses unregistered module defaults and suppresses private
 });
 
 test('CLI commands startup requires one explicit app, matching references and an existing journal', { timeout: 12000 }, () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-cli-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-cli-'));
   try {
     const database = join(directory, 'loans.db');
     const db = new DatabaseSync(database);

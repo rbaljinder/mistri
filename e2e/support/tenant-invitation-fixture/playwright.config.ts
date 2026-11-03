@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // No import of the ordinary config: it provisions shared e2e/.tmp fixtures.
-const output = (process.env.TABLEWALK_INVITATION_PLAYWRIGHT_OUTPUT ??= mkdtempSync(join(tmpdir(), 'tablewalk-invitation-playwright-')));
+const output = (process.env.TABLEWALK_INVITATION_PLAYWRIGHT_OUTPUT ??= mkdtempSync(join(tmpdir(), 'mistri-invitation-playwright-')));
 export default defineConfig({
   testDir: '../..',
   testMatch: 'tenant-invitations*.spec.ts',

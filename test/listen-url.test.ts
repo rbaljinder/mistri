@@ -28,7 +28,7 @@ test('"listen" is a PostgreSQL URL on a PostgreSQL connection, and anything else
 });
 
 test('loadConfig carries "listen" on the connection', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-listen-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-listen-'));
   try {
     const file = join(directory, 'mistri.json');
     writeFileSync(

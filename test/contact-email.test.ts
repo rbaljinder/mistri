@@ -45,7 +45,7 @@ class Recorder implements EmailTransport {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-contact-email-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-contact-email-'));
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE contact (id INTEGER PRIMARY KEY, status TEXT, email TEXT, email_ok INTEGER, proved TEXT);

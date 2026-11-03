@@ -485,6 +485,12 @@
     height: 20px;
     font-size: var(--text-xs);
   }
+  /* A group's head (Grid.tsx GroupHeadRow) is a hairline, not a row a reader opens: no look's row fill or hover tint
+     lands on it, here where it outranks them all. */
+  .table-wrap tbody tr.grid-group-head,
+  .table-wrap tbody tr.grid-group-head > td {
+    background: transparent;
+  }
 
   /* The folded and drill-in menus are used by thumb: their rows keep a 44px target in every look. */
   .topnav .tn-pop.tn-folded-pop .tn-popitem {
@@ -862,8 +868,8 @@
      figure 37px and a plain banner's action 33px: a field report's grade found them on every page. A date's calendar
      button is 30×40 inside its field and a New sheet's Close 23×25: the same grade found them on every form. A record's
      value link (a phone number, an address) is 18px, and the 32px pencil beside a link or a reference that edits it,
-     which the same grade found on every lead: their hit areas are cut at their field's row, below, so a tall one
-     never reaches into the next field's. */
+     which the same grade found on every lead, and a value's 24px copy button: their hit areas are cut at their
+     field's row, below, so a tall one never reaches into the next field's. */
     :where(
       .brand,
       .icon-button,
@@ -892,6 +898,7 @@
       .dashboard-note-action,
       .peekpanel-close,
       .inline-edit-button,
+      .value-copy,
       :is(.page-field, .page-card-fact) a.value-link
     ) {
       position: relative;
@@ -927,6 +934,7 @@
       .date-field-trigger,
       .peekpanel-close,
       .inline-edit-button,
+      .value-copy,
       :is(.page-field, .page-card-fact) a.value-link
     )::before {
       content: '';
@@ -937,7 +945,7 @@
       height: max(100%, 44px);
       transform: translate(-50%, -50%);
     }
-    :is(.page-field, .page-card-fact):has(a.value-link, .inline-edit-button) {
+    :is(.page-field, .page-card-fact):has(a.value-link, .inline-edit-button, .value-copy) {
       clip-path: inset(0 -100vmax);
     }
     /* A folding section's heading draws its chevron on ::before, so its hit area is the ::after. A gantt bar is

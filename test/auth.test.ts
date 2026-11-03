@@ -58,7 +58,7 @@ describe('an app that signs people in', () => {
   };
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-auth-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-auth-'));
     await serve({
       providers: ['email'],
       signUp: 'open',
@@ -236,7 +236,7 @@ describe('an app that signs people in', () => {
 
 describe('invite-only sign-up', () => {
   test("is refused at the door, in Better Auth's own words", async () => {
-    const tmp = mkdtempSync(join(tmpdir(), 'tablewalk-auth-invite-'));
+    const tmp = mkdtempSync(join(tmpdir(), 'mistri-auth-invite-'));
     const db = join(tmp, 'app.db');
     makeDemoDatabase(db);
     const dir = join(tmp, 'invite');

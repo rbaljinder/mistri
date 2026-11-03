@@ -20,7 +20,7 @@ const FIXTURE = resolve('test/fixtures/apps/command-desk');
 
 /** The fixture App under a disposable id and its own session store. */
 export async function startCommandApp(options: { rowPolicy?: boolean } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-desk-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-desk-'));
   let child: ReturnType<typeof spawn> | undefined;
   const stopProcess = async () => {
     if (!child || child.exitCode !== null || child.signalCode !== null) return;

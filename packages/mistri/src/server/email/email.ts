@@ -476,7 +476,7 @@ export function composeMail(mail: OutboundMail, now = new Date()): string {
       '\r\n',
     );
   }
-  const boundary = `tw-${randomBytes(12).toString('hex')}`;
+  const boundary = `mistri-${randomBytes(12).toString('hex')}`;
   return [
     ...head,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,

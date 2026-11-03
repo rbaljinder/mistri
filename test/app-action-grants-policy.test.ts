@@ -68,7 +68,7 @@ test('a fixed-action grant loads under a row policy and is still refused in a te
 });
 
 async function fixture(t: TestContext, machine = false) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-action-grants-policy-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-action-grants-policy-'));
   const file = join(directory, 'runs.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE run (id INTEGER PRIMARY KEY, desk INTEGER NOT NULL, title TEXT NOT NULL, gross INTEGER NOT NULL,

@@ -21,7 +21,7 @@ const ROOT = resolve('.');
 const ENTRY = join(ROOT, 'packages', 'mistri', 'src', 'server', 'index.ts');
 /* Outside the checkout, with tablewalk "installed" beside the Apps: the way
    a project that ran npm install resolves @mistriwork/mistri/app. */
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-check-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-check-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 mkdirSync(join(work, 'node_modules'));
 mkdirSync(join(work, 'node_modules', '@mistriwork'), { recursive: true });

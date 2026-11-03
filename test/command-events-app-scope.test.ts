@@ -100,7 +100,7 @@ const sqlite: Engine = {
   name: 'sqlite',
   skip: false,
   async setup(t) {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-events-')),
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-app-events-')),
       path = join(directory, 'loans.db');
     const db = new DatabaseSync(path);
     db.exec(

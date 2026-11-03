@@ -94,7 +94,7 @@ test('page-layout: a mistri.json page, a document and a free-form page are told 
     assert.equal(code, 'page-layout');
     assert.equal(message, `[page-layout] pages "unit" is a document, and a document has one layout, paper's. Remove "layout".`);
   }
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-layout-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-layout-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   mkdirSync(join(dir, 'pages'));
   writeFileSync(

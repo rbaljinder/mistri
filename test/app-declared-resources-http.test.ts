@@ -51,7 +51,7 @@ async function serve(
   mode: Mode,
   run: (call: (path: string, body?: Record<string, unknown>) => Promise<{ status: number; body: any }>) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-declared-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-declared-'));
   const previousConfig = process.env.XDG_CONFIG_HOME;
   process.env.XDG_CONFIG_HOME = directory;
   const path = join(directory, 'atlas.db');

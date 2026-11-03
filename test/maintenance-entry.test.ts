@@ -96,7 +96,7 @@ const tablesOf = (path: string): string[] => {
 };
 
 test('provisionStores makes the stores `only` names, once, and refuses a list it cannot keep before making any', async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-provision-stores-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-provision-stores-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'app.db');
   new DatabaseSync(path).close();

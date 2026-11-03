@@ -68,7 +68,7 @@ async function fixture(
   options: { form?: boolean; trustProxy?: string[]; role?: string } = { form: true },
 ) {
   resetPublicFormLimits();
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-forms-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-forms-http-'));
   const file = join(directory, 'forms.db');
   const db = new DatabaseSync(file);
   const registry = new Registry();

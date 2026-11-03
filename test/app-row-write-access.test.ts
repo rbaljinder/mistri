@@ -43,7 +43,7 @@ const aliases = {
 };
 
 async function fixture(t: TestContext, options: { single?: boolean; readonlyInventory?: boolean } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-write-access-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-write-access-'));
   const physical = new Map<string, SqliteAdapter>();
   const databases = new Map<string, DatabaseSync>();
   t.after(async () => {

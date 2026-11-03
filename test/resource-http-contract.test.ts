@@ -29,7 +29,7 @@ type Fixture = {
 const secret = 'PRIVATE_HTTP_CONTRACT_DRIVER';
 
 async function fixture(mode: ResourceHttpMode, run: (f: Fixture) => Promise<void>, sourceCeiling = false) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-http-contract-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-http-contract-'));
   const owner = basename(directory);
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);

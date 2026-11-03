@@ -81,7 +81,7 @@ const LOADERS = defineLoaders({
 describe('what check refuses, one fixture per code', () => {
   /* Page files on disk, read under the stand-ins the server reads them with. */
   async function readFiles(t: TestContext, files: Record<string, string>) {
-    const dir = mkdtempSync(join(tmpdir(), 'tablewalk-pages-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mistri-pages-'));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
     mkdirSync(join(dir, 'pages'));
     for (const [name, source] of Object.entries(files)) writeFileSync(join(dir, 'pages', name), source);
@@ -269,7 +269,7 @@ describe('what the App records of its pages', () => {
 
 describe('a loader reads as the reader, never writes, and ends', () => {
   async function reader(t: TestContext) {
-    const dir = mkdtempSync(join(tmpdir(), 'tablewalk-loader-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mistri-loader-'));
     const file = join(dir, 'desk.db');
     const db = new DatabaseSync(file);
     db.exec(SQL);

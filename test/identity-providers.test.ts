@@ -435,7 +435,7 @@ describe('signing in through an OpenID Connect provider', () => {
   const error = console.error;
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-oidc-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-oidc-'));
     idp = await startMockOidc();
     process.env.TEST_WORKFORCE_SECRET = idp.clientSecret;
     const db = join(tmp, 'app.db');

@@ -713,7 +713,12 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.12: the shell's `breadcrumbs` takes `{ top, home }` (two entries, no new name: `top` and `home` are others' already): 1672/504.
     // 1.0.0-rc.12: a tab's `empty` (both tab shapes) and a dashboard embed's (three entries, no new name): 1675/504.
     // 1.0.0-rc.12: the root's `shortName` (one entry, one new name): 1676/505.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1676, names: 505 });
+    // 1.0.0-rc.15: a display rule's `copy`, a copy button beside the value (one entry, one new name): 1677/506.
+    // 1.0.0-rc.15: a timeline's `reactions` and its six keys (seven entries, one new name: `kinds`): 1684/507.
+    // 1.0.0-rc.15: a calendar's `span`, a week or a day as a time grid (one entry, one new name): 1685/508.
+    // 1.0.0-rc.15: a list view's `group`, its grid's rows under heads (one entry; the name a related list's): 1686/508.
+    // 1.0.0-rc.15: a form field's `tree`, a reference picked from its hierarchy (one entry, one new name): 1687/509.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1687, names: 509 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {
@@ -831,7 +836,14 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     /* `themes` came back as something else: the themes a tenant's branding picks from, under `branding` alone. */
     const { branding, ...roots } = appSchema.properties;
     assert.ok(branding.properties.themes, 'branding offers its themes');
-    const app = declaredKeys({ ...appSchema, properties: roots });
+    /* `group` came back as something else: the column a list view's grid groups its rows by, on a list view alone. */
+    const { group: listGroup, ...listKeys } = appSchema.$defs.listView.properties;
+    assert.equal(listGroup.type, 'string', "a list view's group names a column");
+    const app = declaredKeys({
+      ...appSchema,
+      properties: roots,
+      $defs: { ...appSchema.$defs, listView: { ...appSchema.$defs.listView, properties: listKeys } },
+    });
     for (const gone of [
       'writable',
       'defaultSource',

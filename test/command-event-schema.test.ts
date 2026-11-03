@@ -17,7 +17,7 @@ import { isRuntimeTable } from '../packages/engine/src/shared/runtimeTables.js';
 
 const owner = { appId: 'ignition', storeId: 'sample-store', sourceId: 'business' };
 function fixture(t: TestContext, journal = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-event-schema-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-event-schema-'));
   const path = join(directory, 'business.db');
   const db = new DatabaseSync(path, { enableForeignKeyConstraints: true });
   db.exec("CREATE TABLE application(id INTEGER PRIMARY KEY, name TEXT); INSERT INTO application VALUES(1,'Before')");

@@ -8,7 +8,7 @@
  * and Forward through `popstate`.
  *
  *   const navigator = useNextNavigator();
- *   <Provider endpoint="/api/tw" navigator={navigator}>…
+ *   <Provider endpoint="/api/mistri" navigator={navigator}>…
  */
 import { useEffect, useMemo, useRef } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';

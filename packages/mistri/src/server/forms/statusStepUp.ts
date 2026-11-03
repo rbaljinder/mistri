@@ -71,7 +71,7 @@ interface Session {
   until: number;
 }
 const hashOf = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
-const cookieName = (form: string) => `tw_stepup_${form}`;
+const cookieName = (form: string) => `mistri_stepup_${form}`;
 
 /** Forget every step-up session: tests use it. */
 export function resetStepUpSessions(): void {

@@ -10,7 +10,7 @@ import { parseViewQuery, type ViewDef } from '../packages/engine/src/shared/view
 import type { BreakdownDef } from '../packages/engine/src/shared/breakdown.js';
 
 async function withCatalog(run: (adapter: SqliteAdapter) => Promise<void>): Promise<void> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-sqlite-booleans-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-sqlite-booleans-'));
   let adapter: SqliteAdapter | undefined;
   try {
     const file = join(directory, 'catalog.db');

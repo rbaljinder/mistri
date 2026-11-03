@@ -514,6 +514,9 @@ export interface PageTimeline {
       `record.<column>` is the page's record — `author_id = record.caller_id`. A stream whose table lacks a column it
       names is never on the far side; a stream's own `side` replaces it (timelineSides, page.ts). */
   side?: string;
+  /** Reactions under each entry: the rows of `from` that name it, counted by kind, the reader's own pressed, and the
+      App's command run to give or take one back (timelineReactions, page.ts). */
+  reactions?: TimelineReactions;
   width?: SectionWidth;
   offsetLeft?: SectionOffset;
   offsetRight?: SectionOffset;
@@ -521,6 +524,24 @@ export interface PageTimeline {
   /** Shown only when the root record matches this condition, in the query
       language: "status = converted". Judged against the base table. */
   when?: string;
+}
+
+/**
+ * A timeline's reactions: rows of `from`, one per person per kind per entry. `whose` names the entry, `by` the person
+ * (read as `<by> = me`), `column` the kind; each is inferred where `from` has exactly one candidate and named
+ * otherwise (page.ts timelineReactions). `command` is the App's own, offered by an action of the entry's resource and
+ * handed the kind as its `<column>` input: it gives a reaction or takes it back, under the reader's grants.
+ */
+export interface TimelineReactions {
+  from: string;
+  /** The kinds offered, in the order they are drawn; each a value of `column`, said through its display rule. */
+  kinds: string[];
+  command: string;
+  whose?: string;
+  by?: string;
+  column?: string;
+  /** The table people are rows of (an App's `auth.me`), set as the App loads: `by` is inferred among its references. */
+  person?: string;
 }
 
 /** The tones a timeline row may be tinted: the display tones' words. */

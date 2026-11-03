@@ -36,7 +36,7 @@ const audit: CommandAudit = { target: 'ticket', keyJson: '{"id":1}', changesJson
 const update = { table: 'ticket', key: { id: 1 }, values: { name: 'Updated' } };
 
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync) => Promise<void>, migrate = true) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-command-boundaries-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-command-boundaries-'));
   const path = join(dir, 'data.db');
   const db = new DatabaseSync(path);
   let adapter: SqliteAdapter | undefined;

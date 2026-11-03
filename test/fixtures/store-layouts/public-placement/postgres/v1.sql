@@ -37,10 +37,10 @@ CREATE TABLE mistri.public_placement_receipt (
     keys_json text NOT NULL COLLATE pg_catalog."C",
     changes_json text NOT NULL COLLATE pg_catalog."C"
 );
-INSERT INTO mistri.public_placement_meta (singleton, version, format_owner, schema_fingerprint) VALUES (1, 1, 'mistri.public-placement', 'bb2d510a8a4a120e4ebf305146580ab00d243a8bba9c7fb381f2a5b80f404d0f');
+INSERT INTO mistri.public_placement_meta (singleton, version, format_owner, schema_fingerprint) VALUES (1, 1, 'mistri.public-placement', '9d33c55e79435b34abdc4b0f284ae907c32e590c17af20aeef816a42a117b734');
 ALTER TABLE ONLY mistri.public_placement_meta
-    ADD CONSTRAINT tw_pp_meta_pk PRIMARY KEY (singleton);
+    ADD CONSTRAINT mistri_pp_meta_pk PRIMARY KEY (singleton);
 ALTER TABLE ONLY mistri.public_placement_receipt
-    ADD CONSTRAINT tw_pp_receipt_pk PRIMARY KEY (id);
+    ADD CONSTRAINT mistri_pp_receipt_pk PRIMARY KEY (id);
 ALTER TABLE ONLY mistri.public_placement_receipt
-    ADD CONSTRAINT tw_pp_receipt_scope UNIQUE (issuer_id, source_identity, app_id, form, tenant, command_id, command_version, submission);
+    ADD CONSTRAINT mistri_pp_receipt_scope UNIQUE (issuer_id, source_identity, app_id, form, tenant, command_id, command_version, submission);

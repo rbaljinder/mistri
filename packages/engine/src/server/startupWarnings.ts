@@ -102,4 +102,4 @@ export const RESET_WITHOUT_MAIL_WARNING =
 /** A fetch-style host that names no client: every visitor is one address to the sign-in and form rate limits. */
 export const SHARED_RATE_LIMIT_WARNING =
   'the fetch handler was called without a clientAddress, so every visitor shares one sign-in rate limit and lockout. ' +
-  "Pass the visitor's address as the second argument: tw.fetch(request, { clientAddress }).";
+  "Pass the visitor's address as the second argument: mistri.fetch(request, { clientAddress }).";

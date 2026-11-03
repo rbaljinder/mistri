@@ -139,7 +139,7 @@ describe('SQLite', () => {
   let directory: string;
   let file: string;
   before(() => {
-    directory = mkdtempSync(join(tmpdir(), 'tablewalk-bounded-count-'));
+    directory = mkdtempSync(join(tmpdir(), 'mistri-bounded-count-'));
     file = sqliteFile(directory);
   });
   after(() => rmSync(directory, { recursive: true, force: true }));
@@ -502,7 +502,7 @@ describe('bounded counts on PostgreSQL, against a real server', { skip: liveSkip
   });
 
   test("HTTP, a row policy: the scoped role's bounded count is its own, and capped past ten thousand", async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-bounded-count-pg-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-bounded-count-pg-'));
     const registry = new Registry();
     const owner = 'bounded-count-postgres';
     const appId = 'bounded-count-postgres-app';

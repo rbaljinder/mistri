@@ -19,7 +19,7 @@ import { expect, test } from './support/harness';
 import { startMockOidc, type MockOidc } from '../test/support/mockOidc';
 
 async function startApp(idp: MockOidc) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-oidc-browser-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-oidc-browser-'));
   let child: ReturnType<typeof spawn> | undefined;
   const stop = async () => {
     if (child && child.exitCode === null && child.signalCode === null) {

@@ -3,7 +3,7 @@
  * `<style>` of ours anywhere in it.
  *
  * The embed build turns every stylesheet the shell imports into a string,
- * already scoped to `.tw-root` and nested in one `@layer mistri`
+ * already scoped to `.mistri-root` and nested in one `@layer mistri`
  * (scripts/embed-css.mjs), and a module that hands the string here
  * (config/vite.embed.config.ts, `adoptedCss`). Each becomes a constructed sheet,
  * adopted by the document while a mistri element is on the page and taken

@@ -38,7 +38,7 @@ const returning = (id: number, idempotencyKey: string, expectedVersion = 0) => (
 });
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-loaner-desk-test-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-loaner-desk-test-'));
   const file = seed(join(directory, 'loans.db'));
   const db = new DatabaseSync(file, { timeout: 5000 });
   db.exec('PRAGMA foreign_keys = ON');

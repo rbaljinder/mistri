@@ -1,0 +1,49 @@
+/* A timeline's reactions (its `reactions`), fetched with TimelineReactions.tsx the first time a section with reactions
+   draws, so a first page carries none of it. In the base layer, beside the rest of the timeline in page.css. */
+@layer base {
+/* Reactions under a message: a quiet row of outlined kinds in the column of its words, the reader's own on the accent's
+   wash. A press changes the count and the ground, and nothing moves or springs (docs/design.md, motion). */
+.timeline-reactions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.timeline-reaction {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 24px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: none;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+.timeline-reaction:is([aria-pressed='true'], [data-pressed='true']) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+.timeline-reaction-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-subtle);
+}
+@media (hover: hover) and (pointer: fine) {
+  button.timeline-reaction:hover:not(:disabled) {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+}
+/* On a touch screen a kind's 24px takes a 44px hit area, as the chrome's small controls do (structure.css). */
+@media (pointer: coarse) {
+  button.timeline-reaction::after {
+    content: '';
+    position: absolute;
+    inset: -10px 0;
+  }
+}
+}

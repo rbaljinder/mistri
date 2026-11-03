@@ -29,7 +29,7 @@ test(
   "a suite App's email rule opens its channel, and the unsubscribe link answers under the App's mount",
   { timeout: 30_000 },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-contact-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-contact-'));
     let active: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
     t.after(async () => {
       await active?.close();
@@ -149,7 +149,7 @@ test(
   { timeout: 30_000 },
   async (t) => {
     const INBOUND = 'suite-tenant-contact-inbound-secret-0001';
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-tenant-contact-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-tenant-contact-'));
     let active: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
     t.after(async () => {
       await active?.close();

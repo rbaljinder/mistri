@@ -237,7 +237,8 @@ export interface AppDisplayRule {
     | 'month'
     | 'year'
     | 'json'
-    | 'qr';
+    | 'qr'
+    | 'address';
   /** The face this column's values are set in, over the look's own: `data` (the look's data face, usually
       monospace), `sans` (the interface's reading face) or `code` (always monospace, for a VIN or a hash):
       `display: { vin: { face: 'code' } }`. Left out, an App sets a key, a reference, a code or a QR value in the
@@ -257,6 +258,8 @@ export interface AppDisplayRule {
   /** A signature drawn (or a name typed) and kept as a PNG row of the file resource the column points at. As
       authored, `true`; resolved against a catalog, the file resource's table id (absent where it does not resolve). */
   signature?: true | { table: string; key: string };
+  /** A copy button beside the value on a record: the stored value copied, a toast saying so. */
+  copy?: true;
   /** Value → one of the theme's chart colors, 1 to 8: a category's own color — a board card's chip and stripe, a
       chip in a cell — kept apart from `tone`, which says meaning. A value it does not name takes a color of its
       own, fixed by its words. */
@@ -401,6 +404,8 @@ export interface AppFormField<Field extends string = string> {
   as?: 'cards' | 'buttons' | 'radios' | 'select';
   /** The referenced table's column → this form's field whose value it must equal. */
   where?: Record<string, Field>;
+  /** The referenced table's column naming each record's parent: the picker draws the hierarchy it makes. */
+  tree?: string;
 }
 
 /** A resource's tags resolved against the catalog: the link table, its reference back to the record and out to the tag, and how a tag is named. */

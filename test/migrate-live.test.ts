@@ -26,7 +26,7 @@ import { pgClient, uuidPostgresDatabase } from './support/tenantDialects.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 const ROOT = resolve('.');
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-migrate-pg-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-migrate-pg-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 const drops: Array<() => Promise<void>> = [];
 after(async () => {

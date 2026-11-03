@@ -1,0 +1,37 @@
+/* A command form's files (HeldFiles.tsx), a part on demand: the attachments list's drop area and rows (kit page.css
+   `.attachments`), drawn in the same tokens, so a form that takes files reads as the record's attachments do. The
+   drop target is the accent's outline, nothing more; progress is a plain filled track, not animated. */
+@layer components {
+.held-files { display: grid; gap: var(--space-3); width: 100%; border-radius: var(--radius); transition: box-shadow var(--t-hover) var(--ease-out); }
+.held-files.is-over { box-shadow: 0 0 0 2px var(--accent); background: var(--accent-soft); }
+.held-files-add {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4);
+  padding: var(--space-4); border: 1px dashed var(--line-strong, var(--line)); border-radius: var(--radius);
+}
+.held-files.is-over .held-files-add { border-color: var(--accent); }
+.held-files-hint { margin: 0; color: var(--ink-subtle); font-size: var(--text-sm); }
+.held-files-error { margin: 0; color: var(--status-critical); font-size: var(--text-sm); }
+.held-files-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.held-files-item { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) 0; border-top: 1px solid var(--line); min-width: 0; }
+.held-files-item:first-child { border-top: 0; }
+.held-files-badge {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  min-width: 38px; height: 38px; padding: 0 var(--space-2h); border-radius: calc(var(--radius) - 2px);
+  background: var(--accent-soft); color: var(--accent-ink); font: 600 var(--text-xs) var(--sans); letter-spacing: 0.02em;
+}
+.held-files-text { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); min-width: 0; flex: 1; }
+.held-files-name {
+  max-width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer;
+  color: var(--link); font: inherit; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.held-files-name.is-plain { color: var(--ink); cursor: default; }
+@media (hover: hover) {
+  .held-files-name:not(.is-plain):hover { text-decoration: underline; }
+}
+.held-files-meta { color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.held-files .progress-bar { align-self: stretch; height: 4px; border-radius: var(--radius-item); background: var(--raised); overflow: hidden; }
+.held-files .progress-bar-fill { display: block; height: 100%; border-radius: var(--radius-item); background: var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+  .held-files { transition: none; }
+}
+}

@@ -31,7 +31,7 @@ async function fixture(
   observe = true,
   addresses?: { base?: string; mounts?: Record<string, string> },
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-observe-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-observe-'));
   const file = join(directory, 'app.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE loan(id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, note TEXT, api_token TEXT);

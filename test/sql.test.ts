@@ -33,7 +33,7 @@ import { liveSkip } from './live.js';
 
 /* Made for this run and removed after it — never `.demo/`, where a
    developer's demo databases and credentials are. */
-const DB_DIR = mkdtempSync(join(tmpdir(), 'tablewalk-sql-'));
+const DB_DIR = mkdtempSync(join(tmpdir(), 'mistri-sql-'));
 const DB = join(DB_DIR, 'sql-test.db');
 
 const table = (name: string, columns: Array<[string, string, boolean?]>): TableMeta => ({

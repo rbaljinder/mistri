@@ -15,7 +15,7 @@ test(
   'owned PG Thread fixture preserves every canonical row and drops only its captured database',
   { skip: process.env.TABLEWALK_TEST_PG_LOAD !== '1', timeout: 60000 },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-pg-load-fixture-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-pg-load-fixture-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const fixture = await seedPostgresFixture(directory, 100);
     try {

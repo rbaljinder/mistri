@@ -173,7 +173,7 @@ test('closed declarations reject wildcards, unknown/empty lists, malformed roles
  * No listener or external service is needed for proof provenance tests. */
 async function fixture(t: TestContext) {
   const { captureAppAuthRuntime, createAppAuth, createSuiteAppAuth } = await import('../packages/mistri/src/server/auth/auth.js');
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-flag-authority-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-flag-authority-'));
   const secret = 'flag-authority-owned-test-secret-at-least-thirty-two-characters';
   const auth = await createAppAuth(
     {

@@ -130,7 +130,7 @@ test("the email service's tenant mail keys are checked when read, written back a
   };
   assert.deepEqual(emailEntry(emailConnectionOf(full, 'mistri.json')), full);
 
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-mail-dns-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-mail-dns-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const config = join(directory, 'mistri.json');
   writeFileSync(config, JSON.stringify({ connections: [full] }));

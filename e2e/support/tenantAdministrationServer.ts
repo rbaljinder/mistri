@@ -41,7 +41,7 @@ const AUTH_SECRET = 'disposable-administration-browser-secret-at-least-thirty-tw
 /** `assistant`: the App declares an assistant answered by a scripted model, and the target account is
  * already a reader of an existing North, so the spec starts at the switch rather than at the membership. */
 export async function startTenantAdministration(options: { assistant?: boolean } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-administration-browser-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-administration-browser-'));
   const appDirectory = join(directory, 'app');
   mkdirSync(appDirectory);
   const database = join(directory, 'business.db'),

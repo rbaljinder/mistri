@@ -16,12 +16,12 @@
   background: transparent; border: 0; border-radius: var(--radius);
   color: var(--ink); font: var(--text-sm) var(--sans);
 }
-.new-menu-item .tw-icon { flex: none; width: 16px; height: 16px; color: var(--ink-muted); }
+.new-menu-item .mistri-icon { flex: none; width: 16px; height: 16px; color: var(--ink-muted); }
 .new-menu-item .new-menu-slot { flex: none; width: 16px; height: 16px; }
 .new-menu-item:hover, .new-menu-item:focus-visible, .new-menu-item[data-highlighted] {
   background: var(--accent-soft); color: var(--accent-ink);
 }
-.new-menu-item:hover .tw-icon, .new-menu-item[data-highlighted] .tw-icon { color: inherit; }
+.new-menu-item:hover .mistri-icon, .new-menu-item[data-highlighted] .mistri-icon { color: inherit; }
 /* A long menu's groups: a quiet heading over each, aligned with the lines' text, and one hairline between runs (a separator) — the
    section rule's quiet, not a box round each group. */
 .new-menu-sep { height: 1px; margin: var(--space-2) var(--space-1); background: var(--line); }

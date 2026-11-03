@@ -10,7 +10,7 @@ import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 const byId = (id: number): Filter => ({ groups: [[{ column: 'id', op: '=', value: id }]] });
 const page = { limit: 20, offset: 0 };
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-sqlite-transaction-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-sqlite-transaction-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(

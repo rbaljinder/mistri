@@ -91,7 +91,7 @@ test('native PostgreSQL private ordinary receipt recovery', { skip: liveSkip('po
 
     await t.test('same lookup returns frozen ordered keys without audit change images', async () => {
       await commandsOf(source).commandTransaction(async (_tx, journal) => {
-        assert.deepEqual(Object.keys(journal).sort(), ['commit', 'find', 'insert', 'kept', 'nextNumber', 'taken']);
+        assert.deepEqual(Object.keys(journal).sort(), ['commit', 'find', 'insert', 'kept', 'nextNumber', 'stage', 'takeStaged', 'taken']);
         assert.deepEqual(await journal.find(receipt), receipt);
         const recovered = await recoverPostgresCommandReceipt(journal, receipt);
         assert.ok(recovered);

@@ -15,7 +15,17 @@
  * never echoes a value.
  */
 import type { AppCommandField } from './command.js';
-import { COMMAND_INPUT_LIMITS, fieldPattern, isIsoDate, isIsoMonth, isoInstant, maskPattern } from './command.js';
+import {
+  COMMAND_INPUT_LIMITS,
+  fieldPattern,
+  isHexColor,
+  isIsoDate,
+  isIsoMonth,
+  isIsoTime,
+  isoInstant,
+  maskPattern,
+  STAGED_FILE_ID,
+} from './command.js';
 import { RICH_TEXT_MOST, richTextPlain } from '@mistriwork/engine/shared/richText.js';
 import { DEFINED_KEY, DEFINITIONS_MOST } from '@mistriwork/engine/shared/definedFields.js';
 
@@ -202,6 +212,8 @@ function readValue(
       if (field.minLength !== undefined && cased.length < field.minLength) return problem('too_short');
       if (field.maxLength !== undefined && cased.length > field.maxLength) return problem('too_long');
       if (field.format !== undefined && !FORMATS[field.format](cased)) return problem('format');
+      // A color is kept as the picker writes it, `#` and six lower-case hex digits, whatever case was typed.
+      if (field.as === 'color') return isHexColor(cased) ? { value: cased.toLowerCase() } : problem('format');
       if (field.pattern !== undefined && !fieldPattern(field.pattern).test(cased)) return problem('pattern');
       return { value: cased };
     }
@@ -227,6 +239,12 @@ function readValue(
     }
     case 'month': {
       if (!isIsoMonth(value)) return problem('type');
+      if (field.min !== undefined && value < field.min) return problem('below_min');
+      if (field.max !== undefined && value > field.max) return problem('above_max');
+      return { value };
+    }
+    case 'time': {
+      if (!isIsoTime(value)) return problem('type');
       if (field.min !== undefined && value < field.min) return problem('below_min');
       if (field.max !== undefined && value > field.max) return problem('above_max');
       return { value };
@@ -321,6 +339,22 @@ function readValue(
       }
       return { value: answers };
     }
+    /* Held files' ids, in the order the form lists them (server/commands/stagedFiles.ts): only their shape is the
+       declaration's. Whose each one is, and which field it was held for, are judged where the command runs. */
+    case 'files': {
+      if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return problem('type');
+      if (value.length > field.max) return problem('too_many');
+      if (value.some((id) => typeof id !== 'string' || !STAGED_FILE_ID.test(id))) return problem('type');
+      if (new Set(value).size !== value.length) return problem('shape');
+      if (!value.length) {
+        if (field.required && !state.partial && field.when === undefined) refuse(state, path, 'required');
+        return {};
+      }
+      if (!state.partial && value.length < (field.min ?? 1)) return problem('too_few');
+      return { value: [...value] };
+    }
+    case 'signature':
+      return typeof value === 'string' && STAGED_FILE_ID.test(value) ? { value } : problem('type');
   }
 }
 
@@ -379,7 +413,12 @@ function readList(fields: readonly AppCommandField[], raw: unknown, within: stri
   // A field below or above its sibling: judged on the values as read, only when both were given.
   for (const field of fields) {
     if (
-      (field.type !== 'number' && field.type !== 'money' && field.type !== 'date' && field.type !== 'month' && field.type !== 'datetime') ||
+      (field.type !== 'number' &&
+        field.type !== 'money' &&
+        field.type !== 'date' &&
+        field.type !== 'month' &&
+        field.type !== 'time' &&
+        field.type !== 'datetime') ||
       !Object.hasOwn(result, field.name)
     )
       continue;

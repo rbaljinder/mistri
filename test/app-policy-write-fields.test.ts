@@ -15,7 +15,7 @@ import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 const owner = 'private-write-fields-owner';
 
 async function fixture(t: TestContext, writable = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-write-fields-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-write-fields-'));
   const path = join(directory, 'records.db');
   const db = new DatabaseSync(path);
   const registry = new Registry();

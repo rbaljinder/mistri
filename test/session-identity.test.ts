@@ -138,7 +138,7 @@ test(
   'expected-account preconditions refuse stale writes before opening adapters and never grant authority',
   { timeout: 10_000 },
   async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-session-owner-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-session-owner-'));
     const database = join(directory, 'data.db');
     const db = new DatabaseSync(database);
     db.exec("CREATE TABLE ticket (id INTEGER PRIMARY KEY, name TEXT NOT NULL); INSERT INTO ticket VALUES (1, 'Original');");

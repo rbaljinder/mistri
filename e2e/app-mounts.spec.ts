@@ -40,7 +40,7 @@ async function freePort(): Promise<number> {
 
 /** Compass over this worker's CRM copy, placed by `flags`. */
 async function startCompass(flags: readonly string[]): Promise<{ origin: string; stop: () => Promise<void> }> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-mounts-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-mounts-'));
   const config = join(directory, 'crm.json');
   writeFileSync(config, JSON.stringify({ connections: [{ name: 'crm', url: CRM_DB, writable: true }] }));
   const port = await freePort();
@@ -205,7 +205,7 @@ test.describe('An App that signs people in, placed three ways', () => {
         await expect(page.getByRole('heading', { name: 'Address' })).toBeVisible();
         const base = under === '/tools' ? '/tools' : '';
         expect((await page.context().cookies()).map((cookie) => [cookie.name, cookie.path])).toEqual([
-          ['tw_form_apply', `${base}/api/forms/apply`],
+          ['mistri_form_apply', `${base}/api/forms/apply`],
         ]);
 
         // The status check, as a link, answers through the API under the base.
@@ -247,7 +247,7 @@ test('the main App at the root beside another under its id', async ({ page }) =>
   /* Tick and a second App over Tick's database in one process:
      `--mount tick=/` makes Tick the main App, the Desk keeps /desk, and each
      reads and writes its own addresses. */
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-'));
   const { execFileSync } = await import('node:child_process');
   // One connection, one App: the Desk reads a second copy of Tick's database.
   for (const name of ['tick', 'desk'])

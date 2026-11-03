@@ -20,6 +20,7 @@ import {
   CommandFields,
   CommandLive,
   asksDraftLogic,
+  builtInInputName,
   blankCommandValues,
   commandInput,
   commandPathLabel,
@@ -39,6 +40,7 @@ import { IntakeNote } from './IntakeNote.js';
 import { answered, maskedLast4, sensitiveText, stepSaid, type NameOf } from './reviewValues.js';
 import { knownReferenceName } from './referenceNames.js';
 import './FormSurface.css';
+import type { HeldTarget } from './HeldFiles.js';
 import { ReviewValue, type ReviewSource } from './ReviewValue.js';
 import { say } from '../copy/forms/components/FormSurface.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
@@ -68,6 +70,9 @@ export async function formArrives(
     list.some(
       (field) => ((field.type === 'number' || field.type === 'money') && !!field.live) || (field.type === 'group' && lives(field.fields)),
     );
+  /* A field drawn as a column's format is (stars, a scan, a color) asks the platform's own input, from its own chunk. */
+  const ownInputs = (list: readonly AppCommandField[]): boolean =>
+    list.some((field) => builtInInputName(field) !== undefined || (field.type === 'group' && ownInputs(field.fields)));
   await Promise.all([
     form.steps
       ? MultiStepForm.ready().then(() => (form.style === 'intake' ? stepping().then((module) => module.loadIntakeStyle()) : undefined))
@@ -76,8 +81,8 @@ export async function formArrives(
     lives(fields) ? CommandLive.ready() : undefined,
     form.challenge ? PublicGuard.ready() : undefined,
     // The App's own input components it draws: where they are served, for the kit's slot; their code comes as drawn.
-    form.components && Object.keys(form.components).length
-      ? import('./sdk/publicInputs.js').then(({ installPublicInputs }) => installPublicInputs(form.components!))
+    (form.components && Object.keys(form.components).length) || ownInputs(fields)
+      ? import('./sdk/publicInputs.js').then(({ installPublicInputs }) => installPublicInputs(form.components ?? {}))
       : undefined,
   ]).catch(() => {});
 }
@@ -267,6 +272,7 @@ export function FormSurface({
   submit,
   connection,
   visitor,
+  held,
   identityEpoch = 0,
   again = false,
   prefill,
@@ -311,6 +317,8 @@ export function FormSurface({
   connection?: string;
   /** A public form's App (and its intake address), where a reference input's choices are read signed out. */
   visitor?: { app: string; via?: string };
+  /** Where a files or signature input's files are held as they are sent: the command's, or this public form's. */
+  held?: HeldTarget;
   identityEpoch?: number;
   /** Offer the form again after a receipt: a signed-in desk's next entry, never a public applicant's second application. */
   again?: boolean;
@@ -530,6 +538,7 @@ export function FormSurface({
       inputs={form.inputs}
       {...(connection === undefined ? {} : { connection })}
       {...(visitor === undefined ? {} : { visitor })}
+      {...(held === undefined ? {} : { held })}
       {...(questions ? { questions } : {})}
     />
   );

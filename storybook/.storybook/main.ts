@@ -98,7 +98,7 @@ const config: StorybookConfig = {
        static Storybook, and the surfaces check refuses a build without them; the root config, which names no
        product, refuses every build (productless), which a static Storybook is not. */
     const bundleOnly = new Set(['mistri:surfaces', 'mistri:surface-pages', 'mistri:precompress', 'mistri:productless']);
-    const rules = named(app?.config.plugins).filter((plugin) => plugin.name.startsWith('tablewalk:') && !bundleOnly.has(plugin.name));
+    const rules = named(app?.config.plugins).filter((plugin) => plugin.name.startsWith('mistri:') && !bundleOnly.has(plugin.name));
     const hasReact = named(base.plugins).some((plugin) => plugin.name.startsWith('vite:react'));
     const react = hasReact ? [] : [(await import('@vitejs/plugin-react')).default({ include: /\.[jt]sx$/ })];
     return mergeConfig(base, {

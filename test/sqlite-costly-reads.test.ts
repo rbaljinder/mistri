@@ -15,7 +15,7 @@ import { heavyRelations, PROCESS_ROWS, stalls } from '../packages/engine/src/ada
 const BIG = PROCESS_ROWS + 50_000;
 
 function fixture(t: { after(fn: () => unknown): void }) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-costly-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-costly-'));
   const file = join(directory, 'big.db'),
     db = new DatabaseSync(file);
   db.exec(`CREATE TABLE big (id INTEGER PRIMARY KEY, name TEXT NOT NULL, bucket INTEGER NOT NULL);

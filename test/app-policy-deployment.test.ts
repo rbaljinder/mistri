@@ -60,7 +60,7 @@ function sanitized(kind: typeof AppRowPolicyDefinitionError | typeof AppAccessDe
 }
 
 async function fixture(t: TestContext, configuration: { commands?: boolean; journal?: boolean; readOnly?: boolean } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-deployment-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-deployment-'));
   const registry = new Registry();
   const databases = new Map<string, DatabaseSync>();
   const deployments: Deployment[] = [];

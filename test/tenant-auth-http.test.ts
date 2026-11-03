@@ -79,7 +79,7 @@ const pageView = (key: string) => ({
 });
 
 async function fixture(t: TestContext, start = true, pages = false) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-auth-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-auth-http-'));
   const business = join(directory, 'business.db'),
     authStore = join(directory, 'auth.db');
   const db = new DatabaseSync(business),

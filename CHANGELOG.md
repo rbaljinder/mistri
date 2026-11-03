@@ -5,6 +5,101 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.15
+
+- **The rename is finished in mistri's own surface.** What an App author's stylesheet, a host page, a shared cache, a
+  visitor's browser and an App's database meet of the framework is named mistri, not tablewalk or `tw`. The engine's
+  names both products read (the config file, `~/.config/<product>`, the environment variables, the read-your-write
+  cookie, and now the shared cache's keys and the scratch directories) are said in the running product's name
+  (`setProduct`, `@mistriwork/engine/server/product.js`), so the database browser keeps `tablewalk` for its own.
+- **An App's tab never says tablewalk.** Until its first room drew, an App's tab read "Inventory — tablewalk"; it is now
+  the App's name, then the room's before it, as the server already wrote it. A grid header's tooltip no longer says the
+  default order is "the one tablewalk chose".
+- **The samples and the reference mount an App at `/api/mistri`.** The embedding guides, Ladle's host, the
+  `@mistriwork/mistri/react` declarations and `createHandler`'s base-path refusal said `/api/tw` and a handler called
+  `tw`; they now say `/api/mistri` and `mistri` (`mistri.node`, `mistri.fetch`). Any path works as before; only the
+  examples moved.
+- **An oversized upload under a row policy answers 413.** A request body past the upload ceiling is told it is too large
+  (the client can send less), where a row-policy App used to answer it as a 400 refusal of the change.
+- **A command form asks what a column's format edits.** `field.time()` is a time of day (`HH:MM`, 24-hour) in the
+  browser's picker, with `min`, `max` and `below`/`above`; `field.number({ as: 'rating', outOf: 5 })` asks stars, a whole
+  number from 1 to `outOf` (3 to 10); `field.text({ as: 'scan' })` is a box beside a Scan button where the browser reads
+  codes with the camera; `field.text({ as: 'color' })` is a `#rrggbb` color in the system's picker, kept in lower case.
+  Each is the record form's own built-in input, fetched the first time one is drawn, on a signed-in and a public form
+  alike, and the one reader the browser and the server share holds each to its shape.
+- **A value can be copied from its record.** `display: { tracking_number: { copy: true } }` puts a copy button after
+  the value on a record page: it copies the value as stored (an id past 2^53 as its digits) and the toast says it was
+  copied. At a desk it waits for the pointer or keyboard focus, as a field's pencil does; on touch it stays. A value a
+  `masked` prefix hides is not copied, and a value with its own copy button is edited by the pencil beside it.
+- **An address reads as one.** `display: { ship_to: { format: 'address' } }` draws a postal address on its lines, as
+  typed one part per line, as a link that opens a map search for it beside the App; nothing is fetched to draw it, a
+  list or a card says it on one line, and a New form asks it in a box of several lines.
+- **A timeline can carry reactions.** `timeline('Posts', [...], { reactions: { from: 'reaction', kinds: ['like',
+  'thanks'], command: 'reactToPost' } })` draws a quiet row of those kinds under each entry, each said through the kind
+  column's display rule with its count, the reader's own pressed. Pressing one runs the App's own command on the entry
+  with the kind as its input, under the reader's grants, so the command decides whether a press gives one or takes it
+  back; there is no other write. The counts for the page's entries are one read and the reader's own one more
+  (`<by> = me`). `whose`, `by` and `column` are found when the reactions table has one candidate for each; otherwise
+  `mistri check` names the key to add, and a command no action of the entry's resource offers, or one that takes no
+  input of the kind, is refused.
+- **A reaction's `whose` refers to its entry's primary key.** A press runs the command on the entry by the column
+  `whose` refers to, as its key; `mistri check` now refuses a `whose` whose reference lands on another column of the
+  entry's table (a unique slug), naming the column it refers to and the key it should.
+- **A command form takes files.** `field.files('repair_photo', { max: 5, accept: 'image/*' })` asks for files that a
+  person picks, drops or pastes, each shown with its progress as it is sent, then by name with a preview and a Remove.
+  Each file is sent as it is picked, held for the person who sent it, that command and that field, under the grant that
+  runs the command and within the file resource's `maxBytes` (413) and the field's `accept` (415). The form sends the ids
+  it was answered. The command takes the files in its own transaction, and the handler receives `{ name, type, size,
+  data }[]` to store with `db.<from>.insertFile(file, values)`; a file it does not store refuses the run. An id is random
+  and used once: another person, field or run cannot take it, and a refused command writes no rows and leaves the files
+  held. A public form holds files only for a field its command declares and only for the visitor's own browser, by
+  cookie, within its own rate limit and a cap for each visitor and for all visitors. A held file expires after a day.
+  Held files are kept in a runtime store of their own (`__mistri_staged_*`, both engines), created where missing.
+- **A command form takes a signature.** `field.signature('signature_file')` is the pad a column's signature uses,
+  drawn or typed, and kept by holding its PNG as a file is held. The handler receives one `{ name, type, size, data }`
+  to store with `insertFile`, under the same rules: the person's own, used once, taken in the command's transaction.
+- **A calendar shows a week or a day of hours.** `calendar('starts_at', 'title', { span: 'week', end: 'ends_at' })`
+  (or `span: 'day'`) draws a time grid: the hours down the side, each record placed by its start and end, records that
+  overlap side by side, and a line at the present moment. A record is dragged to another time or day and its foot to
+  change its end, or moved half an hour or a day with Alt and an arrow (its end with Alt, Shift and an arrow), each
+  through the ordinary update the month's move takes. Both columns must be timestamps (`mistri check` says so); a
+  phone reads the period as an agenda with each record's hours. `span: 'month'`, the default, is the month as before.
+- **A grid groups its rows, with subtotals.** `listView('Deals by stage', 'opportunity', { group: 'stage', totals:
+  ['amount'] })` reads the rows in the stage's order and stands each stage's under a hairline head that says the stage,
+  how many deals it holds and the amount's subtotal under the Amount column; the head folds its stage away and opens it
+  again, and the keyboard's cursor steps over a folded stage. The heads are one breakdown over everything the tab
+  matches — a stage a page divides is counted whole — never a read per group; a reader's sort orders the rows inside
+  each group. A grid only, and not beside a hand `order` (`mistri check` refuses a key, a missing column or a JSON one).
+  A record page's related list keeps its own `group: { by }`.
+- **A reference picks from its hierarchy.** `field.reference('category', { by: 'id', labelColumn: 'name', tree:
+  'parent_id' })` on a command, and `form: { fields: { parent_id: { tree: 'parent_id' } } }` on a resource's form, open
+  the picker on the records with no parent, a caret where there are children (one breakdown a level, never a read per
+  record), and read a branch as it opens. The arrows walk it (Right opens and steps in, Left folds and steps out),
+  typing searches every level with each match said by its path, so two Batteries under different parents are told
+  apart, and the choice is said with its path under the box. The catalog check holds `tree` to a column of the table
+  that names a parent row of that table itself; on a public form `auth.public` opens it as it opens the key and label.
+- **Three unions widened.** The command field kinds (`AppCommandField`, `CommandField`) gained `'time'`, `'files'` and
+  `'signature'`, `CommandFieldPresentation` gained `'rating'`, `'scan'` and `'color'`, and a display rule's `format`
+  gained `'address'`. An App that switches exhaustively over any of them may need a case.
+
+### Renamed
+
+No old name is read: there is no compatibility before 1.0.0. Each row says where an rc's App, host or deployment meets
+the change.
+
+| Old | New | Where it shows |
+| --- | --- | --- |
+| `@layer tablewalk` | `@layer mistri` | An embedded App's stylesheet (`@mistriwork/mistri/react`): a host that orders its layers names `mistri` among them. |
+| `.tw-root`, `.tw-body`, `.tw-frame`, `.tw-portals` | `.mistri-root`, `.mistri-body`, `.mistri-frame`, `.mistri-portals` | The elements an embedded App is drawn in, and any host rule that targets them. |
+| `.tw-icon` | `.mistri-icon` | Every icon `@mistriwork/ui` and the kit draw, and any stylesheet or test that selects one. |
+| `tw:<app>:signin:…`, `tw:<app>:form:…`, `tw:http:<connection>:…`, `tw:branding:…` | `mistri:<app>:signin:…`, `mistri:<app>:form:…`, `mistri:http:<connection>:…`, `mistri:branding:…` | Keys in a shared cache (Valkey): sign-in lockouts, public-form rate windows, an HTTP source's cache and a tenant's branding start empty once. The engine's two are in the running product's name. |
+| `tw_claim_<form>`, `tw_form_<form>`, `tw_stepup_<form>` | `mistri_claim_<form>`, `mistri_form_<form>`, `mistri_stepup_<form>` | A public form's cookies: a draft, a claim link or a status step-up a visitor began on an rc is not carried over; they start the form again. |
+| `tw_pp_meta_pk`, `tw_pp_receipt_pk`, `tw_pp_receipt_scope` | `mistri_pp_meta_pk`, `mistri_pp_receipt_pk`, `mistri_pp_receipt_scope` | The public placement journal's constraints (`__mistri_public_placement_*`, both engines), and so its schema fingerprint. A journal an rc provisioned is refused by its layout check: drop its two tables and provision it again. |
+| `tablewalk_schema_<pid>_…` | `mistri_schema_<pid>_…` | The two scratch databases `mistri migrate diff \| check \| squash` makes beside a PostgreSQL connection and drops after. |
+| `$TMPDIR/tablewalk-demo-*`, `tablewalk-schema-*`, `tablewalk-image-cache-*`, `tablewalk-shot-*`, `tablewalk-recipes-*`, `tablewalk-compare-*`, `tablewalk-pending-*`, `tablewalk-path-*`, `tablewalk-workflow-*`, `tablewalk-test-*` | `mistri-…` | Scratch directories made by `--demo`, `migrate diff`, image variants, `mistri shot`, `check` and `mistri test`. |
+| `/api/tw`, `const tw = createHandler(…)` | `/api/mistri`, `const mistri = createHandler(…)` | The docs', Ladle's and the React declarations' examples. |
+| `tablewalk-workspace` | `mistri-workspace` | The checkout's root `package.json`, which `mistri new` reads to know it runs inside the repository. |
+
 ## 1.0.0-rc.14
 
 - **A mysql:// connection hears the MySQL refusal first.** The registry refuses a `mysql://` or `mariadb://` address

@@ -24,7 +24,7 @@ import { entryFor } from './support/bins.js';
 const ROOT = resolve('.');
 const TSX = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
 
-const dir = mkdtempSync(join(tmpdir(), 'tablewalk-relative-sqlite-'));
+const dir = mkdtempSync(join(tmpdir(), 'mistri-relative-sqlite-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 /** A project: a database and a config beside it, an App in a folder below, and somewhere else to run from. */

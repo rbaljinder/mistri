@@ -18,7 +18,7 @@ const shopperB = { id: 'shopper-b', appId: 'forecourt', roles: ['shopper'] };
 const staff = { id: 'staff-one', appId: 'forecourt', roles: ['staff'] };
 
 test('Forecourt: shortlist commands are account-scoped, durable and replayable', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-forecourt-shortlist-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-forecourt-shortlist-'));
   const file = join(directory, 'market.db');
   let registry = new Registry();
   let deployment: AppPolicyDeployment<typeof shopperA | null> | undefined;

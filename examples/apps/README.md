@@ -1,6 +1,6 @@
 # Sample Apps: start here
 
-Public TypeScript DSL example projects show Tablewalk over synthetic
+Public TypeScript DSL example projects show mistri over synthetic
 business data. Start with the smallest one that fits your task.
 
 | Sample | What to learn | Entry point |

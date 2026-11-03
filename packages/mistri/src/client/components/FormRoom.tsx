@@ -139,6 +139,7 @@ export function FormBody({
       again={!onDismiss}
       inDialog={Boolean(onDismiss)}
       connection={connection ?? undefined}
+      held={{ command: form.command.id, ...(connection ? { connection } : {}) }}
       identityEpoch={identity.epoch}
       {...(prepared.data || initial ? { initial: { ...prepared.data?.initial, ...initial } } : {})}
       {...(prepared.data?.questions ? { questions: prepared.data.questions } : {})}

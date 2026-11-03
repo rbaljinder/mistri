@@ -24,7 +24,7 @@ const binding = { appId: 'lending', source: { id: 'business', connection: 'busin
 const PASSWORD = 'first-boot-password-123';
 
 async function fixture(t: TestContext, platform = true, named = true) {
-  const { directory } = scratch(t, 'tablewalk-tenant-first-boot-');
+  const { directory } = scratch(t, 'mistri-tenant-first-boot-');
   const appDir = join(directory, 'app');
   mkdirSync(appDir);
   const data = join(directory, 'business.db'),

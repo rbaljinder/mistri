@@ -38,7 +38,7 @@ test('Tick contains only its pure DSL manifest and README, and inline schema aut
 });
 
 test('Tick seed is deterministic, writable and validates against its real manifest', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tick-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tick-'));
   const file = join(directory, 'nested', 'tick.db');
   let adapter: SqliteAdapter | undefined;
   try {
@@ -87,7 +87,7 @@ test('Tick seed is deterministic, writable and validates against its real manife
 });
 
 test('Tick refuses existing database/config paths without changing either', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tick-refusal-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tick-refusal-'));
   try {
     const seeded = join(directory, 'seeded.db');
     seed(seeded);
@@ -118,7 +118,7 @@ test('Tick refuses existing database/config paths without changing either', () =
 });
 
 test('Tick imports and loader argv cannot activate seeding; CLI requires an explicit target', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tick-import-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tick-import-'));
   const file = join(directory, 'never.db');
   const argv = [...process.argv];
   try {

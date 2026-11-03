@@ -312,7 +312,7 @@ interface Lab {
 }
 async function lab(t: TestContext, dialect: Dialect, sql: string): Promise<Lab> {
   if (dialect === 'sqlite') {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-lines-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-lines-'));
     const file = join(directory, 'shop.db');
     const db = new DatabaseSync(file);
     t.after(() => {
@@ -466,7 +466,7 @@ for (const { dialect, skip } of ENGINES)
         INSERT INTO sales_order (desk, customer) VALUES (2, 'Desk two');
         INSERT INTO order_line (desk, order_id, position, product, quantity) VALUES (2, 1, 1, 'Theirs', 1);`,
       );
-      const directory = mkdtempSync(join(tmpdir(), 'tablewalk-lines-policy-'));
+      const directory = mkdtempSync(join(tmpdir(), 'mistri-lines-policy-'));
       t.after(() => rmSync(directory, { recursive: true, force: true }));
       const registry = new Registry();
       registry.add({ id: 'desk-shop', name: 'Desk shop', url: shop.url, source: 'config', writable: true });

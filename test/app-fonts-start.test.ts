@@ -10,7 +10,7 @@ import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
    context could not be verified", while check and build passed. Sign-in takes a loaded App only by keys it names, and
    `fonts` was not one of them (apps.ts LOADED_APP_KEYS). The tenant start had the same list (tenant-startup.test.ts). */
 test('an App with sign-in whose look ships font files starts its sign-in', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-fonts-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-fonts-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const auth = await createAppAuth(
     {

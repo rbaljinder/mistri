@@ -41,7 +41,7 @@ const object = (value: unknown): Record<string, unknown> => {
 };
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-gaps-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-gaps-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path);
   let owner: ReturnType<typeof createTenantHttpServer> | undefined;

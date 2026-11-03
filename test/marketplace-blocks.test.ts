@@ -442,7 +442,7 @@ test('closeness is ordered by a checked number, never text, and survives the tri
 });
 
 test('a similar list runs as one read: the same body type, inside the window, closest first, the key breaking ties, never the record', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-similar-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-similar-'));
   const path = join(directory, 'market.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE vehicle(id INTEGER PRIMARY KEY, title TEXT, body_type TEXT, price INTEGER, status TEXT);

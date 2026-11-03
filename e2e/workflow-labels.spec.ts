@@ -25,7 +25,7 @@ const children: ChildProcess[] = [];
 test.beforeAll(async () => {
   // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
   test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'tablewalk-workflow-labels-'));
+  directory = mkdtempSync(join(tmpdir(), 'mistri-workflow-labels-'));
   const db = join(directory, 'shop.db');
   const source = new DatabaseSync(db);
   try {

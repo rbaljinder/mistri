@@ -86,7 +86,7 @@ export function draftTokenHash(token: string): string {
 }
 
 /** The cookie's name: one per form, so two forms' drafts never meet. */
-const draftCookieName = (form: string): string => `tw_form_${form}`;
+const draftCookieName = (form: string): string => `mistri_form_${form}`;
 
 /** The applicant's token from the request's cookie, or undefined for none or anything malformed. */
 export function readDraftToken(req: Pick<IncomingMessage, 'headers'>, form: string): string | undefined {

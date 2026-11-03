@@ -24,7 +24,7 @@ let child: ChildProcess | undefined;
 test.beforeAll(async () => {
   // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
   test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'tablewalk-theme-expression-'));
+  directory = mkdtempSync(join(tmpdir(), 'mistri-theme-expression-'));
   const db = join(directory, 'yard.db');
   const source = new DatabaseSync(db);
   try {
@@ -193,7 +193,7 @@ test('a dressed theme: its parts where the platform draws them, a band under eve
 }) => {
   test.setTimeout(60_000);
   await open(page, '/today');
-  const plainIcon = await page.locator('.tw-icon path').first().getAttribute('d');
+  const plainIcon = await page.locator('.mistri-icon path').first().getAttribute('d');
   const names = fetched(page);
   await open(page, '/today', 'dressed');
   await expect(page.locator('html')).toHaveAttribute('data-parts', /stat:ground/);
@@ -240,7 +240,7 @@ test('a dressed theme: its parts where the platform draws them, a band under eve
   ).toBe('none');
 
   /* The icons in the theme's weight: the same glyph, drawn filled. */
-  expect(await page.locator('.tw-icon path').first().getAttribute('d')).not.toBe(plainIcon);
+  expect(await page.locator('.mistri-icon path').first().getAttribute('d')).not.toBe(plainIcon);
 
   /* A band under every other row, and the table's head on the menu's ground in its ink. */
   await open(page, '/jobs', 'dressed');

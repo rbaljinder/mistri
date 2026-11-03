@@ -98,7 +98,7 @@ const HUSH = 'hush';
 let hushHost: AppHost;
 
 before(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'tablewalk-security-surfaces-'));
+  directory = mkdtempSync(join(tmpdir(), 'mistri-security-surfaces-'));
   const file = join(directory, 'sec.db');
   db = new DatabaseSync(file);
   db.exec(SQL);

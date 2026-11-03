@@ -151,6 +151,8 @@ export async function dispatchPublicFormHttp(options: {
   admit?: SubmissionAdmission;
   /** `'thrown'`: a body past the envelope is thrown as itself (CommandBodyTooLarge), for a door that answers it 413. */
   tooLarge?: 'thrown';
+  /** The visitor's token from their own cookie: the files held for them (stagedFiles.ts) are the ones the run may take. */
+  visitor?: string;
 }): Promise<PublicSubmissionReply> {
   const { req, res, registry, app, commands, connection, key, command, events } = options;
   const captureFlags = options.captureFlags;
@@ -186,7 +188,7 @@ export async function dispatchPublicFormHttp(options: {
             idempotencyKey: submission,
             input,
           },
-          { ...execution, flags },
+          { ...execution, flags, ...(options.visitor ? { visitor: options.visitor } : {}) },
         );
       },
     });

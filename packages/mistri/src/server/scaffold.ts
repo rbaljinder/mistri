@@ -2120,7 +2120,7 @@ interface WrittenScaffold {
 
 /** The package whose scope a directory is in: the nearest package.json's name, if any. */
 /** The manifests a checkout's directories sit under: the workspace root's, or a product package's own. */
-const CHECKOUT_NAMES = new Set(['tablewalk-workspace', 'tablewalk', '@mistriwork/mistri']);
+const CHECKOUT_NAMES = new Set(['mistri-workspace', '@mistriwork/mistri']);
 
 function packageScope(dir: string): string | undefined {
   for (let at = resolve(dir); ; at = dirname(at)) {

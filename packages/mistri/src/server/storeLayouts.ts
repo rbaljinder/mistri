@@ -302,6 +302,14 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     upgrades: {},
   },
   {
+    id: 'command-staging',
+    title: 'files a form holds for its command',
+    tables: { prefix: '__mistri_staged_' },
+    current: both(1),
+    read: marked({ sqlite: { table: '__mistri_staged_meta' }, postgres: { table: '__mistri_staged_meta' } }),
+    upgrades: {},
+  },
+  {
     id: 'public-placement',
     title: 'public form placement receipts',
     tables: { prefix: '__mistri_public_placement_' },

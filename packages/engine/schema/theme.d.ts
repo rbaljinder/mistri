@@ -567,7 +567,7 @@ interface ThemeSpecCommon {
    * the theme is worn (theme-css).
    */
   stylesheet?: `./${string}.css`;
-  /** The theme contract it was written to. A package says `1`; a newer one than this tablewalk knows is refused. */
+  /** The theme contract it was written to. A package says `1`; a newer one than this mistri knows is refused. */
   contract?: 1;
   /** Where its files are read from: a package's `import.meta.url`. Omitted, the App's directory. */
   from?: string;

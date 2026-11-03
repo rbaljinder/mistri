@@ -46,7 +46,7 @@
     all: revert;
   }
   /* The frame the root sits in, as a window is to a page: nothing inherited from the host. */
-  :where(.tw-frame) {
+  :where(.mistri-frame) {
     all: initial;
     display: block;
     height: 100%;

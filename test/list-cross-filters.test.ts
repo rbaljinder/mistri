@@ -179,7 +179,7 @@ test('any is an EXISTS over the rows that point at the record, no is NOT EXISTS,
 });
 
 async function database(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-cross-filters-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-cross-filters-'));
   const path = join(dir, 'sales.db');
   const db = new DatabaseSync(path);
   db.exec(`

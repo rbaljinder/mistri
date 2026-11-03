@@ -12,7 +12,7 @@ import { startConfiguredSuite } from '../packages/mistri/src/server/cli/suiteCom
 import { buildApp } from '../packages/mistri/src/server/build/build.js';
 
 test('same-name suite commands retain authentication, policy, transaction and receipt ownership', { timeout: 15_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-commands-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-commands-'));
   let active: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   t.after(async () => {
     await active?.close();
@@ -183,7 +183,7 @@ test('same-name suite commands retain authentication, policy, transaction and re
 });
 
 test('a suite serves a mistri build with its own bundled commands, as serve --commands does', { timeout: 20_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-built-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-built-'));
   let active: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   t.after(async () => {
     await active?.close();

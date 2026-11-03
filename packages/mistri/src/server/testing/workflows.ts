@@ -35,7 +35,7 @@ export async function createWorkflowDriver(options: WorkflowDriverOptions) {
   let directory: string | undefined;
   let store = options.store;
   if (!store) {
-    directory = mkdtempSync(join(tmpdir(), 'tablewalk-workflow-'));
+    directory = mkdtempSync(join(tmpdir(), 'mistri-workflow-'));
     const file = join(directory, 'workflows.db');
     writeFileSync(file, '');
     provisionSqliteWorkflowStore(file);

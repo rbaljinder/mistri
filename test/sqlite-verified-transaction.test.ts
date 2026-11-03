@@ -14,7 +14,7 @@ import {
 } from '../packages/mistri/src/server/tenant/tenantStore.js';
 
 function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-verified-writer-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-verified-writer-'));
   const path = join(directory, 'business.db');
   const db = new DatabaseSync(path);
   db.exec("CREATE TABLE item(id INTEGER PRIMARY KEY, name TEXT); INSERT INTO item VALUES(1, 'Before');");

@@ -422,7 +422,7 @@ test('custom history callback owns physical source and account attribution, incl
 });
 
 function sqlite(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-record-writes-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-record-writes-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(

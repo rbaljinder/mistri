@@ -130,7 +130,7 @@ describe('deployFindings', () => {
 
 describe('mistri check --deploy', () => {
   const ROOT = resolve('.');
-  const work = mkdtempSync(join(tmpdir(), 'tablewalk-check-deploy-'));
+  const work = mkdtempSync(join(tmpdir(), 'mistri-check-deploy-'));
   after(() => rmSync(work, { recursive: true, force: true }));
   mkdirSync(join(work, 'node_modules'));
   mkdirSync(join(work, 'node_modules', '@mistriwork'), { recursive: true });

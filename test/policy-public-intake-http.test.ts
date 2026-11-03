@@ -18,7 +18,7 @@ import { parseTestApp } from './support/commandCatalog.js';
 
 async function fixture(t: TestContext, enrolled = true) {
   resetPublicFormLimits();
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-intake-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-intake-http-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec('CREATE TABLE inbox(id INTEGER PRIMARY KEY, name TEXT NOT NULL, desk INTEGER NOT NULL DEFAULT 1)');

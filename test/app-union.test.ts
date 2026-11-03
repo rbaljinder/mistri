@@ -54,7 +54,7 @@ const manifest = parseAppConfig(
 );
 
 async function fixture(run: (base: string) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-union-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-union-'));
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
   db.exec(`

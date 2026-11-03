@@ -696,7 +696,7 @@ describe('mistri check --design', () => {
 });
 
 /* The step itself: read over Tick, as an agent runs it. */
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-design-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-design-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 
 describe('the design step of mistri check', () => {

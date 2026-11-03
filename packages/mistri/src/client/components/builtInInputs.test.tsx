@@ -129,6 +129,13 @@ describe('built-in inputs', () => {
     expect(yearChange).toHaveBeenLastCalledWith(null);
   });
 
+  test("a command's field, which no column stands behind, brings its own rule: stars of its outOf", () => {
+    const Rating = builtInInput('rating')!;
+    const { container } = render(<Rating {...props('score', 3)} field={{ name: 'score', rule: { outOf: 7 } }} />);
+    expect(container.querySelectorAll('[role="radio"]')).toHaveLength(7);
+    expect(container.querySelectorAll('[role="radio"][aria-checked="true"]')).toHaveLength(1);
+  });
+
   test('the slot draws the plain box until the built-in input arrives, then the input', async () => {
     const { container } = render(
       <InputSlot component="mistri:rating" fallback={<input data-stub="plain-box" />} context="edit" {...props('health', 3)} />,

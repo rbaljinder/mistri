@@ -1,7 +1,7 @@
 /**
  * packages/kit/src/client/addressMount.js as an embedded shell has it. Two bases, where
  * the served page has one: the address bar's (`/rentals`, where the host shows
- * the App, read from the host's router) and the server's (`/api/tw`, the
+ * the App, read from the host's router) and the server's (`/api/mistri`, the
  * Provider's endpoint). The shell's inside addresses — `/lintel/leases/12` —
  * are unchanged; only their two outward forms move apart.
  */
@@ -46,7 +46,7 @@ export function shownUnplaced(internal: string): string {
 
 /**
  * One of an App's own files (`/ladle/_components/<file>`, a theme's `/ladle/_fonts/…` and `/ladle/_brand/…`) at the
- * Provider's endpoint, not under the host's address: `/api/tw/_components/<file>`. The endpoint serves the App at its root, as the handler does, so the App's segment
+ * Provider's endpoint, not under the host's address: `/api/mistri/_components/<file>`. The endpoint serves the App at its root, as the handler does, so the App's segment
  * goes; the address bar's prefix (`/staff`) is the host's and serves no file of the App's.
  */
 export function appFile(internal: string): string {

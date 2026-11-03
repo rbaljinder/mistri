@@ -47,6 +47,8 @@
   border: 1px dashed var(--line-control, var(--line)); border-radius: var(--radius); background: #ffffff;
 }
 .signature-input-kept { display: block; max-width: 100%; max-height: 120px; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: #ffffff; }
+/* A held signature this page did not draw (a step drawn again after a reload): said in words, the box kept. */
+.signature-input-kept.is-unseen { padding: var(--space-3) var(--space-4); font: var(--text-sm) var(--sans); color: var(--ink-muted); }
 .signature-input-tools { display: flex; flex-wrap: wrap; gap: var(--space-2h) var(--space-3); align-items: center; }
 .signature-input-keep { margin-left: auto; }
 .signature-input-problem { font: var(--text-sm) var(--sans); color: var(--status-critical); }

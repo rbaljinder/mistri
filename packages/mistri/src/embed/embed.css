@@ -3,7 +3,7 @@
  * the served page, for the two elements that stand for them in a host's
  * (shell.ts makeRoot). Written against `html` and `body` like the shell's
  * sheets, and rewritten with them (scripts/embed-css.mjs): `html` is the
- * `.tw-root`, `body` its `.tw-body`. Outside every named layer of ours, so
+ * `.mistri-root`, `body` its `.mistri-body`. Outside every named layer of ours, so
  * it is the last word inside `mistri`.
  */
 

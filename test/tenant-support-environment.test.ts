@@ -32,7 +32,7 @@ function ambient(t: TestContext, value: string) {
 }
 
 function fixture(t: TestContext, secret: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-support-environment-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-support-environment-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const path = join(directory, 'business.db'),
     authPath = join(directory, 'auth.db');

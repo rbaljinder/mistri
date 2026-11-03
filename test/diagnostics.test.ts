@@ -43,7 +43,7 @@ function request(url: string, options: RequestInit = {}) {
 }
 
 async function serve(diagnostics?: RequestDiagnostics) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-diagnostics-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-diagnostics-'));
   const file = join(dir, 'data.db');
   const db = new DatabaseSync(file);
   db.exec('CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)');

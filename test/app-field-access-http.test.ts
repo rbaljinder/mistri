@@ -27,7 +27,7 @@ async function fixture(
     base: string;
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-field-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-field-http-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE lead (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT DEFAULT 'new', private_note TEXT DEFAULT '${secret}');

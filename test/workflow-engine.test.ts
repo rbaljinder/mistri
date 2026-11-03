@@ -413,7 +413,7 @@ test('a store that cannot record the end aborts the advance rather than ending t
   /* The end of an advance is written where nothing awaits it. A rejected
      write there — a dropped connection, a failover — was an unhandled
      rejection, which ends a Node process, and the advance never returned. */
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-workflow-finish-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-workflow-finish-'));
   const file = join(directory, 'workflows.db');
   writeFileSync(file, '');
   provisionSqliteWorkflowStore(file);

@@ -38,7 +38,7 @@ describe('following an App’s saves', () => {
   let directory: string;
   let dir: string;
   before(() => {
-    directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-live-'));
+    directory = mkdtempSync(join(tmpdir(), 'mistri-app-live-'));
     const db = new DatabaseSync(join(directory, 'live.db'));
     db.exec(`CREATE TABLE task (id INTEGER PRIMARY KEY, title TEXT NOT NULL); INSERT INTO task VALUES (1, 'First');`);
     db.close();

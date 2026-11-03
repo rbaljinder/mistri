@@ -21,7 +21,7 @@ import { defineCommand, defineCommands } from '../packages/mistri/src/server/com
 import { Registry } from '../packages/engine/src/server/connections.js';
 
 test('runtime resources and command bindings are kept per App and connection, and a schema, App or writability change is a miss', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-plan-cache-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-plan-cache-'));
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
   const registry = new Registry();

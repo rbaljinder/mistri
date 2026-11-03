@@ -395,7 +395,7 @@ test('catalog: exactly the declared tables, each one ordinary table; a key to a 
 });
 
 test("locations: a platform-only source is never the App's own database under another name", (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-platform-location-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-platform-location-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const make = (name: string) => {
     const path = join(dir, name),
@@ -437,7 +437,7 @@ async function outsideDatabase(dialect: TenantDialect): Promise<Outside> {
     secret: await all('SELECT * FROM secret ORDER BY id'),
   });
   if (dialect === 'sqlite') {
-    const dir = mkdtempSync(join(tmpdir(), 'tablewalk-platform-source-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mistri-platform-source-'));
     const path = join(dir, 'applicants.db'),
       db = new DatabaseSync(path);
     db.exec(APPLICANTS.sqlite + APPLICANTS.rows);
@@ -1094,7 +1094,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
           TenantContextError,
         );
       } else {
-        const dir = mkdtempSync(join(tmpdir(), 'tablewalk-platform-alias-'));
+        const dir = mkdtempSync(join(tmpdir(), 'mistri-platform-alias-'));
         t.after(() => rmSync(dir, { recursive: true, force: true }));
         symlinkSync(f.own.existingPath, join(dir, 'link.db'));
         linkSync(f.own.existingPath, join(dir, 'hard.db'));
@@ -1258,7 +1258,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
 
     async function startup(t: TestContext) {
       const f = await fixture(t, dialect);
-      const dir = mkdtempSync(join(tmpdir(), 'tablewalk-platform-startup-'));
+      const dir = mkdtempSync(join(tmpdir(), 'mistri-platform-startup-'));
       t.after(() => rmSync(dir, { recursive: true, force: true }));
       // The policy as it stands without --commands, and with one extractor for the command the refusals load.
       const written = (results: string) => `export default { kind: 'tenant', appId: 'lending', storeId: 'lending-store',

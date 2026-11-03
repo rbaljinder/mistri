@@ -23,6 +23,7 @@
 import type { IncomingMessage } from 'node:http';
 import { CacheUnavailable, scopedCache, type CacheStore } from '../../adapters/cache/cacheStore.js';
 import { forwardedClient, ipv6Groups, type ProxyRange } from './trust.js';
+import { product } from '../product.js';
 
 interface RateWindow {
   limit: number;
@@ -342,7 +343,17 @@ const CODE_TOTAL: readonly RateWindow[] = Object.freeze([{ limit: 300, ms: 3_600
 const CHECK_WINDOWS: readonly RateWindow[] = Object.freeze([{ limit: 60, ms: 60_000 }]);
 const CHECK_TOTAL: readonly RateWindow[] = Object.freeze([{ limit: 6_000, ms: 60_000 }]);
 
+/* A file sent to be held for a public form's command (stagedFiles.ts): a person attaches a few, so twenty a minute
+   and sixty an hour from one client; and few enough from every visitor together that the form's files cannot be made
+   a place to keep things. */
+const FILE_WINDOWS: readonly RateWindow[] = Object.freeze([
+  { limit: 20, ms: 60_000 },
+  { limit: 60, ms: 3_600_000 },
+]);
+const FILE_TOTAL: readonly RateWindow[] = Object.freeze([{ limit: 1_200, ms: 3_600_000 }]);
+
 const check = new FixedWindowLimiter(CHECK_WINDOWS, Date.now, { total: CHECK_TOTAL, whenFull: 'evict' });
+const file = new FixedWindowLimiter(FILE_WINDOWS, Date.now, { total: FILE_TOTAL, whenFull: 'refuse' });
 const submit = new FixedWindowLimiter(PUBLIC_FORM_SUBMIT_WINDOWS, Date.now, { total: PUBLIC_FORM_SUBMIT_TOTAL, whenFull: 'refuse' });
 const read = new FixedWindowLimiter(PUBLIC_FORM_READ_WINDOWS, Date.now, { whenFull: 'evict' });
 const claim = new FixedWindowLimiter(INVITATION_CLAIM_WINDOWS, Date.now, { total: INVITATION_CLAIM_TOTAL, whenFull: 'refuse' });
@@ -360,14 +371,16 @@ let shared:
       link: SharedWindowLimiter;
       code: SharedWindowLimiter;
       check: SharedWindowLimiter;
+      file: SharedWindowLimiter;
     }
   | undefined;
 
 export function publicFormLimiter(
-  kind: 'submit' | 'read' | 'start' | 'status' | 'link' | 'code' | 'check',
+  kind: 'submit' | 'read' | 'start' | 'status' | 'link' | 'code' | 'check' | 'file',
 ): FixedWindowLimiter | SharedWindowLimiter {
   if (shared) return shared[kind];
   if (kind === 'check') return check;
+  if (kind === 'file') return file;
   return kind === 'submit'
     ? submit
     : kind === 'read'
@@ -388,7 +401,7 @@ export function invitationClaimLimiter(): FixedWindowLimiter | SharedWindowLimit
 
 /**
  * Count the public forms' windows in the deployment's cache, under the
- * deployment's namespace (`tw:<app>:form:`), or — with no cache, or the
+ * deployment's namespace (`mistri:<app>:form:`, in the running product's name), or — with no cache, or the
  * process's own — in this process, as before.
  */
 export function configurePublicFormLimits(cache: CacheStore | undefined, namespace: string): void {
@@ -396,7 +409,7 @@ export function configurePublicFormLimits(cache: CacheStore | undefined, namespa
     shared = undefined;
     return;
   }
-  const scoped = scopedCache(cache, `tw:${namespace}:form:`);
+  const scoped = scopedCache(cache, `${product()}:${namespace}:form:`);
   shared = {
     submit: new SharedWindowLimiter('submit', PUBLIC_FORM_SUBMIT_WINDOWS, scoped, submit, PUBLIC_FORM_SUBMIT_TOTAL),
     read: new SharedWindowLimiter('read', PUBLIC_FORM_READ_WINDOWS, scoped, read),
@@ -407,6 +420,7 @@ export function configurePublicFormLimits(cache: CacheStore | undefined, namespa
     link: new SharedWindowLimiter('link', LINK_WINDOWS, scoped, link, LINK_TOTAL),
     code: new SharedWindowLimiter('code', CODE_WINDOWS, scoped, code, CODE_TOTAL),
     check: new SharedWindowLimiter('check', CHECK_WINDOWS, scoped, check, CHECK_TOTAL),
+    file: new SharedWindowLimiter('file', FILE_WINDOWS, scoped, file, FILE_TOTAL),
   };
 }
 
@@ -420,4 +434,5 @@ export function resetPublicFormLimits(): void {
   link.reset();
   code.reset();
   check.reset();
+  file.reset();
 }

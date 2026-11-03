@@ -51,7 +51,7 @@ const plain = (rows: readonly object[]) => rows.map((row) => ({ ...row }));
 
 describe('SQLite', () => {
   async function fixture(t: TestContext, sql: string) {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-key-types-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-key-types-'));
     const file = join(directory, 'data.db');
     const db = new DatabaseSync(file);
     db.exec(sql);

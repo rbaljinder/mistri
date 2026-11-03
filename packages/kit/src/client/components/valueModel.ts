@@ -91,6 +91,8 @@ export interface DisplayRule {
   scan?: boolean;
   /** A signature kept as a row of a file resource (its table id and key column): drawn as the picture. */
   signature?: true | { table: string; key: string };
+  /** A copy button beside the value on a record. */
+  copy?: boolean;
 }
 
 /**
@@ -243,6 +245,8 @@ export type Dress =
   | { kind: 'meter'; text: string; fill: number; tone: string | null; title: string }
   | { kind: 'avatar'; text: string; initials: string; hue: number; photo?: string }
   | { kind: 'items'; items: string[]; text: string }
+  /* A postal address: its lines as typed, `text` them on one line (a cell, a card). */
+  | { kind: 'address'; lines: string[]; text: string }
   /* The people on a thing: the first few as overlapping discs, the rest counted; `text` names every one. */
   | { kind: 'avatars'; names: string[]; more: number; text: string }
   /* `html` is the stored value, drawn through the allowlist (RichText.tsx); `text` its words in one line. */
@@ -540,6 +544,10 @@ function ownDrawing(rule: DisplayRule, value: unknown, text: string): Dress | nu
     }
     case 'qr':
       return text.trim() ? { kind: 'qr', text } : null;
+    case 'address': {
+      const lines = addressLines(text);
+      return lines.length ? { kind: 'address', lines, text: lines.join(', ') } : null;
+    }
   }
   return undefined;
 }
@@ -627,8 +635,20 @@ export function sayValue(col: ColumnMeta | undefined, value: unknown): Said {
   return { kind: 'text', text, prose: /\s/.test(text.trim()) };
 }
 
-/** The values a reader acts on rather than reads: an address to write to, a number to call, a page to open. */
-type LinkKind = 'email' | 'phone' | 'url';
+/** The values a reader acts on rather than reads: an address to write to, a number to call, a page to open, a place to find. */
+type LinkKind = 'email' | 'phone' | 'url' | 'address';
+
+/** A postal address's lines as typed: one part per line, blank lines and stray spaces gone. */
+function addressLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/\s+/g, ' '))
+    .filter(Boolean);
+}
+
+/* A map search for an address, opened beside the App: a link, so nothing is fetched to draw the value and the
+   reader's own maps take it from there. */
+const MAP_SEARCH = 'https://www.google.com/maps/search/?api=1&query=';
 
 const EMAIL = /^[^\s@<>()"',;:]+@[^\s@<>()"',;:]+\.[^\s@<>()"',;:]+$/;
 const PHONE = /^\+?[\d\s().-]+$/;
@@ -643,7 +663,7 @@ const NAMED: Array<[RegExp, LinkKind]> = [
 
 /**
  * A value as a link, when it is one: a rule's `format: 'email' | 'phone' |
- * 'url'`, or — where `infer` (an App) — a column named like one. Only a
+ * 'url' | 'address'` (an address opens a map search for it), or — where `infer` (an App) — a column named like one. Only a
  * value of the right shape is linked, so a note typed into an email column
  * stays text, and only https and http open: a column cannot hand the page a
  * `javascript:` address. The Workbench shows the data exactly and infers
@@ -654,7 +674,7 @@ export function linkFor(
   value: unknown,
   rule?: DisplayRule | null,
   infer = false,
-): { kind: LinkKind; href: string; text: string } | null {
+): { kind: LinkKind; href: string; text: string; lines?: string[] } | null {
   if (value === null || value === undefined || typeof value === 'object') return null;
   const text = String(value).trim();
   if (!text) return null;
@@ -669,6 +689,12 @@ export function linkFor(
   if (kind === 'email' && EMAIL.test(text)) return { kind, href: `mailto:${text}`, text };
   if (kind === 'phone' && PHONE.test(text) && text.replace(/\D/g, '').length >= 5)
     return { kind, href: `tel:${text.replace(/[^\d+]/g, '')}`, text };
+  if (format === 'address') {
+    const lines = addressLines(text);
+    return lines.length
+      ? { kind: 'address', href: `${MAP_SEARCH}${encodeURIComponent(lines.join(', '))}`, text: lines.join(', '), lines }
+      : null;
+  }
   if (kind === 'url' && WEB.test(text)) {
     const href = /^https?:\/\//i.test(text) ? text : `https://${text}`;
     return { kind, href, text: text.replace(/^https?:\/\//i, '').replace(/\/$/, '') };

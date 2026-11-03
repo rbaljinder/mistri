@@ -17,7 +17,13 @@ import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { appAddressBook, readAppSegments } from '../../shared/appAddress.js';
 import { isFormView, viewOrder } from '../../shared/appModel.js';
 import { tabKey } from '@mistriwork/engine/shared/addressParams.js';
-import { appListQuery, referenceNames, type ListQuestionSpec, type ListRules } from '@mistriwork/engine/shared/listQuestion.js';
+import {
+  appListQuery,
+  groupedQuestion,
+  referenceNames,
+  type ListQuestionSpec,
+  type ListRules,
+} from '@mistriwork/engine/shared/listQuestion.js';
 import { DEFAULT_LIMIT, NAV_COUNT_LIMIT } from '@mistriwork/engine/shared/reads.js';
 import { RECORD_COMPOSE_PATH } from '@mistriwork/engine/shared/recordReads.js';
 import type { PageDef } from '@mistriwork/engine/shared/page.js';
@@ -254,7 +260,8 @@ function listReads(input: RoomInput, rules: ListRules, key: string, plan: RoomPl
   const asked = params.get('tab');
   const found = asked === null ? 0 : tabs.findIndex((tab) => tabKey(tab) === asked);
   const index = found < 0 ? 0 : found;
-  const q = appListQuery(rules, view, index);
+  /* A grouped grid reads its rows in its group's order (TableRoom.tsx): the first page is that read. */
+  const q = view.group ? groupedQuestion(appListQuery(rules, view, index), view.group) : appListQuery(rules, view, index);
   plan.reads.push({ method: 'POST', target: '/api/run', body: { q, limit: DEFAULT_LIMIT, offset: 0, exactCount: false, app: input.app } });
   /* The tab badges not on screen, and the reader's saved views of this list. */
   const saved = input.visitor ? [] : (input.filters?.filters?.[key] ?? []);

@@ -103,7 +103,7 @@ async function fixture(
     declaration?: ExperimentEpoch;
   } = {},
 ) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-experiment-http-')),
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-experiment-http-')),
     secret = 'experiment-http-secret-at-least-thirty-two-characters';
   const auth = await createAppAuth(
     {

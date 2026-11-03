@@ -197,8 +197,11 @@ test('the client preserves a reserved Console host base for bootstrap and compon
 });
 
 test("a cookie's path, the App home and the other Apps' segments", () => {
-  assert.equal(cookieUnder('/tools', 'tw_claim=x; Path=/api/forms/intake; HttpOnly'), 'tw_claim=x; Path=/tools/api/forms/intake; HttpOnly');
-  assert.equal(cookieUnder('', 'tw_claim=x; Path=/api/forms/intake'), 'tw_claim=x; Path=/api/forms/intake');
+  assert.equal(
+    cookieUnder('/tools', 'mistri_claim=x; Path=/api/forms/intake; HttpOnly'),
+    'mistri_claim=x; Path=/tools/api/forms/intake; HttpOnly',
+  );
+  assert.equal(cookieUnder('', 'mistri_claim=x; Path=/api/forms/intake'), 'mistri_claim=x; Path=/api/forms/intake');
   assert.equal(appHome(single, 'compass'), '/');
   assert.equal(appHome(suite, 'billing'), '/billing');
   assert.equal(appHome(underBase, 'compass'), '/tools/');

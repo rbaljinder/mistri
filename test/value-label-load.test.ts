@@ -15,7 +15,7 @@ import { learnValueLabels, valueLabelFindings } from '../packages/mistri/src/ser
 import type { ColumnMeta, DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
 const ROOT = resolve('.');
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-value-label-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-value-label-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 mkdirSync(join(work, 'node_modules'));
 mkdirSync(join(work, 'node_modules', '@mistriwork'), { recursive: true });

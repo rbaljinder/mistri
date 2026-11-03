@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { untypedExports } from '../scripts/export-types.mjs';
 
 function pack(files: string[]) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-export-types-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-export-types-'));
   for (const file of files) {
     mkdirSync(dirname(join(dir, file)), { recursive: true });
     writeFileSync(join(dir, file), '');

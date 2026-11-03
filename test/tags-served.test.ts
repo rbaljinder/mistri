@@ -23,7 +23,7 @@ import { tagChips } from '../packages/engine/src/shared/tagLists.js';
 type Reply = { status: number; body: any };
 
 test("served: tags are listed, asked and written under the reader's grants", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tags-served-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tags-served-'));
   const file = join(directory, 'issues.db');
   const db = new DatabaseSync(file);
   db.exec(`PRAGMA foreign_keys = ON;

@@ -22,7 +22,7 @@ import { connect } from '../packages/engine/src/adapters/connect.js';
 import { toMarkdown } from '../packages/engine/src/shared/schematext.js';
 
 const ROOT = resolve('.');
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-brief-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-brief-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 const db = join(work, 'tick.db');
 spawnSync(process.execPath, [join(ROOT, 'examples/databases/tick/seed.mjs'), db], { encoding: 'utf8' });

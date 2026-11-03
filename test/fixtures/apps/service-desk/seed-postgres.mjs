@@ -32,7 +32,7 @@ function defaultSql(table, column) {
 
 /** Derive only the schema shapes used by this example, rejecting unfamiliar ones. */
 export function postgresFixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-atlas-postgres-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-atlas-postgres-'));
   let db;
   try {
     const file = seed(join(directory, 'fixture.db'));

@@ -16,7 +16,7 @@ test(
   { skip: liveSkip('postgres', process.env.TABLEWALK_TEST_PG) },
   async () => {
     const owned = await uuidPostgresDatabase('schema_flag');
-    const xdg = mkdtempSync(join(tmpdir(), 'tablewalk-schema-flag-'));
+    const xdg = mkdtempSync(join(tmpdir(), 'mistri-schema-flag-'));
     try {
       const client = await pgClient(owned.url);
       try {

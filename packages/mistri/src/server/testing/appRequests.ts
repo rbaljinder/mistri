@@ -194,6 +194,10 @@ export async function sampleInput(
       case 'textarea':
       case 'richText': {
         if ('pattern' in field && field.pattern !== undefined) return { input, unanswered: field.name };
+        if (field.as === 'color') {
+          input[field.name] = '#1d6a5a';
+          break;
+        }
         // A mask is answered by its places: a digit for each 0, a letter for each a.
         if ('mask' in field && field.mask !== undefined) {
           input[field.name] = [...field.mask].flatMap((c) => (c === '0' ? ['1'] : c === 'a' || c === '*' ? ['A'] : [])).join('');
@@ -230,6 +234,9 @@ export async function sampleInput(
         break;
       case 'datetime':
         input[field.name] = new Date().toISOString();
+        break;
+      case 'time':
+        input[field.name] = field.min ?? (field.max !== undefined && field.max < '09:00' ? field.max : '09:00');
         break;
       case 'choice':
         if (field.source) {

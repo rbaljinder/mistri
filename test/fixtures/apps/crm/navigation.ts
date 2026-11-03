@@ -8,7 +8,7 @@ export const navigation = [
   navGroup(
     'sales',
     'Sales',
-    ['sales-dashboard', 'pipeline-layout', 'leads', 'opportunities', 'pipeline', 'accounts', 'account-tree', 'contacts'],
+    ['sales-dashboard', 'pipeline-layout', 'leads', 'opportunities', 'deals-by-stage', 'pipeline', 'accounts', 'account-tree', 'contacts'],
     {
       icon: 'chart-line',
     },

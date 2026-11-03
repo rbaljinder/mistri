@@ -100,7 +100,7 @@ async function fixture(
   run: (value: { ask: Ask; db: DatabaseSync; app: AppDef; signIn(): void }) => Promise<void>,
   options: Parameters<typeof definition>[0] = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-branding-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-branding-http-'));
   const file = join(directory, 'records.db');
   const db = new DatabaseSync(file);
   db.exec(
@@ -475,7 +475,7 @@ test('built GET/HEAD/cache headers and startup ignore previous tenant colors, ev
     setTimeout() {},
   });
   assert.equal(styles.get('--startup-ground'), base.value.theme.light.ground);
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-branding-built-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-branding-built-'));
   writeFileSync(join(directory, 'index.html'), source);
   const serve = builtClient(directory);
   let presentation = base;

@@ -47,5 +47,5 @@ the second; TypeScript 7 loads no `@types` package unnamed). `host.as(role)` is
 ## Report
 
 The command and exit status of each layer, the counts (pass, fail, skipped),
-what was not tested and why (a PostgreSQL-only suite without
-`TABLEWALK_TEST_PG` is skipped, not passed).
+what was not tested and why (a PostgreSQL-only suite run without its
+database is skipped, not passed).

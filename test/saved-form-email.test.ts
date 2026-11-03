@@ -112,7 +112,7 @@ async function fixture(run: (f: Fixture) => Promise<void>) {
   resetStatusLockouts();
   resetOneTimeCodes();
   resetStepUpSessions();
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-form-email-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-form-email-'));
   const file = join(directory, 'apply.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE application(id INTEGER PRIMARY KEY, status TEXT NOT NULL, reference TEXT UNIQUE, first_name TEXT, last_name TEXT, email TEXT,
@@ -274,7 +274,7 @@ test(
       const opened = await visitor.post('/api/forms/apply/stepup', { receipt, confirm: { last_name: 'Lovelace' }, code });
       assert.equal(opened.status, 200, opened.raw);
       assert.deepEqual(opened.body, { status: { status: 'Received' }, details: { first_name: 'Ada' } });
-      assert.match(visitor.jar.get('tw_stepup_apply') ?? '', /^[A-Za-z0-9_-]{43}$/);
+      assert.match(visitor.jar.get('mistri_stepup_apply') ?? '', /^[A-Za-z0-9_-]{43}$/);
       // Used once: the same code again is the one refusal.
       const again = await visitor.post('/api/forms/apply/stepup', { receipt, confirm: { last_name: 'Lovelace' }, code });
       assert.equal(again.body.code, 'code_refused');

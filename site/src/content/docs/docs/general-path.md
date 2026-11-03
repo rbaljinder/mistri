@@ -8,7 +8,7 @@ Keep an App where it pays and your own code everywhere else — a page, a route 
 ```ts title="examples/apps/ladle/host/server.ts"
   const server = createServer((req, res) => {
     const url = req.url ?? '/';
-    if (ours(url)) return void tw.node(req, res);
+    if (ours(url)) return void mistri.node(req, res);
     if (url === '/schedule.json' || url.startsWith('/schedule.json?')) return schedule(req, res);
     vite.middlewares(req, res, async () => {
 ```
@@ -24,7 +24,7 @@ entry points.
 /                 the school's site, its own design      (host/main.tsx)
 /schedule.json    the school's JSON route                 (host/schedule.ts)
 /staff/…          the App, inside the site's header       (@mistriwork/mistri/react)
-/api/tw/…         the App's API, sign-in and files        (@mistriwork/mistri/handler)
+/api/mistri/…         the App's API, sign-in and files        (@mistriwork/mistri/handler)
 ```
 
 ## When to take it
@@ -41,13 +41,13 @@ drawn for you.
 - **A free-form page inside the App.** `pages/check-in.page.tsx` declares what
   it reads and the one command it runs, and draws the App's `Metric` and
   `Rows` blocks beside its own React ([free-form pages](/docs/custom-components/#free-form-pages)).
-- **A route of your own beside the App.** `host/server.ts` hands `/api/tw` to
+- **A route of your own beside the App.** `host/server.ts` hands `/api/mistri` to
   `createHandler` from `@mistriwork/mistri/handler` and answers `/schedule.json`
   itself, from the same database with its own driver
   ([mount in your server](/docs/mount-in-your-server/)).
 - **The App inside your React app.** `host/main.tsx` is the school's site;
   under `/staff` it renders `<App app="ladle" basePath="/staff" />`
-  inside `<Provider endpoint="/api/tw">` from `@mistriwork/mistri/react`
+  inside `<Provider endpoint="/api/mistri">` from `@mistriwork/mistri/react`
   ([embed in a React app](/docs/embed-in-a-react-app/)).
 
 Staff sign in to the App inside the site. A host that already knows who is

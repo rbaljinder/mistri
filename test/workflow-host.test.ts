@@ -43,7 +43,7 @@ async function until(check: () => boolean | Promise<boolean>, what: string) {
 }
 
 test('a delivery starts a workflow that sleeps, then approves the loan once, as its principal', { timeout: 60_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-workflow-host-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-workflow-host-'));
   const children: ChildProcess[] = [];
   t.after(async () => {
     for (const child of children)

@@ -112,7 +112,7 @@ test('and on SQLite, the same rows', async (t) => {
   const { join } = await import('node:path');
   const { DatabaseSync } = await import('node:sqlite');
   const { SqliteAdapter } = await import('../packages/engine/src/adapters/sqlite.js');
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-column-values-live-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-column-values-live-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'inv.db'));
   db.exec(`CREATE TABLE product (id INTEGER PRIMARY KEY, name TEXT NOT NULL, owner TEXT, reorder_level INTEGER);

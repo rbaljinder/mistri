@@ -28,7 +28,7 @@ async function fixture(
     db: DatabaseSync;
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-narrowing-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-narrowing-http-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

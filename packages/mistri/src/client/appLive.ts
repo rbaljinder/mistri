@@ -4,7 +4,7 @@
  * the App again and redraws it where it stands (app.js `reloadAppInPlace`).
  *
  * A server-sent event stream rather than Vite's HMR socket: an App served by
- * `npx tablewalk` has no Vite — its client is the built one — and is the
+ * `npx @mistriwork/mistri` has no Vite — its client is the built one — and is the
  * case this exists for. Custom components and `pages/*.page.tsx` are not
  * Vite modules either (the server compiles them, appComponents.ts); a save
  * gives them a new hashed address and they are drawn again from it.

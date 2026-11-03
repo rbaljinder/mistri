@@ -17,14 +17,14 @@ CREATE TABLE "__mistri_public_placement_receipt" (
   target TEXT COLLATE BINARY NOT NULL,
   keys_json TEXT COLLATE BINARY NOT NULL,
   changes_json TEXT COLLATE BINARY NOT NULL,
-  CONSTRAINT tw_pp_receipt_pk PRIMARY KEY (id),
-  CONSTRAINT tw_pp_receipt_scope UNIQUE (issuer_id, source_identity, app_id, form, tenant, command_id, command_version, submission)
+  CONSTRAINT mistri_pp_receipt_pk PRIMARY KEY (id),
+  CONSTRAINT mistri_pp_receipt_scope UNIQUE (issuer_id, source_identity, app_id, form, tenant, command_id, command_version, submission)
 );
 CREATE TABLE "__mistri_public_placement_meta" (
   singleton INTEGER NOT NULL,
   version INTEGER NOT NULL,
   format_owner TEXT COLLATE BINARY NOT NULL,
   schema_fingerprint TEXT COLLATE BINARY NOT NULL,
-  CONSTRAINT tw_pp_meta_pk PRIMARY KEY (singleton)
+  CONSTRAINT mistri_pp_meta_pk PRIMARY KEY (singleton)
 );
-INSERT INTO "__mistri_public_placement_meta" ("singleton", "version", "format_owner", "schema_fingerprint") VALUES (1, 1, 'mistri.public-placement', '17dea35a2ba4edf5d286bc5a684c2ea5498c3c788dea7b2e41f91887f077c875');
+INSERT INTO "__mistri_public_placement_meta" ("singleton", "version", "format_owner", "schema_fingerprint") VALUES (1, 1, 'mistri.public-placement', '956e63bd57aa2b1e5703f47307c1f59de15a7e95c0a525ad119a263a4d55f9a0');

@@ -30,7 +30,7 @@ const run = (args: string[], env: Record<string, string>): Promise<{ code: numbe
   });
 
 test('a broken App with jobs: --brief says its problem and nothing of the jobs it lists', { timeout: 300_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-brief-listing-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-brief-listing-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = join(directory, 'desk.db');
   const raw = new DatabaseSync(db);

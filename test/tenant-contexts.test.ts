@@ -96,7 +96,7 @@ function commandFailure(outcome: 'not_applied' | 'unknown') {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-contexts-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-contexts-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path),
     managers: Manager[] = [];

@@ -131,7 +131,7 @@ const definition = (extra: Record<string, unknown> = {}) => parseTestApp({ ...ma
 
 type Call = (path: string) => Promise<{ status: number; text: string; body: Record<string, any> }>;
 async function serve(def: AppDef, run: (call: Call, as: (role: string | null) => void) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-home-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-home-'));
   const file = join(directory, 'home.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE lead (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT, private_note TEXT);

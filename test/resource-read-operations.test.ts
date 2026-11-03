@@ -1139,7 +1139,7 @@ test('breakdown whose page holds its last group, or that has no groups, reads no
 });
 
 async function sqlite(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-resource-reads-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-resource-reads-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`

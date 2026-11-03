@@ -32,7 +32,7 @@ const receipt: StoredCommandReceipt = {
 const audit = { target: 'ticket', keyJson: '{"id":1}', changesJson: '[]' };
 const update = { table: 'ticket', key: { id: 1 }, values: { name: 'Changed' } };
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync) => Promise<void>, migrate = true) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-verified-command-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-verified-command-'));
   const path = join(dir, 'business.db');
   const db = new DatabaseSync(path);
   let adapter: SqliteAdapter | undefined;

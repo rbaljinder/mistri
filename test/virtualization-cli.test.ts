@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
 test('standalone service responds and exits unsuccessfully after an unexpected call', async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), 'tablewalk-virtual-cli-'));
+  const directory = await mkdtemp(join(tmpdir(), 'mistri-virtual-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const file = join(directory, 'service.mjs');
   await writeFile(

@@ -17,7 +17,7 @@ test('importedFromApp reads value names, not types or comments', () => {
 });
 
 test('an App that imports several removed helpers hears all of them at once, with what replaces each', async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-removed-imports-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-removed-imports-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   mkdirSync(join(dir, 'features'));
   writeFileSync(

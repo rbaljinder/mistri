@@ -1,5 +1,5 @@
 /**
- * Soak sampler: load it into a tablewalk server with `node --import`.
+ * Soak sampler: load it into a mistri server with `node --import`.
  *
  *   SOAK_OUT=<dir> node --expose-gc --import ./scripts/soak/sampler.mjs ...
  *

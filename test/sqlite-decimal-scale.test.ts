@@ -18,7 +18,7 @@ test('a declared scale is read from the type, and only a scale above zero counts
 });
 
 test('a DECIMAL/NUMERIC column with a scale reads as Postgres says a numeric', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-sqlite-decimal-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-sqlite-decimal-'));
   let adapter: SqliteAdapter | undefined;
   try {
     const file = join(directory, 'prices.db');
@@ -57,7 +57,7 @@ test('a DECIMAL/NUMERIC column with a scale reads as Postgres says a numeric', a
    dashboard. The shared compiler sums it in hundredths and says it with the column's places (shared/decimals.ts),
    so a dashboard's total and PostgreSQL's agree to the cent. */
 test('a breakdown sums a decimal column exactly, said with its places, and sorts by the amount', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-sqlite-decimal-sum-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-sqlite-decimal-sum-'));
   let adapter: SqliteAdapter | undefined;
   try {
     const file = join(directory, 'ledger.db');

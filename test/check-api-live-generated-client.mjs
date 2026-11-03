@@ -30,7 +30,7 @@ for (const [name, version] of [
 const { default: openapiTS, astToString } = await import(pathToFileURL(join(tools, 'node_modules/openapi-typescript/dist/index.mjs')).href);
 const clientModule = join(tools, 'node_modules/openapi-fetch/dist/index.mjs');
 const compiler = createRequire(import.meta.url).resolve('typescript/bin/tsc');
-const directory = await mkdtemp(join(tmpdir(), 'tablewalk-api-live-client-'));
+const directory = await mkdtemp(join(tmpdir(), 'mistri-api-live-client-'));
 const storeId = '21a53156-f274-4622-8a68-3f0b82c2c45a';
 try {
   for (const integers of ['decimal-string', 'number']) {

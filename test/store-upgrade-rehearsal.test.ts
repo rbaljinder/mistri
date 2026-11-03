@@ -83,7 +83,7 @@ for (const engine of ENGINES) {
     { skip: engine === 'postgres' ? liveSkip('postgres', LIVE) : false },
     async () => {
       const where = await scratch(engine, 'rehearsal');
-      const directory = mkdtempSync(join(tmpdir(), 'tablewalk-rehearsal-'));
+      const directory = mkdtempSync(join(tmpdir(), 'mistri-rehearsal-'));
       const pauseFile = join(directory, 'paused');
       try {
         const fixture = fixtureFiles('record-history', engine).find((file) => file.version === 1)!;

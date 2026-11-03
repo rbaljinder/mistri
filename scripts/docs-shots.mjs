@@ -334,7 +334,7 @@ async function main() {
   }
   if (!shots.length) throw new Error('No manifest entry matches.');
 
-  const work = mkdtempSync(join(tmpdir(), 'tablewalk-docs-shots-'));
+  const work = mkdtempSync(join(tmpdir(), 'mistri-docs-shots-'));
   const configs = new Map();
   const servers = new Map();
   /* Each App seeded once, its people made once, its config's path. */

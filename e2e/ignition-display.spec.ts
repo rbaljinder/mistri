@@ -144,7 +144,7 @@ test.describe('Ignition says names', () => {
      granted the role in the context named, chooses that context in every tab. */
   test('shot signs in to a dealership, or to the lender, and shoots the rooms of that realm', async () => {
     test.setTimeout(240_000);
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-ignition-shot-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-ignition-shot-'));
     const reader = join(directory, 'real-config');
     try {
       const shot = (args: string[]) =>

@@ -17,7 +17,7 @@ let directory = '';
 let db = '';
 
 test.beforeAll(() => {
-  directory = mkdtempSync(join(tmpdir(), 'tablewalk-shot-text-'));
+  directory = mkdtempSync(join(tmpdir(), 'mistri-shot-text-'));
   db = join(directory, 'tick.db');
   const seeded = spawnSync(process.execPath, [resolve('examples/databases/tick/seed.mjs'), db], { encoding: 'utf8' });
   if (seeded.status !== 0) throw new Error(seeded.stderr);

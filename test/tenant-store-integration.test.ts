@@ -32,7 +32,7 @@ const grant = {
   expectedVersion: null,
 };
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-integration-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-integration-'));
   const path = join(directory, 'business.db');
   const writer = new DatabaseSync(path),
     reader = new DatabaseSync(path);

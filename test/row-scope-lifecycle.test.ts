@@ -9,7 +9,7 @@ import { TransactionOutcomeUnknown } from '../packages/engine/src/adapters/adapt
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
 function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scope-lifecycle-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-scope-lifecycle-'));
   const file = join(directory, 'scope.db');
   const setup = new DatabaseSync(file);
   setup.exec('CREATE TABLE item(id INTEGER PRIMARY KEY, name TEXT);');

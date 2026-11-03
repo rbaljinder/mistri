@@ -65,6 +65,7 @@ import { BusinessCommandExecutionError, isBusinessCommandExecutionError } from '
 import { evaluateCommandAvailability } from './commandAvailability.js';
 import { constraintColumns, writeFailureKind } from '@mistriwork/engine/server/constraints.js';
 import { placeFile, type PlacedFile } from '../files/fileStorage.js';
+import { stagedOwner, takeHeldFiles } from './stagedFiles.js';
 import type { CommandFileRule } from './businessCommandAuthorization.js';
 import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
 import { currentSpan, errorCode, inSpan, tracing } from '@mistriwork/engine/adapters/telemetry/trace.js';
@@ -129,6 +130,8 @@ interface ExecutionOptions {
   analytics?: (event: CommandAnalyticsEvent) => void;
   /** Files the host received for this run, beside the input (an inbound email's attachments): the handler's `files`. */
   files?: readonly import('./businessCommands.js').CommandFile[];
+  /** A public form's visitor token, from their own cookie: whose held files (stagedFiles.ts) a submission may take. */
+  visitor?: string;
 }
 
 interface CommandAnalyticsEvent {
@@ -285,6 +288,8 @@ async function executeUntraced(
      deleted when the transaction is known to have rolled back, and left for
      the sweep when its outcome is unknown. */
   const placedFiles: PlacedFile[] = [];
+  /* Each file a handler's insertFile stored, by its table and its bytes: a held file taken for the handler must be one. */
+  const storedFiles: Array<[string, Uint8Array]> = [];
   /* Started after the transaction has committed, and dropped with a failed attempt (a retried one makes its own). */
   const afterCommit: Array<() => void> = [];
   /* The parsed input, kept for a refusal: the field a broken constraint names is marked only when the input has it. */
@@ -1109,6 +1114,7 @@ async function executeUntraced(
                 ? {
                     files: authorized.files,
                     afterCommit: (run: () => void) => void afterCommit.push(run),
+                    stored: (table: string, data: Uint8Array) => void storedFiles.push([table, data]),
                     placeFile: async (rule: CommandFileRule, values: Record<string, unknown>) => {
                       const placed = await placeFile(rule, values, {
                         app: authorized.actor.appId,
@@ -1142,6 +1148,15 @@ async function executeUntraced(
             const intake =
               publicActor && (authorized.intake === 'tenant' || authorized.intake === 'platform') ? authorized.intake : undefined;
             const placement = publicActor && authorized.placement ? Object.freeze({ tenantId: authorized.placement.tenantId }) : undefined;
+            /* The files the input names by id, taken from what this sender holds for this command (stagedFiles.ts):
+             deleted in this transaction, so a refusal below holds them again and a commit uses them up. */
+            const held = await takeHeldFiles(command.fields, input, journal, {
+              appId: authorized.actor.appId,
+              command: request.command,
+              owner: stagedOwner(publicActor ? actor : authorized.actor, options.visitor),
+              now: now().getTime(),
+            });
+            const handed = Object.keys(held.files).length ? { ...held.files, ...revealed } : revealed;
             const output = await withoutRevealed(revealed, () =>
               executeWithCommandFlags(flags, command.enabledBy, (executionFlags) =>
                 command.handle(
@@ -1167,10 +1182,19 @@ async function executeUntraced(
                     ...(options.files ? { files: Object.freeze(options.files.map((file) => Object.freeze({ ...file }))) } : {}),
                     ...(flowTell ? { [FLOW_TELL]: flowTell } : {}),
                   }),
-                  Object.keys(revealed).length ? Object.freeze({ ...(input as object), ...revealed }) : input,
+                  Object.keys(handed).length ? Object.freeze({ ...(input as object), ...handed }) : input,
                 ),
               ),
             );
+            /* A held file becomes its row in this transaction or the command does not commit: one left unstored would be
+             used up and kept nowhere. */
+            for (const file of held.taken)
+              if (!storedFiles.some(([table, data]) => table === held.from.get(file) && data === file.data))
+                throw recordRefusalCause(
+                  new BusinessCommandExecutionError('invalid_result'),
+                  `Command "${request.command}" was sent the file "${file.name}" for ${held.from.get(file)} and did not store it; ` +
+                    `store each with db.${held.from.get(file)}.insertFile(file, values).`,
+                );
             /* A whole sensitive value is the handler's alone: an output that says it back would put it in the receipt,
              the journal and the reader's screen. */
             if (Object.keys(revealed).length) {

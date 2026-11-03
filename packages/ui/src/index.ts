@@ -1,6 +1,6 @@
 /**
  * @mistriwork/ui: the primitives every dialog, menu, listbox, icon and form here is drawn with, over Base UI and dressed in
- * the house classes (`modal`, `dd-*`, `btn`, `form-field`, `date-field`, `tw-icon`), which its own stylesheet styles
+ * the house classes (`modal`, `dd-*`, `btn`, `form-field`, `date-field`, `mistri-icon`), which its own stylesheet styles
  * (`@mistriwork/ui/style.css`). A primitive reads no walk, no address, no transport and no copy catalog: its words, its
  * icons, its answers and its hooks are props (scripts/check-boundary.mjs holds the `ui` layer to importing only
  * itself).

@@ -33,7 +33,7 @@ import type { LivePosition, LiveStore } from '../packages/mistri/src/server/live
 import { setServerTiming, timedSum, timeRequests } from '../packages/engine/src/adapters/telemetry/serverTiming.js';
 
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync, hub: LiveHub) => Promise<void>) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-live-hub-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-live-hub-'));
   const path = join(dir, 'data.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE ticket (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT);

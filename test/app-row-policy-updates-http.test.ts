@@ -34,7 +34,7 @@ function privateFree(value: unknown, path = ''): void {
 }
 
 async function fixture(t: TestContext, options: { commands?: boolean; secondaryWrite?: boolean } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-update-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-update-'));
   const registry = new Registry();
   const databases: DatabaseSync[] = [];
   const policies: HttpAppPolicy[] = [];

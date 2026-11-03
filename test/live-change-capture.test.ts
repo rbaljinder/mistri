@@ -18,7 +18,7 @@ import {
 import { bindLiveChanges } from '../packages/mistri/src/server/stores/writeCaptures.js';
 
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync, path: string) => Promise<void>, provision = true) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-live-change-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-live-change-'));
   const path = join(dir, 'data.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE ticket (id INTEGER PRIMARY KEY, tenant_id TEXT, title TEXT NOT NULL, status TEXT, secret TEXT);

@@ -31,7 +31,7 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 /* The binary's compiled entry. */
 const built = join(root, 'packages/mistri/dist/server/index.js');
 assert.ok(existsSync(built) && existsSync(join(root, 'packages/mistri/dist/client/index.html')), 'Build the package first: npm run build.');
-const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-built-client-'));
+const scratch = mkdtempSync(join(tmpdir(), 'mistri-built-client-'));
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 /* What a cold first visit may take off the wire, page and assets, before the
    room paints, by the surface it draws (vite.config.ts, `surfaces`). Every
@@ -141,7 +141,11 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
 // reference's record, documents' day dates and print sheet, and the clearer messages. Measured: 250.1 KB the staff
 // sign-in, 453.2 KB Forecourt's list and 565.8 KB Tick's list; each ceiling passed moves to about 0.5% above.
 // The database browser's Workbench left for its own repository, and its ceiling with it.
-const FIRST_PAINT_WIRE_KB = { public: 251.4, app: 455.5, workshop: 568.6 };
+// rc.15 adds the inputs modern Apps reach for (time, rating, scan, color, files, signature), copy and address cells,
+// reactions, the week and day calendar, the grouped grid and the tree picker, each of whose shared pieces rides the
+// entry beside the forms they belong to. Measured on CI: 252.3 KB the staff sign-in, 457.8 KB Forecourt's list and
+// 570.5 KB Tick's list; each ceiling passed moves to about 0.5% above.
+const FIRST_PAINT_WIRE_KB = { public: 253.6, app: 460.1, workshop: 573.4 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/tenant'],
   app: ['/assets/tenant', '/assets/public'],

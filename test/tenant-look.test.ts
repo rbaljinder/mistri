@@ -15,7 +15,7 @@ import { lookOnlyChange, wearing } from '../packages/mistri/src/server/tenant/te
 import { watchTenantStartup } from '../packages/mistri/src/server/tenant/tenantStartup.js';
 
 const ROOT = resolve('.');
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-look-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-tenant-look-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 
 const theme = (accent: string) => `import { defineTheme } from '@mistriwork/mistri/app';

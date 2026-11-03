@@ -105,8 +105,9 @@ export interface CommandValueBase {
   input?: string;
 }
 /** How a field is drawn: a slider (a bounded number or amount), cards (one or several, with icons), two buttons (a
-    yes or a no; a choice's few), a select, or radios. */
-export type CommandFieldPresentation = 'slider' | 'cards' | 'buttons' | 'select' | 'radios';
+    yes or a no; a choice's few), a select, or radios; a number as stars (`'rating'`), a text as a code the camera
+    reads (`'scan'`) or as a color with the system's picker (`'color'`). */
+export type CommandFieldPresentation = 'slider' | 'cards' | 'buttons' | 'select' | 'radios' | 'rating' | 'scan' | 'color';
 /** What a sensitive text keeps once its own rules have read the whole value: its last four characters, a keyed hash
     (HMAC under the form key), nothing at all, or — for the handler alone, once, in memory — the whole value
     (`'handler'`); whatever it keeps, the journal, the audit, events, flags, logs and the idempotency fingerprint
@@ -155,7 +156,8 @@ export type AppCommandField = (CommandValueBase & (
           (`'000-00-0000'`). The value is what the mask's places hold (`123456789`), and the mask is its pattern. */
       mask?: string; sensitive?: CommandSensitive }
   | { type: 'richText'; minLength?: number; maxLength?: number; mentions?: CommandRichTextMentions; images?: string }
-  | { type: 'number'; min?: number; max?: number; integer?: boolean; step?: number; below?: string; above?: string; live?: CommandLiveLines }
+  /** `outOf`: with `as: 'rating'`, the stars of its scale; the field is then a whole number from 1 to it. */
+  | { type: 'number'; min?: number; max?: number; integer?: boolean; step?: number; below?: string; above?: string; live?: CommandLiveLines; outOf?: number }
   /** An amount of money in the App's currency (`ui.currency`), from 0 unless `min` says less, on cents unless `step` says otherwise. */
   | { type: 'money'; min?: number; max?: number; step?: number; minor?: boolean; currency?: string; below?: string; above?: string; live?: CommandLiveLines }
   /** `statement`: the long words a consent box stands beside (at most 2,000 characters), drawn as one paragraph. */
@@ -164,12 +166,19 @@ export type AppCommandField = (CommandValueBase & (
   /** A month, `YYYY-MM`: `min` and `max` are months too. */
   | { type: 'month'; min?: string; max?: string; below?: string; above?: string }
   | { type: 'datetime'; min?: string; max?: string; below?: string; above?: string }
+  /** A time of day, `HH:MM` on a 24-hour clock: `min` and `max` are times too. */
+  | { type: 'time'; min?: string; max?: string; below?: string; above?: string }
   /** One of the options; or, with `source`, one of a table's rows by its key (the options then come from the table). */
   | { type: 'choice'; options: readonly AppCommandChoice[]; source?: CommandChoiceSource }
   /** Several of the options: from `min` to `max` of them, and an `exclusive` option (`'none'`) stands alone. */
   | { type: 'choices'; options: readonly AppCommandChoice[]; source?: CommandChoiceSource; min?: number; max?: number; exclusive?: readonly (string | number)[] }
-  | { type: 'reference'; from: string; by: string; labelColumn: string; query?: string }
+  | { type: 'reference'; from: string; by: string; labelColumn: string; query?: string; tree?: string }
   | { type: 'defined'; from: string; whose?: string }
+  /** Files of the file resource `from`, from `min` (1 unless said) to `max`; `accept` the media types taken
+      (`image/*`). Each is sent as it is picked and held for the command; the value is the held files' ids. */
+  | { type: 'files'; from: string; min?: number; max: number; accept?: readonly string[] }
+  /** A signature drawn on a pad, held as a PNG of the file resource `from`; the value is the held file's id. */
+  | { type: 'signature'; from: string }
 )) | AppCommandGroup | AppCommandLines;
 
 /**
@@ -288,7 +297,7 @@ export interface AppCommandAction<Target extends string = string, Label extends 
 /** A resource action as the App serves it. */
 export type AppAction<Target extends string = string, Label extends string | AppMessageRef = string> = AppUpdateAction<Label> | AppCommandAction<Target, Label>;
 
-/** The authored spelling of a page and its sections — the plain data a pages/ file and tablewalk.json hold — as the
+/** The authored spelling of a page and its sections — the plain data a pages/ file and the config file (mistri.json) hold — as the
     page rules write it back (packages/engine/src/shared/page.ts `sectionConfig`, `pageConfig`). The App framework's types say what it
     is: packages/mistri/schema/app.d.ts fills these shapes in with `Plain<PageSection>` and `Plain<AppPage>`, so a rule that writes a
     section the authored types refuse does not compile, while the engine names none of the App's authoring types.

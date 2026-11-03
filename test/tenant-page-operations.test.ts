@@ -29,7 +29,7 @@ function viewAt(result: Plan, index: number) {
 
 /** These are helper/compiler tests, not enrollment or public authentication proof. */
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-page-ops-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-page-ops-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   const adapter = new SqliteAdapter(path, 'Tenant page operations');

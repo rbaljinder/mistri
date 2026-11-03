@@ -14,7 +14,7 @@ import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 const originalName = 'public.customer and physical_customers are literal record text';
 
 async function fixture(appMode: boolean, run: (base: string, db: DatabaseSync, host: AppHost) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-resource-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-resource-http-'));
   const path = join(directory, 'fixture.db');
   const db = new DatabaseSync(path);
   db.exec(`

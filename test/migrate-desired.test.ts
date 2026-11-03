@@ -28,7 +28,7 @@ import {
 } from '../packages/engine/src/server/migrate/desired.js';
 import { newMigration } from '../packages/engine/src/server/migrate/files.js';
 
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-desired-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-desired-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 let n = 0;
 

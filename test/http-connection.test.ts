@@ -18,7 +18,7 @@ let api: Awaited<ReturnType<typeof startFakeRest>>;
 let dir: string;
 before(async () => {
   api = await startFakeRest();
-  dir = mkdtempSync(join(tmpdir(), 'tablewalk-http-connection-'));
+  dir = mkdtempSync(join(tmpdir(), 'mistri-http-connection-'));
   writeFileSync(join(dir, 'desk.http.json'), JSON.stringify(draftDescription(readOpenApi(spec))));
 });
 after(async () => {

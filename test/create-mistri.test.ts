@@ -17,7 +17,7 @@ const MISTRI = fileURLToPath(new URL('../packages/mistri/package.json', import.m
 
 /** An install: create-mistri beside a mistri whose command prints what it was run with. */
 function install() {
-  const root = mkdtempSync(join(tmpdir(), 'tablewalk-create-mistri-'));
+  const root = mkdtempSync(join(tmpdir(), 'mistri-create-mistri-'));
   const modules = join(root, 'node_modules');
   mkdirSync(join(modules, 'create-mistri'), { recursive: true });
   mkdirSync(join(modules, '@mistriwork', 'mistri', 'dist'), { recursive: true });

@@ -25,7 +25,7 @@ import { parseTestApp } from './support/commandCatalog.js';
 const NOW = new Date('2026-09-08T02:30:00Z');
 
 test('a handler writes now, today and me in each column’s own format', { timeout: 10_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-constants-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-constants-'));
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
   const registry = new Registry();

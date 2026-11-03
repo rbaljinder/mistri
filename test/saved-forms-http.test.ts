@@ -257,7 +257,7 @@ async function fixture(
 ) {
   resetPublicFormLimits();
   resetStatusLockouts();
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-saved-forms-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-saved-forms-'));
   const file = join(directory, 'apply.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE application(id INTEGER PRIMARY KEY, status TEXT NOT NULL, reference TEXT UNIQUE,
@@ -340,7 +340,7 @@ class Applicant {
       headers: {
         'content-type': 'application/json',
         origin: this.base,
-        ...(this.cookie ? { cookie: `tw_form_apply=${this.cookie}` } : {}),
+        ...(this.cookie ? { cookie: `mistri_form_apply=${this.cookie}` } : {}),
         ...extra,
       },
     });
@@ -348,7 +348,7 @@ class Applicant {
     const set = response.headers.get('set-cookie') ?? undefined;
     this.lastSetCookie = set;
     if (set) {
-      const value = /^tw_form_apply=([^;]*)/.exec(set)?.[1];
+      const value = /^mistri_form_apply=([^;]*)/.exec(set)?.[1];
       this.cookie = value || undefined;
     }
     return { status: response.status, body: JSON.parse(raw) as Record<string, unknown>, raw, set };
@@ -463,7 +463,7 @@ test(
       const done = await ada.submit();
       assert.equal(done.status, 200, done.raw);
       assert.match(String(done.body.reference), publicReferencePattern('APP'));
-      assert.match(done.set!, /^tw_form_apply=;/);
+      assert.match(done.set!, /^mistri_form_apply=;/);
       assert.match(done.set!, /Max-Age=0/);
       assert.equal(ada.cookie, undefined);
       const finished = root(f, 1);

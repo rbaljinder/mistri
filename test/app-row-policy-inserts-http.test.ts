@@ -46,7 +46,7 @@ async function fixture(
     requiredCode?: boolean;
   } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-insert-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-insert-'));
   const registry = new Registry();
   const databases: DatabaseSync[] = [];
   const policies: HttpAppPolicy[] = [];

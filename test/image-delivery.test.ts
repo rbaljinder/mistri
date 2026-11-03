@@ -84,7 +84,7 @@ type Mode = 'policy' | 'open' | 'none';
  *  - `policy`: as `open`, but under a row policy, where a context exists for a visitor too.
  */
 async function fixture(t: TestContext, mode: Mode, options: { bucket?: boolean; proxy?: boolean } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-image-delivery-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-image-delivery-'));
   const cache = join(directory, 'cache');
   setImageCache(cache);
   const photo = await sharp!({ create: { width: 1000, height: 600, channels: 3, background: '#c33' } })
@@ -495,7 +495,7 @@ test('a GIF is sent as it is at every width and format', { skip }, async () => {
 });
 
 test("a public page learns a picture's hash and room from its thumbnail alone, never the picture", { skip }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-picture-details-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-picture-details-'));
   const file = join(directory, 'p.db');
   const full = await sharp!({ create: { width: 1000, height: 600, channels: 3, background: '#3a6' } })
     .png()

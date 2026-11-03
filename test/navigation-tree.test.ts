@@ -109,14 +109,15 @@ test('groups validate IDs, labels, nonempty children and exclusive ownership', (
     assert.throws(() => parse([{ ...valid, children: value }]), /non-empty "children" array/);
   }
   assert.throws(() => parse([{ ...valid, table: 'incident' }]), /"table"/);
-  /* Grouping is the tree's alone: a flat `group` on a view is an unknown key. */
+  /* Grouping in the menu is the tree's alone: a dashboard has no `group`, and a list view's `group` names one of its
+     own columns, the grid's heads (rc.15), so a menu heading spelled there is refused as no column. */
   assert.throws(
-    () => parse([valid], { incidents: { kind: 'list', from: 'incident', group: 'Other' } }),
-    /has no "group"\. "group" belongs inside a page section \(list\)\. It takes: /,
+    () => parse([valid], { incidents: { kind: 'list', from: 'incident', group: 'Other work' } }),
+    /"group" must name one of the resource's own columns/,
   );
   assert.throws(
     () => parse([{ ...valid, children: ['overview'] }], { overview: { ...dashboard, group: 'Other' } }),
-    /has no "group"\. "group" belongs inside a page section \(list\)\. It takes: /,
+    /has no "group"\. "group" belongs on a view \(list\) or inside a page section \(list\)\. It takes: /,
   );
   assert.throws(() => parse([{ ...valid, children: [{ to: 'incidents', label: 'Incidents', group: 'Other' }] }]), /has no "group"/);
   assert.throws(() => parse([{ to: 'incidents', label: 'Incidents', ancestors: [{ id: 'forged', label: 'Forged' }] }]), /"ancestors"/);
@@ -163,8 +164,8 @@ test('navigation bounds recursion and refuses cycles with useful errors', () => 
 test('flat groups are refused and helpers return ordinary objects', () => {
   assert.throws(() => parse([{ table: 'incident', group: 'Legacy' }]), /nav entry 1 is not a view id, a \{ label, to \} or a navGroup\./);
   assert.throws(
-    () => parse(['incidents'], { incidents: { kind: 'list', from: 'incident', group: 'Legacy' } }),
-    /has no "group"\. "group" belongs inside a page section \(list\)\. It takes: /,
+    () => parse(['incidents'], { incidents: { kind: 'list', from: 'incident', group: 'Legacy views' } }),
+    /"group" must name one of the resource's own columns/,
   );
   assert.deepEqual(navGroup('operate', 'Operate', ['incidents']), { id: 'operate', label: 'Operate', children: ['incidents'] });
 });

@@ -90,7 +90,7 @@ describe('the --jobs flag', () => {
     });
   }
   test('refuses --jobs for an App with no commands, which would load the jobs and never run one', async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-jobs-tick-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-jobs-tick-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const database = join(directory, 'tick.db');
     seedTick(database);

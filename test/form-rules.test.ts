@@ -861,6 +861,39 @@ test("a field's `as` is cards, buttons, radios or select, and only a vocabulary 
   assert.match(judged({ fields: { done: { as: 'cards' } } }), /a flag is drawn as "buttons" or "select"/);
 });
 
+test("a reference's `tree` names the referenced table's own parent column, and nothing else may take one", () => {
+  assert.deepEqual(parseAppForm({ fields: { other_id: { tree: 'parent_id' } } }).fields?.other_id, { tree: 'parent_id' });
+  assert.throws(() => parseAppForm({ fields: { other_id: { tree: 'a.b' } } }), /"tree"/);
+  const kind: TableMeta = {
+    id: 'kind',
+    name: 'kind',
+    schema: '',
+    isView: false,
+    columns: [
+      { ...column('id', 'integer'), primaryKey: true },
+      column('name', 'text'),
+      { ...column('parent_id', 'integer'), references: { table: 'kind', column: 'id' } },
+      { ...column('owner_id', 'integer'), references: { table: 'items', column: 'id' } },
+    ],
+  };
+  const filed: TableMeta = {
+    ...table,
+    columns: [...columns, { ...column('kind_id', 'integer'), references: { table: 'kind', column: 'id' } }],
+  };
+  const judged = (form: Parameters<typeof validateAppForm>[0]) =>
+    validateAppForm(
+      form,
+      filed,
+      filed.columns.map((c) => c.name),
+      { schema: { ...schema, tables: [filed, kind] }, person: null },
+    ).join('\n');
+  assert.equal(judged({ fields: { kind_id: { tree: 'parent_id' } } }), '');
+  assert.match(judged({ fields: { name: { tree: 'parent_id' } } }), /drawn as a tree, which only a reference is/);
+  assert.match(judged({ fields: { kind_id: { tree: 'parent' } } }), /"tree" names "parent", which is not a column of kind/);
+  assert.match(judged({ fields: { kind_id: { tree: 'owner_id' } } }), /refers to items; a tree's column names a parent row of kind itself/);
+  assert.match(judged({ fields: { kind_id: { tree: 'name' } } }), /refers to nothing/);
+});
+
 test("a step may leave its id out: the label's slug, as step() makes it, and a label with no slug says to write one", () => {
   assert.deepEqual(parseAppForm({ steps: [{ label: 'Care and coverage', fields: ['name'] }] }).steps, [
     { id: 'care-and-coverage', label: 'Care and coverage', fields: ['name'] },

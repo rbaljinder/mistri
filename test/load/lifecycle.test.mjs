@@ -12,7 +12,7 @@ const enabled = process.env.TABLEWALK_LOAD_INTEGRATION === '1';
 async function run(args, signal) {
   /* The run's artifacts and its browser's profile go in a TMPDIR of this test's own, removed once the report is
      read: the run keeps its artifacts for a person, and in a lane they are a leak (scripts/test-node.mjs). */
-  const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-load-lifecycle-'));
+  const scratch = mkdtempSync(join(tmpdir(), 'mistri-load-lifecycle-'));
   try {
     return await runIn(scratch, args, signal);
   } finally {

@@ -62,6 +62,8 @@ export interface ListSpec {
   icon?: string;
   /** Columns summed in the grid's footer, over the whole query. */
   totals?: string[];
+  /** The column the grid's rows are grouped by: read in its order, each group under a head with its count and subtotals. */
+  group?: string;
   /** Row height; 'comfortable' is the default. */
   density?: 'comfortable' | 'compact';
   /** A ⋯ menu at the end of each row with the record's own actions. */

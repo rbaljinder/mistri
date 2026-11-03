@@ -107,7 +107,7 @@ export function typecheck(roots: string | string[], { files = {}, options = {}, 
 
 /** TypeScript to JavaScript, with nothing checked or resolved; `flags` are `tsc` options (`module`, `target`, `removeComments`…). */
 export function transpile(text: string, flags: Record<string, string | boolean> = {}): string {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-transpile-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-transpile-'));
   try {
     const input = join(directory, flags.jsx ? 'module.tsx' : 'module.ts');
     writeFileSync(input, text);
@@ -156,7 +156,7 @@ export function project(tsconfig: string): Project {
  * JavaScript included. A `.mjs` or `.tsx` parses as what its extension says.
  */
 export function parseFiles(files: string[]): Map<string, SourceFile> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-parse-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-parse-'));
   try {
     const config = join(directory, 'tsconfig.json');
     const absolute = files.map((file) => resolve(file));
@@ -185,7 +185,7 @@ export const parseFile = (file: string): SourceFile => parseFiles([file]).get(re
 
 /** Source text that is not on disk, as one syntax tree each (keyed as given): written to a directory, parsed together, removed. */
 export function parseTexts(texts: Record<string, string>): Map<string, SourceFile> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-text-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-text-'));
   try {
     const names = Object.keys(texts);
     const paths = names.map((name, index) => {

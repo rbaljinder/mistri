@@ -193,7 +193,7 @@ test('PoolBusy is found through causes, but not behind an unknown outcome', () =
 });
 
 test('the server answers a refused checkout 503 with Retry-After; a write says it never ran', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-busy-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-busy-'));
   const db = join(dir, 'busy.db');
   makeDemoDatabase(db);
   const registry = new Registry();

@@ -66,7 +66,7 @@ export interface HandlerOptions {
 }
 
 export interface Handler {
-  /** Node listener: `http.createServer(tw.node)`, Express `app.use(tw.node)`. Mount it before any body parser. */
+  /** Node listener: `http.createServer(mistri.node)`, Express `app.use(mistri.node)`. Mount it before any body parser. */
   node(req: IncomingMessage, res: ServerResponse, next?: (error?: unknown) => void): void;
   /** Fetch handler: a Next route handler, a TanStack Start server route, Hono's `c.req.raw`. */
   fetch(request: Request, context?: { clientAddress?: string }): Promise<Response>;
@@ -101,11 +101,11 @@ function parseOrigin(value: string): URL {
  * Why a base path cannot be the handler's, or undefined. Its segments are the
  * host's address for mistri, and the server's own first segments
  * (shared/mount.ts SERVER_SEGMENTS) said again inside it make an address that
- * reads as two things: `/assets/tw` is the host's static files to every CDN
- * and build tool rule that caches `/assets/*` for a year, `/healthz/tw` is an
- * orchestrator's probe, and `/api` itself, or `/tw/api`, puts mistri's API
+ * reads as two things: `/assets/mistri` is the host's static files to every CDN
+ * and build tool rule that caches `/assets/*` for a year, `/healthz/mistri` is an
+ * orchestrator's probe, and `/api` itself, or `/mistri/api`, puts mistri's API
  * at `/api/api/…`. One shape is the host's own and is recommended: `api` first,
- * under a segment of the host's (`/api/tw`), beside the host's other routes.
+ * under a segment of the host's (`/api/mistri`), beside the host's other routes.
  */
 function basePathClash(base: string): string | undefined {
   const segments = base.split('/').filter(Boolean);
@@ -115,7 +115,7 @@ function basePathClash(base: string): string | undefined {
   if (clash === undefined) return undefined;
   return (
     `createHandler: basePath "${base}" says "${clash}", one of the paths mistri answers itself (${SERVER_SEGMENTS.join(', ')}), ` +
-    'so its addresses would read as two things. Mount it at a path of your own, like /crm, or under your API as /api/tw.'
+    'so its addresses would read as two things. Mount it at a path of your own, like /crm, or under your API as /api/mistri.'
   );
 }
 

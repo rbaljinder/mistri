@@ -18,7 +18,7 @@ export const INTAKE_APP_ID = 'intake';
     App of the same shape under test/fixtures/apps (`quote`: a stepped form at a desk, e2e/form-desk.spec.ts). */
 export async function startIntakeApp(flags: readonly string[] = [], fixture = 'intake') {
   const FIXTURE = resolve(`test/fixtures/apps/${fixture}`);
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-intake-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-intake-'));
   let child: ReturnType<typeof spawn> | undefined;
   const stop = async () => {
     if (child && child.exitCode === null && child.signalCode === null) {

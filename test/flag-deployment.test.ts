@@ -24,7 +24,7 @@ const catalog = normalizeFlagCatalog({
 });
 const roles = { reader: { flags: [{ actions: ['view'] as const, environments: ['production'], owners: ['product'] }] } };
 async function fixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-flag-deployment-')),
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-flag-deployment-')),
     secret = 'flag-deployment-fixture-secret-at-least-thirty-two-characters';
   const auth = await createAppAuth(
     {

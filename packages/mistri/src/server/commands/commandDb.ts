@@ -668,6 +668,8 @@ interface CommandDbOptions {
   /** Work to start once the command has committed (a public picture's pre-made copies); never run on a rollback. */
   readonly afterCommit?: (run: () => void) => void;
   readonly placeFile?: (rule: AppFileRule, values: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /** Told of each file insertFile stored, by its table and the bytes it was given (a held file must be one). */
+  readonly stored?: (table: string, data: Uint8Array) => void;
   /** What a constant (`now`, `today`, `me`) writes to a column; absent, a constant is refused. */
   readonly constant?: (table: CommandTable, column: ColumnMeta, word: WriteConstant['auto']) => Promise<Value>;
 }
@@ -937,9 +939,15 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       if ('error' in made) throw new Error(`${name}: ${made.error}`);
       // The pre-made copies of a public picture start when the command has committed (businessCommandExecution.ts).
       if (made.stored) options.afterCommit?.(made.stored);
-      if (rule.storage !== 'bucket') return insert(made.values);
+      if (rule.storage !== 'bucket') {
+        const row = await insert(made.values);
+        options.stored?.(name, data);
+        return row;
+      }
       if (!options.placeFile) throw new Error(`${name}: its files are kept in a bucket, which this command cannot write to.`);
-      return insert(await options.placeFile(rule, made.values));
+      const row = await insert(await options.placeFile(rule, made.values));
+      options.stored?.(name, data);
+      return row;
     },
     async update(row, changes) {
       const key = keyOf(row);

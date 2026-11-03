@@ -32,6 +32,11 @@ const REMOVED: Array<[string, RegExp, RegExp?]> = [
   ['the former product name', /datawalk/i],
   ['the former keychain service', /FORMER_SERVICE/],
   ['a second auth-secret name', /TABLEWALK_AUTH_SECRET/],
+  /* rc.15 finished the rename in the framework's own surface: the embed's layer and classes, the shared cache's keys,
+     the public forms' cookies. The database browser's names are its own and go through the product seam. */
+  ['an embed layer or class in the old product name', /@layer tablewalk|\btw-(?:root|body|frame|portals|icon)\b/],
+  ['a cache key in the old product initials', /[`'"]tw:/],
+  ['a public form cookie in the old product initials', /\btw_(?:claim|form|stepup)_/],
   ['an argument alias on an MCP tool', /Deprecated alias/],
   ['an App-mode `conn` owner stripped in transit', /_legacyOwner|\['app',\s*'conn'\]/],
   ['comma-joined reference segments', /columns\.join\(','\)\s*===/],

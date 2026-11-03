@@ -174,7 +174,7 @@ export class ValkeyCacheStore implements CacheStore {
   }
 }
 
-/** The same store under a key prefix: `tw:<app>:http:<connection>:`, say. */
+/** The same store under a key prefix: `mistri:<app>:http:<connection>:`, say. */
 export function scopedCache(store: CacheStore, prefix: string): CacheStore {
   return {
     kind: store.kind,

@@ -24,7 +24,7 @@ for (const policy of [false, true])
     `mounted ${policy ? 'policy' : 'native'} experiment receipts and actual-use exposure use the mounted native owner`,
     { timeout: 15000 },
     async (t) => {
-      const dir = mkdtempSync(join(tmpdir(), 'tablewalk-mounted-flags-')),
+      const dir = mkdtempSync(join(tmpdir(), 'mistri-mounted-flags-')),
         path = join(dir, 'business.db');
       const db = new DatabaseSync(path);
       db.exec("CREATE TABLE item(id INTEGER PRIMARY KEY, version INTEGER NOT NULL, name TEXT); INSERT INTO item VALUES(1,0,'Before')");
@@ -235,7 +235,7 @@ for (const policy of [false, true])
   );
 
 test('mounted tenant experiment receipts require canonical lease and reject revoked membership', { timeout: 15000 }, async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-mounted-tenant-flags-')),
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-mounted-tenant-flags-')),
     path = join(dir, 'business.db');
   const db = new DatabaseSync(path);
   db.exec(

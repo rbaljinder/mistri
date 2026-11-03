@@ -27,7 +27,7 @@ test('a value its column cannot hold is told by its code, on PostgreSQL', () => 
 });
 
 test('the server answers a value its column cannot hold 400, not 500', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-wrong-type-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-wrong-type-'));
   const db = join(dir, 'demo.db');
   makeDemoDatabase(db);
   const registry = new Registry();

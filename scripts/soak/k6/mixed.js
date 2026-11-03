@@ -91,7 +91,7 @@ export const options = {
   summaryTrendStats: ['avg', 'min', 'med', 'p(90)', 'p(95)', 'p(99)', 'p(99.9)', 'max'],
   discardResponseBodies: false,
   noConnectionReuse: false,
-  userAgent: 'tablewalk-soak/k6',
+  userAgent: 'mistri-soak/k6',
 };
 
 const wrong = new Counter('soak_wrong_answer');

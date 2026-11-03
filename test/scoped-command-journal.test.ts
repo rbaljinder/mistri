@@ -39,7 +39,7 @@ const receipt: StoredCommandReceipt = {
 const audit = { target: 'item', keyJson: '{"id":1}', changesJson: '[{"field":"name"}]' };
 
 function fixture(t: TestContext, migrate = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scoped-command-journal-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-scoped-command-journal-'));
   const path = join(directory, 'data.db');
   const db = new DatabaseSync(path);
   let adapter: SqliteAdapter | undefined;
@@ -167,7 +167,7 @@ test('scoped reads and CRUD share one atomic commit with the receipt and paired 
   const result = await commandsOf(adapter).scopeCommandTransaction(scopeA(), async function (tx, journal, catalog) {
     assert.equal(arguments.length, 3);
     assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
-    assert.deepEqual(Object.keys(journal).sort(), ['commit', 'find', 'insert', 'kept', 'nextNumber', 'taken']);
+    assert.deepEqual(Object.keys(journal).sort(), ['commit', 'find', 'insert', 'kept', 'nextNumber', 'stage', 'takeStaged', 'taken']);
     assert.ok(Object.isFrozen(tx) && Object.isFrozen(journal));
     assert.ok(catalog.tables.some((table) => table.id === 'item'));
     assert.equal(await tx.count('item'), 2);

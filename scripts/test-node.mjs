@@ -209,7 +209,7 @@ export function leaks(scratch, label) {
     /* nothing was made */
   }
   /* Grouped by the prefix a test gave mkdtemp, which is how a leak is traced
-     back to its file: `tablewalk-policy-cli-AbC123` → `tablewalk-policy-cli-`. */
+     back to its file: `mistri-policy-cli-AbC123` → `mistri-policy-cli-`. */
   const byPrefix = new Map();
   for (const name of entries) {
     if (TOOL_CACHES.some((cache) => cache.test(name))) continue;
@@ -297,14 +297,14 @@ function main() {
       return 0;
     }
     console.log(`# ${label}: ${mine.length} files, concurrency ${concurrency}`);
-    const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-lane-'));
+    const scratch = mkdtempSync(join(tmpdir(), 'mistri-lane-'));
     /* A config home of the lane's own, outside its TMPDIR (so the leak check
        does not read it as left behind): no case reaches the developer's
-       ~/.config/tablewalk, its auth stores or its saved credentials. */
-    const configHome = mkdtempSync(join(tmpdir(), 'tablewalk-lane-config-'));
+       ~/.config/mistri, its auth stores or its saved credentials. */
+    const configHome = mkdtempSync(join(tmpdir(), 'mistri-lane-config-'));
     /* Recording adds a second reporter, written outside the lane's TMPDIR so
        the leak check does not read the record as something a case left. */
-    const recorded = record ? join(mkdtempSync(join(tmpdir(), 'tablewalk-timings-')), 'lane.json') : undefined;
+    const recorded = record ? join(mkdtempSync(join(tmpdir(), 'mistri-timings-')), 'lane.json') : undefined;
     const reporters = recorded
       ? [
           '--test-reporter=spec',

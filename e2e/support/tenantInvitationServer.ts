@@ -23,7 +23,7 @@ interface Ready {
 /** Dedicated private child: no public CLI activation, test HTTP routes, or
  * inherited deployment credentials. Native account IDs arrive over owned IPC. */
 export async function startTenantInvitations(options: { administration?: boolean } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-invitation-browser-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-invitation-browser-'));
   const database = join(directory, 'business.db'),
     authDatabase = join(directory, 'auth.db');
   let child: ReturnType<typeof spawn> | undefined, closed: Promise<unknown> | undefined;
