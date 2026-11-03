@@ -64,6 +64,8 @@ export interface PageSection {
   compact?: Record<string, string[]>;
   /** The other party's rows, drawn against the far edge: asked by the server as each stream's `side` read (SectionPlan). */
   side?: string;
+  /** Reactions under each entry, their columns named by the server (page.ts timelineReactions). */
+  reactions?: import('@mistriwork/engine/shared/pageModel.js').TimelineReactions;
   filter?: string;
   fn?: string;
   column?: string;
@@ -165,6 +167,8 @@ export interface SectionPlan {
     /** A timeline's `side`: the stream's key columns, and its read narrowed to the other party's rows. */
     key?: string[];
     side?: { error?: string; empty?: boolean; view?: ViewDef };
+    /** The column the section's reactions name this stream's rows by, read with them (pagePlans.ts). */
+    reacts?: string;
   }>;
   /** A custom section's reads, each planned as a list, by name. */
   reads?: Record<string, { error?: string; empty?: boolean; view?: ViewDef }>;

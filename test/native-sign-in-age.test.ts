@@ -33,7 +33,7 @@ interface Control extends PgQuery {
 }
 
 async function fixture(t: TestContext, dialect: 'sqlite' | 'postgres') {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-sign-in-age-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-sign-in-age-'));
   let runtime: AppAuthRuntime | undefined, binding: AppAuthRuntimeBinding | undefined;
   let db: DatabaseSync | undefined, control: Control | undefined;
   const server = createServer((req, res) => {

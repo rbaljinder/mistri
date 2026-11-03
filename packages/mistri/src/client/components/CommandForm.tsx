@@ -421,6 +421,7 @@ export function CommandForm({
             disabled={Boolean(operation)}
             inputs={action.inputs}
             connection={owner.connection}
+            held={{ command: owner.command, connection: owner.connection }}
             {...(!owner.keys && Object.keys(owner.key).length ? { record: { table: owner.target, key: owner.key } } : {})}
             identityEpoch={identity.epoch}
             isCurrent={current}

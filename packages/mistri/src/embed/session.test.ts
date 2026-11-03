@@ -11,24 +11,24 @@ afterEach(() => {
 describe('the embed session', () => {
   it('exchanges nothing for the cookie', async () => {
     const fetcher = vi.fn();
-    const session = startSession('/api/tw', 'cookie', fetcher);
+    const session = startSession('/api/mistri', 'cookie', fetcher);
     await session.ready;
     expect(fetcher).not.toHaveBeenCalled();
     expect(session.authorization()).toBeUndefined();
   });
 
   it('knows its own origin from another', () => {
-    expect(crossOrigin('/api/tw')).toBe(false);
-    expect(crossOrigin(`${window.location.origin}/api/tw`)).toBe(false);
-    expect(crossOrigin('https://tw.example.com/tools')).toBe(true);
+    expect(crossOrigin('/api/mistri')).toBe(false);
+    expect(crossOrigin(`${window.location.origin}/api/mistri`)).toBe(false);
+    expect(crossOrigin('https://mistri.example.com/tools')).toBe(true);
   });
 
   it('same origin: posts the assertion with the cookie, and the reply sets the session', async () => {
     const fetcher = vi.fn(async () => json(200, { ok: true }));
-    const session = startSession('/api/tw', { assertion: async () => 'signed' }, fetcher);
+    const session = startSession('/api/mistri', { assertion: async () => 'signed' }, fetcher);
     await session.ready;
     expect(fetcher).toHaveBeenCalledWith(
-      `/api/tw${EXCHANGE_PATH}`,
+      `/api/mistri${EXCHANGE_PATH}`,
       expect.objectContaining({ method: 'POST', credentials: 'same-origin', body: JSON.stringify({ assertion: 'signed' }) }),
     );
     expect(session.authorization()).toBeUndefined();
@@ -41,14 +41,14 @@ describe('the embed session', () => {
       json(200, { token: `t${++n}`, expiresAt: Date.now() + 10 * 60_000 }),
     );
     const assertion = vi.fn(async () => 'signed');
-    const session = startSession('https://tw.example.com', { assertion }, fetcher);
+    const session = startSession('https://mistri.example.com', { assertion }, fetcher);
     await session.ready;
     expect(fetcher.mock.calls[0][1]).toMatchObject({ credentials: 'omit' });
     expect(session.authorization()).toBe('Bearer t1');
 
     await vi.advanceTimersByTimeAsync(9 * 60_000);
     // The renewal is the exchange again, with the host's fresh assertion as its whole proof.
-    expect(fetcher.mock.calls[1][0]).toBe(`https://tw.example.com${EXCHANGE_PATH}`);
+    expect(fetcher.mock.calls[1][0]).toBe(`https://mistri.example.com${EXCHANGE_PATH}`);
     expect(new Headers(fetcher.mock.calls[1][1]?.headers).get('authorization')).toBeNull();
     expect(assertion).toHaveBeenCalledTimes(2);
     expect(session.authorization()).toBe('Bearer t2');
@@ -60,7 +60,7 @@ describe('the embed session', () => {
 
   it('another origin: a reply with no token is refused', async () => {
     const fetcher = vi.fn(async () => json(200, {}));
-    await expect(startSession('https://tw.example.com', { assertion: async () => 'signed' }, fetcher).ready).rejects.toThrow(
+    await expect(startSession('https://mistri.example.com', { assertion: async () => 'signed' }, fetcher).ready).rejects.toThrow(
       /without a session for this origin/,
     );
   });
@@ -71,8 +71,8 @@ describe('the embed session', () => {
     const assertion = async () => {
       throw Object.assign(new Error('no session'), { status: 401 });
     };
-    await expect(startSession('/api/tw', { assertion, onUnauthenticated }, fetcher).ready).rejects.toThrow(/signed out too/);
-    expect(fetcher).toHaveBeenCalledWith(`/api/tw${SIGN_OUT_PATH}`, expect.objectContaining({ method: 'POST' }));
+    await expect(startSession('/api/mistri', { assertion, onUnauthenticated }, fetcher).ready).rejects.toThrow(/signed out too/);
+    expect(fetcher).toHaveBeenCalledWith(`/api/mistri${SIGN_OUT_PATH}`, expect.objectContaining({ method: 'POST' }));
     expect(onUnauthenticated).toHaveBeenCalledTimes(1);
   });
 
@@ -92,7 +92,7 @@ describe('the embed session', () => {
     });
     const onUnauthenticated = vi.fn();
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const session = startSession('https://tw.example.com', { assertion, onUnauthenticated }, fetcher);
+    const session = startSession('https://mistri.example.com', { assertion, onUnauthenticated }, fetcher);
     await session.ready;
     await vi.advanceTimersByTimeAsync(2 * 60_000);
     const signOut = fetcher.mock.calls.find(([url]) => String(url).endsWith(SIGN_OUT_PATH));
@@ -106,7 +106,7 @@ describe('the embed session', () => {
   it('a refused exchange says the server’s sentence and tells the host', async () => {
     const fetcher = vi.fn(async () => json(403, { error: 'This assertion has expired.' }));
     const onUnauthenticated = vi.fn();
-    await expect(startSession('/api/tw', { assertion: async () => 'old', onUnauthenticated }, fetcher).ready).rejects.toThrow(
+    await expect(startSession('/api/mistri', { assertion: async () => 'old', onUnauthenticated }, fetcher).ready).rejects.toThrow(
       'This assertion has expired.',
     );
     expect(onUnauthenticated).toHaveBeenCalledTimes(1);

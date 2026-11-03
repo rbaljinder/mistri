@@ -122,7 +122,7 @@ async function freePort() {
   return port;
 }
 
-const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-vitals-'));
+const scratch = mkdtempSync(join(tmpdir(), 'mistri-vitals-'));
 /* The copy of an App this run serves from inside the repository (APPS['compass-trail']), removed with the scratch. */
 let trailCopy;
 

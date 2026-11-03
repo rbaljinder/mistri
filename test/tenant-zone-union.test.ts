@@ -73,7 +73,7 @@ const policy = defineAppTenantPolicy({
 /* Each tenant has a ticket opened on Chicago's today and one on Kiritimati's
    (a day apart for most of every day); `today` picks the tenant's own. */
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-zone-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-zone-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   t.after(() => {

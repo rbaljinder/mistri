@@ -51,6 +51,8 @@ export interface ListQuestionSpec {
   editable?: true | string[];
   /** The reference column whose record a row opens (a view's `opens`): fetched, as the row's key is, to open it. */
   opens?: string;
+  /** The column a grid's rows are grouped by (a view's `group`): fetched, shown or not, as each row's head is read from it. */
+  group?: string;
 }
 
 const squeeze = (text: unknown): string =>
@@ -157,6 +159,7 @@ export function showClause(rules: ListRules, spec: ListQuestionSpec): string {
       ...subtitleColumns(rules, spec.table, names),
       ...editedReferences(rules, spec),
       ...(spec.opens ? [spec.opens] : []),
+      ...(spec.group ? [spec.group] : []),
       ...primaryKey(t),
     ]),
   ].join(', ')}`;
@@ -172,6 +175,24 @@ export const limitClause = (spec: Pick<ListQuestionSpec, 'limit'>): string => (s
    reading, said in the query bar's words. */
 export const orderClause = (spec: Pick<ListQuestionSpec, 'order' | 'sort'>): string =>
   spec.order ? `sort ${spec.order}` : spec.sort ? `sort ${spec.sort}` : '';
+
+/**
+ * A grouped list's question as its rows are read: ordered by the group's column before anything else, so each
+ * group's rows stand together under its head, and then as the list or its reader sorts them. A sort the reader gave
+ * the group's column keeps its direction, at the front. Said only to the read (TableRoom.tsx, firstPaintRooms.ts):
+ * the bar, the address and the tab a list lights stay the reader's own question.
+ */
+export function groupedQuestion(question: string, column: string): string {
+  const parts = splitQuery(question);
+  const fields = (parts.sort ?? '')
+    .replace(/^(?:sort|order\s+by)\s+/i, '')
+    .split(',')
+    .map((field) => field.trim())
+    .filter(Boolean);
+  const own = fields.find((field) => field.split(/\s+/)[0] === column);
+  const sort = `sort ${[own ?? column, ...fields.filter((field) => field !== own)].join(', ')}`;
+  return [parts.table, parts.filter, parts.show, sort, parts.limit].filter((part) => part && part.trim()).join(' ');
+}
 
 export function withOrder(spec: Pick<ListQuestionSpec, 'table' | 'order' | 'sort'>, question: string): string {
   const order = orderClause(spec);

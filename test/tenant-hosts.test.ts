@@ -106,7 +106,7 @@ test('publicOrigin is a normalized HTTPS origin, with HTTP limited to loopback',
 });
 
 test('suite configuration reads hosts and publicOrigin without enrolling arbitrary fields', async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), 'tablewalk-host-config-'));
+  const directory = await mkdtemp(join(tmpdir(), 'mistri-host-config-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const file = join(directory, 'suite.json');
   const config = {

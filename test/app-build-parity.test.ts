@@ -38,7 +38,7 @@ const SAMPLES: Record<string, { commands?: string; jobs?: string; dir?: string }
 };
 const BUNDLERS = { rolldown: loadRolldown, 'strip-types': async () => undefined } as const;
 
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-build-parity-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-build-parity-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 
 /** Every object as its keys in order, so a deep comparison also compares key order. */

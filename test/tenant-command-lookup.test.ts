@@ -38,7 +38,7 @@ const stamp = { label: 'Stamp', command: { id: 'stamp', version: 1, target: 'ite
 
 async function fixture(t: TestContext) {
   const owner = { appId: 'tenant-lookup', source: { id: 'business', connection: 'business-db' }, storeId: 'lookup-store' };
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-lookup-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-lookup-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path),
     services: Service[] = [],

@@ -71,7 +71,7 @@ interface Ledger {
 }
 
 async function sqliteLedger(t: TestContext): Promise<Ledger> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-trigger-sync-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-trigger-sync-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(SQLITE);

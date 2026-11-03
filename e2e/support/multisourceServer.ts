@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 
 /** Independent data and config; never shares the main E2E or preview databases. */
 export async function startMultisourceApp() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-multisource-browser-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-multisource-browser-'));
   const primary = join(directory, 'operations.db');
   const secondary = join(directory, 'inventory.db');
   let child: ReturnType<typeof spawn> | undefined;

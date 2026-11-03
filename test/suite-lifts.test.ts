@@ -43,7 +43,7 @@ async function freePort(): Promise<number> {
 }
 
 function scratch(t: TestContext, name: string): string {
-  const directory = mkdtempSync(join(tmpdir(), `tablewalk-suite-lifts-${name}-`));
+  const directory = mkdtempSync(join(tmpdir(), `mistri-suite-lifts-${name}-`));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   return directory;
 }
@@ -305,7 +305,7 @@ test(
     assert.match(JSON.stringify(received[0]), /TASK-1/);
     // The public form's budget was counted in the cache the App named, under the suite's namespace.
     assert.ok(
-      valkey.commands.some((command) => command.some((part) => part.startsWith('tw:suite:desk:form:'))),
+      valkey.commands.some((command) => command.some((part) => part.startsWith('mistri:suite:desk:form:'))),
       JSON.stringify(valkey.commands.slice(0, 5)),
     );
     await suite.close();

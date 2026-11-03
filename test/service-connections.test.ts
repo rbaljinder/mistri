@@ -9,7 +9,7 @@ import { readOpenApi } from '../packages/engine/src/adapters/http/openapi.js';
 import { startFakeValkey } from './support/fakeValkey.js';
 import { CONFIG_SECTIONS } from '../packages/mistri/src/server/serviceConnections.js';
 
-const dir = mkdtempSync(join(tmpdir(), 'tablewalk-services-'));
+const dir = mkdtempSync(join(tmpdir(), 'mistri-services-'));
 const write = (name: string, body: unknown) => {
   const path = join(dir, name);
   writeFileSync(path, JSON.stringify(body));
@@ -122,8 +122,8 @@ test('a configured cache is Valkey, dialed only when first used, and its passwor
     assert.equal(fake.commands.length, 0);
     const cache = registry.cache();
     assert.equal(cache.kind, 'valkey');
-    await cache.set('tw:k', 'v', 60_000);
-    assert.equal(await cache.get('tw:k'), 'v');
+    await cache.set('mistri:k', 'v', 60_000);
+    assert.equal(await cache.get('mistri:k'), 'v');
     await registry.closeServices();
   } finally {
     delete process.env.TEST_SERVICES_VALKEY_PASSWORD;

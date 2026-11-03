@@ -17,7 +17,7 @@ import { MIGRATE_APPS } from '../packages/mistri/src/server/cli/appTargets.js';
 import { installMistri } from './support/installedMistri.js';
 
 test('migrate stores up --app provisions every store the App uses, once', { timeout: 120_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-stores-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-stores-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   // An App's modules import the package, as one beside an installed tablewalk does.
   mkdirSync(join(directory, 'node_modules'));
@@ -111,7 +111,7 @@ export default defineJobs({
 });
 
 test('migrate stores up --app --commands reads the commands module it names, as a start does', { timeout: 120_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-stores-commands-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-stores-commands-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, 'node_modules'));
   installMistri(join(directory, 'node_modules'));

@@ -23,7 +23,7 @@ async function fixture(
     call(path: string, body?: Record<string, unknown>): Promise<{ status: number; body: any }>;
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-resource-read-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-resource-read-http-'));
   const registry = new Registry();
   let server: Server | undefined;
   try {

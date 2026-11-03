@@ -199,7 +199,7 @@ export async function openIgnitionLending(
   dialect: IgnitionDialect,
   options: IgnitionLendingOptions = {},
 ): Promise<IgnitionLending> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-ignition-lending-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-ignition-lending-'));
   const seeded = lendingRows() as unknown as Seeded;
   const applicants = applicantRows(seeded.loan_application.length) as unknown as Seeded;
   /* Ignition's policy always declares `support`, and every enrollment attests

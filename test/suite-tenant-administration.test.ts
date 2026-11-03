@@ -26,7 +26,7 @@ import { SUPPORT_REFUSAL_CODES } from '../packages/mistri/src/shared/tenantSuppo
 import { supportManifest } from './support/tenantSupportFixture.js';
 
 test('CLI shared tenant mounts admit scoped administration, invitations and audited native support', { timeout: 30_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-tenant-administration-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-tenant-administration-'));
   const ambient = process.env[SUPPORT_AUDIT_KEY_VARIABLE];
   const wrongSecret = 'synthetic-ambient-wrong-audit-key-at-least-thirty-two-bytes';
   process.env[SUPPORT_AUDIT_KEY_VARIABLE] = wrongSecret;

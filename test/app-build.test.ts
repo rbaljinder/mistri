@@ -15,7 +15,7 @@ import { decodeLossless, encodeLossless, BUILD_MANIFEST, type BuildManifest } fr
 import { runtimeVersion } from '../packages/engine/src/server/packageVersion.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-build-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-build-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 const FORECOURT = resolve('test/fixtures/apps/forecourt');
 const TINY = { id: 'tiny', name: 'Tiny', resources: { ticket: {} }, views: { ticket: { kind: 'list', from: 'ticket' } }, home: 'ticket' };

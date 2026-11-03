@@ -71,6 +71,8 @@ import {
 } from '../events/postgresCommandEventStore.js';
 import { commandEventsAppended } from '../events/commandEventSignal.js';
 import { nextPostgresCommandNumber, provisionPostgresCommandSequences } from './postgresCommandSequences.js';
+import { provisionPostgresCommandStaging, stagePostgresFile, takePostgresStaged } from './postgresCommandStaging.js';
+import type { StagedFileRow, StagedLimits, StagedTake } from './commandStaging.js';
 
 /** Explicit maintenance operation. Never called implicitly when opening an App.
  * No journal gets version 1; any other layout is refused, not altered. */
@@ -86,6 +88,7 @@ export async function migratePostgresCommandJournal(url: string): Promise<{ vers
     await assertPostgresCommandJournal(client);
     // The sequences a handler numbers from live beside the journal.
     if (await provisionPostgresCommandSequences(client)) result = { version: 1, migrated: true };
+    if (await provisionPostgresCommandStaging(client)) result = { version: 1, migrated: true };
     return result;
   });
 }
@@ -299,6 +302,23 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
         validText(input.appId, 'application', 128);
         if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
         return nextPostgresCommandNumber(client, { appId: input.appId, namespace, name: input.name, per: input.per }, input.start);
+      }),
+    // In the journal's namespace too, so a tenant's held files are its own.
+    stage: (appId: string, row: StagedFileRow, most: StagedLimits, now: number) => {
+      // The bytes are copied whole, not captured key by key as the rest is: a file is millions of them.
+      const data = row?.data instanceof Uint8Array ? new Uint8Array(row.data) : undefined;
+      const { data: _bytes, ...said } = row ?? ({} as StagedFileRow);
+      return invoke({ appId, said, most, now }, async (input) => {
+        validText(input.appId, 'application', 128);
+        if (!data || (member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        await stagePostgresFile(client, input.appId, namespace, { ...input.said, data }, input.most, input.now);
+      });
+    },
+    takeStaged: (appId: string, take: StagedTake) =>
+      invoke({ appId, take }, async (input) => {
+        validText(input.appId, 'application', 128);
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return takePostgresStaged(client, input.appId, namespace, input.take);
       }),
     /* No advisory lock and no savepoint probe (which proves a transaction
        block for the lock's sake): a new key is the common case, and a

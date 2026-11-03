@@ -25,7 +25,7 @@ import { entryFor } from './support/bins.js';
 const ROOT = resolve('.');
 
 /* Outside the checkout, with tablewalk "installed" beside the Apps. */
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-first-run-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-first-run-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 mkdirSync(join(work, 'node_modules'));
 installMistri(join(work, 'node_modules'));
@@ -200,7 +200,7 @@ describe('a fresh project, as check meets it', () => {
 
 describe('a fresh project, as it is set up', () => {
   test('agent init says what the project lacks, and its map names the registry and the stores command', () => {
-    const project = mkdtempSync(join(tmpdir(), 'tablewalk-first-agent-'));
+    const project = mkdtempSync(join(tmpdir(), 'mistri-first-agent-'));
     try {
       writeFileSync(join(project, 'package.json'), '{ "name": "helpdesk", "type": "commonjs" }\n');
       let out = '';
@@ -245,7 +245,7 @@ describe('a fresh project, as it is set up', () => {
   });
 
   test('shot finds a Chromium another Playwright version installed, the headless shell and the newest build first', () => {
-    const home = mkdtempSync(join(tmpdir(), 'tablewalk-browsers-'));
+    const home = mkdtempSync(join(tmpdir(), 'mistri-browsers-'));
     const cache = join(home, '.cache', 'ms-playwright');
     const put = (file: string) => {
       mkdirSync(join(cache, file, '..'), { recursive: true });

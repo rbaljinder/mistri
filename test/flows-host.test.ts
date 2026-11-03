@@ -46,7 +46,7 @@ async function until(check: () => boolean | Promise<boolean>, what: string) {
 }
 
 test('a created ticket runs its flow: set, wait, ask the team, wait for the answer, branch, close', { timeout: 90_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-flows-host-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-flows-host-'));
   const children: ChildProcess[] = [];
   t.after(async () => {
     for (const child of children)

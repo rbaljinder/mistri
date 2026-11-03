@@ -5,7 +5,7 @@
  *   'use client';
  *   export default function Crm() {
  *     return (
- *       <Provider endpoint="/api/tw" navigator={useNextNavigator()}>
+ *       <Provider endpoint="/api/mistri" navigator={useNextNavigator()}>
  *         <App app="compass" basePath="/crm" />
  *       </Provider>
  *     );

@@ -24,7 +24,7 @@ let shared: CacheStore | undefined;
 
 /** Keep sign-in state in `cache` (a Valkey the config names) under `namespace`; `undefined` or a memory cache keeps it here. */
 export function configureSignInState(cache: CacheStore | undefined, namespace: string): void {
-  shared = !cache || cache.kind === 'memory' ? undefined : scopedCache(cache, `tw:${namespace}:signin:`);
+  shared = !cache || cache.kind === 'memory' ? undefined : scopedCache(cache, `mistri:${namespace}:signin:`);
 }
 
 /** Forget everything this process holds: tests use it. A configured cache is kept; `configureSignInState(undefined, …)` lets it go. */

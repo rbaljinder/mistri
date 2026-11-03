@@ -17,7 +17,7 @@ import { typesenseSearch } from '../packs/search-typesense/src/index.js';
 import { startFakeTypesense, type FakeTypesense } from './support/fakeTypesense.js';
 
 const connection = 'tenant-search-remove';
-const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-search-remove-'));
+const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-search-remove-'));
 const tenantColumns = { item: 'tenant' };
 const app = parseAppConfig(
   {

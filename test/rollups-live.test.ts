@@ -299,7 +299,7 @@ test('rollups on SQLite: the same numbers', async (t) => {
   const { join } = await import('node:path');
   const { DatabaseSync } = await import('node:sqlite');
   const { SqliteAdapter } = await import('../packages/engine/src/adapters/sqlite.js');
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-rollups-live-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-rollups-live-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'po.db'));
   db.exec(`CREATE TABLE vendor (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

@@ -13,7 +13,7 @@ function fixture(
   sql = `CREATE TABLE task (id INTEGER PRIMARY KEY, name TEXT, state TEXT DEFAULT 'new');
     INSERT INTO task (name) VALUES ('first');`,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-validation-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-validation-'));
   const file = join(directory, 'validation.db');
   const db = new DatabaseSync(file);
   db.exec(sql);

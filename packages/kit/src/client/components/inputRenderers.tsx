@@ -33,8 +33,9 @@ interface InputComponentProps {
   required: boolean;
   /** The field's caption, for a control that names itself. */
   label: string;
-  /** The column, or the command's input, it stands for. */
-  field: { name: string; resource?: string };
+  /** The column, or the command's input, it stands for. A command's input carries the rule a built-in input reads
+      from a column's display rule (a rating's `outOf`), having no column to read it from. */
+  field: { name: string; resource?: string; rule?: { outOf?: number } };
   /** Which form: a record's edit, a New form, or a command's. */
   context: 'edit' | 'new' | 'command';
 }
@@ -42,6 +43,8 @@ interface InputComponentProps {
 /* The platform's own inputs for a display rule's formats — stars, a slider, a color, a time, a month, a year, a JSON document — are
    named like this and loaded like an author's, from one chunk of their own (builtInInputs.tsx). */
 const BUILT_IN = 'mistri:';
+/** The input component id of the platform's own input for a format: what a command's field drawn as one asks for. */
+export const builtInInputId = (format: string): string => `${BUILT_IN}${format}`;
 
 const Slot = componentSlot<InputComponentProps>({
   className: 'custom-input',

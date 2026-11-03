@@ -161,7 +161,7 @@ async function scratch(url: string, devUrl?: string): Promise<Scratch> {
   if (devUrl !== undefined && dialectOf(devUrl) !== dialect)
     throw new Error(`--dev-url must be the same kind of database as the connection (${dialect}).`);
   if (dialect === 'sqlite') {
-    const dir = mkdtempSync(join(tmpdir(), 'tablewalk-schema-'));
+    const dir = mkdtempSync(join(tmpdir(), `${product()}-schema-`));
     return {
       built: join(dir, 'built.db'),
       dev: 'sqlite://dev?mode=memory',
@@ -169,7 +169,7 @@ async function scratch(url: string, devUrl?: string): Promise<Scratch> {
     };
   }
   const server = devUrl ?? url;
-  const stem = `tablewalk_schema_${process.pid}_${randomBytes(3).toString('hex')}`;
+  const stem = `${product()}_schema_${process.pid}_${randomBytes(3).toString('hex')}`;
   const names = [`${stem}_built`, `${stem}_dev`];
   const admin = await openMigrationDb(server, [], false);
   const at = (name: string) => {

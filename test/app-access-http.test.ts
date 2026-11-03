@@ -74,7 +74,7 @@ async function fixture(
     opens: () => number;
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-access-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-access-http-'));
   const previousConfig = process.env.XDG_CONFIG_HOME;
   const path = join(directory, 'private.db');
   const db = new DatabaseSync(path);

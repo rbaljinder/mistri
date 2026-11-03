@@ -111,7 +111,7 @@ async function desk(
 const TICKETS = Array.from({ length: 12 }, (_, i) => `(${i + 1}, 0, 'open')`).join(', ');
 
 test('SQLite: a warm command, per track, within its statement budget', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-statement-budget-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-statement-budget-'));
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
   try {

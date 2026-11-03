@@ -68,7 +68,7 @@ function app(timezone?: string) {
 }
 
 async function world(t: TestContext, timezone?: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-wall-clock-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-wall-clock-'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(TABLES);

@@ -20,7 +20,7 @@ import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 
 async function fixture(access: boolean) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-undo-outcomes-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-undo-outcomes-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec("CREATE TABLE lead (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO lead VALUES (1,'saved')");

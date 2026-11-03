@@ -19,7 +19,7 @@ import { textToView } from '../packages/engine/src/shared/viewtext.js';
 import { parseLabelTemplate } from '../packages/engine/src/shared/recordLabel.js';
 
 async function clinic(t: import('node:test').TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-label-words-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-label-words-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'clinic.db');
   const db = new DatabaseSync(file);

@@ -150,7 +150,7 @@ const numbered = (sql: string) => {
 };
 
 export async function tenantSupportFixture(t: TestContext, dialect: TenantDialect, options: FixtureOptions = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-support-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-support-'));
   const authPath = join(directory, 'auth.db'),
     path = join(directory, 'business.db');
   const key = supportAuditKey(SUPPORT_SECRET);

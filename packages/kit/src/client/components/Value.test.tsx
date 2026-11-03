@@ -13,6 +13,7 @@ let display: Record<string, unknown> | null = null;
 
 const tables: Record<string, unknown> = {};
 const asked: unknown[] = [];
+const toasts: unknown[][] = [];
 
 vi.mock('../core.js', () => ({
   state: { schema: { tables: [], foreignKeys: [] } },
@@ -25,6 +26,9 @@ vi.mock('../core.js', () => ({
   },
   refsFrom: () => [],
   openRecord: (...a: unknown[]) => opened.push(a),
+  columnLabel: (_table: string, column: string) => (column === 'tracking_number' ? 'Tracking number' : undefined),
+  humanName: (name: string) => name.replace(/_/g, ' '),
+  toast: (...a: unknown[]) => toasts.push(a),
   columnKind,
 }));
 
@@ -37,6 +41,7 @@ afterEach(() => {
   cleanup();
   opened.length = 0;
   asked.length = 0;
+  toasts.length = 0;
   display = null;
   for (const id of Object.keys(tables)) delete tables[id];
 });
@@ -369,5 +374,95 @@ describe('the face a value is set in', () => {
     } finally {
       document.body.classList.remove('app-mode');
     }
+  });
+});
+
+describe('a value to copy', () => {
+  test('a rule’s copy puts a named button beside the value that copies it as stored and says so', async () => {
+    document.body.classList.add('app-mode');
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      display = { copy: true };
+      render(<Value col={col('tracking_number', 'TEXT')} value="9007199254740993" tableId="shipment" />);
+      const button = screen.getByRole('button', { name: 'Copy Tracking number' });
+      expect(button.closest('.value-copyable')?.textContent).toContain('9007199254740993');
+      await userEvent.click(button);
+      expect(writeText).toHaveBeenCalledWith('9007199254740993');
+      expect(toasts).toEqual([['Copied Tracking number.']]);
+      writeText.mockRejectedValueOnce(new Error('denied'));
+      await userEvent.click(button);
+      expect(toasts[1]?.[1]).toBe('error');
+    } finally {
+      document.body.classList.remove('app-mode');
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
+  test('no button where the value is a target of its own, empty, masked, or in the Workbench', () => {
+    document.body.classList.add('app-mode');
+    try {
+      display = { copy: true };
+      render(<Value col={col('code', 'TEXT')} value="A1" tableId="shipment" compact />);
+      expect(screen.queryByRole('button')).toBeNull();
+      cleanup();
+      render(<Value col={col('code', 'TEXT')} value={null} tableId="shipment" />);
+      expect(screen.queryByRole('button')).toBeNull();
+      cleanup();
+      display = { copy: true, masked: { prefix: 'ENC:' } };
+      render(<Value col={col('code', 'TEXT')} value="ENC:abc" tableId="shipment" />);
+      expect(screen.queryByRole('button')).toBeNull();
+      cleanup();
+      display = { copy: true };
+      render(<Value col={col('code', 'TEXT')} value="A1" tableId="shipment" compact links />);
+      expect(screen.getByRole('button', { name: 'Copy code' })).toBeTruthy();
+      cleanup();
+      document.body.classList.remove('app-mode');
+      render(<Value col={col('code', 'TEXT')} value="A1" tableId="shipment" />);
+      expect(screen.queryByRole('button')).toBeNull();
+    } finally {
+      document.body.classList.remove('app-mode');
+    }
+  });
+});
+
+describe('a postal address', () => {
+  const address = '1 Infinite Loop\n\n  Cupertino,   CA 95014 \nUSA';
+
+  test('is drawn on its lines as one link to a map search, and fetches nothing to draw it', () => {
+    document.body.classList.add('app-mode');
+    try {
+      display = { format: 'address' };
+      render(<Value col={col('ship_to', 'TEXT')} value={address} tableId="order" />);
+      const link = screen.getByRole('link');
+      expect([...link.querySelectorAll('.value-address-line')].map((line) => line.textContent)).toEqual([
+        '1 Infinite Loop',
+        'Cupertino, CA 95014',
+        'USA',
+      ]);
+      expect(link).toHaveAttribute(
+        'href',
+        'https://www.google.com/maps/search/?api=1&query=1%20Infinite%20Loop%2C%20Cupertino%2C%20CA%2095014%2C%20USA',
+      );
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(document.querySelector('img, iframe')).toBeNull();
+      expect(asked).toEqual([]);
+    } finally {
+      document.body.classList.remove('app-mode');
+    }
+  });
+
+  test('in a list it is one line, its lines in the title; an empty one is no address', () => {
+    expect(dressFor({ format: 'address' }, address)).toEqual({
+      kind: 'address',
+      lines: ['1 Infinite Loop', 'Cupertino, CA 95014', 'USA'],
+      text: '1 Infinite Loop, Cupertino, CA 95014, USA',
+    });
+    expect(dressFor({ format: 'address' }, ' \n ')).toBeNull();
+    const { container } = render(<Dressed dress={dressFor({ format: 'address' }, address)!} compact />);
+    const said = container.querySelector('span[title]');
+    expect(said?.getAttribute('title')).toBe('1 Infinite Loop\nCupertino, CA 95014\nUSA');
+    expect(said?.textContent).toBe('1 Infinite Loop, Cupertino, CA 95014, USA');
   });
 });

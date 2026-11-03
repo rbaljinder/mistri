@@ -27,7 +27,7 @@ const account: Identity = { id: 'account-a', who: 'maya@example.test', role: 'cl
 async function fixture(
   run: (f: { base: string; db: DatabaseSync; seen: BusinessCommandActor[]; control: { current: Identity | null } }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-actor-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-actor-'));
   const file = join(directory, 'actor.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE bin(id INTEGER PRIMARY KEY, qty INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 0);

@@ -16,6 +16,7 @@ import { Typeahead } from '@mistriwork/ui/Typeahead.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { offeredChoices } from '@mistriwork/kit/client/components/pickerStaleness.js';
 import { readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
+import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { say as sayField } from '../copy/forms/components/CommandFields.js';
 import { say } from '../copy/forms/components/CommandReference.js';
 import { andQuery, splitClauseTail } from '@mistriwork/engine/shared/query.js';
@@ -27,6 +28,9 @@ import type { AppCommandField } from '../../shared/command.js';
 /* The type only: a runtime import back into CommandFields, which loads this file on demand, would be a file loop. */
 import type { ReferenceField } from './CommandFields.js';
 
+/* A reference over a hierarchy: a part of its own, so a flat picker carries none of it. */
+const TreePicker = onDemand(() => import('@mistriwork/kit/client/components/TreePicker.js'), 'TreePicker', { quiet: true });
+
 /** Where a picker reads: a signed-in reader's connection, or a public form's App, read as its signed-out visitor. */
 export type ChoiceSource = string | { visitor: { app: string; via?: string } };
 
@@ -35,10 +39,19 @@ export async function run(
   source: ChoiceSource,
   body: { q: string; limit: number; offset: number; count: 'none' },
 ): Promise<{ rows?: unknown; errors?: unknown[] }> {
-  if (typeof source === 'string') return api('/api/run', { ...ownedBy(source), ...body });
+  return read(source, '/api/run', body);
+}
+
+/* A read through the same door: a tree picker's rows, and the breakdown that says which of them have children. */
+async function read(
+  source: ChoiceSource,
+  path: '/api/run' | '/api/breakdown',
+  body: Record<string, unknown>,
+): Promise<{ rows?: unknown; errors?: unknown[] }> {
+  if (typeof source === 'string') return api(path, { ...ownedBy(source), ...body } as Parameters<typeof api>[1]);
   const { app, via } = source.visitor;
   const query = new URLSearchParams({ app, ...(via ? { via } : {}) });
-  const res = await fetchServer(`/api/run?${query}`, {
+  const res = await fetchServer(`${path}?${query}`, {
     method: 'POST',
     credentials: 'same-origin',
     signal: AbortSignal.timeout(15_000),
@@ -186,8 +199,57 @@ export function ReviewNamed({ field, value, from }: { field: AppCommandField; va
   );
 }
 
-/** A reference input as a picker over its resource: the command modal's, and a signed-in command form's. */
-export function CommandReferenceField({
+type ReferenceFieldProps = Parameters<typeof FlatReferenceField>[0];
+
+/** A reference input as a picker over its resource: the command modal's, and a signed-in command form's — drawn as
+    its hierarchy where the field names one (`tree`), else a flat list of what matches. */
+export function CommandReferenceField(props: ReferenceFieldProps) {
+  return props.field.tree ? <TreeReferenceField {...props} /> : <FlatReferenceField {...props} />;
+}
+
+/* The same field over a hierarchy (TreePicker.tsx, a part of its own): read through the same door, under the same
+   filter, and the name it picks remembered as the flat picker's is, so a review says it at once. */
+function TreeReferenceField({
+  field,
+  id,
+  describedBy,
+  invalid,
+  connection,
+  identityEpoch,
+  value,
+  disabled,
+  onChange,
+  isCurrent,
+}: ReferenceFieldProps) {
+  const held = typeof value === 'string' || typeof value === 'number' ? value : '';
+  return (
+    <TreePicker
+      from={field.from}
+      by={field.by}
+      labelColumn={field.labelColumn}
+      parent={field.tree!}
+      where={splitClauseTail(field.query ?? '').head || undefined}
+      ask={(path, body) => read(connection, path, body)}
+      scope={JSON.stringify([identityEpoch, connection])}
+      value={held}
+      known={held === '' ? undefined : knownReferenceName(field, connection, identityEpoch, held)}
+      onChange={(next, label) => {
+        if (!isCurrent()) return;
+        if (next !== '' && label !== undefined) rememberReferenceName(field, connection, identityEpoch, next, label);
+        onChange(next);
+      }}
+      id={id}
+      listLabel={field.label}
+      describedBy={describedBy}
+      invalid={invalid}
+      required={field.required}
+      disabled={disabled}
+      placeholder={readsAsName(field.label) ? sayField('choosePlaceholder', { label: field.label.toLowerCase() }) : sayField('chooseOne')}
+    />
+  );
+}
+
+function FlatReferenceField({
   field,
   id,
   describedBy,

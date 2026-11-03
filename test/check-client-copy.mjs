@@ -84,6 +84,16 @@ const ALLOWED = [
   { file: 'components/sdk/blocks.tsx', text: 'Assistant', reason: "a block's component name, as the author writes it in JSX" },
   { file: '*', text: 'SQL', reason: "the language's name" },
   {
+    file: 'components/useGridGroups.ts',
+    text: 'count as group_rows',
+    reason: "a grouped grid's heads asked in the query language, sent to the server and never shown",
+  },
+  {
+    file: 'components/useGridGroups.ts',
+    text: 'sum {} as total_{}',
+    reason: "a grouped grid's subtotals asked in the query language, sent to the server and never shown",
+  },
+  {
     file: 'components/builtInInputs.tsx',
     text: 'italic 40px Georgia, "Times New Roman", serif',
     reason: 'a canvas font for a typed signature, a CSS font shorthand rather than words',
@@ -104,6 +114,11 @@ const ALLOWED = [
     text,
     reason: 'a refusal the server reads and answers by sending the page without its drawing; no person sees it',
   })),
+  {
+    file: 'components/TreePicker.tsx',
+    text: '{} {} count as children by {}',
+    reason: "a tree picker's question of which records have children, in the query language, sent and never shown",
+  },
   {
     file: 'components/BoardList.tsx',
     text: 'count as {}, sum {} as {}',

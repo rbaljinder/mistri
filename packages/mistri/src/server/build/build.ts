@@ -110,7 +110,7 @@ function difference(a: unknown, b: unknown, at = ''): string | undefined {
 }
 
 /* The CLI entry this module belongs to, and the loader flags it was started
-   with (tsx's, under the test suites), so a child runs the same tablewalk. */
+   with (tsx's, under the test suites), so a child runs the same mistri. */
 export function selfInvocation(): string[] {
   const entry = serverEntry();
   const kept: string[] = [];

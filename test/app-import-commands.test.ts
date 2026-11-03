@@ -58,7 +58,7 @@ async function fixture(
     commands: ReturnType<typeof defineCommands>;
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-import-commands-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-import-commands-'));
   const file = join(directory, 'loans.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE loan(id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE, open INTEGER NOT NULL DEFAULT 1,

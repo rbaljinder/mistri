@@ -43,7 +43,7 @@ const schema: DatabaseSchema = {
 };
 
 async function serve(policyApp: boolean) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-learned-words-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-learned-words-'));
   mkdirSync(join(directory, 'node_modules', '@mistriwork'), { recursive: true });
   symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(directory, 'node_modules', '@mistriwork', 'mistri'), 'dir');
   const appDir = join(directory, 'app');

@@ -129,7 +129,7 @@ function isolation(name: string, open: (t: TestContext) => Promise<{ store: Inte
 }
 
 isolation('SQLite', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-contact-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-contact-'));
   const path = join(directory, 'lintel.db');
   new DatabaseSync(path).close();
   provisionSqliteIntegrations(path);
@@ -156,7 +156,7 @@ describe('on PostgreSQL', { skip: liveSkip('postgres', LIVE) }, () => {
 });
 
 test("a tenant's write queues its mail under that tenant, says why, and a visitor's write mails only the address they proved", async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-contact-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-contact-'));
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE contact (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, status TEXT, email TEXT, email_ok INTEGER, proved TEXT);

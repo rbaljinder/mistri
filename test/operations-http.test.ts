@@ -34,7 +34,7 @@ async function fixture(
   }) => Promise<void>,
   options: { diagnostics?: boolean; roles?: Record<string, unknown>; app?: Record<string, unknown> } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-operations-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-operations-http-'));
   const file = join(directory, 'ops.db');
   const db = new DatabaseSync(file);
   db.exec("CREATE TABLE loan(id INTEGER PRIMARY KEY, status TEXT); INSERT INTO loan VALUES (1, 'new');");
@@ -243,7 +243,7 @@ test('only GET and HEAD answer; other methods, stale accounts and unknown operat
 });
 
 test('a standalone host without App auth has no operator route at all', { timeout: 8000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-operations-standalone-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-operations-standalone-'));
   const file = join(directory, 'plain.db');
   const db = new DatabaseSync(file);
   db.exec('CREATE TABLE t(id INTEGER PRIMARY KEY);');

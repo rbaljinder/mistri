@@ -106,7 +106,7 @@ async function fixture(
   secondary = false,
   availability?: (context: BusinessCommandAvailabilityContext) => readonly boolean[] | Promise<readonly boolean[]>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-execution-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-execution-'));
   const path = join(directory, 'loans.db');
   const db = new DatabaseSync(path);
   let registry = new Registry();

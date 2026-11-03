@@ -17,7 +17,7 @@ import { VALIDATE, validating } from './support/validation.js';
 const ROOT = resolve('.');
 /* An App's starts are mistri's (test/support/bins.ts). */
 const ENTRY = join(ROOT, 'packages', 'mistri', 'src', 'server', 'index.ts');
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-build-cli-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-build-cli-'));
 // The projects here install TypeScript, as the quickstart's does: the typecheck reads only the project's.
 mkdirSync(join(work, 'node_modules'));
 symlinkSync(join(ROOT, 'node_modules', 'typescript'), join(work, 'node_modules', 'typescript'), 'dir');
@@ -92,7 +92,7 @@ describe('mistri build, the command', () => {
   });
 
   test("UX-1: the typecheck runs the project's TypeScript only, never the one beside tablewalk", async () => {
-    const bare = mkdtempSync(join(tmpdir(), 'tablewalk-build-bare-'));
+    const bare = mkdtempSync(join(tmpdir(), 'mistri-build-bare-'));
     try {
       const dir = join(bare, 'untyped');
       mkdirSync(dir);

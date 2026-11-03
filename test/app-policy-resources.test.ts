@@ -21,7 +21,7 @@ const gate = () => {
 };
 
 function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-acquisition-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-acquisition-'));
   const registry = new Registry();
   t.after(async () => {
     await registry.closeAll();

@@ -24,7 +24,7 @@ function privateFree(value: unknown, path = ''): void {
 }
 
 async function fixture(t: TestContext) {
-  const { directory, stopping } = scratch(t, 'tablewalk-scoped-insert-cli-');
+  const { directory, stopping } = scratch(t, 'mistri-scoped-insert-cli-');
   const app = join(directory, 'app');
   mkdirSync(app);
   const data = join(directory, 'business.db');

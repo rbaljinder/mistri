@@ -27,7 +27,7 @@ import { plugSearch } from '../packages/mistri/src/server/app/searchProvider.js'
 const KEY = 'app-policy-search-key';
 const appId = 'desks';
 const owner = 'policy-search-db';
-const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-search-'));
+const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-search-'));
 const file = join(directory, 'desks.db');
 const identity = { id: 'desk-one', who: 'one@example.test', role: 'editor' } as Identity;
 let fake: FakeTypesense;

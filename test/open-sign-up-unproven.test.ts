@@ -45,7 +45,7 @@ const DESK = {
 };
 
 test('an unproven address under open sign-up has no `me` and no inbox; a proven one has both', { timeout: 20_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-unproven-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-unproven-'));
   const previous = process.env.XDG_CONFIG_HOME;
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
@@ -118,7 +118,7 @@ test(
   "the sign-in store marks an open sign-up unproven until its email is verified; the operator's admin is proven",
   { timeout: 30_000 },
   async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-unproven-auth-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-unproven-auth-'));
     const path = join(directory, 'desk.db');
     const store = join(directory, 'sessions.db');
     const environment = {

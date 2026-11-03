@@ -1138,7 +1138,7 @@ body.app-mobile-nav .sidebar-reveal { display: none; }
 body.app-mobile-nav .topnav { display: flex; flex: none; align-self: center; margin: 0; min-width: auto; }
 .tn-mobile-menu { display: inline-flex; align-items: center; gap: var(--space-3); min-height: 36px; padding: 0 var(--space-3); border: 0; background: transparent; color: var(--ink-muted); font: var(--type-ui) var(--sans); }
 .tn-mobile-menu:hover { color: var(--ink); background: var(--raised); }
-.tn-mobile-menu .tw-icon { width: 17px; height: 17px; }
+.tn-mobile-menu .mistri-icon { width: 17px; height: 17px; }
 .modal.mobile-nav-drawer { position: fixed; inset: 0 auto 0 0; width: min(20rem, calc(100% - 44px)); height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-right: 1px solid var(--line); border-radius: 0; transform: none; background: var(--surface); box-shadow: var(--shadow-modal); }
 body.app-mobile-nav .topnav { order: -1; }
 body.app-mobile-nav .brand { flex: 1; min-width: 0; }
@@ -1853,6 +1853,27 @@ body.session-locked > :not(#session-lock) { display: none !important; }
 .inline-edit-button:hover { border-color: var(--line); color: var(--accent-ink); }
 .inline-edit-value:focus-visible, .inline-edit-button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
 .inline-field-open .cell-edit, .inline-field-open .cell-edit-control { min-width: 0; width: 100%; }
+
+/* A postal address (`format: 'address'`) on its lines, as an envelope has it. A field's value box clips what falls
+   outside it, and a link's underline sits below its last line's box: the room under it keeps that one underlined. */
+.value-address { display: inline-grid; padding-block-end: var(--space-1); }
+.value-address-line { display: block; }
+
+/* A value with a copy button (`display: { <column>: { copy: true } }`): the button sits after the value at its first
+   line (an address has several), its focus ring clear of the value, the size of a line's mark, and like the pencil waits for a pointer or keyboard focus at a desk and stays on
+   touch. The copy is said by the toast, so the button itself never changes. */
+.value-copyable { display: inline-flex; align-items: flex-start; gap: var(--space-3); max-width: 100%; min-width: 0; }
+.value-copyable > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.value-copy { flex: 0 0 24px; display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: var(--field-radius, 2px); background: transparent; color: var(--ink-muted); }
+.value-copy:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .value-copy { opacity: 0; }
+  .value-copyable:hover .value-copy, .value-copyable:focus-within .value-copy, .inline-field:hover .value-copy, .inline-field:focus-within .value-copy { opacity: 1; }
+  .value-copy:hover { border-color: var(--line); color: var(--accent-ink); }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .value-copy { transition: opacity var(--t-hover) var(--ease-out); }
+}
 /* The input takes the box the value's button stood in (32px: its 4px pad inside a 1px edge), not the control's own
    padding on top of that floor, which made it 4px taller and moved every row below it on opening and again on closing. */
 .inline-field-open input.cell-edit { padding-block: 0; }
@@ -1892,6 +1913,19 @@ body.session-locked > :not(#session-lock) { display: none !important; }
 .grid-totals td { font-weight: 600; border-top: 1px solid var(--line-strong); border-bottom: 0; background: var(--surface); }
 .grid-totals-label { font-weight: 500; color: var(--ink-muted); }
 .grid-totals-pending { color: var(--ink-subtle); }
+
+/* A grouped grid's heads (a list view's `group`): a hairline row over each run of one value, not a box and not a
+   tint — the value, its count in the quiet figure face, and each subtotal under the column it sums. The value is the
+   button that folds the group. */
+.grid-group-head td { border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line); }
+.grid-group-toggle {
+  display: inline-flex; align-items: baseline; gap: var(--space-2); min-height: 0; max-width: 100%; padding: 0; border: 0;
+  background: none; font: inherit; font-weight: 600; color: var(--ink); text-align: start; cursor: pointer;
+}
+.grid-group-caret { align-self: center; flex: none; color: var(--ink-subtle); }
+.grid-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grid-group-count { flex: none; font: var(--text-xs) var(--mono); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+.grid-group-sum { font-weight: 600; }
 
 /* A compact list's rows: structure.css, so no look's row padding outranks them. */
 

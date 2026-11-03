@@ -18,7 +18,7 @@ import { pgClient, uuidPostgresDatabase } from './support/tenantDialects.js';
 const LIVE = process.env.TABLEWALK_TEST_PG;
 
 test('suite experiments require a dedicated assignment key before loading Apps or opening stores', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-experiments-refusal-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-experiments-refusal-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'suite.json');
   const environment = { SUITE_SECRET: 'test-only-suite-secret-at-least-thirty-two-characters' };
@@ -73,7 +73,7 @@ test('suite experiments require a dedicated assignment key before loading Apps o
 });
 
 test('suite config resolves paths and captures environment aliases while refusing ambiguous or unsupported declarations', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-config-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-config-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'suite.json');
   const app = {
@@ -106,7 +106,7 @@ test('suite config resolves paths and captures environment aliases while refusin
 });
 
 test('the suite CLI serves two independent authenticated Apps and exits cleanly on SIGTERM', { timeout: 20_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-cli-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-cli-'));
   const socket = createServer();
   await new Promise<void>((resolve) => socket.listen(0, '127.0.0.1', resolve));
   const port = (socket.address() as { port: number }).port;
@@ -204,7 +204,7 @@ test('the suite CLI serves two independent authenticated Apps and exits cleanly 
 });
 
 test('suite preflight refuses unsupported forms and mismatched policy owners before opening stores', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-refusals-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-refusals-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const app = join(directory, 'main');
   mkdirSync(app);
@@ -251,7 +251,7 @@ test('suite preflight refuses unsupported forms and mismatched policy owners bef
 });
 
 test('suite preflight refuses an ordinary App whose record history page has no provisioned store', { timeout: 20_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-history-refusal-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-history-refusal-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const app = join(directory, 'main');
   mkdirSync(app);
@@ -285,7 +285,7 @@ test('suite preflight refuses an ordinary App whose record history page has no p
 });
 
 test('suite serves independent Apps with provisioned record history stores', { timeout: 20_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-history-startup-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-history-startup-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const socket = createServer();
   await new Promise<void>((resolve) => socket.listen(0, '127.0.0.1', resolve));
@@ -389,7 +389,7 @@ test(
     await new Promise<void>((resolve) => socket.listen(0, '127.0.0.1', resolve));
     const port = (socket.address() as { port: number }).port;
     await new Promise<void>((resolve) => socket.close(() => resolve()));
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-pg-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-pg-'));
     const owned: Array<{ url: string; drop: () => Promise<void> }> = [];
     const controls: Array<{ end(): Promise<void> }> = [];
     let suite: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;

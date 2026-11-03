@@ -62,7 +62,7 @@ function publicData(value: unknown, path: string[] = []): void {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-http-'));
   const registry = new Registry();
   const databases: DatabaseSync[] = [];
   const policies: HttpAppPolicy[] = [];

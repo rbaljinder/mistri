@@ -311,7 +311,7 @@ describe('mistri agent init', () => {
   };
 
   test('copies the skill where each agent reads it, once, and points at it from AGENTS.md', () => {
-    const project = mkdtempSync(join(tmpdir(), 'tablewalk-agent-'));
+    const project = mkdtempSync(join(tmpdir(), 'mistri-agent-'));
     try {
       writeFileSync(join(project, 'AGENTS.md'), '# House rules\n\nRun the tests.\n');
       const first = run(['init', '--dir', project]);
@@ -363,7 +363,7 @@ describe('mistri agent init', () => {
   });
 
   test('one tool writes its own place; a copy it did not install is left alone', () => {
-    const project = mkdtempSync(join(tmpdir(), 'tablewalk-agent-'));
+    const project = mkdtempSync(join(tmpdir(), 'mistri-agent-'));
     try {
       const codex = run(['init', '--dir', project, '--tool', 'codex']);
       assert.equal(codex.code, 0, codex.err);
@@ -386,7 +386,7 @@ describe('mistri agent init', () => {
   });
 
   test('re-aims the sample links at node_modules/@mistriwork/mistri, where each resolves to a real file', () => {
-    const project = mkdtempSync(join(tmpdir(), 'tablewalk-agent-links-'));
+    const project = mkdtempSync(join(tmpdir(), 'mistri-agent-links-'));
     try {
       /* The package as an install lays it out: its own files, and the examples a pack carries in from the checkout. */
       const installed = join(project, 'node_modules', '@mistriwork', 'mistri');

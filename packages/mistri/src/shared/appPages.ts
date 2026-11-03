@@ -172,8 +172,13 @@ export function resolvePageEmbeds(app: AppDef, pages: readonly PageDef[], where:
       }
       if (section.kind === 'list' && section.create && section.from)
         return { ...section, create: withFormDefaults(app, section.from, section.create) };
-      if (section.kind === 'timeline' && section.create)
-        return { ...section, create: withFormDefaults(app, section.streams[0].from, section.create) };
+      if (section.kind === 'timeline' && (section.create || section.reactions))
+        return {
+          ...section,
+          ...(section.create ? { create: withFormDefaults(app, section.streams[0].from, section.create) } : {}),
+          /* Reactions are someone's: the table people are rows of is where `by` is found (page.ts timelineReactions). */
+          ...(section.reactions && app.auth?.me ? { reactions: { ...section.reactions, person: app.auth.me.from } } : {}),
+        };
       if (section.kind !== 'list' || section.view === undefined || section.from) return section;
       const view = Object.hasOwn(app.views, section.view) ? app.views[section.view] : undefined;
       if (!view || !lists.includes(section.view)) {

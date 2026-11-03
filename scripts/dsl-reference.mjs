@@ -145,7 +145,7 @@ function* spellings(dir) {
     if (!entry.name.endsWith('.ts') || /\.d\.ts$|\.test\./.test(entry.name)) continue;
     const source = readFileSync(path, 'utf8');
     const names = [...source.matchAll(/(?:^|[\s{,(])([A-Za-z_][A-Za-z0-9_]*)\??\s*:/g)].map((match) => match[1]);
-    yield { path, names, dsl: /from\s+['"](?:tablewalk|@mistriwork\/mistri)\/app['"]/.test(source) };
+    yield { path, names, dsl: /from\s+['"]@mistriwork\/mistri\/app['"]/.test(source) };
   }
 }
 

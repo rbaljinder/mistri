@@ -26,7 +26,7 @@ import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 const HIDDEN = 'Unlisted Prototype';
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-unlisted-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-unlisted-'));
   const file = join(directory, 'lot.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE vehicle (id INTEGER PRIMARY KEY, title TEXT NOT NULL, price INTEGER NOT NULL, listed INTEGER NOT NULL);

@@ -12,7 +12,7 @@ for (const [name, table, clock] of [
   ['forecourt', 'vehicle', null],
 ] as const) {
   test(`${name} browser fixtures copy a closed seed into separate writable databases`, (t) => {
-    const directory = mkdtempSync(join(tmpdir(), `tablewalk-${name}-seed-copy-`));
+    const directory = mkdtempSync(join(tmpdir(), `mistri-${name}-seed-copy-`));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     if (clock) {
       const previous = process.env[clock];

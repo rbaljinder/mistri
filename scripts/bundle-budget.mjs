@@ -666,7 +666,29 @@ export const BUDGET = {
        paint's own, so none can wait behind onDemand.tsx. Measured: public script 676,437 / 189,132 (+1,037 / +182 over
        the ceilings above, nothing but our own modules in the added bytes). The script ceilings move to 678_500 / 189_700,
        about 0.3% of room. */
-    public: { script: { raw: 678_500, br: 189_700 }, style: { raw: 393_700, br: 52_970 } },
+    /* rc.15's components: a command form's time, stars, scanned code and color read by the shared reader
+       (commandInput.ts, command.ts) a public form judges with before any request, a display rule's copy button beside a
+       record's value (Value.tsx; the chrome's copy glyph) and an address drawn on its lines (valueModel.ts, Dressed.tsx),
+       with their rules in features.css, structure.css and page.css. A record's values and a form's reading are the first
+       screen's own, and a copy button that arrived later would move the line it sits on, so none can wait behind
+       onDemand.tsx. Measured: public script 678,671 / 189,358 (+171 raw past its ceiling; brotli inside), style 394,615 /
+       53,088 (+915 / +118). The raw ceilings keep about 250 bytes of room, the style's brotli about 100. */
+    /* rc.15's files and signature (`field.files`, `field.signature`): the shared reader and parser a public form judges
+       with before any request learn the two kinds (command.ts, commandInput.ts), a form's field draws its label and
+       problem in the first paint while the drop area and the pad wait behind onDemand.tsx (HeldFiles.tsx), and a
+       review says a held file by the name it was sent with (heldFileNames.ts). A field that arrived whole later would
+       move every question under it. Measured: public script 680,330 / 189,780 (+1,659 / +422). The raw ceiling keeps
+       about 250 bytes of room, the brotli 400 for the compressor that packs worst. */
+    /* rc.15's grouped grid: a list view's `group` stands its rows under hairline heads (features.css, structure.css)
+       and a phone's summaries under the same heads (style.css). A grid is first paint's own, and heads that arrived
+       later would push its rows down, so their rules cannot wait behind onDemand.tsx. Measured: public style 395,803 /
+       53,137 (+953 raw past its ceiling; brotli inside). The style ceilings keep about 250 bytes of room raw, 100 in
+       brotli. */
+    /* rc.15's two component branches merged (files and signature, reactions, copy and address beside the week
+       calendar, grouped grid and tree picker), each first paint's own as said above. Measured together: public script
+       680,330 / 189,936, style 395,803 / 53,137. The raw ceilings keep about 250 bytes of room, the script's brotli 400
+       and the style's 100. */
+    public: { script: { raw: 680_580, br: 190_340 }, style: { raw: 396_050, br: 53_240 } },
     /* A one-click command's revision asked as the pointer or focus reaches its button (commandSend.ts readyCommand,
        Actions.tsx), so the click sends only the execute: about 500 raw bytes, 1335.1 KiB measured. The App script's
        raw ceiling moves to 1_367_400 and keeps about 250 bytes of room; its brotli did not move past its ceiling. */
@@ -730,7 +752,26 @@ export const BUDGET = {
     /* rc.12 shell, as on the public first paint: App script 1,402,859 / 384,912, style 393,323 / 52,839. The same room. */
     /* The three rc.12 branches merged, as on the public first paint: App script 1,404,304 / 385,633 (+1,154 / +333 over the
        ceilings above). The script ceilings move to 1_408_550 / 386_800, about 0.3% of room. */
-    app: { script: { raw: 1_408_550, br: 386_800 }, style: { raw: 393_580, br: 52_940 } },
+    /* rc.15's components, as on the public first paint: App style 394,496 / 53,059 (+916 / +119 past its ceilings); the
+       App script, 1,408,415 / 386,260, stays inside its own. The style ceilings keep about 250 bytes of room raw and 100
+       in brotli. */
+    /* rc.15's timeline reactions: the check that names a reaction's three columns and the tally's read ride with the
+       page's parser and the timeline, on first paint, so a section holds its rows until the counts are in; the row and
+       its stylesheet are a part of their own. App script 1,409,918 / 386,988 (+1,368 / +188 past the ceilings); they move
+       to 1_410_250 / 387_300, about 300 bytes of room. */
+    /* rc.15's files and signature, as on the public first paint: App script 1,411,708 / 387,150 (+1,790 / +162); the raw
+       ceiling keeps about 250 bytes of room, the brotli did not pass its ceiling. */
+    /* rc.15's grouped grid and tree picker: the grid's heads read through one breakdown (useGridGroups.ts, Grid.tsx,
+       RecordSummaries.tsx) and their rules, as on the public first paint; and a reference's `tree` read by the form and
+       command parsers and handed to the picker (NewRecord.tsx, CommandReference.tsx). The picker itself and its
+       stylesheet are a part loaded on demand (TreePicker.tsx, 9.1 KB), as is the week calendar (CalendarList.tsx).
+       Measured: App script 1,412,414 / 387,359 (+3,864 / +559 past its ceilings), style 395,684 / 53,108 (+954 raw;
+       brotli inside). The ceilings keep about 250 bytes of room raw, 400 in brotli for the script and 100 for the
+       style. */
+    /* rc.15's two component branches merged, as on the public first paint: App script 1,415,725 / 388,427 (the
+       reactions, files and signature beside the grouped grid and the tree's parsers), style 395,684 / 53,108. The same
+       room. */
+    app: { script: { raw: 1_415_980, br: 388_830 }, style: { raw: 395_930, br: 53_210 } },
   },
 };
 
@@ -768,7 +809,13 @@ export const EMBED_BUDGET = {
   adapter: { raw: 3_600, br: 1_400 },
   /* rc.12: the three branches merged put the shell at 595,255 / 88,146 (+855 raw over its ceiling): the chunk-failure
      handler, the money input and the breadcrumbs. The raw ceiling moves to 597_050, about 0.3% of room. */
-  shell: { raw: 597_050, br: 88_900 },
+  /* rc.15: the embed's scoping class is `.mistri-root`, not `.tw-root` (the rename's public CSS names), and every
+     rule of the shell's stylesheets names it twice (scripts/embed-css.mjs): four more characters each, about 4,900
+     times. The same build with the old names measures 595,309 / 88,167; with the new, 626,080 / 88,535 — the weight
+     is raw text a host's bundler compresses, 368 bytes in brotli. The raw ceiling moves to 628_000, about 0.3% of room. */
+  /* rc.15's grouped grid and tree picker, as on the App's first paint: the shell 629,210 / 88,841 (+1,210 raw past its
+     ceiling; brotli inside). The raw ceiling moves to 629_450, about 250 bytes of room. */
+  shell: { raw: 629_450, br: 88_900 },
 };
 
 /* The chrome's words in a language besides English (vite.config.ts LOCALE_GROUP, src/client/copy/<lang>.ts), one chunk

@@ -213,7 +213,7 @@ describe('tenant command events on PostgreSQL, against a real server', { skip: l
   async function fixture(t: TestContext, store: 'provisioned' | 'missing' | 'foreign' = 'provisioned', delivery?: EventDeliveryPolicy) {
     const { url, drop } = await uuidPostgresDatabase('tablewalk_events');
     const control = await client(url);
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-postgres-tenant-events-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-postgres-tenant-events-'));
     let owner: Owner | undefined, auth: AppAuthRuntime | undefined;
     t.after(async () => {
       try {

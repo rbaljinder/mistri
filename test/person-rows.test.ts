@@ -43,7 +43,7 @@ const desk = (me: Record<string, unknown>, rows?: string) =>
   );
 
 function database(sql: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-person-rows-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-person-rows-'));
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
   db.exec(`${sql}

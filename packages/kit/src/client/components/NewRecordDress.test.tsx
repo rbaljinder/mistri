@@ -161,6 +161,17 @@ describe('each field wears its dress', () => {
     expect(screen.getByRole('textbox', { name: 'Description' }).tagName).toBe('INPUT');
   });
 
+  test('an address is asked in a box of several lines, one part per line, unless the form says otherwise', () => {
+    const p = props();
+    const addressed = {
+      ...p,
+      display: (c: ColumnMeta) => (c.name === 'title' || c.name === 'filed_by' ? { format: 'address' } : p.display(c)),
+    };
+    draw(<NewRecordForm {...addressed} form={{ show: ['title', 'filed_by'], fields: { filed_by: { multiline: false } } }} />);
+    expect(screen.getByRole('textbox', { name: 'Title' }).tagName).toBe('TEXTAREA');
+    expect(screen.getByRole('textbox', { name: 'Filed by' }).tagName).toBe('INPUT');
+  });
+
   test('a radio answers, the switch sends no when left off, and the words are sent as stored', async () => {
     const user = userEvent.setup();
     const p = props();

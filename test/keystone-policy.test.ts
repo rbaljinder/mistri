@@ -14,7 +14,7 @@ import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-keystone-policy-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-keystone-policy-'));
   const file = join(directory, 'keystone.db');
   const seed = new DatabaseSync(file);
   const registry = new Registry();

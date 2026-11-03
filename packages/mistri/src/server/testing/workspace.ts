@@ -7,7 +7,7 @@ import { sqliteTargetFrom } from '@mistriwork/engine/server/configPaths.js';
 
 /** Every test owns its directory. Register close with your runner immediately. */
 export async function createTestWorkspace() {
-  const directory = await mkdtemp(join(tmpdir(), 'tablewalk-test-'));
+  const directory = await mkdtemp(join(tmpdir(), 'mistri-test-'));
   // Authored TypeScript Apps use ESM, including when copied outside their repository.
   await writeFile(join(directory, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
   const cleanups: Array<() => unknown | Promise<unknown>> = [];

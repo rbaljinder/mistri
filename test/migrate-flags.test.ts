@@ -12,7 +12,7 @@ import { after, test } from 'node:test';
 import { runMigrate } from '../packages/engine/src/server/migrate/cli.js';
 import { MIGRATE_APPS } from '../packages/mistri/src/server/cli/appTargets.js';
 
-const root = mkdtempSync(join(tmpdir(), 'tablewalk-migrate-flags-'));
+const root = mkdtempSync(join(tmpdir(), 'mistri-migrate-flags-'));
 after(() => rmSync(root, { recursive: true, force: true }));
 
 async function migrate(args: string[]) {

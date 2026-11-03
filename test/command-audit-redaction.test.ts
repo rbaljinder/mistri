@@ -399,7 +399,7 @@ describe('the command audit on SQLite', () => {
     async reset() {
       db?.close();
       if (directory) rmSync(directory, { recursive: true, force: true });
-      directory = mkdtempSync(join(tmpdir(), 'tablewalk-audit-redaction-'));
+      directory = mkdtempSync(join(tmpdir(), 'mistri-audit-redaction-'));
       const file = join(directory, 'enrolments.db');
       db = new DatabaseSync(file);
       db.exec(`CREATE TABLE enrolment (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT, reference TEXT NOT NULL UNIQUE,

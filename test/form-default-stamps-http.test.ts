@@ -23,7 +23,7 @@ const appId = 'intake';
 const owner = 'intake-db';
 
 test('a plain create is given its form defaults by the server, and a hidden one is written over', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-form-default-stamps-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-form-default-stamps-'));
   const file = join(directory, 'intake.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE person (id INTEGER PRIMARY KEY, email TEXT UNIQUE NOT NULL);

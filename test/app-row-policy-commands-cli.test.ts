@@ -23,7 +23,7 @@ const SLOW = 60_000;
 const sourceUrl = (file: string) => JSON.stringify(pathToFileURL(join(root, file)).href);
 
 function fixture(t: TestContext, migrated = true) {
-  const { directory, stopping } = scratch(t, 'tablewalk-scoped-command-cli-');
+  const { directory, stopping } = scratch(t, 'mistri-scoped-command-cli-');
   const app = join(directory, 'app');
   mkdirSync(app);
   const config = join(directory, 'mistri.json');

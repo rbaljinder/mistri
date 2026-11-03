@@ -62,7 +62,7 @@ test.describe('A submitted application added to an account', () => {
     const reference = await apply(page, app.origin);
     // The claim is the server's alone, beside the receipt, for this form's paths only.
     expect(await page.context().cookies()).toEqual([
-      expect.objectContaining({ name: 'tw_claim_apply', httpOnly: true, sameSite: 'Strict', path: '/api/forms/apply' }),
+      expect.objectContaining({ name: 'mistri_claim_apply', httpOnly: true, sameSite: 'Strict', path: '/api/forms/apply' }),
     ]);
 
     await page.getByRole('link', { name: 'Create an account to track this' }).click();
@@ -80,7 +80,7 @@ test.describe('A submitted application added to an account', () => {
     await page.getByRole('button', { name: 'Yes, add it' }).click();
     await expect(page.getByRole('heading', { name: 'Added to your account' })).toBeVisible();
     expect(linked(app)).toMatchObject([{ reference, account_id: expect.any(String), linked_via: 'same-device', claim_token_hash: null }]);
-    expect((await page.context().cookies()).map((cookie) => cookie.name)).not.toContain('tw_claim_apply');
+    expect((await page.context().cookies()).map((cookie) => cookie.name)).not.toContain('mistri_claim_apply');
 
     await page.getByRole('link', { name: 'See its status' }).click();
     await expect(page.getByRole('heading', { name: 'Check your application' })).toBeVisible();

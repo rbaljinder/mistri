@@ -8,7 +8,7 @@
  *   function Crm() {
  *     const navigator = useReactRouterNavigator();
  *     return (
- *       <Provider endpoint="/api/tw" navigator={navigator}>
+ *       <Provider endpoint="/api/mistri" navigator={navigator}>
  *         <App app="compass" basePath="/crm" />
  *       </Provider>
  *     );
@@ -71,7 +71,7 @@ export type Auth =
     };
 
 export interface ProviderProps {
-  /** Where the mistri server answers: `/api/tw` (same origin, recommended) or `https://tw.example.com/tools`. */
+  /** Where the mistri server answers: `/api/mistri` (same origin, recommended) or `https://mistri.example.com/tools`. */
   endpoint: string;
   auth?: Auth;
   /** Worn in place of the reader's choice: a look's id (`lumen`, `mono`, `sage`, or one the App defines), or the

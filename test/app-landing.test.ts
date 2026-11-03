@@ -298,7 +298,7 @@ test('the helpers are checked in the editor', () => {
 });
 
 test('a saved edit is what the next visitor reads, and the validator moves with it', { timeout: 10_000 }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-landing-reload-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-landing-reload-'));
   const manifest = (heading: string) =>
     JSON.stringify({
       id: 'loans',

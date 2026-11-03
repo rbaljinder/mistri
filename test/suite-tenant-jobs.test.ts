@@ -12,7 +12,7 @@ import { provisionSqliteTenantStore, TENANT_TABLES } from '../packages/mistri/sr
 import { startConfiguredSuite } from '../packages/mistri/src/server/cli/suiteCommand.js';
 
 test('tenant suite event jobs retain App and tenant ownership and drain on shutdown', { timeout: 15_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-tenant-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-tenant-'));
   let active: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   const releases: (() => void)[] = [];
   t.after(async () => {

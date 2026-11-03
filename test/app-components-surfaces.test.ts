@@ -274,7 +274,7 @@ const FILES: CompiledComponents = {
 type Call = (path: string, body?: object, init?: RequestInit) => Promise<{ status: number; body: any; headers: Headers }>;
 
 async function serve(role: string | undefined, run: (call: Call) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-components-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-components-http-'));
   const file = join(directory, 'lot.db');
   const db = new DatabaseSync(file);
   db.exec(SQL);

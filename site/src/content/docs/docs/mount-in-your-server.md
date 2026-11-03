@@ -7,12 +7,12 @@ Serve an App under a path of your own Node, Express, Next or Hono server, in
 its process, with no second port.
 
 ```ts title="examples/apps/ladle/host/server.ts"
-  const tw = createHandler({ config: options.config, basePath: MOUNT, publicOrigin: origin, app: resolve(HERE, '..') });
+  const mistri = createHandler({ config: options.config, basePath: MOUNT, publicOrigin: origin, app: resolve(HERE, '..') });
   // …
-    if (ours(url)) return void tw.node(req, res);
+    if (ours(url)) return void mistri.node(req, res);
 ```
 
-See it in the sample (`examples/apps/ladle/host/server.ts:48`): Ladle hands `/api/tw` to the App in the school's own Node server.
+See it in the sample (`examples/apps/ladle/host/server.ts:48`): Ladle hands `/api/mistri` to the App in the school's own Node server.
 
 The options: `config` is the file `--config` reads (connections, and `apps`
 or `app`); `basePath` is where your server hands requests over;
@@ -30,7 +30,7 @@ and the Host and Origin checks expect `publicOrigin`.
 import { createServer } from 'node:http';
 
 createServer((req, res) => {
-  if (req.url?.startsWith('/crm')) return tw.node(req, res);
+  if (req.url?.startsWith('/crm')) return mistri.node(req, res);
   res.end('your own pages');
 }).listen(3000);
 ```
@@ -38,12 +38,12 @@ createServer((req, res) => {
 ## Express
 
 ```ts
-app.use('/crm', tw.node); // before express.json() or any other body parser
+app.use('/crm', mistri.node); // before express.json() or any other body parser
 ```
 
 The handler reads its own request bodies, so mount it ahead of a body parser;
 a request a parser has already read is refused with a message that says so.
-Mounted without a path (`app.use(tw.node)`), it passes anything outside
+Mounted without a path (`app.use(mistri.node)`), it passes anything outside
 `basePath` to `next()`.
 
 ## Next.js
@@ -55,29 +55,29 @@ import { createHandler, type Handler } from '@mistriwork/mistri/handler';
 export const runtime = 'nodejs';
 const shared = globalThis as { mistri?: Handler };
 // One handler per process: development reloads this module.
-const tw = (shared.mistri ??= createHandler({
+const mistri = (shared.mistri ??= createHandler({
   config: './mistri.json',
   basePath: '/crm',
   publicOrigin: process.env.PUBLIC_ORIGIN!,
 }));
-const handle = (request: Request) => tw.fetch(request);
+const handle = (request: Request) => mistri.fetch(request);
 export { handle as GET, handle as HEAD, handle as POST, handle as PUT, handle as PATCH, handle as DELETE };
 ```
 
 ## Hono
 
 ```ts
-app.all('/crm/*', (c) => tw.fetch(c.req.raw));
+app.all('/crm/*', (c) => mistri.fetch(c.req.raw));
 ```
 
 ## The visitor's address
 
 Pass the visitor's address as `fetch`'s second argument:
-`tw.fetch(request, { clientAddress })`. Sign-in's rate limit and lockout,
+`mistri.fetch(request, { clientAddress })`. Sign-in's rate limit and lockout,
 and a public form's, count by it; without it every visitor is one address
 and shares one budget, and the handler warns once. On Hono over Node it is
 `getConnInfo(c).remote.address` (`@hono/node-server/conninfo`); behind a
-proxy, the address your proxy vouches for. `tw.node` reads it from the
+proxy, the address your proxy vouches for. `mistri.node` reads it from the
 socket.
 
 ## Pages on other origins
@@ -95,11 +95,11 @@ gives it.
 
 ## Starting and stopping
 
-- `tw.ready` settles once the App, sign-in and pools are loaded. Requests
+- `mistri.ready` settles once the App, sign-in and pools are loaded. Requests
   that arrive sooner wait for it; past ten seconds they are answered 503
   with `Retry-After`. A startup that fails rejects `ready` and every request
   is answered 503 with the reason.
-- `await tw.close()` on shutdown stops the App's jobs, waits for requests in
+- `await mistri.close()` on shutdown stops the App's jobs, waits for requests in
   flight and closes its pools and sign-in store.
 - `app`, `commands`, `policy` and `jobs` name the files the command line's
   `--app`, `--commands`, `--policy` and `--jobs` would. With `jobs`, the
@@ -109,7 +109,7 @@ gives it.
   config file.
 - A `basePath` that says one of the server's own paths (`/api`, `/assets`,
   `/_mistri`, `/healthz`, `/readyz`) is refused; under your API, as
-  `/api/tw`, is fine.
+  `/api/mistri`, is fine.
 - A config that serves no App is refused: the database browser is not
   mountable, because its connection form trusts whoever reaches it.
 - Bun and Deno are not supported: the SQLite driver, the pools and the App

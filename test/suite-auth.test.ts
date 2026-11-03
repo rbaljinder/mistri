@@ -12,7 +12,7 @@ import { createSuite } from '../packages/mistri/src/server/http/suite.js';
 import { openSuiteApp } from '../packages/mistri/src/server/http/suiteApp.js';
 
 test('suite refuses SQLite auth stores aliased to any captured business file or sidecar before migrating', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-auth-fence-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-auth-fence-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const business = join(directory, 'business.db');
   const db = new DatabaseSync(business);
@@ -68,7 +68,7 @@ test('suite refuses SQLite auth stores aliased to any captured business file or 
 });
 
 test('suite Apps isolate real accounts, cookies, data and logout with explicit deployment environments', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-auth-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-auth-'));
   const processSecret = process.env.BETTER_AUTH_SECRET;
   const definitions = [];
   for (const id of ['lender', 'dealer']) {

@@ -39,7 +39,7 @@ async function fixture(
   configure?: (store: FlagStore) => FlagStore,
   configureTarget?: (target: FlagDeploymentOptions['targets'][number]) => FlagDeploymentOptions['targets'][number],
 ) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-flag-http-')),
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-flag-http-')),
     secret = 'flag-http-fixture-secret-at-least-thirty-two-characters';
   const auth = await createAppAuth(
     {

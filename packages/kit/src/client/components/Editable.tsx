@@ -350,8 +350,10 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
     /* A reference and a link are values to follow, so the value is not the
        edit button: a link inside a button is neither. The pencil beside it edits. */
     const shownRule = columnDisplay(table.id, column.name) as DisplayRule | null;
-    /* Formatted text holds links and blocks of its own, so it is not drawn inside a button either. */
-    const followed = column.references || shownRule?.format === 'richText' || linkFor(column.name, shownValue, shownRule, true);
+    /* Formatted text holds links and blocks of its own, so it is not drawn inside a button either; nor is a value
+       with its own copy button. */
+    const followed =
+      column.references || shownRule?.format === 'richText' || shownRule?.copy || linkFor(column.name, shownValue, shownRule, true);
     return surface(
       followed && shownValue !== null && shownValue !== undefined ? (
         <div className="inline-field">

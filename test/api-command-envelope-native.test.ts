@@ -19,7 +19,7 @@ import { parseTestApi, parseTestApp } from './support/commandCatalog.js';
 
 for (const many of [false, true])
   test(`genuine SQLite ${many ? 'many-target' : 'one-target'} execution, replay and deleted-target recovery conform to internal envelope bundle`, async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-envelope-native-')),
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-envelope-native-')),
       path = join(directory, 'business.db');
     const db = new DatabaseSync(path),
       connections = new Registry();

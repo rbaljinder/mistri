@@ -104,7 +104,7 @@ async function poisoned(runtime: Runtime, run: (data: ScopedReads) => Promise<un
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-read-runtime-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-read-runtime-'));
   const path = join(directory, 'business.db');
   const writer = new DatabaseSync(path);
   const runtimes: Runtime[] = [];

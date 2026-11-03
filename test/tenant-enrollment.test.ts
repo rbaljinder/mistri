@@ -38,7 +38,7 @@ function safe(error: unknown): boolean {
   return true;
 }
 function fixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-enrollment-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-tenant-enrollment-'));
   const path = join(dir, 'business.db'),
     db = new DatabaseSync(path);
   db.exec(`PRAGMA journal_mode=WAL; CREATE TABLE db_item(id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, name TEXT NOT NULL);

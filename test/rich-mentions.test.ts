@@ -90,7 +90,7 @@ async function fixture(
   }) => Promise<void>,
   post: Record<string, unknown> = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-rich-mentions-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-rich-mentions-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE person (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT);

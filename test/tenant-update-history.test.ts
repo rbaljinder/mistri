@@ -50,7 +50,7 @@ function undoId(value: { undoId?: string }): string {
 }
 
 async function fixture(t: TestContext, ownerCollation: 'BINARY' | 'NOCASE' | 'RTRIM' = 'BINARY') {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-update-history-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-update-history-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   const services: Service[] = [];

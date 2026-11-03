@@ -41,6 +41,22 @@ export const Narrowed: StoryObj = {
   },
 };
 
+/* `group: 'status'` with `totals`: each status's tasks under a hairline head with its count and the estimate's
+   subtotal under its column; the head folds its group away. */
+export const Grouped: StoryObj = {
+  beforeEach: async () => {
+    await taskApp({ view: { group: 'status', totals: ['estimate'] } });
+    open('task')();
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = await asTable(canvasElement);
+    const fold = await canvas.findByRole('button', { name: /^Done/ });
+    await expect(fold).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(fold);
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+  },
+};
+
 /* A compact grid with a row picked: the bulk bar's count and verbs. */
 export const CompactWithSelection: StoryObj = {
   beforeEach: async () => {

@@ -48,7 +48,7 @@ test(
   'a delivery starts a workflow that sleeps, then approves the loan once, as its principal, on PostgreSQL',
   { timeout: 120_000, skip: liveSkip('postgres', LIVE_PG) },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-workflow-host-pg-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-workflow-host-pg-'));
     const children: ChildProcess[] = [];
     t.after(async () => {
       for (const child of children)

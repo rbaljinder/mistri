@@ -16,7 +16,7 @@ import { parseArgs, postgresPoolFlags } from '../packages/engine/src/server/cli/
 import { CONFIG_SECTIONS } from '../packages/mistri/src/server/serviceConnections.js';
 
 function scratch(): { directory: string; done: () => void } {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-pool-config-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-pool-config-'));
   return { directory, done: () => rmSync(directory, { recursive: true, force: true }) };
 }
 

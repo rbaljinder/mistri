@@ -14,7 +14,7 @@ for (const shared of [false, true])
     `suite CLI tenant mounts isolate memberships, contexts and equal row ids (${shared ? 'shared' : 'independent'} sign-in)`,
     { timeout: 15_000 },
     async (t) => {
-      const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-tenant-'));
+      const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-tenant-'));
       let active: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
       t.after(async () => {
         await active?.close();

@@ -1140,6 +1140,10 @@
             "$ref": "#/$defs/formField"
           },
           "description": "A reference: offer only the records whose column (the key) equals this form's field (the value): { project_id: 'project_id' }. Enforced on every write."
+        },
+        "tree": {
+          "$ref": "#/$defs/formField",
+          "description": "A reference: offer its records as the hierarchy the referenced table's parent column makes ({ tree: 'parent_id' }): the records with no parent first, each branch read as it opens, the choice said with its path, and a search over every level."
         }
       }
     },
@@ -1304,9 +1308,10 @@
             "month",
             "year",
             "json",
-            "qr"
+            "qr",
+            "address"
           ],
-          "description": "money: currency formatting (metrics compact to \"$27.9M\"). percent: the value is 0\u2013100, shown with %. number: separators forced on. relative: a date said from today (\"in 3 days\", \"64 days ago\"), the date itself in the tooltip. date: a day said absolutely (\"Sep 4, 2026\"), the same on any day for any reader; a stored date never shifts. datetime: a moment with its time and zone (\"Sep 4, 2026, 2:30 PM PDT\"), said in timezone, else the App's ui.timezone. items: a text of one item per line, drawn as a list (a line of them where there is no room). duration: a number of seconds said as its two largest units (\"2h 15m\"), the seconds in the tooltip. email, phone, url: a value of that shape is a link to write to, call or open; an App links a column named like one without a rule. richText: sanitized HTML, drawn formatted on a record and as an excerpt in a list, edited in the rich text editor; the server sanitizes every write and reads Markdown into it. avatars: the people on a thing (an array, a JSON array, or one name per line or comma) as up to three overlapping initials discs and a \"+N\"; takes nothing else. rating: a whole number of stars out of outOf (5). color: a hex color as its swatch and code. time, month, year: a time of day, a month, a year in the reader's words, each edited in its native picker. json: a JSON document as a tree, edited as text whose problem is said while it is typed; the server refuses a write that is not JSON. qr: the value as a QR code to scan. These draw the value their own way."
+          "description": "money: currency formatting (metrics compact to \"$27.9M\"). percent: the value is 0\u2013100, shown with %. number: separators forced on. relative: a date said from today (\"in 3 days\", \"64 days ago\"), the date itself in the tooltip. date: a day said absolutely (\"Sep 4, 2026\"), the same on any day for any reader; a stored date never shifts. datetime: a moment with its time and zone (\"Sep 4, 2026, 2:30 PM PDT\"), said in timezone, else the App's ui.timezone. items: a text of one item per line, drawn as a list (a line of them where there is no room). duration: a number of seconds said as its two largest units (\"2h 15m\"), the seconds in the tooltip. email, phone, url: a value of that shape is a link to write to, call or open; an App links a column named like one without a rule. richText: sanitized HTML, drawn formatted on a record and as an excerpt in a list, edited in the rich text editor; the server sanitizes every write and reads Markdown into it. avatars: the people on a thing (an array, a JSON array, or one name per line or comma) as up to three overlapping initials discs and a \"+N\"; takes nothing else. rating: a whole number of stars out of outOf (5). color: a hex color as its swatch and code. time, month, year: a time of day, a month, a year in the reader's words, each edited in its native picker. json: a JSON document as a tree, edited as text whose problem is said while it is typed; the server refuses a write that is not JSON. qr: the value as a QR code to scan. address: a postal address drawn on its lines, a link to a map search for it (no map is fetched). These draw the value their own way."
         },
         "face": { "enum": ["data", "ui", "code"], "description": "The face this column's values are set in, over the look's own: data (the look's data face, usually monospace), ui (the interface's reading face) or code (always monospace, for a VIN or a hash). Left out, an App sets a key, a reference, a code or a QR value in the data face and any other text in the reading face. A rule with a component takes no face, the component sets its own; masked: true takes none either." },
         "timezone": { "type": "string", "minLength": 1, "description": "With format date or datetime: the IANA zone a moment is said in, over the App's ui.timezone (\"America/New_York\"). A stored date alone never shifts." },
@@ -1321,6 +1326,7 @@
         },
         "scan": { "const": true, "description": "A code typed or read by the camera where the browser can read codes; takes no format." },
         "signature": { "const": true, "description": "On a column that points at a file resource: a signature drawn or typed, kept as a PNG row of it and drawn as the picture; takes no format." },
+        "copy": { "const": true, "description": "A copy button beside the value on a record: the stored value copied, a toast saying so. Not with masked: true or signature." },
         "icon": {
           "description": "A small tinted square before the value in a list's cell: an App icon, or { mark, toneOf } where toneOf names another column of the record whose tone rule tints each row's square.",
           "anyOf": [
@@ -3161,7 +3167,11 @@
               "type": "string",
               "minLength": 1,
               "pattern": "^[^.]*[^.\\s][^.]*$",
-              "description": "A date column holding the record's last day: the record is drawn across every day from date to end, continuing across week rows. A move shifts both."
+              "description": "A date column holding the record's last day: the record is drawn across every day from date to end, continuing across week rows. A move shifts both. In a week or a day, the timestamp the record ends at."
+            },
+            "span": {
+              "enum": ["month", "week", "day"],
+              "description": "What one page shows: 'month' (the default), the days of a month; 'week' or 'day', a time grid with the hours down the side and each record placed by its start and end, read by timestamp columns. A phone reads a week or a day as an agenda."
             },
             "primary": {
               "type": "string",
@@ -3763,6 +3773,11 @@
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
           },
           "description": "Numeric columns, rollups or computed numbers summed in a footer row, over everything the list's conditions match, not just the page. A grid only."
+        },
+        "group": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "One of the resource's own columns whose values group the rows, each group under a head that says the value, how many rows it holds and the subtotal of each of the view's totals; a head folds its group away. The heads are one breakdown over everything the list's conditions match. A grid only, and not beside order."
         },
         "sort": {
           "description": "The list's order, written like the query bar: \"created_on desc\" is how it reads when nothing else says one. Two to eight named orders are a Sort menu beside the filters, the first of them the order the list opens in; a chosen one is the query's own sort clause, so the address keeps it. The opening order is kept out of the bar, as order is. A tab's sort clause wins over it, and the menu over both. Not beside order or a sort in query, and not on a board or a calendar.",

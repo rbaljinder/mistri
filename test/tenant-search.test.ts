@@ -26,7 +26,7 @@ import { startFakeTypesense, type FakeTypesense } from './support/fakeTypesense.
 
 const KEY = 'tenant-search-key';
 const connection = 'tenant-search-depot';
-const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-search-'));
+const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-search-'));
 const path = join(directory, 'depot.db');
 const tenantColumns = { item: 'tenant' };
 let fake: FakeTypesense;

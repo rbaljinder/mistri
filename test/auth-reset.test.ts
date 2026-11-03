@@ -34,7 +34,7 @@ describe('a password reset by a logged link', () => {
   const log = console.log;
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-auth-reset-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-auth-reset-'));
     const db = join(tmp, 'app.db');
     makeDemoDatabase(db);
     seedDemoDatabase(db, { scale: 3 });

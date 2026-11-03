@@ -68,6 +68,7 @@ export function PublicHome({ view, loadError, landingView }: { view: string; loa
           form={data.form}
           appName={data.app.name}
           visitor={{ app: data.app.id }}
+          held={{ form: data.form.id }}
           submit={(submission, input, guard) => submitPublicForm(data.form.id, submission, input, undefined, guard)}
         />
       ) : found.error ? (

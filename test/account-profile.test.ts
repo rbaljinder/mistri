@@ -32,7 +32,7 @@ async function serve(t: TestContext, handler: (req: IncomingMessage, res: Server
   return `http://127.0.0.1:${address.port}`;
 }
 async function fixture(t: TestContext, mail?: EmailTransport) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-account-profile-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-account-profile-'));
   let auth!: AppAuthRuntime;
   const origin = await serve(t, (req, res) => auth.handler(req, res));
   const saved = {

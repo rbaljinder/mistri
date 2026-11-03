@@ -52,7 +52,7 @@ function isolate(t: TestContext, directory: string): void {
 
 /** A directory the seed may create: made, then removed, so it does not exist. */
 function unused(t: TestContext): string {
-  const parent = mkdtempSync(join(tmpdir(), 'tablewalk-ignition-seed-'));
+  const parent = mkdtempSync(join(tmpdir(), 'mistri-ignition-seed-'));
   t.after(() => rmSync(parent, { recursive: true, force: true }));
   return join(parent, 'fixture');
 }
@@ -95,7 +95,7 @@ test('the seed refuses a directory that exists, and a database that is not empty
   const { lendingUrl, applicantsUrl } = await databases();
 
   // A directory it would have to write into is never replaced.
-  const taken = mkdtempSync(join(tmpdir(), 'tablewalk-ignition-seed-taken-'));
+  const taken = mkdtempSync(join(tmpdir(), 'mistri-ignition-seed-taken-'));
   t.after(() => rmSync(taken, { recursive: true, force: true }));
   await assert.rejects(seedIgnition({ lendingUrl, applicantsUrl, directory: taken }), /Refusing to replace/);
 

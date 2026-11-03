@@ -13,7 +13,7 @@
  * Chromium is Playwright's, found where it is installed: beside mistri (a
  * checkout, where it is a devDependency) or in the project it is run from.
  * It is not a dependency of the package: a browser is some 150 MB that every
- * `npx tablewalk` would download for a command most never run, so a person
+ * `npx @mistriwork/mistri` would download for a command most never run, so a person
  * without it is told the one line that installs it.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -1286,7 +1286,7 @@ class ShotRun {
   child?: ChildProcess;
   browser?: Browser;
   member?: TenantShotAccount;
-  readonly xdg = mkdtempSync(join(tmpdir(), 'tablewalk-shot-'));
+  readonly xdg = mkdtempSync(join(tmpdir(), 'mistri-shot-'));
   readonly registry = new Registry();
   private cleaning?: Promise<void>;
   constructor(private readonly warn: (line: string) => void) {}
@@ -1671,7 +1671,7 @@ export async function runShot(
         const id = looks[0]?.theme ?? worn(loaded);
         const base = [...THEME_PRESETS, ...(loaded.app.ui.customThemes ?? [])].find((theme) => theme.id === id)!;
         const folder = modeFolder('recipes');
-        const parts = mkdtempSync(join(tmpdir(), 'tablewalk-recipes-'));
+        const parts = mkdtempSync(join(tmpdir(), 'mistri-recipes-'));
         mkdirSync(folder, { recursive: true });
         try {
           const [shot] = shots;
@@ -1727,7 +1727,7 @@ export async function runShot(
         const ownTheme = (loaded.app.ui.customThemes ?? []).find((theme) => theme.id === worn(loaded));
         const label = looks[0]?.label ?? ownTheme?.label ?? THEME_PRESETS.find((theme) => theme.id === worn(loaded))?.label ?? worn(loaded);
         const folder = modeFolder('compare');
-        const parts = mkdtempSync(join(tmpdir(), 'tablewalk-compare-'));
+        const parts = mkdtempSync(join(tmpdir(), 'mistri-compare-'));
         mkdirSync(folder, { recursive: true });
         try {
           for (const shot of shots)

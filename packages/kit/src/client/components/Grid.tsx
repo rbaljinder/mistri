@@ -27,6 +27,7 @@
 import { useMessageLanguage } from './useMessageLanguage.js';
 import {
   cloneElement,
+  Fragment,
   isValidElement,
   memo,
   useCallback,
@@ -73,6 +74,7 @@ import { openFilterMenu, sortBy } from '../thmenu.js';
 import { AppColumnMenuButton, useAppColumnMenu } from './AppColumnMenu.js';
 import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { DetailRow, Expander } from './Nested.js';
+import { Icon } from './Icon.js';
 import {
   createRowHosts,
   RowDecoration,
@@ -189,7 +191,26 @@ interface GridProps {
   editCell?: (row: Row, column: string, draw: CellDraw, label?: unknown) => ReactNode | undefined;
   /** What the host draws in an empty cell in place of its empty mark (a suggestion waiting on it); undefined leaves the mark. One line: no row grows. */
   adornCell?: (row: Row, column: string) => ReactNode | undefined;
+  /** The rows' groups, where the list has them: the rows arrive in the group's order, and each run of one value is drawn under its head. */
+  group?: GridGroup;
 }
+
+/** What a group's head says: its value, in words; how many rows it holds; each `totals` column's subtotal. */
+export interface GroupHead {
+  label: string;
+  /** Every row of the group the list's conditions match, not the page's; absent while it is counted. */
+  count?: number;
+  sums?: Record<string, unknown>;
+}
+
+/** A grid's groups (a list view's `group`): the column whose value each row stands under, and the head for a value. */
+export interface GridGroup {
+  column: string;
+  head: (value: unknown) => GroupHead;
+}
+
+/** A group's value as the folded set and the head's identity hold it: the rows with no value are one group. */
+const groupKey = (value: unknown): string => (value === null || value === undefined ? '\u0000' : String(value));
 
 /** Beyond a few hundred rows the DOM, not the database, is the bottleneck. */
 const VIRTUAL_THRESHOLD = 300;
@@ -749,6 +770,7 @@ export function Grid({
   dropColumns = false,
   editCell,
   adornCell,
+  group,
 }: GridProps) {
   const captionLanguage = useMessageLanguage();
   const wrap = useRef<HTMLDivElement>(null);
@@ -808,7 +830,16 @@ export function Grid({
   const changedRows = useChangedRows(table?.id, rows, (row) => (table ? (keyOf(table, row) as Record<string, unknown> | null) : null));
   const openable = useMemo(() => rowKeys.filter((key): key is string => key !== null), [rowKeys]);
 
-  const virtual = mayVirtualise && rows.length > VIRTUAL_THRESHOLD;
+  /* A grouped grid is drawn whole: its heads stand between rows, and the window's model is uniform rows. A list's page is
+     the most it holds. */
+  const virtual = mayVirtualise && rows.length > VIRTUAL_THRESHOLD && !group;
+  /* The groups the reader folded, by value: kept across a page turn, so a group folded on one page stays folded on the
+     next it continues on. */
+  const [shutGroups, setShutGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const foldedRow = useCallback(
+    (index: number) => Boolean(group) && shutGroups.has(groupKey(rows[index]?.[group!.column])),
+    [group, shutGroups, rows],
+  );
   /* Not where rows open as pages: the expander is the explorer's way of
      seeing what points at a row, and an app's list gets that on the page
      the row opens as. Nor on a windowed table: an opened detail is many
@@ -868,7 +899,9 @@ export function Grid({
         };
         setHeadFace((was) => (was && was.font === next.font && was.upper === next.upper && was.tracking === next.tracking ? was : next));
       }
-      const cells = [...element.querySelectorAll('tbody tr:first-child > td')];
+      /* A group's head is not a row of values: the first row that is one is sampled. */
+      const first = element.querySelector('tbody tr:not(.grid-group-head)');
+      const cells = first ? [...first.querySelectorAll(':scope > td')] : [];
       if (cells.length) {
         const fonts = cells.map((cell) => {
           const font = getComputedStyle(cell);
@@ -877,7 +910,7 @@ export function Grid({
         setCellFonts((was) => (was.join('|') === fonts.join('|') ? was : fonts));
         /* The widest chip of the sampled rows, not the first row's: a look may draw a neutral state as a bare word
            and the rest as pills, and sized by a first-row "Ready" Sage cut every "In review" pill to "In rev…". */
-        const rows = [...element.querySelectorAll('tbody tr')].slice(0, GRID_SIZE_SAMPLE);
+        const rows = [...element.querySelectorAll('tbody tr:not(.grid-group-head)')].slice(0, GRID_SIZE_SAMPLE);
         const chips = cells.map((_, index) => {
           let extra = -1;
           for (const row of rows) {
@@ -1351,6 +1384,7 @@ export function Grid({
     onPeek: keyed ? (index) => peekRow(rows[index]) : undefined,
     totalRows: data.exactTotal === false || data.cappedTotal ? undefined : data.total,
     firstRow,
+    ...(group ? { skip: foldedRow } : {}),
   });
 
   /* Whatever the column clipped gets its whole value on hover, decided at hover time, once, from its own overflow:
@@ -1675,12 +1709,12 @@ export function Grid({
                   />
                 </tr>
               )}
-              {shown.map((i) => {
+              {shown.map((i, at) => {
                 const row = modelRows[i];
                 if (!row) return null;
                 const key = rowKeys[i];
                 const open = expandable && key !== null && expanded.has(key);
-                return (
+                const drawn = (
                   <Row
                     key={key === null ? `at:${i}` : `key:${key}`}
                     index={i}
@@ -1702,6 +1736,34 @@ export function Grid({
                     editCell={editCell}
                     adornCell={adornCell}
                   />
+                );
+                if (!group) return drawn;
+                /* A head where a run of one value begins: the first row drawn, or one whose group the row above is not. */
+                const value = row.original[group.column];
+                const named = groupKey(value);
+                const starts = at === 0 || groupKey(modelRows[shown[at - 1]]?.original[group.column]) !== named;
+                const shut = shutGroups.has(named);
+                return (
+                  <Fragment key={key === null ? `at:${i}` : `key:${key}`}>
+                    {starts && (
+                      <GroupHeadRow
+                        head={group.head(value)}
+                        folded={shut}
+                        onToggle={() =>
+                          setShutGroups((was) => {
+                            const next = new Set(was);
+                            if (!next.delete(named)) next.add(named);
+                            return next;
+                          })
+                        }
+                        slot={slotted}
+                        trail={trailing}
+                        columns={ordered}
+                        table={table}
+                      />
+                    )}
+                    {shut ? null : drawn}
+                  </Fragment>
                 );
               })}
               {virtual && (
@@ -1756,6 +1818,56 @@ export function Grid({
       {virtual && <p className="note virtual-note">{say('rowsDrawnAsYouScroll', { count: rows.length })}</p>}
       {!rows.length && <p className="note grid-empty">{emptyText}</p>}
     </div>
+  );
+}
+
+/**
+ * A group's head (a list view's `group`): a hairline row, not a box, that says the value, how many rows it holds and,
+ * under each `totals` column, its subtotal — the breakdown's figures, so a group a page divides is counted whole. The
+ * value is a button that folds the group's rows away and opens them again.
+ */
+function GroupHeadRow({
+  head,
+  folded,
+  onToggle,
+  slot,
+  trail,
+  columns,
+  table,
+}: {
+  head: GroupHead;
+  folded: boolean;
+  onToggle: () => void;
+  slot: boolean;
+  trail: boolean;
+  columns: string[];
+  table: TableMeta | undefined;
+}) {
+  const sums = head.sums ?? {};
+  /* The value spans the columns before the first subtotal, so each figure stands under the column it sums. */
+  const first = columns.findIndex((name) => Object.hasOwn(sums, name));
+  const lead = first < 0 ? columns.length : Math.max(1, first);
+  return (
+    <tr className={`grid-group-head${folded ? ' is-folded' : ''}`}>
+      {slot && <td className="expander-cell" />}
+      <td colSpan={lead} className="grid-group-cell">
+        <button type="button" className="grid-group-toggle" aria-expanded={!folded} onClick={onToggle}>
+          <Icon name={folded ? 'caret-right' : 'caret-down'} size={14} className="grid-group-caret" />
+          <span className="grid-group-name">{head.label}</span>
+          {head.count !== undefined && <span className="grid-group-count">{formatNumber(head.count)}</span>}
+        </button>
+      </td>
+      {columns.slice(lead).map((name) =>
+        Object.hasOwn(sums, name) ? (
+          <td key={name} className="align-right num grid-group-sum">
+            <TotalValue value={sums[name]} display={columnDisplay(table?.id, name) as DisplayRule | null} />
+          </td>
+        ) : (
+          <td key={name} />
+        ),
+      )}
+      {trail && <td />}
+    </tr>
   );
 }
 

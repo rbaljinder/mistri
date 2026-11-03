@@ -29,7 +29,7 @@ async function fixture(
     role: (role: string) => void;
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-editable-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-editable-http-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE task (id INTEGER PRIMARY KEY, title TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'open', note TEXT, owner TEXT);

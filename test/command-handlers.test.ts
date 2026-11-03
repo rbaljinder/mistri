@@ -44,7 +44,7 @@ async function fixture(
   }) => Promise<void>,
   handlers: Partial<Record<'one' | 'many' | 'reads' | 'append', Handler>>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-handlers-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-handlers-'));
   const path = join(directory, 'shop.db');
   const db = new DatabaseSync(path);
   const registry = new Registry();

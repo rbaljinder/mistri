@@ -207,6 +207,8 @@ export function showPublicForm(prepared, page, options = {}) {
       review: Boolean(form.steps?.length),
       // A reference input's choices: what the App opens to a signed-out visitor, read as one.
       visitor: { app: app.id, ...(via ? { via } : {}) },
+      // A files input's files are held for this form as they are sent (components/HeldFiles.tsx).
+      held: { form: form.id, ...(via ? { via } : {}) },
       submit: (submission, input, guard) => submitPublicForm(form.id, submission, input, via, guard),
       // Once received, a quiet way back to the App's home; none where this form is that home (the way back is itself).
       ...(options.signIn ? {} : { homeHref: shown(`/${encodeURIComponent(app.id)}`) }),

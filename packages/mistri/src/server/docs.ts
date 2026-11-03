@@ -153,7 +153,7 @@ export function renderDoc(page: DocPage): string {
     /* A sample line is linked on GitHub for the site's reader; the sample ships in the package (package.json
        `files`), so the CLI says it as the file — reachable offline, and the version installed, not main's. */
     .replace(
-      /\]\(https:\/\/github\.com\/rbaljinder\/(?:mistri|tablewalk)\/blob\/main\/(examples\/apps\/[^)#\s]+)(#L\d+)?\)/g,
+      /\]\(https:\/\/github\.com\/rbaljinder\/mistri\/blob\/main\/(examples\/apps\/[^)#\s]+)(#L\d+)?\)/g,
       (whole, file: string, line = '') => {
         const at = sampleFile(file);
         return at ? `](${at}${line})` : whole;

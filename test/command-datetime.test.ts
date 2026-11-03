@@ -89,7 +89,7 @@ const refusedAs = (reason: string) => (error: unknown) => {
 };
 
 test('SQLite keeps the UTC instant a datetime input hands over, whatever offset it was sent in', { timeout: 10_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-datetime-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-datetime-'));
   const path = join(directory, 'clinic.db');
   const db = new DatabaseSync(path);
   const registry = new Registry();

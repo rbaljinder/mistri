@@ -44,7 +44,7 @@ const stop = (child: ChildProcess) =>
   });
 
 test('a start without --dev has no observer; with --dev it is found, and speaks MCP', { timeout: 120_000 }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-observe-cli-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-observe-cli-'));
   const db = join(dir, 'shop.db');
   const sqlite = new DatabaseSync(db);
   sqlite.exec("CREATE TABLE product(id INTEGER PRIMARY KEY, name TEXT); INSERT INTO product VALUES (1, 'Lamp');");

@@ -23,7 +23,7 @@ import { parseTestApp } from './support/commandCatalog.js';
 const appId = 'forum';
 
 test("a member runs a command that reads members whole, and reads no other member's email", { timeout: 20_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-fields-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-fields-'));
   const file = join(directory, 'forum.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE member (id INTEGER PRIMARY KEY, handle TEXT NOT NULL, account_id TEXT, email TEXT, version INTEGER NOT NULL DEFAULT 0);

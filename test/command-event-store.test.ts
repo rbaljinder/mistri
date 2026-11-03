@@ -60,7 +60,7 @@ const manifest = [{ name: 'application.reviewer-assigned', version: 1 }];
 const batch: CommandEventBatch = [{ ...manifest[0], payloadJson: '{"applicationId":1,"reviewerId":"reviewer-one"}' }];
 
 function fixture(t: TestContext, provision = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-event-store-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-event-store-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path, { enableForeignKeyConstraints: true });
   db.exec("CREATE TABLE application(id INTEGER PRIMARY KEY, name TEXT); INSERT INTO application VALUES(1,'Before')");

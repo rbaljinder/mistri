@@ -52,7 +52,7 @@ const definition = (types: Record<string, unknown> = { due_on: 'date', done_at: 
 type Call = (path: string, body?: object) => Promise<{ status: number; text: string; body: any }>;
 
 async function serve(run: (call: Call) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-dates-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-dates-'));
   const file = join(directory, 'tick.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE task (id INTEGER PRIMARY KEY, title TEXT NOT NULL, due_on TEXT, done_at TEXT);

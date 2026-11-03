@@ -126,7 +126,7 @@ export function Icon<Name extends string = string>({ name, label, size = '1em', 
       height={size}
       fill="currentColor"
       viewBox="0 0 256 256"
-      className={`tw-icon${className ? ` ${className}` : ''}`}
+      className={`mistri-icon${className ? ` ${className}` : ''}`}
       role={accessibleLabel ? 'img' : undefined}
       aria-label={accessibleLabel}
       aria-hidden={accessibleLabel ? undefined : true}

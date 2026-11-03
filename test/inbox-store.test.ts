@@ -18,7 +18,7 @@ import { appStoresOf } from '../packages/mistri/src/server/stores/appStores.js';
  * written — and read and marked per person.
  */
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync, path: string) => Promise<void>, provision = true) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-inbox-store-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-inbox-store-'));
   const path = join(dir, 'data.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE person (id INTEGER PRIMARY KEY, email TEXT);

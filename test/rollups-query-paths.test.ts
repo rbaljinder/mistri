@@ -132,7 +132,7 @@ async function serve(
     post: (who: string, body: { route?: string } & Record<string, unknown>) => Promise<Array<Record<string, unknown>> | undefined>,
   ) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-rollup-paths-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-rollup-paths-'));
   const path = join(directory, 'studio.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE client (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

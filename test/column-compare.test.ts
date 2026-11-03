@@ -65,7 +65,7 @@ const command = (when: string, read: string[] = ['part']) =>
   } as Parameters<typeof defineCommand>[0]);
 
 test('a segment, a command and a fixed action compare two values alike', { timeout: 30_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-compare-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-compare-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE job (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',

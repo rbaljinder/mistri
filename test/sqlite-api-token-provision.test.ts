@@ -20,7 +20,7 @@ const unavailable = (error: unknown) => {
   return true;
 };
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-token-provision-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-token-provision-'));
   let runtime: AppAuthRuntime | undefined;
   const server = createServer((req, res) => {
     if (!runtime) {

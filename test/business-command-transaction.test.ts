@@ -16,7 +16,7 @@ const actor = { id: 'verified-manager', appId: 'loan-operations', roles: ['manag
 const rowQuery = (table: string) => ({ table, limit: 10, offset: 0 });
 
 async function fixture(run: (command: AuthorizedBusinessCommand, db: DatabaseSync) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-transaction-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-transaction-'));
   const database = join(directory, 'lending.db');
   const db = new DatabaseSync(database);
   db.exec(`

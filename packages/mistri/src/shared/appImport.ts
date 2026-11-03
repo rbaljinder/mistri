@@ -172,7 +172,14 @@ export function importFields(
     });
     const inputs = def.command.input.flatMap((field): ImportField[] => {
       // A sheet's column holds one value; questions defined in rows are an object of them, which no column fills.
-      if (field.type === 'group' || field.type === 'lines' || field.type === 'defined') return [];
+      if (
+        field.type === 'group' ||
+        field.type === 'lines' ||
+        field.type === 'defined' ||
+        field.type === 'files' ||
+        field.type === 'signature'
+      )
+        return [];
       const base = { name: field.name, label: field.label, required: field.required === true, field };
       switch (field.type) {
         case 'number':

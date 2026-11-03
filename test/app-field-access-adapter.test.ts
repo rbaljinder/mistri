@@ -21,7 +21,7 @@ const breakdown = (extra: Partial<BreakdownDef> = {}): BreakdownDef => ({ base: 
 const denied = (run: () => unknown) => assert.rejects(async () => run(), AppAccessDenied);
 
 async function fixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-field-access-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-field-access-'));
   const opened: SqliteAdapter[] = [];
   t.after(async () => {
     await Promise.all(opened.map((adapter) => adapter.close()));

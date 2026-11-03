@@ -549,7 +549,7 @@ describe('a running App', () => {
       if (previousClock === undefined) delete process.env.MISTRI_CLOCK;
       else process.env.MISTRI_CLOCK = previousClock;
     });
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-computed-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-computed-'));
     const file = join(directory, 'tasks.db');
     const db = new DatabaseSync(file);
     const day = (offset: number) => new Date(NOW.getTime() + offset * 86_400_000).toISOString().slice(0, 10);

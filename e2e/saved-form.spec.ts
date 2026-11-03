@@ -76,7 +76,7 @@ test.describe('A public form saved on every step', () => {
     expect(await page.evaluate(() => document.cookie)).toBe('');
     const cookies = await page.context().cookies();
     expect(cookies).toEqual([
-      expect.objectContaining({ name: 'tw_form_apply', httpOnly: true, sameSite: 'Strict', path: '/api/forms/apply' }),
+      expect.objectContaining({ name: 'mistri_form_apply', httpOnly: true, sameSite: 'Strict', path: '/api/forms/apply' }),
     ]);
     expect(stored(app).application[0].resume_token_hash).not.toBe(cookies[0].value);
 
@@ -126,7 +126,7 @@ test.describe('A public form saved on every step', () => {
     await expect(page.getByText('Difference Engines')).toHaveCount(0);
     expect(stored(app)).toMatchObject({ application: [{ status: 'submitted', reference, resume_token_hash: null }], rows: [1, 1, 1] });
     // The draft's cookie is gone; the claim a submit leaves beside the receipt is the one left (saved-form-account.spec.ts).
-    expect((await page.context().cookies()).map((cookie) => cookie.name)).toEqual(['tw_claim_apply']);
+    expect((await page.context().cookies()).map((cookie) => cookie.name)).toEqual(['mistri_claim_apply']);
 
     // Write-only throughout: no reply said anything typed, and nothing typed is kept in the browser.
     expect(replies.length).toBeGreaterThan(5);

@@ -204,6 +204,25 @@ test('a code read by the camera and a signature are inputs of a plain column: tr
   assert.throws(() => withDisplay({ upc: { scan: true, signature: true } }), /entered one way/);
 });
 
+test('an address is a format of its own: on its lines, copyable, and dressed by nothing else', () => {
+  const withDisplay = (rule: Record<string, unknown>) => app({}, {}, { task: { display: rule } }).resources?.task?.display ?? {};
+  assert.deepEqual(withDisplay({ ship_to: { format: 'address', copy: true } }).ship_to, { format: 'address', copy: true });
+  assert.throws(() => withDisplay({ ship_to: { format: 'address', tone: { x: 'bad' } } }), /format "address".*takes no "tone"/);
+  assert.throws(() => withDisplay({ ship_to: { format: 'address', unit: 'mi' } }), /"unit"/);
+});
+
+test('a value to copy says copy: true, beside any drawing but a placeholder or a signature', () => {
+  const withDisplay = (rule: Record<string, unknown>) => app({}, {}, { task: { display: rule } }).resources?.task?.display ?? {};
+  const display = withDisplay({ code: { copy: true }, amount: { format: 'money', copy: true } });
+  assert.equal(display.code?.copy, true);
+  assert.equal(display.amount?.copy, true);
+  assert.equal(display.amount?.format, 'money');
+  assert.equal(withDisplay({ code: { format: 'qr' } }).code?.copy, undefined);
+  assert.throws(() => withDisplay({ code: { copy: 'yes' } }), /"copy" that is not true/);
+  assert.throws(() => withDisplay({ code: { copy: true, masked: true } }), /"masked: true".*takes no "copy"/);
+  assert.throws(() => withDisplay({ signed: { copy: true, signature: true } }), /a signature is a picture/);
+});
+
 test('a tree hangs records under their parent column; a gantt chart runs them between two dates', () => {
   const list = (presentation: Record<string, unknown>) =>
     (app({ plan: { kind: 'list', from: 'task', show: ['title'], presentation } }).views.plan as AppListView).presentation;

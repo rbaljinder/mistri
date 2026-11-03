@@ -80,7 +80,7 @@ async function database(directory: string) {
 }
 
 test('the binding judges a machine that moves with a command: written, one reference, one state each, unconditionally', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-carried-bind-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-carried-bind-'));
   const { db, registry } = await database(directory);
   try {
     const bound = async (part: Record<string, unknown>, command: ReturnType<typeof cancelJob>) => {
@@ -116,7 +116,7 @@ test('the binding judges a machine that moves with a command: written, one refer
 });
 
 test('a run moves each of the record’s rows along its edge, leaves a finished one, and is refused whole over one that cannot move', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-carried-run-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-carried-run-'));
   const { db, file, registry } = await database(directory);
   const manifest = parseAppConfig(app(), 'carried', { commands: catalogOf({ cancelJob: { target: 'job' } }) });
   const pages = parsePagesConfig({ pages: [] }, 'carried pages');

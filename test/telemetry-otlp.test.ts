@@ -66,7 +66,7 @@ async function receiver() {
 }
 
 async function commandServer(run: (base: string, control: { fail?: string }) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-otlp-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-otlp-'));
   const file = join(directory, 'app.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE loan(id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, note TEXT, owner TEXT);

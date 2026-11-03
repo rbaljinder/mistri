@@ -180,7 +180,7 @@ const LOT_SQL = `CREATE TABLE dealer (id INTEGER PRIMARY KEY, name TEXT NOT NULL
   INSERT INTO inquiry VALUES (1, 1, 'buyer@example.test');`;
 
 async function lot(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-card-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-card-'));
   const file = join(directory, 'lot.db');
   const db = new DatabaseSync(file);
   db.exec(LOT_SQL);
@@ -293,7 +293,7 @@ test(
 
 /* Dealers, each on its own host, each branding the App from its own published row (record branding by host). */
 async function dealers(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-card-host-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-card-host-'));
   const file = join(directory, 'records.db');
   const db = new DatabaseSync(file);
   db.exec(
@@ -406,7 +406,7 @@ test(
 test("a tenant App's card is its landing, and nothing a member reads", { timeout: 60_000 }, async (t) => {
   recording();
   const appId = 'shop-proof';
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-card-tenant-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-card-tenant-'));
   const business = join(directory, 'business.db');
   const db = new DatabaseSync(business);
   db.exec('CREATE TABLE physical_item(id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL)');

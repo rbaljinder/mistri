@@ -18,7 +18,7 @@ export interface AutosaveRow {
 
 /** Each test owns its CLI, store and settings. No shared fixture builder or sample seed. */
 export async function startAutosaveApp(save: 'blur' | 'explicit' = 'blur') {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-autosave-browser-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-autosave-browser-'));
   const db = join(directory, 'records.db');
   let child: ReturnType<typeof spawn> | undefined;
   let stopped = false;

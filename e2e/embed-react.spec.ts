@@ -16,7 +16,7 @@ const CRM_CLOCK = `${CRM_TODAY}T16:00:00.000Z`;
 
 /**
  * Compass inside someone else's React app (@mistriwork/mistri/react): the host's router owns the address, the App is drawn
- * at `/crm` under it, and the server is the handler mounted at `/api/tw` in the host's own server
+ * at `/crm` under it, and the server is the handler mounted at `/api/mistri` in the host's own server
  * (e2e/support/embedReactHost.ts). Walked as a person would — a host link in, a list, a record, a verb that writes,
  * the browser's Back and Forward, a host link out — with the two promises of the styling checked in computed
  * styles: the host's stylesheet does not reach the App, and the App's does not reach the host.
@@ -101,7 +101,7 @@ test('the App under the host’s router: a host link in, list, record, a verb, B
   const stray: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (url.origin === origin && url.pathname.startsWith('/api') && !url.pathname.startsWith('/api/tw/')) stray.push(url.pathname);
+    if (url.origin === origin && url.pathname.startsWith('/api') && !url.pathname.startsWith('/api/mistri/')) stray.push(url.pathname);
   });
 
   await page.goto(`${origin}/`);
@@ -178,12 +178,12 @@ const looks = (page: Page, selectors: string[]) =>
 
 /* Inside the App: its heading, a tab, a cell, a button, the search box, a link of the chrome. */
 const APP_PARTS = [
-  '.tw-body h1',
-  '.tw-body [role="tab"][aria-selected="true"]',
-  '.tw-body tbody tr:first-child td',
-  '.tw-body .applist-head-row button',
-  '.tw-body input[placeholder^="Search leads"]',
-  '.tw-body #home-button',
+  '.mistri-body h1',
+  '.mistri-body [role="tab"][aria-selected="true"]',
+  '.mistri-body tbody tr:first-child td',
+  '.mistri-body .applist-head-row button',
+  '.mistri-body input[placeholder^="Search leads"]',
+  '.mistri-body #home-button',
 ];
 /* The host's own: its bar, a link in it, its body. */
 const HOST_PARTS = ['body', '.host-bar', '.host-bar a'];
@@ -225,7 +225,7 @@ test('a single list on a screen of the host’s: no chrome, its own address, and
   await expect(page.getByRole('heading', { level: 1, name: 'Leads' })).toBeVisible();
   await expect(page.getByRole('tab', { selected: true })).toContainText('Working');
   // The App's chrome is the host's to draw.
-  await expect(page.locator('.tw-body .topbar')).toBeHidden();
+  await expect(page.locator('.mistri-body .topbar')).toBeHidden();
   // The host's <main> is the page's one main landmark; the shell's content pane is a plain element inside it.
   await expect(page.getByRole('main')).toHaveCount(1);
   expect(await page.locator('#content').evaluate((pane) => [pane.tagName, Boolean(pane.closest('main'))])).toEqual(['DIV', true]);
@@ -241,6 +241,6 @@ test('a single record on a screen of the host’s', async ({ page }) => {
   await page.goto(`${origin}/lead/131`);
   await expect(page.getByText('Zoe Takahashi').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mark lost' })).toBeVisible();
-  await expect(page.locator('.tw-body .topbar')).toBeHidden();
+  await expect(page.locator('.mistri-body .topbar')).toBeHidden();
   expect(pathOf(page)).toBe('/lead/131');
 });

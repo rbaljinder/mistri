@@ -50,7 +50,7 @@ async function serve(
   options: { connection?: Partial<ConnectionConfig>; app?: Record<string, unknown>; session?: Identity },
   run: (f: { call: Call; registry: Registry; id: string }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-hidden-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-hidden-'));
   const id = 'hidden-accounts';
   const registry = new Registry();
   registry.add({ id, name: 'Accounts', url: database(directory), source: 'config', writable: true, ...options.connection });

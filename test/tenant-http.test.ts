@@ -999,7 +999,7 @@ async function fixture(
     richText?: boolean;
   } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-http-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-http-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path);
   let owner: HttpOwner | undefined;

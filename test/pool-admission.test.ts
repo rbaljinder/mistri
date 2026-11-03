@@ -256,7 +256,7 @@ test('a retry storm at one reader does not starve another account: every one of 
 });
 
 test("over HTTP a request waits in line as its signed-in account's, or as its client's address's when signed out", async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-admission-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-admission-'));
   const db = join(dir, 'fair.db');
   makeDemoDatabase(db);
   const registry = new Registry();

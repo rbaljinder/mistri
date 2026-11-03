@@ -41,7 +41,7 @@ test('App data projection allowlists metadata without rewriting record values', 
 });
 
 async function fixture(appConfigured: boolean, run: (base: string, registry: Registry) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-response-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-response-'));
   const path = join(directory, 'data.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE team (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

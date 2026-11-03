@@ -1522,7 +1522,7 @@ describe('loadApp and mergeAppPages', () => {
   let tmp: string;
 
   before(() => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-app-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-app-'));
   });
   after(() => {
     rmSync(tmp, { recursive: true, force: true });
@@ -1637,7 +1637,7 @@ describe('the write scope, enforced over HTTP', () => {
   let port = 0;
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-app-scope-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-app-scope-'));
     const db = join(tmp, 'scoped.db');
     makeDemoDatabase(db);
     seedDemoDatabase(db, { scale: 5 });
@@ -1708,7 +1708,7 @@ describe('GET /api/app', () => {
   let port = 0;
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-app-http-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-app-http-'));
     const db = join(tmp, 'app.db');
     makeDemoDatabase(db);
     // work_order lives in the seeded half of the demo, not the base fixture.

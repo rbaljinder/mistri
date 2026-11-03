@@ -11,7 +11,7 @@ async function fixture(
   options: { unavailableUnrelated?: boolean; unavailableInventory?: boolean },
   run: (config: string, app: string, directory: string) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-multisource-cli-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-multisource-cli-'));
   try {
     for (const [name, columns] of [
       ['ops', 'id INTEGER PRIMARY KEY, name TEXT, severity TEXT'],

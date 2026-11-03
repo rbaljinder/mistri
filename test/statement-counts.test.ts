@@ -38,7 +38,7 @@ interface Engine {
 }
 
 async function sqliteEngine(): Promise<Engine> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-statement-counts-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-statement-counts-'));
   const file = join(directory, 'crm.db');
   execFileSync(process.execPath, [resolve('test/fixtures/databases/crm/make-crm-db.mjs'), file], {
     stdio: 'pipe',

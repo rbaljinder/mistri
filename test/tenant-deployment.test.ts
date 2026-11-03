@@ -76,7 +76,7 @@ function undoId(result: { undoId?: string }): string {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-deployment-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-deployment-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path),
     deployments: Deployment[] = [];

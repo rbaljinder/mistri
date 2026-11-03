@@ -25,7 +25,7 @@ const SHOTS = process.env.TABLEWALK_XFILTER_SHOTS;
 test.beforeAll(async () => {
   // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
   test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'tablewalk-cross-filters-'));
+  directory = mkdtempSync(join(tmpdir(), 'mistri-cross-filters-'));
   const db = join(directory, 'sales.db');
   const source = new DatabaseSync(db);
   try {

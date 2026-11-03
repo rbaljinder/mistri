@@ -78,7 +78,7 @@ const catalogSchema: DatabaseSchema = {
 const itemKey = (context: BusinessCommandContext) => ({ id: Number(context.record!.id) });
 
 function fixture(t: TestContext, scoped = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scoped-execution-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-scoped-execution-'));
   const path = join(directory, 'data.db');
   const db = new DatabaseSync(path);
   db.exec(`

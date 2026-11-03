@@ -1214,8 +1214,8 @@ td .ref { color: var(--link); text-decoration: underline; text-decoration-style:
   font: inherit; line-height: 1.4;
 }
 .step-control > :not(:first-child) { border-inline-start: 1px solid var(--line); }
-.step-control .tw-icon, .crumb-back .tw-icon { flex: none; }
-.step-control:dir(rtl) .tw-icon, .crumb-back:dir(rtl) .tw-icon { transform: scaleX(-1); }
+.step-control .mistri-icon, .crumb-back .mistri-icon { flex: none; }
+.step-control:dir(rtl) .mistri-icon, .crumb-back:dir(rtl) .mistri-icon { transform: scaleX(-1); }
 .step-label { min-inline-size: 0; overflow-wrap: anywhere; }
 .step-position {
   display: flex; align-items: center; justify-content: center;
@@ -1633,6 +1633,15 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
      a phone's screen. */
   .record-summary { padding: var(--space-3h) 0 var(--space-4); border-top: 1px solid var(--line); }
   .record-summary:last-child { border-bottom: 1px solid var(--line); }
+  /* A grouped list's head on a phone (RecordSummaries.tsx): the value, its count and subtotals on one wrapping line,
+     over a stronger rule than a summary's — a hairline row as the grid's head is, not a box. */
+  .record-summary-group {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) 0 var(--space-2); border-top: 1px solid var(--line-strong);
+  }
+  .record-summary-group-name { font: 600 var(--text-md)/1.45 var(--sans); color: var(--ink); }
+  .record-summary-group-count { font: var(--text-xs) var(--mono); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .record-summary-group-sum { font: var(--text-sm)/1.45 var(--sans); color: var(--ink-muted); }
   .record-summary.is-navigable { cursor: pointer; }
   .record-summary.is-navigable:active { background: var(--raised); }
   .record-summary-title { display: block; width: 100%; min-height: 32px; padding: var(--space-1h) 0; border: 0; border-radius: 0; background: none; text-align: left; font: 600 calc(15px * var(--type-k))/1.45 var(--sans); letter-spacing: 0; color: var(--ink); overflow-wrap: anywhere; }

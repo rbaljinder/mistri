@@ -49,7 +49,7 @@ const manifest = {
 };
 
 async function fixture(t: TestContext, services = "['poster']") {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-jobs-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-jobs-'));
   const file = join(directory, 'desk.db');
   const raw = new DatabaseSync(file);
   // Desk 1 is the service's; desk 2 is not. Both items are due.

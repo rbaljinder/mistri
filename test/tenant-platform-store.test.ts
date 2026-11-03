@@ -39,7 +39,7 @@ type Administration = ReturnType<typeof createSqliteTenantAdministration>;
 type Guard = ReturnType<typeof createSqliteTenantMembershipGuard>;
 
 async function withStore(work: (db: DatabaseSync) => Promise<void> | void) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-platform-store-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-platform-store-'));
   const path = join(directory, 'data.db');
   const db = new DatabaseSync(path);
   try {

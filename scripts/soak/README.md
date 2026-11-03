@@ -1,13 +1,13 @@
 # Soak harness
 
-Measures memory, GC, CPU, latency and where the time goes for one tablewalk server under load.
+Measures memory, GC, CPU, latency and where the time goes for one mistri server under load.
 Not shipped (outside package.json `files`).
 
     PGBIN=<dir with initdb, pg_ctl, createdb, psql> scripts/soak/run.sh <out-dir>
 
 `run.sh` starts a disposable PostgreSQL 16 (with `pg_stat_statements`), seeds Compass, serves it
 writable with `sampler.mjs` loaded, runs the load, then the reports. Everything is torn down on exit.
-Tablewalk runs from source under tsx, as the repository's tests do.
+mistri runs from source under tsx, as the repository's tests do.
 
 ## The k6 run (default)
 

@@ -16,7 +16,7 @@ and center the content with `width: 'narrow'` and `gutter: 'comfortable'`.
 `headerWidth: 'content'` aligns the brand and header controls with that same
 width and gutter on desktop and phones; the background and border stay full width.
 Omitting `headerWidth` or setting it to `'full'` keeps the usual header spacing.
-Omit these settings to keep Tablewalk's default shell. List-level
+Omit these settings to keep mistri's default shell. List-level
 `filterBar: 'none'` hides the filter form without hiding the task-view tabs.
 `open: 'modal'` controls task-list detail opening; the modal fills the screen on
 phones and keeps keyboard focus inside until dismissed.
@@ -64,7 +64,7 @@ defaulted (`defaults: { completed: false }`) and left out of what the form shows
 `show` and `defaults` apply to the New form (inline and in the modal), not to
 editing an existing task, and they never change what the server accepts.
 Today means due today; Upcoming means later than today. Undated and overdue
-tasks remain in Open. The date phrases are evaluated by Tablewalk, not fixed
+tasks remain in Open. The date phrases are evaluated by mistri, not fixed
 dates embedded in this manifest.
 Overdue reads a computed column: `computed: { is_overdue: computed.boolean('due_on
 < today and not completed') }` is a yes-or-no worked out in the statement, never

@@ -25,7 +25,7 @@ import { labelPath, type DatabaseSchema } from '../packages/engine/src/shared/sc
 import { parseLabelTemplate } from '../packages/engine/src/shared/recordLabel.js';
 
 async function inventory(t: import('node:test').TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-column-values-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-column-values-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'inv.db');
   const db = new DatabaseSync(file);
@@ -128,7 +128,7 @@ test('only a builder that resolves a column comparison may write one', () => {
 });
 
 test('me is the signed-in person: an email beside text, their row beside a reference to people', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-me-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-me-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'me.db'));
   db.exec(`CREATE TABLE employee (id INTEGER PRIMARY KEY, email TEXT NOT NULL);

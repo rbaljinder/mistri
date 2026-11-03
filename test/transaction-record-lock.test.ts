@@ -13,7 +13,7 @@ import { AppAccessDenied, authorizeTransaction } from '../packages/mistri/src/se
 import { runScopedTransactionFacade } from '../packages/mistri/src/server/policy/scopedTransactionFacade.js';
 
 async function sqlite(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-record-lock-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-record-lock-'));
   const file = join(directory, 'records.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE physical_item (tenant TEXT NOT NULL, id INTEGER NOT NULL, name TEXT COLLATE NOCASE, secret TEXT,

@@ -77,7 +77,7 @@ type StoreStage = 'none' | 'tenant' | 'administration' | 'invitations';
 
 /** Every store and policy module is disposable and outside shared browser fixtures. */
 function fixture(t: TestContext, stage: StoreStage = 'invitations', policy = declaration()) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-invitation-enrollment-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-invitation-enrollment-'));
   const path = join(directory, 'business.db'),
     authPath = join(directory, 'auth.db');
   const db = new DatabaseSync(path),

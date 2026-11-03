@@ -6,6 +6,7 @@ import {
   customTotalPlan,
   listView,
   metricView,
+  reactedColumn,
   sectionQuery,
   timelineMarkColumns,
   timelineSides,
@@ -43,6 +44,8 @@ type HttpPagePlan =
           by?: string;
           /** With a `side`: the stream's key columns, and the same read narrowed to the other party's rows. */
           key?: string[];
+          /** The column the section's reactions name this stream's rows by (page.ts reactedColumn), read with them. */
+          reacts?: string;
           side?: ReturnType<typeof listView>;
         } & ReturnType<typeof listView>
       >;
@@ -106,13 +109,14 @@ export function planPageSections(
           const side = sides[s];
           const table = side === undefined ? undefined : findTable(schema, stream.from);
           const keyColumns = table ? primaryKey(table) : [];
+          const reacts = reactedColumn(schema, section, stream);
           const asList: PageList = {
             kind: 'list',
             from: stream.from,
             path: stream.path,
             columns: [
               ...new Set(
-                [stream.at, stream.show, stream.detail, stream.by, ...streamMarks(stream), ...keyColumns].filter((c): c is string =>
+                [stream.at, stream.show, stream.detail, stream.by, ...streamMarks(stream), ...keyColumns, reacts].filter((c): c is string =>
                   Boolean(c),
                 ),
               ),
@@ -137,6 +141,7 @@ export function planPageSections(
             empty: built.empty,
             error: built.error,
             ...(others ? { key: keyColumns, side: others } : {}),
+            ...(reacts ? { reacts } : {}),
           };
         }),
       };

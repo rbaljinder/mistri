@@ -19,7 +19,7 @@
  * is a grid embedded in someone else's surface — an app list, a dashboard
  * section, a page's chooser — and touches nothing but its own box.
  */
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { $, api, columnLabel, findTable, go, pageSize, setExplain, showErrors, state, tableView } from '../core.js';
 import { explicitLimit } from '../clauses.js';
@@ -36,7 +36,8 @@ import { onDemand, useArrived } from './onDemand.js';
 import { FilterBar } from './FilterBoxes.js';
 import { Delayed, GridSkeleton } from './Skeleton.js';
 import { Problem, Refused } from './Notes.js';
-import type { GridData } from './Grid.js';
+import type { GridData, GridGroup } from './Grid.js';
+import { groupedQuestion } from '@mistriwork/engine/shared/listQuestion.js';
 import { GridCellEdit, isApiConnection, TableView, ViewTabs, type PageAt, type TableEntry, type TableViewProps } from './TableView.js';
 import { pageStepFor, stepList } from './pageStep.js';
 import { ExportHold } from './ExportHold.js';
@@ -106,6 +107,8 @@ interface TableRoomProps {
   referenceLabels?: Record<string, string>;
   /** Column → its total over the whole query; undefined while it is asked. */
   totals?: Record<string, unknown>;
+  /** The rows' groups (a list view's `group`): read in the group's order, each run under its head (useGridGroups.ts). */
+  group?: GridGroup;
   density?: 'comfortable' | 'compact';
   /** A ⋯ menu at the end of each row with the record's own actions. */
   rowActions?: boolean;
@@ -141,6 +144,7 @@ export function TableRoom({
   labels,
   referenceLabels,
   totals,
+  group,
   density,
   rowActions,
   editable,
@@ -209,6 +213,7 @@ export function TableRoom({
             labels={labels}
             referenceLabels={referenceLabels}
             totals={totals}
+            group={group}
             density={density}
             rowActions={rowActions}
             editable={editable}
@@ -294,13 +299,14 @@ function keepTotal(key: string, reply: unknown): void {
 }
 
 function Rows({
-  entry,
+  entry: given,
   chrome,
   interactive,
   hide,
   labels,
   referenceLabels,
   totals,
+  group,
   density,
   rowActions,
   editable,
@@ -335,6 +341,7 @@ function Rows({
   labels?: Record<string, string>;
   referenceLabels?: Record<string, string>;
   totals?: Record<string, unknown>;
+  group?: GridGroup;
   density?: 'comfortable' | 'compact';
   rowActions?: boolean;
   editable?: true | string[];
@@ -344,6 +351,10 @@ function Rows({
   version: number;
   onResult?: (data: RunData) => void;
 }) {
+  /* A grouped list's rows are read in the group's order, each group's together under its head: said to the read and
+     the pager that steps it, while the walk keeps the reader's own question (a header's sort writes that). */
+  const groupedQuery = group ? groupedQuestion(given.query, group.column) : given.query;
+  const entry = useMemo(() => (groupedQuery === given.query ? given : { ...given, query: groupedQuery }), [given, groupedQuery]);
   const table = findTable(entry.table) as TableMeta | undefined;
   /* An explicit `limit` in the query is a deliberate statement and beats the page size. */
   const asked = explicitLimit(entry.query) as number | null;
@@ -454,6 +465,7 @@ function Rows({
         labels={labels}
         referenceLabels={referenceLabels}
         totals={totals}
+        group={group}
         density={density}
         rowActions={rowActions}
         editable={editable}

@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { createHandler } from '../../packages/mistri/src/server/handler.ts';
 
 const [config, port] = process.argv.slice(2);
-const tw = createHandler({
+const mistri = createHandler({
   config,
   basePath: '/crm',
   publicOrigin: `http://127.0.0.1:${port}`,
@@ -15,7 +15,7 @@ const tw = createHandler({
 });
 
 const server = createServer((req, res) => {
-  if (req.url === '/crm' || req.url?.startsWith('/crm/') || req.url?.startsWith('/crm?')) return tw.node(req, res);
+  if (req.url === '/crm' || req.url?.startsWith('/crm/') || req.url?.startsWith('/crm?')) return mistri.node(req, res);
   if (req.url === '/') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end('<!doctype html><title>Host</title><h1>The host</h1><a href="/crm/leads">Leads</a>');
@@ -24,10 +24,10 @@ const server = createServer((req, res) => {
   res.writeHead(404, { 'content-type': 'text/plain' }).end('not the host’s');
 });
 
-await tw.ready;
+await mistri.ready;
 server.listen(Number(port), '127.0.0.1', () => console.log(`Host listening on ${port}`));
 
 process.once('SIGTERM', async () => {
-  await tw.close();
+  await mistri.close();
   server.close(() => process.exit(0));
 });

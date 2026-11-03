@@ -190,7 +190,7 @@ const AUTHORED_UI = { name: 'AppUi', file: 'packages/mistri/schema/app.d.ts' };
 
 const files = [...new Set([...Object.values(PINNED).map((pin) => pin.file), AUTHORED_UI.file])].map((file) => join(root, file));
 const { program, checker } = (() => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-vocabulary-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-vocabulary-'));
   try {
     const config = join(directory, 'tsconfig.json');
     writeFileSync(

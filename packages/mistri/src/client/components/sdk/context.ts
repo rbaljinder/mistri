@@ -190,7 +190,7 @@ export const UiHostContext = createContext<UiHost | null>(null);
 
 export function useUiHost(): UiHost {
   const host = useContext(UiHostContext) ?? pageHost;
-  if (!host) throw new Error(say('tablewalkUiIsDrawn'));
+  if (!host) throw new Error(say('uiIsDrawnByASection'));
   return host;
 }
 

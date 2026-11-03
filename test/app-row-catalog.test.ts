@@ -36,7 +36,7 @@ function gate() {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-row-catalog-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-row-catalog-'));
   const file = join(directory, 'catalog.db');
   const db = new DatabaseSync(file);
   const physical = new SqliteAdapter(file, 'catalog');

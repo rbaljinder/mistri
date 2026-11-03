@@ -81,7 +81,7 @@ permissive error-rate gate. SIGINT/SIGTERM stop owned browser/server resources
 and return 130/143; failures return 1. No unrelated process is signaled.
 
 `report.json` and `report.md` are retained beside the small fixture and isolated
-stores in the printed `tablewalk-load-*` OS-temp directory. Error examples are
+stores in the printed `mistri-load-*` OS-temp directory. Error examples are
 capped at 20 per collector and 1,500 characters each; child log tail is capped at
 65,536 characters. Serialized reports have hard limits of 1 MiB JSON and 64 KiB
 Markdown. Request latency samples are summarized rather than serialized. Temporary

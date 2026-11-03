@@ -39,7 +39,9 @@ interface FieldBase {
    */
   when?: string;
   /** How the field is drawn, over its kind's default: `'slider'` (a number or an amount with `min` and `max`),
-      `'cards'` (a choice, one or several), `'buttons'` (a yes or a no; a choice's few), `'select'`, `'radios'`. */
+      `'cards'` (a choice, one or several), `'buttons'` (a yes or a no; a choice's few), `'select'`, `'radios'`;
+      `'rating'` (a number as stars, `outOf` of them), `'scan'` (a text box beside a Scan button where the browser
+      reads codes with the camera), `'color'` (a text as `#rrggbb`, picked with the system's color picker). */
   as?: CommandFieldPresentation;
   /** The App's own input component that draws this field in every form that asks it, by its name in `ui.inputs`.
       What the value must be is still the field's kind's to judge, on the server. */
@@ -52,7 +54,7 @@ export interface CommandTextField extends FieldBase {
   min?: number;
   /** Most characters, after trimming: at most 16384. */
   max?: number;
-  /** An email address, a web address (http or https), or a phone number. */
+  /** An email address, a web address (http or https), or a phone number. Not with `as: 'color'`, which is its own format. */
   format?: CommandTextFormat;
   /** A regular expression the whole value must match, as its source text: `field.text({ pattern: /[A-Z]+/ })` stores it so. */
   pattern?: string;
@@ -88,6 +90,10 @@ export interface CommandNumberField extends FieldBase {
   /** Lines said under the field as it is typed, each an expression over this input's numbers in the field's
       format: `live: { monthly: 'biweekly_gross * 26 / 12' }` reads "$5,417 monthly". Display only, never sent. */
   live?: CommandLiveLines;
+  /** With `as: 'rating'`: the stars of its scale, 3 to 10 (5 when unsaid), as a column's rating says it. The value is a
+      whole number from 1 to it, picked by a star: `field.number({ as: 'rating', outOf: 5 })`. A rating takes no `min`,
+      `max`, `step`, `integer` or `live`; its scale is its bounds. */
+  outOf?: number;
 }
 /** An amount in the App's currency (`ui.currency`), or the field's own `currency`: typed as `$2,500`, received as a number
     on its `step` (cents).
@@ -139,6 +145,17 @@ export interface CommandDateField extends FieldBase {
   /** Before this sibling date field, when both are given. */
   below?: string;
   /** After this sibling date field, when both are given. */
+  above?: string;
+}
+/** A time of day, `HH:MM` on a 24-hour clock (`'14:30'`), asked with the browser's own time picker; `min` and `max` are
+    times too. A time names no day and no zone: a moment is `field.datetime()`. */
+export interface CommandTimeField extends FieldBase {
+  type: 'time';
+  min?: string;
+  max?: string;
+  /** Before this sibling time field, when both are given. */
+  below?: string;
+  /** After this sibling time field, when both are given. */
   above?: string;
 }
 /**
@@ -197,7 +214,18 @@ export interface CommandChoicesField extends FieldBase {
 }
 /** A picker over a resource: its key column and the column it is shown by. Never on a public form.
     `query` narrows the rows offered; `record.<column>` in it is the target record's value (`'sales_order_id = record.id'`). */
-export interface CommandReferenceField extends FieldBase { type: 'reference'; from: string; by: string; labelColumn: string; query?: string }
+export interface CommandReferenceField extends FieldBase {
+  type: 'reference';
+  from: string;
+  by: string;
+  labelColumn: string;
+  query?: string;
+  /** The column of `from` that names each row's parent row, by `by` (`tree: 'parent_id'`): the picker opens as that
+      hierarchy — the rows with no parent first, each branch's children read as it is opened — and says the chosen
+      row's path (Hardware › Laptops › Batteries). Typing searches every level and says each match's path. The
+      column refers to `from` itself; on a public form `auth.public` opens it, as it opens `by` and `labelColumn`. */
+  tree?: string;
+}
 /**
  * Answers to questions that are rows of `from`, which an administrator adds and
  * edits while the App runs (`field.defined('item_variable', { whose: 'item_id' })`).
@@ -267,10 +295,60 @@ export interface CommandLinesField {
   max?: number;
 }
 
+/** A file a command's handler receives: its name, its type (a picture's read from its bytes, never the sender's word
+    for it), its size in bytes and the bytes. A `field.files` or `field.signature` value, and an inbound email's
+    attachment. Store one with `db.<file resource>.insertFile(file, values)`. */
+export interface CommandFile {
+  readonly name: string;
+  readonly type: string;
+  readonly size: number;
+  readonly data: Uint8Array;
+}
+/**
+ * Files a person attaches to the form: `field.files('repair_photo', { max: 5, accept: 'image/*' })`. `from` is a file
+ * resource the command writes (it is among its `write`, and has a `file`), whose cap each file meets. A file is sent
+ * as it is picked, dropped or pasted, and held by the server — under the grant that runs the command, for the
+ * person who sent it, for a day — until the command runs: the handler receives the files and stores each with
+ * `db.<from>.insertFile(file, values)`, in the command's own transaction. A command refused stores nothing, and the
+ * files stay held for the next try; one that runs and leaves a file unstored is refused. Never in a group.
+ */
+export interface CommandFilesField {
+  type: 'files';
+  label?: string;
+  help?: string;
+  /** Required unless it says `optional: true`; an optional field left empty is absent. */
+  optional?: boolean;
+  /** As FieldBase's `when`: asked only while it holds. */
+  when?: string;
+  /** The file resource the files land in. */
+  from: string;
+  /** At least this many files where any are given: 1 unless said. */
+  min?: number;
+  /** At most this many: 1 to 20, 10 unless said. */
+  max?: number;
+  /** The media types taken: `'image/*'`, `'application/pdf'`, or a list of them. A picture's type is read from its
+      bytes, so a file named `.png` that is not one is refused where `image/*` is asked. Absent, any type. */
+  accept?: string | readonly string[];
+}
+/**
+ * A signature drawn on a pad (or typed, where drawing is not possible), kept as a PNG file of `from`, a file resource
+ * the command writes: `field.signature('signature_file')`. Held and committed as `field.files`'s are; the handler
+ * receives one file, image/png, and stores it with `db.<from>.insertFile(file, values)`. Never in a group.
+ */
+export interface CommandSignatureField {
+  type: 'signature';
+  label?: string;
+  help?: string;
+  optional?: boolean;
+  when?: string;
+  /** The file resource the picture lands in. */
+  from: string;
+}
+
 /** One field as it is authored. */
 export type CommandField = CommandTextField | CommandRichTextField | CommandNumberField | CommandMoneyField | CommandBooleanField
-  | CommandDateField | CommandMonthField | CommandDateTimeField | CommandChoiceField | CommandChoicesField | CommandReferenceField
-  | CommandDefinedField | CommandGroupField | CommandLinesField;
+  | CommandDateField | CommandMonthField | CommandDateTimeField | CommandTimeField | CommandChoiceField | CommandChoicesField | CommandReferenceField
+  | CommandDefinedField | CommandGroupField | CommandLinesField | CommandFilesField | CommandSignatureField;
 
 /** A rule over the whole draft, as a resource's validation says one: the input must meet `must` wherever `when`
     holds, and `message` is said at the first field `must` names. Pure conditions over this input's own fields
@@ -283,7 +361,7 @@ type FieldValue<F> =
   F extends { type: 'lines'; from: infer R extends string; show: readonly (infer C extends string)[] } ? { [K in C]: ColumnValue<R, K> }[]
   : F extends { type: 'group'; fields: infer G extends CommandInput; repeat: object } ? CommandInputOf<G>[]
   : F extends { type: 'group'; fields: infer G extends CommandInput } ? CommandInputOf<G>
-  : F extends { type: 'text' | 'textarea' | 'richText' | 'date' | 'month' | 'datetime' } ? string
+  : F extends { type: 'text' | 'textarea' | 'richText' | 'date' | 'month' | 'datetime' | 'time' } ? string
   : F extends { type: 'money'; minor: true } ? number | string
   : F extends { type: 'number' | 'money' } ? number
   : F extends { type: 'boolean'; accept: true } ? true
@@ -294,6 +372,8 @@ type FieldValue<F> =
   : F extends { type: 'choices' } ? (string | number)[]
   : F extends { type: 'reference' } ? string | number
   : F extends { type: 'defined' } ? Record<string, string | number | boolean | string[]>
+  : F extends { type: 'files' } ? CommandFile[]
+  : F extends { type: 'signature' } ? CommandFile
   : never;
 /* A field asked only where its `when` holds may be absent, as an optional one may. */
 type Optional<F> = F extends { optional: true } ? true : F extends { when: string } ? true

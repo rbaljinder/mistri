@@ -222,7 +222,7 @@ export function graphOf(root, packages = packagesOf(root), extra = []) {
         : [path],
     )
     .filter((file) => !known.has(file));
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-boundary-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-boundary-'));
   const api = new API({ cwd: root });
   try {
     const config = join(directory, 'tsconfig.json');

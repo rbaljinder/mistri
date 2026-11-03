@@ -1,0 +1,25 @@
+/* Brought by a tree picker (TreePicker.tsx), loaded only where a reference is drawn as one. Tokens only. The box,
+   the popup and its rows are the record picker's own (features.css); this is what a tree adds to them. */
+@layer components {
+.tree-picker { display: grid; gap: var(--space-1h); min-width: 0; }
+/* The record picker's list measures its room from Base UI's --available-height, as this one does. */
+.tree-picker-popup { width: 100%; }
+.tree-picker-option { justify-content: flex-start; align-items: center; gap: var(--space-2); }
+.tree-picker-option .picker-option-label { flex: 0 1 auto; }
+.tree-picker-caret {
+  display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px;
+  color: var(--ink-muted); border-radius: min(4px, var(--radius));
+}
+.tree-picker-caret.is-leaf { cursor: inherit; }
+@media (hover: hover) {
+  .tree-picker-caret:not(.is-leaf):hover { color: var(--ink); }
+}
+/* A match's path, after its name and pushed to the row's end, as a choice's second line is said. */
+.tree-picker-path { margin-inline-start: auto; text-align: end; }
+/* The chosen record's path under the box: quiet, one line, its separators lighter than its names. */
+.tree-picker-trail {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-1h); margin: 0;
+  font: var(--text-xs) var(--sans); color: var(--ink-muted);
+}
+.tree-picker-sep { color: var(--ink-subtle); }
+}

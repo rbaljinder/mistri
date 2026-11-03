@@ -119,8 +119,10 @@ test('the school’s site, its own schedule route, and the staff App embedded un
   await expect(embed.getByRole('heading', { level: 1, name: 'Classes' })).toBeVisible();
   await expect(header.getByRole('link', { name: 'Staff desk' })).toHaveAttribute('aria-current', 'page');
   // The boundary: the header is the host's, outside tablewalk's root; the App's heading is inside it.
-  expect(await header.evaluate((node) => node.closest('.tw-root') === null)).toBe(true);
-  expect(await embed.getByRole('heading', { level: 1, name: 'Classes' }).evaluate((node) => node.closest('.tw-root') !== null)).toBe(true);
+  expect(await header.evaluate((node) => node.closest('.mistri-root') === null)).toBe(true);
+  expect(await embed.getByRole('heading', { level: 1, name: 'Classes' }).evaluate((node) => node.closest('.mistri-root') !== null)).toBe(
+    true,
+  );
   // The host's type does not reach the App's heading: the site's serif is on the host's headings alone.
   expect(await embed.getByRole('heading', { level: 1, name: 'Classes' }).evaluate((node) => getComputedStyle(node).fontFamily)).not.toMatch(
     /Georgia/,

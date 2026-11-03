@@ -393,7 +393,7 @@ async function postgresLab(t: TestContext, directory: string): Promise<Lab> {
 }
 
 async function openLab(t: TestContext, dialect: Dialect): Promise<Lab> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-mail-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-mail-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const lab = await (dialect === 'sqlite' ? sqliteLab(t, directory) : postgresLab(t, directory));
   await lab.provision(mailModule);

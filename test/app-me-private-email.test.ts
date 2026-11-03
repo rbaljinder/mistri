@@ -26,7 +26,7 @@ test(
   "a reader who may not read people's emails still reads what is theirs, and nothing by anyone's email",
   { timeout: 20_000 },
   async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-me-private-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-app-me-private-'));
     const path = join(directory, 'forum.db');
     const db = new DatabaseSync(path);
     db.exec(`

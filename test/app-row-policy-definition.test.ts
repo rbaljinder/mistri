@@ -280,7 +280,7 @@ test('row policy: never invokes extractor accessors or proxy reflection traps', 
 
 for (const extension of ['ts', 'mjs', 'js']) {
   test(`row policy loader: loads a default .${extension} declaration from an explicit local path`, async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     writeFileSync(join(directory, 'package.json'), '{"type":"module"}');
     const file = join(directory, `private policy #?.${extension}`);
@@ -296,7 +296,7 @@ for (const extension of ['ts', 'mjs', 'js']) {
 }
 
 test('row policy loader: uses Node module cache and snapshots mutable defaults', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-cache-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-cache-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'policy.mjs');
   writeFileSync(
@@ -322,7 +322,7 @@ test('row policy loader: uses Node module cache and snapshots mutable defaults',
 });
 
 test('row policy loader: accepts defineAppRowPolicy defaults without invoking callbacks', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-defined-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-defined-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'policy.mjs');
   const api = new URL('../packages/mistri/src/server/policy/appRowPolicy.ts', import.meta.url).href;
@@ -350,7 +350,7 @@ for (const [name, source] of Object.entries({
   'getter default field': `export default { get appId() { throw new Error('private getter'); }, resolveRows() { return {}; } };`,
 })) {
   test(`row policy loader: sanitizes ${name}`, async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-errors-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-errors-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const file = join(directory, 'private-filename.mjs');
     writeFileSync(file, source);
@@ -373,7 +373,7 @@ test('row policy loader: sanitizes missing files and invalid paths', async () =>
    — never "run it on its own". A credential in a URL is masked on the way. */
 test("row policy loader: records the loader's own reason and the module's line for the operator", async (t) => {
   const { refusalReasons } = await import('../packages/engine/src/server/evidence.js');
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-reason-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-reason-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const missing = join(directory, 'missing.mjs'),
     throwing = join(directory, 'throwing.mjs');

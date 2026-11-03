@@ -56,7 +56,7 @@ async function fixture(
   options: { opsWritable?: boolean; stockWritable?: boolean; appWritable?: boolean | string[]; failStock?: boolean },
   run: (base: string, databases: Record<'ops' | 'stock', DatabaseSync>, registry: Registry, host: AppHost) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-multisource-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-multisource-'));
   const databases = {
     ops: new DatabaseSync(join(directory, 'private-ops.db')),
     stock: new DatabaseSync(join(directory, 'private-stock.db')),

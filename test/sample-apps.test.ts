@@ -14,7 +14,7 @@ import { POSTGRES_STYLE } from '../packages/engine/src/adapters/adapter.js';
 
 for (const name of ['relay', 'thread', 'service-desk']) {
   test(`${name}: seeded schema satisfies its real manifest and all record pages`, async () => {
-    const directory = mkdtempSync(join(tmpdir(), `tablewalk-${name}-`));
+    const directory = mkdtempSync(join(tmpdir(), `mistri-${name}-`));
     const file = join(directory, 'fixture.db');
     let adapter: SqliteAdapter | undefined;
     try {

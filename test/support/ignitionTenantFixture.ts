@@ -386,7 +386,7 @@ function authManifest(store: string) {
 }
 
 export async function ignitionTenantFixture(t: TestContext, options: IgnitionTenantOptions = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-ignition-tenant-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-ignition-tenant-'));
   const path = join(directory, 'loans.db'),
     authPath = join(directory, 'auth.db');
   let db: DatabaseSync | undefined;

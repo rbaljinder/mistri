@@ -251,7 +251,7 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
     await administer(async (admin) => {
       for (const tenantId of ['north', 'south']) await admin.putTenant({ tenantId, status: 'active', expectedVersion: null });
     });
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-postgres-tenant-auth-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-postgres-tenant-auth-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const appPath = join(directory, 'app.json'),
       policyFile = join(directory, 'policy.mjs'),
@@ -612,7 +612,7 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
   test('SQLite business invitations still refuse an asynchronous PostgreSQL auth store at the normal entry', async (t) => {
     const f = await fixture(t, { administration: true });
     assert.equal(captureAppAuthRuntime(f.runtime).synchronous, false);
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-sqlite-business-pg-auth-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-sqlite-business-pg-auth-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const path = join(directory, 'business.db');
     new DatabaseSync(path).close();

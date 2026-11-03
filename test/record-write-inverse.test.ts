@@ -30,7 +30,7 @@ function fixture(
   note TEXT DEFAULT 'default', nullable TEXT, amount INTEGER DEFAULT 7, payload BLOB
 )`,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-record-inverse-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-record-inverse-'));
   const db = new DatabaseSync(join(directory, 'data.db'));
   db.exec(ddl);
   const adapter = new SqliteAdapter(join(directory, 'data.db'));
@@ -325,7 +325,7 @@ test('a lost SQLite commit acknowledgement quarantines a whole-row inverse that 
 });
 
 function fake(t: TestContext, overrides: Partial<WriteTransaction> = {}) {
-  const connection = mkdtempSync(join(tmpdir(), 'tablewalk-inverse-seam-'));
+  const connection = mkdtempSync(join(tmpdir(), 'mistri-inverse-seam-'));
   t.after(() => {
     clearJournal(connection);
     rmSync(connection, { recursive: true, force: true });

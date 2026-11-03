@@ -28,7 +28,7 @@ describe("Better Auth's per-address limits", () => {
   const saved = process.env[TEST_AUTH_LIMITS];
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-auth-rate-limit-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-auth-rate-limit-'));
     const db = join(tmp, 'app.db');
     makeDemoDatabase(db);
     seedDemoDatabase(db, { scale: 3 });

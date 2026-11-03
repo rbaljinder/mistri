@@ -112,7 +112,7 @@ function Staff(): ReactNode {
     <main className="site-staff">
       <p className="site-staff-note">Staff only. Below this line is the Ladle App, embedded with @mistriwork/mistri/react.</p>
       <section className="site-embed" aria-label="Ladle staff App">
-        <Provider endpoint="/api/tw" onTitle={(title) => (document.title = `${title} · Ladle Cooking School`)}>
+        <Provider endpoint="/api/mistri" onTitle={(title) => (document.title = `${title} · Ladle Cooking School`)}>
           <App app="ladle" basePath={STAFF} fallback={<p className="site-quiet">Opening the staff desk…</p>} />
         </Provider>
       </section>

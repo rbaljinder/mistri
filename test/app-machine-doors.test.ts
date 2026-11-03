@@ -76,7 +76,7 @@ async function fixture(
     state: (id: number) => { status: string; moved_at: string | null; note: string | null };
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-machine-doors-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-machine-doors-'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE ticket (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', note TEXT, moved_at TIMESTAMP, due_at TIMESTAMP, attachment BLOB, working_at TIMESTAMP, done_on TEXT);

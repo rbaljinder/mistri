@@ -55,7 +55,7 @@ describe('signing in through a SAML provider', () => {
   const error = console.error;
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-saml-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-saml-'));
     const db = join(tmp, 'app.db');
     makeDemoDatabase(db);
     seedDemoDatabase(db, { scale: 3 });

@@ -13,7 +13,7 @@ let directory: string;
 let db: DatabaseSync;
 let adapter: SqliteAdapter;
 before(() => {
-  directory = mkdtempSync(join(tmpdir(), 'tablewalk-update-guard-'));
+  directory = mkdtempSync(join(tmpdir(), 'mistri-update-guard-'));
   const file = join(directory, 'fixture.db');
   db = new DatabaseSync(file);
   db.exec(

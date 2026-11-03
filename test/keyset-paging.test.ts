@@ -27,7 +27,7 @@ const ROWS = 237,
 const STAGES = ['new', 'qualified', 'won', 'lost', null] as const;
 
 async function sqliteSource(t: { after(fn: () => unknown): void }) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-keyset-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-keyset-'));
   const file = join(directory, 'list.db'),
     db = new DatabaseSync(file);
   db.exec(`CREATE TABLE team (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

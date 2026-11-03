@@ -405,7 +405,7 @@ test('a trigger blocks only the writes that fire it, and a validation-only one b
 
 /* SQLite's scoped writer, end to end: a real adapter, its writer's catalog inside BEGIN IMMEDIATE. */
 async function fixture(t: TestContext, triggers: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scope-triggers-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-scope-triggers-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(`

@@ -33,7 +33,7 @@ const receipt: StoredCommandReceipt = {
 const audit = { target: 'loan', keyJson: '{"id":1}', changesJson: '[{"field":"name"}]' };
 const update = { table: 'ticket', key: { id: 1 }, values: { name: 'Updated' } };
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync, path: string) => Promise<void>, migrate = true) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-command-journal-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-command-journal-'));
   const path = join(dir, 'data.db');
   const db = new DatabaseSync(path);
   db.exec("CREATE TABLE ticket (id INTEGER PRIMARY KEY, name TEXT NOT NULL); INSERT INTO ticket VALUES (1, 'Original')");

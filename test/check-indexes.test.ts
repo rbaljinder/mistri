@@ -360,7 +360,7 @@ describe('index-missing against a real PostgreSQL', { skip }, () => {
 
 describe('mistri check indexes step', () => {
   const ROOT = resolve('.');
-  const work = mkdtempSync(join(tmpdir(), 'tablewalk-check-indexes-'));
+  const work = mkdtempSync(join(tmpdir(), 'mistri-check-indexes-'));
   after(() => rmSync(work, { recursive: true, force: true }));
   mkdirSync(join(work, 'node_modules', '@mistriwork'), { recursive: true });
   symlinkSync(join(ROOT, 'packages', 'mistri'), join(work, 'node_modules', '@mistriwork', 'mistri'), 'dir');

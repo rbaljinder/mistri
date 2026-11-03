@@ -490,7 +490,7 @@ test('factory rejects mismatched principal source and hostile evidence without e
 });
 
 async function sqlite(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-inverse-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-inverse-')),
     path = join(directory, 'data.db');
   const db = new DatabaseSync(path),
     adapter = new SqliteAdapter(path, 'Test');

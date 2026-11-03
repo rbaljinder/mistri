@@ -296,7 +296,7 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
     `public --policy startup on ${dialect}: an invitation makes a member whose command records its tenant event`,
     { timeout: 120_000, skip: dialect === 'postgres' ? liveSkip('postgres', LIVE) : false },
     async (t) => {
-      const { directory, stopping } = scratch(t, 'tablewalk-tenant-public-cli-');
+      const { directory, stopping } = scratch(t, 'mistri-tenant-public-cli-');
       const engine = dialect === 'sqlite' ? await sqliteEngine(directory) : await postgresEngine(t);
       const { ids, launch } = await deployment(stopping, engine, directory);
       const live = await launch();
@@ -442,7 +442,7 @@ test(
   'public --policy startup refuses invitations on a SQLite source whose auth store is postgres://, naming why',
   { timeout: 60_000, skip: liveSkip('postgres', LIVE) },
   async (t) => {
-    const { directory, stopping } = scratch(t, 'tablewalk-tenant-public-cli-');
+    const { directory, stopping } = scratch(t, 'mistri-tenant-public-cli-');
     const { url: authUrl, drop } = await uuidPostgresDatabase('tablewalk_public_auth');
     t.after(drop);
     await migratePostgresAuthStore(authUrl);

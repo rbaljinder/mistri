@@ -681,8 +681,8 @@ export function contractProbe(input: { reduced: boolean; ms: number }): Pick<Pro
 function focusStop(input: { index: number }): { what: string; width: number; ratio?: number; repeat?: true } | null {
   const el = document.activeElement;
   if (!el || el === document.body || el === document.documentElement) return null;
-  if (el.hasAttribute('data-tw-stop')) return { what: '', width: 0, repeat: true };
-  el.setAttribute('data-tw-stop', String(input.index));
+  if (el.hasAttribute('data-mistri-stop')) return { what: '', width: 0, repeat: true };
+  el.setAttribute('data-mistri-stop', String(input.index));
   const FOCUS_WIDTH = 2;
   const say = () => {
     const label = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 32);
@@ -790,7 +790,7 @@ function focusChanges(input: { count: number }): boolean[] {
       style.textDecorationLine,
     ].join('|');
   return Array.from({ length: input.count }, (_, i) => {
-    const el = document.querySelector(`[data-tw-stop="${i}"]`);
+    const el = document.querySelector(`[data-mistri-stop="${i}"]`);
     /* A stop drawn again since (a row re-rendered) cannot be compared: given the benefit of the doubt. */
     if (!el) return true;
     const now = [getComputedStyle(el), getComputedStyle(el, '::before'), getComputedStyle(el, '::after')].map(look).join('/');

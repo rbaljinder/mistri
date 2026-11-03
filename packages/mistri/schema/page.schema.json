@@ -1577,6 +1577,54 @@
           },
           "description": "A conversation's pinned composer under the rows: a Reply / Internal note toggle running these commands, the text typed becoming the command's first text input. Not with create."
         },
+        "reactions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "kinds",
+            "command"
+          ],
+          "properties": {
+            "from": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The table whose rows are the reactions: one per person, per kind, per entry."
+            },
+            "kinds": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "The kinds offered under each entry, in the order they are drawn: values of column, each said through its display rule."
+            },
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The App's command that gives a reaction or takes it back: offered by an action of the entry's resource, run on the entry, the kind handed to it as its <column> input, under the reader's grants."
+            },
+            "whose": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The column of from that names the entry. Absent, the one column of from that refers to a stream's table; with none or several, the check asks for it."
+            },
+            "by": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The column of from that names who reacted, read as <by> = me. Absent, the one column of from that refers to auth.me's table; with none or several, the check asks for it."
+            },
+            "column": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The column of from holding the kind. Absent, the one text column of from that is not whose or by and allows every kind; with none or several, the check asks for it."
+            }
+          },
+          "description": "Reactions under each entry: counted by kind in one read per page, the reader's own pressed (read as <by> = me), pressing one running the App's command on the entry. Without the command's grant, the counts alone."
+        },
         "tone": {
           "type": "object",
           "minProperties": 1,

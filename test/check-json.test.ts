@@ -19,7 +19,7 @@ import { VALIDATION_CODES, componentCode, pathOfMessage, validationCode } from '
 const ROOT = resolve('.');
 /* An App's starts are mistri's (test/support/bins.ts). */
 const ENTRY = join(ROOT, 'packages', 'mistri', 'src', 'server', 'index.ts');
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-check-json-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-check-json-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 mkdirSync(join(work, 'node_modules'));
 mkdirSync(join(work, 'node_modules', '@mistriwork'), { recursive: true });

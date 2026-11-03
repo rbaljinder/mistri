@@ -57,7 +57,7 @@ export interface Reply {
 }
 
 export async function policyServer(t: TestContext, options: PolicyServerOptions) {
-  const { directory, stopping } = scratch(t, 'tablewalk-policy-server-');
+  const { directory, stopping } = scratch(t, 'mistri-policy-server-');
   const appDir = join(directory, 'app');
   mkdirSync(appDir);
   let url: string;

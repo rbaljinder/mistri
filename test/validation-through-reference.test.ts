@@ -21,7 +21,7 @@ import { parseFormRules } from '../packages/mistri/src/shared/formRules.js';
 const BENCH = { must: 'order_id.status = bench', message: 'Parts go on an order only while it is on the bench.' };
 
 async function shop(t: { after: (fn: () => void) => void }) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-through-reference-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-through-reference-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);

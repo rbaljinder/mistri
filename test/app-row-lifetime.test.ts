@@ -38,7 +38,7 @@ function lifetime() {
 }
 
 async function fixture(t: TestContext, mode: Mode = 'root') {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-row-lifetime-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-row-lifetime-'));
   const adapters: SqliteAdapter[] = [];
   t.after(async () => {
     try {

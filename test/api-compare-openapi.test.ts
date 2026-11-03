@@ -32,7 +32,7 @@ function preview() {
   };
 }
 function files(t: { after(fn: () => void): void }) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-spec-compare-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-spec-compare-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const previous = join(dir, 'previous.json'),
     current = join(dir, 'current.json');

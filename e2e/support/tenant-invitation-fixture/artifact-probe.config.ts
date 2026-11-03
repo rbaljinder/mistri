@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const output = (process.env.TABLEWALK_INVITATION_PROBE_OUTPUT ??= mkdtempSync(join(tmpdir(), 'tablewalk-invitation-artifacts-')));
+const output = (process.env.TABLEWALK_INVITATION_PROBE_OUTPUT ??= mkdtempSync(join(tmpdir(), 'mistri-invitation-artifacts-')));
 export default defineConfig({
   testDir: '.',
   testMatch: 'artifact-probe.pw.ts',

@@ -189,6 +189,23 @@ describe('the editor', () => {
     expect(applied).toEqual([]);
   });
 
+  test('a value with a copy button is not drawn inside the edit button: the pencil beside it edits', () => {
+    model.rules = { name: { copy: true } };
+    render(
+      <Editable
+        app
+        table={customer}
+        row={row}
+        column={customer.columns[1]}
+        recordKey={key}
+        display={(value) => <button type="button">Copy {String(value)}</button>}
+      />,
+    );
+    const pencil = screen.getByRole('button', { name: 'Edit Name' });
+    expect(pencil).not.toHaveTextContent('Acme');
+    expect(screen.getByRole('button', { name: 'Copy Acme' }).closest('button.inline-edit-value')).toBeNull();
+  });
+
   test('app vocabulary uses human labels and preserves the stored value on discard', async () => {
     const user = userEvent.setup();
     const column = col('status', 'TEXT', { allowed: ['in_progress', 'done'], nullable: false });

@@ -65,7 +65,7 @@ const since = (before: ReturnType<typeof counters>) => {
    north. A viewer reads no `secret` column, and its rows leave out the hidden
    item: what each one gets back says whose scope served it. */
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-reuse-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-reuse-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path),
     deployments: Deployment[] = [];

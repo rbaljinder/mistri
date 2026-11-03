@@ -57,7 +57,7 @@ async function fixture(
     blob?: boolean;
   } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-delete-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-delete-'));
   const registry = new Registry();
   const databases: DatabaseSync[] = [];
   const policies: HttpAppPolicy[] = [];

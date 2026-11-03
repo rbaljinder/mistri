@@ -26,7 +26,7 @@ import { makeDemoDatabase } from './make-demo-db.js';
    processes and would race for the handle. */
 /* Made for this run and removed after it — never `.demo/`, where a
    developer's demo databases and credentials are. */
-const DB_DIR = mkdtempSync(join(tmpdir(), 'tablewalk-language-'));
+const DB_DIR = mkdtempSync(join(tmpdir(), 'mistri-language-'));
 const DB_FILE = join(DB_DIR, 'language.db');
 let adapter: SqliteAdapter;
 let schema: DatabaseSchema;

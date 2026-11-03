@@ -369,7 +369,7 @@ for (const [code, body, window] of defects) {
 
 test('mistri grade on Tick: every view and a record, each finding a line with its fix, then a score', async () => {
   test.setTimeout(240_000);
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-grade-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-grade-'));
   try {
     const db = join(directory, 'tick.db');
     const seeded = spawnSync(process.execPath, [resolve('examples/databases/tick/seed.mjs'), db], { encoding: 'utf8' });

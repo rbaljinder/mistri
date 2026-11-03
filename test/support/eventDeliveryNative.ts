@@ -12,7 +12,7 @@ import { eventDeliveryPolicy } from './eventDeliveryFixture.js';
  * SQLite snapshot is retained; no auth store or credentials enter publication.
  * The snapshot has no active owner when explicit delivery provisioning runs. */
 export async function nativeEventDeliveryFixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-event-delivery-native-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-event-delivery-native-')),
     path = join(directory, 'source.db');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const f = await startTenantAssignment({ tenantEvents: true });

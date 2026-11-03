@@ -11,7 +11,7 @@
  * offsetWidth/offsetHeight are already layout pixels and stay as read.
  *
  * The root is the page's own element unless a shell says otherwise: an
- * embedded shell wears its zoom on its own `.tw-root` and names it with
+ * embedded shell wears its zoom on its own `.mistri-root` and names it with
  * `measureFrom` (packages/mistri/src/embed/seams/shellHost.ts). The kit
  * reads these through core.js, under the names it always had.
  */

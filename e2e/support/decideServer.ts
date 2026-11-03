@@ -20,7 +20,7 @@ const source = (path: string) => JSON.stringify(pathToFileURL(resolve(path)).hre
 const ENTRY = 'packages/mistri/src/server/index.ts';
 
 export async function startDecideApp() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-decide-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-decide-'));
   let child: ReturnType<typeof spawn> | undefined;
   const stop = async () => {
     if (child && child.exitCode === null && child.signalCode === null) {

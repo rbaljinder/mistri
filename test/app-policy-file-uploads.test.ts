@@ -21,7 +21,7 @@ const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 25
 const account = (id: string, role = 'staff'): Identity => ({ id, who: `${id}@example.test`, role });
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-uploads-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-uploads-'));
   const file = join(directory, 'lot.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE car (id INTEGER PRIMARY KEY, desk INTEGER NOT NULL, name TEXT);
@@ -247,4 +247,16 @@ test("removing a file is a delete the same policy judges: one's own partition, a
     f.photos().map((row) => row.id),
     [20],
   );
+});
+
+test('an upload body past the ceiling answers 413 under a policy, not a 400', async (t) => {
+  const f = await fixture(t);
+  const big = await f.post('/api/file/upload', {
+    app: appId,
+    table: 'photo',
+    values: { desk: 1, car_id: 1 },
+    file: { name: 'huge.png', type: 'image/png', data: 'A'.repeat(40 * 1024 * 1024) },
+  });
+  assert.equal(big.status, 413, big.text);
+  assert.equal(f.photos().length, 2);
 });

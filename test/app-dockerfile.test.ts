@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { appDockerfile } from '../packages/mistri/src/server/build/dockerfile.js';
 import { runBuild } from '../packages/mistri/src/server/build/build.js';
 
-const root = mkdtempSync(join(tmpdir(), 'tablewalk-dockerfile-'));
+const root = mkdtempSync(join(tmpdir(), 'mistri-dockerfile-'));
 const home = process.cwd();
 before(() => process.chdir(root));
 after(() => {

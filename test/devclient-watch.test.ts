@@ -35,7 +35,7 @@ test('a watcher error is said once and the process goes on', () => {
 });
 
 test("Vite's own watcher, so bounded, does not take a folder outside the package", async () => {
-  const work = mkdtempSync(join(tmpdir(), 'tablewalk-watch-'));
+  const work = mkdtempSync(join(tmpdir(), 'mistri-watch-'));
   const pkg = join(work, 'package');
   const client = join(pkg, 'src', 'client');
   const outside = join(work, 'outside');

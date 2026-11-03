@@ -25,7 +25,7 @@ const actor: BusinessCommandActor = { id: 'desk-one-member', appId: 'desk', role
 const deskOne: Filter = { groups: [[{ column: 'desk', op: '=', value: 1 }]] };
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-form-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-form-')),
     path = join(directory, 'operations.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE raw_ticket (id INTEGER PRIMARY KEY, desk INTEGER NOT NULL, name TEXT NOT NULL);

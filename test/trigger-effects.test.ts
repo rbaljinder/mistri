@@ -54,7 +54,7 @@ export const CHECK_OPEN = `CREATE TRIGGER check_open BEFORE INSERT ON ledger_ent
   SELECT RAISE(ABORT, 'closed account') WHERE (SELECT status FROM account WHERE id = NEW.account_id) = 'closed'; END`;
 
 async function fixture(t: TestContext, triggers: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-trigger-effects-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-trigger-effects-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(`${LEDGER}\n${triggers}`);
@@ -822,7 +822,7 @@ const adaClaims = (more: RowScope = {}): RowScope => ({
 });
 const ofAda = (column: string): RowScope[string] => ({ groups: [[{ column, op: '=', value: 1 }]] });
 async function claims(t: TestContext, sql: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-trigger-claims-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-trigger-claims-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(`${CLAIMS}\n${sql}`);
@@ -1012,7 +1012,7 @@ const folding = (bens: string, trigger: string) => `
   CREATE TABLE entry (id INTEGER PRIMARY KEY, code TEXT COLLATE NOCASE NOT NULL);
   ${trigger}`;
 async function folded(t: TestContext, sql: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-trigger-collation-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-trigger-collation-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(sql);
@@ -1103,7 +1103,7 @@ test('on SQLite a key is the primary key, its index comparing as its columns do,
 
 /** A database of its own, where Ada's rows are those she owns: the review's reproducers, kept. */
 async function owned(t: TestContext, sql: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-trigger-owned-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-trigger-owned-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec(sql);

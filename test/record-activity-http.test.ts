@@ -28,7 +28,7 @@ type Reply = { status: number; body: any };
 async function fixture(
   run: (f: { post: (path: string, body: Record<string, unknown>) => Promise<Reply>; role: (role: string) => void }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-activity-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-activity-http-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE person (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
@@ -251,7 +251,7 @@ test("a period is the App's own day: today from its midnight, yesterday the day 
 test('the store leaves out deletes, and every change of a key made before that key was deleted', async () => {
   const { appendSqliteRecordChange, readSqliteRecordActivity } =
     await import('../packages/mistri/src/adapters/history/sqliteRecordHistory.js');
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-activity-store-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-activity-store-'));
   const file = join(directory, 'store.db');
   new DatabaseSync(file).close();
   provisionSqliteRecordHistory(file);

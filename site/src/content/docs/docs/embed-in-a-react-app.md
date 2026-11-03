@@ -7,7 +7,7 @@ Show a mistri App, or one of its lists, records or dashboards, inside your
 own React app's routes, under your router.
 
 ```tsx title="examples/apps/ladle/host/main.tsx"
-        <Provider endpoint="/api/tw" onTitle={(title) => (document.title = `${title} · Ladle Cooking School`)}>
+        <Provider endpoint="/api/mistri" onTitle={(title) => (document.title = `${title} · Ladle Cooking School`)}>
           <App app="ladle" basePath={STAFF} fallback={<p className="site-quiet">Opening the staff desk…</p>} />
         </Provider>
 ```
@@ -16,7 +16,7 @@ See it in the sample (`examples/apps/ladle/host/main.tsx:115`): the school's sit
 
 The `endpoint` is the mistri server: the handler
 [mounted in your server](/docs/mount-in-your-server/) with
-`basePath: '/api/tw'`, or a mistri process your server rewrites `/api/tw`
+`basePath: '/api/mistri'`, or a mistri process your server rewrites `/api/mistri`
 to. `basePath` is where your app shows the App: `/staff/bookings/12` is booking 12.
 Your router owns the address bar, so Back, Forward and your own links move
 the App too.
@@ -31,7 +31,7 @@ import { useReactRouterNavigator } from '@mistriwork/mistri/react/react-router';
 
 function Staff() {
   return (
-    <Provider endpoint="/api/tw" navigator={useReactRouterNavigator()}>
+    <Provider endpoint="/api/mistri" navigator={useReactRouterNavigator()}>
       <App app="ladle" basePath="/staff" />
     </Provider>
   );
@@ -47,7 +47,7 @@ import { useTanStackNavigator } from '@mistriwork/mistri/react/tanstack-router';
 const staff = createRoute({ getParentRoute: () => root, path: '/staff/$', component: Staff });
 function Staff() {
   return (
-    <Provider endpoint="/api/tw" navigator={useTanStackNavigator()}>
+    <Provider endpoint="/api/mistri" navigator={useTanStackNavigator()}>
       <App app="ladle" basePath="/staff" />
     </Provider>
   );
@@ -63,7 +63,7 @@ import { useNextNavigator } from '@mistriwork/mistri/react/next';
 
 export default function Staff() {
   return (
-    <Provider endpoint="/api/tw" navigator={useNextNavigator()}>
+    <Provider endpoint="/api/mistri" navigator={useNextNavigator()}>
       <App app="ladle" basePath="/staff" />
     </Provider>
   );
@@ -112,7 +112,7 @@ and hand it over:
 
 ```tsx
 <Provider
-  endpoint="/api/tw"
+  endpoint="/api/mistri"
   auth={{ assertion: () => fetch('/my/mistri-assertion').then((r) => r.text()) }}
 >
 ```
@@ -146,7 +146,7 @@ look's name, or your own made with `defineTheme`:
 import { defineTheme } from '@mistriwork/mistri/app';
 
 const harbor = defineTheme({ id: 'harbor', label: 'Harbor', extends: 'mono', colors: { light: { accent: '#0b6e4f' } } });
-<Provider endpoint="/api/tw" theme={harbor}>
+<Provider endpoint="/api/mistri" theme={harbor}>
 ```
 
 ## Related

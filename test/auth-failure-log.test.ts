@@ -32,7 +32,7 @@ describe('a failing auth route is logged once, without secrets', () => {
   const PASSWORD = 'correct-horse-battery-staple-9';
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-auth-failure-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-auth-failure-'));
     const db = join(tmp, 'app.db');
     makeDemoDatabase(db);
     seedDemoDatabase(db, { scale: 3 });

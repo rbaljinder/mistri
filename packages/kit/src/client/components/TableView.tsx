@@ -36,7 +36,7 @@ import { Dropdown } from './Dropdown.js';
 import { stepList, takePageStep } from './pageStep.js';
 import { formatApprox, formatNumber } from '../locale.js';
 import { ExportControl } from './ExportHold.js';
-import { Grid, type GridData } from './Grid.js';
+import { Grid, type GridData, type GridGroup } from './Grid.js';
 import { trailListFor } from '../recordTrail.js';
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { BesideDetail } from './besideDetail.js';
@@ -140,6 +140,8 @@ export interface TableViewProps {
   referenceLabels?: Record<string, string>;
   /** Column → its total over the whole query, for the grid's footer. */
   totals?: Record<string, unknown>;
+  /** The rows' groups, each run of one value under its head (Grid.tsx `group`). */
+  group?: GridGroup;
   density?: 'comfortable' | 'compact';
   /** A ⋯ menu at the end of each row with the record's own actions. */
   rowActions?: boolean;
@@ -496,6 +498,7 @@ export function TableView({
   labels,
   referenceLabels,
   totals,
+  group,
   density,
   rowActions,
   editable,
@@ -659,6 +662,7 @@ export function TableView({
       labels={labels}
       referenceLabels={referenceLabels}
       totals={totals}
+      {...(group ? { group } : {})}
       density={density}
       sizing={sizing}
       interactive={interactive}
@@ -735,6 +739,7 @@ export function TableView({
               referenceLabels={referenceLabels}
               list={list}
               query={entry.query}
+              {...(group ? { group } : {})}
               {...(adornCell ? { adornFact: (row: Record<string, unknown>, column: string) => adornCell(row, column, 'summary') } : {})}
             />
           </>

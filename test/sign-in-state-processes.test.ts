@@ -80,7 +80,7 @@ async function apply(base: string, tag: string): Promise<string> {
 }
 
 test('a lockout and a status step-up made on one instance are honoured on another', { timeout: 90_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-sign-in-state-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-sign-in-state-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'apply.db');
   const db = new DatabaseSync(file);
@@ -104,7 +104,7 @@ test('a lockout and a status step-up made on one instance are honoured on anothe
   const other = await apply(two, 'grace');
   assert.equal((await post(one, '/api/forms/apply/status', { receipt: other, confirm: { last_name: 'Lovelace' } })).status, 200);
   assert.ok(
-    valkey.commands.some((command) => command.some((part) => part.startsWith('tw:lending:signin:fail:'))),
+    valkey.commands.some((command) => command.some((part) => part.startsWith('mistri:lending:signin:fail:'))),
     'counted in the named cache',
   );
 
@@ -127,5 +127,5 @@ test('a lockout and a status step-up made on one instance are honoured on anothe
     details: { last_name: 'Lovelace' },
   });
   assert.equal((await post(two, '/api/forms/apply/details', {}, new Map())).status, 404, 'that browser only');
-  assert.ok(valkey.commands.some((command) => command.some((part) => part.startsWith('tw:lending:signin:stepup:'))));
+  assert.ok(valkey.commands.some((command) => command.some((part) => part.startsWith('mistri:lending:signin:stepup:'))));
 });

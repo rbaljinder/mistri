@@ -26,7 +26,7 @@ import { buildExamples } from '../packages/kit/src/client/helpContent.js';
 
 /* Made for this run and removed after it — never `.demo/`, where a
    developer's demo databases and credentials are. */
-const DB_DIR = mkdtempSync(join(tmpdir(), 'tablewalk-help-'));
+const DB_DIR = mkdtempSync(join(tmpdir(), 'mistri-help-'));
 const DB_FILE = join(DB_DIR, 'test-help.db');
 let adapter: SqliteAdapter;
 let schema: DatabaseSchema;

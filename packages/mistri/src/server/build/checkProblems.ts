@@ -255,7 +255,7 @@ async function typescript(appDir: string): Promise<Compiler | undefined> {
 
 /** A syntax tree of one file, parsed with nothing resolved: the file alone, no libraries, no imports. */
 function parseOne(compiler: Compiler, file: string): import('typescript/unstable/ast').SourceFile | undefined {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-path-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-path-'));
   try {
     const config = join(directory, 'tsconfig.json');
     writeFileSync(

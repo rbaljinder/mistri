@@ -60,7 +60,7 @@ describe('reloadApp', () => {
   let tmp: string;
 
   before(() => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-appreload-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-appreload-'));
   });
   after(() => {
     rmSync(tmp, { recursive: true, force: true });
@@ -329,7 +329,7 @@ describe('watchApp', () => {
   let tmp: string;
 
   before(() => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-appwatch-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-appwatch-'));
   });
   after(() => {
     rmSync(tmp, { recursive: true, force: true });
@@ -460,7 +460,7 @@ describe('watchApp', () => {
 describe('app.mjs: the typed veneer', () => {
   let tmp: string;
   before(() => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-appmjs-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-appmjs-'));
   });
   after(() => {
     rmSync(tmp, { recursive: true, force: true });
@@ -586,7 +586,7 @@ describe('app.mjs: the typed veneer', () => {
 describe('more than one app', () => {
   let tmp: string;
   before(() => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-multiapp-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-multiapp-'));
   });
   after(() => {
     rmSync(tmp, { recursive: true, force: true });

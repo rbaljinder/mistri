@@ -1347,7 +1347,7 @@ test('a child that points at its parent by a single key and a composite one is r
 test('a money-named 0/1 flag is never rolled up as a sum', async () => {
   const { DatabaseSync } = await import('node:sqlite');
   const { SqliteAdapter } = await import('../packages/engine/src/adapters/sqlite.js');
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scaffold-flag-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-scaffold-flag-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`

@@ -54,7 +54,7 @@ async function fixture(
   run: (f: { page: (path: string) => Promise<Page>; call: Call; as: (role: string | null) => void }) => Promise<void>,
   { publicGrant = true }: { publicGrant?: boolean } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-first-paint-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-first-paint-'));
   const file = join(directory, 'records.db');
   const db = new DatabaseSync(file);
   db.exec(`

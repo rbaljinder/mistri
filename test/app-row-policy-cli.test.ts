@@ -18,7 +18,7 @@ const deadline = 15_000;
 const BROWSERS = /is the database browser's, a command of its own: npx tablewalk/;
 
 function fixture(t: TestContext) {
-  const { directory, stopping } = scratch(t, 'tablewalk-policy-cli-');
+  const { directory, stopping } = scratch(t, 'mistri-policy-cli-');
   const app = join(directory, 'app');
   mkdirSync(app);
   const config = join(directory, 'mistri.json');

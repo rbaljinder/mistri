@@ -103,7 +103,7 @@ interface Served {
 }
 
 async function serve(run: (f: Served) => Promise<void>, app: object = definition('bucket'), identity?: () => Identity) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-s3-files-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-s3-files-'));
   const file = join(directory, 'files.db');
   const db = new DatabaseSync(file);
   db.exec(SQL);
@@ -384,7 +384,7 @@ test('keys are filed by App, tenant and resource, and a reader accepts only its 
 });
 
 test('migrate files: status, up to the bucket and back, resumable, dry runs, and the sweep', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-s3-migrate-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-s3-migrate-'));
   const appDir = join(directory, 'app');
   mkdirSync(appDir);
   const file = join(directory, 'files.db');
@@ -688,7 +688,7 @@ test("the App API and its MCP tools refuse to expose or write a file's object or
 });
 
 test("a tenant App is swept tenant by tenant, and one tenant's sweep cannot delete another's object", async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-s3-tenant-sweep-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-s3-tenant-sweep-'));
   try {
     const file = join(directory, 'files.db');
     const db = new DatabaseSync(file);
@@ -746,7 +746,7 @@ test("a tenant App is swept tenant by tenant, and one tenant's sweep cannot dele
 });
 
 test('a server whose App keeps files in a bucket does not start without the credentials, and says which to set', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-s3-start-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-s3-start-'));
   try {
     const appDir = join(directory, 'app');
     mkdirSync(appDir);
@@ -811,7 +811,7 @@ test(
     assert.match(unsweptBuckets([plain], false).join('\n'), /run `mistri migrate files sweep --app <dir>` daily, or serve it with jobs/);
     assert.deepEqual(unsweptBuckets([plain], true).length, 0);
 
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-s3-sweep-job-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-s3-sweep-job-'));
     let child: ChildProcess | undefined;
     t.after(async () => {
       if (child && child.exitCode === null) {

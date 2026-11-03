@@ -27,7 +27,7 @@ import {
 const start = Date.parse('2026-11-01T00:00:00Z'),
   path = '/target/api/experiments/exposures';
 async function fixture(t: TestContext, visitor = false, realm: 'app' | 'tenant' | 'platform' = 'tenant') {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-exposure-http-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-exposure-http-'));
   const secret = 'native-auth-only-secret-not-the-assignment-receipt-key';
   const runtime = await createAppAuth(
     {

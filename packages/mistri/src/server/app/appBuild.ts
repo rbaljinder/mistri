@@ -91,7 +91,7 @@ export const sha256 = (bytes: Buffer | string): string => createHash('sha256').u
    `Object.keys`, `in` and a deep-strict comparison all see the difference.
    So the encoder records where each undefined key was, and the decoder puts
    it back in the same place in the key order. Anything else JSON cannot
-   carry exactly is refused, loudly, as a bug in tablewalk: the definition is
+   carry exactly is refused, loudly, as a bug in mistri: the definition is
    the parser's output, and the parser produces plain data. */
 
 type Hole = [parent: string, key: string | number, position: number];

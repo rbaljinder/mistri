@@ -5,6 +5,7 @@
     (none: a form's command), its input names, and whether a public form runs it. */
 export type Commands = {
   addNote: { target: "ticket"; targets: "one"; input: "body" };
+  categorize: { target: "ticket"; targets: "one"; input: "category" };
   reply: { target: "ticket"; targets: "one"; input: "body" };
 };
 

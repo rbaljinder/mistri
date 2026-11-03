@@ -36,6 +36,7 @@ import {
   looksLikeDate,
   rowName,
   referencesTo,
+  referencesFrom,
   type DatabaseSchema,
   type ForeignKey,
   tableNamed,
@@ -58,6 +59,7 @@ import {
   type PageSection,
   type PageTimeline,
   type TimelineStream,
+  type TimelineReactions,
   type PageDef,
   DEFAULT_PAGE_LIST_LIMIT,
   timelineMarkColumns,
@@ -208,6 +210,7 @@ function validated(schema: DatabaseSchema, page: PageDef): PageDef {
     if (error) return { ...page, error: `document: "number": ${error}` };
   }
 
+  const reactions = new Map<number, TimelineReactions>();
   for (const [i, section] of page.sections.entries()) {
     const at = section.title ? `"${section.title}"` : `section ${i + 1}`;
     /* A note reads nothing. Nor does a history (the record's own writes), a flows section (the runs are the record's
@@ -322,6 +325,13 @@ function validated(schema: DatabaseSchema, page: PageDef): PageDef {
          back to it, judged by the real parser now rather than as a read that fails on the page. */
       const sides = timelineSides(schema, section);
       if (sides.error) return { ...page, error: `${at}${sides.error}` };
+      /* Reactions name their columns, or have the one candidate each: the page is served with them named, so the
+         browser reads and the check refuses the same three. */
+      if (section.reactions) {
+        const reacted = timelineReactions(schema, section);
+        if ('error' in reacted) return { ...page, error: `${at}: ${reacted.error}` };
+        reactions.set(i, reacted.reactions);
+      }
       continue;
     }
     /* A custom section's reads are judged as the lists they are planned
@@ -431,7 +441,139 @@ function validated(schema: DatabaseSchema, page: PageDef): PageDef {
       }
     }
   }
-  return { ...page, error: undefined };
+  if (!reactions.size) return { ...page, error: undefined };
+  return {
+    ...page,
+    sections: page.sections.map((section, i) =>
+      section.kind === 'timeline' && reactions.has(i) ? { ...section, reactions: reactions.get(i)! } : section,
+    ),
+    error: undefined,
+  };
+}
+
+/**
+ * A timeline's reactions with their three columns named: `whose`, the column of `from` that refers to an entry of one
+ * of the streams; `by`, the one that refers to the table people are rows of (`person`, an App's `auth.me`), read as
+ * `<by> = me`; `column`, the text column the kinds are values of. Each one the author left out is the one candidate
+ * `from` has, and two or none is refused with the key to add. A kind the column's database constraint does not allow
+ * is refused by name.
+ */
+function timelineReactions(
+  schema: DatabaseSchema,
+  section: Pick<PageTimeline, 'streams' | 'reactions'>,
+): { reactions: TimelineReactions } | { error: string } {
+  const r = section.reactions!;
+  const from = findTable(schema, r.from);
+  if (!from) return { error: `"reactions" reads "${r.from}", which is not a table here.` };
+  const entries = new Set(section.streams.map((stream) => findTable(schema, stream.from)?.id).filter(Boolean));
+  const listed = (columns: readonly { name: string }[]) => columns.map((c) => `"${c.name}"`).join(', ');
+  const choose = (
+    key: 'whose' | 'by' | 'column',
+    candidates: readonly { name: string }[],
+    what: string,
+  ): { name: string } | { error: string } => {
+    if (candidates.length === 1) return candidates[0]!;
+    return {
+      error: candidates.length
+        ? `"reactions" names no "${key}", and ${listed(candidates)} could each be ${what}. Add "${key}": the one that is.`
+        : `"reactions" names no "${key}", and no column of ${from.name} is ${what}. Add "${key}": the column that is.`,
+    };
+  };
+  const refs = singleReferences(schema, from.id);
+  const refersTo = (tables: ReadonlySet<string | undefined>) => (c: { name: string }) =>
+    tables.has(findTable(schema, refs.get(c.name)?.table ?? '')?.id);
+  const column = (key: 'whose' | 'by' | 'column', name: string) => {
+    const found = from.columns.find((c) => c.name === name);
+    return found ?? { error: `reactions.${key} names "${name}", which is not a column on ${from.name}.` };
+  };
+
+  const whose = r.whose
+    ? column('whose', r.whose)
+    : choose('whose', from.columns.filter(refersTo(entries)), `the entry a reaction is to (a reference to ${[...entries].join(' or ')})`);
+  if ('error' in whose) return whose;
+  if (r.whose && !refersTo(entries)(whose))
+    return {
+      error: `reactions.whose names "${r.whose}", which does not refer to an entry of this timeline (${[...entries].join(' or ')}).`,
+    };
+  /* A press runs the command on the entry the reaction names, by the column `whose` refers to as its key: a reference
+     to another unique column (a post's slug) would hand the command a value that is not the entry's key. */
+  const target = refs.get(whose.name)!;
+  const entry = findTable(schema, target.table)!;
+  const entryKey = primaryKey(entry);
+  if (entryKey.length !== 1 || entryKey[0] !== target.column)
+    return {
+      error:
+        `reactions.whose "${whose.name}" refers to ${entry.name}.${target.column}, which is not ${entry.name}'s primary key` +
+        `${entryKey.length ? ` (${entryKey.join(', ')})` : ''}; a reaction is pressed on its entry by that key, so "whose" must refer to it.`,
+    };
+
+  const person = r.person === undefined ? undefined : findTable(schema, r.person)?.id;
+  if (!r.by && !person)
+    return {
+      error: `"reactions" names no "by", and the App does not say which table people are rows of (auth.me). Add "by": the column of ${from.name} that holds who reacted.`,
+    };
+  const by = r.by
+    ? column('by', r.by)
+    : choose(
+        'by',
+        from.columns.filter((c) => c.name !== whose.name && refersTo(new Set([person]))(c)),
+        `who reacted (a reference to ${person})`,
+      );
+  if ('error' in by) return by;
+  if (by.name === whose.name)
+    return { error: `reactions.by and reactions.whose both name "${by.name}"; a reaction is someone's, to something.` };
+
+  const kinds = (c: (typeof from.columns)[number]) => !c.allowed || r.kinds.every((kind) => c.allowed!.includes(kind));
+  const kind = r.column
+    ? column('column', r.column)
+    : choose(
+        'column',
+        from.columns.filter(
+          (c) =>
+            !c.primaryKey && !refs.has(c.name) && c.name !== whose.name && c.name !== by.name && columnKind(c.type) === 'text' && kinds(c),
+        ),
+        `the kind of a reaction (a text column holding ${r.kinds.map((k) => `"${k}"`).join(', ')})`,
+      );
+  if ('error' in kind) return kind;
+  if (kind.name === whose.name || kind.name === by.name)
+    return { error: `reactions.column names "${kind.name}", which is already "${kind.name === whose.name ? 'whose' : 'by'}".` };
+  const allowed = (kind as (typeof from.columns)[number]).allowed;
+  const stray = allowed && r.kinds.find((each) => !allowed.includes(each));
+  if (stray) return { error: `reactions.kinds names "${stray}", which ${from.name}.${kind.name} does not allow (${allowed!.join(', ')}).` };
+  return { reactions: { ...r, whose: whose.name, by: by.name, column: kind.name } };
+}
+
+/**
+ * The column of a stream's table a timeline's reactions name its entries by — the column `whose` refers to — or
+ * undefined where the stream's rows are not what the reactions are to. Read on a validated page, whose `whose` is named.
+ */
+export function reactedColumn(
+  schema: DatabaseSchema,
+  section: Pick<PageTimeline, 'reactions'>,
+  stream: Pick<TimelineStream, 'from'>,
+): string | undefined {
+  const r = section.reactions;
+  if (!r?.whose) return undefined;
+  const from = findTable(schema, r.from);
+  const ref = from && singleReferences(schema, from.id).get(r.whose);
+  const table = findTable(schema, stream.from);
+  return ref && table && findTable(schema, ref.table)?.id === table.id ? ref.column : undefined;
+}
+
+/** The table a timeline's reactions are to: the one `whose` refers to, on a validated page. */
+export function reactionEntryTable(schema: DatabaseSchema, reactions: Pick<TimelineReactions, 'from' | 'whose'>): string | undefined {
+  const from = findTable(schema, reactions.from);
+  const ref = from && reactions.whose ? singleReferences(schema, from.id).get(reactions.whose) : undefined;
+  return ref && findTable(schema, ref.table)?.id;
+}
+
+/* A table's one-column references by the column that holds each: the only kind a reaction's entry or person can be. */
+function singleReferences(schema: DatabaseSchema, tableId: string): Map<string, { table: string; column: string }> {
+  return new Map(
+    referencesFrom(schema, tableId)
+      .filter((fk) => fk.from.columns.length === 1)
+      .map((fk) => [fk.from.columns[0]!, { table: fk.to.table, column: fk.to.columns[0]! }]),
+  );
 }
 
 /**
@@ -846,6 +988,18 @@ export function sectionConfig(s: PageSection): AuthoredSection {
         ...(s.tone ? { tone: s.tone } : {}),
         ...(s.compact ? { compact: s.compact } : {}),
         ...(s.side ? { side: s.side } : {}),
+        ...(s.reactions
+          ? {
+              reactions: {
+                from: s.reactions.from,
+                kinds: s.reactions.kinds,
+                command: s.reactions.command,
+                ...(s.reactions.whose ? { whose: s.reactions.whose } : {}),
+                ...(s.reactions.by ? { by: s.reactions.by } : {}),
+                ...(s.reactions.column ? { column: s.reactions.column } : {}),
+              } as Extract<AuthoredSection, { kind: 'timeline' }>['reactions'],
+            }
+          : {}),
       };
     case 'metric':
       return {

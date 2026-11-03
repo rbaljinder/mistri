@@ -75,7 +75,7 @@ async function fixture(
   provision = true,
   prerequisite: 'all' | 'tenant' | 'none' = 'all',
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-invitation-store-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-invitation-store-'));
   const path = join(directory, 'business.db');
   let db: DatabaseSync | undefined;
   try {
@@ -166,7 +166,7 @@ test('provisioning is separately attested v1, idempotent, and preserves all exis
 });
 
 test('missing files, directories and absent prerequisites refuse without creation or adoption', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-invitation-missing-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-invitation-missing-'));
   try {
     const missing = join(directory, 'missing.db');
     await denied(() => provisionSqliteTenantInvitations(missing, owner()));

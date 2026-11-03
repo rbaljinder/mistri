@@ -116,7 +116,7 @@ test('the Provider signs the host’s person in, and the App boots signed in on 
   const asked: string[] = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (url.origin === origin && (url.pathname.startsWith('/api/tw/') || url.pathname === '/host/assertion')) asked.push(url.pathname);
+    if (url.origin === origin && (url.pathname.startsWith('/api/mistri/') || url.pathname === '/host/assertion')) asked.push(url.pathname);
   });
   await page.addInitScript(() => {
     (window as { __signIn?: boolean }).__signIn = true;
@@ -130,18 +130,18 @@ test('the Provider signs the host’s person in, and the App boots signed in on 
   // One assertion, one exchange, then one boot: the session is made before the boot, so the boot is signed in.
   const count = (path: string) => asked.filter((seen) => seen === path).length;
   expect(count('/host/assertion')).toBe(1);
-  expect(count('/api/tw/api/auth/embed/exchange')).toBe(1);
-  expect(count('/api/tw/api/embed/boot')).toBe(1);
-  expect(asked.indexOf('/api/tw/api/auth/embed/exchange')).toBeLessThan(asked.indexOf('/api/tw/api/embed/boot'));
+  expect(count('/api/mistri/api/auth/embed/exchange')).toBe(1);
+  expect(count('/api/mistri/api/embed/boot')).toBe(1);
+  expect(asked.indexOf('/api/mistri/api/auth/embed/exchange')).toBeLessThan(asked.indexOf('/api/mistri/api/embed/boot'));
   // The boot carried who is here and the App: the shell did not ask for them again.
-  expect(count('/api/tw/api/whoami')).toBe(0);
-  expect(count('/api/tw/api/app')).toBe(0);
+  expect(count('/api/mistri/api/whoami')).toBe(0);
+  expect(count('/api/mistri/api/app')).toBe(0);
 
   // The session is the App's cookie, out of the page's script, on the handler's path.
-  const session = (await page.context().cookies(`${origin}/api/tw/`)).find((cookie) => cookie.name.endsWith('.session_token'));
+  const session = (await page.context().cookies(`${origin}/api/mistri/`)).find((cookie) => cookie.name.endsWith('.session_token'));
   expect(session?.httpOnly).toBe(true);
-  expect(session?.path).toBe('/api/tw');
-  const who = await page.evaluate(async () => (await fetch('/api/tw/api/whoami?app=compass')).json());
+  expect(session?.path).toBe('/api/mistri');
+  const who = await page.evaluate(async () => (await fetch('/api/mistri/api/whoami?app=compass')).json());
   expect(who.signedIn).toBe(true);
   expect(who.who).toBe('rita@portal.example');
 });

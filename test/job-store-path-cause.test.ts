@@ -26,7 +26,7 @@ const refused = (run: () => unknown): Error => {
 };
 
 test('a job store at a wrong path, or at a directory, says so beneath its fixed sentence', (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-job-store-path-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-job-store-path-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const missing = join(directory, 'nowhere', 'ops.db');
   assert.match(refusalHeadline(refused(() => openSqliteJobStore(missing, { namespace: 'spoke' }))), /does not exist/);

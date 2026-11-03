@@ -23,7 +23,7 @@ let child: ChildProcess | undefined;
 test.beforeAll(async () => {
   // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
   test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'tablewalk-new-form-switch-'));
+  directory = mkdtempSync(join(tmpdir(), 'mistri-new-form-switch-'));
   const db = join(directory, 'billing.db');
   const source = new DatabaseSync(db);
   try {

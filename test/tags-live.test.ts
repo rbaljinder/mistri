@@ -102,7 +102,7 @@ describe('tags on SQLite', () => {
   let directory: string;
   let adapter: SqliteAdapter;
   before(() => {
-    directory = mkdtempSync(join(tmpdir(), 'tablewalk-tags-live-'));
+    directory = mkdtempSync(join(tmpdir(), 'mistri-tags-live-'));
     const db = new DatabaseSync(join(directory, 'tags.db'));
     db.exec(`CREATE TABLE issue (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
       CREATE TABLE label (id INTEGER PRIMARY KEY, name TEXT NOT NULL, tone TEXT, tenant TEXT NOT NULL);

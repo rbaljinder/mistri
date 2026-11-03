@@ -91,6 +91,19 @@ export const Dressed = memo(function Dressed({ dress, compact = false }: { dress
           ))}
         </ul>
       );
+    /* An address on its lines where there is room, on one line where there is not. */
+    case 'address':
+      return compact ? (
+        <span title={dress.lines.join('\n')}>{dress.text}</span>
+      ) : (
+        <span className="value-address">
+          {dress.lines.map((line, index) => (
+            <span key={index} className="value-address-line">
+              {line}
+            </span>
+          ))}
+        </span>
+      );
     /* A mark stands where the tone's dot would, in its colour; the word stays the value, for every reader. */
     case 'tone':
       return dress.icon ? (

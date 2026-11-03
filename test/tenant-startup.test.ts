@@ -78,7 +78,7 @@ function snapshot(path: string) {
 }
 
 function fixture(t: TestContext, writable = false, format: 'ts' | 'json' = 'json') {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-startup-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-tenant-startup-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'business.db'),
     authPath = join(dir, 'auth.db');

@@ -24,7 +24,7 @@ export interface EmbedBinding {
   navigator: Navigator;
   /** Where the host shows the App (`/crm`) and which App is at its root: the address bar's form. */
   address: AddressMount;
-  /** Where the server answers: `/api/tw`, or `https://tw.example.com/tools`. No trailing slash. */
+  /** Where the server answers: `/api/mistri`, or `https://mistri.example.com/tools`. No trailing slash. */
   endpoint: string;
   /** The `Authorization` header a request carries (a cross-origin embed session), or undefined for the cookie. */
   authorization(): string | undefined;

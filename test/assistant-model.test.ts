@@ -160,7 +160,7 @@ test('an answer cut off before its end, or a model that stalls, is said as such 
 });
 
 test('a scripted model is a test’s and a demo’s: under NODE_ENV=production the script is not read', (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-script-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-script-'));
   const saved = { script: process.env.MISTRI_ASSISTANT_SCRIPT, env: process.env.NODE_ENV, key: process.env.ANTHROPIC_API_KEY };
   t.after(() => {
     for (const [name, value] of [
@@ -182,7 +182,7 @@ test('a scripted model is a test’s and a demo’s: under NODE_ENV=production t
 });
 
 test('a store of another layout version says which way to go, and only a missing one is told to provision', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-assistant-store-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-assistant-store-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const app = { name: 'Leads' } as AppDef;
   const missing = join(directory, 'missing.db');

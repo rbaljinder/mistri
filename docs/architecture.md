@@ -335,7 +335,7 @@ own tests (`config/vite.ui.config.ts`); the page never loads it. mistri's `dist/
 built once more for a host's React app, with `shellHost.ts`, `addressMount.js`
 and `transport.ts` swapped for their twins in `src/embed/seams/` (which answer
 from the element the shell is drawn in and the host's router) and every
-stylesheet scoped to that element in one `@layer tablewalk`
+stylesheet scoped to that element in one `@layer mistri`
 (`scripts/embed-css.mjs`); the served client's bytes do not change. Each
 package ships its `dist` and what its `files` allowlist names; a pack builds
 nothing and refuses a package without a `dist/`. mistri's `schema/` carries

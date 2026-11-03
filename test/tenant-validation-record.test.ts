@@ -104,7 +104,7 @@ describe('planning from a record', () => {
 });
 
 describe("a build's fingerprints", () => {
-  const work = mkdtempSync(join(tmpdir(), 'tablewalk-validation-build-'));
+  const work = mkdtempSync(join(tmpdir(), 'mistri-validation-build-'));
   after(() => rmSync(work, { recursive: true, force: true }));
   const connections: ConnectionConfig[] = [
     { id: 'loans', name: 'loans', url: 'postgres://u@h/loans', source: 'config', writable: true },

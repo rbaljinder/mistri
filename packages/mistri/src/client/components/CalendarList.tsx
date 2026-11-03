@@ -19,12 +19,15 @@
  * first record, or its "+N more" when all of them are folded — where Up and
  * Down step between what the day holds and Escape comes back out. A month of
  * thirty cards was thirty Tab stops before it.
+ * With a `span` of a week or a day the period is drawn as a time grid (CalendarTimeGrid.tsx), asked and written
+ * here the same way: the period's own question, the same optimistic move and the same update route; a phone keeps
+ * the agenda, each record with its times.
  */
 import './CalendarList.css';
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, columnLabel, findTable, keyOf, openRecord, refsFrom, state, toast, writeAllowed } from '@mistriwork/kit/client/core.js';
-import { formatLocale, formatNumber } from '@mistriwork/kit/client/locale.js';
+import { formatDateTime, formatLocale, formatNumber } from '@mistriwork/kit/client/locale.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { applyBulk, bulkKey } from '@mistriwork/kit/client/bulkActions.js';
@@ -45,6 +48,8 @@ import type { TableEntry } from '@mistriwork/kit/client/components/TableView.js'
 import { Value } from '@mistriwork/kit/client/components/Value.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { say as sayCopy } from '../copy/lists/components/CalendarList.js';
+import { CalendarTimeGrid, type TimedRecord } from './CalendarTimeGrid.js';
+import { SLOT_MINUTES, momentOf, shifted, type Moment } from './calendarTime.js';
 
 /** A month is read in one request; past this, the calendar says so rather than silently dropping days. */
 const LIMIT = 500;
@@ -214,6 +219,10 @@ interface CalendarListProps {
 
 export function CalendarList({ table, spec, entry, interactive = true, label, referenceLabels }: CalendarListProps) {
   const [month, setMonth] = useState(() => monthStart(new Date()));
+  /* A week or a day: the time grid's period, by a day in it. */
+  const span = spec.span ?? 'month';
+  const timed = span !== 'month';
+  const [periodDay, setPeriodDay] = useState(() => iso(new Date()));
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const [over, setOver] = useState<string>();
   /* The grid's one Tab stop, and a day the keyboard asked for that is not drawn yet (the month is turning). */
@@ -246,8 +255,8 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
   const phone = useMediaQuery(PHONE_QUERY);
   const connection = state.activeConnection ?? null;
   const locale = formatLocale();
-  const first = iso(month);
-  const next = iso(addMonths(month, 1));
+  const first = span === 'week' ? weekOf(periodDay) : span === 'day' ? periodDay : iso(month);
+  const next = span === 'week' ? addDays(first, 7) : span === 'day' ? addDays(first, 1) : iso(addMonths(month, 1));
   const columns = [...new Set([...primaryKey(table), ...listPresentationColumns(spec), ...Object.values(referenceLabels ?? {})])];
   /* A range is in the month when it starts before the month ends and ends in
      it or after; a record with no end is on its one day. */
@@ -290,11 +299,13 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
   const all = useMemo(() => {
     const out: CalendarCard[] = [];
     for (const row of drawnRows) {
-      const day = row[spec.date] == null ? '' : String(row[spec.date]).slice(0, 10);
+      /* A moment is placed on the day it falls on where it is said (calendarTime.ts), not the day its text begins with. */
+      const day = row[spec.date] == null ? '' : timed ? (momentOf(row[spec.date])?.day ?? '') : String(row[spec.date]).slice(0, 10);
       const key = keyOf(table, row) as Record<string, unknown> | null;
       if (!day || !key) continue;
       // A range that ends before it starts, or has no end, is its first day alone.
-      const end = spec.end && row[spec.end] != null ? String(row[spec.end]).slice(0, 10) : '';
+      const end =
+        spec.end && row[spec.end] != null ? (timed ? (momentOf(row[spec.end])?.day ?? '') : String(row[spec.end]).slice(0, 10)) : '';
       out.push({
         id: bulkKey(table, key),
         key,
@@ -307,7 +318,23 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
       });
     }
     return out;
-  }, [drawnRows, table, spec, referenceLabels]);
+  }, [drawnRows, table, spec, referenceLabels, timed]);
+  /* The time grid's records: from the start to the end, or a half hour where there is none (or it is before the start). */
+  const timedRecords = useMemo(
+    () =>
+      timed
+        ? all.flatMap((card): TimedRecord[] => {
+            const start = momentOf(card.value);
+            if (!start) return [];
+            const said = card.endValue == null ? null : momentOf(card.endValue);
+            const half = momentOf(shifted(card.value, SLOT_MINUTES));
+            const end = said && (said.day > start.day || (said.day === start.day && said.minute > start.minute)) ? said : half;
+            return end ? [{ id: card.id, title: card.title, start, end }] : [];
+          })
+        : [],
+    [all, timed],
+  );
+  const cardsById = useMemo(() => new Map(all.map((card) => [card.id, card])), [all]);
   /* A day's records for the agenda: a range sits under its first day in the month. */
   const byDay = useMemo(() => {
     const days = new Map<string, CalendarCard[]>();
@@ -372,6 +399,17 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
     return Array.from({ length: 7 }, (_, i) => say.format(new Date(2024, 0, 1 + i)));
   }, [locale]);
   const fullDate = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+  /* A week or a day: its days, and its name over the grid ("November 2 – 8, 2026", "Tuesday, November 3, 2026"). */
+  const periodDays = useMemo(
+    () => (timed ? Array.from({ length: span === 'week' ? 7 : 1 }, (_, i) => addDays(first, i)) : []),
+    [timed, span, first],
+  );
+  const periodTitle =
+    span === 'week'
+      ? new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', year: 'numeric' }).formatRange(at(first), at(addDays(next, -1)))
+      : span === 'day'
+        ? new Intl.DateTimeFormat(locale, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(at(first))
+        : new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(month);
   const shortDate = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' });
   const spanned = (card: CalendarCard) => shortDate.formatRange(at(card.day), at(card.last));
   const today = iso(new Date());
@@ -395,19 +433,21 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
   );
   // A time of day stays; only the date moves.
   const keepTime = (raw: unknown, date: string) => (typeof raw === 'string' && raw.length > 10 ? `${date}${raw.slice(10)}` : date);
-  const reschedule = (card: CalendarCard, date: string) => {
-    if (!movable || date === card.day) return;
+  /* A move as the update route writes it, whatever drew it: the record drawn where it goes at once, the period turned
+     to the day it lands on, and the write queued behind any other. */
+  const commit = (card: CalendarCard, values: Record<string, string>, said: string, lands: string) => {
     const epoch = sessionIdentity().epoch;
     const isCurrent = () => mounted.current && epoch === sessionIdentity().epoch && connection === (state.activeConnection ?? null);
-    const shift = Math.round((at(date).getTime() - at(card.day).getTime()) / 86_400_000);
-    const values: Record<string, string> = { [spec.date]: keepTime(card.value, date) };
-    if (spec.end && card.endValue != null) values[spec.end] = keepTime(card.endValue, addDays(card.last, shift));
     // The dates as the calendar read them: moved by someone else since, the move is refused, not written over theirs.
     const expected = expectedValues(table, values, card.row);
-    // The card follows its date: into its month and onto its day, opened, with the focus — all drawn in the one
+    // The card follows its date: into its period and onto its day, opened, with the focus — all drawn in the one
     // render the move is (begin flushes these with it), so the card the focus goes to is the one that stays.
-    if (date.slice(0, 7) !== first.slice(0, 7)) setMonth(monthStart(at(date)));
-    setOpened((current) => new Set([...current, weekOf(date)]));
+    if (timed) {
+      if (lands < first || lands >= next) setPeriodDay(lands);
+    } else {
+      if (lands.slice(0, 7) !== first.slice(0, 7)) setMonth(monthStart(at(lands)));
+      setOpened((current) => new Set([...current, weekOf(lands)]));
+    }
     refocus.current = card.id;
     const move = optimistic.begin([[card.id, values]]);
     optimistic.enqueue(async () => {
@@ -422,7 +462,7 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
         const outcome = result.outcomes[0];
         if (outcome.kind === 'applied') {
           optimistic.saved(move);
-          toast(sayCopy('movedTitleToAt', { title: card.title, at: fullDate.format(at(date)) }), 'ok');
+          toast(said, 'ok');
           void client.invalidateQueries({ queryKey: ['count', connection] });
         } else {
           // Refused, or uncertain (the update route's to settle, as on a board): drawn where the server has it.
@@ -434,6 +474,37 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
         throw error;
       }
     });
+  };
+  /* A timed record moved by minutes: its start and its end by `start` and `end`, each in the form it is stored in.
+     One with no end of its own is half an hour long, so a foot dragged on it writes its end for the first time. */
+  const moveTimed = (record: Pick<TimedRecord, 'id'>, start: number, end: number) => {
+    const card = cardsById.get(record.id);
+    if (!movable || !card) return;
+    const values: Record<string, string> = {};
+    const from = start ? shifted(card.value, start) : null;
+    if (from) values[spec.date] = from;
+    if (spec.end && card.endValue != null && end) {
+      const to = shifted(card.endValue, end);
+      if (to) values[spec.end] = to;
+    } else if (spec.end && card.endValue == null && end !== start) {
+      const to = shifted(card.value, SLOT_MINUTES + end);
+      if (to) values[spec.end] = to;
+    }
+    if (!Object.keys(values).length) return;
+    const lands = momentOf(values[spec.date] ?? card.value)?.day ?? card.day;
+    const said = from
+      ? sayCopy('movedTitleToAt', { title: card.title, at: formatDateTime(from) })
+      : sayCopy('titleNowEndsAt', { title: card.title, at: formatDateTime(values[spec.end!]!) });
+    commit(card, values, said, lands);
+  };
+  const reschedule = (card: CalendarCard, date: string) => {
+    if (!movable || date === card.day) return;
+    const shift = Math.round((at(date).getTime() - at(card.day).getTime()) / 86_400_000);
+    /* A timed record keeps its hour: moved by whole days, in the form its moments are stored in. */
+    if (timed) return moveTimed(card, shift * 1440, shift * 1440);
+    const values: Record<string, string> = { [spec.date]: keepTime(card.value, date) };
+    if (spec.end && card.endValue != null) values[spec.end] = keepTime(card.endValue, addDays(card.last, shift));
+    commit(card, values, sayCopy('movedTitleToAt', { title: card.title, at: fullDate.format(at(date)) }), date);
   };
   const onCardKey = (event: KeyboardEvent<HTMLButtonElement>, card: CalendarCard) => {
     const step = event.altKey && !event.metaKey && !event.ctrlKey ? STEPS[event.key] : undefined;
@@ -511,10 +582,58 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
     locate: (card) => cardRefs.current.get(card.id) ?? null,
   });
   const zone = (date: string) => (movable ? { 'data-drop-zone': '', 'data-date': date } : { 'data-date': date });
+  /* In a day's cell the status is its toned dot before the title, its word kept for a reader and the pointer's
+     hover: a pill cut to "Book…" beside a name cut to "Trek F…" said neither. The agenda has the room for the
+     word, so it keeps it on the line. */
+  const titleOf = (item: CalendarCard, badge: ReactNode, agenda: boolean) => (
+    <span className="calendar-card-title">
+      {badge && !agenda && (
+        <span
+          className="calendar-card-mark"
+          ref={(mark) => {
+            if (mark) mark.title = mark.firstElementChild?.textContent?.trim() ?? '';
+          }}
+        >
+          {badge}
+          <span className="calendar-sr">: </span>
+        </span>
+      )}
+      {item.title}
+    </span>
+  );
+  /* A timed record's hours, as the agenda says them under its title. */
+  const clock = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+  const hoursOf = (item: CalendarCard) => {
+    const record = timedRecords.find((candidate) => candidate.id === item.id);
+    if (!record) return null;
+    const time = (moment: Moment) => new Date(Date.UTC(1970, 0, 1, 0, moment.minute));
+    return record.end.day === record.start.day
+      ? clock.formatRange(time(record.start), time(record.end))
+      : `${clock.format(time(record.start))} – ${shortDate.format(at(record.end.day))}, ${clock.format(time(record.end))}`;
+  };
+  /* What a record says inside a box of the time grid: its title, and its detail where the list names one. */
+  const timedContent = (record: TimedRecord) => {
+    const item = cardsById.get(record.id)!;
+    const line = said(lineColumn, item.row);
+    return (
+      <>
+        {titleOf(item, said(badgeColumn, item.row), false)}
+        {line && (
+          <span className="calendar-card-line">
+            <span className="calendar-card-detail">
+              {lineCaption && <span className="calendar-card-caption">{lineCaption} </span>}
+              {line}
+            </span>
+          </span>
+        )}
+      </>
+    );
+  };
   const card = (item: CalendarCard, extra = '', style?: CSSProperties, agenda = false) => {
     const badge = said(badgeColumn, item.row);
     const line = said(lineColumn, item.row);
-    const ranged = item.last !== item.day;
+    const ranged = item.last !== item.day && !timed;
+    const hours = timed && agenda ? hoursOf(item) : null;
     return (
       <button
         type="button"
@@ -536,27 +655,12 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
         aria-keyshortcuts={movable ? 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown' : undefined}
         title={movable ? sayCopy('dragToAnotherDay') : undefined}
       >
-        {/* In a day's cell the status is its toned dot before the title, its word kept for a reader and the pointer's
-            hover: a pill cut to "Book…" beside a name cut to "Trek F…" said neither. The agenda has the room for the
-            word, so it keeps it on the line. */}
-        <span className="calendar-card-title">
-          {badge && !agenda && (
-            <span
-              className="calendar-card-mark"
-              ref={(mark) => {
-                if (mark) mark.title = mark.firstElementChild?.textContent?.trim() ?? '';
-              }}
-            >
-              {badge}
-              <span className="calendar-sr">: </span>
-            </span>
-          )}
-          {item.title}
-        </span>
+        {titleOf(item, badge, agenda)}
         {/* A range says its days: in words to a reader of the grid, as its line on the agenda. */}
         {ranged && !agenda && <span className="calendar-sr">, {spanned(item)}</span>}
-        {((badge && agenda) || line || (ranged && agenda)) && (
+        {((badge && agenda) || line || (ranged && agenda) || hours) && (
           <span className="calendar-card-line">
+            {hours && <span className="calendar-card-detail">{hours}</span>}
             {badge && agenda && <span className="calendar-card-badge">{badge}</span>}
             {line && (
               <span className="calendar-card-detail">
@@ -642,8 +746,25 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
     </p>
   ) : answer.isPending ? (
     <p className="calendar-note" role="status">
-      {sayCopy('loadingTheMonth')}
+      {sayCopy(span === 'week' ? 'loadingTheWeek' : span === 'day' ? 'loadingTheDay' : 'loadingTheMonth')}
     </p>
+  ) : timed && !phone ? (
+    <CalendarTimeGrid
+      days={periodDays}
+      records={timedRecords}
+      content={timedContent}
+      pending={(id) => Boolean(optimistic.pending(id))}
+      movable={movable}
+      resizable={movable && spec.end !== undefined}
+      interactive={interactive}
+      locale={locale}
+      label={periodTitle}
+      onOpen={(record) => {
+        const item = cardsById.get(record.id);
+        if (item) open(item);
+      }}
+      onMove={moveTimed}
+    />
   ) : phone ? (
     <ol className="calendar-agenda">
       {[...new Set([...byDay.keys(), ...spans.map((span) => (span.day < first ? first : span.day)).filter((day) => day < next)])]
@@ -735,37 +856,56 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
     </table>
   );
 
+  /* A step back or on: a month, a week or a day. */
+  const step = (way: -1 | 1) =>
+    timed ? setPeriodDay((day) => addDays(day, way * (span === 'week' ? 7 : 1))) : setMonth((current) => addMonths(current, way));
   return (
     <section className="calendar-list" aria-label={label ?? sayCopy('calendar')}>
       <div className="calendar-head">
         <h2 className="calendar-title" aria-live="polite">
-          {new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(month)}
+          {periodTitle}
         </h2>
         <div className="calendar-nav">
           <button
             type="button"
             className="ghost"
-            aria-label={sayCopy('previousMonth')}
-            onClick={() => setMonth((current) => addMonths(current, -1))}
+            aria-label={sayCopy(span === 'week' ? 'previousWeek' : span === 'day' ? 'previousDay' : 'previousMonth')}
+            onClick={() => step(-1)}
           >
             <Icon name="caret-left" size={16} />
           </button>
-          <button type="button" className="ghost" onClick={() => setMonth(monthStart(new Date()))}>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => (timed ? setPeriodDay(iso(new Date())) : setMonth(monthStart(new Date())))}
+          >
             {sayCopy('common.today')}
           </button>
           <button
             type="button"
             className="ghost"
-            aria-label={sayCopy('nextMonth')}
-            onClick={() => setMonth((current) => addMonths(current, 1))}
+            aria-label={sayCopy(span === 'week' ? 'nextWeek' : span === 'day' ? 'nextDay' : 'nextMonth')}
+            onClick={() => step(1)}
           >
             <Icon name="caret-right" size={16} />
           </button>
         </div>
       </div>
       {body}
-      {answer.data && !answer.data.rows.length && <p className="calendar-note">{sayCopy('nothingOnTheCalendar')}</p>}
-      {answer.data?.more && <p className="calendar-note">{sayCopy('showingTheFirstThisMonth', { max: LIMIT })}</p>}
+      {answer.data && !answer.data.rows.length && (
+        <p className="calendar-note">
+          {sayCopy(
+            span === 'week' ? 'nothingOnTheCalendarThisWeek' : span === 'day' ? 'nothingOnTheCalendarThisDay' : 'nothingOnTheCalendar',
+          )}
+        </p>
+      )}
+      {answer.data?.more && (
+        <p className="calendar-note">
+          {sayCopy(span === 'week' ? 'showingTheFirstThisWeek' : span === 'day' ? 'showingTheFirstThisDay' : 'showingTheFirstThisMonth', {
+            max: LIMIT,
+          })}
+        </p>
+      )}
     </section>
   );
 }

@@ -6,7 +6,7 @@
  * hears a host `<Link>` or Back through `useLocation`.
  *
  *   const navigator = useReactRouterNavigator();
- *   <Provider endpoint="/api/tw" navigator={navigator}>…
+ *   <Provider endpoint="/api/mistri" navigator={navigator}>…
  */
 import { useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';

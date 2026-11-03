@@ -36,11 +36,30 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
 vi.mock('../../../../kit/src/client/components/Value.js', () => ({ Value: () => null }));
 /* An App's own input, standing in a field: says which component, for which field, with which value. */
 vi.mock('../../../../kit/src/client/components/inputRenderers.js', () => ({
-  InputSlot: ({ component, id, value, onChange }: { component: string; id: string; value: unknown; onChange: (next: unknown) => void }) => (
-    <button type="button" id={id} data-component={component} onClick={() => onChange(`${String(value ?? '')}!`)}>
+  InputSlot: ({
+    component,
+    id,
+    value,
+    onChange,
+    field,
+  }: {
+    component: string;
+    id: string;
+    value: unknown;
+    onChange: (next: unknown) => void;
+    field: { rule?: { outOf?: number } };
+  }) => (
+    <button
+      type="button"
+      id={id}
+      data-component={component}
+      data-out-of={field.rule?.outOf}
+      onClick={() => onChange(`${String(value ?? '')}!`)}
+    >
       {component}: {String(value ?? '')}
     </button>
   ),
+  builtInInputId: (format: string) => `mistri:${format}`,
 }));
 
 const { FormSurface } = await import('./FormSurface.js');
@@ -247,6 +266,28 @@ test('more options than a few are the listbox; the reading helpers name paths an
   expect(prefilledCommandValues(input, { applicant: { name: 'Ada' }, trade_ins: [{ stock: 'S-9' }, { stock: 'S-10', miles: 3 }] })).toEqual(
     { applicant: { name: 'Ada' }, trade_ins: [{ stock: 'S-9' }, { stock: 'S-10', miles: 3 }] },
   );
+});
+
+test('files and a signature are drawn as their own inputs, said by count, never started by an address, and sent as ids', async () => {
+  const held: AppCommandField[] = [
+    { name: 'photos', label: 'Photos', type: 'files', from: 'repair_photo', min: 2, max: 3, accept: ['image/*'], required: true },
+    { name: 'signed', label: 'Signature', type: 'signature', from: 'signature_file', required: true },
+  ];
+  const id = (n: number) => String(n).repeat(43);
+  render(<FormSurface form={{ id: 'repair', label: 'Repair', input: held }} appName="Fleet" held={{ form: 'repair' }} submit={vi.fn()} />);
+  expect(await screen.findByRole('group', { name: /Photos/ })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: '+ Choose files' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Type instead' })).toBeInTheDocument();
+  expect(commandProblems(held, { photos: [id(1)] })).toEqual({
+    photos: 'Photos needs at least 2 files.',
+    signed: 'Signature is required.',
+  });
+  expect(commandProblems(held, { photos: [id(1), id(2), id(3), id(4)], signed: id(5) })).toEqual({
+    photos: 'Photos takes at most 3 files.',
+  });
+  expect(commandInput(held, { photos: [id(1), id(2)], signed: id(5) })).toEqual({ photos: [id(1), id(2)], signed: id(5) });
+  // A held id is its sender's alone: an address or a prepare that names one starts nothing.
+  expect(prefilledCommandValues(held, { photos: [id(1)], signed: id(5) })).toEqual({});
 });
 
 test("a rule the declaration states is said in words: a format, a pattern's own message, a length, and the sibling it must be below", () => {
@@ -528,6 +569,42 @@ test("a field's own input component draws it wherever it is asked, a public form
   view.unmount();
   render(draw({ app: 'loans' }));
   expect(screen.getByText('swatch:', { exact: false })).toHaveAttribute('data-component', 'swatch');
+});
+
+test("stars, a scanned code and a color are the platform's own inputs, a time its native picker; each judged as the server judges it", () => {
+  const fields: AppCommandField[] = [
+    { name: 'score', label: 'Score', type: 'number', as: 'rating', integer: true, min: 1, max: 4, outOf: 4, required: true },
+    { name: 'upc', label: 'UPC', type: 'text', as: 'scan', required: true },
+    { name: 'hue', label: 'Hue', type: 'text', as: 'color' },
+    { name: 'opens', label: 'Opens', type: 'time', min: '06:00', max: '22:00', required: true },
+  ];
+  const { container } = render(
+    <CommandFields
+      fields={fields}
+      values={blankCommandValues(fields)}
+      idPrefix="c"
+      identityEpoch={1}
+      isCurrent={() => true}
+      onChange={() => {}}
+    />,
+  );
+  expect(screen.getByText('mistri:rating:', { exact: false })).toHaveAttribute('data-out-of', '4');
+  expect(screen.getByText('mistri:scan:', { exact: false })).toHaveAttribute('data-component', 'mistri:scan');
+  expect(screen.getByText('mistri:color:', { exact: false })).toHaveAttribute('data-component', 'mistri:color');
+  const time = container.querySelector<HTMLInputElement>('input[type="time"]')!;
+  expect([time.min, time.max, time.required]).toEqual(['06:00', '22:00', true]);
+  expect(commandProblems(fields, { score: 5, upc: 'A1', hue: 'teal', opens: '23:00' })).toEqual({
+    score: 'Score must be at most 4.',
+    hue: 'Hue must be a color, such as #1d6a5a.',
+    opens: 'Opens must be on or before 22:00.',
+  });
+  expect(commandProblems(fields, { score: 3, upc: 'A1', opens: '7:00' })).toEqual({ opens: 'Opens must be a time of day.' });
+  expect(commandInput(fields, { score: 3, upc: ' A1 ', hue: '#ABCDEF', opens: '07:00' })).toEqual({
+    score: 3,
+    upc: 'A1',
+    hue: '#abcdef',
+    opens: '07:00',
+  });
 });
 
 test('a lines field starts with one blank line, sends only what a line asks, typed, and names a bad cell by its row and column', async () => {

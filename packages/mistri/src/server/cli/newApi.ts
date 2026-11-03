@@ -68,7 +68,7 @@ export function insideCheckout(dir: string): boolean {
     if (existsSync(manifest)) {
       try {
         const name = (JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string }).name;
-        return name === 'tablewalk-workspace' || name === 'tablewalk' || name === '@mistriwork/mistri';
+        return name === 'mistri-workspace' || name === '@mistriwork/mistri';
       } catch {
         return false;
       }

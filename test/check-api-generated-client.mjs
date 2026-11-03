@@ -25,7 +25,7 @@ const { default: openapiTS, astToString } = await import(pathToFileURL(join(tool
 const clientModule = join(tools, 'node_modules/openapi-fetch/dist/index.mjs');
 const { default: createClient, serializeObjectParam, defaultPathSerializer } = await import(pathToFileURL(clientModule).href);
 const compiler = createRequire(import.meta.url).resolve('typescript/bin/tsc');
-const directory = await mkdtemp(join(tmpdir(), 'tablewalk-api-client-check-'));
+const directory = await mkdtemp(join(tmpdir(), 'mistri-api-client-check-'));
 try {
   for (const integers of ['decimal-string', 'number']) {
     const app = parseAppConfig(

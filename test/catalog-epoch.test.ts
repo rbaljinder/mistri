@@ -47,7 +47,7 @@ test('an epoch cache answers only the version it was kept under', async () => {
 });
 
 function sqliteFixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-catalog-epoch-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-catalog-epoch-'));
   const path = join(directory, 'epoch.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 0);

@@ -77,7 +77,7 @@ function deferred() {
 /** Ignition served in this process, two dealer admins each in their own dealership; through `relay` when it is given. */
 async function deploy(t: TestContext, relay?: LatencyProxy) {
   const lending = await openIgnitionLending(t, 'postgres', { events: true });
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-statements-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-statements-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const previous = { xdg: process.env.XDG_CONFIG_HOME, secret: process.env.BETTER_AUTH_SECRET };
   process.env.XDG_CONFIG_HOME = directory;

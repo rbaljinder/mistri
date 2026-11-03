@@ -157,7 +157,7 @@ async function leakChecks(
 }
 
 test('a scope with repeated conditions admits exactly its rows through self-joins and reverse counts (SQLite)', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scope-inline-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-scope-inline-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'scope.db');
   const db = new DatabaseSync(file);

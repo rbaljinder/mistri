@@ -17,7 +17,7 @@ const FIXTURE = resolve('test/fixtures/apps/saved-application');
 
 /** `flags`: more of the server's own, such as where the App is mounted (`--mount`, `--base-path`). */
 export async function startSavedFormApp(flags: readonly string[] = []) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-saved-form-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-saved-form-'));
   let child: ReturnType<typeof spawn> | undefined;
   const stop = async () => {
     if (child && child.exitCode === null && child.signalCode === null) {

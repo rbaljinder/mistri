@@ -82,7 +82,7 @@ function gate() {
   };
 }
 async function fixture(work: (db: DatabaseSync, path: string) => void | Promise<void>, provision = true, tenantStore = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-admin-journal-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-admin-journal-'));
   const path = join(directory, 'business.db');
   const db = new DatabaseSync(path);
   try {
@@ -160,7 +160,7 @@ test('provisioning independently attests version 1 and preserves existing tenant
 });
 
 test('missing paths, directories and absent tenant stores refuse without adoption', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-admin-missing-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-admin-missing-'));
   const missing = join(directory, 'absent.db');
   try {
     await denied(() => provisionSqliteTenantAdministrationJournal(missing, binding()));

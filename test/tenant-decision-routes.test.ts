@@ -169,7 +169,7 @@ interface Lab {
 }
 
 async function sqliteLab(t: TestContext): Promise<Lab> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-decide-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-decide-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   t.after(() => {
@@ -366,7 +366,7 @@ const ENGINES: ReadonlyArray<{ dialect: Dialect; skip: false | string }> = [
 for (const { dialect, skip } of ENGINES)
   describe(`tenant decisions served on ${dialect}`, { skip }, () => {
     test("each tenant's members see its own suggestions alone, and only those who could accept one", async (t) => {
-      const directory = mkdtempSync(join(tmpdir(), 'tablewalk-decide-script-'));
+      const directory = mkdtempSync(join(tmpdir(), 'mistri-decide-script-'));
       const script = join(directory, 'script.json');
       writeFileSync(
         script,

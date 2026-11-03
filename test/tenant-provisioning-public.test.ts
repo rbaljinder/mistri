@@ -55,7 +55,7 @@ const denied = (error: unknown) => {
 };
 
 function fixture(t: TestContext, administration: boolean) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-provisioning-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-tenant-provisioning-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'business.db');
   const db = new DatabaseSync(path);

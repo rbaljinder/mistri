@@ -32,6 +32,9 @@ the worked examples.
   `examples/apps/lintel/views.ts:53`; when a count or sum of children
   says more, a rollup such as `balance` shown like a column —
   `examples/apps/lintel/views.ts:86`.
+- **When the rows fall into a few kinds that are read apart**, `group`
+  on that column — `group: 'stage'` — each kind under a head with its
+  count and its share of the `totals`.
 - **When it can be empty**, an `empty` that says what belongs there and
   where it comes from — `examples/apps/lintel/views.ts:35`.
 - **When the rows are things to look at**, a cards `presentation` —

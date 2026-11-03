@@ -10,6 +10,8 @@ export const COMMAND_ROUTES = {
   availability: '/api/commands/availability',
   /** A signed-in form's step checked: the answers so far judged, nothing run (server/commands/commandCheck.ts). */
   check: '/api/commands/check',
+  /** A file sent to be held for a command's `field.files` or `field.signature` (server/commands/stagedFiles.ts). */
+  files: '/api/commands/files',
 } as const;
 
 export const COMMAND_ROUTE_PATHS: readonly string[] = Object.values(COMMAND_ROUTES);

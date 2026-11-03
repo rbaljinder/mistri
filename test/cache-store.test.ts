@@ -53,9 +53,9 @@ test('memory: a count keeps its window — the first count starts it, the rest d
 
 test('scoped: keys carry the prefix, so two namespaces never meet', async () => {
   const store = new MemoryCacheStore();
-  await scopedCache(store, 'tw:a:').set('k', '1', 60_000);
-  assert.equal(await scopedCache(store, 'tw:b:').get('k'), undefined);
-  assert.equal(await store.get('tw:a:k'), '1');
+  await scopedCache(store, 'mistri:a:').set('k', '1', 60_000);
+  assert.equal(await scopedCache(store, 'mistri:b:').get('k'), undefined);
+  assert.equal(await store.get('mistri:a:k'), '1');
 });
 
 let fake: FakeValkey;
@@ -79,16 +79,16 @@ const client = (options: Partial<ConstructorParameters<typeof RespClient>[0]> = 
 
 test('valkey: get, set with a time to live, delete and a windowed count, over one connection', async () => {
   const store = new ValkeyCacheStore(client());
-  await store.set('tw:k', 'v', 60_000);
-  assert.equal(await store.get('tw:k'), 'v');
-  await store.delete('tw:k');
-  assert.equal(await store.get('tw:k'), undefined);
-  assert.equal((await store.incr('tw:w', 60_000)).count, 1);
-  const second = await store.incr('tw:w', 60_000);
+  await store.set('mistri:k', 'v', 60_000);
+  assert.equal(await store.get('mistri:k'), 'v');
+  await store.delete('mistri:k');
+  assert.equal(await store.get('mistri:k'), undefined);
+  assert.equal((await store.incr('mistri:w', 60_000)).count, 1);
+  const second = await store.incr('mistri:w', 60_000);
   assert.equal(second.count, 2);
   assert.ok(second.ttlMs > 0 && second.ttlMs <= 60_000);
-  const set = fake.commands.find((command) => command[0] === 'SET' && command[1] === 'tw:k');
-  assert.deepEqual(set, ['SET', 'tw:k', 'v', 'PX', '60000']);
+  const set = fake.commands.find((command) => command[0] === 'SET' && command[1] === 'mistri:k');
+  assert.deepEqual(set, ['SET', 'mistri:k', 'v', 'PX', '60000']);
   await store.close();
 });
 

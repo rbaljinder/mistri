@@ -6,7 +6,7 @@ import { join } from 'node:path';
 export default defineConfig({
   testDir: '..',
   testMatch: 'record-autosave.spec.ts',
-  outputDir: join(tmpdir(), 'tablewalk-autosave-browser-results'),
+  outputDir: join(tmpdir(), 'mistri-autosave-browser-results'),
   workers: 1,
   fullyParallel: false,
   retries: 0,

@@ -48,7 +48,7 @@ import { entryFor } from './support/bins.js';
 
 const ROOT = resolve('.');
 
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-migrate-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-migrate-'));
 after(() => rmSync(work, { recursive: true, force: true }));
 let n = 0;
 

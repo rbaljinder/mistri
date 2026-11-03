@@ -39,7 +39,7 @@ const command = (when: string) =>
   } as Parameters<typeof defineCommand>[0]);
 
 async function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-when-words-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-when-words-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE invoice (id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'open', balance_cents INTEGER NOT NULL DEFAULT 0, note TEXT);

@@ -77,7 +77,7 @@ async function fixture(
     execute: (key: number, who?: typeof staff, request?: Record<string, unknown>) => Promise<{ result: unknown; replayed: boolean }>;
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-lookup-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-lookup-'));
   const path = join(directory, 'shop.db');
   const db = new DatabaseSync(path);
   const api = await startFakeRest();
@@ -182,7 +182,7 @@ test('an App is held to its lookups: a declared source, never a row-policy App, 
 });
 
 test('the binding asks the same question, so startup and mistri check refuse a lookup the App cannot run', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-lookup-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-lookup-'));
   const path = join(directory, 'shop.db');
   const db = new DatabaseSync(path);
   const api = await startFakeRest();

@@ -75,7 +75,7 @@ function commandError(code: string, outcome = 'not_applied') {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-command-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-command-'));
   const path = join(directory, 'commands.db');
   const db = new DatabaseSync(path);
   const registry = new Registry();

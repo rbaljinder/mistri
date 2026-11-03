@@ -51,6 +51,7 @@ See it in the sample (`examples/apps/lintel/views.ts:143`) (some tabs left out);
 | `board` | `{ by, primary, … }`: lanes of cards by one column; `category` puts a colored tag on each card, `footer: [{ column: 'close_date', icon: 'calendar' }, 'team']` a row of up to four facts under it | no board | Stable |
 | `split` | `{ detail, limit, row }`: the list beside the picked record; `row: { primary, lines, properties, badge, avatar }` says how a row reads, and the view's `shortcuts: { s: 'startWork' }` binds single keys to the picked record's actions (shown beside each verb, off while an input has focus) | no split | Stable |
 | `editable`, `totals`, `rowActions` | Cells edited in place, sums over the whole tab, a row's own actions | off | Stable |
+| `group` | `group: 'stage'`: the grid's rows under a head for each value, saying how many it holds and each of `totals` summed under its column, over the whole tab; a head folds its group. A grid only, not beside `order` | none | Stable |
 | `open`, `order`, `import` | `'drawer'` or `'modal'`; a column people drag rows by; Import from CSV | page; none; off | Stable |
 | `opens` | a reference column: a row opens the record it names, so a list of `ticket_watcher` opens each ticket; a grid only | the row | Stable |
 | `empty` | `{ title, description?, action? }`: what the list says while it has no row, as it opens; a tab says its own with `{ segment, empty }` | "No work orders yet." | Stable |

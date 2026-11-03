@@ -22,7 +22,7 @@ function privateFree(value: unknown): void {
 }
 
 async function fixture(t: TestContext, withHook = true) {
-  const { directory, stopping } = scratch(t, 'tablewalk-scoped-delete-cli-');
+  const { directory, stopping } = scratch(t, 'mistri-scoped-delete-cli-');
   const app = join(directory, 'app');
   mkdirSync(app);
   const data = join(directory, 'business.db');

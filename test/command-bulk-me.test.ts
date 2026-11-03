@@ -61,7 +61,7 @@ for (const shape of shapes) {
     // The command's own `when`, which its bulk action carries: a "my records" verb and its opposite.
     const when = { claim: `${shape.column} = me`, nudge: `${shape.column} != me` };
     const commands = Object.keys(when);
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-bulk-me-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-bulk-me-'));
     const file = join(directory, 'desk.db');
     const db = new DatabaseSync(file);
     db.exec(shape.schema);

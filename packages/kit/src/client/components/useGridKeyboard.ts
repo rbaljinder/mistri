@@ -35,6 +35,8 @@ interface GridKeyboardOptions {
   /** So a screen reader hears "of 63,010" rather than "of 20". */
   totalRows?: number;
   firstRow: number;
+  /** Rows the cursor passes over: a folded group's (Grid.tsx `group`), which are not drawn. */
+  skip?: (index: number) => boolean;
 }
 
 export function useGridKeyboard(
@@ -46,6 +48,9 @@ export function useGridKeyboard(
      send the reader back to the top-left corner. */
   const cursor = useRef({ row: -1, col: 0 });
   const { rowCount, columnCount, offset, onOpen, onPeek, totalRows, firstRow } = opts;
+  /* Read when a key is pressed, so a group folded or opened does not rebind the grid's keys. */
+  const skip = useRef(opts.skip);
+  skip.current = opts.skip;
 
   useEffect(() => {
     const table = tableRef.current;
@@ -104,9 +109,21 @@ export function useGridKeyboard(
       cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     };
 
+    /* The nearest row that is drawn, on from `row` the way the cursor travels, else back the other way; a folded
+       group's rows are stepped over as if they were not there. */
+    const drawnRow = (row: number, way: number): number => {
+      const passes = skip.current;
+      if (!passes) return row;
+      for (const step of [way, -way]) {
+        for (let at = row; at >= 0 && at < rowCount; at += step) if (!passes(at)) return at;
+      }
+      return cursor.current.row;
+    };
+
     const moveTo = (nextRow: number, nextCol: number) => {
+      const row = Math.max(0, Math.min(rowCount - 1, nextRow));
       cursor.current = {
-        row: Math.max(0, Math.min(rowCount - 1, nextRow)),
+        row: drawnRow(row, row < cursor.current.row ? -1 : 1),
         col: Math.max(0, Math.min(columnCount - 1, nextCol)),
       };
       focusCell();

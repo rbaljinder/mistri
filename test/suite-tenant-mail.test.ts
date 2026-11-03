@@ -21,7 +21,7 @@ import { startConfiguredSuite } from '../packages/mistri/src/server/cli/suiteCom
 const SECRET = 'suite-tenant-mail-inbound-secret-0001';
 
 test('a suite tenant App takes signed mail under its mount, in the tenant its address names', { timeout: 20_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-tenant-mail-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-tenant-mail-'));
   let active: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   t.after(async () => {
     await active?.close();

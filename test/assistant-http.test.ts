@@ -78,7 +78,7 @@ async function fixture(
   run: (f: Fixture) => Promise<void>,
   options: { script?: AssistantScript; assistant?: Record<string, unknown>; usage?: number | ModelUsage; model?: false } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-assistant-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-assistant-http-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE person (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT);

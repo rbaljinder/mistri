@@ -252,7 +252,7 @@ async function fixture(
   }) => Promise<void>,
   variant: 'plain' | 'command' | 'order' = 'plain',
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-consumes-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-consumes-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA}`);
@@ -540,7 +540,7 @@ test('a decimal balance read as text moves without rounding, and floor: false le
 });
 
 test('under a row policy a take past zero answers 422 as well (DM9)', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-consumes-policy-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-consumes-policy-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`PRAGMA foreign_keys = ON; ${SCHEMA}`);

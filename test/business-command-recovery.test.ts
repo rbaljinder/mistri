@@ -43,7 +43,7 @@ async function fixture(
   }) => Promise<void>,
   many = true,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-shared-recovery-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-shared-recovery-'));
   const path = join(directory, 'business.db');
   const db = new DatabaseSync(path),
     registry = new Registry();

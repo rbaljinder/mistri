@@ -15,7 +15,7 @@ import { pathToFileURL } from 'node:url';
 const FIXTURE = resolve('test/fixtures/apps/desk-blocks');
 
 export async function startDeskBlocks() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-desk-blocks-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-desk-blocks-'));
   let child: ReturnType<typeof spawn> | undefined;
   let stopping = false;
   const stop = async () => {

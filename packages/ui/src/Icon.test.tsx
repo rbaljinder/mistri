@@ -15,7 +15,7 @@ test('a registered glyph draws regular, or bold when asked, in a labelled or dec
   expect(paths(svg)).toEqual(['M0 0h1']);
   expect(svg).toHaveAttribute('aria-hidden', 'true');
   expect(svg).toHaveAttribute('width', '16');
-  expect(svg).toHaveClass('tw-icon');
+  expect(svg).toHaveClass('mistri-icon');
   rerender(<Icon name="dot" weight="bold" label="Dot" />);
   expect(paths(screen.getByRole('img', { name: 'Dot' }))).toEqual(['M0 0h2']);
 });

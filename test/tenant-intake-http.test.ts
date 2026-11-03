@@ -64,7 +64,7 @@ async function maintain(file: string, run: (admin: TenantStoreAdministration) =>
 
 async function fixture(t: TestContext, mount = '') {
   resetPublicFormLimits();
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-intake-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-intake-http-'));
   const business = join(directory, 'business.db');
   const db = new DatabaseSync(business);
   try {
@@ -447,7 +447,7 @@ test('a saved form over the tenant host: every step carries its address, and a c
     response.headers
       .getSetCookie()
       .map((value) => value.split(';')[0])
-      .find((value) => value.startsWith('tw_form_draft='));
+      .find((value) => value.startsWith('mistri_form_draft='));
   // A first step, placed and unplaced: the same status, header names and body.
   const placed = await post('/steps/name', via(NORTH), { input: { name: 'Ada' }, submission: randomUUID() });
   const unplaced = await post('/steps/name', via(UNKNOWN), { input: { name: 'Ada' }, submission: randomUUID() });
@@ -471,7 +471,7 @@ test('a saved form over the tenant host: every step carries its address, and a c
     assert.equal(refused.status, 404, query);
     assert.equal((await refused.json()).code, 'not_found');
     // The browser's place is forgotten with the answer: the cookie is cleared.
-    assert.match(refused.headers.getSetCookie().join('\n'), /tw_form_draft=;/);
+    assert.match(refused.headers.getSetCookie().join('\n'), /mistri_form_draft=;/);
   }
   assert.deepEqual(f.count("SELECT tenant_id, name, more, status FROM lead WHERE status = 'draft'"), [
     { tenant_id: 'north', name: 'Ada', more: 'Details', status: 'draft' },
@@ -498,7 +498,7 @@ test('a mounted tenant saved form scopes its draft cookie to the mounted form pa
     });
   const first = await post('/steps/name', { input: { name: 'Maya' }, submission: randomUUID() });
   assert.equal(first.status, 200, await first.clone().text());
-  const savedCookie = first.headers.getSetCookie().find((value) => value.startsWith('tw_form_draft='));
+  const savedCookie = first.headers.getSetCookie().find((value) => value.startsWith('mistri_form_draft='));
   assert.ok(savedCookie);
   assert.match(savedCookie, /(?:^|;)\s*Path=\/leads\/api\/forms\/draft(?:;|$)/i);
   const cookie = savedCookie.split(';')[0];

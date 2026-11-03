@@ -30,7 +30,7 @@ const app = (defaults: Record<string, unknown>) =>
   ) as AppDef;
 
 async function catalog(t: import('node:test').TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-form-derived-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-form-derived-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);

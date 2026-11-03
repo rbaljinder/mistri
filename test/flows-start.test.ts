@@ -52,7 +52,7 @@ async function until(check: () => boolean | Promise<boolean>, what: string) {
 }
 
 test('a start pages past its last key, keys each dispatch, and a tenant reads its own rows alone', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-flows-start-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-flows-start-'));
   const path = join(directory, 'data.db');
   const db = new DatabaseSync(path);
   db.exec('CREATE TABLE ticket(id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, priority TEXT NOT NULL)');
@@ -107,7 +107,7 @@ test(
   'flows start on an App: the server runs the created flow on the records chosen, where its condition holds',
   { timeout: 90_000 },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-flows-start-cli-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-flows-start-cli-'));
     const children: ChildProcess[] = [];
     t.after(async () => {
       for (const child of children)

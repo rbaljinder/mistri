@@ -63,7 +63,7 @@ type Call = (path: string, body?: object) => Promise<Answer>;
 
 /** The two databases: SQLite files, or the catalog in PostgreSQL where `catalogUrl` names one. */
 function databases(catalogUrl?: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-stitch-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-stitch-'));
   const registry = new Registry();
   for (const [id, sql] of [['ops', OPS], ...(catalogUrl ? [] : [['catalog', CATALOG]])] as const) {
     const file = join(directory, `${id}.db`);

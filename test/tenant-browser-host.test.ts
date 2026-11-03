@@ -31,7 +31,7 @@ async function portFor() {
   return address.port;
 }
 async function fixture(t: TestContext, browser = true, mount?: AddressMount, suite?: { port: number }) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-browser-host-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-browser-host-'));
   const business = join(directory, 'business.db'),
     store = join(directory, 'auth.db');
   const db = new DatabaseSync(business);

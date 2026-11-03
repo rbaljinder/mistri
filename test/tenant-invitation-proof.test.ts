@@ -220,7 +220,7 @@ test('pure: eligibility rejects stale terms before lookups and rechecks expiry a
 test('genuine native proofs remain binding-owned through inactive async helper observations', async (t) => {
   // SQLite native fixture. Instrumented async scheduling forwards every proof
   // observation to the genuine binding; this is not a claim of PG integration.
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-invitation-proof-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-invitation-proof-'));
   let binding: AppAuthRuntimeBinding | undefined;
   const server = createServer((req, res) => {
     if (!binding) {

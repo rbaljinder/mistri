@@ -24,7 +24,7 @@ const definition = () => ({
   api: { version: 1, roles: ['reader'], resources: { item: { fields: ['id', 'name'], sorts: ['id'] } } },
 });
 function setup() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-api-loader-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-api-loader-'));
   const app = join(directory, 'app');
   mkdirSync(app);
   const path = join(directory, 'data.db');

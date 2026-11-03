@@ -46,7 +46,7 @@ test("a build's tablewalk imports are the running tablewalk's own entries", () =
 });
 
 test('a build beside the App, with no node_modules above it, starts and serves', { timeout: 180_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-build-placement-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-build-placement-'));
   const children: ChildProcess[] = [];
   t.after(async () => {
     for (const child of children) {

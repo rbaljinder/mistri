@@ -24,7 +24,7 @@ describe('NewMenu', () => {
     await userEvent.click(trigger);
     const lines = await screen.findAllByRole('menuitem');
     expect(lines.map((line) => line.textContent)).toEqual(['Ticket', 'Change']);
-    expect(lines[1].querySelector('.tw-icon')).not.toBeNull();
+    expect(lines[1].querySelector('.mistri-icon')).not.toBeNull();
     // Icons on all lines or none: the line without a mark keeps its empty slot, so the labels line up.
     expect(lines[0].firstElementChild).toHaveClass('new-menu-slot');
     await userEvent.click(screen.getByRole('menuitem', { name: 'Change' }));

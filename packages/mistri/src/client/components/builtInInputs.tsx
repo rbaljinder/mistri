@@ -31,13 +31,14 @@ interface InputProps {
   disabled: boolean;
   required: boolean;
   label: string;
-  field: { name: string; resource?: string };
+  field: { name: string; resource?: string; rule?: Rule };
 }
 
 type Rule = { outOf?: number; slider?: { min: number; max: number; step?: number }; signature?: true | { table: string; key: string } };
 
-/** The column's display rule, as the App's payload carries it. */
+/** The column's display rule, as the App's payload carries it; a command's field brings its own. */
 function ruleOf(field: InputProps['field']): Rule {
+  if (field.rule) return field.rule;
   const resources = (pageBridge.activeApp() as { resources?: Record<string, { display?: Record<string, Rule> }> } | null)?.resources;
   const display = field.resource ? resources?.[field.resource]?.display : undefined;
   return display && Object.hasOwn(display, field.name) ? display[field.name] : {};
@@ -350,10 +351,15 @@ function ScanInput({ value, onChange, id, describedBy, invalid, disabled, requir
   );
 }
 
-/** A canvas's picture as base64, for the file route. */
-async function pngOf(canvas: HTMLCanvasElement): Promise<string> {
+/** A canvas's picture as a PNG. */
+async function pngOf(canvas: HTMLCanvasElement): Promise<Blob> {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error(say('signatureUnread'));
+  return blob;
+}
+
+/** A picture's bytes as base64, for the file route. */
+export async function base64Of(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let out = '';
   for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -371,9 +377,44 @@ const PAD = { wide: 480, high: 150 };
  * points at; the form holds that row's key. A kept signature is shown as its
  * picture with "Sign again" beside it. Nothing is stored until it is kept.
  */
-function SignatureInput({ value, onChange, id, describedBy, invalid, disabled, label, field }: InputProps) {
-  const rule = ruleOf(field).signature;
+function SignatureInput(props: InputProps) {
+  const rule = ruleOf(props.field).signature;
   const keeps = rule && typeof rule === 'object' ? rule : undefined;
+  const keeper: SignatureKeeper | undefined = keeps && {
+    keep: async (png) => {
+      const reply = (await api('/api/file/upload', {
+        table: keeps.table,
+        values: {},
+        file: { name: 'signature.png', type: 'image/png', data: await base64Of(png) },
+      })) as { key?: Record<string, string | number>; errors?: unknown[]; error?: unknown };
+      const stored = reply.key?.[keeps.key];
+      if (stored === undefined || reply.errors || reply.error) throw new Error(say('signatureUnread'));
+      return typeof stored === 'number' ? stored : String(stored);
+    },
+    picture: (value) => richTextImageAddress(keeps.table, { [keeps.key]: value }),
+  };
+  return <SignaturePad {...props} keeper={keeper} />;
+}
+
+/** Where a signature goes once kept, and the picture of a kept one: a row of a file resource, or a file held for a command. */
+interface SignatureKeeper {
+  /** Keeps the drawing; answers what the field holds for it. */
+  keep(png: Blob): Promise<string | number>;
+  /** The kept picture's address; undefined where there is none to show (a held file this page did not send). */
+  picture(value: string | number): string | undefined;
+}
+
+/** The pad itself, kept by whichever keeper it is handed: without one, nothing can be kept. */
+export function SignaturePad({
+  value,
+  onChange,
+  id,
+  describedBy,
+  invalid,
+  disabled,
+  label,
+  keeper,
+}: Omit<InputProps, 'field' | 'required'> & { keeper: SignatureKeeper | undefined }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [typed, setTyped] = useState<string | null>(null);
@@ -428,17 +469,10 @@ function SignatureInput({ value, onChange, id, describedBy, invalid, disabled, l
   const [, redraw] = useState(0);
 
   const keep = async () => {
-    if (!keeps || !canvas.current) return;
+    if (!keeper || !canvas.current) return;
     setState('keeping');
     try {
-      const reply = (await api('/api/file/upload', {
-        table: keeps.table,
-        values: {},
-        file: { name: 'signature.png', type: 'image/png', data: await pngOf(canvas.current) },
-      })) as { key?: Record<string, string | number>; errors?: unknown[]; error?: unknown };
-      const stored = reply.key?.[keeps.key];
-      if (stored === undefined || reply.errors || reply.error) throw new Error(say('signatureUnread'));
-      onChange(typeof stored === 'number' ? stored : String(stored));
+      onChange(await keeper.keep(await pngOf(canvas.current)));
       kept.current = true;
       setSigning(false);
       setStrokes([]);
@@ -449,14 +483,15 @@ function SignatureInput({ value, onChange, id, describedBy, invalid, disabled, l
     }
   };
 
-  if (!signing && value !== null && value !== '' && keeps)
+  const picture = value !== null && value !== '' && typeof value !== 'boolean' ? keeper?.picture(value) : undefined;
+  if (!signing && value !== null && value !== '' && keeper)
     return (
       <span className="signature-input">
-        <img
-          className="signature-input-kept"
-          src={richTextImageAddress(keeps.table, { [keeps.key]: typeof value === 'number' ? value : String(value) })}
-          alt={say('keptSignature', { label })}
-        />
+        {picture ? (
+          <img className="signature-input-kept" src={picture} alt={say('keptSignature', { label })} />
+        ) : (
+          <span className="signature-input-kept is-unseen">{say('signatureKept')}</span>
+        )}
         <span className="signature-input-tools">
           <button ref={again} type="button" className="btn btn-quiet" disabled={disabled} onClick={() => setSigning(true)}>
             {say('signAgain')}
@@ -541,7 +576,7 @@ function SignatureInput({ value, onChange, id, describedBy, invalid, disabled, l
         <button
           type="button"
           className="btn signature-input-keep"
-          disabled={disabled || empty || !keeps || state === 'keeping'}
+          disabled={disabled || empty || !keeper || state === 'keeping'}
           onClick={() => void keep()}
         >
           {say(state === 'keeping' ? 'keepingSignature' : 'useSignature')}

@@ -26,7 +26,7 @@ test('a meaningful icon exposes its label; blank labels remain decorative', () =
   const { rerender } = render(<Icon name="caret-down" label="Expand" size="0.75rem" className="utility" />);
   const icon = screen.getByRole('img', { name: 'Expand' });
   expect(icon).not.toHaveAttribute('aria-hidden');
-  expect(icon).toHaveClass('tw-icon', 'utility');
+  expect(icon).toHaveClass('mistri-icon', 'utility');
   expect(icon).toHaveAttribute('width', '0.75rem');
   expect(icon).toHaveAttribute('height', '0.75rem');
   rerender(<Icon name="caret-down" label="  " />);

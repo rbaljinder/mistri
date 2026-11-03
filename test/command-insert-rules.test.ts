@@ -50,7 +50,7 @@ async function fixture(
     exec: (command: string, input: object, attach?: Attach, data?: string) => Promise<unknown>;
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-insert-rules-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-insert-rules-'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE ticket (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', note BLOB);

@@ -60,7 +60,7 @@ const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 /** Reusable fresh business-only fixture: startup tests must observe auth still
  * absent. The real-native owner test below reuses the existing auth support. */
 function fixture(t: TestContext, admin = true, provision = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-administration-startup-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-administration-startup-'));
   const path = join(directory, 'business.db'),
     authPath = join(directory, 'auth.db');
   const db = new DatabaseSync(path),

@@ -4,4 +4,7 @@ import { defineMessages } from '../../../messages.js';
 export const say = defineMessages({
   openReference: 'Open {label} ({table} {key})',
   openTableKey: 'Open {table} {key}',
+  copyValue: 'Copy {label}',
+  copiedValue: 'Copied {label}.',
+  findOnAMap: 'Find on a map',
 });

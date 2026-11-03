@@ -152,6 +152,8 @@ export interface AppListView {
   favorite?: true;
   /** Numeric columns summed in a footer row over the whole query, not the page. A grid only. */
   totals?: string[];
+  /** The column the grid's rows are grouped by, each group under a head with its count and subtotals. A grid only. */
+  group?: string;
   /** Row height; 'comfortable' is the default. */
   density?: 'comfortable' | 'compact';
   /** A ⋯ menu at the end of each row with the record's own actions. A grid only. */
@@ -803,6 +805,7 @@ export const DISPLAY_FORMATS = [
   'year',
   'json',
   'qr',
+  'address',
 ] as const;
 
 /** The roles an App names for people (`auth.roles.<id>.label`), for the sign-in answer: absent where none is labeled. */

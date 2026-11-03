@@ -23,7 +23,7 @@ import { parseLabelTemplate } from '../packages/engine/src/shared/recordLabel.js
 const WHERE = 'test/app.json';
 
 async function vault(t: import('node:test').TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-masked-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-masked-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'vault.db');
   const db = new DatabaseSync(file);

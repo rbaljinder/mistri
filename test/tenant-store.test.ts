@@ -63,7 +63,7 @@ function count(db: DatabaseSync, table: string) {
   return db.prepare(`SELECT count(*) AS n FROM main."${table}"`).get()?.n;
 }
 async function fixture(work: (db: DatabaseSync, path: string) => void | Promise<void>, provision = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-store-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-store-'));
   const path = join(directory, 'data.db');
   const db = new DatabaseSync(path);
   try {
@@ -137,7 +137,7 @@ test('explicit provisioning is idempotent, source-bound, and preserves existing 
 });
 
 test('provisioning refuses missing paths and directories without creating a database', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-store-missing-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-store-missing-'));
   const absent = join(directory, 'absent.db');
   try {
     await denied(() => provisionSqliteTenantStore(absent, binding()));

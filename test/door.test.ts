@@ -310,7 +310,7 @@ interface Row {
 }
 
 const stub = {} as never;
-const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-door-'));
+const scratch = mkdtempSync(join(tmpdir(), 'mistri-door-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
 /** An App with no sign-in over one writable SQLite table, served as the App framework's start serves it. */

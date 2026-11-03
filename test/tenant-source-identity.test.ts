@@ -32,7 +32,7 @@ function safe(error: unknown): boolean {
   return true;
 }
 async function fixture(t: TestContext, owner = plain(binding)) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-identity-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-identity-'));
   const path = join(directory, 'source.db'),
     db = new DatabaseSync(path);
   const sources: Array<TenantReadSource | TenantWriteSource> = [];

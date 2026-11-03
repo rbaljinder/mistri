@@ -11,7 +11,7 @@ import { startConfiguredSuite } from '../packages/mistri/src/server/cli/suiteCom
 import { provisionSqliteTenantStore, TENANT_TABLES } from '../packages/mistri/src/server/tenant/tenantStore.js';
 
 test('suite-mounted tenant saved intake owns its address, draft cookie, writes and refusals', { timeout: 20_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-intake-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-intake-'));
   let suite: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   t.after(async () => {
     try {
@@ -172,7 +172,7 @@ test('suite-mounted tenant saved intake owns its address, draft cookie, writes a
     });
   const first = await post('/steps/name', north, { input: { name: 'Ada' }, submission: randomUUID() });
   assert.equal(first.status, 200, await first.clone().text());
-  const savedCookie = first.headers.getSetCookie().find((cookie) => cookie.startsWith('tw_form_draft='));
+  const savedCookie = first.headers.getSetCookie().find((cookie) => cookie.startsWith('mistri_form_draft='));
   assert.ok(savedCookie);
   assert.match(savedCookie, /(?:^|;)\s*Path=\/tools\/leads\/api\/forms\/draft(?:;|$)/i);
   const cookie = savedCookie.split(';')[0];

@@ -796,6 +796,12 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=list].from` | string | Stable | A logical resource name: bare, or source.name for a secondary source. Used in `examples/apps/lintel/app.ts`. |
 
+## `views.*[kind=list].group`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=list].group` | string | Stable | One of the resource's own columns whose values group the rows, each group under a head that says the value, how many rows it holds and the subtotal of each of the view's totals; a head folds its group away. The heads are one breakdown over everything the list's conditions match. A grid only, and not beside order. Used in `examples/apps/lintel/pages/resident.ts`. |
+
 ## `views.*[kind=list].heading`
 
 | Key | Type | Status | What it does |
@@ -875,10 +881,11 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].presentation[kind=calendar].backdrop[].tone` | `"good"` · `"warn"` · `"bad"` · `"info"` · `"neutral"` | Stable | The span's shade, in a display tone; absent, the quiet neutral. One of `bad`, `good`, `info`, `neutral`, `warn`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].presentation[kind=calendar].badge` | string | Stable | A status said as its tone (a dot and its word) from the column's display map: a local column or one-hop label path. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].presentation[kind=calendar].date` | string | Stable | The date (or timestamp) column a record sits on, or starts on when it has an end. |
-| `views.*[kind=list].presentation[kind=calendar].end` | string | Stable | A date column holding the record's last day: the record is drawn across every day from date to end, continuing across week rows. A move shifts both. |
+| `views.*[kind=list].presentation[kind=calendar].end` | string | Stable | A date column holding the record's last day: the record is drawn across every day from date to end, continuing across week rows. A move shifts both. In a week or a day, the timestamp the record ends at. |
 | `views.*[kind=list].presentation[kind=calendar].kind` |  | Stable |  One of `calendar`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `views.*[kind=list].presentation[kind=calendar].lines` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `views.*[kind=list].presentation[kind=calendar].primary` | string | Stable | A local text column or one-hop reference label path like "employee_id.name". Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].presentation[kind=calendar].span` | `"month"` · `"week"` · `"day"` | Stable | What one page shows: 'month' (the default), the days of a month; 'week' or 'day', a time grid with the hours down the side and each record placed by its start and end, read by timestamp columns. A phone reads a week or a day as an agenda. One of `day`, `month`, `week`. |
 
 ## `views.*[kind=list].presentation[kind=cards]`
 

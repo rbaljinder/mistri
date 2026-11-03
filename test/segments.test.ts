@@ -246,7 +246,7 @@ const identity = (role: string): Identity => ({ id: `account-${role}`, who: `${r
 const sessions: Record<string, Identity> = { manager: identity('manager'), clerk: identity('clerk'), crew: identity('crew') };
 
 test('a served App: tabs and counts read segments, row policy narrows them, and a reader who may not read a column is served none', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-segments-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-segments-'));
   const path = join(directory, 'works.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE site (id INTEGER PRIMARY KEY, name TEXT NOT NULL, region TEXT NOT NULL);
@@ -340,7 +340,7 @@ test('a served App: tabs and counts read segments, row policy narrows them, and 
 });
 
 test('a row policy narrows a segment as it narrows any condition: the person’s own rows, and no more', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-segments-policy-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-segments-policy-'));
   const path = join(directory, 'works.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE site (id INTEGER PRIMARY KEY, name TEXT NOT NULL, region TEXT NOT NULL);
@@ -661,7 +661,7 @@ export const views = {
     findings[0].text,
     /'status = waiting' is written in 2 places \(view "waiting"; view "stuck"\).*segments: \{ waiting: 'status = waiting' \}/,
   );
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-segments-fix-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-segments-fix-'));
   try {
     writeFileSync(join(directory, 'app.ts'), source);
     const { fixed, left } = fixRepeatedQueries(authored, schema, directory);
@@ -684,7 +684,7 @@ export const views = {
   }
   /* The same words over another table are another query: a reference to a site, a count of sites, and a view
      of sites keep theirs, and the two over work orders are still found and named. */
-  const elsewhere = mkdtempSync(join(tmpdir(), 'tablewalk-segments-fix-'));
+  const elsewhere = mkdtempSync(join(tmpdir(), 'mistri-segments-fix-'));
   try {
     writeFileSync(
       join(elsewhere, 'app.ts'),

@@ -75,7 +75,7 @@ test('current native roles are captured with eligibility, without signup default
 });
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-auth-eligibility-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-auth-eligibility-'));
   let binding: AppAuthRuntimeBinding | undefined, db: DatabaseSync | undefined;
   const server = createServer((req, res) => {
     if (!binding) {

@@ -57,7 +57,7 @@ test("no test keeps its files in .demo/, where a developer's demo databases live
       .forEach((line, index) => {
         if (!DEMO_PATH.test(line) || STRING_ONLY.some((allowed) => allowed.test(line))) return;
         problems.push(
-          `${file}:${index + 1} puts a path under .demo/; use a directory of the test's own (mkdtempSync(join(tmpdir(), 'tablewalk-…-'))).`,
+          `${file}:${index + 1} puts a path under .demo/; use a directory of the test's own (mkdtempSync(join(tmpdir(), 'mistri-…-'))).`,
         );
       });
   }

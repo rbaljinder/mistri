@@ -39,7 +39,7 @@ type Reply = { status: number; body: { store?: string; filters?: Record<string, 
 type Call = (route: string, session?: string, body?: Record<string, unknown>) => Promise<Reply>;
 
 async function fixture(auth: Record<string, unknown> | undefined, run: (call: Call) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-saved-views-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-saved-views-'));
   const previousConfig = process.env.XDG_CONFIG_HOME;
   const path = join(directory, 'app.db');
   const db = new DatabaseSync(path);

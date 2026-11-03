@@ -944,7 +944,7 @@ interface Fixture {
 
 async function fixture(run: (f: Fixture) => Promise<void>) {
   resetPublicFormLimits();
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-inputs-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-inputs-'));
   const file = join(directory, 'inputs.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE loan(id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, amount REAL NOT NULL, due TEXT NOT NULL);
@@ -1279,4 +1279,89 @@ test('a statement stands beside a checkbox that must be checked or may be left; 
     () => parseCommandInput({ texts: { type: 'boolean', as: 'buttons', statement: words } }, 'join'),
     /statement is the words a checkbox stands beside/,
   );
+});
+
+test('a time, stars, a scanned code and a color: asked as a column format is edited, held to its shape on both sides', () => {
+  const [opens, closes, score, upc, hue] = parseCommandInput(
+    {
+      opens: fieldHelpers.time({ min: '06:00', max: '22:00' }),
+      closes: fieldHelpers.time({ above: 'opens', optional: true }),
+      score: fieldHelpers.number({ as: 'rating', outOf: 4 }),
+      upc: fieldHelpers.text({ as: 'scan', max: 40 }),
+      hue: fieldHelpers.text({ as: 'color', optional: true }),
+    },
+    'shapes',
+  );
+  assert.deepEqual(opens, { name: 'opens', label: 'Opens', required: true, type: 'time', min: '06:00', max: '22:00' });
+  assert.deepEqual(closes, { name: 'closes', label: 'Closes', type: 'time', above: 'opens' });
+  // A rating's scale is its bounds: a whole number from one, which the shared reader holds it to as any integer.
+  assert.deepEqual(score, {
+    name: 'score',
+    label: 'Score',
+    required: true,
+    as: 'rating',
+    type: 'number',
+    integer: true,
+    min: 1,
+    max: 4,
+    outOf: 4,
+  });
+  assert.deepEqual(upc, { name: 'upc', label: 'Upc', required: true, as: 'scan', type: 'text', maxLength: 40 });
+  assert.deepEqual(hue, { name: 'hue', label: 'Hue', as: 'color', type: 'text' });
+  // A rating says five stars when it says none.
+  assert.equal((parseCommandInput({ s: fieldHelpers.number({ as: 'rating' }) }, 'r')[0] as { outOf?: number }).outOf, 5);
+  for (const [raw, message] of [
+    [{ t: { type: 'time', min: '6:00' } }, /HH:MM/],
+    [{ t: { type: 'time', min: '24:00' } }, /HH:MM/],
+    [{ t: { type: 'time', min: '18:00', max: '09:00' } }, /min must not be after max/],
+    [{ t: { type: 'time', step: 15 } }, /step/],
+    [{ d: { type: 'date' }, t: { type: 'time', above: 'd' } }, /another time field/],
+    [{ n: { type: 'number', outOf: 5 } }, /give as: 'rating' too/],
+    [{ n: { type: 'number', as: 'rating', outOf: 2 } }, /from 3 to 10/],
+    [{ n: { type: 'number', as: 'rating', outOf: 11 } }, /from 3 to 10/],
+    [{ n: { type: 'number', as: 'rating', max: 5 } }, /takes no max/],
+    [{ n: { type: 'money', as: 'rating' } }, /'slider'/],
+    [{ c: { type: 'text', as: 'scan', mask: '000' } }, /takes no mask/],
+    [{ c: { type: 'textarea', as: 'scan' } }, /drawn one way/],
+    [{ c: { type: 'text', as: 'color', format: 'email' } }, /takes no format/],
+    [{ c: { type: 'text', as: 'color', max: 7 } }, /takes no max/],
+    [{ c: { type: 'text', as: 'stars' } }, /'scan', 'color'/],
+  ] as const) {
+    assert.throws(() => parseCommandInput(raw, 'case'), message);
+  }
+  const fields = [opens, closes, score, upc, hue];
+  const refused = (input: unknown) => {
+    try {
+      return readCommandInput(fields, input);
+    } catch (error) {
+      assert.ok(error instanceof CommandInputRefusal);
+      return `${error.path} ${error.reason}`;
+    }
+  };
+  // A color is kept as the picker writes it; a code is text, trimmed, held to its own rules.
+  assert.deepEqual(refused({ opens: '09:30', closes: '17:00', score: 3, upc: ' 012345678905 ', hue: '#1D6A5A' }), {
+    opens: '09:30',
+    closes: '17:00',
+    score: 3,
+    upc: '012345678905',
+    hue: '#1d6a5a',
+  });
+  assert.equal(refused({ opens: '9:30', score: 3, upc: 'x' }), 'opens type');
+  assert.equal(refused({ opens: '09:30:00', score: 3, upc: 'x' }), 'opens type');
+  assert.equal(refused({ opens: '05:59', score: 3, upc: 'x' }), 'opens below_min');
+  assert.equal(refused({ opens: '22:01', score: 3, upc: 'x' }), 'opens above_max');
+  assert.equal(refused({ opens: '09:30', closes: '09:30', score: 3, upc: 'x' }), 'closes not_above');
+  assert.equal(refused({ opens: '09:30', score: 0, upc: 'x' }), 'score below_min');
+  assert.equal(refused({ opens: '09:30', score: 5, upc: 'x' }), 'score above_max');
+  assert.equal(refused({ opens: '09:30', score: 2.5, upc: 'x' }), 'score integer');
+  assert.equal(refused({ opens: '09:30', score: 3, upc: 'x'.repeat(41) }), 'upc too_long');
+  assert.equal(refused({ opens: '09:30', score: 3, upc: 'x', hue: 'teal' }), 'hue format');
+  assert.equal(refused({ opens: '09:30', score: 3, upc: 'x', hue: '#1d6a5' }), 'hue format');
+  // The browser marks every problem at once, by the same reading.
+  assert.deepEqual(commandInputProblems(fields, { opens: '25:00', score: 9, upc: '', hue: 'red' }), [
+    { path: 'opens', reason: 'type' },
+    { path: 'score', reason: 'above_max' },
+    { path: 'upc', reason: 'required' },
+    { path: 'hue', reason: 'format' },
+  ]);
 });

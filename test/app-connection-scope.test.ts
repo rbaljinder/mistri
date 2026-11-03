@@ -177,7 +177,7 @@ test('app connection management is denied for every method and subpath before op
 });
 
 test('bound schema remains available while unbound GET and POST requests never open a source', { timeout: 5_000 }, async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-runtime-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-runtime-'));
   const path = join(directory, 'bound.db');
   const fixture = new DatabaseSync(path);
   fixture.exec('CREATE TABLE task (id INTEGER PRIMARY KEY, name TEXT NOT NULL)');

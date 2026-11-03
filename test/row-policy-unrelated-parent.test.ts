@@ -27,7 +27,7 @@ const appId = 'borrower-desk';
 const who: Identity = { id: 'account-ada', who: 'ada@example.test', role: 'borrower' };
 
 async function serve(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-unrelated-parent-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-unrelated-parent-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   const registry = new Registry();

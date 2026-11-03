@@ -31,7 +31,7 @@ function app(): LoadedApp {
 }
 
 test('token schema selects the named SQLite source, maps logical resources and closes it', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-token-schema-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-token-schema-'));
   const path = join(directory, 'data.db'),
     missing = join(directory, 'missing.db');
   const db = new DatabaseSync(path);

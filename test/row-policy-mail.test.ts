@@ -50,7 +50,7 @@ class Recorder implements EmailTransport {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-policy-mail-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-policy-mail-'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   // Ann works desk 1 and Bob desk 2; the policy gives each their own desk's tickets.

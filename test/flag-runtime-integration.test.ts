@@ -38,7 +38,7 @@ const request = () =>
   }) as IncomingMessage;
 
 async function fixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-flag-runtime-')),
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-tenant-flag-runtime-')),
     path = join(dir, 'business.db'),
     db = new DatabaseSync(path);
   db.exec(

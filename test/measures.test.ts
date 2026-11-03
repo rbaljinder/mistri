@@ -205,7 +205,7 @@ test('measures on SQLite: the same numbers', async (t) => {
   const { join } = await import('node:path');
   const { DatabaseSync } = await import('node:sqlite');
   const { SqliteAdapter } = await import('../packages/engine/src/adapters/sqlite.js');
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-measures-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-measures-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'deal.db'));
   db.exec(`CREATE TABLE deal (id INTEGER PRIMARY KEY, stage TEXT NOT NULL, amount INTEGER NOT NULL, won INTEGER NOT NULL,

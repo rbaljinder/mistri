@@ -1,7 +1,8 @@
 /*
  * Desk blocks: the browser gate's own App for the desk blocks — a conversation timeline with its composer and the
  * caller's side, a split that chooses its rows and keys, a header that names its verbs, a change calendar over its
- * freezes and holidays, and a dashboard with an author's component. Owned by the test suite, not by examples/, so a
+ * freezes and holidays, a week of visits by the hour, a dashboard with an author's component, and categories picked
+ * from their hierarchy. Owned by the test suite, not by examples/, so a
  * public sample being reshaped cannot take the gate down. Sized to its specs and nothing more.
  */
 import {
@@ -18,6 +19,7 @@ import {
   page,
   stream,
   timeline,
+  tree,
 } from '@mistriwork/mistri/app';
 import type { App } from './mistri-schema.d.ts';
 
@@ -36,6 +38,13 @@ export default defineApp({
   sources: { desk: { connection: 'desk' } },
   resources: {
     person: {},
+    // Three levels deep: a new category is placed under its parent, picked by walking the hierarchy.
+    category: {
+      noun: 'category',
+      access: 'write',
+      labels: { parent_id: 'Parent' },
+      form: { fields: { parent_id: { tree: 'parent_id', help: 'Leave empty for a top-level category.' } } },
+    },
     ticket: {
       noun: 'ticket',
       access: 'write',
@@ -46,6 +55,8 @@ export default defineApp({
         solve: action('Solve', { set: { status: 'solved' }, when: 'status != solved' }),
         reopen: action('Reopen', { set: { status: 'open' }, when: 'status = solved' }),
         hold: action('Put on hold', { set: { status: 'pending' }, when: 'status = open' }),
+        // Last, so the split's bar keeps the keyed verbs in reach; the record page's header names it.
+        categorize: action('Categorize', { command: 'categorize' }),
       },
     },
     message: { access: 'write' },
@@ -54,12 +65,20 @@ export default defineApp({
     freeze: {},
     // Shaded behind the changes, with no view of its own: its spans are words, not links.
     holiday: {},
+    // A week of site visits by the hour, moved by dragging: the agent's one table to write directly.
+    visit: { noun: 'visit', access: 'write' },
   },
   auth: {
     providers: ['email'],
     defaultRole: 'agent',
     roles: {
-      agent: { label: 'Agent', read: true, write: false, commands: ['reply', 'addNote'], actions: { ticket: ['solve', 'reopen', 'hold'] } },
+      agent: {
+        label: 'Agent',
+        read: true,
+        write: ['visit', 'category'],
+        commands: ['reply', 'addNote', 'categorize'],
+        actions: { ticket: ['solve', 'reopen', 'hold'] },
+      },
     },
   },
   views: {
@@ -84,6 +103,8 @@ export default defineApp({
       }),
     }),
     freezes: listView('Freezes', 'freeze', { show: ['name', 'starts_on', 'ends_on'] }),
+    categories: listView('Categories', 'category', { presentation: tree('parent_id', 'name') }),
+    schedule: listView('Schedule', 'visit', { presentation: calendar('starts_at', 'name', { span: 'week', end: 'ends_at' }) }),
     desk: dashboard('Desk', [metric('Open tickets', 'ticket', { query: 'status != solved', over: 'opened_at' }), urgentNow], {
       windows: ['last 7 days', 'last 30 days'],
     }),
@@ -92,7 +113,7 @@ export default defineApp({
     ticket: page(
       'ticket',
       [
-        header({ actions: ['solve', 'hold'] }),
+        header({ actions: ['solve', 'hold', 'categorize'] }),
         fields(['name', 'requester', 'priority'], { columns: 3 }),
         timeline('Conversation', [stream('message', 'ticket_id', 'sent_at', 'body', { author: 'author_id' })], {
           newest: 'last',
@@ -110,6 +131,6 @@ export default defineApp({
     ),
   },
   home: 'inbox',
-  nav: ['inbox', 'all', 'changes', 'freezes', 'desk'],
+  nav: ['inbox', 'all', 'changes', 'freezes', 'schedule', 'categories', 'desk'],
   ui: { locale: 'en-US', export: false },
 } satisfies App);

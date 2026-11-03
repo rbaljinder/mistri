@@ -59,7 +59,7 @@ const stores = [
 
 for (const store of stores) {
   test(`${store.name} on SQLite: a newer and an older layout each say so at open`, () => {
-    const dir = mkdtempSync(join(tmpdir(), 'tablewalk-layout-'));
+    const dir = mkdtempSync(join(tmpdir(), 'mistri-layout-'));
     try {
       const path = join(dir, 'app.db');
       new DatabaseSync(path).close();

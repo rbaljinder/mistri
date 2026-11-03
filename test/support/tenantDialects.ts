@@ -171,7 +171,7 @@ const intercepted = () => new Error('PRIVATE_SENTINEL: intercepted statement');
 /* ---------- SQLite ---------- */
 
 function sqliteEngine(setup: string): TenantEngine {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-dialect-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-dialect-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   db.exec(setup);

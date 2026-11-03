@@ -243,7 +243,7 @@ function run(project, workers, files, source) {
   }
   console.log(`\n# ${label}: ${workers} worker${workers === 1 ? '' : 's'}, ${mine.length} specs`);
   /* Recording reads Playwright's JSON report, written beside the list output. */
-  const report = record ? join(mkdtempSync(join(tmpdir(), 'tablewalk-e2e-timings-')), `${project}.json`) : undefined;
+  const report = record ? join(mkdtempSync(join(tmpdir(), 'mistri-e2e-timings-')), `${project}.json`) : undefined;
   /* Each pass writes its failures under its own folder. Playwright empties
      its output folder when a run starts, so with one folder the owned built
      pass's trace and error context were deleted by the source pass after it,

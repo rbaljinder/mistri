@@ -43,7 +43,7 @@ describe('back-channel logout', () => {
   const error = console.error;
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-logout-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-logout-'));
     workforce = await startMockOidc({ clientId: 'workforce-client', path: '/workforce' });
     partners = await startMockOidc({ clientId: 'partners-client', path: '/partners' });
     process.env.TEST_WORKFORCE_SECRET = workforce.clientSecret;

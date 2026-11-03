@@ -103,7 +103,23 @@ export const COMMAND_INPUT_LIMITS = Object.freeze({
   publicRepeatRows: 10,
   choiceOptions: 100,
   publicInputBytes: 32_768,
+  /** The most files one `field.files` takes, and its `max` where it says none. */
+  files: 20,
+  filesDefault: 10,
 });
+
+/** A held file's id as a form sends it: 32 random bytes, base64url (server/commands/stagedFiles.ts). Only its hash is kept. */
+export const STAGED_FILE_ID = /^[A-Za-z0-9_-]{43}$/;
+
+/** A media type `accept` takes: `image/*` or `application/pdf`, lower case. */
+const MEDIA_PATTERN = /^[a-z0-9][a-z0-9.+-]{0,63}\/(?:\*|[a-z0-9][a-z0-9.+-]{0,63})$/;
+
+/** Whether a file's media type is one an `accept` list takes; an absent list takes every type. */
+export function acceptsMedia(accept: readonly string[] | undefined, type: string): boolean {
+  if (!accept?.length) return true;
+  const media = type.toLowerCase();
+  return accept.some((pattern) => (pattern.endsWith('/*') ? media.startsWith(pattern.slice(0, -1)) : media === pattern));
+}
 
 /* A moment, as ISO 8601 says one: a date, a time to the minute or finer, and a zone — `Z` or an offset. The
    separator may be the `T` or a space, as Postgres writes a timestamptz (`2026-10-12 19:16:00-04`). */
@@ -250,7 +266,8 @@ const maskPlaces = (mask: string): number => [...mask].filter((c) => c === '0' |
 
 const KEEPS = ['last4', 'hash', 'none', 'handler'] as const;
 const PRESENTATIONS: Record<string, readonly string[]> = {
-  number: ['slider'],
+  number: ['slider', 'rating'],
+  text: ['scan', 'color'],
   money: ['slider'],
   boolean: ['buttons'],
   choice: ['cards', 'buttons', 'select', 'radios'],
@@ -261,6 +278,12 @@ const COMPONENT_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,47}$/;
 
 /* A month, `YYYY-MM`. */
 export const isIsoMonth = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+/* A time of day, `HH:MM` on a 24-hour clock: one spelling, so bounds and siblings compare as text. */
+export const isIsoTime = (value: unknown): value is string => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+/** A color as a text field asks it (`as: 'color'`): `#` and six hex digits, as a column's color format keeps one. */
+export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+/** A rating's stars when it says none, and its bounds, as a column's rating takes them (appValidation's outOf). */
+const RATING = { outOf: 5, least: 3, most: 10 } as const;
 
 /* Choices read from a table: its rows by key, shown by a column. */
 function choiceSource(f: Record<string, unknown>, where: string): { from: string; by: string; labelColumn: string } {
@@ -374,6 +397,8 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       'exclusive',
       'as',
       'input',
+      'outOf',
+      'tree',
     ],
     where,
   );
@@ -407,6 +432,14 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
   const sibling = (key: 'below' | 'above') => (f[key] === undefined ? {} : { [key]: name(f[key], where) });
   if (f.type === 'text' || f.type === 'textarea') {
     only(['min', 'max', 'format', 'pattern', 'message', 'case', 'mask', 'sensitive']);
+    /* A code the camera reads is typed through no mask and never hidden: what was read is shown, to be corrected. A
+       color is its own format, `#rrggbb`, which the picker writes and nothing else needs to say. */
+    if (base.as === 'scan' && (f.mask !== undefined || f.sensitive !== undefined))
+      return fail(where, "as: 'scan' shows the code it read, to be corrected by hand; it takes no mask and is not sensitive");
+    if (base.as === 'color') {
+      const stray = ['min', 'max', 'format', 'pattern', 'message', 'case', 'mask', 'sensitive'].find((key) => f[key] !== undefined);
+      if (stray !== undefined) return fail(where, `as: 'color' is its own format, #rrggbb; it takes no ${stray}`);
+    }
     if (f.mask !== undefined) {
       if (f.type !== 'text' || typeof f.mask !== 'string' || !MASK.test(f.mask) || !maskPlaces(f.mask))
         return fail(
@@ -510,8 +543,28 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
     only(
       f.type === 'money'
         ? ['min', 'max', 'step', 'minor', 'currency', 'below', 'above', 'live']
-        : ['min', 'max', 'integer', 'step', 'below', 'above', 'live'],
+        : ['min', 'max', 'integer', 'step', 'below', 'above', 'live', 'outOf'],
     );
+    /* Stars: a whole number from one to the scale, which is its bounds, so it is said once (`outOf`) and the parser
+       below holds it to them as it holds any integer field. */
+    if (f.outOf !== undefined && base.as !== 'rating') return fail(where, "outOf is a rating's scale; give as: 'rating' too");
+    if (base.as === 'rating') {
+      const stray = ['min', 'max', 'step', 'integer', 'live'].find((key) => f[key] !== undefined);
+      if (stray !== undefined) return fail(where, `a rating's bounds are its stars, 1 to outOf; it takes no ${stray}`);
+      const outOf = f.outOf ?? RATING.outOf;
+      if (!Number.isSafeInteger(outOf) || Number(outOf) < RATING.least || Number(outOf) > RATING.most)
+        return fail(where, `outOf is a whole number of stars from ${RATING.least} to ${RATING.most}`);
+      return {
+        ...base,
+        type: 'number',
+        integer: true,
+        min: 1,
+        max: outOf as number,
+        outOf: outOf as number,
+        ...sibling('below'),
+        ...sibling('above'),
+      } as AppCommandField;
+    }
     if (f.minor !== undefined && typeof f.minor !== 'boolean') return fail(where, 'minor must be boolean');
     if (f.currency !== undefined && (typeof f.currency !== 'string' || !/^[A-Z]{3}$/.test(f.currency)))
       return fail(where, "currency must be an ISO 4217 code such as 'EUR'");
@@ -574,6 +627,20 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
     return {
       ...base,
       type: 'month',
+      ...(f.min === undefined ? {} : { min: f.min as string }),
+      ...(f.max === undefined ? {} : { max: f.max as string }),
+      ...sibling('below'),
+      ...sibling('above'),
+    };
+  }
+  if (f.type === 'time') {
+    only(['min', 'max', 'below', 'above']);
+    for (const key of ['min', 'max'] as const)
+      if (f[key] !== undefined && !isIsoTime(f[key])) fail(where, `${key} must be a time of day, HH:MM on a 24-hour clock`);
+    if (f.min !== undefined && f.max !== undefined && String(f.min) > String(f.max)) return fail(where, 'min must not be after max');
+    return {
+      ...base,
+      type: 'time',
       ...(f.min === undefined ? {} : { min: f.min as string }),
       ...(f.max === undefined ? {} : { max: f.max as string }),
       ...sibling('below'),
@@ -655,14 +722,21 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
   /* On a public form too: its choices are what `auth.public` opens, read signed out, and the App's public grant is
      judged against it where both are known (forms/savedFormChecks.ts, [public-form-picker]). */
   if (f.type === 'reference') {
-    only(['from', 'by', 'labelColumn', 'query']);
+    only(['from', 'by', 'labelColumn', 'query', 'tree']);
+    const by = name(f.by, where);
+    const labelColumn = name(f.labelColumn, where);
+    const tree = f.tree === undefined ? undefined : name(f.tree, `${where}, tree`);
+    /* The parent column names another row by its key: the key or the name itself would make every row its own parent. */
+    if (tree !== undefined && (tree === by || tree === labelColumn))
+      return fail(where, `tree names the column that holds each row's parent, not "${tree}", its ${tree === by ? 'key' : 'label'}`);
     return {
       ...base,
       type: 'reference',
       from: name(f.from, where, true),
-      by: name(f.by, where),
-      labelColumn: name(f.labelColumn, where),
+      by,
+      labelColumn,
       ...(f.query === undefined ? {} : { query: text(f.query, where, 2000) }),
+      ...(tree === undefined ? {} : { tree }),
     };
   }
   /* Answers to questions that are rows: the rows of `from` an administrator edits while the App runs,
@@ -753,6 +827,39 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       max: (f.max as number | undefined) ?? cap,
     };
   }
+  /* Files, sent as they are picked and held for the command (server/commands/stagedFiles.ts): the value is their ids,
+     and the handler receives the files. A held file is the person's who sent it and this field's, so it sits in no
+     group, where a row's files would be no one field's; and nothing starts as one. */
+  if (f.type === 'files' || f.type === 'signature') {
+    only(f.type === 'files' ? ['from', 'min', 'max', 'accept'] : ['from']);
+    if (rules.depth)
+      return fail(where, `${f.type === 'files' ? 'files are' : 'a signature is'} a field of the input itself, not one inside a group`);
+    const stray = (['default', 'as', 'input'] as const).find((key) => f[key] !== undefined);
+    if (stray !== undefined) return fail(where, `${f.type === 'files' ? 'files take' : 'a signature takes'} no ${stray}`);
+    const from = name(f.from, `${where}, from`, true);
+    if (f.type === 'signature') return { ...base, type: 'signature', from };
+    const cap = COMMAND_INPUT_LIMITS.files;
+    for (const bound of ['min', 'max'] as const)
+      if (f[bound] !== undefined && (!Number.isSafeInteger(f[bound]) || Number(f[bound]) < 1 || Number(f[bound]) > cap))
+        return fail(where, `${bound} must be a whole number of files from 1 to ${cap}`);
+    const max = (f.max as number | undefined) ?? Math.max(COMMAND_INPUT_LIMITS.filesDefault, (f.min as number | undefined) ?? 1);
+    if (f.min !== undefined && Number(f.min) > max) return fail(where, 'min must not exceed max');
+    let accept: string[] | undefined;
+    if (f.accept !== undefined) {
+      const said = typeof f.accept === 'string' ? [f.accept] : items(f.accept, `${where}, accept`, 'accept', 16, 'media types');
+      accept = said.map((each) => (typeof each === 'string' ? each.trim().toLowerCase() : ''));
+      if (!accept.length || accept.some((each) => !MEDIA_PATTERN.test(each)))
+        return fail(where, "accept is a media type or a list of them: 'image/*', 'application/pdf'");
+    }
+    return {
+      ...base,
+      type: 'files',
+      from,
+      ...(f.min === undefined ? {} : { min: f.min as number }),
+      max,
+      ...(accept ? { accept: [...new Set(accept)] } : {}),
+    };
+  }
   if (f.type === 'group') {
     only(['fields', 'repeat', 'description']);
     // A group is always present — rows, or an object — so what may be absent is its members.
@@ -829,7 +936,9 @@ function fieldList(raw: unknown, where: string, rules: FieldRules): AppCommandFi
           other.type === 'lines' ||
           other.type === 'richText' ||
           other.type === 'choices' ||
-          other.type === 'defined'
+          other.type === 'defined' ||
+          other.type === 'files' ||
+          other.type === 'signature'
         )
           return fail(where, `input "${item.name}" is asked when "${named}"…, a ${other.type} field a condition cannot compare`);
       }
@@ -1137,6 +1246,18 @@ export function commandInputProblem(
       );
     const keys = resource.columns.filter((column) => column.primaryKey);
     if (keys.length !== 1 || keys[0].name !== f.by) return `Command input "${f.name}" must select a single primary key.`;
+    if (f.tree) {
+      const parent = resource.columns.find((column) => column.name === f.tree);
+      if (!parent)
+        return `Command input "${f.name}": tree names "${f.tree}", which is not a column of "${f.from}": name the column that holds each row's parent.`;
+      /* The hierarchy is the column's own: it must refer to the rows the picker offers, or a branch would open onto another table's keys. */
+      const to =
+        parent.references?.table ??
+        schema.foreignKeys.find((key) => key.from.table === resource.id && key.from.columns.length === 1 && key.from.columns[0] === f.tree)
+          ?.to.table;
+      if (to !== resource.id)
+        return `Command input "${f.name}": tree "${f.tree}" ${to ? `refers to "${to}"` : 'refers to nothing'}; a tree's column names a parent row of "${f.from}" itself.`;
+    }
     if (f.query) {
       const named = recordColumnsIn(f.query);
       if (named.length && (!target || target.many))

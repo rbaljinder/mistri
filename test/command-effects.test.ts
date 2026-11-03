@@ -385,7 +385,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
   });
 
 test('a webhook destination nobody provisioned refuses to open, naming the step', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-effects-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-effects-'));
   const path = join(directory, 'shop.db');
   const db = new DatabaseSync(path);
   try {

@@ -438,6 +438,11 @@ export interface AppFormField<Field extends string = string> {
       lists the chosen project's milestones. Keys are the referenced table's columns, values this form's fields, at
       most four. Enforced on every write, not only drawn: the server refuses a record whose reference falls outside. */
   where?: Readonly<Record<string, Field>>;
+  /** A reference: offer its records as the hierarchy one of their columns makes — `{ tree: 'parent_id' }`, the
+      referenced table's column naming each record's parent. The picker opens on the records with no parent, reads a
+      branch's children as it is opened, says the chosen record's path (Hardware › Laptops › Batteries), and typing
+      searches every level, each match said with its path. */
+  tree?: string;
 }
 
 /**
@@ -468,6 +473,9 @@ export interface AppDisplayRule {
       json: a JSON document as a tree to open level by level, one line of it in a list; edited as text whose parse
       problem is said while it is typed, and a write that is not JSON is refused by its field.
       qr: the value as a QR code to scan — an asset tag, a link — with the value under it; the text in a list.
+      address: a postal address, one part per line as typed, drawn on its lines as a link that opens a map search
+      for it beside the App; nothing is fetched to draw it, and a list says it on one line. A New form asks it in a
+      box of several lines.
       These draw the value their own way, and take no currency, unit, tone (but a rating), bar, icons or values. */
   format?:
     | 'money'
@@ -489,7 +497,8 @@ export interface AppDisplayRule {
     | 'month'
     | 'year'
     | 'json'
-    | 'qr';
+    | 'qr'
+    | 'address';
   /** The face this column's values are set in, over the look's own: `data` (the look's data face, usually
       monospace), `ui` (the interface's reading face) or `code` (always monospace, for a VIN or a hash):
       `display: { vin: { face: 'code' } }`. Left out, an App sets a key, a reference, a code or a QR value in the
@@ -515,6 +524,11 @@ export interface AppDisplayRule {
       type, kept as a PNG row of that resource and drawn as the picture: `signed_file_id: { signature: true }`.
       Takes no format. */
   signature?: true;
+  /** A copy button beside the value on a record — a tracking number, an account number, a code to paste
+      elsewhere: `tracking_number: { copy: true }`. It copies the stored value and says so in a toast; it waits for
+      a pointer or keyboard focus at a desk and stays on touch. Not with `masked: true` or `signature`, and a value a
+      `masked` prefix hides is not copied. */
+  copy?: true;
   /** With format "richText": who an @ names — the resource of people, the column stored as the handle, the column shown
       or a template of their columns (`labelColumn: '{first_name} {last_name}'`); typing after the @ matches any word of the label
       and the handle by its start —
@@ -717,7 +731,7 @@ export interface AppFileBucket {
   endpoint?: string;
   /** true addresses the bucket as a path ('<endpoint>/<name>/<key>'), as MinIO wants; otherwise as a host. */
   pathStyle?: boolean;
-  /** A folder every key goes under, so Apps can share one bucket: 'tablewalk/'. */
+  /** A folder every key goes under, so Apps can share one bucket: 'mistri/'. */
   prefix?: string;
   /** true sends a download straight from the bucket, by a redirect to a URL signed for a minute; otherwise it passes through the server. */
   presign?: boolean;
@@ -1294,15 +1308,22 @@ export interface AppBoardList<Column extends string = string, OneHop extends str
 }
 
 /** A month of records by one date column, each on its day — or, with `end`, drawn across every day from `date`
-    to `end`, continuing from one week's row to the next; a phone reads it as an agenda. */
+    to `end`, continuing from one week's row to the next; a phone reads it as an agenda. With `span: 'week'` or
+    `'day'`, a time grid instead: `calendar('starts_at', 'title', { span: 'week', end: 'ends_at' })`. */
 export interface AppCalendarList<Column extends string = string, OneHop extends string = Column | `${Column}.${string}`> {
   kind: 'calendar';
   readonly [madeBy]: 'calendar';
   /** The date (or timestamp) column a record sits on, or starts on when it has an `end`. */
   date: Column;
   /** A date column holding the record's last day: a leave from its first day to its last, a pay period. A move
-      shifts both. Absent, a record sits on one day. */
+      shifts both. Absent, a record sits on one day. In a week or a day, the timestamp the record ends at: it is
+      drawn from its start down to it, and its foot is dragged to change it. Absent there, a record is half an hour. */
   end?: Column;
+  /** What one page shows. 'month' (the default): the days of a month. 'week' or 'day': a time grid, the hours down
+      the side and each record placed by its start and `end`, records that overlap side by side, a line at the
+      present moment; a record is dragged to another time or day, Alt and an arrow moving it half an hour or a day.
+      Both read timestamp columns (`date`, and `end` where given). A phone reads the week or the day as an agenda. */
+  span?: 'month' | 'week' | 'day';
   /** A local text column or one-hop reference label path, like `employee_id.name`. Absent, the record's name. */
   primary?: OneHop;
   /** One local column or one-hop label path, said quietly under the primary. */
@@ -1555,6 +1576,14 @@ export interface AppListView<Table extends string = string, Column extends strin
   /** Numeric columns, rollups or computed numbers summed in a footer row, over everything the list's conditions match,
       not just the page. A grid only. */
   totals?: readonly Column[];
+  /** One of the resource's own columns whose values group the rows: `group: 'stage'`. The grid reads its rows in that
+      column's order, each group under a head that says the value, how many rows it holds and, where the view has
+      `totals`, each one's subtotal under its column; a head folds its group away and opens it again. The heads are one
+      breakdown over everything the list's conditions match, not the page, so a group a page divides is counted whole.
+      Within a group the rows keep the list's own order; a reader's sort of the grouped column turns the groups around.
+      A grid only, and not beside a hand `order`, which ranks the whole list. (A record page's related list groups with
+      an object, `group: { by }`, as it pages its groups and reads facts of the record each one is.) */
+  group?: Column;
   /** Row height: 'comfortable' (default) or 'compact', for a list read as a ledger. A reader's zoom still applies. A grid only
       (a split's list is one). */
   density?: 'comfortable' | 'compact';
@@ -2538,6 +2567,34 @@ export interface TimelineSection extends SectionCommon {
       is never on the far side, and a stream's own `side` replaces it; one no stream can read is refused. On a phone
       the rows stay full width, told apart by the surface alone. */
   side?: string;
+  /** Reactions under each entry, a quiet row of kinds with their counts — a forum's Like and Thanks under each post:
+      `reactions: { from: 'reaction', kinds: ['like', 'thanks'], command: 'reactToPost' }`. Counted in one read per page,
+      the reader's own pressed; pressing one runs the App's own command on the entry, under the reader's grants. */
+  reactions?: TimelineReactions;
+}
+
+/**
+ * A timeline's reactions: rows of `from`, one per person, per kind, per entry. The three columns are inferred where
+ * `from` has exactly one candidate for each; with none or several, the check refuses and names the key to add.
+ */
+export interface TimelineReactions {
+  /** The table whose rows are the reactions. */
+  from: string;
+  /** The kinds offered under each entry, in the order they are drawn (at most 8): values of `column`, each said
+      through its display rule (`display: { kind: { values: { like: 'Like' } } }`). */
+  kinds: readonly string[];
+  /** The App's command that gives a reaction or takes it back: it acts on the entry's resource, is offered by one of its
+      actions (`react: action('React', { command: 'reactToPost' })`), and takes the kind as its `<column>` input. A reader
+      not granted it reads the counts and presses nothing. */
+  command: CommandName;
+  /** The column of `from` that names the entry. Absent: the one column of `from` that refers to a stream's table. */
+  whose?: string;
+  /** The column of `from` that names who reacted, read as `<by> = me`. Absent: the one column of `from` that refers to
+      `auth.me`'s table. */
+  by?: string;
+  /** The column of `from` holding the kind. Absent: the one text column of `from`, other than `whose` and `by`, that
+      allows every kind. */
+  column?: string;
 }
 
 /** The display tones a timeline row may be tinted. */
@@ -4202,7 +4259,7 @@ export type TypedHasFilter<S extends SchemaShape> = AppHasFilter extends infer H
 /** A list view over one of the schema's tables: what it shows, filters, totals and draws are that table's
     columns and label paths. */
 export type TypedListView<S extends SchemaShape, R extends SchemaReferences = never> = { [T in TableOf<S>]:
-  Omit<AppListView, 'from' | 'show' | 'filters' | 'totals' | 'order' | 'presentation' | 'sort' | 'editable' | 'import' | 'board' | 'split'>
+  Omit<AppListView, 'from' | 'show' | 'filters' | 'totals' | 'group' | 'order' | 'presentation' | 'sort' | 'editable' | 'import' | 'board' | 'split'>
   & {
     from: T;
     show?: readonly LabelPath<S, R, T>[];
@@ -4210,6 +4267,7 @@ export type TypedListView<S extends SchemaShape, R extends SchemaReferences = ne
     sort?: SortOf<S, R, T> | readonly { label: string | AppMessageRef; sort: SortOf<S, R, T> }[];
     filters?: readonly (LabelPath<S, R, T> | TypedHasFilter<S>)[];
     totals?: readonly ColumnOf<S, T>[];
+    group?: ColumnOf<S, T>;
     order?: ColumnOf<S, T>;
     presentation?: AppListPresentation<ColumnOf<S, T>, OneHopPath<S, R, T>, LabelPath<S, R, T>>;
     board?: Omit<AppBoardList<ColumnOf<S, T>, OneHopPath<S, R, T>>, 'kind'>;

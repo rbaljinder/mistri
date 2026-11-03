@@ -284,7 +284,7 @@ test('tenant evidence carries an upload’s bytes as a copy, counted against its
 
 /* An App on its own server: a column declared rich text is sanitized on every write, generic or not. */
 test('an App’s rich text column is sanitized on insert and update, Markdown read into it; a JSON column holds JSON', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-rich-text-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-rich-text-'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE ticket (id INTEGER PRIMARY KEY, title TEXT NOT NULL, body TEXT, meta TEXT);

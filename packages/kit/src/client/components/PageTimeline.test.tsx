@@ -71,6 +71,18 @@ vi.mock('../../../../mistri/src/client/components/sdk/commands.js', () => ({
   }),
 }));
 
+/* The reactions' own reads and drawing are TimelineReactions.test.tsx's: here, which entries the section hands them. */
+const tallied: unknown[][] = [];
+vi.mock('./reactionTally.js', () => ({
+  useReactionTally: (reactions: unknown, entries: unknown[]) => {
+    if (reactions) tallied.push(entries);
+    return reactions ? { tally: { counts: new Map(), mine: new Set() }, waiting: false } : { waiting: false };
+  },
+}));
+vi.mock('./TimelineReactions.js', () => ({
+  ReactionRow: ({ entry }: { entry: unknown }) => createElement('span', { 'data-entry': JSON.stringify(entry) }),
+}));
+
 const { TimelineSection } = await import('./PageTimeline.js');
 const { fillComposer } = await import('./composerDraft.js');
 
@@ -130,6 +142,31 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+describe('reactions under a timeline', () => {
+  test("hand each message's entry, by the column its stream says, and none for a line no person wrote", async () => {
+    tallied.length = 0;
+    streamRows = streamRows.map((row, i) => ({ ...row, id: 10 + i }));
+    const reacted = { streams: [{ ...plan.streams[0], reacts: 'id' }] };
+    draw(
+      { reactions: { from: 'reaction', kinds: ['like'], command: 'react', whose: 'message_id', by: 'member_id', column: 'kind' } },
+      reacted,
+    );
+    await screen.findByText('Oldest');
+    expect([...document.querySelectorAll('[data-entry]')].map((row) => row.getAttribute('data-entry'))).toEqual([
+      '{"column":"id","value":12}',
+      '{"column":"id","value":10}',
+    ]);
+    // The system line (11) is one quiet row: no reactions, and not counted.
+    expect(tallied.at(-1)).toEqual([10, 12]);
+  });
+
+  test('a section without reactions draws none', async () => {
+    draw();
+    await screen.findByText('Oldest');
+    expect(document.querySelector('[data-entry]')).toBeNull();
+  });
 });
 
 describe('a conversation timeline', () => {

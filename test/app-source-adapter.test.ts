@@ -10,7 +10,7 @@ import { createAppSourceAdapter, type AppAdapterSource } from '../packages/mistr
 import type { ViewDef } from '../packages/engine/src/shared/view.js';
 
 async function fixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-source-adapter-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-source-adapter-'));
   const opened: SqliteAdapter[] = [];
   t.after(async () => {
     await Promise.all(opened.map((adapter) => adapter.close()));

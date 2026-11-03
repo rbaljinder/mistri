@@ -51,7 +51,7 @@ export function gitInfo() {
 
 export function createRunDirectory() {
   const freeBytesBefore = assertDiskSpace();
-  return { directory: mkdtempSync(join(tmpdir(), 'tablewalk-load-')), freeBytesBefore };
+  return { directory: mkdtempSync(join(tmpdir(), 'mistri-load-')), freeBytesBefore };
 }
 
 export async function seedFixture(directory, rows) {

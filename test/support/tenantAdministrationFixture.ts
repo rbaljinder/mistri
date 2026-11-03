@@ -15,7 +15,7 @@ import { parseAppConfig } from '../../packages/mistri/src/shared/app.js';
 let authCreation = Promise.resolve();
 
 export async function tenantAdministrationFixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-administration-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-administration-'));
   const path = join(directory, 'business.db');
   const binding = { appId: 'admin-app', source: { id: 'business', connection: 'business' }, storeId: 'admin-store' };
   let native: AppAuthRuntimeBinding | undefined;

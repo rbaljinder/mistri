@@ -20,7 +20,7 @@ import { Problem } from './Notes.js';
 import { say } from '../copy/shell/components/ErrorBoundary.js';
 
 /** The console line the browser suites watch for. */
-export const SECTION_ERROR = say('tablewalkASectionCould');
+export const SECTION_ERROR = say('aSectionCouldNotBeDrawn');
 
 interface Props {
   children: ReactNode;

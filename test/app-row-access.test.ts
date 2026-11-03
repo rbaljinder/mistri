@@ -37,7 +37,7 @@ const denied = (run: () => unknown) =>
   );
 
 async function fixture(t: TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-row-access-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-row-access-'));
   const opened: SqliteAdapter[] = [];
   t.after(async () => {
     await Promise.all(opened.map((adapter) => adapter.close()));

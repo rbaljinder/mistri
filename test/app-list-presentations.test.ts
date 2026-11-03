@@ -6,6 +6,7 @@ import { listPresentationColumns, resolveViews, type AppListView } from '../pack
 import type { AppBoardList, AppQueueList } from '../packages/engine/src/shared/listPresentations.js';
 import { fieldAccessibleApp } from '../packages/mistri/src/server/app/appFieldProjection.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
+import { groupedQuestion } from '../packages/engine/src/shared/listQuestion.js';
 import { defineCommand } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { parseTestApp } from './support/commandCatalog.js';
 import { keyedPresentation } from './support/keyedPresentation.js';
@@ -252,6 +253,36 @@ test("a join table's list opens the record a reference names: a reference column
   );
 });
 
+test("a list view groups its grid's rows by one of its own columns, refused where no head could stand", () => {
+  assert.equal((parse({ group: ' state ', totals: ['count'] }).views.tasks as AppListView).group, 'state');
+  const problem = (view: Record<string, unknown>) => (resolveViews(parse(view), schema).tasks as { error?: string }).error;
+  assert.equal(problem({ group: 'state', totals: ['count'] }), undefined);
+  assert.equal(problem({ group: 'priority' }), undefined, 'a column with empty values groups them under one head');
+  assert.match(problem({ group: 'missing' })!, /This view's group: "missing" must be a local column of "tasks"/);
+  assert.match(problem({ group: 'id' })!, /This view's group names "id", the primary key: every group would be one row/);
+  for (const value of [4, '', ' ', 'owner_id.title', { by: 'state' }])
+    assert.throws(() => parse({ group: value }), /"group" must name one of the resource's own columns: group: 'stage'/);
+  assert.throws(
+    () => parse({ group: 'state', presentation: queue }),
+    /has "group" and a queue presentation; heads over groups of rows belong to a grid/,
+  );
+  assert.throws(() => parse({ group: 'state', order: 'count' }), /has "group" and "order": a hand order ranks the whole list/);
+});
+
+test("a grouped list reads its rows in its group's order first, the list's own order after, its question otherwise as it was", () => {
+  assert.equal(
+    groupedQuestion('tasks state = new show title, id sort count desc', 'state'),
+    'tasks state = new show title, id sort state, count desc',
+  );
+  assert.equal(
+    groupedQuestion('tasks sort count, state desc', 'state'),
+    'tasks sort state desc, count',
+    "the reader's direction for the group stays",
+  );
+  assert.equal(groupedQuestion('tasks', 'state'), 'tasks sort state');
+  assert.equal(groupedQuestion('tasks title = "sort it" limit 5', 'state'), 'tasks title = "sort it" sort state limit 5');
+});
+
 test('a list view keeps a hand order in a numeric column of its own, refused where it could never be read', () => {
   assert.equal((parse({ order: ' count ', presentation: queue }).views.tasks as AppListView).order, 'count');
   const problem = (view: Record<string, unknown>) => (resolveViews(parse(view), schema).tasks as { error?: string }).error;
@@ -444,7 +475,7 @@ test("JSON schema offers the list kinds and names a bulk action's command", () =
   const calendarSchema = options.find((option: { properties: { kind: { const: string } } }) => option.properties.kind.const === 'calendar');
   // A calendar with no `primary` titles each entry with the record's name (42297f25).
   assert.deepEqual(calendarSchema.required, ['kind', 'date']);
-  assert.deepEqual(Object.keys(calendarSchema.properties), ['kind', 'date', 'end', 'primary', 'lines', 'badge', 'backdrop']);
+  assert.deepEqual(Object.keys(calendarSchema.properties), ['kind', 'date', 'end', 'span', 'primary', 'lines', 'badge', 'backdrop']);
   assert.equal(calendarSchema.properties.lines.maxItems, 1);
   const [checklist, queueSchema] = options;
   const boardSchema = board;
@@ -627,4 +658,32 @@ test('a calendar takes a range, a badge and one-hop label paths, and refuses wha
     /Calendar primary: "person_id.missing" is not a readable one-hop reference label path/,
   );
   assert.match(judged({ ...ranged, primary: 'person_id.hired_on' }) ?? '', /Calendar primary must be a text column/);
+  /* A week or a day is a time grid: the model keeps its span (a month, the default, is said by none), and its
+     columns must hold a time of day, which a DATE column does not. */
+  assert.equal((app({ ...ranged, span: 'month' }).views.out as AppListView).presentation?.kind, 'calendar');
+  assert.equal('span' in (app({ ...ranged, span: 'month' }).views.out as AppListView).presentation!, false);
+  assert.throws(() => app({ ...ranged, span: 'year' }), /"span" must be "month", "week", "day"/);
+  const timed = structuredClone(people);
+  timed.tables[1].columns.push(
+    { name: 'starts_at', type: 'TIMESTAMP', nullable: false, primaryKey: false },
+    { name: 'ends_at', type: 'timestamp with time zone', nullable: true, primaryKey: false },
+  );
+  const week = { kind: 'calendar', date: 'starts_at', end: 'ends_at', span: 'week', primary: 'status' };
+  assert.deepEqual((app(week).views.out as AppListView).presentation, {
+    kind: 'calendar',
+    date: 'starts_at',
+    end: 'ends_at',
+    span: 'week',
+    primary: 'status',
+  });
+  const judgedTimed = (presentation: Record<string, unknown>) => (resolveViews(app(presentation), timed).out as { error?: string }).error;
+  assert.equal(judgedTimed(week), undefined);
+  assert.equal(judgedTimed({ ...week, span: 'day', end: undefined }), undefined);
+  assert.match(
+    judgedTimed({ ...week, date: 'first_day' }) ?? '',
+    /Calendar date: "first_day" is DATE; a week places records by their time, so it needs a timestamp column/,
+  );
+  assert.match(judgedTimed({ ...week, span: 'day', end: 'last_day' }) ?? '', /Calendar end: "last_day" is DATE; a day places records/);
+  // The same columns in a month are days, as they always were.
+  assert.equal(judgedTimed({ ...week, span: undefined, date: 'first_day', end: 'last_day' }), undefined);
 });

@@ -129,7 +129,7 @@ describe('the words', () => {
 
 type Call = (path: string) => Promise<{ status: number; body: Record<string, any> }>;
 async function serve(def: AppDef, who: () => { name?: string } | null, run: (call: Call) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-greeting-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-greeting-'));
   const file = join(directory, 'greeting.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE task (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT); INSERT INTO task VALUES (1, 'First', 'open');`);

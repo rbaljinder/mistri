@@ -46,7 +46,7 @@ const account = (id: string): Identity => ({
 });
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-image-variants-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-image-variants-'));
   const cache = join(directory, 'cache');
   setImageCache(cache);
   const photo = await sharp!({
@@ -260,7 +260,7 @@ test(
 );
 
 test('with no cache folder named, copies are kept in a private folder this process makes, never a shared name in the temp directory', async () => {
-  const outer = mkdtempSync(join(tmpdir(), 'tablewalk-image-private-'));
+  const outer = mkdtempSync(join(tmpdir(), 'mistri-image-private-'));
   const before = {
     tmp: process.env.TMPDIR,
     cache: process.env.MISTRI_IMAGE_CACHE,
@@ -271,14 +271,14 @@ test('with no cache folder named, copies are kept in a private folder this proce
     // Another local user got there first: a world-writable folder under the old, predictable name, with a picture planted for a public photo.
     const bytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
     const hash = createHash('sha256').update(bytes).digest('base64url').slice(0, 32);
-    const shared = join(outer, 'tablewalk-image-cache');
+    const shared = join(outer, 'mistri-image-cache');
     mkdirSync(shared);
     chmodSync(shared, 0o777);
     writeFileSync(join(shared, `${hash}-320.jpg`), 'PLANTED');
     resetImageCache();
     const answer = await imageVariant(bytes, 'image/jpeg', 320, undefined);
     assert.notEqual(Buffer.from(answer.bytes).toString(), 'PLANTED', 'a planted copy is not sent');
-    const made = readdirSync(outer).filter((name) => name.startsWith('tablewalk-image-cache-'));
+    const made = readdirSync(outer).filter((name) => name.startsWith('mistri-image-cache-'));
     assert.equal(made.length, 1, 'the process made a folder of its own');
     assert.equal(statSync(join(outer, made[0])).mode & 0o077, 0, 'readable and writable by its owner alone');
   } finally {

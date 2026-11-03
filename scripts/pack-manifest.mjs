@@ -44,7 +44,6 @@ export const CARRIED = {
   mistri: { ...EVERY, skills: 'skills', examples: 'examples' },
   'create-mistri': EVERY,
   cloudflare: EVERY,
-  tablewalk: EVERY,
 };
 
 /** An export target as an install reads it: the dev form's built target in place of its source. */

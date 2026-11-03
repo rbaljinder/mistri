@@ -67,7 +67,7 @@ function block(phase: 'precommit' | 'commit', unknown = false) {
 }
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-scoped-delete-lifecycle-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-scoped-delete-lifecycle-'));
   const registry = new Registry();
   const policies: HttpAppPolicy[] = [];
   const databases: DatabaseSync[] = [];

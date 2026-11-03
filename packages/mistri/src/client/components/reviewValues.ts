@@ -8,6 +8,7 @@ import type { AppCommandField } from '../../shared/command.js';
 import { formatLocale } from '@mistriwork/kit/client/locale.js';
 import { say } from '../copy/record/components/reviewValues.js';
 import { amountIn, maskShown } from './fieldShown.js';
+import { heldFileInfo } from '../heldFileNames.js';
 
 /** Whether a field keeps only part of what is typed (`sensitive`): it is never said in full where it is read back. */
 export function sensitiveText(
@@ -52,6 +53,13 @@ export function sayInput(field: AppCommandField, value: unknown, nameOf?: NameOf
   const mask = 'mask' in field && typeof field.mask === 'string' ? field.mask : undefined;
   if (sensitiveText(field)) return maskedLast4(String(value), field.mask);
   if (field.type === 'boolean') return value ? say('common.yes') : say('common.no');
+  // A held file is said by the name it was sent with, where this page sent it; a signature only as given.
+  if (field.type === 'files') {
+    const ids = Array.isArray(value) ? value : [value];
+    if (!ids.length) return '—';
+    return ids.map((id) => heldFileInfo(String(id))?.name ?? say('aFile')).join(', ');
+  }
+  if (field.type === 'signature') return say('signed');
   // A day is a calendar date, not a moment: read in UTC so no zone moves it, and said as the person's locale says it.
   if (field.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(String(value)))
     return new Date(`${String(value)}T00:00:00Z`).toLocaleDateString(formatLocale(), { timeZone: 'UTC', dateStyle: 'medium' });

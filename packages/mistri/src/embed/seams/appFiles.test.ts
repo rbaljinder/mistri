@@ -25,9 +25,9 @@ describe('an embedded App’s theme files', () => {
   beforeEach(() => {
     settings.disableCSSFileLoading = settings.handleDisabledFileLoadingAsSuccess = true;
     const root = document.createElement('div');
-    root.className = 'tw-root';
+    root.className = 'mistri-root';
     const body = document.createElement('div');
-    body.className = 'tw-body';
+    body.className = 'mistri-body';
     const portals = document.createElement('div');
     body.append(portals);
     root.append(body);
@@ -38,7 +38,7 @@ describe('an embedded App’s theme files', () => {
       portals,
       navigator: memoryNavigator('/staff/classes'),
       address: { base: '/staff', apps: { ladle: '' } },
-      endpoint: '/api/tw',
+      endpoint: '/api/mistri',
       authorization: () => undefined,
       title: () => {},
     });
@@ -71,11 +71,11 @@ describe('an embedded App’s theme files', () => {
     };
     configureVisualThemes([theme], 'school', true, undefined, 'ladle');
     const faces = document.getElementById('mistri-theme-faces')?.textContent ?? '';
-    expect(faces).toContain('url("/api/tw/_fonts/fraunces-0a1b2c3d.woff2")');
+    expect(faces).toContain('url("/api/mistri/_fonts/fraunces-0a1b2c3d.woff2")');
     expect(faces).not.toContain('/staff/');
     expect(document.querySelector<HTMLLinkElement>('link[data-theme-sheet]')?.getAttribute('href')).toBe(
-      '/api/tw/_brand/theme-0a1b2c3d.css',
+      '/api/mistri/_brand/theme-0a1b2c3d.css',
     );
-    expect(brandMark({ href: '/ladle/_brand/logo-0a1b2c3d.png' }, 'ladle').image).toBe('/api/tw/_brand/logo-0a1b2c3d.png');
+    expect(brandMark({ href: '/ladle/_brand/logo-0a1b2c3d.png' }, 'ladle').image).toBe('/api/mistri/_brand/logo-0a1b2c3d.png');
   });
 });

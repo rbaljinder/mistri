@@ -82,7 +82,7 @@ test('portable tenant capture is detached, deeply frozen and rejects proxy/gette
   assert.equal(hooks, 0);
 });
 function fixture(t: TestContext, migrate = true) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-command-journal-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-command-journal-')),
     path = join(directory, 'data.db');
   const db = new DatabaseSync(path);
   db.exec("PRAGMA foreign_keys=ON; CREATE TABLE item(id TEXT PRIMARY KEY, name TEXT); INSERT INTO item VALUES ('one','Before')");

@@ -17,7 +17,7 @@ import { appStoresOf } from '../packages/mistri/src/server/stores/appStores.js';
 import { bindRecordHistory } from '../packages/mistri/src/server/stores/writeCaptures.js';
 
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync, path: string) => Promise<void>, provision = true) {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-record-history-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-record-history-'));
   const path = join(dir, 'data.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE ticket (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT, salary INTEGER, notes TEXT);

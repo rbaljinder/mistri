@@ -15,7 +15,15 @@ import { isPublicForm, isRowPolicyApp, isTenantApp, type AppDef, type AppFormVie
 import { appEntrypoint } from '../app/appEntrypoint.js';
 import { businessCommandHttpError, commandBody, holdCommandBody } from '../commands/businessCommandHttp.js';
 import { checkCommandStep } from '../commands/commandCheck.js';
-import { dispatchPublicFormHttp, dispatchPublicFormSubmissionHttp, presentForm, publicFormComponents } from '../commands/formHttp.js';
+import {
+  dispatchPublicFormHttp,
+  dispatchPublicFormSubmissionHttp,
+  presentForm,
+  publicFormComponents,
+  publicPrincipal,
+} from '../commands/formHttp.js';
+import { stagePublicFileHttp } from '../commands/stagedFileHttp.js';
+import { readVisitorToken } from '../commands/stagedFiles.js';
 import { clientAddress, publicFormLimiter, type RatePart } from '@mistriwork/engine/server/http/rateLimit.js';
 import { send, sendRevalidated } from '@mistriwork/engine/server/http/reply.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
@@ -74,16 +82,22 @@ export function countDecoy(command: string): void {
     and a step-up's `/stepup` and `/details`; forms/savedFormHttp.ts).
     Anything else is not this route. */
 type SavedPath = 'resume' | 'status' | 'claim' | 'link' | 'mine' | 'stepup' | 'details' | 'found' | 'verify-email';
-export function publicFormPath(path: string): { id?: string; action?: 'steps' | 'check' | SavedPath; step?: string } | undefined {
+export function publicFormPath(path: string): { id?: string; action?: 'steps' | 'check' | 'files' | SavedPath; step?: string } | undefined {
   if (path === '/api/forms') return {};
   const match =
-    /^\/api\/forms\/([a-z0-9][a-z0-9-]{0,63})(?:\/(resume|status|claim|link|mine|stepup|details|found|verify-email)|\/(steps|check)\/([a-z0-9][a-z0-9-]{0,63}))?$/.exec(
+    /^\/api\/forms\/([a-z0-9][a-z0-9-]{0,63})(?:\/(resume|status|claim|link|mine|stepup|details|found|verify-email)|\/(steps|check)\/([a-z0-9][a-z0-9-]{0,63})|\/(files))?$/.exec(
       path,
     );
   if (!match) return undefined;
   return {
     id: match[1],
-    ...(match[2] ? { action: match[2] as SavedPath } : match[3] ? { action: match[3] as 'steps' | 'check', step: match[4] } : {}),
+    ...(match[2]
+      ? { action: match[2] as SavedPath }
+      : match[3]
+        ? { action: match[3] as 'steps' | 'check', step: match[4] }
+        : match[5]
+          ? { action: 'files' as const }
+          : {}),
   };
 }
 
@@ -103,7 +117,7 @@ export function publicFormBudget(
   action: SavedFormAction | undefined,
   req: Pick<RequestContext['req'], 'headers'>,
   key: string | undefined,
-): Array<'read' | 'submit' | 'start' | 'status' | 'link' | 'code'> {
+): Array<'read' | 'submit' | 'start' | 'status' | 'link' | 'code' | 'file'> {
   if (reading) return ['read'];
   if (!form || !action || !isSavedForm(form)) return ['submit'];
   // A step-up is the status check asked again, with or without its code.
@@ -188,6 +202,8 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
   const named = match.id === undefined ? undefined : forms.find(([key]) => key === match.id);
   /* A step's check (commandCheck.ts): any multistep public form's, before its budget is the submissions'. */
   if (match.action === 'check') return publicStepCheck(ctx, named, match.step!);
+  /* A file held for the form's command (commands/stagedFiles.ts): its own budget, before anything is read. */
+  if (match.action === 'files') return publicFileHold(ctx, named);
   const action = named ? savedFormAction(named[1], match) : undefined;
   // A saved form's paths are served only on a form that has them.
   if (match.action !== undefined && !action) {
@@ -377,6 +393,8 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
       command: form.command,
       captureFlags: captureHttpCommandFlags,
       ...(commands.events ? { events: commands.events } : {}),
+      // Whose held files the submission may take: this visitor's, by their own cookie.
+      ...(readVisitorToken(req, key) ? { visitor: readVisitorToken(req, key) } : {}),
     });
     send(res, 200, result);
   } catch (error) {
@@ -386,6 +404,46 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
     reportRefusal(req, failure.status, failure.body.code, failure.body.message, error);
     send(res, failure.status, body);
   }
+  return true;
+}
+
+/**
+ * A file sent to be held for a public form's command: only a stock form an ordinary App serves, only for a files or
+ * signature field its command declares (stagedFiles.ts says no to any other), within its own budget per client and
+ * across every visitor, and for this visitor alone, by their cookie. The human check is the submission's: a
+ * provider's token answers one request, and a form's files are several.
+ */
+async function publicFileHold(ctx: RequestContext, named: [string, AppFormView] | undefined): Promise<true> {
+  const { req, res, registry, commands, signedIn, policy, policyUnavailable, bound } = ctx;
+  if (!named) {
+    send(res, 404, { code: 'no_such_form', error: 'No such form.' });
+    return true;
+  }
+  if (req.method !== 'POST') {
+    res.setHeader('allow', 'POST');
+    send(res, 405, { error: 'A file is held with POST.' });
+    return true;
+  }
+  const address = clientAddress(req, bound.trustedProxies);
+  if (await rateLimited(res, ['file'], address, 'client')) return true;
+  if (!signedIn) return closed(res);
+  const app = signedIn.app.app;
+  const [key, form] = named;
+  if (policyUnavailable || (policy && !policy.matches(app))) return unavailable(res);
+  if (policy || isRowPolicyApp(app) || isTenantApp(app) || isSavedForm(form) || !commands || commands.appId !== app.id) return closed(res);
+  const connection = appEntrypoint(signedIn, registry);
+  if (!connection) return closed(res);
+  if (await rateLimited(res, ['file'], address, 'all')) return true;
+  await stagePublicFileHttp(ctx, {
+    app,
+    commands: commands.registry,
+    ...(commands.events ? { events: commands.events } : {}),
+    connection,
+    actor: publicPrincipal(app.id, key),
+    key,
+    command: form.command.id,
+    secure: secureRequest(req, bound.trustedProxies),
+  });
   return true;
 }
 

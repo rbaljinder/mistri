@@ -92,7 +92,7 @@ async function fixture(
   }) => Promise<void>,
   app: object = APP,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-import-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-import-http-'));
   const file = join(directory, 'stock.db');
   const db = new DatabaseSync(file);
   db.exec(SQL);

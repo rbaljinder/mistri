@@ -23,7 +23,7 @@ type Fixture = {
 };
 
 async function fixture(run: (f: Fixture) => Promise<void>) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-resource-detail-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-resource-detail-'));
   const owner = basename(directory);
   const registry = new Registry();
   try {

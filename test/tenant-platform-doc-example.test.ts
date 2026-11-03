@@ -70,7 +70,7 @@ export default defineAppTenantPolicy({
 
 /** `provisioned: false` leaves the stores to `mistri migrate stores up`, which finds the commands beside the App. */
 function fixture(t: TestContext, commands = COMMANDS(), { provisioned = true } = {}) {
-  const { directory, stopping } = scratch(t, 'tablewalk-tenant-platform-doc-');
+  const { directory, stopping } = scratch(t, 'mistri-tenant-platform-doc-');
   const appDir = join(directory, 'app');
   mkdirSync(appDir);
   const data = join(directory, 'data.db'),

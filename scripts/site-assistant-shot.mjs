@@ -28,7 +28,7 @@ const CLOCK = `${TODAY}T16:00:00.000Z`;
 const at = process.argv.indexOf('--out');
 const target = join(at < 0 ? ASSETS : resolve(process.argv[at + 1]), 'home/tab-assistant.webp');
 
-const work = mkdtempSync(join(tmpdir(), 'tablewalk-assistant-shot-'));
+const work = mkdtempSync(join(tmpdir(), 'mistri-assistant-shot-'));
 const db = join(work, 'crm.db');
 const made = spawnSync(process.execPath, ['test/fixtures/databases/crm/make-crm-db.mjs', db], {
   cwd: ROOT,

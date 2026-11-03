@@ -26,5 +26,5 @@ export const say = defineMessages({
   resizeColumnHint: 'Drag or use arrow keys to resize {name}; double-click or Alt+Backspace to restore its fitted width',
   actions: 'Actions',
   rowsDrawnAsYouScroll: { one: '{count} row, drawn as you scroll.', other: '{count} rows, drawn as you scroll.' },
-  defaultOrderRowsHaveToCome: 'default order — rows have to come back in some order, and this is the one tablewalk chose',
+  defaultOrderRowsHaveToCome: 'default order — rows have to come back in some order, and this is the one used when none is asked for',
 });

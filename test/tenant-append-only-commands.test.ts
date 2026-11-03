@@ -42,7 +42,7 @@ type Name = 'addNote' | 'rename' | 'plainNote';
 
 async function fixture(t: TestContext) {
   const owner = { appId: 'tenant-notes', source: { id: 'business', connection: 'business-db' }, storeId: 'notes-store' };
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-notes-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-notes-'));
   const path = join(directory, 'business.db');
   const db = new DatabaseSync(path);
   const closers: Array<{ close(): Promise<void> } | { retire(): Promise<void> }> = [];

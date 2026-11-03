@@ -66,7 +66,7 @@ function expectations(read: (query: RecordActivityQuery) => Promise<StoredRecord
 }
 
 test("SQLite: a tenant's feed is read from its own rows, before the limit", async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-activity-owners-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-activity-owners-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path);
   t.after(() => {

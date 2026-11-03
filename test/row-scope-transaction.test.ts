@@ -23,7 +23,7 @@ const page = (table = 'item', extra: Partial<QueryRequest> = {}): QueryRequest =
 const rowsA = (): RowScope => ({ item: eq('tenant', 'a'), owner: eq('tenant', 'a') });
 
 async function fixture(t: TestContext, extra = '') {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-row-transaction-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-row-transaction-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   let adapter: SqliteAdapter | undefined;

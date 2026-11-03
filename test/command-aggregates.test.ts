@@ -78,7 +78,7 @@ const ROWS = `
 type Handler = (context: BusinessCommandContext) => unknown;
 
 async function fixture(t: TestContext, rows = ROWS, options: { snapshot?: true; amount?: string } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-aggregates-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-aggregates-')),
     path = join(directory, 'ledger.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE raw_entry (id INTEGER PRIMARY KEY, desk INTEGER NOT NULL, account TEXT NOT NULL, amount ${options.amount ?? 'NUMERIC(16,2)'} NOT NULL,
@@ -472,7 +472,7 @@ test('a walk cancelled between pages answers cancelled, and what it wrote is rol
 });
 
 test('under elevate, an aggregate reads what the elevated where reads, and a role without the command reads nothing through it', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-aggregates-elevate-')),
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-aggregates-elevate-')),
     path = join(directory, 'shop.db');
   const db = new DatabaseSync(path);
   const registry = new Registry();

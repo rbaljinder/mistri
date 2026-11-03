@@ -34,7 +34,7 @@ async function fixture(
   run: (f: { post: Post; as: (account: string, role?: string) => void; db: DatabaseSync }) => Promise<void>,
   options: { declareStep?: boolean; signIn?: boolean } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-record-undo-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-record-undo-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`PRAGMA foreign_keys = ON;

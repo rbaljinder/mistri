@@ -43,6 +43,7 @@ import type { LookupSources } from './commandLookup.js';
 import type { IntegrationCalls, IntegrationCallsOf, IntegrationUses, IntegrationUsesGuard } from '../integrations/integrationModule.js';
 import type { SavedDraftContext } from '../forms/savedForms.js';
 import type { WhenGuard } from '../../../schema/query.js';
+import type { CommandFile } from '../../../schema/command.js';
 import { cutSensitive } from '../forms/formKey.js';
 import { brokenRules, draftHolds, draftNames, readsRecord, type BoundCondition, type DraftRule } from '../../shared/commandDraft.js';
 import { readRichTextInput } from '../richText.js';
@@ -197,13 +198,8 @@ export interface BusinessCommandContext extends CommandContextBase {
   readonly files?: readonly CommandFile[];
 }
 
-/** A file handed to a command run beside its input: its name, type, size and bytes. */
-export interface CommandFile {
-  readonly name: string;
-  readonly type: string;
-  readonly size: number;
-  readonly data: Uint8Array;
-}
+/** A file handed to a command run beside its input, or as a `field.files` value: its name, type, size and bytes. */
+export type { CommandFile } from '../../../schema/command.js';
 
 /** What `initial` reads through: the target at the revision prepare reads, and reads only. A signed-in form's
     command (`targets: 'none'`) has no `record`. */
@@ -688,7 +684,7 @@ function rulesOption(value: unknown, fields: readonly AppCommandField[]): readon
           if (!field) fail(`${at} names "${name}", which is not a field of the input.`);
           if (field!.type === 'text' && field!.sensitive)
             fail(`${at} names "${name}", a sensitive field; nothing reads a sensitive value.`);
-          if (['group', 'lines', 'richText', 'choices', 'defined'].includes(field!.type))
+          if (['group', 'lines', 'richText', 'choices', 'defined', 'files', 'signature'].includes(field!.type))
             fail(`${at} names "${name}", a ${field!.type} field a rule cannot compare.`);
         }
       }
@@ -1070,6 +1066,16 @@ export function defineCommand<
     if (field.type === 'lines') {
       if (!write.includes(field.from) || field.from === target)
         fail(`Command input "${path}" asks lines of "${field.from}"; declare it among the command's write, beside its target.`);
+      continue;
+    }
+    /* Held files land in their file resource in the command's own transaction: the handler stores each one, under
+       the command's footprint, so the resource is among its writes. That it holds files is the App's to say, and is
+       judged where the command is bound to one (businessCommandAuthorization.ts). */
+    if (field.type === 'files' || field.type === 'signature') {
+      if (!write.includes(field.from))
+        fail(
+          `Command input "${path}" takes ${field.type === 'files' ? 'files' : 'a signature'} of "${field.from}"; declare it among the command's write.`,
+        );
       continue;
     }
     if (field.type === 'group' || field.default === undefined) continue;

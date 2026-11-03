@@ -169,7 +169,7 @@ test('proxy/accessor declarations and callbacks are never executed', () => {
 });
 
 test('one loader seam preserves ordinary/tenant kind separation and safe import errors', async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-policy-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-tenant-policy-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const tenant = join(dir, 'tenant.mjs'),
     ordinary = join(dir, 'ordinary.mjs'),
@@ -228,7 +228,7 @@ test("a refused tenant policy records why, for the operator's console only", asy
     assert.ok(safe(error));
     assert.match(refusalReasons(error).join(' | '), reason, JSON.stringify(patch));
   }
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-reason-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-tenant-reason-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const bad = join(dir, 'bad.mjs'),
     ordinary = join(dir, 'ordinary.mjs');
@@ -260,7 +260,7 @@ export default defineAppTenantPolicy({ kind: 'tenant', appId: 'app', storeId: 's
 });
 
 test('module default thenable/getter is refused before promise assimilation', async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-module-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-tenant-module-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'hostile.mjs');
   writeFileSync(path, `export let calls=0; export default {get then(){calls++;throw new Error('SECRET')}}`);

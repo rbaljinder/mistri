@@ -170,7 +170,7 @@ interface Lab {
 }
 
 async function openLab(t: TestContext): Promise<Lab> {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-pay-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-pay-'));
   const path = join(directory, 'business.db'),
     db = new DatabaseSync(path);
   t.after(() => {

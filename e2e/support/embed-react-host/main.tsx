@@ -140,7 +140,7 @@ function Host() {
   const { place } = useRouter();
   const navigator = useHostNavigator();
   return (
-    <Provider endpoint="/api/tw" auth={auth} navigator={navigator} onTitle={(title) => (document.title = `${title} · Host`)}>
+    <Provider endpoint="/api/mistri" auth={auth} navigator={navigator} onTitle={(title) => (document.title = `${title} · Host`)}>
       <Bar />
       {place.pathname === '/crm' || place.pathname.startsWith('/crm/') ? (
         <App app="compass" basePath="/crm" className="host-app" fallback={<p>Loading the CRM…</p>} />

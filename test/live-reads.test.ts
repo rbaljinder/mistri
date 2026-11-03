@@ -16,7 +16,7 @@ import { captureTenantData } from '../packages/engine/src/server/evidence.js';
 import type { ServerResponse } from 'node:http';
 
 test('a read names its base, the paths it walks, the records its labels name and the rows that point at it', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-live-reads-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-live-reads-'));
   const path = join(dir, 'data.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE region(id INTEGER PRIMARY KEY, name TEXT);
@@ -69,7 +69,7 @@ test('a read names its base, the paths it walks, the records its labels name and
 });
 
 test('a frozen reader, as a row policy hands out, is read through and its reads are filed', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tablewalk-live-reads-'));
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-live-reads-'));
   const path = join(dir, 'data.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE vehicle(id INTEGER PRIMARY KEY, make TEXT); INSERT INTO vehicle(make) VALUES ('Toyota');`);

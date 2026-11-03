@@ -40,7 +40,7 @@ async function probe(url: string, writable = false) {
 test('a wider role is said once per connection per run, not on every schema refresh; a new grant is news', async (t) => {
   /* SQLite has no roles; the reach is lent to its adapter here so the rule
      is held without a live server. */
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-role-once-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-role-once-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'one.db');
   const db = new DatabaseSync(file);

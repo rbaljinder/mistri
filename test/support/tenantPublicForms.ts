@@ -119,7 +119,7 @@ export async function openTenantPublicForms(
 ): Promise<TenantPublicForms> {
   resetPublicFormLimits();
   const engine = await openTenantEngine(dialect, { sqlite: SQLITE, postgres: POSTGRES, tables: ['make'], database });
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-public-forms-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-public-forms-'));
   let auth: AppAuthRuntime | undefined;
   let owner: Awaited<ReturnType<typeof createTenantAuthenticatedHttpServer>> | undefined;
   const front = createServer();

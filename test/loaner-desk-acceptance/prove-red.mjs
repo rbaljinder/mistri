@@ -62,7 +62,7 @@ assert.equal(clean.code, 0, `The untouched App must pass first:\n${clean.output}
 console.log('ok  the untouched App passes');
 
 for (const variant of VARIANTS) {
-  const root = mkdtempSync(join(tmpdir(), 'tablewalk-prove-red-'));
+  const root = mkdtempSync(join(tmpdir(), 'mistri-prove-red-'));
   try {
     mkdirSync(join(root, 'node_modules/@mistriwork'), { recursive: true });
     symlinkSync(packageRoot, join(root, 'node_modules/@mistriwork/mistri'), 'dir');

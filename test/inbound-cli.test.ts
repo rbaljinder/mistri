@@ -115,7 +115,7 @@ test(
   'a module of endpoints alone serves a signed delivery over the real CLI, and refuses to start without its secret',
   { timeout: 300_000 },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-inbound-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-inbound-'));
     const children: ChildProcess[] = [];
     t.after(async () => {
       for (const child of children)

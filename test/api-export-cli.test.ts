@@ -29,7 +29,7 @@ const definition = () => ({
   api: { version: 1, roles: ['reader'], resources: { person: { fields: ['id', 'name'], sorts: ['id'] } } },
 });
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-api-export-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-api-export-'));
   const app = join(directory, 'app');
   mkdirSync(app);
   const file = join(directory, 'data.db'),
@@ -60,7 +60,7 @@ export default defineCommands({ unused: defineCommand({ source: 'main', target: 
  * `declared` writes the exposure into app.json; otherwise a caller attaches
  * the returned `api` in code. */
 function commandFixture(declared: boolean) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-api-export-commands-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-api-export-commands-'));
   const app = join(directory, 'app');
   mkdirSync(app);
   // .mts: a temporary directory has no package.json, so a .ts file would load

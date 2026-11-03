@@ -270,7 +270,7 @@ const identity = (role: string): Identity => ({ id: `account-${role}`, who: `${r
 const sessions: Record<string, Identity> = { manager: identity('manager'), clerk: identity('clerk') };
 
 test('a served App reads rollups in lists, sorts, conditions and fields, and a reader who may not read the rows is served none', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-rollups-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-rollups-'));
   const path = join(directory, 'orders.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE po (id INTEGER PRIMARY KEY, number TEXT NOT NULL, status TEXT NOT NULL);

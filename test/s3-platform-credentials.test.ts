@@ -71,7 +71,7 @@ test('the container endpoint is asked with the authorization token and its answe
 
 test('the authorization token file is read when asked, not once', async () => {
   reset();
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-s3-token-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-s3-token-'));
   try {
     const file = join(directory, 'token');
     writeFileSync(file, 'from-file\n');

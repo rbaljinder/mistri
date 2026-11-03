@@ -36,7 +36,7 @@ describe('the accounts screen', () => {
   const log = console.log;
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-accounts-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-accounts-'));
     const db = join(tmp, 'app.db');
     makeDemoDatabase(db);
     seedDemoDatabase(db, { scale: 1 });

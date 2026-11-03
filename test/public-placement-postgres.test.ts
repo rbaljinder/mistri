@@ -145,7 +145,7 @@ test(
         await dropJournal();
         // Constraint names are per schema, so the clash has to sit in the runtime schema beside the journal.
         await client.query('CREATE SCHEMA IF NOT EXISTS mistri');
-        await client.query('CREATE TABLE mistri.provision_conflict(id integer CONSTRAINT tw_pp_meta_pk PRIMARY KEY)');
+        await client.query('CREATE TABLE mistri.provision_conflict(id integer CONSTRAINT mistri_pp_meta_pk PRIMARY KEY)');
         await assert.rejects(provisionPostgresPublicPlacementJournal(url.href));
         assert.deepEqual(await describePostgresRelations(client, PUBLIC_PLACEMENT_PREFIX), []);
         await client.query('DROP TABLE mistri.provision_conflict');

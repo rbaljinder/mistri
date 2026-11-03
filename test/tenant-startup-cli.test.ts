@@ -15,7 +15,7 @@ import { VALIDATE, validating } from './support/validation.js';
 
 const entry = resolve('packages/mistri/src/server/index.ts');
 function fixture(t: TestContext) {
-  const { directory, stopping } = scratch(t, 'tablewalk-tenant-startup-cli-');
+  const { directory, stopping } = scratch(t, 'mistri-tenant-startup-cli-');
   const appDir = join(directory, 'app');
   mkdirSync(appDir);
   const appFile = join(appDir, 'app.json'),

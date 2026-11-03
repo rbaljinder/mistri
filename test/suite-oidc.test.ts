@@ -25,7 +25,7 @@ const environment: NodeJS.ProcessEnv = {
 };
 
 before(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-oidc-'));
+  directory = mkdtempSync(join(tmpdir(), 'mistri-suite-oidc-'));
   idp = await startMockOidc();
   const socket = createServer();
   await new Promise<void>((resolve) => socket.listen(0, '127.0.0.1', resolve));

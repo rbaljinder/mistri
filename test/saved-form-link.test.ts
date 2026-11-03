@@ -143,7 +143,7 @@ interface Fixture {
 async function fixture(run: (f: Fixture) => Promise<void>) {
   resetPublicFormLimits();
   resetStatusLockouts();
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-form-link-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-form-link-'));
   const file = join(directory, 'apply.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE application(id INTEGER PRIMARY KEY, status TEXT NOT NULL, reference TEXT UNIQUE, first_name TEXT, last_name TEXT,
@@ -271,9 +271,9 @@ test(
     await fixture(async (f) => {
       const ada = new Browser(f.base, 'ada');
       const receipt = await ada.apply();
-      const token = ada.jar.get('tw_claim_apply');
+      const token = ada.jar.get('mistri_claim_apply');
       assert.match(token ?? '', /^[A-Za-z0-9_-]{43}$/, 'the claim rides beside the receipt');
-      assert.equal(ada.jar.has('tw_form_apply'), false, "the draft's cookie is gone");
+      assert.equal(ada.jar.has('mistri_form_apply'), false, "the draft's cookie is gone");
       assert.equal(row(f, receipt).claim_token_hash, hash(token!), 'only its hash is kept');
       assert.ok(Date.parse(String(row(f, receipt).claim_expires_at)) - Date.now() <= 30 * 60_000);
 
@@ -289,14 +289,14 @@ test(
       // A copy of the cookie in another browser works as the cookie would, so the copy is spent with the first Yes.
       const copy = new Browser(f.base, 'copy');
       copy.session = 'account-c';
-      copy.jar.set('tw_claim_apply', token!);
+      copy.jar.set('mistri_claim_apply', token!);
 
       // Five link attempts a minute per address: every browser here shares one, so each part starts a fresh budget.
       resetPublicFormLimits();
       const yes = await ada.claim('yes');
       assert.equal(yes.status, 200, yes.raw);
       assert.deepEqual(yes.body, { linked: { reference: receipt } });
-      assert.equal(ada.jar.has('tw_claim_apply'), false, 'spent: the cookie is cleared');
+      assert.equal(ada.jar.has('mistri_claim_apply'), false, 'spent: the cookie is cleared');
       const { account_id, linked_via, linked_at, claim_token_hash, claim_expires_at } = row(f, receipt);
       assert.deepEqual(
         { account_id, linked_via, claim_token_hash, claim_expires_at },
@@ -314,7 +314,7 @@ test(
       assert.deepEqual((await grace.claim('no')).body, { claim: null });
       assert.equal(row(f, second).claim_token_hash, null);
       grace.session = 'account-g';
-      grace.jar.set('tw_claim_apply', 'A'.repeat(43));
+      grace.jar.set('mistri_claim_apply', 'A'.repeat(43));
       assert.equal((await grace.claim('yes')).status, 404);
       assert.equal(row(f, second).account_id, null);
 
@@ -341,7 +341,7 @@ test(
       twice.session = 'account-t';
       const out = await fetch(`${f.base}/api/auth/sign-out`, {
         method: 'POST',
-        headers: { origin: f.base, cookie: `session=account-t; tw_claim_apply=${twice.jar.get('tw_claim_apply')}` },
+        headers: { origin: f.base, cookie: `session=account-t; mistri_claim_apply=${twice.jar.get('mistri_claim_apply')}` },
       });
       const cleared = out.headers.getSetCookie();
       assert.ok(
@@ -349,7 +349,7 @@ test(
         "Better Auth's own cookie is kept",
       );
       assert.ok(
-        cleared.some((line) => /^tw_claim_apply=;.*Path=\/api\/forms\/apply.*Max-Age=0/.test(line)),
+        cleared.some((line) => /^mistri_claim_apply=;.*Path=\/api\/forms\/apply.*Max-Age=0/.test(line)),
         cleared.join('\n'),
       );
     });

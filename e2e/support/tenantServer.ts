@@ -64,7 +64,7 @@ export async function startTenantApp(
   if (options.tenantEvents && (!options.tenantAssignment || options.tenantInventory))
     throw new Error('Events require the assignment-only fixture');
   const appId = options.appId ?? TENANT_APP_ID;
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-browser-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-browser-'));
   let child: ReturnType<typeof spawn> | undefined;
   let stopping: Promise<void> | undefined;
   const stop = () =>

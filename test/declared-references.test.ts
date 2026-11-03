@@ -50,7 +50,7 @@ const base = (more: Record<string, unknown> = {}) => ({
 type Call = (path: string, body?: object) => Promise<{ status: number; text: string; body: any }>;
 
 async function serve(definition: Record<string, unknown> | undefined, run: (call: Call) => Promise<void>, role = 'clerk') {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-refs-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-refs-'));
   const file = join(directory, 'depot.db');
   const db = new DatabaseSync(file);
   db.exec(SCHEMA);
@@ -288,7 +288,7 @@ test('a declared reference is never write authority: its target deletes as the d
 });
 
 test('a reference the catalog cannot prove is refused when the App loads', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-refs-load-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-refs-load-'));
   const file = join(directory, 'depot.db');
   const db = new DatabaseSync(file);
   db.exec(SCHEMA);

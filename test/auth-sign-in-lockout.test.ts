@@ -29,7 +29,7 @@ describe('sign-in lockout and the client address', () => {
   const PASSWORD = 'correct-horse-battery-staple-9';
 
   before(async () => {
-    tmp = mkdtempSync(join(tmpdir(), 'tablewalk-auth-lockout-'));
+    tmp = mkdtempSync(join(tmpdir(), 'mistri-auth-lockout-'));
     const db = join(tmp, 'app.db');
     makeDemoDatabase(db);
     seedDemoDatabase(db, { scale: 3 });

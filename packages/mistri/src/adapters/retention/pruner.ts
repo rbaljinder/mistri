@@ -21,8 +21,9 @@ export const PRUNE_BATCH = 5_000;
 /** The rest between two statements of one rule. */
 const PRUNE_PAUSE_MS = 250;
 
-/** The App's retention windows a rule may be governed by (`retention` in the App, shared/appRetention.ts). */
-type PruneWindow = 'history' | 'commands' | 'attempts';
+/** The App's retention windows a rule may be governed by (`retention` in the App, shared/appRetention.ts), or
+    `expired`: the row's time is when it lapses, and it goes once that has passed, whatever the App keeps. */
+type PruneWindow = 'history' | 'commands' | 'attempts' | 'expired';
 
 /** How the column that dates a row holds its time. */
 type PruneClock =
@@ -98,7 +99,8 @@ interface PruneDb {
 }
 
 /** Retention in milliseconds per window; null keeps for ever. */
-type RetentionMs = Readonly<Record<PruneWindow, number | null>>;
+type RetentionMs = Readonly<Record<Exclude<PruneWindow, 'expired'>, number | null>>;
+const windowOf = (windows: RetentionMs, rule: PruneRule): number | null => (rule.window === 'expired' ? 0 : windows[rule.window]);
 
 const quote = (name: string) => `"${name}"`;
 
@@ -176,8 +178,8 @@ export async function pruneAll(
 ): Promise<readonly Readonly<{ id: string; deleted: number }>[]> {
   const out: Array<Readonly<{ id: string; deleted: number }>> = [];
   for (const rule of which) {
-    if (windows[rule.window] === null || !(await db.has(rule.table))) continue;
-    out.push({ id: rule.id, deleted: await prune(db, rule, windows[rule.window], options) });
+    if (windowOf(windows, rule) === null || !(await db.has(rule.table))) continue;
+    out.push({ id: rule.id, deleted: await prune(db, rule, windowOf(windows, rule), options) });
   }
   return out;
 }

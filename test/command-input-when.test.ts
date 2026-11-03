@@ -138,7 +138,7 @@ test('prepare names the fields the record does not ask, and starts none of them'
 });
 
 test('the run refuses an input the record does not ask, and asks for one it does, through a rollup too', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-input-when-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-input-when-'));
   const file = join(directory, 'shop.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE job (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', note TEXT);

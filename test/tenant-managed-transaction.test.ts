@@ -781,7 +781,7 @@ test('in-flight unknown outcome survives an unrelated callback failure and opera
 });
 
 async function real(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-managed-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-managed-'));
   const path = join(directory, 'data.db'),
     db = new DatabaseSync(path);
   const adapter = new SqliteAdapter(path);

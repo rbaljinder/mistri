@@ -44,7 +44,7 @@ test(
     timeout: 180_000,
   },
   async (t) => {
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-suite-keystone-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-suite-keystone-'));
     let suite: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
     let owned: Awaited<ReturnType<typeof uuidPostgresDatabase>> | undefined;
     let control: Awaited<ReturnType<typeof pgClient>> | undefined;
@@ -467,7 +467,7 @@ test(
       },
     );
     ok(draft);
-    assert.match(draft.cookie, /tw_form_apply=/);
+    assert.match(draft.cookie, /mistri_form_apply=/);
     assert.deepEqual((await control.query("SELECT dealer_id, status FROM lead WHERE email = 'intake@suite.example.test'")).rows, [
       { dealer_id: own, status: 'draft' },
     ]);

@@ -48,7 +48,7 @@ const DESK = {
 };
 
 test("a list, a view, a count and an export read the reader's own teams, and no one else's", { timeout: 20_000 }, async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-me-sets-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-me-sets-'));
   const previous = process.env.XDG_CONFIG_HOME;
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
@@ -151,7 +151,7 @@ test("a list, a view, a count and an export read the reader's own teams, and no 
 });
 
 test('a membership is judged against the catalog as the App loads: a table people are in, one link to them, one kind', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-me-sets-catalog-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-me-sets-catalog-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 'desk.db'));
   db.exec(`CREATE TABLE employee (id INTEGER PRIMARY KEY, email TEXT NOT NULL);

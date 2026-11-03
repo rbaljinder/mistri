@@ -49,7 +49,7 @@ test('a page drawn with @mistriwork/ui alone wears its stylesheet, under any rul
     expect(await style('.field-control', 'min-height')).toBe('34px');
     expect(await style('.field-control', 'border-top-width')).toBe('1px');
     // The icon and the date field.
-    expect(await style('.tw-icon', 'display')).toBe('inline-block');
+    expect(await style('.mistri-icon', 'display')).toBe('inline-block');
     expect(await style('.date-field', 'display')).toBe('flex');
     expect(await style('.date-field-trigger', 'position')).toBe('absolute');
     expect(await style('.date-field-hint', 'position')).toBe('absolute');

@@ -50,7 +50,7 @@ async function fixture(
     kept: () => { receipts: number; changes: unknown[] };
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-command-track-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-track-'));
   const path = join(directory, 'desk.db');
   const db = new DatabaseSync(path);
   const registry = new Registry();

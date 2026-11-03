@@ -59,11 +59,11 @@ function definitions(dialect: 'sqlite' | 'postgres'): ReadonlyMap<string, string
   return new Map([
     [
       receipt,
-      `CREATE TABLE ${at(receipt)} (\n  ${placementReceiptColumns.map(column).join(',\n  ')},\n  CONSTRAINT tw_pp_receipt_pk PRIMARY KEY (id),\n  CONSTRAINT tw_pp_receipt_scope UNIQUE (${placementNamespaceColumns.join(', ')})\n)`,
+      `CREATE TABLE ${at(receipt)} (\n  ${placementReceiptColumns.map(column).join(',\n  ')},\n  CONSTRAINT mistri_pp_receipt_pk PRIMARY KEY (id),\n  CONSTRAINT mistri_pp_receipt_scope UNIQUE (${placementNamespaceColumns.join(', ')})\n)`,
     ],
     [
       meta,
-      `CREATE TABLE ${at(meta)} (\n  ${metaColumns.map(column).join(',\n  ')},\n  CONSTRAINT tw_pp_meta_pk PRIMARY KEY (singleton)\n)`,
+      `CREATE TABLE ${at(meta)} (\n  ${metaColumns.map(column).join(',\n  ')},\n  CONSTRAINT mistri_pp_meta_pk PRIMARY KEY (singleton)\n)`,
     ],
   ]);
 }
@@ -192,15 +192,15 @@ const pgLayout = [
     pgMeta,
     metaColumns,
     ['PRIMARY KEY (singleton)'],
-    [`CREATE UNIQUE INDEX tw_pp_meta_pk ON ${runtimeSchema('postgres')}.${pgMeta} USING btree (singleton)`],
+    [`CREATE UNIQUE INDEX mistri_pp_meta_pk ON ${runtimeSchema('postgres')}.${pgMeta} USING btree (singleton)`],
   ),
   pgTable(
     pgReceipt,
     placementReceiptColumns,
     ['PRIMARY KEY (id)', `UNIQUE (${placementNamespaceColumns.join(', ')})`],
     [
-      `CREATE UNIQUE INDEX tw_pp_receipt_pk ON ${runtimeSchema('postgres')}.${pgReceipt} USING btree (id)`,
-      `CREATE UNIQUE INDEX tw_pp_receipt_scope ON ${runtimeSchema('postgres')}.${pgReceipt} USING btree (${placementNamespaceColumns.join(', ')})`,
+      `CREATE UNIQUE INDEX mistri_pp_receipt_pk ON ${runtimeSchema('postgres')}.${pgReceipt} USING btree (id)`,
+      `CREATE UNIQUE INDEX mistri_pp_receipt_scope ON ${runtimeSchema('postgres')}.${pgReceipt} USING btree (${placementNamespaceColumns.join(', ')})`,
     ],
   ),
 ];

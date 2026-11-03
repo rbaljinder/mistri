@@ -141,7 +141,7 @@ for (const { entry, subject } of plan)
 if (missing.length) {
   const ids = [...new Set(missing.map((job) => job.subject.appId))];
   console.log(`Capturing ${missing.length} of ${plan.length * looks.length} (${ids.join(', ')}); the rest are the matrix's.`);
-  const temp = mkdtempSync(join(tmpdir(), 'tablewalk-atlas-'));
+  const temp = mkdtempSync(join(tmpdir(), 'mistri-atlas-'));
   const browser = await chromium.launch();
   const apps = [];
   try {

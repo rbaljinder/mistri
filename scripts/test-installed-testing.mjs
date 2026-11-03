@@ -12,7 +12,7 @@ import { promisify } from 'node:util';
 
 const tarballs = process.argv.slice(2);
 assert.ok(tarballs.length, "Pass the built packages' tarballs.");
-const directory = await mkdtemp(join(tmpdir(), 'tablewalk-installed-testing-'));
+const directory = await mkdtemp(join(tmpdir(), 'mistri-installed-testing-'));
 const run = promisify(execFile),
   require = createRequire(import.meta.url);
 const environment = { ...process.env };

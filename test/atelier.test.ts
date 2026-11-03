@@ -21,7 +21,7 @@ type Row = Record<string, unknown>;
 type Reply = { status: number; body: Row & { result?: Row; refusal?: Row; outcome?: string; code?: string; expectedVersion?: number } };
 
 async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-atelier-test-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-atelier-test-'));
   const file = await seed(join(directory, 'atelier.db'), { photos: false });
   const db = new DatabaseSync(file, { timeout: 5000 });
   const registry = new Registry();

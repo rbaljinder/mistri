@@ -20,7 +20,7 @@ import {
 } from '../packages/engine/src/server/journal.js';
 
 function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-transaction-outcome-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-transaction-outcome-'));
   const file = join(directory, 'data.db');
   const db = new DatabaseSync(file);
   db.exec("CREATE TABLE item(id INTEGER PRIMARY KEY, name TEXT); INSERT INTO item VALUES (1, 'After'), (2, 'Second');");

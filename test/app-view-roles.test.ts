@@ -50,7 +50,7 @@ const manifest = {
 };
 /* The App as the server loads it, pages and all, from an app.json in its own directory. */
 async function load(extra: Record<string, unknown> = {}, directory?: string) {
-  const own = directory ?? mkdtempSync(join(tmpdir(), 'tablewalk-view-roles-'));
+  const own = directory ?? mkdtempSync(join(tmpdir(), 'mistri-view-roles-'));
   try {
     writeFileSync(join(own, 'app.json'), JSON.stringify({ ...manifest, ...extra }));
     return await loadApp(own);
@@ -64,7 +64,7 @@ async function serve(
   run: (call: (path: string, body?: unknown) => Promise<Reply>, as: (role: string) => void, origin: string) => Promise<void>,
   extra: Record<string, unknown> = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-view-roles-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-view-roles-'));
   const file = join(directory, 'desk.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE ticket (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT);

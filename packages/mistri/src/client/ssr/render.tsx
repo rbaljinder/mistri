@@ -62,6 +62,7 @@ function tree(input: PublicRenderInput): ReactNode {
         review: Boolean(input.form.steps?.length),
         // As the page draws it (publicForm.js), so a reference input's field stands where the page will keep it.
         visitor: { app: input.app.id },
+        held: { form: input.form.id },
         // Never called: a submit happens in the page, after it has taken the form over.
         submit: () => Promise.reject(new Error('Not in the page yet.')),
       }),

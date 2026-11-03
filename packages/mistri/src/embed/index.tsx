@@ -3,7 +3,7 @@
  * of its surfaces (a list, a record, a dashboard, a free-form page, the
  * assistant) inside one of the host's screens.
  *
- *   <Provider endpoint="/api/tw" navigator={useReactRouterNavigator()}>
+ *   <Provider endpoint="/api/mistri" navigator={useReactRouterNavigator()}>
  *     <App app="compass" basePath="/crm" />
  *   </Provider>
  *
@@ -30,7 +30,7 @@ export type { Auth } from './session.js';
 const VERSION = typeof __MISTRI_VERSION__ === 'string' ? __MISTRI_VERSION__ : undefined;
 
 export interface ProviderProps {
-  /** Where the mistri server answers: `/api/tw` (same origin, recommended) or `https://tw.example.com/tools`. */
+  /** Where the mistri server answers: `/api/mistri` (same origin, recommended) or `https://mistri.example.com/tools`. */
   endpoint: string;
   /** `'cookie'` (the default): the page already carries mistri's session. Or exchange the host's own. */
   auth?: Auth;

@@ -23,14 +23,15 @@ import { MultiStepForm } from './MultiStepForm.js';
 import { Columns } from '@mistriwork/ui/FormParts.js';
 import type { FormStep } from '@mistriwork/engine/shared/formValues.js';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { state, viewportBox, writeAllowed } from '../core.js';
+import { api, labelColumn, labelPath, state, viewportBox, writeAllowed } from '../core.js';
+import { ownedBy } from '../requestIdentity.js';
 import { RichTextField, mentionSearch } from './RichTextField.js';
 import { createPortal } from 'react-dom';
 import { Modal } from '@mistriwork/ui/Modal.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { ConfirmDialog } from './Prompt.js';
 import { useForm } from '@tanstack/react-form';
-import { columnKind, isFlagColumn, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, isFlagColumn, primaryKey, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { humanName, vocabularyWord } from '@mistriwork/engine/shared/model.js';
 import { inferredFormDefaults } from '@mistriwork/engine/shared/formValues.js';
 import { sessionIdentity } from '../sessionIdentity.js';
@@ -77,6 +78,8 @@ export type { FormCuration } from './newRecordModel.js';
 export { autoKey, isRequired } from '@mistriwork/engine/shared/form.js';
 
 const DefinedInputs = onDemand(() => import('./DefinedFields.js'), 'DefinedInputs', { quiet: true });
+/* A reference drawn as its hierarchy (`form.fields.<column>.tree`): a part of its own, so a form without one carries none of it. */
+const TreePicker = onDemand(() => import('./TreePicker.js'), 'TreePicker', { quiet: true });
 
 const dateOnly = (column: ColumnMeta) => columnKind(column.type) === 'date' && !/time/i.test(column.type);
 /* A date is judged in the Workbench too; a date and time only where an App draws its picker. */
@@ -234,7 +237,8 @@ function NewRecordFormBody({
       ? fieldInput(column, {
           money: display?.(column)?.format === 'money',
           richText: display?.(column)?.format === 'richText',
-          multiline: dress(column)?.multiline,
+          /* An address is written one part per line. */
+          multiline: dress(column)?.multiline ?? (display?.(column)?.format === 'address' ? true : undefined),
           required: isRequired(column, assigned),
           hasStart:
             switches.has(column.name) ||
@@ -577,6 +581,7 @@ function NewRecordFormBody({
                             as={own?.as}
                             where={narrowed === undefined ? undefined : narrowed || undefined}
                             waiting={narrowed === undefined}
+                            tree={kind === 'reference' ? own?.tree : undefined}
                             helpId={helpId}
                             onChange={(value) => {
                               edited.current.add(column.name);
@@ -877,6 +882,7 @@ export function PlatformControl({
   as,
   where,
   waiting = false,
+  tree,
   helpId,
 }: {
   column: ColumnMeta;
@@ -901,6 +907,8 @@ export function PlatformControl({
   /** A narrowed reference's condition; `waiting` while a field it reads is empty. */
   where?: string;
   waiting?: boolean;
+  /** The referenced table's parent column, where the form draws the reference as its hierarchy (`form.fields.<column>.tree`). */
+  tree?: string;
   helpId?: string;
 }) {
   const dateId = useId();
@@ -1080,6 +1088,31 @@ export function PlatformControl({
     );
   }
   const referenced = column.references ? target(column.references.table) : undefined;
+  if (referenced && tree) {
+    /* A plain column to search and say: a walked name or a label template is a view's, which a level's read is not. */
+    const naming = labelPath(referenced);
+    const plain =
+      naming && !naming.includes('.') && !naming.startsWith('$') ? naming : (labelColumn(referenced) ?? primaryKey(referenced)[0]);
+    const connection = state.activeConnection;
+    return (
+      <TreePicker
+        from={referenced.id}
+        by={primaryKey(referenced)[0]}
+        labelColumn={plain}
+        parent={tree}
+        where={where}
+        ask={(path, body) => api(path, { ...ownedBy(connection), ...body } as Parameters<typeof api>[1])}
+        scope={JSON.stringify([sessionIdentity().epoch, connection])}
+        value={value}
+        onChange={(next) => onChange(next === '' ? '' : String(next))}
+        ariaLabel={spoken}
+        inputRef={setControl}
+        disabled={waiting}
+        required={required}
+        {...(placeholder ? { placeholder } : {})}
+      />
+    );
+  }
   if (referenced) {
     return (
       <RecordPicker

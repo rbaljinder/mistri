@@ -57,7 +57,7 @@ test("the App's rule sits on the database's key by key, and a value breaks the f
 });
 
 test('served text rules: a resource names text columns only, and every write is held to the rule', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-text-rules-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-text-rules-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const file = join(directory, 'rules.db');
   const db = new DatabaseSync(file);

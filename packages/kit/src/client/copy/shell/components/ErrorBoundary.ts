@@ -2,6 +2,6 @@
 import { defineMessages } from '../../../messages.js';
 
 export const say = defineMessages({
-  tablewalkASectionCould: 'a section could not be drawn.',
+  aSectionCouldNotBeDrawn: 'a section could not be drawn.',
   unknownError: 'Unknown error',
 });

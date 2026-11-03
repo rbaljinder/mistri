@@ -762,6 +762,13 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           }),
         );
       }
+      /* Held files land in their resource through insertFile, which takes bytes only into a file resource's content. */
+      for (const field of command.fields)
+        if ((field.type === 'files' || field.type === 'signature') && !files.has(field.from))
+          conflicts.push(
+            `Command "${id}" input "${field.name}" takes ${field.type === 'files' ? 'files' : 'a signature'} of "${field.from}", ` +
+              `which holds no files: give resources.${logical(field.from)} a file: { content, name, … }.`,
+          );
       return [
         id,
         {

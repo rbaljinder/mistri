@@ -607,7 +607,7 @@ test('tenant events: a version-1 non-event command still executes in the provisi
 });
 
 test('tenant events: missing event storage refuses actual native-host startup and does not provision or mutate assignment state', async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-tenant-event-startup-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-event-startup-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const reservation = createServer();
   reservation.listen(0, '127.0.0.1');

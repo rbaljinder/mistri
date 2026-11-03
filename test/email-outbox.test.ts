@@ -61,7 +61,7 @@ async function fixture(
     directory: string;
   }) => Promise<void>,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-mail-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-mail-'));
   const file = join(directory, 'fixture.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE person (id INTEGER PRIMARY KEY, name TEXT NOT NULL, handle TEXT NOT NULL, email TEXT);
@@ -353,7 +353,7 @@ test('mentions are read at word edges, each once, and a server with email rules 
 });
 
 test('the log transport writes each message as a line and sends nothing', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-mail-log-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-mail-log-'));
   try {
     const registry = new Registry();
     const { emailConnectionOf } = await import('../packages/mistri/src/server/email/email.js');

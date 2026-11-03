@@ -49,7 +49,7 @@ test(
   async () => {
     const schema = `tw_policy_media_${randomUUID().replaceAll('-', '')}`;
     const quoted = `"${schema}"`;
-    const directory = mkdtempSync(join(tmpdir(), 'tablewalk-policy-media-pg-'));
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-policy-media-pg-'));
     const registry = new Registry();
     let control: Client | undefined;
     let policy: HttpAppPolicy | undefined;

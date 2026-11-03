@@ -19,7 +19,7 @@ import { compileAppTheme } from '../packages/mistri/src/shared/themeSpec.js';
 
 const ROOT = resolve('.');
 const PACKAGE = join(ROOT, 'test/fixtures/theme-package');
-const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-theme-package-'));
+const scratch = mkdtempSync(join(tmpdir(), 'mistri-theme-package-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
 const db = join(scratch, 'tick.db');

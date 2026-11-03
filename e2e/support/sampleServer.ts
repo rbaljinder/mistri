@@ -37,7 +37,7 @@ export function seedExpensiveSampleDatabase(name: 'depot' | 'commons' | 'forecou
   const key = `${name}:${today}`;
   let template = seedTemplates.get(key);
   if (!template || !existsSync(template)) {
-    const directory = mkdtempSync(join(tmpdir(), `tablewalk-${name}-seed-template-`));
+    const directory = mkdtempSync(join(tmpdir(), `mistri-${name}-seed-template-`));
     const database = join(directory, 'fixture.db');
     try {
       execFileSync(process.execPath, ['--import', 'tsx', seed, database]);

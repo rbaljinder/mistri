@@ -26,7 +26,7 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 24"><script>alert(1)</script><rect width="96" height="24" fill="#123456"/></svg>';
 
-const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-brand-'));
+const scratch = mkdtempSync(join(tmpdir(), 'mistri-brand-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 function appDir(name: string): string {
   const dir = join(scratch, name);

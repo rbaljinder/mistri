@@ -45,7 +45,7 @@ async function fixture(
   }) => Promise<void>,
   app: object = APP,
 ) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-files-http-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-files-http-'));
   const file = join(directory, 'files.db');
   const db = new DatabaseSync(file);
   db.exec(SQL);
@@ -237,7 +237,7 @@ test('a file block is checked where it is written and against the catalog', asyn
   assert.throws(() => parseAppConfig(resource({ content: 'data', name: 'data' }), 'x'), /names one column for two things/);
   assert.throws(() => parseAppConfig(resource({ content: 'data', name: 'file_name', path: 'x' }), 'x'), /path/);
 
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-files-schema-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-files-schema-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const db = new DatabaseSync(join(directory, 's.db'));
   db.exec(SQL);

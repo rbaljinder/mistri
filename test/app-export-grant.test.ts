@@ -60,7 +60,7 @@ const appOver = (ui?: Record<string, unknown>) =>
 const app = appOver();
 
 async function served(run: (base: string) => Promise<void>, over = app, more = '') {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-export-grant-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-export-grant-'));
   const path = join(directory, 'teller.db');
   const db = new DatabaseSync(path);
   db.exec(`

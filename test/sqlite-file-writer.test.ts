@@ -7,7 +7,7 @@ import { test, type TestContext } from 'node:test';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 
 function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-file-writers-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-file-writers-'));
   const owners: SqliteAdapter[] = [];
   const create = (name: string) => {
     const path = join(directory, name),

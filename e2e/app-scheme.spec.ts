@@ -25,7 +25,7 @@ const servers: Record<'night' | 'dusk', { origin: string; child?: ChildProcess; 
 const SCHEME = { night: 'dark-only', dusk: 'dark' } as const;
 
 async function start(name: 'night' | 'dusk') {
-  const directory = mkdtempSync(join(tmpdir(), `tablewalk-scheme-${name}-`));
+  const directory = mkdtempSync(join(tmpdir(), `mistri-scheme-${name}-`));
   const db = join(directory, 'yard.db');
   const source = new DatabaseSync(db);
   try {

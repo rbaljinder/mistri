@@ -20,7 +20,7 @@ let db = '';
 let realConfig = '';
 
 test.beforeAll(() => {
-  directory = mkdtempSync(join(tmpdir(), 'tablewalk-shot-'));
+  directory = mkdtempSync(join(tmpdir(), 'mistri-shot-'));
   db = join(directory, 'thread.db');
   const seeded = spawnSync(process.execPath, [resolve('test/fixtures/databases/thread/seed.mjs'), db], { encoding: 'utf8' });
   if (seeded.status !== 0) throw new Error(seeded.stderr);

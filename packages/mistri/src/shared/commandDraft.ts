@@ -66,6 +66,7 @@ function columnType(field: Field): string | undefined {
     case 'text':
     case 'textarea':
     case 'month':
+    case 'time':
     case 'reference':
       return 'TEXT';
     default:

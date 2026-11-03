@@ -46,6 +46,7 @@ export const CHROME_ICONS = [
   'calendar-blank',
   'bell',
   'check-circle',
+  'copy',
   'gear',
   'list',
   'lock',

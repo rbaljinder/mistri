@@ -31,6 +31,7 @@ import {
   MAX_STREAMS,
   MAX_HISTORY_LIMIT,
   type TimelineComposer,
+  type TimelineReactions,
   type TimelineTone,
   type PageSection,
   type PageDef,
@@ -122,7 +123,7 @@ export const PAGE_SECTION_KEYS: Record<PageSection['kind'] | 'view' | 'header' |
   header: ['kind', 'status', 'facts', 'primary', 'destructive', 'actions'],
   /* The one current related row as a card: nothing to page, sum or add under it. */
   current: ['kind', 'title', 'region', 'tab', 'width', 'when', 'from', 'whose', 'show', 'query', 'sort', 'empty'],
-  timeline: [...SECTION_COMMON, 'streams', 'limit', 'create', 'newest', 'composer', 'tone', 'compact', 'side'],
+  timeline: [...SECTION_COMMON, 'streams', 'limit', 'create', 'newest', 'composer', 'tone', 'compact', 'side', 'reactions'],
   history: [...SECTION_COMMON, 'limit'],
   flows: [...SECTION_COMMON],
   diagram: [...SECTION_COMMON],
@@ -603,6 +604,7 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
       throw new Error(`${at} has a "side" that is not a condition like "author_id = record.caller_id".`);
     }
     const side = typeof s.side === 'string' ? s.side.trim() : undefined;
+    const reactions = s.reactions === undefined ? undefined : parseTimelineReactions(s.reactions, at);
     if (composer && s.create !== undefined) {
       throw new Error(
         `${at} has both "composer" and "create": a conversation's composer is the commands' (reply, note), and "create" is the form's. Keep one.`,
@@ -623,6 +625,7 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
       ...(tone ? { tone } : {}),
       ...(compact ? { compact } : {}),
       ...(side ? { side } : {}),
+      ...(reactions ? { reactions } : {}),
       ...(s.create === undefined ? {} : { create: parseRelatedCreate(s.create, at) }),
       ...(when ? { when } : {}),
     };
@@ -1226,6 +1229,46 @@ function parseTimelineComposer(raw: unknown, at: string): TimelineComposer {
   const templates = c.templates === undefined ? undefined : parseComposerTemplates(c.templates, at);
   return { reply, ...(note === undefined ? {} : { note }), ...(templates ? { templates } : {}) };
 }
+
+/* Reactions under each entry: the table that holds them, the kinds offered, and the command that gives or takes one
+   back. Its columns are judged against the catalog with the rest of the section (page.ts timelineReactions). */
+function parseTimelineReactions(raw: unknown, at: string): TimelineReactions {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    throw new Error(
+      `${at} has "reactions" that is not { from, kinds, command, whose?, by?, column? }: the table reactions are rows of, the kinds offered, and the command that toggles one.`,
+    );
+  const r = raw as Record<string, unknown>;
+  allowKeys(r, ['from', 'kinds', 'command', 'whose', 'by', 'column'], `${at}, reactions`);
+  for (const key of ['from', 'command'] as const) {
+    if (typeof r[key] !== 'string' || !(r[key] as string).trim())
+      throw new Error(
+        `${at}: reactions needs "${key}", ${key === 'from' ? 'the table whose rows are the reactions' : "the name of the App's command that gives a reaction or takes it back"}.`,
+      );
+  }
+  for (const key of ['whose', 'by', 'column'] as const) {
+    if (r[key] !== undefined && (typeof r[key] !== 'string' || !(r[key] as string).trim()))
+      throw new Error(`${at}: reactions.${key} is not a column's name.`);
+  }
+  const kinds = r.kinds;
+  if (!Array.isArray(kinds) || !kinds.length || kinds.some((kind) => typeof kind !== 'string' || !kind.trim()))
+    throw new Error(`${at}: reactions needs "kinds", the values a reaction may be, in the order they are drawn: ['like', 'thanks'].`);
+  const trimmed = kinds.map((kind: string) => kind.trim());
+  const twice = trimmed.find((kind, i) => trimmed.indexOf(kind) !== i);
+  if (twice !== undefined) throw new Error(`${at}: reactions.kinds names "${twice}" twice.`);
+  if (trimmed.length > MAX_REACTION_KINDS)
+    throw new Error(`${at}: reactions.kinds names ${trimmed.length} kinds; a row of reactions holds at most ${MAX_REACTION_KINDS}.`);
+  return {
+    from: (r.from as string).trim(),
+    kinds: trimmed,
+    command: (r.command as string).trim(),
+    ...(typeof r.whose === 'string' ? { whose: r.whose.trim() } : {}),
+    ...(typeof r.by === 'string' ? { by: r.by.trim() } : {}),
+    ...(typeof r.column === 'string' ? { column: r.column.trim() } : {}),
+  };
+}
+
+/* A row of reactions under an entry stays one quiet line: more kinds than this is a survey, not a reaction. */
+const MAX_REACTION_KINDS = 8;
 
 /* Canned replies: the rows of a resource, each a label to pick and the text it puts in the box. */
 function parseComposerTemplates(raw: unknown, at: string): NonNullable<TimelineComposer['templates']> {

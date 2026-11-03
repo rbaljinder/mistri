@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import postcss from 'postcss';
-import { FRAME_CLASS, ROOT_CLASS, firstCompound, scopeSelector, scopeSelectorList, tablewalkScope } from '../scripts/embed-css.mjs';
+import { FRAME_CLASS, ROOT_CLASS, firstCompound, scopeSelector, scopeSelectorList, mistriScope } from '../scripts/embed-css.mjs';
 import { EMBED_BOOT_PATH, EMBED_PROTOCOL, embedRefusal } from '../packages/mistri/src/shared/embedProtocol.ts';
 import { embedBoot } from '../packages/mistri/src/server/embed/boot.ts';
 import { runtimeVersion } from '../packages/engine/src/server/packageVersion.ts';
@@ -33,18 +33,18 @@ const confined = (selector: string) => {
 
 describe('the shell’s stylesheets in a host’s page', () => {
   test('rewrites the roots, keeps their specificity, and scopes every other selector', () => {
-    assert.equal(scopeSelector(':root'), '.tw-root');
-    assert.equal(scopeSelector(':root[data-theme="dark"] .card'), '.tw-root[data-theme="dark"] .card');
-    assert.equal(scopeSelector('html'), 'div:where(.tw-root)');
-    assert.equal(scopeSelector('body.app-mode .sidebar'), 'div:where(.tw-body).app-mode:where(.tw-root, .tw-root *) .sidebar');
-    assert.equal(scopeSelector('.toast'), '.toast:where(.tw-root, .tw-root *)');
-    assert.equal(scopeSelector('a::before'), 'a:where(.tw-root, .tw-root *)::before');
+    assert.equal(scopeSelector(':root'), '.mistri-root');
+    assert.equal(scopeSelector(':root[data-theme="dark"] .card'), '.mistri-root[data-theme="dark"] .card');
+    assert.equal(scopeSelector('html'), 'div:where(.mistri-root)');
+    assert.equal(scopeSelector('body.app-mode .sidebar'), 'div:where(.mistri-body).app-mode:where(.mistri-root, .mistri-root *) .sidebar');
+    assert.equal(scopeSelector('.toast'), '.toast:where(.mistri-root, .mistri-root *)');
+    assert.equal(scopeSelector('a::before'), 'a:where(.mistri-root, .mistri-root *)::before');
     // After a sibling combinator the first compound must be inside: the root's own sibling is the host's.
-    assert.equal(scopeSelector('.a + .b'), '.a:where(.tw-root *) + .b');
+    assert.equal(scopeSelector('.a + .b'), '.a:where(.mistri-root *) + .b');
     // A word inside an attribute or a string is not a selector.
-    assert.equal(scopeSelector('[data-x="html body"]'), '[data-x="html body"]:where(.tw-root, .tw-root *)');
-    assert.equal(scopeSelector('.tw-frame'), '.tw-frame');
-    assert.equal(scopeSelectorList('h1, h2'), 'h1:where(.tw-root, .tw-root *),\nh2:where(.tw-root, .tw-root *)');
+    assert.equal(scopeSelector('[data-x="html body"]'), '[data-x="html body"]:where(.mistri-root, .mistri-root *)');
+    assert.equal(scopeSelector('.mistri-frame'), '.mistri-frame');
+    assert.equal(scopeSelectorList('h1, h2'), 'h1:where(.mistri-root, .mistri-root *),\nh2:where(.mistri-root, .mistri-root *)');
   });
 
   test('every rule of every sheet the shell can adopt matches only inside it, in one layer, in pixels', async () => {
@@ -52,13 +52,10 @@ describe('the shell’s stylesheets in a host’s page', () => {
     assert.ok(files.length > 60, `found ${files.length} sheets`);
     const loose: string[] = [];
     for (const file of files) {
-      const { root } = await postcss([tablewalkScope()]).process(readFileSync(file, 'utf8'), { from: file });
+      const { root } = await postcss([mistriScope()]).process(readFileSync(file, 'utf8'), { from: file });
       for (const node of root.nodes) {
         if (node.type === 'atrule' && ['charset', 'namespace', 'import'].includes(node.name)) continue;
-        assert.ok(
-          node.type === 'atrule' && node.name === 'layer' && node.params === 'tablewalk',
-          `${file}: a node outside @layer tablewalk`,
-        );
+        assert.ok(node.type === 'atrule' && node.name === 'layer' && node.params === 'mistri', `${file}: a node outside @layer mistri`);
       }
       root.walkRules((rule) => {
         if (rule.parent?.type === 'atrule' && /keyframes$/i.test((rule.parent as postcss.AtRule).name)) return;
@@ -74,7 +71,7 @@ describe('the shell’s stylesheets in a host’s page', () => {
 
   test('leaves a sheet that is not the shell’s as written', async () => {
     const css = 'h1 { margin: 1rem }';
-    const { css: out } = await postcss([tablewalkScope({ only: (file: string) => file.includes('/src/') })]).process(css, {
+    const { css: out } = await postcss([mistriScope({ only: (file: string) => file.includes('/src/') })]).process(css, {
       from: '/host/app.css',
     });
     assert.equal(out, css);

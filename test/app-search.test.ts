@@ -23,7 +23,7 @@ import { plugSearch } from '../packages/mistri/src/server/app/searchProvider.js'
 const KEY = 'app-search-key';
 const connection = 'search-crm';
 const appId = 'search-app';
-const directory = mkdtempSync(join(tmpdir(), 'tablewalk-app-search-'));
+const directory = mkdtempSync(join(tmpdir(), 'mistri-app-search-'));
 const path = join(directory, 'crm.db');
 let fake: FakeTypesense;
 let registry: Registry;

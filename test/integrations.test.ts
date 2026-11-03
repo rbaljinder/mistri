@@ -199,7 +199,7 @@ test('commands call only declared actions and send only on provided channels; an
 });
 
 async function openRuntime(t: TestContext, declared: CapturedIntegrations, clock: { now: number }) {
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-integrations-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-integrations-'));
   const path = join(directory, 'app.db');
   new DatabaseSync(path).close();
   provisionSqliteIntegrations(path);
@@ -477,7 +477,7 @@ test('a notify rule that sends on a channel queues its message with the write, a
   );
   assert.deepEqual(integrationNotifyProblems(capture({ use: [fakepay()] }), { ...app, resources: {} } as never), []);
 
-  const directory = mkdtempSync(join(tmpdir(), 'tablewalk-notify-via-'));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-notify-via-'));
   const path = join(directory, 'app.db');
   const db = new DatabaseSync(path);
   db.exec(`CREATE TABLE orders (id INTEGER PRIMARY KEY, status TEXT, phone TEXT, sms_ok INTEGER, tz TEXT);
