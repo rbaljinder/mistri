@@ -5,7 +5,7 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
-## Unreleased
+## 1.0.0-rc.13
 
 - **The database browser moved to its own repository.** It lives at https://github.com/rbaljinder/tablewalk and is
   published from there as `tablewalk`, built from the installed `@mistriwork/engine`, `@mistriwork/kit` and

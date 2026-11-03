@@ -46,9 +46,18 @@ async function files(directory) {
 /* The component library at /components/ is Storybook's own application: its
    pages are checked below as the library, not as documentation pages. */
 const library = join(output, 'components');
-const html = (await files(output)).filter(
+const built = (await files(output)).filter(
   (path) => path.endsWith('.html') && !path.endsWith('/404.html') && !path.startsWith(library + '/'),
 );
+/* A redirect page is a refresh and nothing else, and the database browser's pages now redirect to tablewalk.dev:
+   loading one would test another site, over the network. Each is held to a target here instead. */
+const REFRESH = /<meta\s+http-equiv="refresh"\s+content="\d+;\s*url=([^"]+)"/i;
+const html = [];
+for (const path of built) {
+  const target = REFRESH.exec(await readFile(path, 'utf8'))?.[1];
+  if (!target) html.push(path);
+  else assert.match(target, /^(\/|https:\/\/tablewalk\.dev\/)/, `${relative(output, path)} redirects to ${target}`);
+}
 assert.ok(html.length >= 9, 'Build the documentation site before browser verification.');
 const server = createServer(async (request, response) => {
   try {
