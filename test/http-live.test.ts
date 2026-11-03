@@ -38,10 +38,9 @@ const postTo = (where: { port: number }, path: string, body: unknown, headers: R
  *
  * Opt-in, because requiring a Postgres to test an HTTP layer would
  * be a bad trade — the whole suite above runs on a file. What these add is the
- * one thing a file cannot show: that the permission gate and the two error
- * vocabularies are properties of the server rather than of the adapter
- * underneath it. Postgres refuses a write with a read-only transaction, and
- * that has to arrive at the client in the same words as the SQLite refusal.
+ * one thing a file cannot show: that the permission gate is a property of the
+ * server rather than of the adapter underneath it — a write refused before the adapter is asked, raw SQL refused
+ * by path, the cross-origin guard in front of both.
  *
  * Every statement here is a read or a no-op. A suite that is opt-in is a suite
  * someone will point at a database that matters.
@@ -92,31 +91,21 @@ for (const [engine, liveUrl] of LIVE) {
       assert.ok(res.json.tables.length > 0);
     });
 
-    test('a read is positional here too', async () => {
-      const res = await postTo(where, '/api/sql', { text: `select 1 as one`, limit: 5 });
-      assert.equal(res.status, 200);
-      assert.ok(Array.isArray(res.json.rows[0]));
-      assert.equal(Number(res.json.rows[0][0]), 1);
-    });
-
-    test('a write is refused with the same message a SQLite connection gives', async () => {
-      const res = await postTo(where, '/api/sql', {
-        text: `delete from ${table} where 1 = 0`,
-        write: true,
-      });
-      assert.equal(res.status, 403);
-      assert.match(res.json.error, /is read-only\. Add "writable": true/);
-    });
-
-    test('a write without the flag is the engine refusing, as 200 with errors', async () => {
-      /* Matches nothing even if it ran, because an opt-in suite is one
-           somebody will eventually point at a database that matters. What is
-           asserted is that the engine's own words arrive in the language
-           vocabulary rather than as a failed request. */
-      const res = await postTo(where, '/api/sql', { text: `delete from ${table} where 1 = 0` });
-      assert.equal(res.status, 200);
-      assert.match(res.json.errors[0].message, /read.only|cannot execute|denied/i);
-      assert.equal(res.json.error, undefined);
+    test('raw SQL is refused before it reaches the connection', async () => {
+      /* The App server serves no raw SQL on any dialect: `/api/sql` is the
+         standalone browser's diagnostic tool, refused by path before the
+         adapter is looked at. Held here as well as on SQLite because the
+         thing at stake is a statement arriving at a Postgres connection;
+         the positional reads and the read-only refusal underneath are the
+         adapter's own, in test/postgres.test.ts. */
+      for (const body of [
+        { text: 'select 1 as one', limit: 5 },
+        { text: `delete from ${table} where 1 = 0`, write: true },
+      ]) {
+        const res = await postTo(where, '/api/sql', body);
+        assert.equal(res.status, 403);
+        assert.match(res.json.error, /only in the standalone DB browser/);
+      }
     });
 
     test('/api/update is refused before the adapter is asked', async () => {
