@@ -338,7 +338,10 @@
     {
       "id": "query-language",
       "surface": ["dsl: app: views.*[kind=list].query"],
-      "tests": [{ "file": "test/agreement.test.ts" }, { "file": "e2e/query.spec.ts" }],
+      "tests": [
+        { "file": "test/agreement.test.ts" },
+        { "file": "e2e/apps.spec.ts", "title": "a nav module is a destination of its own, not a tab in disguise" }
+      ],
       "browser": true
     },
     {
@@ -347,7 +350,6 @@
       "tests": [
         { "file": "test/app-pages.test.ts" },
         { "file": "packages/kit/src/client/components/Page.test.tsx" },
-        { "file": "e2e/pages.spec.ts" },
         { "file": "e2e/record-compose.spec.ts" }
       ],
       "browser": true
@@ -839,11 +841,6 @@
       "tests": [{ "file": "test/observe-cli.test.ts" }, { "file": "test/check-json.test.ts" }]
     },
     {
-      "id": "cli-command-postgres",
-      "surface": ["cli: command postgres"],
-      "tests": [{ "file": "test/http-live.test.ts" }, { "file": "test/update-guard.test.ts" }]
-    },
-    {
       "id": "cli-command-schema",
       "surface": ["cli: command schema"],
       "tests": [{ "file": "test/agent-brief.test.ts" }, { "file": "test/api-token-maintenance-cli.test.ts" }]
@@ -997,7 +994,6 @@
       "surface": ["cli: flag --export"],
       "tests": [{ "file": "test/app-multisource-cli.test.ts" }, { "file": "test/cli.test.ts" }]
     },
-    { "id": "cli-flag-fail-on", "surface": ["cli: flag --fail-on"], "tests": [{ "file": "test/mcp.test.ts" }] },
     {
       "id": "cli-flag-fail-on-design-warning",
       "surface": ["cli: flag --fail-on-design-warning"],
@@ -1042,15 +1038,6 @@
       "tests": [{ "file": "test/new-api.test.ts" }, { "file": "e2e/grade.spec.ts" }]
     },
     { "id": "cli-flag-light", "surface": ["cli: flag --light"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
-    {
-      "id": "cli-flag-lint",
-      "surface": ["cli: flag --lint"],
-      "tests": [
-        { "file": "test/trust-proxy.test.ts" },
-        { "file": "test/api-read-startup-options.test.ts" },
-        { "file": "test/tenant-startup-cli.test.ts" }
-      ]
-    },
     { "id": "cli-flag-locale", "surface": ["cli: flag --locale"], "tests": [{ "file": "test/app-messages.test.ts" }] },
     {
       "id": "cli-flag-lock-timeout",
@@ -1092,7 +1079,6 @@
       "surface": ["cli: flag --out"],
       "tests": [{ "file": "e2e/shot-text.spec.ts" }, { "file": "e2e/shot.spec.ts" }]
     },
-    { "id": "cli-flag-output-schema", "surface": ["cli: flag --output-schema"], "tests": [{ "file": "test/mcp.test.ts" }] },
     { "id": "cli-flag-palette", "surface": ["cli: flag --palette"], "tests": [{ "file": "test/theme-tooling.test.ts" }] },
     { "id": "cli-flag-dockerfile", "surface": ["cli: flag --dockerfile"], "tests": [{ "file": "test/app-dockerfile.test.ts" }] },
     { "id": "cli-flag-drain-delay", "surface": ["cli: flag --drain-delay"], "tests": [{ "file": "test/server-shutdown-cli.test.ts" }] },
@@ -1112,7 +1098,7 @@
     {
       "id": "cli-flag-port",
       "surface": ["cli: flag --port"],
-      "tests": [{ "file": "e2e/keyset-pager.spec.ts" }, { "file": "e2e/new-form-switch.spec.ts" }]
+      "tests": [{ "file": "e2e/new-form-switch.spec.ts" }]
     },
     { "id": "cli-flag-press", "surface": ["cli: flag --press"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
     { "id": "cli-flag-read-pool", "surface": ["cli: flag --read-pool"], "tests": [{ "file": "test/connection-pool-config.test.ts" }] },
@@ -1176,7 +1162,6 @@
       "surface": ["cli: flag --tool"],
       "tests": [{ "file": "test/first-run.test.ts" }, { "file": "test/migrate-desired.test.ts" }]
     },
-    { "id": "cli-flag-tools", "surface": ["cli: flag --tools"], "tests": [{ "file": "test/mcp.test.ts" }] },
     {
       "id": "cli-flag-trust-proxy",
       "surface": ["cli: flag --trust-proxy"],

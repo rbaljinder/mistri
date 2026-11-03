@@ -457,6 +457,10 @@
       "mistri-built": "./dist/client/deeplink.js",
       "default": "./src/client/deeplink.js"
     },
+    "./client/delete.js": {
+      "mistri-built": "./dist/client/delete.js",
+      "default": "./src/client/delete.js"
+    },
     "./client/density.js": {
       "mistri-built": "./dist/client/density.js",
       "default": "./src/client/density.js"
@@ -556,6 +560,10 @@
     "./client/recordCompose.js": {
       "mistri-built": "./dist/client/recordCompose.js",
       "default": "./src/client/recordCompose.ts"
+    },
+    "./client/recordEditValidation.js": {
+      "mistri-built": "./dist/client/recordEditValidation.js",
+      "default": "./src/client/recordEditValidation.ts"
     },
     "./client/recordIntent.js": {
       "mistri-built": "./dist/client/recordIntent.js",

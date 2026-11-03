@@ -113,6 +113,7 @@ export async function prepareEditingExit() {
   return true;
 }
 
+/** @public the database browser's (scripts/boundary/entries.json, "host") */
 export async function toggleWriteMode() {
   if (state.canWrite) {
     if (await prepareEditingExit()) setWriteMode(false);
@@ -221,6 +222,7 @@ export function takeTheirs(column, value) {
 }
 
 export const draftNeedsReview = (table, key) => sameRow(table, key) && staged.needsReview;
+/** @public the database browser's (scripts/boundary/entries.json, "host") */
 export const draftRequiresManualSave = (table, key) => sameRow(table, key) && staged.manualSaveRequired;
 export const draftSchemaChanged = (table) => staged.schemaKey !== draftSchemaKey(table);
 export const retainedValues = () => ({ ...staged.values });
@@ -546,6 +548,7 @@ let autosaveOwner;
 export function cancelRecordAutosave() {
   autosaveCancellation++;
 }
+/** @public the database browser's (scripts/boundary/entries.json, "host") */
 export function recordAutosavePending() {
   // Ordinary uncertainty keeps the record locked, not every route. Tenant
   // uncertainty still has its independent stronger navigation gate in core.

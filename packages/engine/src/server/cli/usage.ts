@@ -1,7 +1,7 @@
 /**
  * What both command lines share about their words: the near miss a typo is told, the version, and how a usage text
- * is read for its command and flag words. Each binary keeps its own `USAGE` (packages/tablewalk/src/server/cli/usage.ts,
- * packages/mistri/src/server/cli/usage.ts), and test/prose.test.ts holds each one to its own README.
+ * is read for its command and flag words. Each binary keeps its own `USAGE` (packages/mistri/src/server/cli/usage.ts
+ * here, the database browser's in its own repository), and each is held to its own README.
  */
 
 /** The command words a usage names (`tablewalk migrate`, `mistri check`, …), for a near miss's suggestion. */

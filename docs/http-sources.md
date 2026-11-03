@@ -1,6 +1,6 @@
 # HTTP sources
 
-An API can be a connection. tablewalk reads it through a *description*: a
+An API can be a connection. mistri reads it through a *description*: a
 JSON file saying which endpoints are lists and which are items, what columns
 their rows have, and which filters, sort and paging the API documents. It is
 drafted from the API's OpenAPI 3 spec, then kept beside the config file,
@@ -14,7 +14,7 @@ connection.
 ## Draft a description
 
 ```sh
-tablewalk --from-openapi desk-openapi.json > desk.http.json
+mistri --from-openapi desk-openapi.json > desk.http.json
 ```
 
 The spec must be OpenAPI 3 JSON: convert YAML first, and Swagger 2.0 is
@@ -22,15 +22,16 @@ refused. A resource is a collection path with an item path beside it
 (`/contacts` and `/contacts/{id}`). What the draft had to guess — the paging
 style, which parameter searches — and what it skipped (nested paths, rows
 that are `oneOf`, remote `$ref`s) is written to stderr. Read it before
-trusting the file; the description, not the spec, is what tablewalk obeys.
+trusting the file; the description, not the spec, is what mistri obeys.
 
 ## Serve an API straight from its spec
 
 ```sh
-tablewalk --openapi https://api.example.com/openapi.json --api-token-env EXAMPLE_TOKEN
+mistri --app ./desk --openapi https://api.example.com/openapi.json --api-token-env EXAMPLE_TOKEN
 ```
 
-One command, no config file and nothing written to disk: the description is
+One command, no config file and nothing written to disk (with no App, the
+database browser serves one the same way: `npx tablewalk --openapi …`): the description is
 drafted in memory, with the same notes on stderr as `--from-openapi`, and the
 API is served as a connection.
 
@@ -90,7 +91,7 @@ The API is asked only what its description declares:
   with a filter as the way round it.
 
 Anything else — an `or`, `contains`, a second sort, a column the API does not
-filter on — is refused with a message naming what the API can do. tablewalk
+filter on — is refused with a message naming what the API can do. mistri
 never fetches more and filters the rows itself: a list that quietly showed
 other rows than the ones asked for is the one wrong answer.
 
@@ -111,7 +112,7 @@ value is written as `"references": "carriers"` on that column, and listed
 under `guesses`. Correct or remove it in the description like any other
 guess.
 
-A reference is a foreign key to the rest of tablewalk: related lists, label
+A reference is a foreign key to the rest of mistri: related lists, label
 paths such as `carrier_id.name`, the diagram. It is followed one step, and
 each target a page names is read once from its item path, at most 50 per
 read. A target the API no longer has reads as empty. What would need the
@@ -122,7 +123,7 @@ it works where the child's list documents that parameter.
 
 ## Operation explorer
 
-In the database browser, a table read from an HTTP connection has an **API**
+In the database browser (https://github.com/rbaljinder/tablewalk), a table read from an HTTP connection has an **API**
 tab in place of Definition, since an API's definition is its description.
 It offers the resource's two documented reads, its list GET and its item
 GET, as a form drawn from the description alone:

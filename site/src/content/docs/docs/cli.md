@@ -9,7 +9,7 @@ Every mistri command and flag — the App framework's — laid out from the help
 prints: what each does, and where its section is. `npx mistri --help all`
 prints the same text, `npx mistri --help` the commands and common options
 on one screen, and `npx mistri <command> --help` one command's.
-Browsing a database with no App is the database browser's: [its command line](/docs/cli-browser/).
+Browsing a database with no App is the [database browser](https://tablewalk.dev)'s, which has its own.
 
 The first line of the help says it: *mistri — the App framework: a few lines of TypeScript, a complete App*
 

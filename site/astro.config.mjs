@@ -20,9 +20,13 @@ export default defineConfig({
     '/docs/pages-forms/': '/docs/forms/',
     /* The page is titled "The DSL in one App"; a reader guessed its address from that. */
     '/docs/dsl-in-one-app/': '/docs/dsl-tour/',
-    /* The database browser's quickstart and walk became one page when it became a product of its own (1.0). */
-    '/docs/quickstart-browse/': '/docs/database-browser/',
-    '/docs/walk/': '/docs/database-browser/',
+    /* The database browser's pages moved with it to its own repository and site (1.0). */
+    '/docs/quickstart-browse/': 'https://tablewalk.dev/',
+    '/docs/walk/': 'https://tablewalk.dev/',
+    '/docs/database-browser/': 'https://tablewalk.dev/',
+    '/docs/mcp/': 'https://tablewalk.dev/docs/mcp/',
+    '/docs/keyboard/': 'https://tablewalk.dev/docs/keyboard/',
+    '/docs/cli-browser/': 'https://tablewalk.dev/docs/cli/',
     /* Merged in the 1.0 docs revamp: the ways to start are one page, and what a crawler reads is part of the public pages. */
     '/docs/quickstart-new-app/': '/docs/getting-started/#from-a-schema-of-your-own',
     '/docs/seo-and-images/': '/docs/landing-pages/#search-engines-and-link-previews',
@@ -89,8 +93,8 @@ export default defineConfig({
       /* One path, in the order a reader takes it: start an App, build it (the
        loop, extending it, testing it), say what it does, its data and who may
        see it, its screens, ship it, and look something up. The database
-       browser, tablewalk, is a product of its own: one line on the home and
-       the last group here. Each page is in exactly one place, and
+       browser, tablewalk, is a product of its own with its own site
+       (tablewalk.dev): one line on the home. Each page is in exactly one place, and
        test/docs-site.test.ts holds that. */
       sidebar: [
         {
@@ -251,16 +255,6 @@ export default defineConfig({
             { label: 'Status & roadmap', slug: 'docs/status' },
             /* Generated from CHANGELOG.md as the site builds (src/pages/docs/changelog.astro), so it is a link, not a slug. */
             { label: 'Changelog', link: '/docs/changelog/' },
-          ],
-        },
-        /* tablewalk, the database browser: a package and a command of its own, with no App in it. */
-        {
-          label: 'Database browser',
-          items: [
-            { label: 'Database browser', slug: 'docs/database-browser' },
-            { label: 'MCP for coding agents', slug: 'docs/mcp' },
-            { label: 'Keyboard', slug: 'docs/keyboard' },
-            { label: 'Command line', slug: 'docs/cli-browser' },
           ],
         },
       ],

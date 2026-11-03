@@ -13,8 +13,6 @@ import {
   type WriteTransaction,
 } from '../packages/engine/src/adapters/adapter.js';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
-import { Registry } from '../packages/engine/src/server/connections.js';
-import { runTool } from '../packages/tablewalk/src/server/mcp.js';
 import { clearJournal, history, lastRevertible, recordWrite } from '../packages/engine/src/server/journal.js';
 import {
   changingReferences,
@@ -503,47 +501,4 @@ test('a deletion whose cascade reached a row is a barrier, so it is undone whole
   assert.equal(deletionDependents(catalog, 'nowhere', (table) => table).unseen, true);
   f.db.exec("INSERT INTO item (id, name) VALUES (3, 'alone too')");
   assert.equal((await recordedDelete(f, { table: 'item', key: { id: 3 } }, { unseen: true })).undoId, undefined);
-});
-
-test('MCP single-row writes preserve expected guards and truthful unknown results in process', async (t) => {
-  const f = sqlite(t);
-  const registry = new Registry();
-  registry.add({ id: f.connection, name: f.connection, url: f.file, source: 'config', writable: true });
-  t.after(() => registry.closeAll());
-  const { adapter } = await registry.open(f.connection);
-  const conflict = await runTool(registry, 'update', {
-    connection: f.connection,
-    table: 'item',
-    key: { id: 1 },
-    set: { name: 'bad' },
-    expected: { name: 'forged' },
-  });
-  assert.equal(conflict.isError, true);
-  assert.equal(f.db.prepare('SELECT name FROM item WHERE id=1').get()!.name, 'original');
-  const updated = await runTool(registry, 'update', {
-    connection: f.connection,
-    table: 'item',
-    key: { id: 1 },
-    set: { name: 'new' },
-    expected: { name: 'original' },
-  });
-  assert.equal(updated.isError, false);
-  assert.equal(updated.structuredContent!.link, `/${f.connection}/item/~1`);
-  assert.deepEqual(history(f.connection)[0].steps[0].before, { name: 'original' });
-  adapter.transaction = async () => {
-    throw new TransactionOutcomeUnknown(Object.assign(new Error('constraint'), { code: '23505' }));
-  };
-  for (const name of ['insert', 'delete', 'update']) {
-    const result = await runTool(registry, name, {
-      connection: f.connection,
-      table: 'item',
-      ...(name === 'insert'
-        ? { values: { name: 'another' } }
-        : { key: { id: 1 }, ...(name === 'delete' ? { confirm: true } : { set: { name: 'unknown' } }) }),
-    });
-    assert.equal(result.isError, false);
-    assert.equal(result.structuredContent!.outcome, 'unknown');
-    if (name !== 'update') assert.equal(result.structuredContent![name === 'insert' ? 'inserted' : 'deleted'], null);
-    assert.equal(lastRevertible(f.connection), undefined);
-  }
 });

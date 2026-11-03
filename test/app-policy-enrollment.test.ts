@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { publishedDeclarations } from './support/installedTablewalk.js';
+import { publishedDeclarations } from './support/installedMistri.js';
 import * as policy from '../packages/mistri/src/server/policy.js';
 import { defineAppRowPolicy } from '../packages/mistri/src/server/policy/appRowPolicy.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';

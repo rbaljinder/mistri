@@ -5,14 +5,14 @@
  * them, as the page does: `beforeEach(bridgeShell)`.
  *
  * Called in the test's own hook, after its vi.mock calls, so a mock is what is
- * read; an export a mock leaves out keeps the Workbench's answer. Not in the
+ * read; an export a mock leaves out keeps the kit's default answer. Not in the
  * setup file: importing these modules there, ahead of a test that resets the
  * module graph (vi.resetModules), leaves that test two session identities.
  */
 import { installShell, shell } from '../packages/kit/src/client/shellMode.js';
 
 export async function bridgeShell(): Promise<void> {
-  /* A module whose own imports a test mocked away cannot load; its answers stay the Workbench's. */
+  /* A module whose own imports a test mocked away cannot load; its answers stay the kit's defaults. */
   const load = <T>(module: Promise<T>) => module.catch(() => undefined);
   const [
     appState,
@@ -40,13 +40,13 @@ export async function bridgeShell(): Promise<void> {
     load(import('../packages/mistri/src/client/tenantMutationState.js')),
     load(import('../packages/mistri/src/client/tenantAccountState.js')),
     load(import('../packages/mistri/src/client/tenantTransport.js')),
-    load(import('../packages/tablewalk/src/client/undo.js')),
+    load(import('./hostUndo.js')),
     load(import('../packages/mistri/src/client/components/Actions.js')),
     load(import('../packages/mistri/src/client/components/ImportButton.js')),
     load(import('../packages/mistri/src/client/components/SplitRecordRoom.js')),
     load(import('../packages/mistri/src/client/components/FreePage.js')),
     load(import('../packages/mistri/src/client/components/sdk/CustomList.js')),
-    load(import('../packages/tablewalk/src/client/pagebuilder.js')),
+    load(import('./hostPageBuilder.js')),
     load(import('../packages/mistri/src/client/components/TimelineComposer.js')),
     load(import('../packages/mistri/src/client/components/sdk/commands.js')),
     load(import('../packages/mistri/src/client/components/AppTargetAction.js')),
@@ -80,7 +80,7 @@ export async function bridgeShell(): Promise<void> {
     toast: (id, after) => (has(undo, 'undoToast') ? undo!.undoToast(id, after) : undefined),
   };
   if (has(actions, 'ActionBar'))
-    /* A slot no module here answers keeps the Workbench's none: an author's page section (sdk/CustomSection.tsx)
+    /* A slot no module here answers keeps the kit's none: an author's page section (sdk/CustomSection.tsx)
        is drawn by its own test, and a suite's preference by its. */
     answers.slots = {
       ...shell().slots,
@@ -110,7 +110,7 @@ export async function bridgeShell(): Promise<void> {
       SplitRecord: has(split, 'SplitRecordRoom') ? split!.SplitRecordRoom : null,
       Page: has(freePage, 'FreePage') ? freePage!.FreePage : null,
     };
-  /* The Workbench's page builder (workbench.js installs it), read through the module so a mock of it is what opens. */
+  /* A host's page builder (test/hostPageBuilder.ts stands in for the one shell that has one), read through the module so a mock of it is what opens. */
   if (has(pageBuilder, 'openBuilder')) answers.editPage = (page, options) => void pageBuilder!.openBuilder(page as never, options);
   installShell(answers);
 }

@@ -6,8 +6,7 @@
 #
 #   docker build -f examples/docker/Dockerfile -t mistri-samples:local .
 #
-# It is the root Dockerfile's builder stage with more in it. That stage
-# builds the packages, runs `mistri build` for each App — typecheck,
+# Its build stage builds the packages, runs `mistri build` for each App — typecheck,
 # validation, bundle — and seeds each App's sample data into a template. The
 # runtime stage ships node, the installed packages, their production
 # dependencies, the builds and the seeded templates: no App's TypeScript, no
@@ -15,8 +14,8 @@
 # TypeScript and watch nothing, so a change to an App is
 # `docker compose … up --build`.
 
-# The same pin as the root Dockerfile, for the same reasons: node:sqlite
-# needs 24, and an exact patch rebuilds into the image that was tested.
+# Node 24 because node:sqlite needs it, pinned to an exact patch so a rebuild
+# produces the image that was tested. Bump it deliberately.
 ARG NODE_IMAGE=node:24.22.1-alpine3.24
 
 # ---------------------------------------------------------------------------
@@ -31,11 +30,10 @@ COPY packages/engine/package.json ./packages/engine/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/kit/package.json ./packages/kit/
 COPY packages/mistri/package.json ./packages/mistri/
-COPY packages/tablewalk/package.json ./packages/tablewalk/
 COPY packages/create-mistri/package.json ./packages/create-mistri/
 RUN npm ci --no-audit --no-fund
 
-# What `npm run build` reads, as the root Dockerfile copies it.
+# What `npm run build` reads (scripts/ci-parity.mjs holds this list to the build).
 COPY tsconfig.json vite.config.ts ./
 COPY config ./config
 COPY scripts ./scripts
@@ -78,19 +76,18 @@ RUN mkdir -p /templates \
 
 # typescript, vite and rolldown exist to build. Nothing at runtime imports
 # them. `pg` and the auth backend survive: they are optional dependencies.
-# The workspace's links become the packages as npm would install them, as in
-# the root Dockerfile.
+# The workspace's links become the packages as npm would install them.
 RUN npm prune --omit=dev \
- && rm -rf node_modules/tablewalk node_modules/create-mistri node_modules/@mistriwork \
+ && rm -rf node_modules/create-mistri node_modules/@mistriwork \
  && node -e "import('./scripts/install-packages.mjs').then((m) => m.installPackages('/src/node_modules'))"
-RUN find node_modules/tablewalk node_modules/@mistriwork -name '*.map' -delete
+RUN find node_modules/@mistriwork -name '*.map' -delete
 
 # ---------------------------------------------------------------------------
 # Runtime
 # ---------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS runtime
 
-# tini as PID 1, as in the root Dockerfile: signals reach node, and
+# tini as PID 1: signals reach node, and
 # `docker stop` closes the databases instead of timing out.
 RUN apk add --no-cache tini
 

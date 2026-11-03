@@ -1,4 +1,3 @@
-// test-package: shared — each binary's defaults (scripts/test-owners.mjs).
 /**
  * Two start-up flags by their effect, from the command line: `--open` hands the served address to the machine's
  * opener (a stand-in on the PATH records it), and `check --defaults` adds the step that prints what each column is
@@ -16,7 +15,7 @@ import { after, before, test } from 'node:test';
 
 const root = mkdtempSync(join(tmpdir(), 'tablewalk-cli-open-'));
 const db = join(root, 'tick.db');
-/* The test's environment without what would decide for it: TABLEWALK_OPEN (MISTRI_OPEN for an App) has the last word on opening. */
+/* The test's environment without what would decide for it: MISTRI_OPEN (TABLEWALK_OPEN too) has the last word on opening. */
 const env = () => {
   const { TABLEWALK_OPEN: _open, MISTRI_OPEN: _mistriOpen, NODE_TEST_CONTEXT: _context, ...rest } = process.env;
   return { ...rest, XDG_CONFIG_HOME: join(root, 'xdg'), DATABASE_URL: '' };
@@ -50,9 +49,11 @@ test('--open hands the served address to the machine opener', async () => {
     [
       '--import',
       'tsx',
-      'packages/tablewalk/src/server/index.ts',
-      db,
-      '--no-config',
+      'packages/mistri/src/server/index.ts',
+      '--app',
+      'examples/apps/tick',
+      '--config',
+      `${db}.json`,
       '--open',
       '--host',
       '127.0.0.1',

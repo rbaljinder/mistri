@@ -35,7 +35,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   viewportBox: (element: Element) => element.getBoundingClientRect(),
   viewportSize: () => ({ width: 1000, height: 800 }),
 }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: () => {}, undoLast: async () => {} }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo: () => {}, undoLast: async () => {} }));
 
 const { Editable } = await import('../../../../kit/src/client/components/Editable.js');
 const { activateDraft, discardStaged } = await import('../../../../kit/src/client/write.js');

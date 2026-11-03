@@ -1,12 +1,7 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
 // e2e-client: source — imports /core.js from the page
-import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from './support/harness.js';
 import { startTenantApp, type TenantAppFixture } from './support/tenantServer.js';
 import { TENANT_HTTP_HEADERS as names, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
-
-/* Undo is the database browser's, in the tablewalk package outside the kit's client root: Vite serves it by path. */
-const UNDO = `/@fs${fileURLToPath(new URL('../packages/tablewalk/src/client/undo.js', import.meta.url))}`;
 
 // Exercise the bundled client transport against genuine native-auth HTTP and
 // SQLite. Writable fixtures now advertise shared CRUD controls, while tenant
@@ -92,8 +87,6 @@ test.describe('private tenant bundled mutation transport', () => {
     ]);
     const other = await call(page, '/api/update', { table: 'item', key: { id: 'south-1' }, values: { name: 'Must not change' } });
     expect(other).toMatchObject({ ok: false, outcome: 'rejected' });
-    const available = await page.evaluate(async (modulePath) => (await import(modulePath)).canUndo(), UNDO);
-    expect(available).toBe(false);
     await expect(page.getByRole('button', { name: '+ New item', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
   });

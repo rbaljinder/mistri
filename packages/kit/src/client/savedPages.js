@@ -60,7 +60,11 @@ async function writePage(id, page, connection) {
   }
 }
 
-/** Pages saved for the connection in hand, read from the local mirror. */
+/**
+ * Pages saved for the connection in hand, read from the local mirror.
+ *
+ * @param {*} [tableId] only the pages based on this table
+ */
 export function savedPages(tableId) {
   const all = mirrorFor(state.activeConnection);
   const pages = Object.values(all);
@@ -101,6 +105,10 @@ export async function loadSavedPages() {
   }
 }
 
+/**
+ * @param {*} page
+ * @param {string | null} [connection] the connection written to; the one in hand, unless given
+ */
 export async function savePage(page, connection = state.activeConnection) {
   const owner = sessionIdentity();
   if (!connection) throw new Error(say('noDatabaseConnectionIsSelected'));
@@ -114,6 +122,10 @@ export async function savePage(page, connection = state.activeConnection) {
   if (state.activeConnection === connection) pagesChanged?.();
 }
 
+/**
+ * @param {*} id
+ * @param {string | null} [connection] the connection written to; the one in hand, unless given
+ */
 export async function deletePage(id, connection = state.activeConnection) {
   const owner = sessionIdentity();
   if (!connection) throw new Error(say('noDatabaseConnectionIsSelected'));

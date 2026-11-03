@@ -242,7 +242,14 @@ export function graphOf(root, packages = packagesOf(root), extra = []) {
       const source = program.getSourceFile(absolute[index]);
       if (!source) throw new Error(`check-boundary: typescript did not parse ${file}`);
       const specifiers = specifiersOf(source, readFileSync(absolute[index], 'utf8'));
-      named.set(file, [...new Set(specifiers.map(({ specifier }) => specifier).filter((specifier) => !specifier.startsWith('.')))]);
+      /* A test that mocks a module depends on its name as much as one that imports it: the host's copy of the test
+         mocks that name from the installed package, so it is read here (and only here: a mock is no edge of the graph). */
+      const mocked = [...readFileSync(absolute[index], 'utf8').matchAll(/\bvi\.(?:do)?[Mm]ock\(\s*['"]([^'"]+)['"]/g)].map(
+        ([, name]) => name,
+      );
+      named.set(file, [
+        ...new Set([...specifiers.map(({ specifier }) => specifier), ...mocked].filter((specifier) => !specifier.startsWith('.'))),
+      ]);
       if (index >= modules.length) return;
       const out = new Map();
       for (const { specifier, type, lazy } of specifiers) {

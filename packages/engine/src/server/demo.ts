@@ -1,10 +1,10 @@
 /**
  * Build the demo database.
  *
- * Lives in `src/` (not `test/`) because it ships: `tablewalk --demo` builds
+ * Lives in `src/` (not `test/`) because it ships: `--demo` builds
  * one of these at runtime so a new install has something to walk without
  * hunting for a database first. `test/make-demo-db.ts` re-exports it, so the
- * suite and `npm run demo` keep the path they have always used.
+ * suite keeps the path it has always used.
  *
  * A demo that ships as a binary file is a demo nobody can review, so this
  * writes one from source instead. The shape is chosen to exercise the parts

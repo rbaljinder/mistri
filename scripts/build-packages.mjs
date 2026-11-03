@@ -73,7 +73,6 @@ for (const name of readdirSync(join(ROOT, 'packages/ui/src')))
 node('scripts/package-docs.mjs');
 node('--conditions=mistri-built', 'scripts/package-console.mjs');
 for (const config of [
-  'config/vite.tablewalk.config.ts',
   'config/vite.mistri.config.ts',
   'config/vite.ui.config.ts',
   'config/vite.observe.config.ts',
@@ -95,7 +94,6 @@ const expected = [
   'packages/kit/dist/vite.js',
   'packages/cloudflare/dist/index.js',
   'packages/cloudflare/dist/index.d.ts',
-  'packages/tablewalk/dist/client/index.workbench.html',
   'packages/mistri/dist/client/index.html',
   'packages/mistri/dist/client/index.public.html',
   'packages/mistri/dist/ssr/render.js',
@@ -103,7 +101,6 @@ const expected = [
   'packages/mistri/dist/observe/observe/index.html',
   'packages/mistri/dist/embed/react/index.js',
   'packages/mistri/dist/server/index.js',
-  'packages/tablewalk/dist/server/index.js',
 ];
 const missing = expected.filter((file) => !existsSync(join(ROOT, file)));
 if (missing.length) {

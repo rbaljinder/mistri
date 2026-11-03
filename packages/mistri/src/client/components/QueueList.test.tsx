@@ -64,7 +64,7 @@ vi.mock('../../../../kit/src/client/sessionIdentity.js', () => ({
   subscribeSessionIdentity: () => () => {},
   subscribeTenantLease: () => () => {},
 }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: mocks.refresh }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo: mocks.refresh }));
 // This suite exercises command preparation/reconciliation; transport batching,
 // pending visibility and owner fences have their own availability hook tests.
 vi.mock('../commandAvailability.js', () => ({ useCommandAvailability: (checks: unknown[]) => checks.map(() => true) }));

@@ -48,7 +48,7 @@ function definition(mode: Mode) {
 }
 
 async function serve(
-  mode: Mode | 'browser',
+  mode: Mode,
   run: (call: (path: string, body?: Record<string, unknown>) => Promise<{ status: number; body: any }>) => Promise<void>,
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'tablewalk-declared-'));
@@ -69,24 +69,22 @@ async function serve(
   const registry = new Registry();
   registry.add({ id: connection, name: 'Atlas database', url: path, source: 'config', writable: true });
   const hosts: AppHost[] = [];
-  if (mode !== 'browser') {
-    const manifest = definition(mode);
-    hosts.push({
-      app: { path: join(directory, 'app.ts'), app: manifest, pages: [], sources: {} },
-      pages: [],
-      ...(manifest.auth
-        ? {
-            auth: {
-              spec: manifest.auth,
-              store: join(directory, 'sessions.db'),
-              handler: async () => {},
-              close: async () => {},
-              session: async () => reader,
-            },
-          }
-        : {}),
-    });
-  }
+  const manifest = definition(mode);
+  hosts.push({
+    app: { path: join(directory, 'app.ts'), app: manifest, pages: [], sources: {} },
+    pages: [],
+    ...(manifest.auth
+      ? {
+          auth: {
+            spec: manifest.auth,
+            store: join(directory, 'sessions.db'),
+            handler: async () => {},
+            close: async () => {},
+            session: async () => reader,
+          },
+        }
+      : {}),
+  });
   const bound = { host: '127.0.0.1', port: 0 };
   const server = createApp({ registry, bound, apps: hosts, pages: [] });
   try {
@@ -95,7 +93,7 @@ async function serve(
     const address = server.address();
     assert.ok(address && typeof address === 'object');
     bound.port = address.port;
-    const scope: Record<string, string> = mode === 'browser' ? { conn: connection } : { app: appId };
+    const scope: Record<string, string> = { app: appId };
     await run(async (route, body) => {
       const query = new URLSearchParams(scope).toString();
       const response = await fetch(
@@ -200,15 +198,3 @@ for (const mode of MODES) {
     });
   });
 }
-
-test('the standalone browser keeps every table and its tools', { timeout: 30_000 }, async () => {
-  await serve('browser', async (call) => {
-    const schema = await call('/api/schema');
-    assert.ok(schema.body.tables.some((table: { id: string }) => table.id === 'audit_note'));
-    const rows = await call('/api/query', { table: 'audit_note' });
-    assert.equal(rows.status, 200, JSON.stringify(rows.body));
-    assert.equal(rows.body.rows[0].name, secret);
-    const sql = await call('/api/sql', { text: 'SELECT name FROM audit_note' });
-    assert.equal(sql.status, 200, JSON.stringify(sql.body));
-  });
-});

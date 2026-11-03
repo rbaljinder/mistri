@@ -166,10 +166,6 @@ test('over the wire, an API list has no total, a count is refused and a failing 
     const failed = await post('/api/run', { q: 'contacts', conn: goneId });
     assert.equal(failed.status, 502);
     assert.match(failed.json.error, /GET \/contacts answered 404/);
-
-    const listed = await (await fetch(`http://127.0.0.1:${bound.port}/api/connections`)).text();
-    assert.match(listed, /"dialect":"http"/);
-    assert.doesNotMatch(listed, /tok-wire/);
   } finally {
     server.close();
     server.closeAllConnections();

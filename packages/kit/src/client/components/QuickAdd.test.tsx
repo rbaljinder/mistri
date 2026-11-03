@@ -37,7 +37,7 @@ vi.mock('../core.js', () => ({
     return () => context.watchers.delete(fn);
   },
 }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo }));
 vi.mock('../url.js', () => ({ syncHash: vi.fn() }));
 vi.mock('./mount.js', () => ({ mount: vi.fn(), unmount: vi.fn() }));
 

@@ -44,7 +44,10 @@ const sources = { places: [], databases: [] };
 
 /** @typedef {{ kind: string, label: string, search: string, detail?: string, run: () => unknown }} PaletteItem */
 
-/** @param {'places' | 'databases'} where @param {() => PaletteItem[]} source */
+/**
+ * @param {'places' | 'databases'} where @param {() => PaletteItem[]} source
+ * @public the database browser's (scripts/boundary/entries.json, "host")
+ */
 export function addPaletteSource(where, source) {
   sources[where].push(source);
 }

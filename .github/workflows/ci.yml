@@ -1,6 +1,6 @@
 # The suite, on every push and pull request.
 #
-# One job, one Node version. tablewalk pins Node 24 because `node:sqlite` is
+# One job, one Node version. mistri pins Node 24 because `node:sqlite` is
 # built in there — testing a matrix of versions it does not support would be
 # a matrix of the same failure.
 name: CI
@@ -169,17 +169,15 @@ jobs:
       # Only the one browser the suite uses. `--with-deps` because the runner
       # has none of the shared libraries Chromium needs.
       - run: npx playwright install --with-deps chromium
-      # The suite serves each product's client from its own `dist/client`: one
-      # `vite build` per product per shard (the runner would do it too, but a step
-      # names it in the log), then the servers of every spec send the build. Specs
-      # that need the source say `e2e-client: source` and run unbuilt
-      # (scripts/test-e2e.mjs).
-      - run: npx vite build --config config/vite.tablewalk.config.ts --logLevel warn
+      # The suite serves the App framework's client from its `dist/client`: one
+      # `vite build` per shard (the runner would do it too, but a step names it in
+      # the log), then the servers of every spec send the build. Specs that need
+      # the source say `e2e-client: source` and run unbuilt (scripts/test-e2e.mjs).
       - run: npx vite build --config config/vite.mistri.config.ts --logLevel warn
       # The public pages' server renderer: without mistri's dist/ssr a public page is
       # sent undrawn and the specs that read its drawn HTML fail.
       - run: npx vite build --config config/vite.ssr.config.ts --logLevel warn
-      # tablewalk/react as it ships: e2e/embed-built.spec.ts starts the built
+      # @mistriwork/mistri/react as it ships: e2e/embed-built.spec.ts starts the built
       # library in a host's page, the one run of what a host installs.
       - run: npx vite build --config config/vite.embed.config.ts --logLevel warn
       # Two workers, as before. 0.8.6 measured three on an 8-core, 16 GB laptop;
@@ -232,13 +230,9 @@ jobs:
       - run: npm run build && npm run test:built:browser
       - name: Installed public testing package
         run: |
-          # Every package's tarball: mistri, and tablewalk beside it, install the @mistri packages at their own version.
+          # Every package's tarball: mistri installs the @mistriwork packages at its own version.
           npm pack --workspaces --pack-destination "$RUNNER_TEMP"
           node scripts/test-installed-testing.mjs "$RUNNER_TEMP"/*.tgz
-      # The database browser built and served from the engine, kit and ui tarballs alone, as a checkout of it
-      # outside this repository builds it (docs/boundary.md, "The host list").
-      - name: Database browser from the tarballs
-        run: node scripts/prove-browser-from-tarballs.mjs "$RUNNER_TEMP"/*.tgz
       # Web Vitals on the build: layout shift, largest paint and interaction
       # latency, each held to its budget (test/built-client-vitals.mjs), and a gate.
       # Ignition's tenant pages are measured only where a PostgreSQL server
@@ -319,155 +313,19 @@ jobs:
       - name: The tarballs have what they need and nothing they should not
         run: npm pack --workspaces --dry-run --json > /tmp/pack.json && node scripts/check-tarballs.mjs /tmp/pack.json
 
-      - name: It installs, serves, and speaks MCP
+      # The installed binary, as a person runs it: its help, its version, an unknown option refused, and a start only
+      # the database browser serves (a database with no App) refused by name. What the built server sends (compressed,
+      # content-named, cached) is test/built-client-browser.mjs's, in the built job.
+      - name: It installs, and refuses what is not its own
         run: |
           npx tsx test/make-demo-db.ts /tmp/demo.db
           mkdir -p /tmp/asuser && cd /tmp/asuser
           npm init -y >/dev/null
           npm install /tmp/pack/*.tgz
-
-          # The two that stop rather than serve. Both were unhandled — ignored
-          # by the parser, then rescued by the "nothing to open" gate printing
-          # the usage and exiting 1. Once the server learned to start with no
-          # connection that accident became `tablewalk --help` listening on a
-          # port and waiting for a browser, so the exit code is the assertion.
-          ./node_modules/.bin/tablewalk --help | grep -q 'graph you walk'
-          ./node_modules/.bin/tablewalk --version | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'
-          if ./node_modules/.bin/tablewalk --prot 1 >/dev/null 2>&1; then
-            echo "an unknown option was accepted" && exit 1
-          fi
-          # The App framework is a binary of its own, and each refuses the other's start by its name.
           ./node_modules/.bin/mistri --help | grep -q 'the App framework'
           ./node_modules/.bin/mistri --version | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'
-          ./node_modules/.bin/tablewalk check --app . 2>&1 | grep -q 'npx @mistriwork/mistri check'
-          ./node_modules/.bin/mistri --db /tmp/demo.db 2>&1 | grep -q 'npx tablewalk'
-
-          # And the first-run path: no database named, so it serves the page
-          # that asks for one. This is what `npx tablewalk` does for someone
-          # who has just installed it and typed the name.
-          ./node_modules/.bin/tablewalk --no-config --port 4224 &
-          for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:4224/api/connections >/dev/null && break
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:4224/ | grep -q '<title>'
-          # The client as it ships: the page names its entry by content, the
-          # entry comes back compressed and cacheable for good. The page can
-          # carry account-bound first-paint data, so it must never be cached.
-          # An unknown path answers the page too,
-          # so the entry is asked for by the name the page gives it.
-          entry="$(curl -fsS http://127.0.0.1:4224/ | grep -o 'src="/assets/[^"]*\.js"' | head -1 | cut -d'"' -f2)"
-          test -n "$entry"
-          curl -fsS -o /dev/null -D /tmp/entry.headers -H 'Accept-Encoding: gzip, br' "http://127.0.0.1:4224$entry"
-          grep -qi '^content-type: text/javascript' /tmp/entry.headers
-          grep -qi '^content-encoding: br' /tmp/entry.headers
-          grep -qi '^cache-control: public, max-age=31536000, immutable' /tmp/entry.headers
-          curl -fsS -o /dev/null -D /tmp/page.headers http://127.0.0.1:4224/
-          grep -qi '^cache-control: private, no-store' /tmp/page.headers
-          grep -qi '^vary:.*Cookie' /tmp/page.headers
-          if grep -qi '^etag:' /tmp/page.headers; then
-            echo "a page carrying first-paint data must not have a reusable ETag" && exit 1
+          if ./node_modules/.bin/mistri --prot 1 >/dev/null 2>&1; then
+            echo "an unknown option was accepted" && exit 1
           fi
-          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'If-None-Match: *' http://127.0.0.1:4224/)" = 200
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4224/api/schema)" = 409
-          kill %1
-
-          ./node_modules/.bin/tablewalk --no-config --db /tmp/demo.db --port 4223 &
-          for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:4223/api/connections >/dev/null && break
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:4223/ | grep -q '<title>'
-          kill %1
-          # The tool list is the tell: a stale dist answers with the tools it
-          # had when it was built, and every one of them still works.
-          printf '%s\n%s\n' \
-            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-            | ./node_modules/.bin/tablewalk --mcp --no-config --db /tmp/demo.db > /tmp/mcp.out
-          # The newest tools, so a dist built before they existed is caught:
-          # change_impact, and none of the App authoring tools it no longer has.
-          grep -q '"change_impact"' /tmp/mcp.out
-          ! grep -q '"validate_app"' /tmp/mcp.out
+          ./node_modules/.bin/mistri --db /tmp/demo.db 2>&1 | grep -q 'npx tablewalk'
           echo "the packed build is the current one"
-
-  # The desktop bundle, staged on every push.
-  #
-  # The bundle is assembled rather than checked in — the workspace packages laid
-  # out as an install leaves them, and a production-only install of what they
-  # need from the registry — and
-  # it went stale twice without anyone noticing, because nothing built it
-  # until release day. Both times the symptom was an app that started and
-  # then failed at something the repo had already fixed.
-  #
-  # Electron is deliberately not installed here. Staging needs Node and the
-  # root build only, so this costs a minute and catches the class of failure
-  # that matters: the bundle no longer assembles from current sources, or
-  # assembles into something that does not answer.
-  desktop:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: node desktop/scripts/stage.mjs
-
-      # The staged tree is what ships, so it is what gets probed — not the
-      # source it was built from. `--db` with a fresh file makes the check
-      # independent of any config on the runner.
-      - name: The staged server starts, and answers
-        run: |
-          npx tsx test/make-demo-db.ts /tmp/probe.db
-          node desktop/build/server/node_modules/tablewalk/dist/server/index.js \
-            --no-config --db /tmp/probe.db --port 4222 &
-          for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:4222/api/connections >/dev/null && break
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:4222/api/connections | head -c 200
-          # The client is served from the staged copy too: a bundle whose
-          # dist/client nested inside itself served a 404 here and a working
-          # page in the repo.
-          curl -fsS http://127.0.0.1:4222/ | grep -q '<title>' \
-            && echo "and the page is there"
-          kill %1
-
-  # Built on every push, not only on release, because a Dockerfile that has
-  # stopped building is worth knowing about before the day you want to ship it.
-  image:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - run: docker build -t tablewalk:ci .
-      - name: Create the image smoke fixture
-        run: |
-          mkdir -p "$RUNNER_TEMP/tablewalk-image-probe"
-          python3 - <<'PY'
-          import json, os, sqlite3
-          from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP']) / 'tablewalk-image-probe'
-          with sqlite3.connect(root / 'probe.db') as db:
-              db.execute('CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL)')
-              db.execute("INSERT INTO item VALUES (1, 'image smoke')")
-          (root / 'tablewalk.json').write_text(json.dumps({
-              'connections': [{'name': 'probe', 'url': '/config/probe.db'}]
-          }))
-          PY
-      - name: It starts, and answers
-        run: |
-          docker run -d --name probe -p 127.0.0.1:4111:4111 \
-            -v "$RUNNER_TEMP/tablewalk-image-probe:/config:ro" tablewalk:ci
-          for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:4111/api/connections >/dev/null && break
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:4111/api/connections | head -c 200
-          curl -fsS http://127.0.0.1:4111/api/schema | python3 -c 'import json,sys; assert any(t["name"] == "item" for t in json.load(sys.stdin)["tables"])'
-      - name: Stop the image smoke server
-        if: always()
-        run: docker rm -f probe

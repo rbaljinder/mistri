@@ -93,10 +93,10 @@ test('diagnostics require exact opt-in and disabled HTTP responses are unchanged
   assert.equal(log.output.listenerCount('error'), 0);
   const app = await serve();
   try {
-    const response = await request(`${app.base}/api/connections`);
+    const response = await request(`${app.base}/api/whoami`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('x-request-id'), null);
-    assert.equal((await response.json()).connections.length, 1);
+    assert.equal(typeof (await response.json()), 'object');
     assert.deepEqual(log.lines, []);
   } finally {
     await app.close();
@@ -131,7 +131,7 @@ test('HTTP diagnostics correlate generated IDs, timings and statuses without ret
   const diagnostics = diagnosticsFromEnvironment('1', log.output)!;
   const app = await serve(diagnostics);
   try {
-    const first = await request(`${app.base}/api/connections?secret=${SECRET}`, {
+    const first = await request(`${app.base}/api/whoami?secret=${SECRET}`, {
       headers: { 'x-request-id': SECRET, authorization: `Bearer ${SECRET}`, cookie: `session=${SECRET}` },
     });
     assert.equal(first.status, 200);
@@ -169,7 +169,7 @@ test('HTTP diagnostics correlate generated IDs, timings and statuses without ret
     assert.equal(events.length, 6);
     assert.deepEqual(
       events.map((event) => event.route),
-      ['api.connections', 'api.schema', 'api.update', 'api.insert', 'api.other', 'web'],
+      ['api.identity', 'api.schema', 'api.update', 'api.insert', 'api.other', 'web'],
     );
     assert.deepEqual(
       events.map((event) => event.status),
@@ -634,7 +634,9 @@ test('instrumentation setup failure is a diagnostic drop without a fictional obs
   assert.equal(log.events().length, 0);
 });
 
-test('the real CLI wires environment opt-in and flushes on shutdown', { timeout: 20_000 }, async () => {
+test('the real CLI wires environment opt-in and flushes on shutdown', { timeout: 40_000 }, async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-diagnostics-cli-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   for (const enabled of ['0', '1']) {
     const reservation = createServer();
     reservation.listen(0, '127.0.0.1');
@@ -643,9 +645,19 @@ test('the real CLI wires environment opt-in and flushes on shutdown', { timeout:
     await new Promise<void>((resolve) => reservation.close(() => resolve()));
     const child = spawn(
       process.execPath,
-      ['--import', 'tsx', 'packages/tablewalk/src/server/index.ts', '--no-config', '--port', String(port)],
+      [
+        '--import',
+        'tsx',
+        'packages/mistri/src/server/index.ts',
+        '--demo',
+        '--app',
+        'test/fixtures/apps/fieldops',
+        '--no-config',
+        '--port',
+        String(port),
+      ],
       {
-        env: { ...process.env, DATABASE_URL: '', TABLEWALK_OPEN: '0', TABLEWALK_DIAGNOSTICS: enabled },
+        env: { ...process.env, DATABASE_URL: '', MISTRI_OPEN: '0', MISTRI_DIAGNOSTICS: enabled, MISTRI_DEMO_DB: join(dir, 'demo.db') },
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
@@ -658,7 +670,7 @@ test('the real CLI wires environment opt-in and flushes on shutdown', { timeout:
       stderr += String(chunk);
     });
     const exited = once(child, 'exit');
-    const deadline = setTimeout(() => child.kill('SIGKILL'), 8_000);
+    const deadline = setTimeout(() => child.kill('SIGKILL'), 15_000);
     try {
       await new Promise<void>((resolve, reject) => {
         child.stdout.on('data', () => {
@@ -667,7 +679,7 @@ test('the real CLI wires environment opt-in and flushes on shutdown', { timeout:
         child.once('error', reject);
         child.once('exit', () => reject(new Error(`CLI exited before listening: ${stderr}`)));
       });
-      const response = await request(`http://127.0.0.1:${port}/api/connections?secret=${SECRET}`, {
+      const response = await request(`http://127.0.0.1:${port}/api/whoami?secret=${SECRET}`, {
         headers: { 'x-request-id': SECRET },
       });
       await response.text();
@@ -684,7 +696,7 @@ test('the real CLI wires environment opt-in and flushes on shutdown', { timeout:
         assert.equal(events.length, 1);
         assert.equal(events[0].requestId, response.headers.get('x-request-id'));
         assert.match(events[0].requestId, UUID);
-        assert.equal(events[0].route, 'api.connections');
+        assert.equal(events[0].route, 'api.identity');
         assert.equal(summaries.length, 1);
         assert.equal(summaries[0].completed, 1);
         assert.equal(summaries[0].series[0].statusClass, '2xx');

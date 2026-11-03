@@ -1,5 +1,4 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
-import { CRM, DEMO, expect, test } from './support/ownServers';
+import { CRM, expect, test } from './support/ownServers';
 import type { ThemeDefinition } from '../packages/engine/schema/theme.js';
 import { themePreset } from '../packages/engine/src/shared/themePresets.js';
 
@@ -7,7 +6,7 @@ import { themePreset } from '../packages/engine/src/shared/themePresets.js';
 test.use({ carryFirstPaint: false });
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
-test.use({ servers: ['explorer', 'crm'] });
+test.use({ servers: ['crm'] });
 
 const CUSTOM: ThemeDefinition = {
   id: 'custom',
@@ -72,44 +71,6 @@ test('custom themes: app default, browser override, reload, mode, removal and re
   available = true;
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'custom');
-});
-
-test('theme lab: shared controls, nested focus, and mobile containment without business writes', async ({ page }) => {
-  const writes: string[] = [];
-  page.on('request', (request) => {
-    if (/\/api\/(insert|update|delete)/.test(request.url())) writes.push(request.url());
-  });
-  // An authoring tool of the standalone browser: an App has no Workbench to open it from.
-  await page.goto(`/${DEMO}/customer`);
-  await page.getByRole('button', { name: 'More', exact: true }).click();
-  await page.getByRole('menuitem', { name: /^Theme lab/ }).click();
-  const lab = page.getByRole('dialog', { name: 'Theme lab', exact: true });
-  await lab.getByRole('textbox', { name: 'Name', exact: true }).fill('');
-  await expect(lab.getByRole('alert')).toHaveText('Name is required.');
-  await lab.getByRole('button', { name: 'Confirm sample', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Confirm sample', exact: true })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(lab).toBeVisible();
-  await expect(lab.getByRole('button', { name: 'Confirm sample', exact: true })).toBeFocused();
-  for (const theme of ['Lumen', 'Mono']) {
-    await lab.getByRole('button', { name: 'Visual theme', exact: true }).click();
-    await page.getByRole('option', { name: theme, exact: true }).click();
-    for (const mode of ['Light', 'Dark']) {
-      await lab.getByRole('button', { name: 'Color mode', exact: true }).click();
-      await page.getByRole('option', { name: mode, exact: true }).click();
-      for (const width of [1440, 390, 320]) {
-        await page.setViewportSize({ width, height: 844 });
-        const box = (await lab.boundingBox())!;
-        expect(box.x).toBeGreaterThanOrEqual(0);
-        expect(box.x + box.width).toBeLessThanOrEqual(width);
-        expect(box.y).toBeGreaterThanOrEqual(0);
-        expect(box.y + box.height).toBeLessThanOrEqual(844);
-        expect(await lab.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-      }
-    }
-  }
-  await lab.getByRole('button', { name: 'Close', exact: true }).click();
-  expect(writes).toEqual([]);
 });
 
 for (const system of ['light', 'dark'] as const) {

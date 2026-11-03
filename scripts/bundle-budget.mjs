@@ -32,9 +32,9 @@ import { fileURLToPath } from 'node:url';
 import { brotliCompressSync } from 'node:zlib';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-/** Each binary's built client (config/vite.tablewalk.config.ts, config/vite.mistri.config.ts): each is held to its own ceilings. */
+/** The binary's built client (config/vite.mistri.config.ts), held to its own ceilings. The database browser's
+    Workbench and its ceilings live in its own repository (https://github.com/rbaljinder/tablewalk). */
 export const CLIENTS = {
-  tablewalk: join(ROOT, 'packages/tablewalk/dist/client'),
   mistri: join(ROOT, 'packages/mistri/dist/client'),
 };
 const EMBED = join(ROOT, 'packages/mistri/dist/embed/react');
@@ -732,18 +732,6 @@ export const BUDGET = {
        ceilings above). The script ceilings move to 1_408_550 / 386_800, about 0.3% of room. */
     app: { script: { raw: 1_408_550, br: 386_800 }, style: { raw: 393_580, br: 52_940 } },
   },
-  tablewalk: {
-    /* The follow-up's grid head rules, as above. */
-    /* The grid head's controls placed inside their own head (style.css; they lay over the neighbour's label): about
-       130 raw bytes over the follow-up, so the public and Workbench style ceilings move by 200 raw and the Workbench's
-       brotli by 150. */
-    /* rc.9 merged: the grid heads and the client review fixes together put the Workbench style past its brotli
-       ceiling by under 0.1 KB (50.3 KB measured); the brotli ceiling moves to 51_800, a few hundred bytes of room. */
-    /* rc.11's touch targets and grid heads, as on the public first paint: the raw style ceiling moves; brotli holds. */
-    /* rc.11's accessibility round, as on the public first paint: the raw style ceiling moves; brotli holds. */
-    /* rc.12 shell, as on the public first paint: style 378,607 / 51,684. The raw style ceiling moves; brotli holds. */
-    workbench: { script: { raw: 1_287_900, br: 361_400 }, style: { raw: 378_860, br: 51_800 } },
-  },
 };
 
 /* @mistriwork/mistri/react, measured without React and the routers (the host's) and in brotli as this script compresses it:
@@ -863,12 +851,10 @@ export function embedRequires(embed = dirname(EMBED)) {
 }
 
 /** Each surface's first page, the binary whose client it is, and the chunks past it that it loads at once. Each
-    page names its own (vite.config.ts PAGES): an App's preloads the shell with the App's chrome, the Workbench's the
-    kit's shell with the database browser's main, in the workbench chunk. */
+    page names its own (vite.config.ts PAGES): an App's preloads the shell with the App's chrome. */
 export const SURFACES = {
   public: { bin: 'mistri', page: 'index.public.html', chunks: [] },
   app: { bin: 'mistri', page: 'index.html', chunks: [] },
-  workbench: { bin: 'tablewalk', page: 'index.workbench.html', chunks: [] },
 };
 /** A surface's ceilings: its binary's. */
 export const ceilingOf = (surface) => BUDGET[SURFACES[surface].bin][surface];

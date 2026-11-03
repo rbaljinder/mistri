@@ -1,9 +1,6 @@
 /**
- * What one binary's README owes that binary: every flag its USAGE has is in its Options block and none is made up
- * there, and every relative link lands inside the package that ships the README. One suite, run once per binary
- * (test/prose-tablewalk.test.ts, test/prose-mistri.test.ts), so each package's own run holds its own README.
- *
- * test-package: dispatch — the file that calls this names the binary, and is that package's.
+ * What the binary's README owes that binary: every flag its USAGE has is in its Options block and none is made up
+ * there, and every relative link lands inside the package that ships the README (test/prose-mistri.test.ts).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +16,7 @@ export const usageOf = (cli: string): string => {
   return usage;
 };
 
-export function productProse(bin: 'tablewalk' | 'mistri'): void {
+export function productProse(bin: 'mistri'): void {
   const readme = read(`packages/${bin}/README.md`);
   const cli = read(`packages/${bin}/src/server/cli/usage.ts`);
 

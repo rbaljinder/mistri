@@ -1,6 +1,4 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
-import { COMPASS, CRM_CLOCK, DEMO, expect, test } from './support/ownServers';
-import { open } from './support/app';
+import { COMPASS, CRM_CLOCK, expect, test } from './support/ownServers';
 import { THEME_PRESETS } from '../packages/engine/src/shared/themePresets';
 import { contrastRatio } from '../packages/engine/src/shared/theme';
 import { compileAppTheme } from '../packages/mistri/src/shared/themeSpec';
@@ -10,7 +8,7 @@ import { readings } from './support/contrast';
 test.use({ carryFirstPaint: false });
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
-test.use({ servers: ['explorer', 'crm'] });
+test.use({ servers: ['crm'] });
 
 const CRM = COMPASS;
 
@@ -50,11 +48,11 @@ async function inside(page: import('@playwright/test').Page): Promise<void> {
 }
 
 /* Sixteen journeys used to run here — eight looks in two modes, each walking
-   the dashboard, the list, a record's editor, the New drawer and the
-   Workbench. Three assertions in that walk depended on the look: the surface
+   the dashboard, the list, a record's editor and the New drawer.
+   Three assertions in that walk depended on the look: the surface
    token, a field's drawn radius, and what happens when another look replaces
    this one. Everything else — a pager, a focus, a drawer that does not
-   overflow, the database browser wearing no look — is the same whichever look is on,
+   overflow — is the same whichever look is on,
    and running it sixteen times bought nothing but a minute.
 
    So the look-dependent part runs per look and per mode, and the walk runs
@@ -99,7 +97,7 @@ for (const theme of THEME_PRESETS)
       expect(bar).toEqual({ inside: true, underline: false });
       /* A record's tabs are in sentence case, the look's own; Mono, Workshop and Ledger set
        them as a label. Ledger's label role is monospace capitals (its `label` type role, themeLooks.ts), as a
-       ruled book heads its columns. The Workbench's capitals survived a font shorthand. */
+       ruled book heads its columns. */
       const recordTab = await page.evaluate(() => {
         const tab = document.createElement('button');
         tab.className = 'page-tab';
@@ -146,8 +144,7 @@ for (const theme of THEME_PRESETS)
 
 /* The walk itself, once. It starts by picking the look in Preferences and
    reloading — the one thing a seeded preference cannot prove — and then goes
-   where a reader goes: a list's pager, a record's editor, the database
-   browser and back, and the typography preference. None of it depends on which look is
+   where a reader goes: a list's pager, a record's editor, and the typography preference. None of it depends on which look is
    on, which is why it is not run once per look. */
 test('a look chosen in Preferences survives a reload, and the walk under it reads', async ({ page }) => {
   test.setTimeout(45_000);
@@ -184,7 +181,6 @@ test('a look chosen in Preferences survives a reload, and the walk under it read
   await pager.scrollIntoViewIfNeeded();
   await expect(pager.getByRole('button', { name: 'Next', exact: false })).toBeInViewport();
   await pager.getByRole('button', { name: 'Next', exact: false }).click();
-  // An App's pager says where the reader is as a range; the page box is the Workbench's.
   await expect(pager.locator('.pager-range')).toHaveText(/^21–/);
 
   await page.goto(`${CRM}/@opportunity~1`);
@@ -196,13 +192,6 @@ test('a look chosen in Preferences survives a reload, and the walk under it read
   await field.press('Escape');
 
   await page.setViewportSize({ width: 1440, height: 924 });
-  // The standalone browser wears no look at all — its own tokens (style.css)
-  // and the code face. An App has no Workbench to wear it in.
-  await page.goto(`/${DEMO}/customer`);
-  await expect(page.locator('html')).not.toHaveAttribute('data-starting');
-  expect(await page.locator('html').getAttribute('data-theme-style')).toBeNull();
-  expect(await page.locator('html').evaluate((node) => (node as HTMLElement).style.getPropertyValue('--surface'))).toBe('');
-  expect(await page.locator('body').evaluate((node) => getComputedStyle(node).getPropertyValue('--mono'))).toContain('monospace');
   await page.goto(CRM);
   await expect(page.locator('.chart-donut')).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-theme-style', theme.id);
@@ -421,9 +410,6 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
       expect(dates.filter((reading) => reading.ratio < reading.need)).toEqual([]);
     });
 
-/* The database browser wears its own tokens and no
-   look; its fields draw the same 3:1 edge — the query bar, the table
-   filter, a list's filter boxes, the pager's page box. */
 /* Lumen's table, held: the row anchored on the record's name, the head small and faint, a neutral status a grey
    dot and its word, placeholder rows the real rows' height, and a head that stays in view once the page
    scrolls past it (useStickyHead.ts). */
@@ -502,21 +488,6 @@ for (const header of ['band', 'hero'] as const)
       expect(read.map((reading) => reading.need).sort()).toEqual([3, 4.5]);
       expect(read.filter((reading) => reading.ratio < reading.need)).toEqual([]);
     });
-
-for (const mode of ['light', 'dark'] as const) {
-  test(`the database browser ${mode}: every field's edge reads at 3:1 on the field and on its ground`, async ({ page }) => {
-    await page.emulateMedia({ colorScheme: mode });
-    await page.setViewportSize({ width: 1440, height: 924 });
-    await open(page, DEMO, 'customer');
-    await expect(page.locator('.table-wrap table').first()).toBeVisible();
-    // A focused field wears the ring instead of its edge; read them at rest.
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    const edges = (await readings(page)).filter((reading) => reading.need === 3);
-    expect(edges.some((reading) => reading.what.includes('#query'))).toBe(true);
-    expect(edges.length).toBeGreaterThan(2);
-    expect(edges.filter((reading) => reading.ratio < reading.need)).toEqual([]);
-  });
-}
 
 test('new bases honor authored defaults and inherit custom palette roles across system changes', async ({ page }) => {
   await page.route(/\/api\/app(?:\?|$)/, async (route) => {

@@ -1,13 +1,16 @@
-# Contributing to tablewalk
+# Contributing to mistri
 
 ```bash
-git clone <this repo> && cd tablewalk
+git clone <this repo> && cd <its directory>
 npm install
-npm run demo          # builds a sample SQLite database and opens the app
+npm run dev           # serves an App from source, reloading on each edit
 npm test              # tsc, oxlint, the client type/geometry checks, and the test suite
 ```
 
-Node 24.22.1 or newer. tablewalk uses `node:sqlite`, which is built into Node — there
+The database browser, `tablewalk`, is built on the same engine in its own
+repository: [rbaljinder/tablewalk](https://github.com/rbaljinder/tablewalk).
+
+Node 24.22.1 or newer. mistri uses `node:sqlite`, which is built into Node — there
 is no native module to compile and no install step that can fail on your
 platform. `.node-version` names that minimum for nvm, fnm, mise and asdf.
 
@@ -20,7 +23,7 @@ breaks one needs to argue for it rather than work around it.
 
 ### The user has no build step
 
-`npx tablewalk mydb.sqlite` runs, and that is the whole deployment. The
+`npx @mistriwork/mistri --app <dir>` serves an App from its source, and that is the whole deployment. The
 maintainer's `npm run build` compiles the server with `tsc` and bundles the
 client with Vite (`vite.config.ts`); the published package is that output.
 Under `npm run dev` and every test suite the server serves `src/client` from
@@ -72,14 +75,14 @@ there are tests asserting no password survives it. This is why the connection
 editor cannot prefill the URL it is editing — a small awkwardness downstream of a
 rule worth keeping.
 
-tablewalk stores no secrets of its own. Passwords come from `${ENV}` expansion,
+The server stores no secrets of its own. Passwords come from `${ENV}` expansion,
 the OS keychain, or a credentials file at mode 600 that is refused if anyone else
 can read it. **Do not add encryption**: a key sitting next to the ciphertext it
 protects is obfuscation with extra steps.
 
 ### Requests from other pages are refused
 
-Loopback binding keeps tablewalk off the network. It does not keep it away from
+Loopback binding keeps the server off the network. It does not keep it away from
 the browser — any page you have open can POST to a localhost port. `crossOriginRefusal()`
 checks `Origin`, requires `Content-Type: application/json` so a cross-origin
 request must preflight, and checks `Host` against loopback or the bound

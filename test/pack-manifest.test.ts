@@ -50,8 +50,7 @@ test('the links name the repository, its issues and the site', () => {
     assert.equal(manifest.repository.url, 'git+https://github.com/rbaljinder/mistri.git');
     assert.equal(manifest.repository.directory, `packages/${dir}`);
     assert.equal(manifest.bugs.url, 'https://github.com/rbaljinder/mistri/issues');
-    /* The browser keeps its own site; the App framework and its layers are mistri's. */
-    assert.equal(manifest.homepage, dir === 'tablewalk' ? 'https://tablewalk.dev' : 'https://mistriwork.dev');
+    assert.equal(manifest.homepage, 'https://mistriwork.dev');
     assert.equal(manifest.engines.node, '>=24.22.1');
   }
 });

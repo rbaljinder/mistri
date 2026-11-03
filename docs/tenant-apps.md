@@ -16,8 +16,7 @@ database or one existing PostgreSQL database. Tenant Apps are stable since
 | Public reads: a visitor browses one tenant's public rows by its public address or mapped host | Stable ([below](#public-reads)) |
 
 What a tenant App still refuses is listed on the status page ("Still
-refused"). The ordinary database browser and non-tenant Apps remain
-independently launchable.
+refused"). Non-tenant Apps remain independently launchable.
 
 ## Authoring and running
 

@@ -180,6 +180,7 @@ function inRange(groups: readonly number[], range: ProxyRange): boolean {
  * it is a peer whose `X-Forwarded-For` the limiter may read; with the `--auth-proxy-from` list (`Bound.identityProxies`)
  * it is a peer whose `--auth-proxy-header` value `identityFor` believes. The two lists are never swapped: one
  * grants a client address, the other a person.
+ * @public the database browser's (scripts/boundary/entries.json, "host")
  */
 export function trustedProxyPeer(address: string | undefined, trusted: readonly ProxyRange[] = []): boolean {
   if (loopbackPeer(address)) return true;

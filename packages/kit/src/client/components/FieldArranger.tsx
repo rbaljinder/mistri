@@ -33,6 +33,7 @@ interface FieldArrangerProps {
 
 /** The field being dragged between groups, or null. */
 let carried: { name: string; owner: unknown; take: () => void } | null = null;
+/** @public the database browser's (scripts/boundary/entries.json, "host") */
 export const carriedField = () => carried;
 
 export function FieldArranger({

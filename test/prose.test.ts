@@ -2,49 +2,33 @@
  * The facts that live in the code AND in prose, held together.
  *
  * CLAUDE.md keeps a list titled "facts that are written in more than one
- * place" — the MCP tool count, the CLI flags, the dialects — each with a
+ * place" — the CLI flags, the dialects, the current release — each with a
  * manual command to verify it, because each has drifted before. A manual
  * ritual is a rule that fails silently on the day it matters; these tests
  * are those rituals, run on every `npm test`. Same move as
  * check-client-geometry.mjs: prose into invariant.
  *
- * test-package: shared — the repository's prose, which names both binaries: the site, the changelog, the docs.
- * What each binary's README owes its own USAGE is a test per package (test/prose-tablewalk.test.ts,
- * test/prose-mistri.test.ts, through test/support/productProse.ts).
+ * test-package: shared — the repository's prose: the site, the changelog, the docs. What the `mistri`
+ * binary's README owes its own USAGE is test/prose-mistri.test.ts (through test/support/productProse.ts).
+ * The database browser's facts — its MCP tool count, its flags, its dialect keywords — are held in its own
+ * repository (https://github.com/rbaljinder/tablewalk).
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { toolCounts, toolNames } from '../packages/tablewalk/src/server/mcp.js';
 import { flagsIn } from '../scripts/public-surface.mjs';
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-/* Two binaries, each with its own USAGE and its own README, held to each other: the database browser's (tablewalk)
-   and the App framework's (mistri). The database MCP is the browser's, so its count is in the browser's README. */
+/* The binary this repository ships, with its own USAGE and its own README, held to each other. */
 const PRODUCTS = {
-  tablewalk: { readme: read('packages/tablewalk/README.md'), cli: read('packages/tablewalk/src/server/cli/usage.ts') },
   mistri: { readme: read('packages/mistri/README.md'), cli: read('packages/mistri/src/server/cli/usage.ts') },
 } as const;
-const README = PRODUCTS.tablewalk.readme;
-/** The database browser's page on the site: its MCP count and its version check live there, not on the App framework's home. */
-const BROWSER_PAGE = read('site/src/content/docs/docs/database-browser.md');
-/** The database browser's manifest: the package a person installs for it, whose keywords npm search reads. */
-const PKG = JSON.parse(read('packages/tablewalk/package.json'));
 const usageOf = (cli: string): string => {
   const usage = cli.match(/const USAGE = `([\s\S]*?)`/)?.[1];
   assert.ok(usage, 'USAGE moved — update the extraction here');
   return usage;
 };
-
-/** Twenty to thirty-nine, which is the range the count will live in for a while. */
-function spelled(n: number): string {
-  const ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
-  const tens = n >= 30 ? 'thirty' : 'twenty';
-  const rest = n % 10;
-  assert.ok(n >= 20 && n <= 39, `spell out ${n} by hand and widen this helper`);
-  return rest ? `${tens}-${ones[rest]}` : tens;
-}
 
 describe('the prose agrees with the code it describes', () => {
   test('the first line of the upgrade notes is the TypeScript peer, which stops npm install before anything else is read', () => {
@@ -62,9 +46,6 @@ describe('the prose agrees with the code it describes', () => {
     // release sections must remain historical, so check only current claims.
     const released = /^## (\d+\.\d+\.\d+(?:-[\w.]+)?)\s*$/m.exec(read('CHANGELOG.md'))?.[1];
     assert.ok(released, 'The changelog needs a completed release entry.');
-    const gettingStarted = BROWSER_PAGE;
-    assert.match(gettingStarted, /npx tablewalk --version/);
-    assert.doesNotMatch(gettingStarted, /current release is/i);
     for (const [path, pattern] of [
       ['packages/mistri/README.md', /These App features ship in mistri (\d+\.\d+\.\d+(?:-[\w.]+)?)[;,. ]/],
       ['site/src/content/docs/docs/status.md', /This site describes \*\*mistri (\d+\.\d+\.\d+(?:-[\w.]+)?)\*\*/],
@@ -72,75 +53,6 @@ describe('the prose agrees with the code it describes', () => {
       ['site/src/content/docs/docs/status.md', /^description: The (\d+\.\d+\.\d+(?:-[\w.]+)?) scope/m],
     ] as const) {
       assert.equal(pattern.exec(read(path))?.[1], released, `${path}: update the current release statement`);
-    }
-  });
-
-  test('the MCP tool count in README and on the site is the real one', () => {
-    const { read, write } = toolCounts();
-    const total = read + write;
-    const word = spelled(total);
-    const capitalised = word[0].toUpperCase() + word.slice(1);
-    assert.ok(
-      README.includes(`**${capitalised} tools**`),
-      `README says a different number than the ${total} tools the server defines — update the "${capitalised} tools" sentence`,
-    );
-    assert.ok(
-      BROWSER_PAGE.includes(`up to ${word} tools`),
-      `site/src/content/docs/docs/database-browser.md says a different number than the ${total} tools the server defines`,
-    );
-  });
-
-  test('the README says the read/write split the server actually has', () => {
-    /* "Twenty-five tools — seventeen read-only, and six writes" was right
-       once and wrong for two tools; the count was pinned and the split was
-       not. Both halves are the code's now. */
-    const words = [
-      'zero',
-      'one',
-      'two',
-      'three',
-      'four',
-      'five',
-      'six',
-      'seven',
-      'eight',
-      'nine',
-      'ten',
-      'eleven',
-      'twelve',
-      'thirteen',
-      'fourteen',
-      'fifteen',
-      'sixteen',
-      'seventeen',
-      'eighteen',
-      'nineteen',
-      'twenty',
-      'twenty-one',
-      'twenty-two',
-      'twenty-three',
-      'twenty-four',
-      'twenty-five',
-      'twenty-six',
-      'twenty-seven',
-      'twenty-eight',
-      'twenty-nine',
-      'thirty',
-    ];
-    const { read, write } = toolCounts();
-    assert.match(
-      README,
-      new RegExp(`${words[read]} read-only, and ${words[write]} writes`),
-      `README should say ${words[read]} read-only, ${words[write]} writes`,
-    );
-    assert.match(
-      BROWSER_PAGE,
-      new RegExp(`${words[read]} that only read`),
-      `the database browser's page should say ${words[read]} that only read`,
-    );
-    /* And every tool has its row in the README's tables. */
-    for (const name of toolNames()) {
-      assert.ok(README.includes(`\`${name}\``), `README's tool tables do not mention \`${name}\``);
     }
   });
 
@@ -155,19 +67,20 @@ describe('the prose agrees with the code it describes', () => {
 
      No check can read intent. What it can do is hold prose to names that
      exist: a document or a comment that offers a flag the CLI does not take
-     is describing a tablewalk that is not this one. */
+     is describing a mistri that is not this one. */
   test("every flag named in the docs, the site and the code's own comments is one the CLI takes", () => {
-    /* Either binary's: a line names the one it runs, and a flag either takes is a real one. */
+    /* A line that names `mistri` offers its flags; one that names `npx tablewalk` is about the database browser, whose
+       flags are held in its own repository. */
     const real = new Set(
       Object.values(PRODUCTS).flatMap(({ cli }) => [...usageOf(cli).matchAll(/--[a-z][a-z-]+/g)].map((match) => match[0])),
     );
     /* Only what a line offers *after* naming the command. A design token is
        spelled `--surface` and Docker takes `--rm`; neither is a claim about
        this CLI, and a check that flags them is a check nobody keeps. What is
-       left is the claim that matters: this is how you run tablewalk. */
+       left is the claim that matters: this is how you run mistri. */
     const offered = (text: string): string[] =>
       text.split('\n').flatMap((line) => {
-        const at = line.search(/tablewalk|mistri/);
+        const at = line.search(/\bmistri\b/);
         if (at < 0) return [];
         return [...line.slice(at).matchAll(/(?<=\s)--[a-z][a-z-]+/g)].map((match) => match[0]);
       });
@@ -181,7 +94,6 @@ describe('the prose agrees with the code it describes', () => {
     };
     for (const file of [
       'README.md',
-      'packages/tablewalk/README.md',
       'packages/mistri/README.md',
       'docs/apps.md',
       'docs/architecture.md',
@@ -192,18 +104,18 @@ describe('the prose agrees with the code it describes', () => {
       looked.push([file, read(file)]);
     }
     const problems: string[] = [];
-    /* A flag a document offers on purpose because it is *not* one: the
-       README shows `tablewalk --prot 4111` to say that an unrecognised
-       option is an error rather than a shrug. */
+    /* A flag a document offers on purpose because it is *not* one: a README
+       may show `--prot 4111` to say that an unrecognised option is an error
+       rather than a shrug. */
     const DELIBERATE = new Set(['--prot']);
     for (const [file, text] of looked) {
       if (!text) continue;
       for (const flag of offered(text)) {
         if (real.has(flag) || DELIBERATE.has(flag)) continue;
-        problems.push(`${file} offers ${flag} to tablewalk, which the CLI does not take.`);
+        problems.push(`${file} offers ${flag} to mistri, which the CLI does not take.`);
       }
     }
-    assert.deepEqual([...new Set(problems)], [], 'Prose that names a flag the CLI does not take describes a tablewalk this is not.');
+    assert.deepEqual([...new Set(problems)], [], 'Prose that names a flag the CLI does not take describes a mistri this is not.');
   });
 
   /* One rule for relative paths, stated where a reader of either looks: a path on the command line is from the current
@@ -224,13 +136,8 @@ describe('the prose agrees with the code it describes', () => {
   });
 
   test('the dialects are stated wherever they are stated', () => {
-    for (const dialect of ['sqlite', 'postgres']) {
-      assert.ok(
-        (PKG.keywords as string[]).some((k) => k.includes(dialect)),
-        `packages/tablewalk/package.json keywords do not mention ${dialect}`,
-      );
-      assert.match(README.toLowerCase(), new RegExp(dialect), `README does not mention ${dialect}`);
-    }
+    for (const dialect of ['sqlite', 'postgres'])
+      assert.match(PRODUCTS.mistri.readme.toLowerCase(), new RegExp(dialect), `packages/mistri/README.md does not mention ${dialect}`);
   });
 
   /* The author is in the United States and the docs say so: color, not colour.
@@ -249,7 +156,6 @@ describe('the prose agrees with the code it describes', () => {
     const found: string[] = [];
     for (const [name, text] of [
       ['README.md', read('README.md')],
-      ['packages/tablewalk/README.md', PRODUCTS.tablewalk.readme],
       ['packages/mistri/README.md', PRODUCTS.mistri.readme],
       ...docs.map((path) => [path.split('/site/')[1], read(path)]),
     ] as Array<[string, string]>) {

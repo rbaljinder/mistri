@@ -60,7 +60,7 @@ vi.mock('../sessionIdentity.js', () => ({
   tenantLeaseActive: () => false,
   subscribeSessionIdentity: () => () => {},
 }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: mocks.refresh }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo: mocks.refresh }));
 vi.mock('../../../../mistri/src/client/appState.js', () => ({ activeApp: () => ({ grantedCommands: [] }) }));
 vi.mock('./Value.js', () => ({ Value: ({ value }: { value: unknown }) => <span>{String(value)}</span> }));
 const { Checklist } = await import('../../../../mistri/src/client/components/Checklist.js');

@@ -30,7 +30,7 @@ const MEASURE = 80;
 export const MOTION = 200;
 const THEME_BYTES = 200 * 1024;
 
-export type Severity = 'error' | 'warning';
+type Severity = 'error' | 'warning';
 
 /** The codes grade says, each with its level and its fix, in the order a run reports them. */
 export const GRADE_CODES = {

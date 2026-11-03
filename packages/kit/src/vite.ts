@@ -2,8 +2,8 @@
  * `@mistriwork/kit/vite`: how a product bundles the kit's page, and how it serves it from source.
  *
  * The page is the kit's — its index.html, its entry (boot.js), the shell — and each product builds it into its own
- * dist/client with its own main: the database browser's (config/vite.tablewalk.config.ts in this repository) and the
- * App framework's (config/vite.mistri.config.ts). This is the part they share, so a product checked out on its own,
+ * dist/client with its own main: the App framework's (config/vite.mistri.config.ts) and the database browser's (in
+ * its own repository, over the published kit). This is the part they share, so a product checked out on its own,
  * over the published kit, builds the same page the same way:
  *
  *   - the page's entry starts `virtual:mistri/shell-main`, which `shellMain` answers with the product's main: the kit

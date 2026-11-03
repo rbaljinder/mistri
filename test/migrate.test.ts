@@ -1,5 +1,5 @@
 /**
- * `tablewalk migrate` on SQLite, which needs no server: Flyway's names and
+ * `mistri migrate` on SQLite, which needs no server: Flyway's names and
  * checksums, the history in Flyway's layout, one transaction per file, the
  * rules that refuse a run (a changed, missing, failed or out-of-order file),
  * repair, baseline on a database that was there first, drift and the run
@@ -109,7 +109,7 @@ function cli(args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv } 
       },
       (error, out, err) => {
         if (error && (error as { killed?: boolean }).killed) {
-          reject(new Error(`tablewalk ${args.join(' ')} did not exit`));
+          reject(new Error(`mistri ${args.join(' ')} did not exit`));
           return;
         }
         done({ code: (error as { code?: number } | null)?.code ?? 0, out, err });
@@ -479,7 +479,7 @@ describe('up, validate and repair on SQLite', () => {
   });
 });
 
-describe('tablewalk migrate, the command', () => {
+describe('mistri migrate, the command', () => {
   test('new, up with --dry-run, up, status and validate: their words and exit codes', async () => {
     const root = join(work, 'cli');
     mkdirSync(root);
@@ -503,7 +503,7 @@ describe('tablewalk migrate, the command', () => {
     assert.equal(history(db).length, 1, 'the dry run changed nothing');
     const status = await cli(['migrate', 'status', '--db', db, '--no-config', '--migrations', join(root, 'migrations')], {});
     assert.match(status.out, /1\s+create orders\s+\S+ \S+\s+applied\n\s+2\s+add note\s+pending/);
-    assert.match(status.out, /1 migration pending: tablewalk migrate up/);
+    assert.match(status.out, /1 migration pending: mistri migrate up/);
     const invalid = await cli(['migrate', 'validate', '--db', db, '--no-config', '--migrations', join(root, 'migrations')], {});
     assert.equal(invalid.code, 2);
     assert.match(invalid.out, /pending: V2__add_note\.sql is not applied\nNot valid\./);
@@ -533,26 +533,26 @@ describe('tablewalk migrate, the command', () => {
 
     const never = await cli(['migrate', 'status', ...at]);
     assert.equal(never.code, 2, never.out);
-    assert.match(never.out, /No migrations to apply: tablewalk migrate diff init writes the first from schema\.sql\./);
+    assert.match(never.out, /No migrations to apply: mistri migrate diff init writes the first from schema\.sql\./);
     const nothing = await cli(['migrate', 'up', ...at]);
     assert.equal(nothing.code, 2, nothing.out);
     assert.match(
       nothing.err,
-      /no migrations in .*migrations and none was ever applied, so the schema never was\. Write the first from schema\.sql with tablewalk migrate diff init/,
+      /no migrations in .*migrations and none was ever applied, so the schema never was\. Write the first from schema\.sql with mistri migrate diff init/,
     );
     assert.deepEqual(tables(db), [], 'a refused up makes no history table either');
 
     // An Atlas that cannot run: the first diff must not need one.
-    const first = await cli(['migrate', 'diff', 'init', ...at], { env: { TABLEWALK_ATLAS: join(root, 'no-atlas-here') } });
+    const first = await cli(['migrate', 'diff', 'init', ...at], { env: { MISTRI_ATLAS: join(root, 'no-atlas-here') } });
     assert.equal(first.code, 0, first.err);
     assert.doesNotMatch(first.err, /Atlas/);
     const written = readFileSync(join(root, 'migrations', 'V1__init.sql'), 'utf8');
-    assert.match(written, /^-- Written by tablewalk migrate diff: schema\.sql as it stands/);
+    assert.match(written, /^-- Written by mistri migrate diff: schema\.sql as it stands/);
     assert.ok(written.endsWith(schema.replace('serial primary key', 'integer primary key')), written);
 
     const pending = await cli(['migrate', 'status', ...at]);
     assert.equal(pending.code, 2, 'written is not applied');
-    assert.match(pending.out, /1 migration pending: tablewalk migrate up/);
+    assert.match(pending.out, /1 migration pending: mistri migrate up/);
     const up = await cli(['migrate', 'up', ...at]);
     assert.equal(up.code, 0, up.err);
     assert.match(up.out, /applied V1__init\.sql/);
@@ -574,7 +574,7 @@ describe('tablewalk migrate, the command', () => {
     const db = join(root, 'a.db');
     new DatabaseSync(db).close();
     const ran = await cli(['migrate', 'up', '--db', db, '--no-config', '--migrations', join(root, 'migrations'), '--tool', 'flyway'], {
-      env: { TABLEWALK_FLYWAY: fake },
+      env: { MISTRI_FLYWAY: fake },
     });
     assert.equal(ran.code, 0, ran.err);
     assert.match(ran.out, /flyway: args=migrate\n/);
@@ -586,7 +586,7 @@ describe('tablewalk migrate, the command', () => {
     );
     const missing = await cli(
       ['migrate', 'status', '--db', db, '--no-config', '--migrations', join(root, 'migrations'), '--tool', 'flyway'],
-      { env: { TABLEWALK_FLYWAY: join(root, 'nope') } },
+      { env: { MISTRI_FLYWAY: join(root, 'nope') } },
     );
     assert.equal(missing.code, 1);
     assert.match(missing.out, /Flyway is not installed where this can find it/);
@@ -596,7 +596,7 @@ describe('tablewalk migrate, the command', () => {
 });
 
 describe('the App, checked against the schema the migrations make', () => {
-  /* Outside the checkout, with tablewalk "installed" beside the App: the
+  /* Outside the checkout, with mistri "installed" beside the App: the
      way a project that ran npm install resolves @mistriwork/mistri/app. */
   const root = join(work, 'app');
   const appDir = join(root, 'tiny');
@@ -721,7 +721,7 @@ describe('switching with Flyway, either way', { skip: FLYWAY ? false : 'set TABL
         (error, out, err) => done({ code: (error as { code?: number } | null)?.code ?? 0, out: `${out}${err}` }),
       );
     });
-  test('Flyway validates what tablewalk applied, and tablewalk what Flyway applied', async () => {
+  test('Flyway validates what mistri applied, and mistri what Flyway applied', async () => {
     const files = {
       'V1__create.sql': 'CREATE TABLE a (id INTEGER PRIMARY KEY);\r\nINSERT INTO a VALUES (1);\n',
       'R__views.sql': '﻿CREATE VIEW IF NOT EXISTS va AS SELECT * FROM a;\n\n-- é\n',

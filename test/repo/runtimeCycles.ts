@@ -73,10 +73,9 @@ const PACKAGE_DIRS: Record<string, string> = {
   '@mistriwork/kit': 'packages/kit',
   '@mistriwork/ui': 'packages/ui',
   '@mistriwork/mistri': 'packages/mistri',
-  tablewalk: 'packages/tablewalk',
 };
 function inWorkspace(specifier: string): string | undefined {
-  const named = /^(@mistriwork\/[a-z]+|tablewalk)\/(.+)$/.exec(specifier);
+  const named = /^(@mistriwork\/[a-z]+)\/(.+)$/.exec(specifier);
   const dir = named && PACKAGE_DIRS[named[1]];
   return dir ? `${dir}/${named[2].startsWith('schema/') ? '' : 'src/'}${named[2]}` : undefined;
 }

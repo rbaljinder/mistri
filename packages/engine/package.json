@@ -50,6 +50,18 @@
       "mistri-built": "./dist/adapters/http/egress.js",
       "default": "./src/adapters/http/egress.ts"
     },
+    "./adapters/http/httpAdapter.js": {
+      "mistri-built": "./dist/adapters/http/httpAdapter.js",
+      "default": "./src/adapters/http/httpAdapter.ts"
+    },
+    "./adapters/http/httpDescription.js": {
+      "mistri-built": "./dist/adapters/http/httpDescription.js",
+      "default": "./src/adapters/http/httpDescription.ts"
+    },
+    "./adapters/http/openapi.js": {
+      "mistri-built": "./dist/adapters/http/openapi.js",
+      "default": "./src/adapters/http/openapi.ts"
+    },
     "./adapters/layoutRefusal.js": {
       "mistri-built": "./dist/adapters/layoutRefusal.js",
       "default": "./src/adapters/layoutRefusal.ts"

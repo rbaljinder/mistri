@@ -68,7 +68,6 @@ its own tables is `packages/mistri/src/server/storeLayouts.ts`; each store moves
 | Suite grants, preferences, authority | `identity.grants`: three files beside the suite's identity store, or three schemas of one PostgreSQL database (`packages/mistri/src/server/auth/suiteStoresPostgres.ts`) | SQLite, PostgreSQL | Yes |
 | Rate limits, sign-in lockouts, cached API answers | A `cache` connection (Valkey), else **the process's memory** | Valkey | No, but per-process without a cache |
 | File bytes | The row (`content: 'data'`) or an S3-compatible bucket (`storage: 'bucket'`, `src/server/files/`) | — | Yes |
-| Record layouts (Workbench only) | `$XDG_CONFIG_HOME/tablewalk/layouts.json` (`packages/engine/src/server/layouts.ts`) | file | Not for Apps |
 | Image variants | `MISTRI_IMAGE_CACHE`, else a private temp folder (`packages/mistri/src/server/http/imageVariants.ts`); also, for a public resource, the file resource's bucket (`<prefix>_variants/<app>/`, re-creatable, so a lifecycle rule may expire it; the files sweep deletes the copies of removed pictures) | file, then bucket | No, a cache; the bucket's copies are shared by instances |
 | V8 compile cache | `~/.cache/mistri/compile`, failure ignored (`packages/mistri/src/server/index.ts:50`) | file | No, a cache |
 | Schema snapshot and epoch | `__mistri_schema_snapshot` in the business database, `mistri.schema_epoch` on PostgreSQL | — | Rebuilt |
@@ -137,20 +136,18 @@ Target-neutral; each host below is a mapping of it.
 
 **Image.** The App's own image, built as in `build-and-deploy.md#in-a-container`:
 a build stage runs `mistri build`, the runtime stage carries `build/`,
-pruned `node_modules`, `tini` as PID 1, uid 1000. The published ghcr image is
-the database browser's and is not an App's base: an App's image pins the
-mistri version that built it, so `mistri build --dockerfile <file>`
-writes the Dockerfile from the build's own options (G6, 0.9.7) instead of a
-shared base image. The browser's image is published for `linux/amd64` and
-`linux/arm64`; build the App's for `arm64` on Fargate Graviton and `amd64` for
+pruned `node_modules`, `tini` as PID 1, uid 1000. There is no shared base
+image (the published one is the database browser's, from its own repository):
+an App's image pins the mistri version that built it, so
+`mistri build --dockerfile <file>` writes the Dockerfile from the build's own
+options (G6, 0.9.7). Build it for `arm64` on Fargate Graviton and `amd64` for
 Cloudflare, which has accepted only that.
 
 **Configuration.** `mistri.json` is baked into the image, with every secret
-written as `${NAME}` (expanded at open, never sent to the browser,
-`docs/deploy.md#passwords-in-a-container`). No volume mounts: none of the three
+written as `${NAME}` (expanded at open, never sent to the browser). No volume mounts: none of the three
 offers a convenient one, and none is needed.
 
-**Port and bind.** `TABLEWALK_HOST=0.0.0.0`, `TABLEWALK_PORT=4111`; tell the
+**Port and bind.** `MISTRI_HOST=0.0.0.0`, `MISTRI_PORT=4111`; tell the
 platform the port is 4111. mistri reads `PORT` when no `--port` is given, and the image's
 entrypoint maps it (G6, 0.9.6).
 
@@ -175,7 +172,7 @@ entrypoint maps it (G6, 0.9.6).
 (503 while starting, while a tenant App's writer is closed after an uncertain
 write and reopening, and from shutdown on); both answer before any gate or App
 and probe no database (`packages/engine/src/server/http/probes.ts`). Under `--base-path`
-they move with it. The repository's `Dockerfile` probes
+they move with it. The Dockerfile `mistri build --dockerfile` writes probes
 `/healthz` (G6, 0.9.6).
 
 **Shutdown.** SIGTERM via `tini`: readiness turns 503, the listener closes,

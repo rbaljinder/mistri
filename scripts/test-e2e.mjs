@@ -6,8 +6,8 @@
  * this script, which is what `npm run e2e` runs.
  *
  * `shared` runs one spec at a time, exactly as the whole suite ran before:
- * those specs address the three servers `playwright.config.ts` starts, and one
- * tablewalk process has one active connection (`registry.setActive`). `owned`
+ * those specs address the two servers `playwright.config.ts` starts, and one
+ * server process has one active connection (`registry.setActive`). `owned`
  * runs several at once — each of its specs starts its own server on a
  * `listen(0)` port over a `mkdtemp` database and shares nothing.
  *
@@ -182,12 +182,10 @@ function newest(paths) {
  * is built with them too: e2e/embed-built.spec.ts starts the built library in a host's page,
  * which is the only run of what a host installs. */
 function buildClient() {
-  /* Each product's client, the older of the two: the database browser's and the App framework's. */
+  /* The App framework's client. */
   let stamp = 0;
   try {
-    stamp = Math.min(
-      ...['tablewalk', 'mistri'].map((product) => statSync(join(ROOT, `packages/${product}/dist/client/index.html`)).mtimeMs),
-    );
+    stamp = statSync(join(ROOT, 'packages/mistri/dist/client/index.html')).mtimeMs;
   } catch {
     /* never built */
   }
@@ -201,7 +199,6 @@ function buildClient() {
         'packages/kit/package.json',
         'packages/mistri/package.json',
         'vite.config.ts',
-        'config/vite.tablewalk.config.ts',
         'config/vite.mistri.config.ts',
         'config/vite.ssr.config.ts',
         'config/vite.embed.config.ts',
@@ -210,12 +207,11 @@ function buildClient() {
         'scripts/generate-icons.mjs',
       ])
   ) {
-    console.log("# client: each product's dist/client is current");
+    console.log('# client: dist/client is current');
     return;
   }
   console.log('# client: vite build');
   for (const config of [
-    ['-c', 'config/vite.tablewalk.config.ts'],
     ['-c', 'config/vite.mistri.config.ts'],
     ['-c', 'config/vite.ssr.config.ts'],
     ['-c', 'config/vite.embed.config.ts'],

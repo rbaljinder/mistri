@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { runCli } from './appApiCli.js';
-import { installTablewalk } from './support/installedTablewalk.js';
+import { installMistri } from './support/installedMistri.js';
 
 test('new writes a starter App that has rows, checks, and names its database for dev', { timeout: 300000 }, async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'tw-new-app-'));
@@ -43,7 +43,7 @@ test('new writes a starter App that has rows, checks, and names its database for
     db.close();
   }
 
-  installTablewalk(join(dir, 'node_modules'));
+  installMistri(join(dir, 'node_modules'));
   /* From another folder, --app alone finds the App's own mistri.json: the rule dev reads it by. */
   const checked = await runCli(['check', '--app', dir, '--json']);
   assert.equal(JSON.parse(checked.out).ok, true, checked.out);
@@ -97,7 +97,7 @@ test(
       db.close();
     }
 
-    installTablewalk(join(dir, 'node_modules'));
+    installMistri(join(dir, 'node_modules'));
     const checked = await runCli(['check', '--app', dir, '--config', join(dir, 'mistri.json'), '--json']);
     assert.equal(JSON.parse(checked.out).ok, true, checked.out);
     // Clean as written: a scaffold that warns teaches its reader to ignore the warnings.

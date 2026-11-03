@@ -26,17 +26,14 @@
  * (visual-matrix.mjs --baseline) before it is committed.
  *
  * An entry with "served": true is an App's address `shot` does not take, such as its sign-in screen: the App is
- * served here, signed out, and captured as the Workbench is below.
+ * served here, signed out, and captured as `shot` captures: the tour dismissed, motion reduced, fonts loaded, the
+ * network idle.
  *
  * An entry with "story": "<id>" instead of an App is that story of the component library (Storybook, built into
  * site/dist/components by `npm run build:site` — build it first), in `look` (the library's Look button) and light,
  * captured as what the story drew in a window of `width` by `height` (1240 by 900 by default): the Component tour's pictures.
  *
- * The database browser is not an App, so `shot` cannot take it. An entry with
- * "workbench": "demo" instead of an App is the browser over the --demo
- * database (connection "demo", read-only), served here on a free port with its own
- * config directory and the same pinned day, and captured as `shot` captures:
- * the tour dismissed, motion reduced, fonts loaded, the network idle.
+ * The database browser's pictures are its own site's (https://tablewalk.dev).
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -104,16 +101,6 @@ export const SERVE = {
 export const appDirectory = (app) =>
   app === 'tick' || app === 'lintel' ? `examples/apps/${app}` : `test/fixtures/apps/${app === 'compass' ? 'crm' : app}`;
 
-/** The browser's databases, by name: each made by a script beside the server's own code. */
-export const WORKBENCH = {
-  demo: (db) => [
-    '--import',
-    'tsx',
-    '-e',
-    `const d = await import('./packages/engine/src/server/demo.ts'); d.makeDemoDatabase(${JSON.stringify(db)}); d.seedDemoDatabase(${JSON.stringify(db)}, { scale: 150 });`,
-  ],
-};
-
 const SIZE = { desk: { width: 1280, height: 800 }, phone: { width: 390, height: 844 } };
 
 const freePort = () =>
@@ -125,28 +112,6 @@ const freePort = () =>
         probe.close(() => done(port));
       });
   });
-
-/** The database browser over one of WORKBENCH's databases, listening; `stop` ends it. */
-async function startWorkbench(name, directory) {
-  const db = join(directory, `${name}.db`);
-  const made = spawnSync(process.execPath, WORKBENCH[name](db), { cwd: ROOT, encoding: 'utf8', env: { ...process.env, ...PINNED } });
-  if (made.status !== 0) throw new Error(`making the ${name} database failed: ${made.stderr}`);
-  /* Named as `--demo` names it, so the addresses are the ones the pages print (/demo/customer/~1); --demo itself
-     would open a browser window. */
-  const config = join(directory, `${name}.json`);
-  writeFileSync(config, JSON.stringify({ connections: [{ name, url: db }] }));
-  const port = await freePort();
-  const child = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/tablewalk/src/server/index.ts', '--config', config, '--port', String(port)],
-    {
-      cwd: ROOT,
-      stdio: 'ignore',
-      env: { ...process.env, ...PINNED, XDG_CONFIG_HOME: join(directory, 'workbench-config') },
-    },
-  );
-  return listening(child, port, `the database browser over ${name}`);
-}
 
 /** A sample App served here, signed out, over the database `seed` made; `stop` ends it. For an address `shot` does
  * not take — the sign-in screen is the App's door, not one of its routes. */
@@ -199,8 +164,8 @@ async function listening(child, port, what) {
   throw new Error(`${what} did not start on ${origin}`);
 }
 
-/** One picture of a page served here (the Workbench, or an App's door) as PNG bytes, taken the way `shot` takes an App's. */
-async function workbenchShot(browser, origin, entry) {
+/** One picture of a page served here (an App's door) as PNG bytes, taken the way `shot` takes an App's. */
+async function servedShot(browser, origin, entry) {
   const viewport = { width: entry.width ?? SIZE[entry.viewport].width, height: SIZE[entry.viewport].height };
   const context = await browser.newContext({
     viewport,
@@ -363,7 +328,7 @@ async function main() {
   if (listOnly) {
     for (const entry of shots)
       console.log(
-        `${entry.file}  ${entry.story ? `story ${entry.story}` : (entry.app ?? `workbench ${entry.workbench}`)} ${entry.route ?? ''} ${entry.look ?? 'own look'} ${entry.viewport}${entry.recipes ? ` recipes.${entry.recipes}` : ''}`,
+        `${entry.file}  ${entry.story ? `story ${entry.story}` : entry.app} ${entry.route ?? ''} ${entry.look ?? 'own look'} ${entry.viewport}${entry.recipes ? ` recipes.${entry.recipes}` : ''}`,
       );
     return;
   }
@@ -371,7 +336,7 @@ async function main() {
 
   const work = mkdtempSync(join(tmpdir(), 'tablewalk-docs-shots-'));
   const configs = new Map();
-  const workbenches = new Map();
+  const servers = new Map();
   /* Each App seeded once, its people made once, its config's path. */
   const prepared = (app) => {
     if (!configs.has(app)) {
@@ -385,30 +350,21 @@ async function main() {
     for (const entry of shots) {
       const started = Date.now();
       if (entry.story) {
-        if (!workbenches.has('library')) workbenches.set('library', await startLibrary());
+        if (!servers.has('library')) servers.set('library', await startLibrary());
         browser ??= await (await import('playwright')).chromium.launch();
         await write(
           whole ? { ...entry, clip: undefined } : entry,
-          sharp(await storyShot(browser, workbenches.get('library').origin, entry)),
+          sharp(await storyShot(browser, servers.get('library').origin, entry)),
           out,
         );
         console.log(`${entry.file}  ${((Date.now() - started) / 1000).toFixed(1)}s`);
         continue;
       }
-      if (entry.workbench || entry.served) {
-        const key = entry.workbench ?? `app:${entry.app}`;
-        if (!workbenches.has(key)) {
-          if (entry.workbench) workbenches.set(key, await startWorkbench(entry.workbench, work));
-          else {
-            workbenches.set(key, await startApp(entry.app, prepared(entry.app), work));
-          }
-        }
+      if (entry.served) {
+        const key = `app:${entry.app}`;
+        if (!servers.has(key)) servers.set(key, await startApp(entry.app, prepared(entry.app), work));
         browser ??= await (await import('playwright')).chromium.launch();
-        await write(
-          whole ? { ...entry, clip: undefined } : entry,
-          sharp(await workbenchShot(browser, workbenches.get(key).origin, entry)),
-          out,
-        );
+        await write(whole ? { ...entry, clip: undefined } : entry, sharp(await servedShot(browser, servers.get(key).origin, entry)), out);
         console.log(`${entry.file}  ${((Date.now() - started) / 1000).toFixed(1)}s`);
         continue;
       }
@@ -456,7 +412,7 @@ async function main() {
     }
   } finally {
     await browser?.close();
-    for (const { stop } of workbenches.values()) stop();
+    for (const { stop } of servers.values()) stop();
     rmSync(work, { recursive: true, force: true });
   }
 }

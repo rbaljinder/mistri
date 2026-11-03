@@ -1,4 +1,3 @@
-// test-package: shared — holds the database browser and the App framework to one rule (scripts/test-owners.mjs).
 /**
  * Hidden columns: an App's `hidden` (with or without sign-in) and a
  * connection's `"hidden"` in tablewalk.json. The claim is the server's: a
@@ -19,7 +18,6 @@ import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { Registry, type ConnectionConfig } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
 import { clearJournal } from '../packages/engine/src/server/journal.js';
-import { runTool } from '../packages/tablewalk/src/server/mcp/registry.js';
 import { historyRules } from '../packages/mistri/src/server/recordHistory.js';
 import { parseHiddenColumns } from '../packages/engine/src/server/hiddenColumns.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
@@ -331,7 +329,7 @@ test('a rollup query over a table with hidden columns is refused only where it n
   }
 });
 
-test('a connection\'s "hidden" covers the Workbench and every MCP tool, and refuses raw SQL', async () => {
+test('a connection\'s "hidden" covers every generic read and write the server answers, and refuses raw SQL', async () => {
   await serve({ connection: { hidden: { account: ['password_hash'], '*': ['*_secret'] } } }, async ({ call, registry, id }) => {
     await everyRead(call);
     /* Writes through the connection: a visible column saves, a hidden one is
@@ -346,34 +344,14 @@ test('a connection\'s "hidden" covers the Workbench and every MCP tool, and refu
     assert.ok(removed.status >= 400 || (removed.body.deleted === false && removed.body.errors?.length), removed.text);
     valueFree(removed.text);
     assert.equal((await call('/api/run', { q: 'account' })).body.rows.length, 2, 'the refused delete removed nothing');
-    const listed = await call('/api/connections');
-    assert.equal(listed.body.connections?.[0]?.hidesColumns ?? listed.body[0]?.hidesColumns, true);
-    for (const [name, args] of [
-      ['table', { table: 'account' }],
-      ['tables', {}],
-      ['schema_summary', {}],
-      ['record', { table: 'account', key: { id: 1 } }],
-      ['query', { q: 'account' }],
-      ['profile', { table: 'account' }],
-      ['find', { q: HASH }],
-      ['find', { q: 'password' }],
-    ] as const) {
-      const answer = await runTool(registry, name, { connection: id, ...args });
-      clean(answer, `${name} ${JSON.stringify(args)}`);
-    }
-    for (const [name, args] of [
-      ['query', { q: `account password_hash = ${HASH}` }],
-      ['query', { q: 'account sort api_secret' }],
-      ['sql', { statement: 'SELECT password_hash FROM account' }],
-      ['breakdown', { q: 'account count by password_hash' }],
-    ] as const) {
-      const answer = await runTool(registry, name, { connection: id, ...args });
-      valueFree(answer, `${name} ${JSON.stringify(args)}`);
-      assert.ok(
-        answer.isError || (answer.structuredContent as { errors?: unknown[] } | undefined)?.errors?.length,
-        `${name} ${JSON.stringify(args)} answered: ${answer.content[0]?.text.slice(0, 200)}`,
-      );
-    }
+    // The connection says so to whoever lists it, so a product's SQL box is not offered where SQL is refused.
+    assert.equal(registry.list().find((connection) => connection.id === id)?.hidesColumns, true);
+    /* Raw SQL can name any column, in any spelling: the connection refuses it
+       outright, whoever asks — a product's SQL pane or agent tool reaches it
+       only through this adapter. */
+    const { adapter } = await registry.open(id);
+    await assert.rejects(adapter.runSql!({ text: 'SELECT password_hash FROM account', limit: 10 }), /raw SQL is refused/);
+    await assert.rejects(adapter.explainSql!({ text: 'SELECT password_hash FROM account' }), /explaining raw SQL is refused/);
   });
 });
 

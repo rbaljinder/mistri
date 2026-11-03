@@ -71,8 +71,3 @@ test('boot reads the path, never a #/ fragment', () => {
 test('config files and credentials are looked for under tablewalk only', () => {
   for (const path of [...configLocations(), credentialsPath()]) assert.doesNotMatch(path, /datawalk/i);
 });
-
-test('the package has no root export: nothing imports bare `tablewalk`', () => {
-  const pkg = JSON.parse(read('packages/tablewalk/package.json')) as { exports: Record<string, unknown> };
-  assert.equal(Object.hasOwn(pkg.exports, '.'), false);
-});

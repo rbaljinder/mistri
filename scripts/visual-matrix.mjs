@@ -203,14 +203,7 @@ export async function startApp(dir, app) {
   };
   const server = spawn(
     process.execPath,
-    [
-      '--import',
-      'tsx',
-      `packages/${app.serve(db).includes('--app') ? 'mistri' : 'tablewalk'}/src/server/index.ts`,
-      ...app.serve(db),
-      '--port',
-      String(port),
-    ],
+    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', ...app.serve(db), '--port', String(port)],
     {
       cwd: ROOT,
       env: { ...process.env, ...env },
@@ -498,7 +491,7 @@ export const APPS = [
     ],
   },
   /* The general-path sample's staff App, served on its own: its host, the school's React site, is not a page of
-     tablewalk's to picture. Signed in as its administrator; the check-in page on tonight's class. */
+     mistri's to picture. Signed in as its administrator; the check-in page on tonight's class. */
   {
     id: 'ladle',
     seed: (db) => run(process.execPath, ['examples/databases/ladle/seed.mjs', db]),
@@ -531,21 +524,8 @@ export const APPS = [
       ['carrier', '/@carrier~car-01'],
     ],
   },
-  /* Read by `--styles` only: the rooms `npm run smoke` walks — the database browser over the built-in demo, which
-     wears no look and so is read once, and the App the smoke opens over it — so a refactor of the shared sheets is
-     proven on the Workbench too. A release's pictures are of the sample Apps. */
-  {
-    id: 'workbench',
-    stylesOnly: true,
-    looks: [APP_DEFAULT],
-    seed: async () => {},
-    serve: () => ['--demo', '--no-config'],
-    pages: [
-      ['landing', '/demo'],
-      ['table', '/demo/invoice'],
-      ['record', '/demo/invoice/~1'],
-    ],
-  },
+  /* Read by `--styles` only: the App `npm run smoke` walks, over the built-in demo. A release's pictures are of the
+     sample Apps. */
   {
     id: 'fieldops',
     stylesOnly: true,

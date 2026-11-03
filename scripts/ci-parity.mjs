@@ -4,7 +4,9 @@
  *
  * 0.9.2 took three CI runs that failed on things no local suite looked at:
  *   - the Dockerfile still COPY'd examples/apps/compass after it moved to
- *     test/fixtures/apps/crm, and only the Docker job builds the image;
+ *     test/fixtures/apps/crm, and only the Docker job builds the image (that
+ *     was the database browser's image, which left with it; the sample
+ *     image, examples/docker/Dockerfile, builds the same way);
  *   - CI's brotli measured the App's first-paint script a few bytes over a
  *     ceiling the local build had met, because the two compressors differ by
  *     bytes and the ceiling sat closer than that;
@@ -12,7 +14,7 @@
  *     and the local Node lane that compares them had run before the change.
  *
  * So, before a release PR is pushed:
- *   - every COPY source of the Dockerfile's build exists, and everything
+ *   - every COPY source of the sample image's build (examples/docker/Dockerfile) exists, and everything
  *     `npm run build` reads (the scripts it runs, the configs it names, the
  *     fixture Apps scripts/type-budget.mjs measures) is copied into it;
  *   - the generated CLI and DSL references match what they are generated from;
@@ -84,16 +86,19 @@ export function buildInputs(root = ROOT) {
   return [...inputs];
 }
 
+/** The image this repository builds: the sample Apps' (the database browser's left with it). */
+export const DOCKERFILE = 'examples/docker/Dockerfile';
+
 function docker() {
   const problems = [];
-  const sources = dockerCopySources(read('Dockerfile'));
+  const sources = dockerCopySources(read(DOCKERFILE));
   for (const { path } of sources) {
-    if (!existsSync(join(ROOT, path))) problems.push(`Dockerfile copies ${path}, which does not exist`);
+    if (!existsSync(join(ROOT, path))) problems.push(`${DOCKERFILE} copies ${path}, which does not exist`);
   }
   const built = sources.filter((source) => source.stage === 'build').map((source) => source.path);
   const covered = (path) => built.some((source) => source === '.' || path === source || path.startsWith(`${source}/`));
   for (const path of buildInputs()) {
-    if (!covered(path)) problems.push(`npm run build reads ${path}, which the Dockerfile's build stage does not copy`);
+    if (!covered(path)) problems.push(`npm run build reads ${path}, which ${DOCKERFILE}'s build stage does not copy`);
   }
   return problems;
 }
@@ -147,5 +152,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (problems.length) {
     console.error(`ci-parity:\n${problems.map((problem) => `  ${problem}`).join('\n')}`);
     process.exitCode = 1;
-  } else console.log('ci-parity: Dockerfile inputs, CLI and DSL references agree.');
+  } else console.log(`ci-parity: ${DOCKERFILE} inputs, CLI and DSL references agree.`);
 }

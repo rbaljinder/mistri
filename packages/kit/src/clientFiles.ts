@@ -1,8 +1,8 @@
 /**
  * Where the page every server sends comes from. The page is the kit's: its index.html, its entry (boot.js) and the
  * shell, which start the main of the product that built it (shellStart.js, `virtual:mistri/shell-main`). Each product
- * builds it into its own dist/client with the kit's Vite preset (`@mistriwork/kit/vite`) — the database browser's with
- * config/vite.tablewalk.config.ts, the App framework's with config/vite.mistri.config.ts — and names that build with
+ * builds it into its own dist/client with the kit's Vite preset (`@mistriwork/kit/vite`) — the App framework's with
+ * config/vite.mistri.config.ts, the database browser's with its own in its own repository — and names that build with
  * `clientFiles`; the engine serves whichever files it is handed (clientHttp.ts, devclient.ts).
  *
  * From source — under tsx — Vite serves the kit's client folder with the vite.config.ts of the product's workspace,

@@ -99,7 +99,7 @@ vi.mock('../page.js', () => ({ pageById, pagesFor }));
 vi.mock('./appListModel.js', () => ({ appListFor: () => ({ table: 'issue' }), appListQuery: () => 'issue' }));
 vi.mock('./pageModel.js', () => ({ rootMatches: matches, rootLabel: (key: Record<string, unknown>) => Object.values(key).join(' · ') }));
 vi.mock('../pagemarks.js', () => ({ rememberVisit: visit, forgetPage: forget }));
-vi.mock('../../../../tablewalk/src/client/pagebuilder.js', () => ({ openBuilder: builder }));
+vi.mock('../../../../../test/hostPageBuilder.js', () => ({ openBuilder: builder }));
 vi.mock('../url.js', () => ({ syncHash: sync, readdress: () => undefined }));
 vi.mock('../filterbar.js', () => ({ deriveFilterNames: () => ['name'] }));
 vi.mock('./Rooms.js', () => ({ AppListRoom: () => <div>Collection chooser</div> }));

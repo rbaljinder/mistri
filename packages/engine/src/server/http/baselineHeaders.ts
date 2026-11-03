@@ -18,7 +18,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { arrivedOverHttps, type ProxyRange } from './trust.js';
 
+/** @public the database browser's (scripts/boundary/entries.json, "host") */
 export const REFERRER_POLICY = 'strict-origin-when-cross-origin';
+/** @public the database browser's (scripts/boundary/entries.json, "host") */
 export const PERMISSIONS_POLICY =
   'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), hid=(), midi=(), ' +
   'magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), browsing-topics=()';

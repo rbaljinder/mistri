@@ -51,28 +51,6 @@ async function listening(registry: Registry, apps: AppHost[] | undefined, run: (
 
 const get = (base: string, path: string) => fetch(`${base}${path}`, { signal: AbortSignal.timeout(2_000) });
 
-test('standalone runtime preserves the connection inventory without opening a database', { timeout: 5_000 }, async (t) => {
-  for (const apps of [undefined, []]) {
-    const registry = new Registry();
-    registry.add({ id: 'workbench', name: 'Workbench database', url: '/missing/workbench.db', source: 'config', writable: true });
-    const opened = t.mock.method(registry, 'open', async () => {
-      throw new Error('Unexpected database open');
-    });
-    const expected = JSON.parse(JSON.stringify(registry.list()));
-    await listening(registry, apps, async (base) => {
-      const runtime = await get(base, '/api/runtime');
-      assert.equal(runtime.status, 200);
-      assert.deepEqual(await runtime.json(), { appConfigured: false });
-      const response = await get(base, '/api/connections');
-      assert.equal(response.status, 200);
-      const metadata = await response.json();
-      assert.deepEqual(metadata.connections, expected);
-      assert.equal(metadata.active, 'workbench');
-      assert.equal(opened.mock.callCount(), 0);
-    });
-  }
-});
-
 test('app runtime exposes authored identities with no default across multiple apps', { timeout: 5_000 }, async (t) => {
   const registry = new Registry();
   registry.add({
@@ -145,31 +123,27 @@ test('missing app bindings never fall back to an unrelated active source', { tim
   });
 });
 
-test('empty standalone and app listeners can bootstrap without a database', { timeout: 5_000 }, async (t) => {
-  for (const apps of [undefined, [app()]]) {
-    const registry = new Registry();
-    const opened = t.mock.method(registry, 'open', async () => {
-      throw new Error('Unexpected database open');
+test('an empty App listener can bootstrap without a database', { timeout: 5_000 }, async (t) => {
+  const registry = new Registry();
+  const opened = t.mock.method(registry, 'open', async () => {
+    throw new Error('Unexpected database open');
+  });
+  await listening(registry, [app()], async (base) => {
+    const runtime = await get(base, '/api/runtime');
+    assert.equal(runtime.status, 200);
+    assert.deepEqual(await runtime.json(), {
+      appConfigured: true,
+      active: 'fixture',
+      apps: [{ id: 'fixture', name: 'Fixture app', writable: false }],
     });
-    await listening(registry, apps, async (base) => {
-      const runtime = await get(base, '/api/runtime');
-      assert.equal(runtime.status, 200);
-      assert.deepEqual(
-        await runtime.json(),
-        apps
-          ? { appConfigured: true, active: 'fixture', apps: [{ id: 'fixture', name: 'Fixture app', writable: false }] }
-          : { appConfigured: false },
-      );
-      const schema = await get(base, '/api/schema');
-      assert.equal(schema.status, apps ? 503 : 409);
-      await schema.text();
-      const connections = await get(base, '/api/connections');
-      assert.equal(connections.status, apps ? 403 : 200);
-      const metadata = await connections.json();
-      if (!apps) assert.deepEqual(metadata.connections, []);
-      assert.equal(opened.mock.callCount(), 0);
-    });
-  }
+    const schema = await get(base, '/api/schema');
+    assert.equal(schema.status, 503);
+    await schema.text();
+    const connections = await get(base, '/api/connections');
+    assert.equal(connections.status, 403);
+    await connections.json();
+    assert.equal(opened.mock.callCount(), 0);
+  });
 });
 
 test('app connection management is denied for every method and subpath before opening a database', { timeout: 10_000 }, async (t) => {

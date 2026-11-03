@@ -24,7 +24,6 @@ npx @mistriwork/mistri --config ./mistri.json --app ./build/my-app  # served wit
 
 - Use a build for production: the start-time work is done once, in CI, and a broken App never reaches a server.
 - Run the App from its source directory instead while you build it: a save reloads it, and the build is optional.
-- The database browser has no build step at all: `npx tablewalk <db>` is its whole deployment.
 
 ## Options
 

@@ -4,9 +4,9 @@
  * Every other browser suite runs the server under tsx, which serves the
  * source tree through Vite: none of the build's choices exist there — no
  * content-named files, no compressed copies, no chunks loaded on demand. So
- * this starts the compiled server (`node --conditions=mistri-built packages/{tablewalk,mistri}/dist/server/index.js`) and looks at
- * what it sends: Forecourt's public landing and one of its lists, and the
- * Workbench, each from a cold cache and again from a warm one. It fails on
+ * this starts the compiled server (`node --conditions=mistri-built packages/mistri/dist/server/index.js`) and looks at
+ * what it sends: Forecourt's public landing and one of its lists, its staff
+ * sign-in and Tick's list, each from a cold cache and again from a warm one. It fails on
  * a console error or an uncaught page error anywhere, on a script or a
  * stylesheet sent uncompressed or without its year of caching, on a warm
  * visit that downloads an asset again, and on a chunk that fails to load
@@ -28,17 +28,9 @@ import { chromium } from '@playwright/test';
 import { readyBrowserChild } from './support/ownedBrowserChild.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-/* Each binary's compiled entry: an App's start is mistri's, a database's tablewalk's. */
-const built = {
-  tablewalk: join(root, 'packages/tablewalk/dist/server/index.js'),
-  mistri: join(root, 'packages/mistri/dist/server/index.js'),
-};
-assert.ok(
-  existsSync(built.tablewalk) &&
-    existsSync(built.mistri) &&
-    ['tablewalk', 'mistri'].every((product) => existsSync(join(root, `packages/${product}/dist/client/index.html`))),
-  'Build the package first: npm run build.',
-);
+/* The binary's compiled entry. */
+const built = join(root, 'packages/mistri/dist/server/index.js');
+assert.ok(existsSync(built) && existsSync(join(root, 'packages/mistri/dist/client/index.html')), 'Build the package first: npm run build.');
 const scratch = mkdtempSync(join(tmpdir(), 'tablewalk-built-client-'));
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 /* What a cold first visit may take off the wire, page and assets, before the
@@ -148,12 +140,12 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
 // rc.11 adds the field reports' client fixes: money said to its currency's minor digits, a form's review naming a
 // reference's record, documents' day dates and print sheet, and the clearer messages. Measured: 250.1 KB the staff
 // sign-in, 453.2 KB Forecourt's list and 565.8 KB Tick's list; each ceiling passed moves to about 0.5% above.
-const FIRST_PAINT_WIRE_KB = { public: 251.4, app: 455.5, workshop: 568.6, workbench: 425 };
+// The database browser's Workbench left for its own repository, and its ceiling with it.
+const FIRST_PAINT_WIRE_KB = { public: 251.4, app: 455.5, workshop: 568.6 };
 const NEVER = {
-  public: ['/assets/shell', '/assets/chrome', '/assets/workbench', '/assets/tenant'],
-  app: ['/assets/workbench', '/assets/tenant', '/assets/public'],
-  workshop: ['/assets/workbench', '/assets/tenant', '/assets/public'],
-  workbench: ['/assets/chrome', '/assets/tenant', '/assets/public'],
+  public: ['/assets/shell', '/assets/chrome', '/assets/tenant'],
+  app: ['/assets/tenant', '/assets/public'],
+  workshop: ['/assets/tenant', '/assets/public'],
 };
 
 async function freePort() {
@@ -164,27 +156,22 @@ async function freePort() {
   return port;
 }
 
-/** The compiled server, as `npx tablewalk` would run it, answering once it says it listens. */
+/** The compiled server, as `npx mistri` would run it, answering once it says it listens. */
 async function start(name, args, env = {}) {
   const port = await freePort();
-  const child = spawn(
-    process.execPath,
-    ['--conditions=mistri-built', args.includes('--app') ? built.mistri : built.tablewalk, ...args, '--port', String(port)],
-    {
-      cwd: root,
-      // --demo has a fixed basename within tmpdir(); give each run its own
-      // temporary root so it cannot reseed another preview's demo database.
-      env: {
-        ...process.env,
-        TMPDIR: scratch,
-        XDG_CONFIG_HOME: join(scratch, `${name}-xdg`),
-        TABLEWALK_OPEN: '0',
-        MISTRI_OPEN: '0',
-        ...env,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+  const child = spawn(process.execPath, ['--conditions=mistri-built', built, ...args, '--port', String(port)], {
+    cwd: root,
+    // Each run its own temporary root, so nothing it seeds is another run's.
+    env: {
+      ...process.env,
+      TMPDIR: scratch,
+      XDG_CONFIG_HOME: join(scratch, `${name}-xdg`),
+      TABLEWALK_OPEN: '0',
+      MISTRI_OPEN: '0',
+      ...env,
     },
-  );
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   const owner = await readyBrowserChild(child, name);
   return { origin: `http://127.0.0.1:${port}`, stop: owner.stop };
 }
@@ -316,8 +303,6 @@ try {
   execFileSync(process.execPath, [join(root, 'examples/databases/tick/seed.mjs'), tickDb], { cwd: root, stdio: 'ignore' });
   const tick = await start('tick', ['--config', `${tickDb}.json`, '--app', 'examples/apps/tick']);
   servers.push(tick);
-  const workbench = await start('workbench', ['--demo', '--no-config']);
-  servers.push(workbench);
   browser = await chromium.launch();
 
   /* A page is drawn when the parts it asked for have arrived and drawn what they hold: the cards come from a part loaded
@@ -337,7 +322,6 @@ try {
     await page.getByRole('list', { name: 'Vehicles' }).getByRole('listitem').first().waitFor();
     await cardsDrawn(page);
   };
-  const schema = (page) => page.locator('.diagram-schema > *').first().waitFor();
   const signIn = (page) => page.locator('.signin-title').waitFor();
   const tasks = (page) => page.getByRole('checkbox').first().waitFor();
   for (const [label, url, ready, surface] of [
@@ -345,7 +329,6 @@ try {
     ['Forecourt public landing', `${forecourt.origin}/`, landing, 'app'],
     ['Forecourt list (an App list page)', `${forecourt.origin}/vehicles`, list, 'app'],
     ['Tick list (a Workshop App, its faces preloaded)', `${tick.origin}/`, tasks, 'workshop'],
-    ['Workbench landing', `${workbench.origin}/`, schema, 'workbench'],
   ]) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const cold = await visit(context, url, ready);
@@ -400,14 +383,14 @@ try {
     await context.close();
   }
 
-  // The Workbench draws its schema through a chunk loaded on demand; that chunk
-  // arrives after the entry. After a deploy the old name is gone, and the SPA
-  // fallback answers it with the page — which is what is served here.
+  // An App list draws its cards through a chunk loaded on demand (CardsList);
+  // that chunk arrives after the entry. After a deploy the old name is gone,
+  // and the SPA fallback answers it with the page — which is what is served here.
   const broken = await browser.newContext();
-  await broken.route(/\/assets\/Diagram-[\w-]+\.js$/, (route) =>
-    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><title>tablewalk</title>' }),
+  await broken.route(/\/assets\/CardsList-[\w-]+\.js$/, (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><title>Forecourt</title>' }),
   );
-  const failed = await visit(broken, `${workbench.origin}/`, (page) =>
+  const failed = await visit(broken, `${forecourt.origin}/vehicles`, (page) =>
     page.getByRole('alert').filter({ hasText: 'could not be loaded' }).waitFor(),
   );
   assert.ok(await failed.page.getByRole('button', { name: 'Reload' }).isVisible(), 'a failed chunk offers a reload');

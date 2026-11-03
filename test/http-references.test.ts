@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, test } from 'node:test';
-import { DEFAULT_POLICY } from '../packages/engine/src/adapters/http/egress.js';
-import { HttpAdapter } from '../packages/engine/src/adapters/http/httpAdapter.js';
-import { describedSchema, draftDescription, readDescription } from '../packages/engine/src/adapters/http/httpDescription.js';
-import { readOpenApi } from '../packages/engine/src/adapters/http/openapi.js';
-import { Registry } from '../packages/engine/src/server/connections.js';
+import { DEFAULT_POLICY } from '@mistriwork/engine/adapters/http/egress.js';
+import { HttpAdapter } from '@mistriwork/engine/adapters/http/httpAdapter.js';
+import { describedSchema, draftDescription, readDescription } from '@mistriwork/engine/adapters/http/httpDescription.js';
+import { readOpenApi } from '@mistriwork/engine/adapters/http/openapi.js';
+import { Registry } from '@mistriwork/engine/server/connections.js';
 import { createApp } from './support/createApp.js';
-import { Refusal } from '../packages/engine/src/shared/refusal.js';
+import { Refusal } from '@mistriwork/engine/shared/refusal.js';
 import { startFakeRest } from './support/fakeRest.js';
 
 /* References between an API's resources: guessed from a column's name by the

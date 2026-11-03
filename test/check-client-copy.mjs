@@ -83,8 +83,6 @@ const ALLOWED = [
   { file: 'components/sdk/blocks.tsx', text: 'Gantt', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Assistant', reason: "a block's component name, as the author writes it in JSX" },
   { file: '*', text: 'SQL', reason: "the language's name" },
-  { file: '*', text: 'tablewalk', reason: "the product's name" },
-  { file: '*', text: 'tablewalk.json', reason: "the name of the database browser's configuration file" },
   {
     file: 'components/builtInInputs.tsx',
     text: 'italic 40px Georgia, "Times New Roman", serif',
@@ -119,16 +117,8 @@ const ALLOWED = [
   { file: 'components/useListOrder.tsx', text: 'Alt+ArrowUp Alt+ArrowDown', reason: 'aria-keyshortcuts: key names, not words' },
   { file: 'components/groupMoves.tsx', text: 'Alt+ArrowUp Alt+ArrowDown', reason: 'aria-keyshortcuts: key names, not words' },
   { file: 'components/ApiOperations.tsx', text: 'GET', reason: 'an HTTP method' },
-  { file: 'components/AgentConsole.tsx', text: 'isError', reason: "the name of an MCP result's field" },
-  { file: 'components/ConnectionDialog.tsx', text: 'PROD_PASSWORD', reason: 'an example environment variable name' },
-  { file: 'components/ConnectionDialog.tsx', text: 'postgres://', reason: 'the start of a connection URL, as typed' },
   { file: 'components/QrCode.tsx', text: 'Byte', reason: "the QR encoder's mode name, an argument, never drawn" },
   { file: 'components/builtInInputs.tsx', text: '#1d6a5a', reason: 'an example color code, as typed' },
-  {
-    file: 'components/Welcome.tsx',
-    text: '{\n  "connections": [\n    { "name": "app", "url": "postgres://localhost/appdb" }\n  ]\n}',
-    reason: 'a configuration file, shown as written',
-  },
   {
     file: 'observe/beacon.js',
     text: '500 11.5px/1 var(--code, ui-monospace, monospace)',
@@ -142,11 +132,9 @@ const ALLOWED = [
   { file: 'components/diagramModel.ts', text: 'time without time zone', reason: 'a PostgreSQL type name' },
   { file: 'components/diagramModel.ts', text: 'character varying', reason: 'a PostgreSQL type name' },
   { file: 'components/diagramModel.ts', text: 'double precision', reason: 'a PostgreSQL type name' },
-  { file: 'components/Ask.tsx', text: 'customer active = true sort name limit 20', reason: 'a query-language example' },
   { file: 'components/filterRailModel.ts', text: 'has {}', reason: 'a query-language condition the tags facet writes' },
   { file: 'components/filterRailModel.ts', text: 'has ({})', reason: 'a query-language condition the tags facet writes' },
   { file: 'publicAddress.ts', text: '{} has {}', reason: 'a query-language condition read back from an address' },
-  { file: 'components/Ask.tsx', text: 'invoice count by status', reason: 'a query-language example' },
   { file: 'tour.js', text: 'customer active = true sort name limit 20', reason: 'a query-language example' },
   {
     file: 'components/Composer.tsx',
@@ -726,7 +714,11 @@ const sources = clientFiles().map((path) => [named.get(path), readFileSync(path,
 const saying = new Map(
   sources.filter(([rel]) => !CATALOG.some((re) => re.test(rel))).map(([rel]) => [rel, keysSaid(TREES.get(real.get(rel)))]),
 );
-const anywhere = new Set([...saying.values()].flatMap((keys) => [...keys]));
+/* The kit's shared words the database browser says and nothing here does: it builds from the published kit in its own
+   repository (scripts/boundary/entries.json, "host"), so these stay in the catalog for it. Taking one off is a
+   deliberate edit, as taking a name off the host list is. */
+const SAID_BY_HOST = new Set(['common.connections', 'common.agentConsole']);
+const anywhere = new Set([...saying.values()].flatMap((keys) => [...keys]).concat([...SAID_BY_HOST]));
 for (const [rel, text] of sources.filter(([rel]) => CATALOG.some((re) => re.test(rel)))) {
   /* A module's table is said by that module alone: copy/lists/components/Grid.ts by components/Grid.tsx. */
   const mirror = /^src\/client\/copy\/\w+\/(.+)\.ts$/.exec(rel)?.[1];

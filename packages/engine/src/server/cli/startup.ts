@@ -1,8 +1,8 @@
 /**
  * What every start does before its mode, whichever binary runs it: the questions answered without starting
  * anything (`--help`, `--version`, a typo), and the process's settings the flags make (the proxies it believes,
- * its pools). Both mains call these (packages/tablewalk/src/server/cli/browserMain.ts,
- * packages/mistri/src/server/cli/mistriMain.ts), each with its own words (`Product`), and each binary runs its own
+ * its pools). Both mains call these (packages/mistri/src/server/cli/mistriMain.ts here, the database browser's in
+ * its own repository), each with its own words (`Product`), and each binary runs its own
  * main (bin.ts).
  */
 import { parseClientAddressPolicy, parseTrustedProxies } from '../http/trust.js';

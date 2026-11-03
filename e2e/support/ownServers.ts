@@ -1,27 +1,26 @@
 /**
- * The three fixture servers, one set per worker.
+ * The two fixture App servers, one set per worker.
  *
- * `playwright.config.ts` starts three servers for the whole suite — the
- * explorer over the fixture databases, Field Ops over the demo, Compass over
- * the CRM — and a tablewalk process holds one active connection, so every
- * spec that addresses them runs one at a time (scripts/e2e-lanes.mjs). A spec
+ * `playwright.config.ts` starts two servers for the whole suite — Field Ops
+ * over the demo, Compass over the CRM — and a spec that addresses them shares
+ * their stores with every other, so it runs one at a time
+ * (scripts/e2e-lanes.mjs). A spec
  * that imports `test` from here addresses servers of its worker's own instead:
  * each on a port reserved when this module loads, over copies of the fixture
  * databases in a `mkdtemp` directory, with a config store of its own. Nothing
  * is shared with another worker, so such a spec runs in the parallel lane.
  *
- * A spec names the servers it uses (`test.use({ servers: ['explorer', 'crm'] })`;
- * the explorer alone when it says nothing). They start before its first test
- * and stop with the worker. The first named is `baseURL`, so `page.goto('/demo')`
- * and support/app's `open()` read as they did against the config's server; the
- * others are addressed by their origin below. Every one is marked as having
- * shown its tour, as the config's `seen-tour.json` marks its three.
+ * A spec names the servers it uses (`test.use({ servers: ['crm', 'fieldops'] })`;
+ * Compass alone when it says nothing). They start before its first test
+ * and stop with the worker. The first named is `baseURL`, so a path reads as
+ * it did against the config's server; the others are addressed by their origin
+ * below. Every one is marked as having shown its tour, as the config's
+ * `seen-tour.json` marks its two.
  *
  * The paths below are this worker's copies — a spec that asks the database
  * what the page should say asks the one its server serves.
  *
- * test-package: dispatch — a spec that imports this is owned by the servers it names (scripts/test-owners.mjs):
- * the explorer is the database browser's, Field Ops and Compass are mistri's.
+ * Both serve an App, so a spec that imports this is mistri's (scripts/test-owners.mjs).
  */
 import { execFileSync, type ChildProcess } from 'node:child_process';
 import { spawn } from './spawned';
@@ -33,9 +32,9 @@ import { test as harness } from './harness';
 
 export { expect } from './harness';
 export type { Locator, Page } from './harness';
-export { DEMO, EDGE, EDGE_LONG_LEN, SCRATCH, WIDE, CRM_CLOCK, CRM_TODAY } from './fixtures';
+export { CRM_CLOCK, CRM_TODAY } from './fixtures';
 
-export type ServerKind = 'explorer' | 'fieldops' | 'crm';
+export type ServerKind = 'fieldops' | 'crm';
 
 /* Reserved as the module loads, in whichever process loads it: the runner
    lists the tests too, and a worker's constants must be the same ones its
@@ -70,12 +69,9 @@ const origin = (at: number) => `http://127.0.0.1:${at}`;
 const worker = process.env.TEST_WORKER_INDEX !== undefined;
 if (worker) mkdirSync(shared.TMP, { recursive: true });
 const HOME = worker ? mkdtempSync(join(shared.TMP, 'own-')) : join(shared.TMP, 'own-runner');
-const PORTS: Record<ServerKind, number> = worker
-  ? { explorer: port(), fieldops: port(), crm: port() }
-  : { explorer: 0, fieldops: 0, crm: 0 };
+const PORTS: Record<ServerKind, number> = worker ? { fieldops: port(), crm: port() } : { fieldops: 0, crm: 0 };
 
 /** This worker's servers, by what they serve. */
-export const EXPLORER = origin(PORTS.explorer);
 export const FIELDOPS = origin(PORTS.fieldops);
 export const CRM = origin(PORTS.crm);
 /** Compass, on this worker's CRM server. */
@@ -91,10 +87,6 @@ const copy = (from: string) => {
   cpSync(from, to);
   return to;
 };
-export const DEMO_DB = copy(shared.DEMO_DB);
-export const WIDE_DB = copy(shared.WIDE_DB);
-export const SCRATCH_DB = copy(shared.SCRATCH_DB);
-export const EDGE_DB = copy(shared.EDGE_DB);
 export const CRM_DB = copy(shared.CRM_DB);
 /** Where Field Ops' `--demo` builds its database, which apps.spec.ts counts rows in. */
 export const APP_DEMO_DB = worker ? join(HOME, 'demo-app', 'demo.db') : shared.APP_DEMO_DB;
@@ -103,7 +95,7 @@ export const APP_DEMO_DB = worker ? join(HOME, 'demo-app', 'demo.db') : shared.A
 export const configHome = (kind: ServerKind) => join(HOME, `xdg-${kind}`);
 
 /** A browser that has seen the tour on these servers: for a context a test builds itself. */
-export function seenTour(kinds: readonly ServerKind[] = ['explorer', 'fieldops', 'crm']) {
+export function seenTour(kinds: readonly ServerKind[] = ['fieldops', 'crm']) {
   return {
     cookies: [],
     origins: kinds.map((kind) => ({ origin: origin(PORTS[kind]), localStorage: [{ name: 'mistri.tour.v1', value: 'done' }] })),
@@ -113,25 +105,6 @@ export function seenTour(kinds: readonly ServerKind[] = ['explorer', 'fieldops',
 /** What each server is, as the config starts it (playwright.config.ts). */
 function launch(kind: ServerKind): { args: string[]; env: Record<string, string> } {
   const xdg = configHome(kind);
-  if (kind === 'explorer') {
-    const config = join(HOME, 'mistri.json');
-    writeFileSync(
-      config,
-      `${JSON.stringify(
-        {
-          connections: [
-            { name: 'demo', url: DEMO_DB },
-            { name: 'wide', url: WIDE_DB },
-            { name: 'scratch', url: SCRATCH_DB, writable: true },
-            { name: 'edge', url: EDGE_DB },
-          ],
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    return { args: ['--config', config], env: { XDG_CONFIG_HOME: xdg } };
-  }
   if (kind === 'fieldops') {
     return {
       args: ['--demo', '--app', 'test/fixtures/apps/fieldops', '--no-config'],
@@ -150,17 +123,9 @@ async function start(kind: ServerKind): Promise<() => Promise<void>> {
   const { args, env } = launch(kind);
   const child: ChildProcess = spawn(
     process.execPath,
-    /* The explorer is the database browser; fieldops and crm serve an App, which is mistri's binary. */
-    [
-      '--import',
-      'tsx',
-      resolve(`packages/${kind === 'explorer' ? 'tablewalk' : 'mistri'}/src/server/index.ts`),
-      ...args,
-      '--port',
-      String(PORTS[kind]),
-    ],
+    ['--import', 'tsx', resolve('packages/mistri/src/server/index.ts'), ...args, '--port', String(PORTS[kind])],
     {
-      env: { ...process.env, [kind === 'explorer' ? 'TABLEWALK_OPEN' : 'MISTRI_OPEN']: '0', ...env },
+      env: { ...process.env, MISTRI_OPEN: '0', ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
@@ -208,7 +173,7 @@ async function start(kind: ServerKind): Promise<() => Promise<void>> {
 }
 
 export const test = harness.extend<object, { servers: ServerKind[]; own: void }>({
-  servers: [['explorer'], { scope: 'worker', option: true }],
+  servers: [['crm'], { scope: 'worker', option: true }],
   own: [
     async ({ servers }, use) => {
       const stops: Array<() => Promise<void>> = [];

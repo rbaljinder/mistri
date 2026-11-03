@@ -1,5 +1,4 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
-import { CRM, CRM_DB, EXPLORER, expect, test } from './support/ownServers';
+import { CRM, CRM_DB, expect, test } from './support/ownServers';
 import { DatabaseSync } from 'node:sqlite';
 import { scalar } from './support/db';
 
@@ -7,45 +6,7 @@ import { scalar } from './support/db';
 test.use({ carryFirstPaint: false });
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
-test.use({ servers: ['crm', 'explorer'] });
-
-for (const width of [1440, 390])
-  test(`date column range uses a nested themed calendar at ${width}px`, async ({ page }) => {
-    // The Workbench's column menu asks a range in a dialog (an App's asks it in
-    // the rail's facet). Column menus are desktop-only; an already open dialog
-    // must also survive a narrow resize (mobile opens date filters through the filter sheet).
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${EXPLORER}/demo/invoice`);
-    await page
-      .locator('th', { hasText: /^invoice_date/ })
-      .locator('.th-filter')
-      .click();
-    await page
-      .locator('.th-menu')
-      .getByRole('menuitem', { name: /between…/ })
-      .click();
-    await page.setViewportSize({ width, height: 900 });
-    const dialog = page.locator('.modal.confirm');
-    const from = dialog.getByRole('textbox', { name: 'Date from', exact: true });
-    const to = dialog.getByRole('textbox', { name: 'Date to', exact: true });
-    await from.fill('2026-09-');
-    await to.fill('2026-09-30');
-    await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-    await expect(dialog).toBeVisible();
-    await expect(from).toHaveAttribute('aria-invalid', 'true');
-    await from.fill('2026-09-13');
-    const trigger = dialog.getByRole('button', { name: 'Choose date for Date from', exact: true });
-    await trigger.click();
-    await expect(dialog.locator('.date-field-popup')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(dialog.locator('.date-field-popup')).toHaveCount(0);
-    await expect(trigger).toBeFocused();
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(page).toHaveURL(/2026-09-13/);
-    await expect(page).toHaveURL(/2026-09-30/);
-  });
+test.use({ servers: ['crm'] });
 
 test('date filter preserves invalid drafts and submits the latest typed date', async ({ page }) => {
   await page.goto(`${CRM}/task-calendar`);

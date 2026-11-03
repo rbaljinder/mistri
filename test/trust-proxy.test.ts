@@ -205,12 +205,12 @@ describe('forwardedClient with --trust-proxy', () => {
 
 describe('the --trust-proxy flag at startup', () => {
   const start = (args: string[], env: Record<string, string> = {}) =>
-    spawnSync(process.execPath, ['--import', 'tsx', 'packages/tablewalk/src/server/index.ts', '--no-config', ...args], {
+    spawnSync(process.execPath, ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--no-config', ...args], {
       encoding: 'utf8',
       timeout: 30_000,
       env: {
         ...process.env,
-        TABLEWALK_TRUST_PROXY: '',
+        MISTRI_TRUST_PROXY: '',
         DATABASE_URL: '',
         ...env,
       },
@@ -224,18 +224,18 @@ describe('the --trust-proxy flag at startup', () => {
     const missing = start(['--trust-proxy']);
     assert.equal(missing.status, 1, missing.stderr);
     assert.match(missing.stderr, /--trust-proxy takes/);
-    const env = start([], { TABLEWALK_TRUST_PROXY: 'fd00::/8 10.0.0.0/33' });
+    const env = start([], { MISTRI_TRUST_PROXY: 'fd00::/8 10.0.0.0/33' });
     assert.equal(env.status, 1, env.stderr);
-    assert.match(env.stderr, /"10\.0\.0\.0\/33" is not one\. It comes from the flag or TABLEWALK_TRUST_PROXY\./);
+    assert.match(env.stderr, /"10\.0\.0\.0\/33" is not one\. It comes from the flag or MISTRI_TRUST_PROXY\./);
   });
 });
 
 describe('the --auth-proxy-from flag at startup', () => {
   const start = (args: string[], env: Record<string, string> = {}) =>
-    spawnSync(process.execPath, ['--import', 'tsx', 'packages/tablewalk/src/server/index.ts', '--no-config', ...args], {
+    spawnSync(process.execPath, ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--no-config', ...args], {
       encoding: 'utf8',
       timeout: 30_000,
-      env: { ...process.env, TABLEWALK_AUTH_PROXY_FROM: '', TABLEWALK_TRUST_PROXY: '', DATABASE_URL: '', ...env },
+      env: { ...process.env, MISTRI_AUTH_PROXY_FROM: '', MISTRI_TRUST_PROXY: '', DATABASE_URL: '', ...env },
     });
 
   test('an entry that is not an address or range stops startup, named', () => {
@@ -243,25 +243,25 @@ describe('the --auth-proxy-from flag at startup', () => {
     assert.equal(flag.status, 1, flag.stderr);
     assert.match(flag.stderr, /--auth-proxy-from takes an IPv4 or IPv6 address or CIDR range/);
     assert.match(flag.stderr, /"proxy\.internal" is not one/);
-    const env = start([], { TABLEWALK_AUTH_PROXY_FROM: '10.0.0.0/33' });
+    const env = start([], { MISTRI_AUTH_PROXY_FROM: '10.0.0.0/33' });
     assert.equal(env.status, 1, env.stderr);
-    assert.match(env.stderr, /"10\.0\.0\.0\/33" is not one\. It comes from the flag or TABLEWALK_AUTH_PROXY_FROM\./);
+    assert.match(env.stderr, /"10\.0\.0\.0\/33" is not one\. It comes from the flag or MISTRI_AUTH_PROXY_FROM\./);
   });
 
   test('the flag and the variable are read into their own list, apart from --trust-proxy', async () => {
     const { parseArgs } = await import('../packages/engine/src/server/cli/args.js');
     const { setProduct } = await import('../packages/engine/src/server/product.js');
-    setProduct('tablewalk');
-    const before = process.env.TABLEWALK_AUTH_PROXY_FROM;
+    setProduct('mistri');
+    const before = process.env.MISTRI_AUTH_PROXY_FROM;
     try {
       const parsed = parseArgs(['--auth-proxy-from', '10.0.0.7', '--trust-proxy', '10.0.0.0/8']);
       assert.deepEqual(parsed.authProxyFrom, ['10.0.0.7']);
       assert.deepEqual(parsed.trustProxy, ['10.0.0.0/8']);
-      process.env.TABLEWALK_AUTH_PROXY_FROM = '10.0.0.8,fd00::7';
+      process.env.MISTRI_AUTH_PROXY_FROM = '10.0.0.8,fd00::7';
       assert.deepEqual(parseArgs([]).authProxyFrom, ['10.0.0.8', 'fd00::7']);
     } finally {
-      if (before === undefined) delete process.env.TABLEWALK_AUTH_PROXY_FROM;
-      else process.env.TABLEWALK_AUTH_PROXY_FROM = before;
+      if (before === undefined) delete process.env.MISTRI_AUTH_PROXY_FROM;
+      else process.env.MISTRI_AUTH_PROXY_FROM = before;
     }
   });
 });
@@ -271,13 +271,13 @@ describe('the retired --trust-proxy-header at startup', () => {
      would start a server that no longer requires the identity header, so it
      stops startup and names the new one: the flag and the variable both. */
   const start = (args: string[], env: Record<string, string> = {}) =>
-    spawnSync(process.execPath, ['--import', 'tsx', 'packages/tablewalk/src/server/index.ts', '--no-config', ...args], {
+    spawnSync(process.execPath, ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--no-config', ...args], {
       encoding: 'utf8',
       timeout: 30_000,
       env: {
         ...process.env,
-        TABLEWALK_TRUST_PROXY_HEADER: '',
-        TABLEWALK_AUTH_PROXY_HEADER: '',
+        MISTRI_TRUST_PROXY_HEADER: '',
+        MISTRI_AUTH_PROXY_HEADER: '',
         DATABASE_URL: '',
         ...env,
       },
@@ -289,28 +289,28 @@ describe('the retired --trust-proxy-header at startup', () => {
     assert.match(run.stderr, /--trust-proxy-header is now --auth-proxy-header/);
   });
 
-  test('the old variable stops startup and names TABLEWALK_AUTH_PROXY_HEADER', () => {
+  test('the old variable stops startup and names MISTRI_AUTH_PROXY_HEADER', () => {
     const run = start([':memory:'], {
-      TABLEWALK_TRUST_PROXY_HEADER: 'X-Forwarded-User',
+      MISTRI_TRUST_PROXY_HEADER: 'X-Forwarded-User',
     });
     assert.equal(run.status, 1, run.stderr);
-    assert.match(run.stderr, /TABLEWALK_TRUST_PROXY_HEADER is now TABLEWALK_AUTH_PROXY_HEADER/);
+    assert.match(run.stderr, /MISTRI_TRUST_PROXY_HEADER is now MISTRI_AUTH_PROXY_HEADER/);
   });
 
   test('the new flag and variable are read', async () => {
     const { parseArgs } = await import('../packages/engine/src/server/cli/args.js');
     /* In this process the engine reads in the browser's name, as the browser's main says (product.ts). */
     const { setProduct } = await import('../packages/engine/src/server/product.js');
-    setProduct('tablewalk');
+    setProduct('mistri');
     assert.equal(parseArgs(['--auth-proxy-header', 'X-Forwarded-User']).authProxyHeader, 'X-Forwarded-User');
     assert.equal(parseArgs(['--trust-proxy-header', 'X-Forwarded-User']).authProxyHeader, undefined);
-    const before = process.env.TABLEWALK_AUTH_PROXY_HEADER;
+    const before = process.env.MISTRI_AUTH_PROXY_HEADER;
     try {
-      process.env.TABLEWALK_AUTH_PROXY_HEADER = 'X-Identity';
+      process.env.MISTRI_AUTH_PROXY_HEADER = 'X-Identity';
       assert.equal(parseArgs([]).authProxyHeader, 'X-Identity');
     } finally {
-      if (before === undefined) delete process.env.TABLEWALK_AUTH_PROXY_HEADER;
-      else process.env.TABLEWALK_AUTH_PROXY_HEADER = before;
+      if (before === undefined) delete process.env.MISTRI_AUTH_PROXY_HEADER;
+      else process.env.MISTRI_AUTH_PROXY_HEADER = before;
     }
   });
 });
@@ -417,7 +417,7 @@ describe('client address behind a managed front end', async () => {
 
   test('startup refuses a bad hop count and accepts the environment variables', () => {
     const run = (args: string[], env: Record<string, string> = {}) =>
-      spawnSync(process.execPath, ['--import', 'tsx', 'packages/tablewalk/src/server/index.ts', '--no-config', ...args], {
+      spawnSync(process.execPath, ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--no-config', ...args], {
         encoding: 'utf8',
         env: { ...process.env, ...env },
         timeout: 30_000,
@@ -425,11 +425,11 @@ describe('client address behind a managed front end', async () => {
     const bad = run([':memory:', '--trust-proxy-hops', 'x']);
     assert.notEqual(bad.status, 0);
     assert.match(bad.stderr, /--trust-proxy-hops takes a whole number/);
-    const fromEnv = run([':memory:'], { TABLEWALK_TRUST_PROXY_HOPS: '0' });
+    const fromEnv = run([':memory:'], { MISTRI_TRUST_PROXY_HOPS: '0' });
     assert.notEqual(fromEnv.status, 0);
-    assert.match(fromEnv.stderr, /TABLEWALK_TRUST_PROXY_HOPS/);
+    assert.match(fromEnv.stderr, /MISTRI_TRUST_PROXY_HOPS/);
     const both = run([':memory:', '--trust-proxy-hops', '1'], {
-      TABLEWALK_TRUST_PROXY_CLOUDFLARE: '1',
+      MISTRI_TRUST_PROXY_CLOUDFLARE: '1',
     });
     assert.notEqual(both.status, 0);
     assert.match(both.stderr, /two ways to find the client: name one/);

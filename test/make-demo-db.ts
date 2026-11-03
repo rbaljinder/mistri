@@ -1,13 +1,12 @@
 /**
  * The demo generator now lives in `packages/engine/src/server/demo.ts` so it ships with the
- * package and backs `tablewalk --demo`. This file stays as the path the test
- * suite and `npm run demo` import, re-exporting the library and keeping the
- * runnable entry point.
+ * package and backs `--demo`. This file stays as the path the test suite
+ * imports, re-exporting the library and keeping the runnable entry point.
  */
 export * from '../packages/engine/src/server/demo.js';
 import { makeDemoDatabase, seedDemoDatabase } from '../packages/engine/src/server/demo.js';
 
-/* Runnable directly, so `npm run demo` can build it before starting.
+/* Runnable directly, to build one by hand.
 
      tsx test/make-demo-db.ts .demo/demo.db            small, the test fixture
      tsx test/make-demo-db.ts .demo/demo.db --scale 2000   ~130k rows

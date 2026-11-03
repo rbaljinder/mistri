@@ -1,6 +1,6 @@
 /** Fresh tarball consumer: public declarations, real App process and virtual CLI.
  * Usage: node scripts/test-installed-testing.mjs <tarball>…
- * Every workspace package's tarball (`npm pack --workspaces`): `tablewalk` needs mistri, @mistriwork/kit and
+ * Every workspace package's tarball (`npm pack --workspaces`): mistri needs @mistriwork/kit, @mistriwork/ui and
  * @mistriwork/engine at its own version, which the registry may not have yet, so every one is installed from the files. */
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
@@ -89,7 +89,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createTestWorkspace, startTestApp, validateTestApp, defineService, startService } from '@mistriwork/mistri/testing';
 assert.ok(import.meta.resolve('@mistriwork/mistri/testing').endsWith('/node_modules/@mistriwork/mistri/dist/server/testing.js'));
-await assert.rejects(import('tablewalk/src/server/testing/host.js'), error => error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED');
+await assert.rejects(import('@mistriwork/mistri/src/server/testing/host.js'), error => error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED');
 await using workspace = await createTestWorkspace();
 const database = await workspace.database('business.db', db => db.exec('CREATE TABLE note(id INTEGER PRIMARY KEY, body TEXT)'));
 await workspace.write('app/app.json', { id: 'installed-notes', name: 'Installed notes', resources: { note: {} }, views: { notes: { kind: 'list', from: 'note' } }, home: 'notes', nav: ['notes'] });

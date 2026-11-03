@@ -17,7 +17,7 @@
  *
  * The server, the databases and the config file it reads are all built here.
  * Nothing outside `e2e/.tmp` is written, and `.demo/` is never read — what a
- * previous `npm run demo` left on disk is not something a test should depend
+ * previous seeding left on disk is not something a test should depend
  * on.
  *
  * `npm run e2e` is `scripts/test-e2e.mjs`, which runs this config twice: once
@@ -33,7 +33,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { APP_DEMO_DB, buildFixtures, CONFIG, CRM_CLOCK, CRM_CONFIG, SEEN_TOUR, TMP, writeSeenTour } from './e2e/support/fixtures';
+import { APP_DEMO_DB, buildFixtures, CRM_CLOCK, CRM_CONFIG, SEEN_TOUR, TMP, writeSeenTour } from './e2e/support/fixtures';
 import { lanes } from './scripts/e2e-lanes.mjs';
 
 /* Every server this config starts, and every spec's own, inherits it: the specs sign in many times from 127.0.0.1,
@@ -77,8 +77,8 @@ function freePort(): number {
    once, for different reasons, and the environment is what carries the answer
    across the fork.
 
-   The port, because a worker that picked its own would point the browser at a
-   port nothing is serving — which is precisely what happened, as a `baseURL`
+   The ports, because a worker that picked its own would point the browser at
+   a port nothing is serving — which is precisely what happened, as a `baseURL`
    of `http://127.0.0.1:NaN`.
 
    The fixtures, because building them starts by deleting the directory. Doing
@@ -88,29 +88,20 @@ function freePort(): number {
    Built here rather than in `globalSetup` because Playwright starts
    `webServer` *before* global setup, and the server opens its first database
    at boot. */
-if (!process.env.TABLEWALK_E2E_PORT) {
-  buildFixtures();
-  process.env.TABLEWALK_E2E_PORT = String(freePort());
-}
-const port = Number(process.env.TABLEWALK_E2E_PORT);
-
-/* A second server, for the app-mode suite: the fieldops example over the
-   built-in demo database. Its own port for the same reason as above, asked
-   again until it differs — freePort closes its listener before answering, so
-   two asks *can* return the same number. `apps.spec.ts` reads this from the
-   environment because the suite's `baseURL` stays the config server's: every
-   existing spec keeps pointing where it always did. */
 if (!process.env.TABLEWALK_E2E_APP_PORT) {
-  let picked = freePort();
-  while (picked === port) picked = freePort();
-  process.env.TABLEWALK_E2E_APP_PORT = String(picked);
+  buildFixtures();
+  process.env.TABLEWALK_E2E_APP_PORT = String(freePort());
 }
+/* The suite's `baseURL`: the fieldops example over the built-in demo
+   database. */
 const appPort = Number(process.env.TABLEWALK_E2E_APP_PORT);
 
-/* A third server, for the CRM example — the app that uses every knob. */
+/* A second server, for the CRM example — the app that uses every knob. Its
+   own port, asked again until it differs: freePort closes its listener before
+   answering, so two asks *can* return the same number. */
 if (!process.env.TABLEWALK_E2E_CRM_PORT) {
   let picked = freePort();
-  while (picked === port || picked === appPort) picked = freePort();
+  while (picked === appPort) picked = freePort();
   process.env.TABLEWALK_E2E_CRM_PORT = String(picked);
 }
 const crmPort = Number(process.env.TABLEWALK_E2E_CRM_PORT);
@@ -118,10 +109,10 @@ const crmPort = Number(process.env.TABLEWALK_E2E_CRM_PORT);
 /* Written once, by whichever process built the fixtures. Every test gets it
    as `storageState`; the three that build their own context ask for it by
    name. Without it every test is a first load, and the tour would put a modal
-   scrim over the whole suite. Both origins, because the app server is its own
+   scrim over the whole suite. Both origins, because each server is its own
    origin and the tour would open there all over again. */
 if (!existsSync(SEEN_TOUR)) {
-  writeSeenTour(`http://127.0.0.1:${port}`, `http://127.0.0.1:${appPort}`, `http://127.0.0.1:${crmPort}`);
+  writeSeenTour(`http://127.0.0.1:${appPort}`, `http://127.0.0.1:${crmPort}`);
 }
 
 export default defineConfig({
@@ -139,20 +130,14 @@ export default defineConfig({
      nothing it had ever been shown. Pinned to the browser so the committed
      baselines stay the baseline, whatever the lanes are called. */
   snapshotPathTemplate: '{snapshotDir}/{testFileDir}/{testFileName}-snapshots/{arg}-chromium{-snapshotSuffix}{ext}',
-  /* One worker, and not for tidiness.
-
-     tablewalk's server holds *one* active connection for the whole process —
-     the client switches it with POST /api/connections/select and every later
-     request uses whatever that left behind, because the client never names a
-     connection per request. Two browsers on two databases therefore fight over
-     one global, and a suite that ran the `wide` tests beside the `demo` ones
-     would fail in a way that says nothing about the browser. See the report:
-     the same collision is reachable by opening tablewalk in two tabs.
+  /* One worker, and not for tidiness: the servers below are shared by every
+     spec that addresses them, and two browsers saving filters, layouts and
+     records into one store fail in ways that say nothing about the page.
 
      That binds the `shared` project below, which is why this stays the default
      for anyone who runs `npx playwright test` by hand. `scripts/test-e2e.mjs`
      raises it for the `owned` project, whose specs each start a server of
-     their own and share no such global. */
+     their own and share no such store. */
   workers: 1,
   fullyParallel: false,
   /* No retries. A retried browser test is a flaky test wearing a disguise, and
@@ -168,7 +153,7 @@ export default defineConfig({
   expect: { timeout: process.env.CI ? 15_000 : 7_000 },
 
   use: {
-    baseURL: `http://127.0.0.1:${port}`,
+    baseURL: `http://127.0.0.1:${appPort}`,
     trace: 'retain-on-failure',
     /* Wide enough that the sixteen-column fixture still overflows and the
        three-column one does not, so "this table scrolls sideways" is a
@@ -199,28 +184,8 @@ export default defineConfig({
     lane === 'owned'
       ? []
       : [
-          {
-            command: `npx tsx packages/tablewalk/src/server/index.ts --config ${CONFIG} --port ${port}`,
-            url: `http://127.0.0.1:${port}/`,
-            /* Never reuse: a server someone left running is pointed at their own
-         database, and the whole point of the fixtures is not to care what that
-         is. */
-            reuseExistingServer: false,
-            stdout: 'pipe',
-            stderr: 'pipe',
-            timeout: 30_000,
-            env: {
-              /* Record layouts are stored under XDG_CONFIG_HOME. Without this the
-           suite reads — and writes — the layouts of whoever is running it, so a
-           developer who once customised the `customer` record would see these
-           tests assert against their layout and not the derived one. */
-              XDG_CONFIG_HOME: `${TMP}/xdg`,
-            },
-          },
           /* The app server: fieldops over the demo database, which is what
-       `apps.spec.ts` is about. A separate process rather than a fourth
-       connection, because `--app` is a property of the server, and the point
-       of the suite above is that nothing else changed. */
+       `apps.spec.ts` is about. */
           {
             command: `npx tsx packages/mistri/src/server/index.ts --demo --app test/fixtures/apps/fieldops --port ${appPort} --no-config`,
             url: `http://127.0.0.1:${appPort}/`,
@@ -229,9 +194,11 @@ export default defineConfig({
             stderr: 'pipe',
             timeout: 30_000,
             env: {
-              /* Its own store, not the other server's: saved filter tabs land in
-           XDG_CONFIG_HOME, and two servers writing one file is the kind of
-           coupling a test failure cannot explain. */
+              /* Record layouts and saved filter tabs land in XDG_CONFIG_HOME.
+           Without this the suite reads — and writes — the store of whoever is
+           running it; and its own, not the other server's, because two
+           servers writing one file is the kind of coupling a test failure
+           cannot explain. */
               XDG_CONFIG_HOME: `${TMP}/xdg-app`,
               /* `--demo` builds into a directory of its own per process, so two runs
            on one machine cannot overwrite each other's database. This suite

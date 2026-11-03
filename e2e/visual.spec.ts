@@ -1,11 +1,10 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
 /**
  * What the rooms look like, pixel for pixel.
  *
  * The shell is moving to components one surface at a time, and the promise
  * for every move is that nothing a reader sees changes. The other suites
  * check that things work; this one checks that they look the same — the
- * workbench landing and a walk with its crumbs, the app's landing, a list,
+ * app's landing, a list,
  * a record page, the New drawer, the dashboard, and the top bar folded on a
  * narrow screen. A port that shifts a gutter fails here.
  *
@@ -17,8 +16,7 @@
  *   npx playwright test e2e/visual.spec.ts --update-snapshots re-record
  */
 import { expect, test, type Page } from './support/harness';
-import { CRM_CLOCK, DEMO } from './support/fixtures';
-import { open } from './support/app';
+import { CRM_CLOCK } from './support/fixtures';
 
 const CRM = `http://127.0.0.1:${process.env.TABLEWALK_E2E_CRM_PORT}`;
 
@@ -79,16 +77,6 @@ async function crm(page: Page, path = ''): Promise<void> {
   await page.goto(`${CRM}${path || '/'}`);
   await expect(page.locator('#db-label')).toContainText('Compass');
 }
-
-test('the workbench: landing, and a row at the end of a walk', async ({ page }) => {
-  await open(page, DEMO);
-  await expect(page.locator('.shape')).toBeVisible();
-  await looks(page, 'workbench-landing');
-  await page.goto(`/${DEMO}/customer/~1`);
-  await expect(page.locator('.crumbs .current')).toBeVisible();
-  await expect(page.locator('.record, .record-view, dl').first()).toBeVisible();
-  await looks(page, 'workbench-record');
-});
 
 test('the app: landing, list, record page, New drawer, dashboard', async ({ page }) => {
   await crm(page);

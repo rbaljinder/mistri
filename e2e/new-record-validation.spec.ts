@@ -1,14 +1,12 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
-import { CRM, expect, type Locator, type Page, SCRATCH, test } from './support/ownServers';
+import { CRM, expect, type Locator, type Page, test } from './support/ownServers';
 import { startSample } from './support/sampleServer';
-import { enableWriteMode, open } from './support/app';
 import { scalar } from './support/db';
 
 // This spec controls API responses; exercise boot through its fetch fallback.
 test.use({ carryFirstPaint: false });
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
-test.use({ servers: ['explorer', 'crm'] });
+test.use({ servers: ['crm'] });
 
 // All origins/data come from the disposable harness, never a running preview.
 test.use({ screenshot: 'off', trace: 'off', video: 'off' });
@@ -156,39 +154,6 @@ for (const width of [1440, 390]) {
       await add.click();
       await expect(alert).toBeFocused();
       await expect(alert).toBeInViewport();
-      await expect(form.locator('.insert-missing:visible')).toHaveCount(0);
-      expect(inserts).toBe(0);
-    });
-
-    test('Workbench New validates required fields without marking a nullable key', async ({ page }) => {
-      await open(page, SCRATCH, 'country');
-      await enableWriteMode(page);
-      await page.getByRole('button', { name: '+ New row', exact: true }).click();
-      const form = page.getByRole('dialog', { name: 'New country', exact: true });
-      const code = form.getByRole('textbox', { name: 'code (TEXT)', exact: true });
-      const name = form.getByRole('textbox', { name: 'name (TEXT)', exact: true });
-      const add = form.getByRole('button', { name: 'Add row', exact: true });
-      let inserts = 0;
-      await page.route(
-        (url) => url.pathname === '/api/insert',
-        async (route) => {
-          inserts++;
-          await route.abort();
-        },
-      );
-      await add.click();
-      await fieldError(form, name, 'name');
-      await expect(form.locator('.insert-missing:visible')).toHaveCount(1);
-      await expect(name).toBeFocused();
-      await corrected(form, code, 'code');
-      await expect(form.getByRole('alert')).toHaveCount(0);
-      await code.fill('ZZ');
-      await corrected(form, code, 'code');
-      await add.click();
-      await expect(name).toBeFocused();
-      await expect(name).toBeInViewport();
-      await name.fill('Validation country');
-      await corrected(form, name, 'name');
       await expect(form.locator('.insert-missing:visible')).toHaveCount(0);
       expect(inserts).toBe(0);
     });

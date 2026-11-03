@@ -4,9 +4,8 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import { Refusal, type Adapter, type QueryRequest, type QueryResult } from '../packages/engine/src/adapters/adapter.js';
+import { Refusal, type Adapter, type QueryResult } from '../packages/engine/src/adapters/adapter.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
-import { runTool } from '../packages/tablewalk/src/server/mcp.js';
 import {
   readBreakdown,
   readCount,
@@ -17,12 +16,10 @@ import {
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import type { ViewDef } from '../packages/engine/src/shared/view.js';
 
-type Reply = Awaited<ReturnType<typeof runTool>>;
 type Fixture = {
   adapter: Adapter;
   schema: DatabaseSchema;
   owner: string;
-  call(name: string, args?: Record<string, unknown>): Promise<Reply>;
 };
 
 async function fixture(run: (f: Fixture) => Promise<void>) {
@@ -57,20 +54,13 @@ async function fixture(run: (f: Fixture) => Promise<void>) {
     for (const method of ['query', 'count', 'estimateCount', 'runView', 'countView', 'runBreakdown', 'countBreakdown'] as const) {
       Reflect.set(other, method, () => assert.fail(`${method} must stay on the named source`));
     }
-    await run({ adapter, schema, owner, call: (name, args = {}) => runTool(registry, name, { connection: owner, ...args }) });
+    await run({ adapter, schema, owner });
   } finally {
     await registry.closeAll();
     rmSync(directory, { recursive: true, force: true });
   }
 }
 
-function success(reply: Reply) {
-  assert.equal(reply.isError, false, JSON.stringify(reply));
-  assert.ok(reply.structuredContent);
-  assert.equal(reply.structuredContent.errors, undefined, JSON.stringify(reply));
-  assert.equal(reply.content[0].text, JSON.stringify(reply.structuredContent));
-  return reply.structuredContent as Record<string, any>;
-}
 function labelView(): ViewDef {
   return {
     id: 'detail-label',
@@ -313,146 +303,3 @@ for (const operation of ['count', 'records'] as const) {
     });
   });
 }
-
-test('MCP detail keeps walked labels count-free, exact child counts and stable bounded expansion on its named source', async () => {
-  await fixture(async (f) => {
-    const requests: QueryRequest[] = [];
-    const queried = f.adapter.query.bind(f.adapter);
-    f.adapter.query = (request) => {
-      requests.push(structuredClone(request));
-      return queried(request);
-    };
-    const counted = f.adapter.count.bind(f.adapter);
-    const counts: string[] = [];
-    f.adapter.count = async (table, filter) => {
-      counts.push(table);
-      return counted(table, filter);
-    };
-    f.adapter.countView = async () => assert.fail('MCP label lookup must not add a view count');
-    f.adapter.estimateCount = async () => assert.fail('child counts must remain exact');
-    const record = success(await f.call('record', { table: 'member', key: { party_id: 1 }, expand: 2 }));
-    assert.equal(record.connection, f.owner);
-    assert.equal(record.table, 'member');
-    assert.equal(record.found, true);
-    assert.equal(record.label, 'selected Ada');
-    assert.deepEqual(record.row, { party_id: 1, rank: 7 });
-    assert.deepEqual(record.key, { party_id: 1 });
-    assert.equal(record.link, `/${f.owner}/member/~1`);
-    assert.deepEqual(counts, ['child']);
-    assert.equal(record.pointedAtBy.length, 1);
-    const child = record.pointedAtBy[0];
-    assert.equal(child.table, 'child');
-    assert.deepEqual(child.via, ['member_id']);
-    assert.equal(child.count, 3);
-    assert.equal(child.query, 'child member_id = 1');
-    assert.deepEqual(
-      child.rows.map((row: { id: number }) => row.id),
-      [20, 30],
-    );
-    assert.equal(record.stats.rowsRead, 3);
-    assert.deepEqual(
-      requests.map((request) => [request.table, request.limit, request.offset]),
-      [
-        ['member', 1, 0],
-        ['child', 2, 0],
-      ],
-    );
-    assert.deepEqual(requests[1].orderBy, [
-      { column: 'updated_at', direction: 'desc' },
-      { column: 'id', direction: 'asc' },
-    ]);
-    const next = success(await f.call('record', { table: 'member', key: { party_id: 1 }, expand: 2 }));
-    assert.deepEqual(next.pointedAtBy, record.pointedAtBy);
-    const unexpanded = success(await f.call('record', { table: 'member', key: { party_id: 1 } }));
-    assert.equal(unexpanded.pointedAtBy[0].count, 3);
-    assert.equal(Object.hasOwn(unexpanded.pointedAtBy[0], 'rows'), false);
-    assert.equal(unexpanded.stats.rowsRead, 1);
-  });
-});
-
-test('MCP detail batches preserve requested root order and missing roots without extra counts', async () => {
-  await fixture(async (f) => {
-    const count = f.adapter.count.bind(f.adapter);
-    let counted = 0;
-    f.adapter.count = async (...args) => {
-      counted++;
-      return count(...args);
-    };
-    f.adapter.countView = async () => assert.fail('walked labels must not count views');
-    const batch = success(
-      await f.call('record', { table: 'member', keys: [{ party_id: 2 }, { party_id: 1 }, { party_id: 999 }], expand: 2 }),
-    );
-    assert.equal(batch.connection, f.owner);
-    assert.deepEqual(
-      batch.records.map((record: { key: unknown }) => record.key),
-      [{ party_id: 2 }, { party_id: 1 }, { party_id: 999 }],
-    );
-    assert.deepEqual(
-      batch.records.map((record: { label?: string }) => record.label),
-      ['selected Grace', 'selected Ada', undefined],
-    );
-    assert.deepEqual(batch.records[2], { key: { party_id: 999 }, found: false });
-    assert.deepEqual(
-      batch.records[0].pointedAtBy[0].rows.map((row: { id: number }) => row.id),
-      [40],
-    );
-    assert.equal(counted, 2);
-    assert.equal(batch.stats.rowsRead, 5, 'two found roots plus three expanded children, not label/count work');
-  });
-});
-
-test('MCP value sweep retains stable capped evidence, named-source binding and no counts', async () => {
-  await fixture(async (f) => {
-    const requests: QueryRequest[] = [];
-    const query = f.adapter.query.bind(f.adapter);
-    f.adapter.query = (request) => {
-      requests.push(structuredClone(request));
-      return query(request);
-    };
-    f.adapter.count = async () => assert.fail('value sweeps must not count');
-    f.adapter.countView = async () => assert.fail('value sweeps must not count views');
-    f.adapter.estimateCount = async () => assert.fail('value sweeps must not estimate');
-    const first = success(await f.call('find', { value: 'needle' }));
-    assert.equal(first.connection, f.owner);
-    assert.deepEqual(
-      first.matches.map((match: { key: unknown }) => match.key),
-      ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id })),
-    );
-    for (const match of first.matches) {
-      assert.equal(match.table, 'search_row');
-      assert.deepEqual(match.columns, ['text']);
-      assert.equal(match.values.text, `needle selected ${match.key.id}`);
-    }
-    assert.deepEqual(first.moreIn, ['search_row']);
-    assert.equal(first.searched, 3);
-    assert.equal(first.withoutText, 1);
-    assert.equal(first.failed, undefined);
-    assert.equal(first.stopped, undefined);
-    assert.equal(first.stats.rowsRead, 5);
-    const request = requests.find((request) => request.table === 'search_row')!;
-    assert.deepEqual(request.orderBy, [{ column: 'id', direction: 'asc' }]);
-    assert.equal(request.limit, 6, 'the sweep still fetches one extra row to prove truncation');
-    const second = success(await f.call('find', { value: 'needle' }));
-    assert.deepEqual(second.matches, first.matches);
-    assert.deepEqual(second.moreIn, first.moreIn);
-  });
-});
-
-test('MCP detail and sweep preserve their existing per-table failure orchestration', async () => {
-  await fixture(async (f) => {
-    const query = f.adapter.query.bind(f.adapter);
-    f.adapter.query = (request) => (request.table === 'search_row' ? Promise.reject(new Error('search rows unavailable')) : query(request));
-    f.adapter.count = async () => {
-      throw new Error('child counts unavailable');
-    };
-    const record = success(await f.call('record', { table: 'member', key: { party_id: 1 }, expand: 2 }));
-    assert.equal(record.label, 'selected Ada');
-    assert.deepEqual(record.pointedAtBy, []);
-    assert.equal(record.stats.rowsRead, 1);
-    const sweep = success(await f.call('find', { value: 'needle' }));
-    assert.deepEqual(sweep.matches, []);
-    assert.deepEqual(sweep.failed, [{ table: 'search_row', reason: 'search rows unavailable' }]);
-    assert.equal(sweep.searched, 2);
-    assert.equal(sweep.stats.rowsRead, 0);
-  });
-});

@@ -301,8 +301,9 @@ async function packageSection() {
 /* ---------- 2b. the packages the tree is to be cut into ---------- */
 
 /** One section per package (scripts/boundary/entries.json): the names it is imported by. An App's names (`mistri/*`)
- * are public unless the Status page calls the entry Preview, and so is the database browser's binary; mistri's own
- * main and the scoped packages' names (the engine's, the ui's, the kit's) are Preview. */
+ * are public unless the Status page calls the entry Preview; mistri's own main and the scoped packages' names (the
+ * engine's, the ui's, the kit's) are Preview. The database browser's surface (its binary, flags and MCP tools) is held
+ * in its own repository (https://github.com/rbaljinder/tablewalk). */
 function packageEntrySections() {
   const { entries } = JSON.parse(read('scripts/boundary/entries.json'));
   const previewEntries = new Set(PREVIEW_ENTRIES);
@@ -310,7 +311,7 @@ function packageEntrySections() {
   for (const name of Object.keys(entries)) {
     const pkg = name.startsWith('@') ? name.split('/').slice(0, 2).join('/') : name.split('/')[0];
     const subpath = name === pkg ? '.' : `.${name.slice(pkg.length)}`;
-    const open = name === 'tablewalk' || (pkg === '@mistriwork/mistri' && subpath !== '.' && !previewEntries.has(subpath));
+    const open = pkg === '@mistriwork/mistri' && subpath !== '.' && !previewEntries.has(subpath);
     (sections[`package ${pkg}`] ??= {})[`entry ${name}`] = open ? 'public' : 'preview';
   }
   return Object.fromEntries(Object.entries(sections).map(([section, names]) => [section, sorted(names)]));
@@ -320,15 +321,15 @@ function packageEntrySections() {
 
 /** The flags a text offers: the extraction test/prose.test.ts holds the README to. */
 export const flagsIn = (text) => new Set([...text.matchAll(/--[a-z][a-z-]+/g)].map((match) => match[0]));
-/** A binary's USAGE: the database browser's (`tablewalk`) or the App framework's (`mistri`). */
+/** The binary's USAGE: the App framework's (`mistri`). */
 export const usageText = (bin = 'mistri') => read(`packages/${bin}/src/server/cli/usage.ts`).match(/const USAGE = `([\s\S]*?)`/)?.[1];
-export const BINS = ['tablewalk', 'mistri'];
+export const BINS = ['mistri'];
 
 /** The commands and flags of the Status page's Preview rows: `--reindex`, which needs a search pack (after 1.0). A flag
  * several features share (`--export`, `--policy`, `--search`) stays public. */
 const PREVIEW_CLI_NAMES = new Set(PREVIEW_CLI);
 
-/** Both binaries' names, as one section: a flag or a command either takes is public. */
+/** The binary's names, as one section: a flag or a command it takes is public. */
 function cliSection() {
   const entries = {};
   for (const bin of BINS) {
@@ -344,15 +345,7 @@ function cliSection() {
   return entries;
 }
 
-/* ---------- 4. MCP tools ---------- */
-
-async function mcpSection() {
-  const { toolNames } = await tsImport('../packages/tablewalk/src/server/mcp.ts', import.meta.url);
-  const names = typeof toolNames === 'function' ? toolNames() : toolNames;
-  return Object.fromEntries([...names].map((name) => [`tool ${name}`, 'public']));
-}
-
-/* ---------- 5. check finding codes ---------- */
+/* ---------- 4. check finding codes ---------- */
 
 async function checkCodesSection() {
   const { VALIDATION_CODES } = await tsImport('../packages/mistri/src/server/build/checkProblems.ts', import.meta.url);
@@ -374,7 +367,6 @@ export async function liveSurface() {
       package: sorted(await packageSection()),
       ...packageEntrySections(),
       cli: sorted(cliSection()),
-      mcp: sorted(await mcpSection()),
       checkCodes: sorted(await checkCodesSection()),
     },
   };

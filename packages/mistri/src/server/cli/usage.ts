@@ -1,8 +1,8 @@
 /**
  * The `mistri` command line in words: `USAGE`, every command and flag of the App framework, and `SHORT_USAGE`, the
- * first screen of it. The database browser's are `tablewalk`'s own (packages/tablewalk/src/server/cli/usage.ts).
+ * first screen of it. The database browser's are `tablewalk`'s own, in its own repository.
  * test/prose.test.ts holds this USAGE and the package's README (packages/mistri/README.md) to each other, and
- * scripts/cli-reference.mjs writes the site's CLI page from both.
+ * scripts/cli-reference.mjs writes the site's CLI page from it.
  */
 import { commandWordsOf, flagWordsOf } from '@mistriwork/engine/server/cli/usage.js';
 import type { Product } from '@mistriwork/engine/server/cli/startup.js';

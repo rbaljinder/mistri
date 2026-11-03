@@ -1,6 +1,5 @@
-// test-package: shared — drives the database browser and an App to one behavior (scripts/test-owners.mjs).
 /**
- * Every room, read by axe: the smoke rooms of the Workbench and an App, and
+ * Every room, read by axe: the smoke rooms of an App and
  * the sample Apps' own pages, in several looks, light and dark.
  *
  * docs/design.md holds every look to WCAG 2.2 AA and lists where that was
@@ -13,17 +12,16 @@
  * here. The list is short on purpose: a rule silenced for a whole page
  * hides the next real finding of the same kind.
  *
- * It shares the config, App and CRM servers with the serial lane (it
+ * It shares the App and CRM servers with the serial lane (it
  * addresses them by their ports) and starts the sample Apps it needs on
  * ports of their own.
  */
 import AxeBuilder from '@axe-core/playwright';
-import { CRM, DEMO, expect, FIELDOPS, type Page, test } from './support/ownServers';
-import { open, runQuery } from './support/app';
+import { CRM, expect, FIELDOPS, type Page, test } from './support/ownServers';
 import { COMMONS_ADMIN, DEPOT_ADMIN, PAYDAY_ADMIN, FORECOURT_STAFF, startSample } from './support/sampleServer';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
-test.use({ servers: ['explorer', 'crm', 'fieldops'] });
+test.use({ servers: ['crm', 'fieldops'] });
 
 const APP = FIELDOPS;
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
@@ -106,37 +104,6 @@ async function painted(page: Page) {
 }
 
 test.describe.configure({ timeout: 240_000 });
-
-test('the Workbench’s rooms, light and dark', async ({ page }) => {
-  const findings: Finding[] = [];
-  for (const mode of ['light', 'dark'] as const) {
-    await page.emulateMedia({ colorScheme: mode, reducedMotion: 'reduce' });
-    await open(page, DEMO, '');
-    await painted(page);
-    await audit(page, `workbench ${mode} landing`, findings);
-    await runQuery(page, 'invoice sort total desc');
-    await expect(page.locator('tbody tr').first()).toBeVisible();
-    await audit(page, `workbench ${mode} table`, findings);
-    await page.locator('thead .th-filter').first().click();
-    await expect(page.locator('.th-menu')).toBeVisible();
-    await audit(page, `workbench ${mode} column menu`, findings);
-    await page.keyboard.press('Escape');
-    await page.locator('tbody tr').first().click();
-    await expect(page.locator('.record, .layout').first()).toBeVisible();
-    await audit(page, `workbench ${mode} record`, findings);
-    await page.getByRole('button', { name: 'As a page' }).click();
-    await expect(page.locator('.page-body .page-section').first()).toBeVisible();
-    await audit(page, `workbench ${mode} page`, findings);
-    await runQuery(page, 'invoice count by status');
-    await expect(page.locator('tbody tr').first()).toBeVisible();
-    await audit(page, `workbench ${mode} breakdown`, findings);
-    await page.keyboard.press('ControlOrMeta+k');
-    await expect(page.getByRole('combobox', { name: 'Search' })).toBeVisible();
-    await audit(page, `workbench ${mode} palette`, findings);
-    await page.keyboard.press('Escape');
-  }
-  expect(findings, report(findings)).toEqual([]);
-});
 
 test('an App’s smoke rooms, in every look', async ({ page }) => {
   const findings: Finding[] = [];

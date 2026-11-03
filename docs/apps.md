@@ -2,7 +2,8 @@
 
 An App curates the shared database runtime with a TypeScript DSL: navigation,
 record pages, forms, dashboards, actions and themes over a database you already
-have. The standalone database browser, `tablewalk`, is a product of its own.
+have. The standalone database browser, `tablewalk`, is a product of its own,
+in [its own repository](https://github.com/rbaljinder/tablewalk).
 
 Apps compose shared presentation components through the DSL and customize their
 look through themes. Examples exercise those public capabilities: a task queue,
@@ -32,8 +33,8 @@ This page is the map. The contract itself lives in one place per fact:
 
 ## The one rule
 
-**The app layer composes the core; it never grows into it.** The core stays a
-focused database browser. Every feature must keep the core touchpoints
+**The app layer composes the core; it never grows into it.** The core (the
+engine and the kit, which the database browser is built on too) stays focused. Every feature must keep the core touchpoints
 countable (a flag, a merge call, a route that delegates). If a feature needs
 the core to *know about apps* beyond handing them a request, the design is
 wrong — stop and rethink.

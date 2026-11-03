@@ -10,19 +10,16 @@ import { installShell } from '../../packages/kit/src/client/shellMode.js';
 export * from '../../packages/kit/src/client/core.js';
 
 /* The shell's answers every page has (app.js names them at boot): the record
-   pages a table reads through, the Workbench's Undo and the record's verbs.
-   Fetched after this module, since those modules import the core this file
-   stands in for. */
-void Promise.all([
-  import('../../packages/kit/src/client/page.js'),
-  import('../../packages/tablewalk/src/client/undo.js'),
-  import('../../packages/mistri/src/client/components/Actions.js'),
-]).then(([page, undo, actions]) =>
-  installShell({
-    resolvePage: page.recordPageId,
-    undo: { refresh: undo.refreshUndo, last: undo.undoLast, toast: undo.undoToast },
-    slots: { ActionBar: actions.ActionBar, useReachable: actions.useReachable },
-  }),
+   pages a table reads through and the record's verbs. Undo is the kit's none,
+   as in an App (the database browser's lives in its own repository). Fetched
+   after this module, since those modules import the core this file stands in
+   for. */
+void Promise.all([import('../../packages/kit/src/client/page.js'), import('../../packages/mistri/src/client/components/Actions.js')]).then(
+  ([page, actions]) =>
+    installShell({
+      resolvePage: page.recordPageId,
+      slots: { ActionBar: actions.ActionBar, useReachable: actions.useReachable },
+    }),
 );
 
 const answers = new Map();

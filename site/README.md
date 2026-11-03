@@ -27,8 +27,7 @@ runnable example, cut from a sample App and cited by its file and line (Tick
 for basics, Lintel for policy and decisions, Ladle for the general path), or a
 command when the task is done at the command line; the details in short
 sections; and a `## Related` list. Rationale belongs in the repository's
-`docs/`, not here. The reference pages (`app-dsl`, `dsl-*`, `cli`,
-`cli-browser`) are generated: edit `reference-notes/` or the code's USAGE, then
+`docs/`, not here. The reference pages (`app-dsl`, `dsl-*`, `cli`) are generated: edit `reference-notes/` or the code's USAGE, then
 run `node scripts/dsl-reference.mjs` or `node scripts/cli-reference.mjs`. The home uses Starlight's splash template; its
 pictures are entries in `shots.json` like every other screenshot, except the
 assistant's, which needs a conversation first:

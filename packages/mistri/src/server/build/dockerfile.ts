@@ -29,7 +29,7 @@ interface DockerfileRequest {
   policy?: string;
 }
 
-/* Kept in step with the repository Dockerfile's NODE_IMAGE: an exact patch, so a rebuild is the image that was tested. */
+/* Kept in step with examples/docker/Dockerfile's NODE_IMAGE: an exact patch, so a rebuild is the image that was tested. */
 const NODE_IMAGE = 'node:24.22.1-alpine3.24';
 
 /** A path inside the build context, in the form a Dockerfile COPY reads; refused when it climbs out of the current directory. */

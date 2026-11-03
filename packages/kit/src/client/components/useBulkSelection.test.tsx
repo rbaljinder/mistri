@@ -48,7 +48,7 @@ vi.mock('../sessionIdentity.js', () => ({
   subscribeSessionIdentity: () => () => {},
   subscribeTenantLease: () => () => {},
 }));
-vi.mock('../../../../tablewalk/src/client/undo.js', () => ({ refreshUndo: mocks.refresh }));
+vi.mock('../../../../../test/hostUndo.js', () => ({ refreshUndo: mocks.refresh }));
 vi.mock('../../../../mistri/src/client/commandAvailability.js', () => ({
   useCommandAvailability: (checks: unknown[]) => checks.map(() => true),
 }));

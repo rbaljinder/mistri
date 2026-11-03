@@ -1,4 +1,10 @@
-// test-package: shared — holds the database browser and the App framework to one rule (scripts/test-owners.mjs).
+/**
+ * Undo's outcomes. The engine's `revert` (journal.ts) says what happened to a
+ * recorded write — applied, not applied, or unknown — and holds a pending or
+ * unknown Undo as a barrier the history never reaches past. A product with Undo
+ * (the database browser, in its own repository) answers its HTTP and agent
+ * Undo from it; an App has none, and refuses one without entering a write.
+ */
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -9,8 +15,7 @@ import { test } from 'node:test';
 import { TransactionOutcomeUnknown, type Adapter } from '../packages/engine/src/adapters/adapter.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
-import { agentTools, runTool, setAdvertiseOutputSchema, setElicitor } from '../packages/tablewalk/src/server/mcp.js';
-import { clearJournal, history, recordWrite } from '../packages/engine/src/server/journal.js';
+import { clearJournal, history, lastRevertible, recordWrite, revert } from '../packages/engine/src/server/journal.js';
 import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 
@@ -87,19 +92,17 @@ async function fixture(access: boolean) {
   };
 }
 
-test('HTTP returns applied and not_applied, including the expected-ID precondition', async () => {
+test('revert returns applied, then not_applied for a write it already took back', async () => {
   const f = await fixture(false);
   try {
     const entry = f.record();
-    const stale = await f.call({ confirm: true, expectedId: entry.id + 1 });
-    assert.equal(stale.status, 409);
-    assert.equal(stale.body.outcome, 'not_applied');
-    const done = await f.call({ confirm: true, expectedId: entry.id });
-    assert.equal(done.body.reverted, true);
-    assert.equal(done.body.outcome, 'applied');
-    const empty = await f.call({ confirm: true });
-    assert.equal(empty.body.reverted, false);
-    assert.equal(empty.body.outcome, 'not_applied');
+    const done = await revert(f.adapter, f.connection, entry);
+    assert.equal(done.reverted, true);
+    assert.equal(done.outcome, 'applied');
+    assert.equal(lastRevertible(f.connection), undefined);
+    const again = await revert(f.adapter, f.connection, entry);
+    assert.equal(again.reverted, false);
+    assert.equal(again.outcome, 'not_applied');
   } finally {
     await f.close();
   }
@@ -119,7 +122,7 @@ test('an App refuses Undo without entering a write transaction', async (t) => {
   }
 });
 
-test('Workbench HTTP preserves sanitized unknown feedback and pending/unknown history barriers', async (t) => {
+test("revert words an unknown outcome without the database's message, and holds pending and unknown as history barriers", async (t) => {
   const f = await fixture(false);
   try {
     f.record();
@@ -137,143 +140,30 @@ test('Workbench HTTP preserves sanitized unknown feedback and pending/unknown hi
       await held;
       throw new TransactionOutcomeUnknown('PRIVATE_DATABASE_SENTINEL');
     });
-    const undo = f.call({ confirm: true, expectedId: entry.id });
+    const undo = revert(f.adapter, f.connection, entry);
     await Promise.race([started, undo.then(() => assert.fail('Undo returned without entering its transaction'))]);
     try {
-      const pending = await f.call();
-      assert.equal(pending.body.next, undefined);
-      assert.equal(pending.body.writes[0].undoState, 'pending');
+      assert.equal(history(f.connection)[0].undoState, 'pending');
+      assert.equal(lastRevertible(f.connection), undefined);
+      const twice = await revert(f.adapter, f.connection, entry);
+      assert.equal(twice.outcome, 'unknown');
+      assert.match(twice.errors![0], /already in progress/);
     } finally {
       finish();
     }
     const result = await undo;
-    assert.equal(result.body.reverted, false);
-    assert.equal(result.body.outcome, 'unknown');
-    assert.equal(result.body.steps, undefined);
-    assert.match(result.body.errors[0].message, /could not be confirmed/);
-    assert.doesNotMatch(JSON.stringify(result.body), /PRIVATE_DATABASE_SENTINEL|current permissions/);
-    const unknown = await f.call();
-    assert.equal(unknown.body.next, undefined);
-    assert.equal(unknown.body.writes[0].undoState, 'unknown');
-    assert.equal(unknown.body.writes[0].revertible, false);
-    const newer = f.record();
-    assert.equal((await f.call()).body.next.id, newer.id);
-  } finally {
-    await f.close();
-  }
-});
-
-test('MCP exposes outcome and undoState schemas, returns unknown and withholds older Undo', async (t) => {
-  const f = await fixture(false);
-  try {
-    setAdvertiseOutputSchema(true);
-    const tool = agentTools(f.registry).find((item) => item.name === 'revert') as any;
-    assert.deepEqual(tool.outputSchema.properties.outcome.enum, ['applied', 'not_applied', 'unknown']);
-    assert.deepEqual(tool.outputSchema.properties.writes.items.properties.undoState.enum, ['pending', 'unknown']);
-    const call = async (expectedId?: number) => {
-      const reply = await runTool(f.registry, 'revert', {
-        connection: f.connection,
-        ...(expectedId === undefined ? {} : { confirm: true, expectedId }),
-      });
-      assert.equal(reply.isError, false, JSON.stringify(reply));
-      return reply.structuredContent as any;
-    };
-    f.record();
-    assert.equal((await call((await call()).next.id)).outcome, 'applied');
-    f.record();
-    f.record();
-    // The successful Undo changed the stored name; make the next preflight valid.
-    await f.adapter.update!({ table: 'lead', key: { id: 1 }, values: { name: 'saved' } });
-    t.mock.method(f.adapter as Adapter & Required<Pick<Adapter, 'transaction'>>, 'transaction', async () => {
-      throw new TransactionOutcomeUnknown('PRIVATE_DATABASE_SENTINEL');
-    });
-    const expectedId = (await call()).next.id;
-    const result = await call(expectedId);
     assert.equal(result.reverted, false);
     assert.equal(result.outcome, 'unknown');
     assert.equal(result.steps, undefined);
-    assert.doesNotMatch(JSON.stringify(result), /PRIVATE_DATABASE_SENTINEL/);
-    const listed = await call();
-    assert.equal(listed.next, undefined);
-    assert.equal(listed.writes[0].undoState, 'unknown');
-    assert.equal(history(f.connection).length, 2);
-    assert.equal((await call(expectedId)).outcome, 'not_applied');
-  } finally {
-    setAdvertiseOutputSchema(false);
-    await f.close();
-  }
-});
-
-test('HTTP and MCP reject missing, invalid and stale tokens before any mutation, including after a lost success response', async (t) => {
-  const f = await fixture(false);
-  try {
-    // These two inverse steps can both run in order; retrying the first ID must
-    // not silently execute the older inverse once the first entry is forgotten.
-    const older = recordWrite(f.connection, {
-      kind: 'update',
-      summary: 'Older rename',
-      revertible: true,
-      steps: [{ table: 'lead', key: { id: 1 }, before: { name: 'original' }, after: { name: 'before' } }],
-    });
-    const latest = f.record();
-    const transaction = t.mock.method(f.adapter as Adapter & Required<Pick<Adapter, 'transaction'>>, 'transaction');
-    for (const expectedId of [undefined, null, 0, -1, 1.5, '2', true, {}, [], Number.MAX_SAFE_INTEGER + 1]) {
-      const http = await f.call({ confirm: true, expectedId });
-      assert.equal(http.status, 400);
-      assert.equal(http.body.outcome, 'not_applied');
-      const mcp = await runTool(f.registry, 'revert', { connection: f.connection, confirm: true, expectedId });
-      assert.ok(mcp.isError || mcp.structuredContent?.outcome === 'not_applied');
-    }
-    assert.equal(transaction.mock.callCount(), 0);
-    const mcp = async (expectedId: number) =>
-      (
-        await runTool(f.registry, 'revert', {
-          connection: f.connection,
-          confirm: true,
-          expectedId,
-        })
-      ).structuredContent!;
-    assert.equal((await mcp(older.id)).outcome, 'not_applied');
-    assert.equal((await f.call({ confirm: true, expectedId: older.id })).status, 409);
-    assert.equal(transaction.mock.callCount(), 0);
-    assert.equal((await f.call({ confirm: true, expectedId: latest.id })).body.outcome, 'applied');
-    assert.equal((await f.call()).body.next.id, older.id);
-    assert.equal((await f.call({ confirm: true, expectedId: latest.id })).status, 409);
-    assert.equal((await mcp(latest.id)).outcome, 'not_applied');
-    assert.equal(transaction.mock.callCount(), 1);
+    assert.match(result.errors![0], /could not be confirmed/);
+    assert.doesNotMatch(JSON.stringify(result.errors), /PRIVATE_DATABASE_SENTINEL/);
+    const [unknown] = history(f.connection);
+    assert.equal(unknown.undoState, 'unknown');
+    assert.equal(unknown.revertible, false);
+    assert.equal(lastRevertible(f.connection), undefined);
     const newer = f.record();
-    assert.equal((await mcp(latest.id)).outcome, 'not_applied');
-    assert.equal((await f.call({ confirm: true, expectedId: latest.id })).status, 409);
-    assert.equal(transaction.mock.callCount(), 1);
-    assert.equal((await f.call()).body.next.id, newer.id);
+    assert.equal(lastRevertible(f.connection)?.id, newer.id);
   } finally {
-    await f.close();
-  }
-});
-
-test('MCP preview never writes or elicits; a matching captured ID is required even with elicitation enabled', async (t) => {
-  const f = await fixture(false);
-  try {
-    const entry = f.record();
-    const elicit = t.mock.fn(async () => true);
-    setElicitor(elicit);
-    const preview = (await runTool(f.registry, 'revert', { connection: f.connection })).structuredContent!;
-    assert.equal(preview.reverted, false);
-    assert.deepEqual(
-      history(f.connection).map((item) => item.id),
-      [entry.id],
-    );
-    assert.match(String(preview.note), /expectedId/);
-    assert.equal(elicit.mock.callCount(), 0);
-    const undone = await runTool(f.registry, 'revert', {
-      connection: f.connection,
-      confirm: true,
-      expectedId: (preview.next as { id: number }).id,
-    });
-    assert.equal(undone.structuredContent?.outcome, 'applied');
-    assert.equal(elicit.mock.callCount(), 0);
-  } finally {
-    setElicitor(null);
     await f.close();
   }
 });
