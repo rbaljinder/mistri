@@ -26,6 +26,9 @@ interface GridColumnSize {
   /** What the sort draws beside the label on its line, the gap before it included: a reference's arrow. A head that
       wraps keeps it beside the label's line, so it is room on both floors. */
   mark?: number;
+  /** What stands in the head's flow beside the sort on a device that cannot hover (its caret and move buttons,
+      style.css): room on both floors, as `mark` is. */
+  touchControls?: number;
   showTime?: boolean;
   /** The column that names the row: it is read whole before the others are. */
   title?: boolean;
@@ -88,7 +91,7 @@ export function columnSizeHint(
      edge, which the sort never reaches under (style.css); a reference's arrow beside the label is room too (`mark`).
      Its menu caret and its move buttons stand past the label's end where a pointer hovers, so they are not reserved. */
   const counted = Math.min(column.label.length, 22) * headChar;
-  const around = (column.controls ? 34 : 28) + (column.mark ?? 0);
+  const around = (column.controls ? 34 : 28) + (column.mark ?? 0) + (column.touchControls ?? 0);
   const header = Math.ceil(column.headWidth === undefined ? counted : Math.min(column.headWidth, counted * 1.15)) + around;
   /* An App's head wraps before it widens its column: the floor is its two-line width, and the whole label stays
      what the column wants, so a table with room for it still draws every head on one line. */

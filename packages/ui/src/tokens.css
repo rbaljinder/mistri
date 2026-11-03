@@ -56,9 +56,12 @@
      and "good" must stay green there. */
   --status-good: #1f7a46;
   /* The code face, single-sourced: --mono is the data face and follows the
-     typography preference; --code is what code surfaces pin to. */
+     typography preference; --code is what code surfaces pin to. A host's
+     look may set --data-face on the root to dress the data in another face;
+     the reader's explicit typography (body.type-mono, body.type-sans) wins
+     over it, and unset it is the code face. */
   --code: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --mono: var(--code);
+  --mono: var(--data-face, var(--code));
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius: 6px;
   /* A form control's own size, said once for every one of them (the field box, a listbox, a choice, a button's pair):

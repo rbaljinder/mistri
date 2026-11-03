@@ -122,6 +122,10 @@ const FOLD_ROOM = 150;
 const TAGS_SHOWN = 3;
 /* The mark a reference's head draws after its label, and its sizing counts. */
 const REFERENCE_MARK = '→';
+/** A head's caret and each of its move buttons: 24px (style.css, `.th-filter`, `.th-move`). */
+const HEAD_CONTROL = 24;
+/** A device that cannot hover keeps a head's caret and moves in the head's flow, beside its label (style.css). */
+const touchHeads = () => typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
 
 export type Row = Record<string, unknown>;
 
@@ -941,6 +945,13 @@ export function Grid({
           /* A reference's arrow stands beside its label in the sort (the head, below), after the sort's 4px gap:
              uncounted, it took the room past the label that the resizer's strip is (style.css). */
           mark: byName.get(name)?.references ? 4 + (headMeasure ? headSet(REFERENCE_MARK) : GRID_HEAD_CHAR) : undefined,
+          /* On touch the head's caret and moves stand beside its label, which gives way to them. The key's label is the
+             shortest and gave way whole: a phone drew the Workbench's "id KEY ↓" as "KEY ↓". Its column keeps their
+             room; any other head's label may still give way, as it was designed to. */
+          touchControls:
+            byName.get(name)?.primaryKey && !shell().inApp() && touchHeads()
+              ? HEAD_CONTROL * ((interactive ? 2 : 0) + (language && (!table?.filterable || table.filterable.includes(name)) ? 1 : 0))
+              : undefined,
           showTime: plan.showTime,
           values: rows.slice(0, GRID_SIZE_SAMPLE).map((row) => {
             if (labelColumn && row[labelColumn] != null) return row[labelColumn];
@@ -981,7 +992,23 @@ export function Grid({
               (Boolean(byName.get(name)?.allowed?.length) && STATUS_NAME.test(name))),
         };
       }),
-    [asked, plans, referenceLabels, table?.id, labels, language, captionLanguage, byName, rows, titleName, headFace, cellChips, shift],
+    [
+      asked,
+      plans,
+      referenceLabels,
+      table?.id,
+      table?.filterable,
+      labels,
+      interactive,
+      language,
+      captionLanguage,
+      byName,
+      rows,
+      titleName,
+      headFace,
+      cellChips,
+      shift,
+    ],
   );
   /* Column i's cell follows the expander's when there is one. */
   const measureText = useMemo(

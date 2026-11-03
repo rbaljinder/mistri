@@ -165,6 +165,23 @@ the host's files are not always here to mention it. Adding a name is a line
 in review; removing one breaks the host, so it waits for a release that says
 so in `CHANGELOG.md`.
 
+A host dresses its own screens through three seams, all on the list. It
+declares its looks once from its main, before the kit's shell boots:
+`registerHostLooks([{ id, label, sheet, swatches? }])` from
+`@mistriwork/kit/client/visualTheme.js`, where `sheet` is an address or a
+module that loads the stylesheet. Preferences offers them beside the
+native default and the built-in looks; a pick is kept where the Workbench's
+other picks are (`mistri.workbench-visual-theme`, which the startup veil's
+cached colors are keyed by), the page is held until the sheet is in, and
+while one is worn the root carries `data-host-look="<id>"` and no kit look's
+attributes, so every rule in its sheet keys on that. A look may set
+`--data-face` on the root to set the data — the grid's short values
+included — in another face; the reader's explicit Typography (Mono or Sans)
+wins over it. And `@mistriwork/kit/client/fonts/faces.css` declares the
+kit's own faces (Barlow, Barlow Semi Condensed, IBM Plex Mono, Inter, each
+under the SIL Open Font License, its text beside it), with each `.woff2` a
+subpath of its own, so a host's look can name them.
+
 The proof that the browser builds and serves from the tarballs runs in its
 repository, against the packages this one publishes; the kit's and the
 engine's exported names it uses that nothing here imports carry an `@public`

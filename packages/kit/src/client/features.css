@@ -1088,14 +1088,17 @@ body.type-sans {
      Tabular numerals keep columns of figures aligned, which is what makes
      a non-mono face survivable in a data tool. */
   --mono: "Inter", "IBM Plex Sans", "Segoe UI Variable Text", ui-sans-serif, system-ui, sans-serif;
+  /* The reader's pick wins over a host look's data face (tokens.css). */
+  --data-face: var(--mono);
   font-variant-numeric: tabular-nums;
 }
 /* The interface is sans everywhere (appnav points --mono at it). Code keeps
    the code face; in the database browser so do the short values a grid sets
-   apart — ids, dates, codes — as a data tool reads them. An App's lists read
-   as its theme dresses them. */
+   apart — ids, dates, codes — as a data tool reads them, unless a host look
+   names its data face (--data-face, tokens.css), which the reader's own pick
+   overrides. An App's lists read as its theme dresses them. */
 body :is(.ddl, .explain, #query, .applist-filter, pre, code, kbd) { font-family: var(--code); }
-body:not(.app-mode):not(.type-sans) td.mono { font-family: var(--code); font-size: var(--text-sm); }
+body:not(.app-mode):not(.type-sans) td.mono { font-family: var(--data-face, var(--code)); font-size: var(--text-sm); }
 body.type-sans .ddl,
 body.type-sans .explain,
 body.type-sans #query,

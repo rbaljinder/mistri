@@ -191,9 +191,12 @@ test('beyond loopback, the warning says what is read without signing in: the dat
   const tick = { name: 'Tick' };
   for (const host of ['127.0.0.1', 'localhost', '::1']) assert.deepEqual(exposureLines(host, [tick]), [], host);
   const remedy = 'Bind --host 127.0.0.1, put it behind a proxy that signs people in (--auth-proxy-header), or give the App sign-in.';
-  assert.deepEqual(exposureLines('0.0.0.0', []), [
-    `Warning: bound to 0.0.0.0, beyond loopback, with no sign-in. Anyone who can reach this port can read the database. ${remedy}`,
+  /* No App is served: there is no App sign-in to give, so the warning does not offer one. */
+  const lines = exposureLines('0.0.0.0', []);
+  assert.deepEqual(lines, [
+    'Warning: bound to 0.0.0.0, beyond loopback, with no sign-in. Anyone who can reach this port can read the database. Bind --host 127.0.0.1, put it behind a proxy that signs people in (--auth-proxy-header).',
   ]);
+  assert.ok(!/App/.test(lines[0]));
   assert.deepEqual(exposureLines('0.0.0.0', [desk]), [
     'mistri: bound beyond loopback; "Desk" signs people in, and a signed-out visitor reads nothing but what its public forms show.',
   ]);

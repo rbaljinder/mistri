@@ -214,6 +214,23 @@ test('MySQL and MariaDB URLs are refused before any connection is opened', () =>
   }
 });
 
+test('a mysql:// connection is refused as MySQL before any password is looked for', async () => {
+  const registry = new Registry();
+  try {
+    /* A user and no password: resolution would say "no password found" first. */
+    const added = registry.add({ name: 'old', url: 'mysql://reader@db.invalid/shop', source: 'config' });
+    await assert.rejects(registry.open(added.id), (err: Error) => {
+      assert.match(err.message, /MySQL is not supported; use PostgreSQL or SQLite\./);
+      assert.doesNotMatch(err.message, /no password found/);
+      return true;
+    });
+    const maria = registry.add({ name: 'older', url: 'mariadb://reader@db.invalid/shop', source: 'config' });
+    await assert.rejects(registry.open(maria.id), /MySQL is not supported/);
+  } finally {
+    await registry.closeAll();
+  }
+});
+
 test("an App's pools are sized from the cores, readers never fewer than writers; the database browser keeps four readers", async () => {
   const { balancedPoolSize } = await import('../packages/engine/src/adapters/writeLanes.js');
   assert.deepEqual(

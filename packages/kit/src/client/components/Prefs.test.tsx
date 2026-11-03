@@ -5,7 +5,10 @@ import { userEvent } from '@testing-library/user-event';
 import {
   configureVisualThemes,
   initVisualTheme,
+  registerHostLooks,
+  setVisualTheme,
   visualPaletteChoice,
+  visualThemeOptions,
   VISUAL_PALETTE_KEY,
   VISUAL_THEME_KEY,
   WORKBENCH_VISUAL_THEME_KEY,
@@ -45,6 +48,7 @@ afterEach(() => {
   localStorage.removeItem(VISUAL_THEME_KEY);
   localStorage.removeItem(WORKBENCH_VISUAL_THEME_KEY);
   localStorage.removeItem(VISUAL_PALETTE_KEY);
+  registerHostLooks([]);
   configureVisualThemes();
   initVisualTheme();
 });
@@ -71,6 +75,54 @@ test('Workbench offers its native default and explicit built-ins without changin
   expect(set.density).not.toHaveBeenCalled();
   expect(set.typography).not.toHaveBeenCalled();
   expect(set.pageSize).not.toHaveBeenCalled();
+});
+
+test("a host's own looks are offered beside the native default, worn by one attribute, and kept like any pick", async () => {
+  const loaded = vi.fn(() => Promise.resolve());
+  registerHostLooks([
+    { id: 'blueprint', label: 'Blueprint', sheet: loaded, swatches: ['#dde8f5', '#123f94'] },
+    { id: 'console', label: 'Console', sheet: () => Promise.resolve() },
+  ]);
+  const user = userEvent.setup();
+  const view = render(<PrefsDialog onClose={() => {}} />);
+  const control = screen.getByRole('button', { name: 'Visual theme' });
+  await user.click(control);
+  const names = screen.getAllByRole('option').map((option) => option.textContent?.replace('✓', ''));
+  expect(names.slice(0, 3)).toEqual(['Workbench default', 'Blueprint', 'Console']);
+  await user.click(screen.getByRole('option', { name: 'Blueprint' }));
+  expect(control).toHaveTextContent('Blueprint');
+  expect(document.documentElement).toHaveAttribute('data-host-look', 'blueprint');
+  // Worn over the native tokens: no kit look's attributes, and the sheet fetched once.
+  expect(document.documentElement).not.toHaveAttribute('data-visual-theme');
+  expect(document.documentElement).not.toHaveAttribute('data-custom-theme');
+  expect(loaded).toHaveBeenCalledTimes(1);
+  expect(localStorage.getItem(WORKBENCH_VISUAL_THEME_KEY)).toBe('blueprint');
+  expect(localStorage.getItem(VISUAL_THEME_KEY)).toBeNull();
+  // The next page: the look is worn before the host's main declares it, and again once it has.
+  view.unmount();
+  registerHostLooks([]);
+  initVisualTheme();
+  expect(document.documentElement).not.toHaveAttribute('data-host-look');
+  registerHostLooks([{ id: 'blueprint', label: 'Blueprint', sheet: loaded }]);
+  expect(document.documentElement).toHaveAttribute('data-host-look', 'blueprint');
+  render(<PrefsDialog onClose={() => {}} />);
+  const again = screen.getByRole('button', { name: 'Visual theme' });
+  expect(again).toHaveTextContent('Blueprint');
+  // A built-in look takes its place, and the native default takes every look away.
+  await user.click(again);
+  await user.click(screen.getByRole('option', { name: 'Sage' }));
+  expect(document.documentElement).not.toHaveAttribute('data-host-look');
+  expect(document.documentElement).toHaveAttribute('data-visual-theme', 'sage');
+  await user.click(again);
+  await user.click(screen.getByRole('option', { name: 'Workbench default' }));
+  expect(document.documentElement).not.toHaveAttribute('data-host-look');
+  expect(localStorage.getItem(WORKBENCH_VISUAL_THEME_KEY)).toBeNull();
+  // An App's screen is dressed by its own theme: it never offers or wears one.
+  setVisualTheme('blueprint');
+  inApp();
+  expect(document.documentElement).not.toHaveAttribute('data-host-look');
+  expect(visualThemeOptions().some((theme) => theme.value === 'blueprint')).toBe(false);
+  expect(set.typography).not.toHaveBeenCalled();
 });
 
 test('color mode applies each explicit choice once without changing other preferences', async () => {

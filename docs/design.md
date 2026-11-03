@@ -122,8 +122,10 @@ dense rows. The five looks (Workshop, the default an App wears when neither it n
 its reader names one, then Lumen, Mono, Sage and Ledger, which an App opts into; an App
 may also define its own with `defineTheme`; `visualThemes.css`,
 `themeFamilies.css`) dress Apps only: every one of
-their rules keys on `data-visual-theme`, which the browser never carries,
-and its Preferences offer no Visual theme. A reader's built-in pick is kept for
+their rules keys on `data-visual-theme`, which the browser carries only
+where its reader picks one of them. A host product may offer looks of its own
+beside its native default (`registerHostLooks`, docs/boundary.md): worn over
+these tokens under `data-host-look`, never over a kit look. A reader's built-in pick is kept for
 the next App they open; custom choices belong to the stable App ID that offers
 them, so matching theme names in unrelated Apps do not share preferences.
 Every look draws its content on a white or
@@ -165,7 +167,9 @@ ink darker than its hairlines and still quieter than its text.
   `--lightbox-line` — the lightbox's deep ground and its ink, the same in
   both themes, because a photograph is judged against dark.
 - **Faces**: `--mono` (the data face; an App may re-point it, the
-  reader's typography preference still wins), `--sans` (prose),
+  reader's typography preference still wins; outside an App it is
+  `--data-face` where a host's look sets one, the grid's short values
+  included, and the reader's explicit Mono or Sans wins over that too), `--sans` (prose),
   `--code` (never themed). In an App the interface is sans: `--mono`
   points at `--sans` unless the App or its preset names a face, and what
   is read character by character — code, the query language, and in

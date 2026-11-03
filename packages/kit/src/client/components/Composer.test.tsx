@@ -233,7 +233,7 @@ test('numeric summaries emit qualified relationships rather than physical constr
       <Composer />
     </div>,
   );
-  await user.click(screen.getByRole('button', { name: 'Summarise invoice' }));
+  await user.click(screen.getByRole('button', { name: 'Summarize invoice' }));
   await user.click(screen.getByRole('option', { name: /Total total/ }));
   expect(act.addAggregate).toHaveBeenCalledWith({ fn: 'sum', via: 'invoice.customer_id', column: 'total' });
 });

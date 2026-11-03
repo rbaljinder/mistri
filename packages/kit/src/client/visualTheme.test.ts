@@ -8,7 +8,10 @@ import {
   configureVisualThemes,
   customThemeTokens,
   DEFAULT_VISUAL_THEME,
+  hostLookChoice,
   initVisualTheme,
+  lookSheetReady,
+  registerHostLooks,
   setVisualPalette,
   visualPaletteChoice,
   visualPaletteOptions,
@@ -54,6 +57,7 @@ const app = (themes: readonly ThemeDefinition[] = [], preset?: string) => config
 afterEach(() => {
   vi.restoreAllMocks();
   window.localStorage.clear();
+  registerHostLooks([]);
   configureVisualThemes();
   root().removeAttribute('data-theme');
   document.body.className = '';
@@ -90,6 +94,47 @@ test('Workbench starts native, offers built-ins and remembers its own explicit p
   expect(visualPaletteOptions()).toEqual([]);
   initVisualTheme();
   expect(root()).not.toHaveAttribute('data-visual-theme');
+});
+
+test("a host's looks are checked, linked or imported once, held for the reveal, and set no kit look's tokens", async () => {
+  expect(() => registerHostLooks([{ id: 'Blue Print', label: 'Blueprint', sheet: '/blueprint.css' }])).toThrow(/lowercase/);
+  expect(() => registerHostLooks([{ id: 'sage', label: 'Sage', sheet: '/sage.css' }])).toThrow(/already offers/);
+  expect(() => registerHostLooks([{ id: 'default', label: 'Mine', sheet: '/mine.css' }])).toThrow(/already offers/);
+  // happy-dom fetches no stylesheet: the link's load fails, and says so.
+  const said = vi.spyOn(console, 'error').mockImplementation(() => {});
+  let arrive = () => {};
+  const imported = vi.fn(() => new Promise<void>((settle) => (arrive = settle)));
+  registerHostLooks([
+    { id: 'blueprint', label: 'Blueprint', sheet: '/looks/blueprint.css' },
+    { id: 'console', label: 'Console', sheet: imported },
+  ]);
+  setVisualTheme('blueprint');
+  expect(hostLookChoice()).toBe('blueprint');
+  const link = document.head.querySelector<HTMLLinkElement>('link[data-host-look="blueprint"]')!;
+  expect(link.getAttribute('href')).toBe('/looks/blueprint.css');
+  setVisualTheme('console');
+  setVisualTheme('blueprint');
+  expect(document.head.querySelectorAll('link[data-host-look]')).toHaveLength(1);
+  setVisualTheme('console');
+  // The page is revealed only once the worn host look's sheet is in.
+  let ready = false;
+  void lookSheetReady().then(() => (ready = true));
+  await Promise.resolve();
+  expect(ready).toBe(false);
+  arrive();
+  await vi.waitFor(() => expect(ready).toBe(true));
+  expect(imported).toHaveBeenCalledTimes(1);
+  // Over the native tokens: no palette, no tokens, and the data face the look's own (tokens.css `--data-face`).
+  expect(customThemeTokens(false)).toEqual({});
+  expect(visualPaletteOptions()).toEqual([]);
+  expect(visualThemeOverrides().font).toBe('var(--data-face, var(--code))');
+  // A pick the host no longer declares falls back to native for the page, and stays stored for one that does.
+  registerHostLooks([]);
+  expect(visualThemeChoice()).toBe('default');
+  expect(root()).not.toHaveAttribute('data-host-look');
+  expect(window.localStorage.getItem(WORKBENCH_VISUAL_THEME_KEY)).toBe('console');
+  document.head.querySelectorAll('link[data-host-look]').forEach((node) => node.remove());
+  await vi.waitFor(() => expect(said).toHaveBeenCalledWith("The blueprint look's sheet did not load.", ''));
 });
 
 test('flipping between an App and its Workbench tells the picker', () => {

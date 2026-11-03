@@ -17,7 +17,7 @@ export const say = defineMessages({
   unknownTable: 'Unknown table.',
   hasNoForeignKeys: '{tableId} has no foreign keys in either direction.',
   andWhatItTouches: '{name} and what it touches',
-  foreignKeyNeighbourhood: 'Foreign key neighbourhood of {tableId}',
+  foreignKeyNeighborhood: 'Foreign key neighborhood of {tableId}',
   points: 'points at →',
   pointed: '← pointed at by',
   thisDatabaseHasNoTables: 'This database has no tables.',

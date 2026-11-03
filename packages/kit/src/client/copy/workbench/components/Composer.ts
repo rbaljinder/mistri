@@ -51,9 +51,9 @@ export const say = defineMessages({
   smallest: 'Smallest {column}',
   latest: 'Latest {column}',
   largest: 'Largest {column}',
-  summarise: 'Summarise…',
+  summarize: 'Summarize…',
   aTotalAnAverage: 'a total, an average, a range',
-  summariseName: 'Summarise {name}',
+  summarizeName: 'Summarize {name}',
   aViewIsOne: 'A view is one row per {name}, ',
   withAnyFieldFromAny:
     'with any field from any table it points at. Tick fields here; press “Add” beside a related table on the left to bring its fields into this list too.',
