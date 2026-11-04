@@ -25,7 +25,11 @@ export function mentionLabelText(source: MentionSource, row: Record<string, unkn
   const parsed = parseLabelTemplate(label);
   if ('problem' in parsed) return '';
   return parsed.parts
-    .map((part) => ('text' in part ? part.text : said(row[part.path])))
+    .map((part) =>
+      'text' in part
+        ? part.text
+        : ([part.path, ...(part.or ?? []).map((other) => other.path)].map((path) => said(row[path])).find(Boolean) ?? ''),
+    )
     .join('')
     .replace(/\s+/g, ' ')
     .trim();

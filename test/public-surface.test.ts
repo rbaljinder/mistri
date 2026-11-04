@@ -13,6 +13,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { field } from '../packages/mistri/src/server/commands.js';
+import { previewFieldsUsed, previewKeysUsed } from '../packages/mistri/src/shared/preview.js';
 import { breaks, diffSurface, dslSection, frozen, iconsSection, liveSurface, readInventory } from '../scripts/public-surface.mjs';
 
 type Inventory = { sections: Record<string, Record<string, 'public' | 'preview'>> };
@@ -53,6 +55,69 @@ describe('the public surface', () => {
     assert.equal(frozen('1.0.0'), true);
     assert.equal(frozen('1.4.2'), true);
     assert.equal(frozen('2.0.0-rc.1'), true);
+  });
+
+  test('`check` names the Preview keys an App uses, nested ones too, from the same rules as the inventory', () => {
+    assert.deepEqual(previewKeysUsed({ ui: { pwa: true }, flags: { a: {} }, audiences: {} }), ['ui.pwa', 'flags']);
+    assert.deepEqual(
+      previewKeysUsed({
+        resources: { leads: { triggers: [] }, jobs: { triggers: ['t'] } },
+        auth: { roles: { agent: { operations: ['analytics'] } } },
+        features: [{ id: 'f', experiments: { a: 1 } }],
+      }),
+      ['resources.*.triggers', 'auth.roles.*.operations[] = "analytics"', 'experiments'],
+    );
+    /* A view names no kind in an App's config: its table makes it a list, its sections a dashboard. */
+    assert.deepEqual(
+      previewKeysUsed({
+        views: {
+          deals: { table: 'deal', group: 'stage', presentation: { kind: 'calendar', span: 'week' } },
+          home: { sections: [{ kind: 'metric', measure: 'count', figure: 'compact' }] },
+        },
+        resources: { deal: { display: { amount: { format: 'money', whole: true }, site: { format: 'url' } } } },
+      }),
+      [
+        'views.*[kind=list].group',
+        'views.deals[kind=list].presentation[kind=calendar].span',
+        'views.home[kind=dashboard].sections[][kind=metric].figure',
+        'resources.*.display.*.whole',
+      ],
+    );
+    /* Every Preview rule is read off a path the inventory names, so each key the inventory marks Preview is found. */
+    const marked = Object.entries((readInventory() as Inventory).sections.dsl).filter(
+      ([name, status]) => status === 'preview' && /^app: [a-z]/i.test(name),
+    );
+    assert.ok(marked.length > 0);
+    for (const [name] of marked) {
+      const path = name.slice(5).replace(/^features\[\]\./, '');
+      if (/ = | mirrors |\*\]|\.kind$/.test(path) || path.endsWith('[]')) continue;
+      const config = path
+        .split('.')
+        .reverse()
+        .reduce<unknown>((inner, key) => {
+          const tag = /^([^[]*)\[kind=([^\]]+)\]$/.exec(key);
+          const array = /^([^[]*)\[\]$/.exec(key);
+          if (tag) return { [tag[1]!.replace('*', 'x')]: { kind: tag[2], ...(typeof inner === 'object' ? inner : {}) } };
+          return { [(array?.[1] ?? key).replace('*', 'x')]: array ? [inner] : inner };
+        }, true);
+      assert.ok(previewKeysUsed(config).length > 0, `${name} is Preview in the inventory, but check does not see it`);
+    }
+  });
+
+  test('a Preview command input is found on the commands a registry holds, in a group too', () => {
+    const input = {
+      stars: field.number({ as: 'rating' }),
+      note: field.text(),
+      sign: field.group({ signature: field.signature('sig_file'), plate: field.text({ as: 'scan' }) }),
+    };
+    assert.deepEqual(previewFieldsUsed({ rate: { input }, none: { input: { n: field.number({ max: 5 }) } } }), [
+      'field.number.as = "rating"',
+      'field.signature',
+      'field.text.as = "scan"',
+    ]);
+    assert.deepEqual(previewFieldsUsed(undefined), []);
+    const names = Object.keys((readInventory() as Inventory).sections.package).filter((name) => name.startsWith('./commands: field.'));
+    assert.ok(names.includes('./commands: field.files') && names.includes('./commands: field.text'), 'the field kinds are inventoried');
   });
 
   test("an App's preview root keys say @preview where an editor shows them", () => {

@@ -10,7 +10,7 @@ npm test              # tsc, oxlint, the client type/geometry checks, and the te
 The database browser, `tablewalk`, is built on the same engine in its own
 repository: [rbaljinder/tablewalk](https://github.com/rbaljinder/tablewalk).
 
-Node 24.22.1 or newer. mistri uses `node:sqlite`, which is built into Node — there
+Node 24 or newer. mistri uses `node:sqlite`, which is built into Node — there
 is no native module to compile and no install step that can fail on your
 platform. `.node-version` names that minimum for nvm, fnm, mise and asdf.
 

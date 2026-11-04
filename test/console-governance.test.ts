@@ -112,7 +112,10 @@ async function setup(t: Parameters<typeof consoleHostFixture>[0], receipts = 3) 
               query,
             ),
           email: async (account) => (['alice', 'bob'].includes(account) ? `${account}@example.test` : null),
-          accountOf: async (email) => (email === 'bob@example.test' ? 'bob' : null),
+          accountOf: async (email) => {
+            if (email === 'down@example.test') throw new Error('the directory is unreachable');
+            return email === 'bob@example.test' ? 'bob' : null;
+          },
           // The link is the reader's own address: the room hands over the administrator's roles in this App.
           recordHref: (resource, key, roles) =>
             roles?.includes('admin') ? `/tools/${id}/${resource}/${(key as { id: number }).id}` : undefined,
@@ -200,6 +203,10 @@ test('the audit is the journal: who, which command, a link to the record, which 
     ['receipt-bob'],
   );
   assert.deepEqual((await f.call('/api/console/governance/depot/audit?who=nobody%40example.test')).json().rows, []);
+  // A lookup that failed is unavailable, not a person with no history.
+  const down = await f.call('/api/console/governance/depot/audit?who=down%40example.test');
+  assert.equal(down.response.status, 503);
+  assert.deepEqual(down.json(), { ok: false, code: 'unavailable' });
   const command = (await f.call('/api/console/governance/depot/audit?what=reopen_item')).json();
   assert.equal(command.rows.length, 1);
   assert.equal(command.rows[0].kind, undefined, 'a command or resource filter names only commands');

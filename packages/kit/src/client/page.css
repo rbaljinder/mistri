@@ -813,6 +813,24 @@
   .page-head-facts > .page-fact::before {
     content: none;
   }
+  /* Facts past the line wait in a disclosure of the head's own, under the line and in its column. Closed, it is one
+   row of the same height whoever opens it, and its summary is the quiet caption a fact's is; opened, the rest
+   wrap as the line does, never sideways. */
+  .page-head.has-record > .page-head-more {
+    grid-column: 1;
+    min-width: 0;
+    margin-top: var(--space-2);
+    font-size: var(--text-md);
+  }
+  .page-head-more > summary {
+    display: inline-block;
+    cursor: pointer;
+    font: 500 var(--text-sm)/1.4 var(--sans);
+    color: var(--ink-muted);
+  }
+  .page-head-more > .page-head-facts {
+    margin-top: var(--space-3);
+  }
   .page-head-facts > .page-fact:has(> .page-fact-caption) {
     flex-direction: column;
     align-items: flex-start;
@@ -841,7 +859,7 @@
       flex-basis: 100%;
       margin-inline-start: 0;
     }
-    .page-head.has-record > .page-head-facts {
+    .page-head.has-record > :is(.page-head-facts, .page-head-more) {
       grid-column: 1 / -1;
       order: -1;
     }
@@ -873,7 +891,7 @@
       flex-basis: 100%;
       margin-inline-start: 0;
     }
-    .page-head.has-record > .page-head-facts {
+    .page-head.has-record > :is(.page-head-facts, .page-head-more) {
       grid-column: 1 / -1;
       order: -1;
     }
@@ -1914,6 +1932,10 @@
   }
   .timeline-fold-toggle[aria-expanded='true'] svg {
     transform: rotate(90deg);
+  }
+  .timeline-more {
+    padding-block: var(--space-2) 0;
+    min-height: 32px;
   }
   .page-related-create.timeline-compose {
     padding-block: 0 var(--space-2h);
@@ -3320,6 +3342,12 @@
     color: var(--ink-muted);
     font: 500 calc(15px * var(--type-k)) var(--sans);
     font-variant-numeric: tabular-nums;
+  }
+  .page-headline-subtitle {
+    display: block;
+    margin-top: var(--space-1);
+    color: var(--ink-muted);
+    font: 500 var(--text-md)/1.4 var(--sans);
   }
   .page-headline-sub .num-value {
     font: inherit;

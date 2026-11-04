@@ -258,6 +258,12 @@ function validated(schema: DatabaseSchema, page: PageDef): PageDef {
             error: `${at}: "was" is a number or money column beside the figure; "${section.was}" is ${was.resolved.column.type || 'untyped'}.`,
           };
       }
+      /* The line under the figure is read from the record, so it must name something there. */
+      if (section.subtitle !== undefined) {
+        const line = tryResolvePath(schema, page.base, section.subtitle);
+        if (!line.resolved)
+          return { ...page, error: `${at}: "subtitle" names "${section.subtitle}", ${line.error?.message ?? 'which does not resolve'}` };
+      }
       if (section.status !== undefined && !columnOrRollup(base, section.status)) {
         return { ...page, error: `${at}: the header's status "${section.status}" is not a column on ${base.name}.` };
       }
@@ -297,7 +303,7 @@ function validated(schema: DatabaseSchema, page: PageDef): PageDef {
             error: `${here}: "${stream.at}" is ${atCol.type || 'untyped'} — a timeline orders by a date column. See \`mistri docs dates-and-types\`.`,
           };
         }
-        for (const path of [stream.show, stream.detail, stream.by].filter((p): p is string => Boolean(p))) {
+        for (const path of [stream.text, stream.badge, stream.by].filter((p): p is string => Boolean(p))) {
           /* A bare name is a column of `from`; a dotted path walks references
              to a column of the table it reaches, and is judged the way a
              list column is — `author_id.name`, not a chain of references. */
@@ -392,6 +398,11 @@ function validated(schema: DatabaseSchema, page: PageDef): PageDef {
       if (error) return { ...page, error: `${at}: ${error}` };
       const problem = relatedMatchProblem(schema, page, section);
       if (problem) return { ...page, error: `${at}: ${problem}` };
+      if (section.opens) {
+        const reference = table.columns.find((column) => column.name === section.opens)?.references;
+        if (!reference || !findTable(schema, reference.table))
+          return { ...page, error: `${at}: "opens" names "${section.opens}", which is not a reference column of ${table.name}.` };
+      }
     }
     if (section.kind === 'metric' && section.fn !== 'count' && !section.column) {
       return { ...page, error: `${at}: "${section.fn}" needs a column to ${section.fn}.` };
@@ -909,6 +920,7 @@ function createConfig(create: RelatedCreate<string>): RelatedCreate<string> {
 export function sectionConfig(s: PageSection): AuthoredSection {
   const common = {
     ...(s.title !== undefined ? { title: s.title } : {}),
+    ...(s.icon ? { icon: s.icon } : {}),
     ...(s.region !== undefined ? { region: s.region } : {}),
     ...(s.tab !== undefined ? { tab: s.tab } : {}),
     ...(s.width && s.width !== 'full' ? { width: s.width } : {}),
@@ -952,6 +964,7 @@ export function sectionConfig(s: PageSection): AuthoredSection {
           show: s.paths ?? [],
           ...(s.actions ? { links: s.actions.map((a) => ('view' in a ? (({ view, ...rest }) => ({ ...rest, to: view }))(a) : a)) } : {}),
           ...(s.subfigure !== undefined ? { subfigure: s.subfigure } : {}),
+          ...(s.subtitle !== undefined ? { subtitle: s.subtitle } : {}),
           ...(s.was !== undefined ? { was: s.was } : {}),
           ...(s.note !== undefined ? { note: s.note } : {}),
         } as AuthoredSection;
@@ -963,6 +976,7 @@ export function sectionConfig(s: PageSection): AuthoredSection {
         ...(s.names === false ? { names: false as const } : {}),
         ...(s.presentation ? { presentation: s.presentation } : {}),
         ...(s.edit ? { editable: true } : {}),
+        ...(s.emptyMode ? { empty: s.emptyMode } : {}),
       };
     case 'timeline':
       return {
@@ -973,8 +987,8 @@ export function sectionConfig(s: PageSection): AuthoredSection {
           from: stream.from,
           whose: stream.path,
           at: stream.at,
-          show: stream.show,
-          detail: stream.detail,
+          text: stream.text,
+          badge: stream.badge,
           author: stream.by,
           query: stream.filter,
           ...(stream.of ? { about: stream.of } : {}),
@@ -1036,7 +1050,8 @@ export function sectionConfig(s: PageSection): AuthoredSection {
           whose: s.path,
           show: s.labels ? s.columns?.map((column) => (s.labels![column] ? { column, label: s.labels![column] } : column)) : s.columns,
           query: s.filter,
-          ...(s.empty ? { empty: listEmptyConfig(s.empty) } : {}),
+          ...(s.emptyMode === 'hide' ? { empty: 'hide' as const } : s.empty ? { empty: listEmptyConfig(s.empty) } : {}),
+          ...(s.opens ? { opens: s.opens } : {}),
           sort: s.orderBy?.map((o) => (o.direction === 'desc' ? `${o.column} desc` : o.column)).join(', '),
         };
       return {
@@ -1086,6 +1101,7 @@ export function sectionConfig(s: PageSection): AuthoredSection {
           : { measure: [s.fn, s.column].filter(Boolean).join(' ') }),
         query: s.filter,
         limit: s.limit,
+        ...(s.emptyMode ? { empty: s.emptyMode } : {}),
         ...(s.format !== undefined ? { format: s.format } : {}),
         ...(s.unit !== undefined ? { unit: s.unit } : {}),
       };
@@ -1109,6 +1125,9 @@ export function sectionConfig(s: PageSection): AuthoredSection {
         limit: s.limit,
         ...(s.height !== undefined ? { height: s.height } : {}),
         ...(s.target !== undefined ? { target: s.target } : {}),
+        ...(s.curve ? { curve: s.curve } : {}),
+        ...(s.total ? { total: s.total } : {}),
+        ...(s.emptyMode ? { empty: s.emptyMode } : {}),
         ...(s.format !== undefined ? { format: s.format } : {}),
         ...(s.unit !== undefined ? { unit: s.unit } : {}),
       };
@@ -1118,7 +1137,6 @@ export function sectionConfig(s: PageSection): AuthoredSection {
         kind: s.kind,
         text: s.text,
         ...(s.variant ? { variant: s.variant } : {}),
-        ...(s.icon ? { icon: s.icon } : {}),
         ...(s.action ? { action: 'view' in s.action ? { label: s.action.label, to: s.action.view } : s.action } : {}),
       };
     case 'custom':

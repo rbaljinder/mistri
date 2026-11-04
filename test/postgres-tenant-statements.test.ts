@@ -687,12 +687,15 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
        11.5 / 5,900 / 608 / 3, a prepare 4.6 / 1,560 / 46 / 7), with room: five times the CPU, for a slower runner
        and for the gate's parallel lane beside it (three times was crossed there), half again the bytes, and a
        quarter again the copies. A prepare checked eleven scopes before its transaction
-       checked each once. Raise one only with the reason beside it. */
+       checked each once. Raise one only with the reason beside it.
+       The record page's CPU ceiling is 66, not 58 (rc.16): CI measured 58.6 on a loaded runner where this machine
+       measures 10.0 on rc.16 and on rc.15 alike (five runs each, the same 5,670 KB and 587 copies), so the work did
+       not grow; the ceiling was crossed by the runner, and allocation and copies, which do not vary with load, stay as tight. */
     const budgets: Record<string, { cpuMs: number; kb: number; copied: number; checked: number }> = {
       enter: { cpuMs: 45, kb: 4700, copied: 225, checked: 1 },
       list: { cpuMs: 15, kb: 1850, copied: 90, checked: 1 },
       counts: { cpuMs: 13, kb: 1350, copied: 50, checked: 1 },
-      record: { cpuMs: 58, kb: 8900, copied: 760, checked: 4 },
+      record: { cpuMs: 66, kb: 8900, copied: 760, checked: 4 },
       prepare: { cpuMs: 23, kb: 2350, copied: 60, checked: 8 },
     };
     for (const [name, budget] of Object.entries(budgets)) {

@@ -333,6 +333,8 @@ function main() {
              loopback server (auth.ts authLimitsOffForTests); the per-account lockout stays. A file that tests the
              limits deletes it. Set to anything else to keep them. */
           MISTRI_TEST_AUTH_LIMITS: process.env.MISTRI_TEST_AUTH_LIMITS ?? 'off',
+          /* The seam is read only in a process that says it is a test (auth/requestRules.ts). */
+          NODE_ENV: process.env.NODE_ENV ?? 'test',
         },
       },
     );

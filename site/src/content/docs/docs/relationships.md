@@ -29,7 +29,7 @@ See it in the sample (`examples/apps/lintel/pages/resident.ts:8`); [Sample Apps]
 
 ## When to use it, and when not
 
-- Use a hop (the foreign key, written as its column) wherever one table reaches another: `related`, `whose` on a metric, chart or rollup, `about` on a section about another record, `stream(from, whose, at, show)` on a timeline. `mistri-schema.d.ts` lists every table's hops under `References`.
+- Use a hop (the foreign key, written as its column) wherever one table reaches another: `related`, `whose` on a metric, chart or rollup, `about` on a section about another record, `stream(from, whose, at, text)` on a timeline. `mistri-schema.d.ts` lists every table's hops under `References`.
 - Use `references` on the resource when the database holds the link as plain text (`site_code` naming `site.code`); declare a real foreign key instead when you own the schema.
 - Use `related(title, from, { same: [column] })` instead to list rows that share a value with the record (the same category) rather than point at it; it needs no key.
 
@@ -40,7 +40,7 @@ See it in the sample (`examples/apps/lintel/pages/resident.ts:8`); [Sample Apps]
 | Related list | `related(title, table, hop, { show, query, sort, create })` | `related('Contacts', 'contact', 'account_id', …)` |
 | Label path | `hop.column`, as deep as the keys go | `opportunity_id.account_id.city` |
 | Figures about the record | `whose: hop` on `metric`, `chart`, `breakdown` | `{ whose: 'account_id' }` |
-| Rollup | `count`, `sum`, `min`, `max` over the rows that point here | `count('task', { query: 'status = open' })` |
+| Rollup | `rollup.count`, `sum`, `avg`, `min`, `max` over the rows that point here | `rollup.count('task', { query: 'status = open' })` |
 | Declared key | `references: { col: { to, column? } }` on the resource | `{ site_code: { to: 'site', column: 'code' } }` |
 
 A composite key is `a+b`, and the constraint's name where two keys share columns. Where its other columns are NOT NULL and its target column is unique alone, as in a tenant's `(tenant_id, incident_id) REFERENCES incident (tenant_id, id)`, its remaining column is a reference too: `incident_id.number` is a path, and `incident_id` draws the ticket. A declared reference's target must be unique (its primary key, the default, or a unique constraint on that column alone) and of the same kind; it is followed like a key, but is never authority for a write and adds no delete impact. Every key: [resources reference](/docs/dsl-resources/).

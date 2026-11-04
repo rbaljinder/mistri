@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /**
  * A submitted application added to an account, in a browser: the done
  * screen's "Create an account to track this", the App's own sign-up, the
@@ -49,7 +50,7 @@ async function apply(page: Page, origin: string): Promise<string> {
 }
 
 test.describe('A submitted application added to an account', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startSavedFormApp();

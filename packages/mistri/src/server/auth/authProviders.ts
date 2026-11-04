@@ -5,6 +5,7 @@ import type { AppSignIn } from '../../shared/app.js';
 import type { EmailTransport } from '../email/email.js';
 import { signUpShut } from './identityRoles.js';
 import { resetWithoutMailLog } from '@mistriwork/engine/server/startupWarnings.js';
+import { causeText } from '../observe/failureCause.js';
 
 /**
  * How a reset link for a forgotten password reaches its reader: by email,
@@ -73,7 +74,7 @@ export function appAuthProviders(
                       `Someone asked to reset the password of your ${mail.app} account. The link works once, for an hour:\n\n${url}\n\n` +
                       'If it was not you, ignore this email: the password stays as it is.',
                   })
-                  .catch(() => console.error(`mistri: a password reset link could not be emailed.`));
+                  .catch((cause) => console.error(`mistri: a password reset link could not be emailed: ${causeText(cause)}`));
                 return;
               }
               if (development) {
@@ -107,7 +108,7 @@ export function appAuthProviders(
                     `Confirm this is the address of your ${mail.app} account. The link works for an hour:\n\n${url}\n\n` +
                     'If you did not make an account, ignore this email.',
                 })
-                .catch(() => console.error('mistri: a verification link could not be emailed.'));
+                .catch((cause) => console.error(`mistri: a verification link could not be emailed: ${causeText(cause)}`));
             },
           },
         }
@@ -130,7 +131,7 @@ export function appAuthProviders(
                       `Someone asked to change the email address of your ${mail.app} account to ${newEmail}. To go ahead, follow this link within the hour:\n\n${url}\n\n` +
                       'If it was not you, ignore this email: the address stays as it is, and consider changing your password.',
                   })
-                  .catch(() => console.error('mistri: an email change notice could not be emailed.'));
+                  .catch((cause) => console.error(`mistri: an email change notice could not be emailed: ${causeText(cause)}`));
               },
             },
           },

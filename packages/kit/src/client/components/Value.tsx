@@ -11,11 +11,11 @@ import { Fragment, type ReactNode } from 'react';
 import { api, columnDisplay, columnLabel, emptyWord, findTable, humanName, openRecord, refsFrom, state, toast } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
 import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
-import { dressFor, linkFor, maskedText, ruleSays, type DisplayRule } from './valueModel.js';
+import { dressFor, linkFor, maskedText, ruleSays, subtitlePath, wordFor, type DisplayRule } from './valueModel.js';
 import { rowCurrency } from '@mistriwork/engine/shared/money.js';
 import { dueOpen } from './dueOpen.js';
 import { JsonValue } from './JsonValue.js';
-import { jsonValueOf, previewOf } from './jsonModel.js';
+import { itemsText, jsonValueOf, previewOf } from './jsonModel.js';
 import { TAGS_TYPE, tagChips } from '@mistriwork/engine/shared/tagLists.js';
 import { AvatarText, Dressed, Said } from './Dressed.js';
 import { ValueSlot } from './valueRenderers.js';
@@ -84,10 +84,27 @@ interface ValueProps {
   wholeText?: boolean;
   /** The record the value is of, where a money rule reads its currency from another of its columns (money.ts). */
   row?: Readonly<Record<string, unknown>>;
+  /** Draw the rule's `subtitle` (a column of the same record) as a second line under the value, as a list's cell does. */
+  subtitled?: boolean;
 }
 
 /** A value as the record and the page show it: dressed when the app says, plain otherwise. */
 export function Value(props: ValueProps) {
+  const { subtitled, row, col } = props;
+  const body = <BareValue {...props} />;
+  const rule = subtitled && props.tableId !== undefined ? (columnDisplay(props.tableId, col?.name ?? '') as DisplayRule | null) : null;
+  const path = subtitlePath(rule, col?.name ?? '');
+  const second = path !== undefined && row && Object.hasOwn(row, path) ? row[path] : undefined;
+  if (second === null || second === undefined || second === '') return body;
+  return (
+    <span className="value-subtitled">
+      {body}
+      <span className="value-sub">{String(second)}</span>
+    </span>
+  );
+}
+
+function BareValue(props: ValueProps) {
   const { col, value, tableId, compact = false, links = !compact } = props;
   const rule = tableId === undefined ? null : (columnDisplay(tableId, col?.name ?? '') as DisplayRule | null);
   const drawn = <DrawnValue {...props} rule={rule} />;
@@ -198,9 +215,38 @@ function PlatformValue({ col, value, tableId, compact = false, links = !compact,
       </span>
     );
   }
-  const json = jsonValueOf(col, value);
-  if (json) return compact ? <span className="json-preview-text">{previewOf(json.value)}</span> : <JsonValue value={json.value} />;
   const declared = tableId === undefined ? null : (columnDisplay(tableId, col?.name ?? '') as DisplayRule | null);
+  const json = jsonValueOf(col, value);
+  if (json) {
+    /* A list of plain values (roles, tags, sizes) is its values, each said in the rule's words as a single value is
+       (`values`, `humanize`), plainly: Raw and Copy belong to a document whose braces a reader may want, and are
+       not drawn over a row of chips. */
+    const items = Array.isArray(json.value) && json.value.length && json.value.every((item) => item === null || typeof item !== 'object');
+    const shown = items
+      ? (json.value as unknown[]).map((item) => (typeof item === 'string' ? (wordFor(declared, item) ?? item) : item))
+      : json.value;
+    /* Where there is one line (a cell, a header's fact, a figure) a list of plain values is its words, comma between,
+       with no brackets: "Ram, Truck". Chips are for a field block, where there is room for them; `format: 'items'`
+       asks for one item per line there instead, as a text of lines is said. */
+    if (items && compact) {
+      const text = itemsText(shown as unknown[]);
+      return (
+        <span className="json-preview-text" title={text}>
+          {text}
+        </span>
+      );
+    }
+    if (items && declared?.format === 'items')
+      return (
+        <ul className="value-items">
+          {(shown as unknown[]).map((item, index) => (
+            <li key={index}>{String(item)}</li>
+          ))}
+        </ul>
+      );
+    if (compact) return <span className="json-preview-text">{previewOf(shown as object)}</span>;
+    return <JsonValue value={shown as object} bar={!items} />;
+  }
   /* A money column whose currency is the record's own: the code its row holds. */
   const owned =
     declared?.currencyColumn && row

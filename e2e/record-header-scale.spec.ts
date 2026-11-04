@@ -7,50 +7,35 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { Page } from '@playwright/test';
-import { expect, test } from './support/harness';
+import { expect, test as base } from './support/harness';
+import { fixture } from './support/fixture';
 import { inPage, probePage, type Probe } from '../packages/mistri/src/server/build/gradeProbe';
 
-/**
- * TC14: the shared record header under the largest type scale and the most
- * spacious density a theme may pick, at 1280, 390 and 320 wide. Its pieces —
- * the eyebrow, the name, the star, the facts, the verbs — never share pixels;
- * the verbs wrap rather than run off the window; and on a phone, where the
- * verbs are a bar pinned at the window's foot and the page scrolls under it,
- * every control of the page can be scrolled clear of the bar. Grade's own
- * probe reads the page as having no overlap (it read the page scrolling under
- * the bar as one, in four themes).
- *
- * A server of its own over a fresh database (listen(0), mkdtemp).
- */
-let origin = '';
-let directory = '';
-let child: ChildProcess | undefined;
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'mistri-record-header-scale-'));
-  const db = join(directory, 'shop.db');
-  const source = new DatabaseSync(db);
-  try {
-    source.exec(`CREATE TABLE purchase_order (id INTEGER PRIMARY KEY, name TEXT NOT NULL, supplier TEXT NOT NULL, status TEXT NOT NULL, total REAL NOT NULL);
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      directory = mkdtempSync(join(tmpdir(), 'mistri-record-header-scale-'));
+      const db = join(directory, 'shop.db');
+      const source = new DatabaseSync(db);
+      try {
+        source.exec(`CREATE TABLE purchase_order (id INTEGER PRIMARY KEY, name TEXT NOT NULL, supplier TEXT NOT NULL, status TEXT NOT NULL, total REAL NOT NULL);
       CREATE TABLE po_line (id INTEGER PRIMARY KEY, purchase_order_id INTEGER NOT NULL REFERENCES purchase_order(id), item TEXT NOT NULL, qty INTEGER NOT NULL);
       INSERT INTO purchase_order VALUES (1, 'PO-1042 Shimano drivetrain restock for the spring service season', 'Cascade Cycle Supply of Portland', 'Waiting on the supplier', 4812.5);`);
-    const line = source.prepare('INSERT INTO po_line VALUES (?, 1, ?, ?)');
-    for (let i = 1; i <= 14; i++) line.run(i, `Deore M6100 12-speed chain, 126 links, quick link (${i})`, i * 2);
-  } finally {
-    source.close();
-  }
-  const config = join(directory, 'connections.json');
-  writeFileSync(config, JSON.stringify({ connections: [{ name: 'shop', url: db, writable: true }] }));
-  const app = join(directory, 'app');
-  mkdirSync(join(app, 'node_modules'), { recursive: true });
-  mkdirSync(join(app, 'node_modules', '@mistriwork'), { recursive: true });
-  symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(app, 'node_modules', '@mistriwork', 'mistri'), 'dir');
-  writeFileSync(join(app, 'package.json'), '{ "type": "module" }\n');
-  writeFileSync(
-    join(app, 'app.ts'),
-    `import { action, defineApp, defineTheme, fields, listView, page, related } from '@mistriwork/mistri/app';
+        const line = source.prepare('INSERT INTO po_line VALUES (?, 1, ?, ?)');
+        for (let i = 1; i <= 14; i++) line.run(i, `Deore M6100 12-speed chain, 126 links, quick link (${i})`, i * 2);
+      } finally {
+        source.close();
+      }
+      const config = join(directory, 'connections.json');
+      writeFileSync(config, JSON.stringify({ connections: [{ name: 'shop', url: db, writable: true }] }));
+      const app = join(directory, 'app');
+      mkdirSync(join(app, 'node_modules'), { recursive: true });
+      mkdirSync(join(app, 'node_modules', '@mistriwork'), { recursive: true });
+      symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(app, 'node_modules', '@mistriwork', 'mistri'), 'dir');
+      writeFileSync(join(app, 'package.json'), '{ "type": "module" }\n');
+      writeFileSync(
+        join(app, 'app.ts'),
+        `import { action, defineApp, defineTheme, fields, listView, page, related } from '@mistriwork/mistri/app';
 /* The largest type and the roomiest spacing the menu has. */
 const large = defineTheme({ id: 'large', label: 'Large', extends: 'lumen', type: { base: '16px', roles: { title: { size: '36px', weight: 700 } } }, density: 'spacious' });
 export default defineApp({
@@ -83,57 +68,74 @@ export default defineApp({
   ui: { customThemes: [large], theme: { preset: 'large' } },
 });
 `,
-  );
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  origin = `http://127.0.0.1:${port}`;
-  const started = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
-    {
-      cwd: resolve('.'),
-      env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      );
+      const reservation = createServer();
+      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
+      const port = (reservation.address() as { port: number }).port;
+      await new Promise<void>((done) => reservation.close(() => done()));
+      origin = `http://127.0.0.1:${port}`;
+      const started = spawn(
+        process.execPath,
+        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
+        {
+          cwd: resolve('.'),
+          env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      child = started;
+      let log = '';
+      started.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      started.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
+        started.stdout!.on('data', () => {
+          if (log.includes('Listening on ')) {
+            clearTimeout(timer);
+            done();
+          }
+        });
+        started.once('exit', () => {
+          clearTimeout(timer);
+          fail(new Error(`The fixture exited: ${log}`));
+        });
+      });
     },
-  );
-  child = started;
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
-    started.stdout!.on('data', () => {
-      if (log.includes('Listening on ')) {
-        clearTimeout(timer);
-        done();
+    async () => {
+      if (child && child.exitCode === null) {
+        const closed = once(child, 'close');
+        child.kill('SIGTERM');
+        const force = setTimeout(() => child?.kill('SIGKILL'), 5000);
+        try {
+          await closed;
+        } finally {
+          clearTimeout(force);
+        }
       }
-    });
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The fixture exited: ${log}`));
-    });
-  });
+      rmSync(directory, { recursive: true, force: true });
+    },
+  ),
 });
 
-test.afterAll(async () => {
-  if (child && child.exitCode === null) {
-    const closed = once(child, 'close');
-    child.kill('SIGTERM');
-    const force = setTimeout(() => child?.kill('SIGKILL'), 5000);
-    try {
-      await closed;
-    } finally {
-      clearTimeout(force);
-    }
-  }
-  rmSync(directory, { recursive: true, force: true });
-});
+/**
+ * TC14: the shared record header under the largest type scale and the most
+ * spacious density a theme may pick, at 1280, 390 and 320 wide. Its pieces —
+ * the eyebrow, the name, the star, the facts, the verbs — never share pixels;
+ * the verbs wrap rather than run off the window; and on a phone, where the
+ * verbs are a bar pinned at the window's foot and the page scrolls under it,
+ * every control of the page can be scrolled clear of the bar. Grade's own
+ * probe reads the page as having no overlap (it read the page scrolling under
+ * the bar as one, in four themes).
+ *
+ * A server of its own over a fresh database (listen(0), mkdtemp).
+ */
+let origin = '';
+let directory = '';
+let child: ChildProcess | undefined;
 
 /** The header's drawn pieces, each a box: none may share pixels with another, nor leave the window sideways. */
 async function headerPieces(page: Page) {

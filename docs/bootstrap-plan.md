@@ -47,7 +47,7 @@ So the report is right on both counts, with three corrections:
 3. A profile half exists, and the commands disagree about where to find it. `mistri dev` reads
    `<app>/mistri.json` first (`cli/devMode.ts:100-104`). Serve, check, migrate, seed, shot and grade read
    `--config`, then `./mistri.json` and `./.mistri.json` in the working directory, then the person's own
-   `connections.json` (`engine/server/config/locations.ts:11`). Running `check --app scratch` from the parent
+   `connections.json` (`packages/engine/src/server/config/locations.ts`, `configLocations`). Running `check --app scratch` from the parent
    directory finds no database, while `dev scratch` finds it. `mistri new` writes `--app . --config mistri.json`
    into four package scripts. The site's deploy page builds the profile by hand
    (`P="--config … --app … --policy …"`, `build-and-deploy.md:132`), and the skill says "pass `--policy` to every

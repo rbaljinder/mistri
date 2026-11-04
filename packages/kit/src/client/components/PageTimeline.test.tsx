@@ -17,6 +17,9 @@ let streamRows: Array<Record<string, unknown>> = [];
 let otherRows: Array<Record<string, unknown>> = [];
 /* The keys of the rows the section's `side` picks out. */
 let sideRows: Array<Record<string, unknown>> = [];
+/* The limits the stream's views were asked with, and whether it has rows past them. */
+const limitsAsked: unknown[] = [];
+let streamMore = false;
 const threeRows = [
   { at: '2026-10-03T10:00:00Z', body: 'Newest', kind: 'reply' },
   { at: '2026-10-02T10:00:00Z', body: 'Escalated', kind: 'system' },
@@ -55,10 +58,17 @@ vi.mock('./PageSectionBox.js', () => ({
 }));
 vi.mock('./pageContext.js', () => ({
   PageRenderContext: createContext({}),
-  usePageApi: () => async (_path: string, body: { view: { name?: string } }) =>
-    body.view.name === 'side'
+  usePageApi: () => async (_path: string, body: { view: { name?: string; limit?: number } }) => {
+    limitsAsked.push(body.view.limit);
+    return body.view.name === 'side'
       ? { view: true, columns: ['id'], rows: sideRows }
-      : { view: true, columns: ['at', 'body', 'kind', 'by', 'id'], rows: body.view.name === 'other' ? otherRows : streamRows },
+      : {
+          view: true,
+          columns: ['at', 'body', 'kind', 'by', 'id'],
+          rows: body.view.name === 'other' ? otherRows : streamRows,
+          more: streamMore,
+        };
+  },
 }));
 vi.mock('../../../../mistri/src/client/components/sdk/commands.js', () => ({
   actionOf: () => ({ command: { input: [{ name: 'body', type: 'textarea' }] } }),
@@ -92,8 +102,8 @@ const plan = {
       from: 'message',
       path: 'ticket_id',
       at: 'at',
-      show: 'body',
-      detail: 'kind',
+      text: 'body',
+      badge: 'kind',
       by: 'by',
       view: { columns: [{ path: 'at' }, { path: 'body' }, { path: 'kind' }, { path: 'by' }] },
     },
@@ -144,6 +154,30 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('a timeline past its limit', () => {
+  test('shows the first rows, and Show more asks for another page of each stream only when clicked', async () => {
+    streamRows = threeRows.map((row) => ({ ...row, by: 'Robin Bell' }));
+    streamMore = true;
+    limitsAsked.length = 0;
+    draw({ newest: undefined, limit: 2, composer: undefined });
+    await screen.findByText('Newest');
+    expect(screen.queryByText('Oldest')).toBeNull();
+    expect(limitsAsked).toEqual([undefined]);
+    streamMore = false;
+    await userEvent.setup({ advanceTimers: () => {} }).click(screen.getByRole('button', { name: 'Show more' }));
+    await screen.findByText('Oldest');
+    expect(limitsAsked.at(-1)).toBe(4);
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+  });
+
+  test('a stream that has everything draws no button', async () => {
+    streamMore = false;
+    draw({ newest: undefined, limit: 5, composer: undefined });
+    await screen.findByText('Oldest');
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+  });
+});
+
 describe('reactions under a timeline', () => {
   test("hand each message's entry, by the column its stream says, and none for a line no person wrote", async () => {
     tallied.length = 0;
@@ -183,6 +217,15 @@ describe('a conversation timeline', () => {
     // An internal note is a card in its column, not a band.
     expect(rows[0].classList.contains('is-tinted')).toBe(true);
     expect(rows[2].classList.contains('is-tinted')).toBe(false);
+  });
+
+  test('a row nobody wrote leads with its main value, and the detail follows it', async () => {
+    streamRows = [{ at: '2026-10-03T10:05:00Z', body: 'Invoice sent', kind: 'reply', by: null }];
+    draw();
+    await screen.findByText('Invoice sent');
+    const row = document.querySelector('.timeline-row:not(.is-compact)')!;
+    expect([...row.children].map((child) => child.className.split(' ')[0])).toEqual(['timeline-avatar', 'timeline-text', 'timeline-head']);
+    expect(row.querySelector('.timeline-head .timeline-kind')!.textContent).toBe('reply');
   });
 
   test('a message says who, what kind and when before its words', async () => {

@@ -14,8 +14,8 @@ export const opportunityPage = page(
       sort: 'due_on',
     }),
     timeline('Activity', [
-      stream('activity', 'opportunity_id', 'happened_on', 'subject', { detail: 'kind' }),
-      stream('task', 'opportunity_id', 'created_on', 'subject', { detail: 'status' }),
+      stream('activity', 'opportunity_id', 'happened_on', 'subject', { badge: 'kind' }),
+      stream('task', 'opportunity_id', 'created_on', 'subject', { badge: 'status' }),
     ]),
     fields(['id', 'created_on'], { title: 'Record details' }),
   ],

@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /**
  * A public command form in the intake style, in a browser: a progress bar and
  * one question at a time, a sticky bar of actions, a row of fields side by
@@ -53,7 +54,7 @@ async function toConsent(page: Page) {
 }
 
 test.describe('The intake style of a public command form', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startIntakeApp();
@@ -204,7 +205,7 @@ test.describe('The intake style of a public command form', () => {
    sideways after a Next (P7a): after each Next, no ancestor of the form may scroll on its inline axis. */
 test.describe('The intake form at 411px', () => {
   test.use({ viewport: { width: 411, height: 800 }, deviceScaleFactor: 2.625 });
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startIntakeApp();

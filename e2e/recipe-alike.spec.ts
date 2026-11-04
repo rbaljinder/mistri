@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test } from './support/harness';
 import { alikeNotes, pictureDifferences } from '../packages/mistri/src/server/build/shot';
+import { TOUR_MS } from './support/budgets';
 
 /**
  * TC9: `shot --recipes` measures how far apart each pair of a part's values
@@ -48,7 +49,7 @@ test('a sheet’s pictures are compared pixel by pixel, and only the near-alike 
 });
 
 test('shot --recipes on a page that draws nothing of the part says so once, beside the sheet', async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(TOUR_MS);
   const directory = mkdtempSync(join(tmpdir(), 'mistri-recipe-alike-'));
   try {
     const db = join(directory, 'thread.db');

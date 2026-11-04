@@ -83,6 +83,63 @@ function reachesShared(text) {
   return false;
 }
 
+/* The timeout policy (e2e/support/budgets.ts). A test's budget is the runner's 20 s (40 s on CI), `test.slow()` where
+   it is slow for a reason it can name, or one of budgets.ts's named constants; a number above a minute says nothing
+   about whether it is still true. A fixture that takes a while to start is a worker-scoped one with a timeout of its
+   own (support/fixture.ts, support/ownServers.ts), never a `beforeAll` that sets its test's timeout to pay for it. */
+const LONGEST_LITERAL_MS = 60_000;
+
+/* Specs whose `beforeAll` still sets a timeout, each a describe-scoped or helper-started fixture the mechanical
+   conversion (a top-level beforeAll/afterAll pair into support/fixture.ts) could not take. TODO: move each into a
+   worker fixture, or an `ownServers` set, and delete its line here; the list only shrinks. */
+const HOOK_TIMEOUT_ALLOWED = new Set([
+  'e2e/built-samples.spec.ts',
+  'e2e/calendar-week.spec.ts',
+  'e2e/embed-built.spec.ts',
+  'e2e/ignition-display.spec.ts',
+  'e2e/ignition-landing.spec.ts',
+  'e2e/ignition-public-form.spec.ts',
+  'e2e/ignition-tenancy.spec.ts',
+  'e2e/ignition-workflow.spec.ts',
+  'e2e/multisource-app.spec.ts',
+  'e2e/parcel.spec.ts',
+  'e2e/preview-blocks.spec.ts',
+  'e2e/public-pages.spec.ts',
+  'e2e/public-visitor.spec.ts',
+  'e2e/related-tabs.spec.ts',
+  'e2e/sample-apps.spec.ts',
+  'e2e/service-catalog-filters.spec.ts',
+  'e2e/service-desk.spec.ts',
+  'e2e/startup-notice.spec.ts',
+  'e2e/tags-and-text-rules.spec.ts',
+  'e2e/thread-attachments.spec.ts',
+  'e2e/thread-tags.spec.ts',
+  'e2e/thread-transitions.spec.ts',
+  'e2e/tree-picker.spec.ts',
+  'e2e/write-storm.spec.ts',
+]);
+
+/** What a spec says about its time that the policy refuses, one line each. */
+export function timeoutProblems() {
+  const problems = [];
+  const files = globSync('e2e/**/*.spec.ts', { cwd: ROOT })
+    .map((file) => file.split('\\').join('/'))
+    .sort();
+  for (const file of files) {
+    const text = readFileSync(resolve(ROOT, file), 'utf8');
+    for (const [, value] of text.matchAll(/(?:test\.setTimeout\(|describe\.configure\(\{\s*timeout:\s*)([\d_]+)\s*[)}]/g)) {
+      if (Number(value.replaceAll('_', '')) > LONGEST_LITERAL_MS)
+        problems.push(`${file}: a timeout of ${value} ms is a number; name one from e2e/support/budgets.ts or use test.slow()`);
+    }
+    const hook = /beforeAll\(async \(\) => \{\n(?:\s*\/\/[^\n]*\n)*\s*test\.setTimeout\(/.test(text);
+    if (hook && !HOOK_TIMEOUT_ALLOWED.has(file))
+      problems.push(`${file}: a beforeAll that sets a timeout is a fixture; start it in a worker fixture (e2e/support/fixture.ts)`);
+    if (!hook && HOOK_TIMEOUT_ALLOWED.has(file))
+      problems.push(`${file}: no longer sets a timeout in a beforeAll; remove it from HOOK_TIMEOUT_ALLOWED`);
+  }
+  return problems;
+}
+
 /** Every spec, split into the two lanes. Exported so the repository's own
  * structure test can assert the partition covers the suite exactly: a glob can
  * only be misspelled, but a partition can silently drop a spec. */

@@ -274,12 +274,12 @@ export type GroupBy<F, B extends string> = QueryTable<F> extends infer T ? QOn<T
 
 /* ---------- where the table is the place's, not the helper's ---------- */
 
-/** A rollup's column — `sum('order_line', 'amount')` — as written, or what is wrong with it: one of the rows' own
-    columns (a computed one or a rollup of theirs among them), a number for a sum, a number or a date for a min or a max,
-    any column for a latest. */
+/** A rollup's column — `rollup.sum('order_line', 'amount')` — as written, or what is wrong with it: one of the rows' own
+    columns (a computed one or a rollup of theirs among them), a number for a sum or an avg, a number or a date for a min
+    or a max, any column for a latest. */
 export type RollupColumn<F, Fn extends string, C extends string> = QOn<F> extends true
-  ? C extends keyof QOwn<F> ? Fn extends 'latest' ? C : QOwn<F>[C] extends (Fn extends 'sum' ? 'number' | 'other' : 'number' | 'date' | 'other') ? C
-      : `${C} is ${QOwn<F>[C] extends readonly string[] ? 'a vocabulary' : QOwn<F>[C] & string}; a ${Fn} reads ${Fn extends 'sum' ? 'numbers' : 'numbers or dates'}`
+  ? C extends keyof QOwn<F> ? Fn extends 'latest' ? C : QOwn<F>[C] extends (Fn extends 'sum' | 'avg' ? 'number' | 'other' : 'number' | 'date' | 'other') ? C
+      : `${C} is ${QOwn<F>[C] extends readonly string[] ? 'a vocabulary' : QOwn<F>[C] & string}; a ${Fn} reads ${Fn extends 'sum' | 'avg' ? 'numbers' : 'numbers or dates'}`
     : C extends `${string}.${string}` ? `${C} is a path; a rollup reads a column of its own rows` : QColumnErr<F, C>
   : C;
 

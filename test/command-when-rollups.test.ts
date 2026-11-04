@@ -1,6 +1,6 @@
 /**
  * A command's `when` over its target's rollups and computed columns (commandWhen.ts): `when: 'last_part =
- * installed'` where `last_part` is `latest('part', 'status')`. What the binding refuses about one — rows the command
+ * installed'` where `last_part` is `rollup.latest('part', 'status')`. What the binding refuses about one — rows the command
  * does not read, rows narrowed through a reference, a comparison a transaction cannot decide — and that availability, prepare and the
  * run all judge it of the rows as they are in the transaction.
  */
@@ -25,7 +25,7 @@ import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import { catalogOf } from './support/commandCatalog.js';
 
 const agent: Identity = { id: 'account-agent', who: 'agent@example.test', role: 'agent' };
-const COMMANDS = ['close', 'archive', 'bill', 'chase', 'settle'];
+const COMMANDS = ['close', 'archive', 'bill', 'chase', 'settle', 'average', 'dearAverage'];
 
 const app = () => ({
   id: 'shop',
@@ -43,6 +43,9 @@ const app = () => ({
         // A sum of a computed column of the parts (R4): what is owed is each part's cost times its quantity.
         owed: { fn: 'sum', from: 'part', column: 'line_total' },
         dearest: { fn: 'max', from: 'part', column: 'line_total' },
+        // A mean over no rows is nothing, as the statement's is; over a computed column it works each row out first.
+        mean: { fn: 'avg', from: 'part', column: 'cost' },
+        mean_total: { fn: 'avg', from: 'part', column: 'line_total' },
       },
       computed: {
         waiting: { type: 'boolean', value: 'open_parts > 0 and status = open' },
@@ -80,6 +83,8 @@ const registry = () =>
     chase: command('waiting = true'),
     // A balance built from a rollup of a computed column: offered while money is owed.
     settle: command('balance > 0 and dearest >= 60'),
+    average: command('mean > 50'),
+    dearAverage: command('mean_total >= 50'),
   });
 
 async function database(directory: string) {
@@ -183,6 +188,9 @@ test('availability, prepare and the run judge a rollup or a computed column in t
     // Job 1's newest part (by added_on) is the fitted one; job 2's dated part outranks its undated one.
     assert.deepEqual(await available('archive'), [true, true, true]);
     assert.deepEqual(await available('bill'), [true, false, false]);
+    // Job 1's parts cost 80 and 40 (a mean of 60; 60 of line totals), job 2's 30 and 20 (25; its line totals 60 and 20 are 40), job 3 has none.
+    assert.deepEqual(await available('average'), [true, false, false]);
+    assert.deepEqual(await available('dearAverage'), [true, false, false]);
     assert.deepEqual(await available('chase'), [true, false, false]);
     // Job 1 owes 120 (its dearest part 80), job 2 owes 80 (its dearest 30 times 2), job 3 owes nothing.
     assert.deepEqual(await available('settle'), [true, true, false]);

@@ -178,6 +178,40 @@ test('combination: api reads × a command registry', async (t) => {
   assert.equal(f.revision('north-1'), before + 1);
 });
 
+/** A narrowed resource (Preview) × the api block × a command on its table. The narrowed resource is a second name for
+ * the table that `api.resources`, the token's catalog and the command host all see; what is proved here is that its
+ * conditions hold through the real server — its list and item stand on them — while the table's own resource and the
+ * command that writes it work as they did. */
+test('combination: a narrowed resource × api reads × a command on its table', async (t) => {
+  const narrowed: Part = {
+    root: {
+      resources: { fresh: { physical: 'item', query: 'status = new' } },
+      api: { resources: { fresh: { fields: ['id', 'name', 'status'], sorts: ['id'] } } },
+    },
+    ddl: ["UPDATE item SET status = 'done' WHERE id = 'south-1'"],
+  };
+  const f = await deploy(t, merge(base({ write: true }), auth('AUTH-STORE'), apiReads(), touchCommand(), apiTouchCommand(), narrowed));
+  const ids = async (path: string) => {
+    const answer = await fetch(`${f.base}${path}`, { headers: f.headers });
+    const body = (await answer.json()) as { items: Array<{ id: string }> };
+    assert.equal(answer.status, 200, JSON.stringify(body));
+    return body.items.map((row) => row.id);
+  };
+  assert.deepEqual(await ids('/fresh?sort=id'), ['north-1', 'north-2']);
+  assert.equal((await fetch(`${f.base}/fresh/south-1`, { headers: f.headers })).status, 404, 'a row outside the query is no item');
+  assert.deepEqual(await ids('/item?sort=id'), ['north-1', 'north-2', 'south-1']);
+
+  const before = f.revision('north-1');
+  const ran = await fetch(`${f.base}/item/north-1/commands/touch/v1`, {
+    method: 'POST',
+    headers: { ...f.headers, 'if-match': `"${before}"`, 'idempotency-key': 'combination-narrow-0001' },
+    body: '{}',
+  });
+  assert.equal(ran.status, 200, await ran.text());
+  assert.equal(f.revision('north-1'), before + 1);
+  assert.deepEqual(await ids('/fresh?sort=id'), ['north-1', 'north-2']);
+});
+
 /** The same App, with the exposure declared through a feature rather than at
  * the root — the pair that shipped broken in 0.5.0, where `api.commands`
  * composed through a feature was refused although both halves passed alone. */

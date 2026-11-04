@@ -166,7 +166,7 @@ pairs, then the lists of waiting work. Blocks by intent:
 
 | Intent | Section | Example |
 | --- | --- | --- |
-| Introduce the board and its one next step | `note(text, { variant: 'banner', title, eyebrow, action })`, once, first | `mistri docs compose-dashboard` |
+| Introduce the board and its one next step | `banner(title, text, { eyebrow, action })`, once, first | `mistri docs compose-dashboard` |
 | A flow through ordered states (received, picked, shipped) | `breakdown(..., { shape: 'steps', notes })`, full width | [lintel/dashboards.ts:28](../../../examples/apps/lintel/dashboards.ts#L28) |
 | A trend over time | `chart(..., 'month <date>', { curve: 'smooth' })` | [lintel/dashboards.ts:41](../../../examples/apps/lintel/dashboards.ts#L41) |
 | Shares of a whole, at most six parts | `shape: 'donut', total: 'Leads'` | `mistri docs compose-dashboard` |

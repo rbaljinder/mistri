@@ -138,6 +138,10 @@
         "region": {
           "$ref": "#/$defs/region"
         },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
+        },
         "tab": {
           "allOf": [
             {
@@ -171,6 +175,13 @@
         "editable": {
           "const": true,
           "description": "true edits the properties in place: a choice is a picker, the rest an input, written through the resource's write grant or, where the reader has none for a column, through an action that sets just that column. The server judges every write as it always does; a reader who may do neither sees the values. For a summary, an accordion or a property rail."
+        },
+        "empty": {
+          "enum": [
+            "hide",
+            "show"
+          ],
+          "description": "What a block of fields does with the values the record does not have: hide leaves them out (and the block, when none is left), show says each as a dash. Default: hide for a property rail, show otherwise. A field the reader may fill in place stays."
         },
         "presentation": {
           "enum": [
@@ -227,6 +238,10 @@
         "region": {
           "$ref": "#/$defs/region"
         },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
+        },
         "tab": {
           "allOf": [
             {
@@ -280,6 +295,11 @@
           "type": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
           "description": "A headline's second figure, under the first and smaller: an estimate, a unit price."
+        },
+        "subtitle": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+          "description": "A headline's second line, under its figure: a column of the record, such as the frequency under an income."
         },
         "was": {
           "type": "string",
@@ -383,6 +403,10 @@
         },
         "region": {
           "$ref": "#/$defs/region"
+        },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
         },
         "tab": {
           "allOf": [
@@ -549,6 +573,10 @@
         "region": {
           "$ref": "#/$defs/region"
         },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
+        },
         "tab": {
           "allOf": [
             {
@@ -615,8 +643,20 @@
           "description": "Written like the query bar: \"due_on desc, name\"."
         },
         "empty": {
-          "$ref": "#/$defs/relatedEmpty",
-          "description": "Guidance shown when no row is current."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/relatedEmpty"
+            },
+            {
+              "const": "hide"
+            }
+          ],
+          "description": "Guidance shown when no row is current, or hide (leave the card out while there is none)."
+        },
+        "opens": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The reference column of from whose record the card opens, named by that record: for a link (join) table, the far side. Absent, a table that is only two references (and keys and dates) opens the one whose does not name; any other opens its own row."
         }
       }
     },
@@ -680,6 +720,10 @@
         },
         "region": {
           "$ref": "#/$defs/region"
+        },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
         },
         "tab": {
           "allOf": [
@@ -1072,6 +1116,10 @@
         "region": {
           "$ref": "#/$defs/region"
         },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
+        },
         "tab": {
           "allOf": [
             {
@@ -1271,6 +1319,11 @@
             "exclusiveMinimum": 0,
             "maximum": 1
           }
+        },
+        "opens": {
+          "type": "string",
+          "minLength": 1,
+          "description": "On a current() card only: the reference column of from whose record the card opens, named by that record (a link table's far side). A plain list has none."
         }
       },
       "required": [
@@ -1329,6 +1382,10 @@
         "region": {
           "$ref": "#/$defs/region"
         },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
+        },
         "tab": {
           "allOf": [
             {
@@ -1369,6 +1426,10 @@
           "type": "integer",
           "minimum": 1,
           "description": "Groups shown, biggest first."
+        },
+        "empty": {
+          "const": "hide",
+          "description": "hide leaves the breakdown out of the page while it has nothing to count."
         },
         "format": {
           "type": "string",
@@ -1421,7 +1482,7 @@
         "from",
         "whose",
         "at",
-        "show"
+        "text"
       ],
       "properties": {
         "from": {
@@ -1435,13 +1496,13 @@
           "type": "string",
           "description": "The date column the stream is ordered and merged by."
         },
-        "show": {
+        "text": {
           "type": "string",
-          "description": "The line each row becomes: a column, or a dotted path."
+          "description": "The row's text, its main value (a description, a title): a column, or a dotted path. It leads a row nobody wrote; in a message it sits under who, the badge and when."
         },
-        "detail": {
+        "badge": {
           "type": "string",
-          "description": "A quieter second word \u2014 a kind, an author."
+          "description": "The row's badge, a quieter word \u2014 a kind, a status: a column, or a dotted path. In a message it sits beside who and when, over the text; after the text in a row nobody wrote."
         },
         "author": {
           "type": "string",
@@ -1490,6 +1551,10 @@
         },
         "region": {
           "$ref": "#/$defs/region"
+        },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
         },
         "tab": {
           "allOf": [
@@ -1742,6 +1807,10 @@
         "region": {
           "$ref": "#/$defs/region"
         },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
+        },
         "tab": {
           "allOf": [
             {
@@ -1793,6 +1862,10 @@
         "region": {
           "$ref": "#/$defs/region"
         },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
+        },
         "tab": {
           "allOf": [
             {
@@ -1837,6 +1910,10 @@
         },
         "region": {
           "$ref": "#/$defs/region"
+        },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
         },
         "tab": {
           "allOf": [
@@ -2029,6 +2106,10 @@
         "region": {
           "$ref": "#/$defs/region"
         },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
+        },
         "tab": {
           "allOf": [
             {
@@ -2110,6 +2191,21 @@
         "target": {
           "type": "number",
           "description": "A goal ruled across a line or stacked bars; not on a donut."
+        },
+        "curve": {
+          "enum": [
+            "smooth",
+            "straight"
+          ],
+          "description": "A line's curve: smooth draws a monotone curve through the points, which never overshoots one."
+        },
+        "total": {
+          "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 40 }, { "$ref": "#/$defs/messageRef" }],
+          "description": "A donut's words for the figure in its middle (\"Total visitors\"), said under it. At most 40 characters."
+        },
+        "empty": {
+          "const": "hide",
+          "description": "hide leaves the chart out of the page while it has nothing to draw."
         },
         "title": {
           "$ref": "#/$defs/presentationCopy"
@@ -2251,6 +2347,10 @@
         "region": {
           "$ref": "#/$defs/region"
         },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
+        },
         "tab": {
           "allOf": [
             {
@@ -2322,6 +2422,10 @@
         },
         "region": {
           "$ref": "#/$defs/region"
+        },
+        "icon": {
+          "$ref": "app.schema.json#/$defs/appIcon",
+          "description": "A mark drawn before the section's heading."
         },
         "tab": {
           "allOf": [

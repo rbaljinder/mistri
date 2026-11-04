@@ -54,17 +54,28 @@ const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|::1|\[::1\])$/i;
 
 /**
  * Whether `MISTRI_TEST_AUTH_LIMITS=off` turns Better Auth's per-address
- * limits off: only for a server that listens on loopback, where every client
- * is this machine and the test suites sign in hundreds of times from one
- * address. Beyond loopback it is ignored, and said, so no deployment can carry
- * it into production by an environment file.
+ * limits off: only in a process that says it is a test (`NODE_ENV=test`, which
+ * every harness here and `mistri/testing`'s host set) and listens on loopback,
+ * where every client is this machine and the suites sign in hundreds of times
+ * from one address. Loopback alone is not enough: a production server behind a
+ * reverse proxy on the same machine listens there too, and an environment file
+ * that carried the seam into it would leave sign-in an unthrottled password
+ * oracle. Without both the seam is ignored, and said once.
  */
-export function authLimitsOffForTests(listenHost: string): boolean {
-  if (process.env[TEST_AUTH_LIMITS] !== 'off') return false;
+export function authLimitsOffForTests(listenHost: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env[TEST_AUTH_LIMITS] !== 'off') return false;
+  if (env.NODE_ENV !== 'test') return ignored(`NODE_ENV is ${env.NODE_ENV ? `"${env.NODE_ENV}"` : 'not set'}, not "test"`);
   if (LOOPBACK_HOST.test(listenHost)) return true;
-  console.error(
-    `mistri: ${TEST_AUTH_LIMITS}=off is ignored: this server listens on ${listenHost}, beyond this machine, so sign-in limits stay on.`,
-  );
+  return ignored(`this server listens on ${listenHost}, beyond this machine`);
+}
+
+const warned = new Set<string>();
+function ignored(why: string): false {
+  const line = `mistri: ${TEST_AUTH_LIMITS}=off is ignored: ${why}, so sign-in limits stay on.`;
+  if (!warned.has(line)) {
+    warned.add(line);
+    console.error(line);
+  }
   return false;
 }
 

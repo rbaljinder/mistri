@@ -1,6 +1,7 @@
 import { expect, test } from './support/harness';
 import { startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { LONG_MS } from './support/budgets';
 
 /**
  * Forecourt's search, narrowed from a rail on the left of the cards: a make
@@ -12,7 +13,7 @@ import { scalar } from './support/db';
  */
 test.describe("Forecourt's filter rail", () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   test.beforeEach(async () => {
     sample = await startSample('forecourt');
   });

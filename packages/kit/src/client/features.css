@@ -1000,6 +1000,8 @@ button.ghost.dash-open:hover { color: var(--ink); background: none; }
 /* The main line is cut as the second is, with an ellipsis: a link clipped mid-letter read as a typo. */
 .cell-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-sub { font: 400 var(--text-sm)/1.35 var(--sans); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.value-subtitled { display: inline-flex; flex-direction: column; min-width: 0; max-width: 100%; }
+.value-sub { font: 400 var(--text-sm)/1.35 var(--sans); color: var(--ink-muted); overflow-wrap: anywhere; }
 td.dressed { white-space: nowrap; }
 /* The columns an App's list could not hold, folded under the row's name (Grid.tsx `foldedOf`): each head and its value
    kept together, the line wrapping between them rather than the table scrolling sideways. Said a size down, the

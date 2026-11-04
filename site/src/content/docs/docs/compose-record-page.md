@@ -20,10 +20,11 @@ A record page follows one skeleton: a head, its figures, its children as tabs, a
   `listTabs: true`, each of at most 4 columns, the status last (Lintel's
   lease page says `listTabs: false` and stacks its two) —
   `examples/apps/lintel/pages/lease.ts:31`.
+- **When sections belong together, or the page is long**, give them a `tab`: any section takes
+  `tab: 'Billing'`, and sections sharing a name share one tab in the order written.
 - **When people add children from the record**, give the list a `create`
   whose `prefill` carries the record's own references —
-  `examples/apps/lintel/pages/maintenance_request.ts:30`.
-  A role that may read but not create still sees the list, without its New.
+  `examples/apps/lintel/pages/maintenance_request.ts:30`. A role that may read but not create sees the list without its New.
 - **When a price came down**, give the headline `was: 'was_price'`; the
   older figure is struck through beside it while it is higher.
 - **When the siblings matter**, a `related` list matched on the parent's
@@ -32,8 +33,7 @@ A record page follows one skeleton: a head, its figures, its children as tabs, a
 - **When it has a parent**, put a `card('Home', 'unit_id', ['property_id', 'bedrooms', 'sqft'])` beside the lists, in the aside first where there is one —
   `examples/apps/lintel/pages/lease.ts:27`.
 - **When one child row is "the current one"** (the next task, the active
-  lease), use `current()` in the aside.
-  It selects one row to display; it does **not** prove there is only one.
+  lease), use `current()` in the aside. It selects one row to display; it does **not** prove there is only one.
   If people need every active child, add a related list; if there must be at
   most one, enforce that in the database.
 - **When the children have children of their own**, read the list as groups: `group: { by: 'lease_id', show: ['unit_id', 'status'], sort: 'start_on desc' }`
@@ -58,8 +58,7 @@ A record page follows one skeleton: a head, its figures, its children as tabs, a
   `examples/apps/lintel/pages/maintenance_request.ts:37`.
 - **When the record is chosen from photos** (a home, a vehicle), say
   `layout: 'showcase'`: a `gallery` first, its price `headline` beside it in the
-  aside, the rest under both at full width; on a phone the price follows the
-  photos —
+  aside, the rest under both at full width; on a phone the price follows the photos —
   `examples/apps/lintel/pages/unit.ts:43`.
 - **When the record is read** (a task, a policy), say `layout: 'article'`: one
   column at a reading measure, with no aside —

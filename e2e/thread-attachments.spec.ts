@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from './support/harness';
 import { startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { FIXTURE_MS } from './support/budgets';
 
 /* Thread's issue files: listed on the issue, each a download of the stored
    bytes and, for text, a preview; a new one attached from the page, a row
@@ -11,7 +12,7 @@ test.describe('Thread attachments', () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     sample = await startSample('thread');
   });
   test.afterAll(async () => {

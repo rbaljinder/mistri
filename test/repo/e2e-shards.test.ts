@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { lanes } from '../../scripts/e2e-lanes.mjs';
+import { lanes, timeoutProblems } from '../../scripts/e2e-lanes.mjs';
 import { readTimings, shardSpecs } from '../../scripts/e2e-shards.mjs';
 
 const SHARDS = 6;
@@ -40,4 +40,8 @@ test('every spec has a recorded time', () => {
     [],
     'run `npm run e2e -- --record-timings` to record these specs',
   );
+});
+
+test('no spec sets a timeout above a minute except by a named constant, and no beforeAll pays for a fixture', () => {
+  assert.deepEqual(timeoutProblems(), []);
 });

@@ -91,7 +91,7 @@ describe("an embedded list's and a tab's `empty`", () => {
     assert.deepEqual(first(embedding({ empty: { title: 'Quiet week' } })).empty, { title: 'Quiet week' });
     assert.deepEqual(first(embedding({})).empty, openEmpty);
     assert.deepEqual(first(embedding({}, { tabs: ['open'] })).empty, listEmpty);
-    assert.equal(first(embedding({ tab: 'won' })).empty, undefined);
+    assert.equal(first(embedding({ listTab: 'won' })).empty, undefined);
     const hidden = first(embedding({ empty: 'hide' }));
     assert.equal(hidden.emptyMode, 'hide');
     assert.equal(hidden.empty, undefined);
@@ -132,5 +132,14 @@ describe('[empty-run]', () => {
     assert.equal(advice({ empty: 'collapse', sections: lists(4) }).length, 0);
     assert.equal(advice({ sections: lists(4, { empty: 'hide' }) }).length, 0);
     assert.equal(advice({ listTabs: true, sections: lists(4) }).length, 0);
+  });
+
+  test("a current() card takes the advice's own words: empty: 'hide' loads and settles the run", () => {
+    const cards = (extra: object = {}) =>
+      Array.from({ length: 3 }, (_, i) => ({ kind: 'current', from: `child${i}`, whose: 'deal_id', ...extra }));
+    assert.equal(advice({ sections: cards() }).length, 1);
+    assert.match(advice({ sections: cards() })[0], /empty: 'hide'/);
+    assert.equal(advice({ sections: cards({ empty: 'hide' }) }).length, 0);
+    assert.throws(() => advice({ sections: cards({ empty: 'collapse' }) }), /current\(\) card/);
   });
 });

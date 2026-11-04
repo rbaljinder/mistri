@@ -19,7 +19,7 @@ and assert who may read and do what.
 
 See it in the sample (`examples/apps/lintel/tests/start.ts:44`): Lintel's suite copies the App into a disposable workspace, seeds a database and starts it with its jobs and row policy, as production does.
 
-`npx @mistriwork/mistri test init .` writes a starting suite on these helpers: a
+`npx @mistriwork/mistri test init` writes a starting suite on these helpers: a
 journey per role, each job at times run once, and a permissions matrix from
 `authority.lock`. A row-policy App is served with the `policy.ts` and
 `jobs.ts` beside its `app.ts`, and its matrix holds the reads and refusals,
@@ -150,7 +150,7 @@ test('each clinic sees its own appointments, and never another clinic', async t 
 
 Every other client helper (`rows`, `command`, `prepare`, `update`, `act`)
 works on a member as it does on `host.as(role)`, under the member's lease.
-`npx @mistriwork/mistri test init .` on a tenant App writes `tests/tenants.test.ts`:
+`npx @mistriwork/mistri test init` on a tenant App writes `tests/tenants.test.ts`:
 for two tenants of its database (`MISTRI_TEST_TENANTS=<id>,<id>` picks
 them), each resource a tenant owns, each command a tenant role runs, and each
 platform role's reads. Run it with the `MISTRI_AUDIT_KEY` your stores were

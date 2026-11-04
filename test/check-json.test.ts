@@ -166,7 +166,15 @@ describe('mistri check --json', () => {
     assert.deepEqual(report.app, { id: 'tiny', name: 'Tiny' });
     assert.deepEqual(
       report.steps.map((step: { step: string; status: string }) => `${step.step} ${step.status}`),
-      ['schema types passed', 'typecheck failed', 'validation failed', 'components failed', 'routes passed', 'design passed'],
+      [
+        'schema types passed',
+        'typecheck failed',
+        'validation failed',
+        'queries passed',
+        'components failed',
+        'routes passed',
+        'design passed',
+      ],
     );
     const problems = report.problems as Problem[];
     /* The action's `when` twice: defineApp reads the whole condition against its block's table and names the
@@ -469,6 +477,13 @@ describe('mistri check --json', () => {
 });
 
 describe('the codes and the paths', () => {
+  test('the wide-role warning has a code of its own, not invalid-app, which reads as an error', () => {
+    const said =
+      '"main" is read-only here, but its database role can do more (superuser). Reads still run in read-only transactions; connect as a role that can only read and the database enforces it too.';
+    assert.equal(validationCode(said), 'superuser-connection');
+    assert.equal(validationCode(`warning: ${said}`), 'superuser-connection');
+  });
+
   test('every code a check can say is documented in check-codes.md', () => {
     const page = readFileSync(join(ROOT, 'site/src/content/docs/docs/check-codes.md'), 'utf8');
     const codes = [

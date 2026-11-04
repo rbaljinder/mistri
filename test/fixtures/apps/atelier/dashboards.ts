@@ -31,7 +31,7 @@ export const today = dashboard(
       },
       icon: 'package',
     }),
-    embed('orders', { title: 'Open orders', tab: 'open_orders', limit: 8, icon: 'receipt' }),
+    embed('orders', { title: 'Open orders', listTab: 'open_orders', limit: 8, icon: 'receipt' }),
     chart('Orders by day', 'sales_order', 'day placed_at', {
       query: `placed_at = last 14 days and ${LIVE}`,
       over: 'placed_at',

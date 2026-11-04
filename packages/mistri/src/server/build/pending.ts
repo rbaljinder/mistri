@@ -279,7 +279,10 @@ async function postgresCopy(
   const target = new Client({ ...pgConnectionOptions(at(copy)), connectionTimeoutMillis: 15_000 });
   try {
     await target.connect();
-    await target.query(dump.sql);
+    const known = new Set(
+      ((await target.query('SELECT name FROM pg_settings')) as { rows: { name: string }[] }).rows.map((row) => row.name),
+    );
+    await target.query(withoutUnknownSettings(dump.sql, known));
   } catch (error) {
     await target.end().catch(() => {});
     await drop();
@@ -287,6 +290,21 @@ async function postgresCopy(
   }
   await target.end().catch(() => {});
   return { url: at(copy), drop, how: 'a schema-only copy of the database (pg_dump), since another session holds it' };
+}
+
+/**
+ * A newer pg_dump opens its output with `SET`s for settings an older server lacks (17's `transaction_timeout`, on
+ * a 16 server), which the server refuses. Only those lines go: a `SET` of a setting the server does know, and every
+ * other statement, still runs and still fails loudly.
+ */
+export function withoutUnknownSettings(sql: string, known: ReadonlySet<string>): string {
+  return sql
+    .split('\n')
+    .filter((line) => {
+      const set = /^SET\s+(?:SESSION\s+|LOCAL\s+)?([A-Za-z_][\w.]*)\s*(?:=|TO)\s/i.exec(line);
+      return !set || known.has(set[1].toLowerCase());
+    })
+    .join('\n');
 }
 
 /**

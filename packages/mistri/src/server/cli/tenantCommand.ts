@@ -15,12 +15,12 @@ import { existsSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 
-const TENANT_USAGE = `mistri tenant init [<tenant>...] --app <dir> --policy <file>
+const TENANT_USAGE = `mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
        mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
-                 --app <dir> --policy <file>
-       mistri tenant clone <source> <sandbox> --app <dir> --policy <file> [--samples]
-       mistri tenant import <sandbox> --app <dir> --policy <file>
-       mistri tenant clock <sandbox> --app <dir> --policy <file> --ahead <duration> [--rate <n>]
+                 [--app <dir>] --policy <file>
+       mistri tenant clone <source> <sandbox> [--app <dir>] --policy <file> [--samples]
+       mistri tenant import <sandbox> [--app <dir>] --policy <file>
+       mistri tenant clock <sandbox> [--app <dir>] --policy <file> --ahead <duration> [--rate <n>]
                  [--operator <name>] [--commands <file>] [<db> | --db <target> | --config <path>]`;
 
 const HELP = `${TENANT_USAGE}
@@ -120,7 +120,7 @@ export async function runTenantCommand(
     return fail(`--ahead and --rate are clock's, and clock needs --ahead.\n${TENANT_USAGE}`);
   const appDir = flags['--app'] !== undefined ? resolve(flags['--app']) : undefined;
   if (appDir === undefined || flags['--policy'] === undefined)
-    return fail(`name the App with --app <dir> and its policy with --policy <file>.\n${TENANT_USAGE}`);
+    return fail(`name the App with --app <dir> (or run it in the App's directory) and its policy with --policy <file>.\n${TENANT_USAGE}`);
   if (!existsSync(appDir)) return fail(`${flags['--app']} is not a directory.`);
   const operator = flags['--operator'] ?? userInfo().username.replace(/[^A-Za-z0-9._@-]/g, '-');
   let ahead = 0,

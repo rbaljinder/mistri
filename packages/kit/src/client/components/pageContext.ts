@@ -9,7 +9,7 @@
  */
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 import { ownedBy } from '../requestIdentity.js';
-import { api as request, findTable, labelPath, recordLabel, state } from '../core.js';
+import { api as request, columnDisplay, findTable, labelPath, recordLabel, state } from '../core.js';
 import type { AppAction } from '@mistriwork/engine/schema/model.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { shell } from '../shellMode.js';
@@ -164,5 +164,6 @@ export function recordReadNames(): RecordReadNames {
     namePath: (table: TableMeta) => labelPath(table) as string | undefined,
     table: (id: string) => findTable(id) as TableMeta | undefined,
     defined: (id: string) => resourceOf(shell().app(), id)?.defined,
+    display: (id: string, column: string) => columnDisplay(id, column) as { subtitle?: string } | null,
   };
 }

@@ -557,8 +557,7 @@ describe('an action some role sees and cannot follow', () => {
         roles: ['customer', 'clerk'],
         sections: [
           {
-            kind: 'note',
-            variant: 'banner',
+            kind: 'banner',
             title: 'Found one?',
             text: 'Keep it for later.',
             action: { label: 'Save a car', to: 'save-car' },

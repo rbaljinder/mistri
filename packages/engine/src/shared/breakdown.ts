@@ -635,7 +635,14 @@ function compileBreakdownFresh(
     if (!names.has(o.name)) {
       throw new PathError(`Nothing called "${o.name}" is in this breakdown. It shows: ${[...names].join(', ')}.`, o.name, o.name, 0);
     }
-    if (o.emptyLast) return `(${style.quote(o.name)} IS NULL) ASC`;
+    /* An output name is only a name when it stands alone in ORDER BY: inside an expression PostgreSQL reads it as an
+       input column, and a key (`hold_id`) that the joined record also has (`holds.hold_id`) is ambiguous there. The
+       expression the SELECT list gives that name is what is tested. */
+    if (o.emptyLast) {
+      const shown = select[columns.findIndex((c) => c.name === o.name)] ?? style.quote(o.name);
+      const quoted = ` AS ${style.quote(o.name)}`;
+      return `(${shown.endsWith(quoted) ? shown.slice(0, -quoted.length) : shown} IS NULL) ASC`;
+    }
     /* An exact sum is text; it sorts by the integer it says, never as text ("9.00" after "10.00"). */
     return `${orderedBy.get(o.name) ?? style.quote(o.name)} ${o.direction === 'desc' ? 'DESC' : 'ASC'}`;
   });

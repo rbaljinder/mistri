@@ -100,8 +100,8 @@ export const SCAFFOLD_HELPERS = {
   }),
   current: (title: string, from: string, whose: string, opts: Opts = {}) => ({ kind: 'current', title, from, whose, ...opts }),
   action: (label: string, opts: Opts = {}) => ({ ...opts, label }),
-  count: (from: string, opts: Opts = {}) => ({ fn: 'count', from, ...opts }),
-  sum: (from: string, column: string, opts: Opts = {}) => ({ fn: 'sum', from, column, ...opts }),
+  'rollup.count': (from: string, opts: Opts = {}) => ({ fn: 'count', from, ...opts }),
+  'rollup.sum': (from: string, column: string, opts: Opts = {}) => ({ fn: 'sum', from, column, ...opts }),
   navGroup: (id: string, label: string, children: unknown[], opts: Opts = {}) => ({ id, label, children, ...opts }),
   machine: (column: string, states: unknown, opts: Opts = {}) => ({ column, states, ...opts }),
   /* A member of an exported namespace, rendered as written and imported by its namespace. */
@@ -1629,20 +1629,20 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '');
-      if (free(counted)) found[counted] = call('count', child.table.name, ...whose);
+      if (free(counted)) found[counted] = call('rollup.count', child.table.name, ...whose);
       /* What its lines come to: the sum of each line's quantity times its price, named for what the lines are. */
       const line = lineTotals.get(child);
       if (line) {
         const own = info.one.toLowerCase().replace(/[^a-z0-9]+/g, '_');
         const total = `${counted.startsWith(`${own}_`) ? counted.slice(own.length + 1) : counted}_total`;
-        if (free(total)) found[total] = call('sum', child.table.name, line.name, ...whose);
+        if (free(total)) found[total] = call('rollup.sum', child.table.name, line.name, ...whose);
         continue;
       }
       /* A sum only of what adds up: a line's amount, never its unit price, nor a 0/1 flag named like money ("paid"). */
       const money = child.table.columns.find(
         (c) => columnKind(c.type ?? '') === 'number' && SUMMED.test(c.name) && !c.flag && !c.primaryKey && !child.refs.has(c.name),
       );
-      if (money && free(money.name)) found[money.name] = call('sum', child.table.name, money.name, ...whose);
+      if (money && free(money.name)) found[money.name] = call('rollup.sum', child.table.name, money.name, ...whose);
     }
     if (!Object.keys(found).length) continue;
     rolled.set(info.table.name, found);

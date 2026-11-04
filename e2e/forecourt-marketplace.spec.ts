@@ -1,6 +1,7 @@
 import { expect, test, type Page } from './support/harness';
 import { FORECOURT_STAFF, startSample } from './support/sampleServer';
 import { rows, scalar } from './support/db';
+import { LONG_MS } from './support/budgets';
 
 /**
  * Forecourt, the marketplace sample (test/fixtures/apps/forecourt-market): a buyer finds a
@@ -15,7 +16,7 @@ async function signIn(page: Page, origin: string) {
 
 test.describe('Forecourt marketplace', () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   test.beforeEach(async () => {
     sample = await startSample('forecourt-market');
   });

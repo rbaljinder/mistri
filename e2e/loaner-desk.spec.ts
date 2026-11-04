@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { expect, test, type Page } from './support/harness';
 import { LOANER_ADMIN, startSample } from './support/sampleServer';
 import { rows, scalar } from './support/db';
+import { SLOW_MS } from './support/budgets';
 
 type Sample = Awaited<ReturnType<typeof startSample>>;
 const tomorrow = () => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
@@ -32,7 +33,7 @@ async function stop(sample: Sample) {
 }
 
 test.describe('Loaner Desk guarded operations', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
 
   test('checkout and return use command forms and keep loan dates and availability together', async ({ page }) => {
     const sample = await startSample('loaner-desk');

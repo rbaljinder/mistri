@@ -28,7 +28,7 @@ test('new writes a starter App that has rows, checks, and names its database for
   ])
     assert.ok(existsSync(join(dir, file)), file);
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(pkg.scripts.dev, 'mistri dev .');
+  assert.equal(pkg.scripts.dev, 'mistri dev');
   /* The App is named once, in mistri.json's app block, so the scripts repeat no flag (docs/bootstrap-plan.md B1). */
   assert.deepEqual([pkg.scripts.check, pkg.scripts.migrate], ['mistri check', 'mistri migrate up']);
   assert.deepEqual(Object.keys(pkg.dependencies).sort(), ['@mistriwork/mistri']);

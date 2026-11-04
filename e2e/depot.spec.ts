@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from './support/harness';
 import { DEPOT_ADMIN, startSample } from './support/sampleServer';
 import { count, rows, scalar } from './support/db';
+import { LONG_MS } from './support/budgets';
 
 /* Depot's journeys, each over its own fresh seed: receiving a purchase-order
    line moves the bin, the ledger, the line and the order together; a pick
@@ -11,7 +12,7 @@ import { count, rows, scalar } from './support/db';
    picks its own period and its open orders select in place. Expected values
    are read from the fixture. */
 test.describe('Depot inventory operations', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
 
   const signIn = async (page: Page, origin: string, account = DEPOT_ADMIN) => {
     const login = await page.request.post(`${origin}/api/auth/sign-in/email`, { headers: { origin }, data: account });

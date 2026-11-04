@@ -1,6 +1,6 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.15 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.16 scope, stable and preview features, current limitations and planned work.
 ---
 
 The scope of this release, stable and preview features, current limitations and planned work.
@@ -10,7 +10,7 @@ npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.15**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.16**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -25,7 +25,7 @@ outside the compatibility promise; `mistri check` lists the Preview features
 an App uses, as information. At 1.0 these stay Preview: feature flags,
 audiences and `@mistriwork/mistri/openfeature`, experiments, the Suite Console, behavior
 analytics, SCIM, the Gantt presentation, a resource's `search` (its packs ship
-after 1.0), an App's installable PWA (`ui.pwa`, [installable PWAs](/docs/pwa/)), `@mistriwork/ui`, `mistri deploy` with `@mistriwork/cloudflare`, `roundTrips` in the testing entry, and the triggers a row-policy App names (`resources.<t>.triggers`). The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
+after 1.0), an App's installable PWA (`ui.pwa`, [installable PWAs](/docs/pwa/)), `@mistriwork/ui`, `mistri deploy` with `@mistriwork/cloudflare`, `roundTrips` in the testing entry, and the triggers a row-policy App names (`resources.<t>.triggers`). Also Preview, because they were added late and no more than one sample App uses them: reactions on a timeline, a value's `copy`, `timezone` and `whole`, the `address` format, a metric's `figure`, a list's `group`, a calendar's `span`, a reference's `tree`, the crumb bar's `home` and `top`, the command inputs `field.time`, `field.files`, `field.signature`, `as: 'rating'`, `'scan'` and `'color'`, the command aggregates (`count`, `sum`, `avg`, `min`, `max`, `period`), and the embed router adapters. The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
 flows and machines, the assistant, integrations and durable workflows are
 stable.
 
@@ -42,7 +42,7 @@ stable.
 | Pages, display rules, record names (`recordLabel` templates) | Stable |
 | Display rules `format: 'duration'`, `'avatars'`, `'rating'`, `'color'`, `'time'`, `'month'`, `'year'`, `'json'`, `'qr'`; `icon`, `colors`, `ring`, `slider`; video and audio file previews; the JSON editor, code scanner (`scan`) and signature pad (`signature`) | Stable |
 | Record history (`history()`), notifications (`notify`) and the inbox | Stable |
-| Rollups (`count`, `sum`, `min`, `max`) | Stable |
+| Rollups (`rollup.count`, `sum`, `avg`, `min`, `max`, `latest`) | Stable |
 | Editing, autosave, lists edited in place (`editable`) and **Set field…** | Stable |
 | Files and attachments (`file`), tags (`tags`), CSV import (`import`) | Stable |
 | A resource's `search` and `mistri --reindex`: they need a search pack, which ships after 1.0, so nothing can be plugged in before then; the packs are the SQLite FTS pack (`@mistriwork/search-sqlite`, no external engine), the Postgres tsvector pack (`@mistriwork/search-postgres`, in the deployment's own database) and the Typesense pack | Preview |
@@ -51,11 +51,14 @@ stable.
 | A machine state's `after` and a resource's `at` timers, which run through the jobs, and a machine's service-only moves (`by`) | Stable |
 | Dashboards: metrics, charts, breakdowns, `rows`, `activity()`, section `windows`, interactive `embed`, `firstRun()` | Stable |
 | `funnel()`; chart shapes `stacked`, `scatter`, `heatmap`, `waterfall`, `treemap`; `target`; `find()`; `week`, `weekday`/`hour` groups | Stable |
-| Dashboard `note` `variant: 'banner'`, `breakdown` `shape: 'steps'`, a donut's `total`, `curve: 'smooth'`, `windowControl: 'button'` | Stable |
+| Dashboard `banner()`, `breakdown` `shape: 'steps'`, a donut's `total`, `curve: 'smooth'`, `windowControl: 'button'` | Stable |
 | Gallery, `headline()` (and its earlier figure, `was`), `card()`, facts, sheet and property-rail sections, section `tab`, ordered workflow strip, related cards, `related(…, { same, near })` | Stable |
 | The Gantt presentation (`gantt()`, `kind: 'gantt'` and its keys) | Preview |
 | `roundTrips(response)` in `@mistriwork/mistri/testing`: the database flights a request made, for a test to hold a budget with | Preview |
 | Triggers a row-policy App names (`resources.<t>.triggers`): their keyed effects proven inside the person's rows, approved in `authority.lock`, kept in record history and announced to live sync ([row access](/docs/row-access/#triggers-the-app-names)) | Preview |
+| Reactions under a timeline's entries (`reactions: { from, kinds, command }`) | Preview |
+| A value's copy button (`copy: true`), the zone a moment is said in (`timezone`), a whole amount without minor digits (`whole: true`), the `address` format, and a dashboard metric's `figure: 'compact'` | Preview |
+| A list's `group`, a calendar's `span` (`'week'`, `'day'`), a form field's reference `tree`, and the crumb bar's `home` and `top` | Preview |
 | Row-defined fields (`defined`) | Stable |
 | Flows from rows (`flows`, `flowRunner`, the `flows()` and `diagram()` sections, `mistri flows start`) | Stable |
 | Forms with groups and `when`; multi-step forms (`form.steps`) | Stable |
@@ -86,6 +89,8 @@ stable.
 | Row policies (`auth.rows: 'policy'`), named sources | Stable |
 | Tenant Apps (`auth.rows: 'tenant'`, the platform realm, invitations, public intake, delegated administration, support access), a form's `realm` | Stable |
 | Commands: declared inputs, typed `db`, checked record, `refuse`, output shapes, `actor` | Stable |
+| Command inputs `field.time`, `field.files` and `field.signature`, `as: 'rating'`, `'scan'` and `'color'`, and `field.reference({ tree })` | Preview |
+| The command aggregates in `@mistriwork/mistri/commands`: `count`, `sum`, `avg`, `min`, `max`, `period` and the types that go with them (`Grouped`, `Measure`, …); and `Loaded` in `@mistriwork/mistri/page` and `/ui` | Preview |
 | Command `lookup`, `effects` and webhooks; events and jobs (`@mistriwork/mistri/jobs`, `--jobs`); the App's default `track` | Stable |
 | Durable workflows (`@mistriwork/mistri/workflows`), their `workflows` operations grant and `createWorkflowDriver` | Stable |
 | Email (`"kind": "email"`): notify `email` and `mentions`, step-up codes, links by verified email | Stable |
@@ -102,7 +107,8 @@ stable.
 | [Experiments](/docs/experiments/) (`experiments`, `experiment()`, a role's `experiments`, `defineExperimentConversion`, `useVisitor`, `mistri experiments`) and [audiences](/docs/dsl-flags/#audiences) (`audiences`), on an App's public forms and a tenant's public intake too | Preview |
 | [SCIM provisioning](/docs/scim/) (`"kind": "scim"`, a directory's accounts and leavers) | Preview |
 | [Mounting an App in your server](/docs/mount-in-your-server/) (`@mistriwork/mistri/handler`) | Stable |
-| [Embedding in a React app](/docs/embed-in-a-react-app/) (`@mistriwork/mistri/react` and its router adapters) | Stable |
+| [Embedding in a React app](/docs/embed-in-a-react-app/) (`@mistriwork/mistri/react`) | Stable |
+| The embed router adapters (`@mistriwork/mistri/react/next`, `/react-router`, `/tanstack-router`) | Preview |
 | [Integrations](/docs/integrations/) (`@mistriwork/mistri/integration`, a jobs module's `integrations`, a command's `integrations` and `send(...)`, `integrationsForm()`, a `notify` rule's `send`) and effects on a tenant App | Stable |
 
 ### The packages

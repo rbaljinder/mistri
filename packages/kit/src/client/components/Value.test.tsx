@@ -466,3 +466,46 @@ describe('a postal address', () => {
     expect(said?.textContent).toBe('1 Infinite Loop, Cupertino, CA 95014, USA');
   });
 });
+
+describe('a list of plain values', () => {
+  const roles = col('roles', 'text[]');
+  test('is its values in the rule’s words, each element on its own, with no Raw or Copy over them', async () => {
+    display = { values: { RAM: 'Pickup', TRUCK: 'Box truck' } };
+    const { container } = render(<Value col={roles} value={['RAM', 'TRUCK', 'van']} tableId="t" />);
+    await screen.findByText('Pickup');
+    expect([...container.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['Pickup', 'Box truck', 'van']);
+    expect(screen.queryByRole('button', { name: 'Raw' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull();
+  });
+
+  test('in a list is one line of the same words', () => {
+    display = { values: { RAM: 'Pickup' } };
+    const { container } = render(<Value col={roles} value={['RAM', 'van']} tableId="t" compact />);
+    expect(container.textContent).toBe('Pickup, van');
+  });
+
+  test('`format: items` is one item per line where there is room, and still one line in a cell', () => {
+    display = { format: 'items', values: { RAM: 'Pickup' } };
+    const full = render(<Value col={roles} value={['RAM', 'van']} tableId="t" />);
+    expect([...full.container.querySelectorAll('ul.value-items li')].map((li) => li.textContent)).toEqual(['Pickup', 'van']);
+    full.unmount();
+    const cell = render(<Value col={roles} value={['RAM', 'van']} tableId="t" compact />);
+    expect(cell.container.textContent).toBe('Pickup, van');
+  });
+
+  test("a rule's `subtitle` is a second line under the value where the caller asks, from the record's own column", () => {
+    display = { subtitle: 'title' };
+    const row = { name: 'Ada', title: 'Engineer' };
+    const asked = render(<Value col={col('name', 'text')} value="Ada" tableId="t" row={row} subtitled />);
+    expect(asked.container.querySelector('.value-sub')?.textContent).toBe('Engineer');
+    asked.unmount();
+    const plain = render(<Value col={col('name', 'text')} value="Ada" tableId="t" row={row} />);
+    expect(plain.container.querySelector('.value-sub')).toBeNull();
+  });
+
+  test('a document still has Raw and Copy', async () => {
+    display = null;
+    render(<Value col={col('meta', 'jsonb')} value={{ a: 1 }} tableId="t" />);
+    expect(await screen.findByRole('button', { name: 'Raw' })).toBeTruthy();
+  });
+});

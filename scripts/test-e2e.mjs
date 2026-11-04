@@ -55,7 +55,7 @@ import { existsSync, globSync, mkdtempSync, readFileSync, rmSync, statSync, writ
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { lanes, sourceClientSpecs } from './e2e-lanes.mjs';
+import { lanes, sourceClientSpecs, timeoutProblems } from './e2e-lanes.mjs';
 import { ownedBy, packageArg } from './test-owners.mjs';
 import { STARTUP_SECONDS, TIMINGS, parseHeadStart, readTimings, shardSpecs } from './e2e-shards.mjs';
 
@@ -150,6 +150,13 @@ if (argv.includes('--lanes')) {
    empty, and is not the whole suite. */
 if (!kept && (!owned.length || !shared.length)) {
   console.error(`A lane is empty (owned ${owned.length}, shared ${shared.length}); scripts/e2e-lanes.mjs is wrong.`);
+  process.exit(2);
+}
+
+/* The timeout policy (e2e/support/budgets.ts), read off the specs as the lanes are. */
+const timeouts = timeoutProblems();
+if (timeouts.length) {
+  console.error(`The browser suite's timeout policy is broken:\n${timeouts.map((line) => `  ${line}`).join('\n')}`);
   process.exit(2);
 }
 

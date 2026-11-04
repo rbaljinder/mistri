@@ -886,7 +886,7 @@ const hiddenSections: Array<[string, PageSection]> = [
   ['list relationship', { ...list, path: 'hidden_secret' }],
   ['metric column', { kind: 'metric', from: 'note', path: 'item_id', fn: 'sum', column: 'hidden_secret' }],
   ['breakdown key', { kind: 'breakdown', from: 'note', path: 'item_id', by: 'hidden_secret' }],
-  ['timeline detail', { kind: 'timeline', streams: [{ from: 'note', path: 'item_id', at: 'at', show: 'name', detail: 'hidden_secret' }] }],
+  ['timeline detail', { kind: 'timeline', streams: [{ from: 'note', path: 'item_id', at: 'at', text: 'name', badge: 'hidden_secret' }] }],
 ];
 for (const [name, section] of hiddenSections)
   test(`page projection omits hidden ${name} even in inactive sections`, () => {
@@ -947,8 +947,8 @@ test('a timeline survives capture as the loader writes it, its author included',
               kind: 'timeline',
               title: 'Activity',
               streams: [
-                { from: 'note', whose: 'item_id', at: 'at', show: 'name' },
-                { from: 'note', whose: 'item_id', at: 'at', show: 'name', author: 'name' },
+                { from: 'note', whose: 'item_id', at: 'at', text: 'name' },
+                { from: 'note', whose: 'item_id', at: 'at', text: 'name', author: 'name' },
               ],
             },
           ],
@@ -981,7 +981,7 @@ test("a timeline stream's about survives capture and projection, and a key a str
             {
               kind: 'timeline',
               title: 'Activity',
-              streams: [{ from: 'note', whose: 'item_id', at: 'at', show: 'name', about: 'item_id' }],
+              streams: [{ from: 'note', whose: 'item_id', at: 'at', text: 'name', about: 'item_id' }],
             },
           ],
         },
@@ -1000,7 +1000,7 @@ test("a timeline stream's about survives capture and projection, and a key a str
   assert.equal(result.pages.length, 1);
   const unknown = {
     ...input[0],
-    sections: [{ kind: 'timeline', streams: [{ from: 'note', path: 'item_id', at: 'at', show: 'name', with: 'x' }] }],
+    sections: [{ kind: 'timeline', streams: [{ from: 'note', path: 'item_id', at: 'at', text: 'name', with: 'x' }] }],
   };
   assert.throws(
     () => captureTenantPages(definition, [unknown]),

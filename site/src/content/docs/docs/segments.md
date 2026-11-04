@@ -30,7 +30,7 @@ The name is a word of the [query language](/docs/query/), written out inline bef
 | A list's tabs | `tabs: ['open', { segment: 'overdue', sort: 'due_on' }]` |
 | A metric | `metric('Overdue', 'work_order.overdue')` |
 | A related list | `related(..., { segment: 'open' })` |
-| A rollup | `count('work_order', { segment: 'open' })` |
+| A rollup | `rollup.count('work_order', { segment: 'open' })` |
 | The query bar and other queries | `overdue and mine` |
 | The App API and MCP | read-only `?segment=overdue`, also how a view's tab is chosen |
 

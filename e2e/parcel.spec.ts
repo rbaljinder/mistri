@@ -1,5 +1,6 @@
 import { expect, test } from './support/harness';
 import { startParcel } from './support/httpSourceServer';
+import { FIXTURE_MS } from './support/budgets';
 
 /* The Parcel sample as its README runs it: its mock API behind a bearer
    token, and the App reading it through the committed description. Every
@@ -9,7 +10,7 @@ test.describe('Parcel, an App over an API', () => {
   let parcel: Awaited<ReturnType<typeof startParcel>>;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     parcel = await startParcel();
   });
   test.afterAll(async () => {

@@ -1,3 +1,4 @@
+import { LONG_MS } from './support/budgets';
 /*
  * A decision's suggestions in the browser (design §7): on a list, a muted
  * mark in the empty cell; on a record, the chip in the empty mark's place or
@@ -45,7 +46,7 @@ const shifted = (page: Page) =>
 
 test.describe('Decisions', () => {
   test.describe.configure({ mode: 'serial' });
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   let app: Fixture;
   test.beforeAll(async () => {
     app = await startDecideApp();

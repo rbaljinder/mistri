@@ -1,5 +1,6 @@
 import { COMPASS, expect, test } from './support/ownServers';
 import { readings } from './support/contrast';
+import { LONG_MS } from './support/budgets';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
 test.use({ servers: ['crm'] });
@@ -11,7 +12,7 @@ test.use({ servers: ['crm'] });
  * card's bottom edge. Compass's home dashboard has all three.
  */
 test('widgets in one dashboard row stand at one height', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(COMPASS);
   const cards = page.locator('.dash-strip .home-card');
@@ -66,7 +67,7 @@ test('widgets in one dashboard row stand at one height', async ({ page }) => {
  * run's first takes the row, and no figure breaks across two lines.
  */
 test('a phone lays a run of metric cards two to a row', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(COMPASS);
   const cards = page.locator('.dash-strip').first().locator('.home-card');
@@ -124,7 +125,7 @@ const areaBoxes = (page: import('@playwright/test').Page) =>
   );
 
 test('a layout stands its areas in one row at one top and height, and a stacked column ends where the row ends', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${COMPASS}/pipeline-layout`);
   await expect(page.locator('.dash-grid')).toBeVisible({ timeout: 60_000 });
@@ -147,7 +148,7 @@ test('a layout stands its areas in one row at one top and height, and a stacked 
 });
 
 test('on a phone a layout is one column in reading order and does not scroll sideways', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${COMPASS}/pipeline-layout`);
   await expect(page.locator('.dash-grid')).toBeVisible({ timeout: 60_000 });
@@ -164,7 +165,7 @@ test('on a phone a layout is one column in reading order and does not scroll sid
    heaviest tint (G186): each cell holds its words, and every tinted one reads at 4.5:1, at a desk and on a phone,
    light and dark. */
 test('a folded matrix holds each figure inside its cell, readable on its heaviest tint', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   for (const [width, height] of [
     [1280, 800],
     [390, 844],

@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /**
  * A stepped public form drawn as a page, in a browser at a desk and on a phone: the controls of a row stand level,
  * one answer's cards draw a radio's mark and several answers' a checkbox's. It starts its own server over a disposable
@@ -22,7 +23,7 @@ async function address(page: Page) {
 }
 
 test.describe('A stepped page form', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startIntakeApp([], 'quote');

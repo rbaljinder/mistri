@@ -141,8 +141,8 @@ describe('the shared page emitter', () => {
           hidden: true,
           when: 'id > 4',
           streams: [
-            { from: 'invoice', whose: 'customer_id', at: 'issued_on', show: 'id', detail: 'status', query: 'total > 0' },
-            { from: 'task', whose: 'customer_id', at: 'due_on', show: 'subject', detail: 'owner_id.name', query: 'status = open' },
+            { from: 'invoice', whose: 'customer_id', at: 'issued_on', text: 'id', badge: 'status', query: 'total > 0' },
+            { from: 'task', whose: 'customer_id', at: 'due_on', text: 'subject', badge: 'owner_id.name', query: 'status = open' },
           ],
         },
       ],
@@ -469,14 +469,14 @@ describe('a section about a record the root points at', () => {
   });
 
   test("a timeline stream about the reference reads the referenced record's rows, and its path must land there", () => {
-    const stream = { from: 'invoice', path: 'customer_id', at: 'issued_on', show: 'status', of: 'customer_id' };
+    const stream = { from: 'invoice', path: 'customer_id', at: 'issued_on', text: 'status', of: 'customer_id' };
     const p = invoicePage([{ kind: 'timeline', streams: [stream], limit: 20 }] as never);
     assert.equal(validatePage(SCHEMA, p).error, undefined);
     assert.deepEqual(pageAbouts(p), ['customer_id']);
     const [plan] = planPageSections(SCHEMA, p, { id: 7 }, OF, new Date(0)) as Array<{ streams: Array<{ view?: { filter: unknown } }> }>;
     assert.deepEqual(plan.streams[0].view!.filter, { groups: [[{ path: 'customer_id', op: '=', value: 42 }]] });
     const wrong = invoicePage([
-      { kind: 'timeline', streams: [{ ...stream, from: 'invoice_line', path: 'invoice_id', at: 'sku', show: 'sku' }], limit: 20 },
+      { kind: 'timeline', streams: [{ ...stream, from: 'invoice_line', path: 'invoice_id', at: 'sku', text: 'sku' }], limit: 20 },
     ] as never);
     assert.match(validatePage(SCHEMA, wrong).error!, /leads from invoice_line to invoice, not to customer/);
   });
@@ -630,7 +630,7 @@ describe("the dashboard's words on a page section", () => {
       /section 1 has no "filter"\. It takes: .*query/,
     );
     /* A timeline's streams take the one word every other section does. */
-    const stream = { from: 'invoice', whose: 'customer_id', at: 'issued_on', show: 'total' };
+    const stream = { from: 'invoice', whose: 'customer_id', at: 'issued_on', text: 'total' };
     const timeline = read({ kind: 'timeline', streams: [{ ...stream, query: 'status = open' }] }) as {
       streams: Array<{ filter?: string }>;
     };
@@ -1776,7 +1776,7 @@ describe('timeline sections', () => {
       {
         kind: 'timeline',
         title: 'Activity',
-        streams: [{ from: 'call', whose: 'deal_id', at: 'happened_on', show: 'subject', detail: 'subject' }],
+        streams: [{ from: 'call', whose: 'deal_id', at: 'happened_on', text: 'subject', badge: 'subject' }],
         limit: 12,
       },
     ]);
@@ -1789,23 +1789,40 @@ describe('timeline sections', () => {
     assert.equal(validatePage(SCHEMA, p).error, undefined);
   });
 
+  test("a current card's `opens` names a reference column, and is judged against the catalog", () => {
+    const card = (opens: unknown) => page([{ kind: 'current', from: 'call', whose: 'deal_id', opens }]);
+    assert.equal((card('deal_id').sections[0] as { opens?: string }).opens, 'deal_id');
+    assert.throws(() => card(3), /"opens" that is not a reference column/);
+    assert.match(validatePage(SCHEMA, card('subject')).error ?? '', /"opens" names "subject", which is not a reference column/);
+    assert.equal(validatePage(SCHEMA, card('deal_id')).error, undefined);
+  });
+
   test('refusals name the missing piece', () => {
     assert.throws(() => page([{ kind: 'timeline' }]), /needs "streams"/);
-    assert.throws(() => page([{ kind: 'timeline', streams: [{ from: 'call', whose: 'deal_id', at: 'happened_on' }] }]), /has no "show"/);
+    assert.throws(() => page([{ kind: 'timeline', streams: [{ from: 'call', whose: 'deal_id', at: 'happened_on' }] }]), /has no "text"/);
+    // The old names are refused with the new ones, not read.
     assert.throws(
-      () => page([{ kind: 'timeline', streams: [{ from: 'call', path: 'deal_id', at: 'happened_on', show: 'subject' }] }]),
+      () => page([{ kind: 'timeline', streams: [{ from: 'call', whose: 'deal_id', at: 'happened_on', show: 'subject' }] }]),
+      /"show", which is now "text"/,
+    );
+    assert.throws(
+      () => page([{ kind: 'timeline', streams: [{ from: 'call', whose: 'deal_id', at: 'happened_on', text: 'subject', detail: 'kind' }] }]),
+      /"detail", which is now "badge"/,
+    );
+    assert.throws(
+      () => page([{ kind: 'timeline', streams: [{ from: 'call', path: 'deal_id', at: 'happened_on', text: 'subject' }] }]),
       /"path"/,
     );
   });
 
   test('validation: the date must be a date, the words must exist, the path must lead home', () => {
-    const notDate = page([{ kind: 'timeline', streams: [{ from: 'call', whose: 'deal_id', at: 'subject', show: 'subject' }] }]);
+    const notDate = page([{ kind: 'timeline', streams: [{ from: 'call', whose: 'deal_id', at: 'subject', text: 'subject' }] }]);
     assert.match(validatePage(SCHEMA, notDate).error ?? '', /a timeline orders by a date column/);
 
-    const ghost = page([{ kind: 'timeline', streams: [{ from: 'call', whose: 'deal_id', at: 'happened_on', show: 'ghost' }] }]);
+    const ghost = page([{ kind: 'timeline', streams: [{ from: 'call', whose: 'deal_id', at: 'happened_on', text: 'ghost' }] }]);
     assert.match(validatePage(SCHEMA, ghost).error ?? '', /"ghost" is not a column/);
 
-    const lost = page([{ kind: 'timeline', streams: [{ from: 'deal', whose: 'name', at: 'happened_on', show: 'name' }] }]);
+    const lost = page([{ kind: 'timeline', streams: [{ from: 'deal', whose: 'name', at: 'happened_on', text: 'name' }] }]);
     assert.ok(validatePage(SCHEMA, lost).error, 'a path that does not lead home is refused');
   });
 
@@ -1840,7 +1857,7 @@ describe('timeline sections', () => {
         { name: 'fk_call_rep', from: { table: 'call', columns: ['rep_id'] }, to: { table: 'rep', columns: ['id'] } },
       ],
     } as typeof SCHEMA;
-    const stream = { from: 'call', whose: 'deal_id', at: 'happened_on', show: 'subject', author: 'rep_id.name' };
+    const stream = { from: 'call', whose: 'deal_id', at: 'happened_on', text: 'subject', author: 'rep_id.name' };
     const p = page([{ kind: 'timeline', streams: [stream] }]);
     const section = p.sections[0] as import('../packages/engine/src/shared/page.js').PageTimeline;
     assert.equal(section.streams[0].by, 'rep_id.name');
@@ -1861,7 +1878,7 @@ describe('timeline sections', () => {
           : table,
       ),
     } as typeof SCHEMA;
-    const stream = { from: 'call', whose: 'deal_id', at: 'happened_on', show: 'subject' };
+    const stream = { from: 'call', whose: 'deal_id', at: 'happened_on', text: 'subject' };
     const create = { label: 'Log call', show: ['subject', 'happened_on'] };
     const p = page([{ kind: 'timeline', streams: [stream], create }]);
     const section = p.sections[0] as import('../packages/engine/src/shared/page.js').PageTimeline;

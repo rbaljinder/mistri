@@ -44,13 +44,16 @@ import { parseComputed } from '@mistriwork/engine/shared/computedParse.js';
 import { appTagRules } from './appResourceRules.js';
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
 
+/** A sum and an avg read numbers; a min and a max read numbers or dates. */
+const numbersOnly = (fn: string) => fn === 'sum' || fn === 'avg';
+
 export function appRollupRules(
   app: AppDef,
   given: DatabaseSchema,
   now?: Date,
   zone?: string,
 ): { rules: Map<string, Record<string, Rollup>>; problems: string[] } {
-  /* A rollup's query names a segment of the rows it counts as any query does (`count('report', { query: 'open' })`),
+  /* A rollup's query names a segment of the rows it counts as any query does (`rollup.count('report', { query: 'open' })`),
      so it is read against the catalog that carries them, whichever caller asks. */
   const schema = withMachineStates(app, given);
   const rules = new Map<string, Record<string, Rollup>>();
@@ -179,7 +182,7 @@ export function appRollupRules(
       ...(Object.keys(computed).length ? { computed } : {}),
     };
   };
-  /* A computed column of the child a rollup reads (`sum('order_line', 'line_total')`, where line_total is
+  /* A computed column of the child a rollup reads (`rollup.sum('order_line', 'line_total')`, where line_total is
      `qty * price`): its expression, folded and written inline over the child's row. Undefined where the child
      declares none of that name; false where it does but cannot be read here — the problem said when the
      rollup is why, or the computed column not served in this catalog, its own check saying why at load. */
@@ -334,9 +337,9 @@ export function appRollupRules(
       }
       const read = column?.type ?? computed!.type;
       const kind = columnKind(read);
-      if (rollup.fn === 'sum' ? kind !== 'number' : kind !== 'number' && kind !== 'date') {
+      if (numbersOnly(rollup.fn) ? kind !== 'number' : kind !== 'number' && kind !== 'date') {
         problems.push(
-          `${here}: "${child.name}.${rollup.column}" is ${read || 'untyped'}; a ${rollup.fn} reads ${rollup.fn === 'sum' ? 'numbers' : 'numbers or dates'}.`,
+          `${here}: "${child.name}.${rollup.column}" is ${read || 'untyped'}; a ${rollup.fn} reads ${numbersOnly(rollup.fn) ? 'numbers' : 'numbers or dates'}.`,
         );
         return undefined;
       }
@@ -435,9 +438,9 @@ export function appRollupRules(
          date: said the same of a column and of an inner rollup. */
       const reads = (type: string, what: string): boolean => {
         const kind = columnKind(type);
-        if (rollup.fn === 'sum' ? kind === 'number' : kind === 'number' || kind === 'date') return true;
+        if (numbersOnly(rollup.fn) ? kind === 'number' : kind === 'number' || kind === 'date') return true;
         problems.push(
-          `${here}: ${what} is ${type || 'untyped'}; a ${rollup.fn} reads ${rollup.fn === 'sum' ? 'numbers' : 'numbers or dates'}.`,
+          `${here}: ${what} is ${type || 'untyped'}; a ${rollup.fn} reads ${numbersOnly(rollup.fn) ? 'numbers' : 'numbers or dates'}.`,
         );
         return false;
       };
@@ -464,6 +467,8 @@ export function appRollupRules(
         if (computed && !reads(computed.type, `the computed column "${child.name}.${rollup.column}"`)) continue;
         if (column) type = column.type;
         if (computed) ({ type, expression } = computed);
+        /* A mean of whole numbers is not one, whatever its rows are. */
+        if (rollup.fn === 'avg' && /int|serial/i.test(type)) type = 'numeric';
       }
       const rows = rowsQuery(rollup, child, here);
       if (rows === false) continue;

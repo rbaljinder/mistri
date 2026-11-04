@@ -1,7 +1,7 @@
 import {
   breakdown,
   card,
-  count,
+  rollup,
   defineFeature,
   fields,
   header,
@@ -39,9 +39,9 @@ export const support = defineFeature({
       labels: { reserve_pct: 'Reserve', on_hold_reason: 'On hold because', joined_on: 'Joined' },
       display: { status: dealerStatus, reserve_pct: { format: 'percent' }, monthly_goal: { unit: 'deals' } },
       rollups: {
-        new_leads: count('lead', { whose: 'dealer_id', query: 'status = new' }),
-        on_desk: count('deal', { whose: 'dealer_id', query: 'status = structuring' }),
-        waiting: count('loan_application', { whose: 'dealer_id', query: 'status = submitted or status = in_review' }),
+        new_leads: rollup.count('lead', { whose: 'dealer_id', query: 'status = new' }),
+        on_desk: rollup.count('deal', { whose: 'dealer_id', query: 'status = structuring' }),
+        waiting: rollup.count('loan_application', { whose: 'dealer_id', query: 'status = submitted or status = in_review' }),
       },
     },
     intake_submission: {
@@ -153,7 +153,7 @@ export const support = defineFeature({
       'lead',
       [
         header({ status: 'status', facts: ['dealer_id', 'reference', 'source', 'created_at'] }),
-        timeline('Activity', [stream('lead_activity', 'lead_id', 'created_at', 'kind', { detail: 'body' })], { limit: 30 }),
+        timeline('Activity', [stream('lead_activity', 'lead_id', 'created_at', 'kind', { badge: 'body' })], { limit: 30 }),
         related('Deals', 'deal', 'lead_id', { show: ['reference', 'amount_financed', 'monthly_payment', 'status'], empty: 'hide' }),
         card('Vehicle', 'vehicle_id', ['list_price']),
         fields(['first_name', 'last_name', 'salesperson_id.name', 'next_follow_up_on', 'last_contact_at'], {

@@ -130,6 +130,24 @@ describe('schema --brief', () => {
     }
   });
 
+  test('the flags that name the connection may come before the command, and the command still takes its own', async () => {
+    const before = await run(['--db', db, 'schema', '--brief']);
+    assert.equal(before.code, 0, before.err);
+    assert.match(before.out, /^task\(.*\)$/m);
+    assert.doesNotMatch(before.err, /unknown option/);
+    assert.equal(before.out, (await run(['schema', '--brief', '--db', db])).out);
+  });
+
+  test('a command flag typed where no command is named says where it belongs, never its own spelling', async () => {
+    const ran = await run(['--db', db, '--brief']);
+    assert.equal(ran.code, 1);
+    assert.doesNotMatch(ran.err, /Did you mean --brief/);
+    assert.match(ran.err, /--brief is an option of .*mistri schema.*name the command first/);
+    // A real typo is still met with its near miss.
+    const typo = await run(['--db', db, '--brif']);
+    assert.match(typo.err, /unknown option "--brif"\. Did you mean --brief\?/);
+  });
+
   test('the command reads the connection, and is shorter than the markdown export of the same schema', async () => {
     const brief = await run(['schema', '--brief', db]);
     assert.equal(brief.code, 0, brief.err);

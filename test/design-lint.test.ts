@@ -234,6 +234,7 @@ describe('mistri check --design', () => {
       'aside-table',
       'bare-title',
       'calendar-address',
+      'count-only-summary',
       'dashboard-columns',
       'default-shell',
       'destructive-first',
@@ -335,6 +336,75 @@ describe('mistri check --design', () => {
       said.find((finding) => finding.code === 'bare-title')!.text,
       /header\(\{ status: 'status', facts: \['customer_id', 'ordered_on'\] \}\)/,
     );
+  });
+
+  test('activity-not-tabbed: a timeline and a list in the main column with no tab among them', () => {
+    const page = (sections: object[], more: object = {}) =>
+      ({
+        id: 'order',
+        name: 'Order',
+        base: 'sales_order',
+        sections: [{ kind: 'fields', paths: ['carrier', 'boxes'] }, ...sections],
+        ...more,
+      }) as PageDef;
+    const timeline = { kind: 'timeline', title: 'Activity', streams: [] };
+    const found = (def: PageDef) => designLint(composed, [def], schema).filter((finding) => finding.code === 'activity-not-tabbed');
+
+    const untabbed = found(page([timeline, lines('Lines', ['sku', 'qty'])]));
+    assert.equal(untabbed.length, 1);
+    assert.match(untabbed[0].text, /"Activity", "Lines" are 2 long sections in the main column and none sits in a tab/);
+    assert.match(
+      sayDesignFinding(untabbed[0]),
+      / → give each a tab, so a person chooses one panel at a time: "Activity": tab: 'Activity', "Lines": tab: 'Lines'\./,
+    );
+    // A tab on any of them, tabbed lists, one long section, or a document: nothing to say.
+    assert.equal(
+      found(
+        page([
+          { ...timeline, tab: 'Activity' },
+          { ...lines('Lines', ['sku', 'qty']), tab: 'Lines' },
+        ]),
+      ).length,
+      0,
+    );
+    assert.equal(found(page([timeline, lines('Lines', ['sku', 'qty'])], { listTabs: true })).length, 0);
+    assert.equal(found(page([timeline])).length, 0);
+    assert.equal(found(page([timeline, lines('Lines', ['sku', 'qty'], { region: 'aside' })])).length, 0);
+    // Two lists are stacked-lists' to say, once.
+    assert.equal(found(page([lines('Lines', ['sku']), lines('More', ['sku'])])).length, 0);
+  });
+
+  test("count-only-summary: a summary or a row of metrics that only counts the record's children", () => {
+    const counted = {
+      ...schema,
+      tables: schema.tables.map((table) =>
+        table.id === 'sales_order'
+          ? {
+              ...table,
+              rollups: {
+                line_count: { fn: 'count', via: 'line.order_id' },
+                packed_count: { fn: 'count', via: 'line.order_id', filter: 'packed_at is not empty' },
+                line_total: { fn: 'sum', via: 'line.order_id', column: 'price' },
+              },
+            }
+          : table,
+      ),
+    } as DatabaseSchema;
+    const page = (sections: object[]) => ({ id: 'order', name: 'Order', base: 'sales_order', sections }) as PageDef;
+    const found = (sections: object[]) =>
+      designLint(composed, [page(sections)], counted).filter((finding) => finding.code === 'count-only-summary');
+
+    const only = found([{ kind: 'fields', presentation: 'summary', paths: ['line_count', 'packed_count'] }]);
+    assert.equal(only.length, 1);
+    assert.match(sayDesignFinding(only[0]), /only counts of the record's children → lead with what the record says/);
+    // One amount or one column among them is what the record says.
+    assert.equal(found([{ kind: 'fields', presentation: 'summary', paths: ['line_count', 'line_total'] }]).length, 0);
+    assert.equal(found([{ kind: 'fields', presentation: 'summary', paths: ['line_count', 'status'] }]).length, 0);
+    assert.equal(found([{ kind: 'fields', presentation: 'summary', paths: ['line_count'] }]).length, 0);
+    // A row of count metrics says the same.
+    const metric = (fn: string) => ({ kind: 'metric', fn, from: 'line', path: 'order_id', column: fn === 'count' ? undefined : 'price' });
+    assert.equal(found([metric('count'), metric('count')]).length, 1);
+    assert.equal(found([metric('count'), metric('sum')]).length, 0);
   });
 
   test("a header's primary is an id the validation step checks, not a design warning", () => {

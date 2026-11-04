@@ -1,4 +1,4 @@
-import { action, count, max, min } from '@mistriwork/mistri/app';
+import { action, rollup } from '@mistriwork/mistri/app';
 import type { Resources } from './mistri-schema.d.ts';
 
 /* What the dealer's settings App says about each table, once. Every row here
@@ -20,11 +20,11 @@ export const resources = {
     access: 'write',
     noun: 'dealership',
     rollups: {
-      listed: count('vehicle', { query: 'status = listed' }),
-      pending_sale: count('vehicle', { query: 'status = pending' }),
-      team: count('dealer_user', { query: 'status = active' }),
-      oldest_listing: min('vehicle', 'listed_on', { query: 'status = listed' }),
-      last_visit: max('dealer_visit', 'happened_on'),
+      listed: rollup.count('vehicle', { query: 'status = listed' }),
+      pending_sale: rollup.count('vehicle', { query: 'status = pending' }),
+      team: rollup.count('dealer_user', { query: 'status = active' }),
+      oldest_listing: rollup.min('vehicle', 'listed_on', { query: 'status = listed' }),
+      last_visit: rollup.max('dealer_visit', 'happened_on'),
     },
     display: {
       status: { tone: { on_hold: 'warn', terminated: 'bad', '*': 'neutral' } },

@@ -627,7 +627,7 @@ const said = (query: string) => query.trim().replace(/\s+/g, ' ');
 /**
  * The tables the text says the `query:` written at `at` reads: a `table:` or
  * `from:` beside it, or the strings the call it is an argument of names before
- * it (`count('thread', { query })`, `field.reference('board', { query })`).
+ * it (`rollup.count('thread', { query })`, `field.reference('board', { query })`).
  * The same words over another table are another query, and are left alone.
  */
 function tablesAround(text: string, at: number): string[] {

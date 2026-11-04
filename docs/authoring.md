@@ -411,7 +411,7 @@ gives every key.
   `filters` for pick-filters, `refresh` for the wall-board clock.
 - **Display**: `money`/`percent`/`number`/`relative`/`items`/`duration`/`email`/`phone`/`url` formats
   (`relative` says a date from today — "in 3 days", "64 days ago" — with the
-  date in the tooltip; `items` lays a text of one item per line out as a
+  date in the tooltip; `items` lays a text of one item per line, or a list column, out as a
   list; `duration` says a number of seconds as its two largest units, "2h 15m",
   a preview; `email`, `phone` and `url` link a value of that shape, and an App
   links a column named like one without a rule; `richText` is formatted text —

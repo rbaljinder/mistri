@@ -29,14 +29,23 @@ See [Record pages](/docs/pages/).
 | --- | --- |
 | `header({ status?, facts?, primary?, destructive? })` | The record's title row; its buttons are the resource's actions, `primary` filled and `destructive` last. |
 | `fields(show, { presentation? })` | `summary`, `facts`, `table` or `properties`; a summary over a machine draws its stepper. |
-| `card(title, 'dealer_id', show)`, `headline(figure, { was?, subfigure?, note?, links? })` | The record a reference names, and a figure with its facts: sections of their own. |
+| `card(title, 'dealer_id', show)`, `headline(figure, { was?, subfigure?, subtitle?, note?, links? })` | The record a reference names, and a figure with its facts: sections of their own. |
 | `related(title, from, whose, opts)` | Rows pointing at the record: `show`, `query`, `sort`, `limit`, `create` (with its `prefill`), `empty`, `totals` (columns, or the rows' rollups: `['total_amount', 'refunded']`), `rowActions: true` (each row's own verbs in a ⋯, so an order's payment is voided from the order); `actions: ['addBuyer']` (the record's own verbs drawn in the list's head instead of the record's); `create: false` (no Add: where the reader may add a row, a list offers the child's New form bound to the record); `group: { by, show?, sort?, limit?, empty?, sum? }` (a header for each record the rows share, one level deep, with `limit` then the rows to a group; the rows with no value are the last group, "No <column>" or `empty`; `sum` is a column summed in each header; `rowActions` draws on each group); `presentation: 'gallery'` or `cards(…)` with the list view's keys. |
 | `current(title, from, whose, { query, sort, show })` | The one current related row as a card: the active lease, the latest visit. |
 | `similar(title, from, { same, near? })` | Rows like this one; `near: { price: 0.25 }` is ±25%. |
 | `metric`, `chart`, `breakdown` with `{ whose }` | The dashboard helpers, narrowed to this record's rows. A bar chart or donut draws a category with an order of its own in it (a date, a step, allowed values, the rows' own label oldest first); `sort: 'value' \| 'category' \| 'starts_on desc'` overrides. |
-| `timeline(title, [stream(from, whose, at, show)])` | Dated rows from up to four tables, merged. |
+| `timeline(title, [stream(from, whose, at, text)])` | Dated rows from up to four tables, merged. |
 | `history()` | The record's own changes. |
 | `note(text, opts)`, `embed(view, { whose })`, `custom(title, component, opts)` | Guidance, a list narrowed to this record (a view with a board or calendar presentation is drawn as one), a custom component. |
+
+A timeline row names each column for the part it draws: `at` the time, `text` the main value, `badge` the quieter word with it (a kind, a status), `author` the person, which makes the row a message:
+
+```text
+  RB   Robin Bell   [reply]   10:05          author   badge    at
+       Please restart the router.            text
+
+  Invoice sent   [paid]   10:07              text     badge    at
+```
 
 A fields section once took more forms. They are refused, and the refusal prints this table:
 

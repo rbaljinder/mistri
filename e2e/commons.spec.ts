@@ -2,6 +2,7 @@ import { expect, test, type Page } from './support/harness';
 import { COMMONS_ADMIN, confirmEmail, startSample } from './support/sampleServer';
 import { DatabaseSync } from 'node:sqlite';
 import { scalar } from './support/db';
+import { LONG_MS } from './support/budgets';
 
 /**
  * Commons, the forum sample: what a signed-out reader reads, what a member
@@ -44,7 +45,7 @@ async function openAction(page: Page, label: string) {
 
 test.describe('Commons', () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   test.beforeEach(async () => {
     sample = await startSample('commons');
   });

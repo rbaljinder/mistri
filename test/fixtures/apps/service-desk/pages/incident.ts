@@ -17,7 +17,7 @@ export const incidentPage = page(
       'Activity',
       [
         stream('incident_note', 'incident_id', 'created_at', 'name', {
-          detail: 'body',
+          badge: 'body',
         }),
       ],
       {

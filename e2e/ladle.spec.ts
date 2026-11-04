@@ -5,8 +5,69 @@ import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { expect, test } from './support/harness';
+import { expect, test as base } from './support/harness';
+import { fixture } from './support/fixture';
 import { TMP } from './support/fixtures';
+import { SLOW_MS } from './support/budgets';
+
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      const directory = mkdtempSync(join(TMP, 'ladle-'));
+      db = join(directory, 'ladle.db');
+      // The schedule is counted from today, so tonight's class is tonight whenever this runs.
+      execFileSync(process.execPath, [resolve('examples/databases/ladle/seed.mjs'), db], { stdio: 'pipe' });
+      const reservation = createServer();
+      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
+      const port = (reservation.address() as { port: number }).port;
+      await new Promise<void>((done) => reservation.close(() => done()));
+      origin = `http://127.0.0.1:${port}`;
+      const started = spawn(process.execPath, ['--import', 'tsx', 'e2e/support/ladleHost.ts', `${db}.json`, String(port)], {
+        env: {
+          ...process.env,
+          XDG_CONFIG_HOME: join(directory, 'xdg'),
+          MISTRI_OPEN: '0',
+          BETTER_AUTH_SECRET: 'isolated-ladle-secret-at-least-thirty-two-characters',
+          MISTRI_AUTH_ADMIN_EMAIL: ADMIN.email,
+          MISTRI_AUTH_ADMIN_PASSWORD: ADMIN.password,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      child = started;
+      let log = '';
+      started.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      started.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => fail(new Error(`The host did not start: ${log}`)), 60_000);
+        started.stdout!.on('data', () => {
+          if (log.includes('Host listening')) {
+            clearTimeout(timer);
+            done();
+          }
+        });
+        started.once('exit', () => {
+          clearTimeout(timer);
+          fail(new Error(`The host exited: ${log}`));
+        });
+      });
+    },
+    async () => {
+      if (!child || child.exitCode !== null) return;
+      const closed = once(child, 'close');
+      child.kill('SIGTERM');
+      const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+      try {
+        await closed;
+      } finally {
+        clearTimeout(force);
+      }
+    },
+  ),
+});
 
 /**
  * Ladle, the general-path sample (examples/apps/ladle): a cooking school's own React site, served by its own Node
@@ -22,65 +83,7 @@ let origin = '';
 let db = '';
 let child: ChildProcess | undefined;
 
-test.describe.configure({ timeout: 90_000 });
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  const directory = mkdtempSync(join(TMP, 'ladle-'));
-  db = join(directory, 'ladle.db');
-  // The schedule is counted from today, so tonight's class is tonight whenever this runs.
-  execFileSync(process.execPath, [resolve('examples/databases/ladle/seed.mjs'), db], { stdio: 'pipe' });
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  origin = `http://127.0.0.1:${port}`;
-  const started = spawn(process.execPath, ['--import', 'tsx', 'e2e/support/ladleHost.ts', `${db}.json`, String(port)], {
-    env: {
-      ...process.env,
-      XDG_CONFIG_HOME: join(directory, 'xdg'),
-      MISTRI_OPEN: '0',
-      BETTER_AUTH_SECRET: 'isolated-ladle-secret-at-least-thirty-two-characters',
-      MISTRI_AUTH_ADMIN_EMAIL: ADMIN.email,
-      MISTRI_AUTH_ADMIN_PASSWORD: ADMIN.password,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  child = started;
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The host did not start: ${log}`)), 60_000);
-    started.stdout!.on('data', () => {
-      if (log.includes('Host listening')) {
-        clearTimeout(timer);
-        done();
-      }
-    });
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The host exited: ${log}`));
-    });
-  });
-});
-
-test.afterAll(async () => {
-  if (!child || child.exitCode !== null) return;
-  const closed = once(child, 'close');
-  child.kill('SIGTERM');
-  const force = setTimeout(() => child.kill('SIGKILL'), 5000);
-  try {
-    await closed;
-  } finally {
-    clearTimeout(force);
-  }
-});
+test.describe.configure({ timeout: SLOW_MS });
 
 const bookingStatus = (guest: string) => {
   const handle = new DatabaseSync(db, { readOnly: true, timeout: 5000 });

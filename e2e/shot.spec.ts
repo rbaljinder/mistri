@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync }
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test } from './support/harness';
+import { BUILD_MS, TOUR_MS } from './support/budgets';
 
 /**
  * `mistri shot`, run as an agent runs it: the command serves the App
@@ -63,7 +64,7 @@ const size = (file: string) => {
 };
 
 test('shoots a list and a record page at a desk and on a phone, prints each file, and never touches the config directory', async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(TOUR_MS);
   const out = join(directory, 'shots');
   const ran = await shot(['issues', '/issues/1', '--both', '--out', out]);
   expect(ran.code, ran.err).toBe(0);
@@ -79,7 +80,7 @@ test('shoots a list and a record page at a desk and on a phone, prints each file
 });
 
 test('--scale makes a sharper picture of the same layout, and a scale outside 1 to 3 is refused before anything is served', async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(TOUR_MS);
   const out = join(directory, 'scaled');
   const ran = await shot(['issues', '--scale', '2', '--out', out]);
   expect(ran.code, ran.err).toBe(0);
@@ -103,7 +104,7 @@ test('refuses an address the App does not answer to, naming the ones it does, be
 });
 
 test('a whole page is taller than the window, and a look is named in the file', async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(TOUR_MS);
   const out = join(directory, 'full');
   mkdirSync(out, { recursive: true });
   // A record page, not the issues list: Sage starts an App compact (ca0a0ed8d), and at
@@ -115,7 +116,7 @@ test('a whole page is taller than the window, and a look is named in the file', 
 });
 
 test('--phone with --width is a window that wide, --theme names the look in the file, and --compare draws two looks side by side', async () => {
-  test.setTimeout(240_000);
+  test.setTimeout(BUILD_MS);
   const out = join(directory, 'sized');
   const ran = await shot(['issues', '--phone', '--width', '700', '--theme', 'mono', '--out', out]);
   expect(ran.code, ran.err).toBe(0);

@@ -59,10 +59,11 @@ interface ChartFigureProps {
   curve?: 'smooth' | 'straight';
   /** A donut's words for the figure in its middle. */
   total?: string;
-  /** How a donut's slices and a bar chart's categories are arranged: 'answer' keeps the order they were asked in (the
+  /** How a donut's slices and a bar chart's categories are arranged: 'category' is the key's own order (its vocabulary,
+      else its values as a scale), 'answer' keeps the order they were asked in (the
       page's chart asked for the key's natural order, or a column's), 'value' is biggest first whatever the key's
       vocabulary. Absent, the key's vocabulary or scale, else biggest first. */
-  arrange?: 'answer' | 'value';
+  arrange?: 'answer' | 'value' | 'category';
   /** A line with too few filled buckets to draw a line through keeps its shape and stands its points alone. */
   dots?: boolean;
 }
@@ -107,11 +108,13 @@ export function ChartFigure({
   const answered =
     arrange === 'answer' && (donut || bars)
       ? (answer?.rows ?? []).slice(0, limit)
-      : arrange === 'value' && (donut || (bars && !periods))
-        ? orderDeclared(answer?.rows ?? [], columns[0], columns[1]).slice(0, limit)
-        : donut || (bars && !periods) || (!stacked && !periods && columns.length < 3 && ((vocabulary?.length ?? 0) > 0 || Boolean(scale)))
-          ? orderDeclared(answer?.rows ?? [], columns[0], columns[1], vocabulary, scale).slice(0, limit)
-          : (answer?.rows ?? []);
+      : arrange === 'category' && (donut || (bars && !periods))
+        ? orderDeclared(answer?.rows ?? [], columns[0], columns[1], vocabulary, true).slice(0, limit)
+        : arrange === 'value' && (donut || (bars && !periods))
+          ? orderDeclared(answer?.rows ?? [], columns[0], columns[1]).slice(0, limit)
+          : donut || (bars && !periods) || (!stacked && !periods && columns.length < 3 && ((vocabulary?.length ?? 0) > 0 || Boolean(scale)))
+            ? orderDeclared(answer?.rows ?? [], columns[0], columns[1], vocabulary, scale).slice(0, limit)
+            : (answer?.rows ?? []);
   /* A line over a two-key answer is a line per value of the second key. */
   const multi = !stacked && !donut && !bars && columns.length >= 3;
   const rows = answered.map((r) => ({

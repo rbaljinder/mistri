@@ -1,7 +1,7 @@
 import {
   breakdown,
   chart,
-  count,
+  rollup,
   dashboard,
   defineFeature,
   fields,
@@ -11,7 +11,6 @@ import {
   page,
   related,
   rows,
-  sum,
 } from '@mistriwork/mistri/app';
 import type { Feature } from '../mistri-schema.d.ts';
 
@@ -60,9 +59,9 @@ export const benefits = defineFeature({
     benefit_plan: {
       // What a plan's elections add up to, named once so the plan page shows them as a summary beside its rail.
       rollups: {
-        enrolled: count('benefit', { query: 'enrolled' }),
-        company_pays: sum('benefit', 'employer_cost'),
-        teammates_pay: sum('benefit', 'employee_cost'),
+        enrolled: rollup.count('benefit', { query: 'enrolled' }),
+        company_pays: rollup.sum('benefit', 'employer_cost'),
+        teammates_pay: rollup.sum('benefit', 'employee_cost'),
       },
       labels: {
         name: 'Plan',

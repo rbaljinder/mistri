@@ -1,10 +1,22 @@
-import { test, expect, type Page } from './support/harness.js';
+import { test as base, expect, type Page } from './support/harness.js';
+import { fixture } from './support/fixture';
 import { startTenantAdministration, type TenantAdministrationFixture } from './support/tenantAdministrationServer.js';
 import {
   ADMINISTRATION_HTTP_ROOT as root,
   ADMINISTRATION_HTTP_HEADER as contextHeader,
 } from '../packages/mistri/src/shared/tenantAdministration.js';
 import { TENANT_HTTP_HEADERS as headers } from '../packages/mistri/src/shared/tenantContext.js';
+
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      app = await startTenantAdministration({ assistant: true });
+    },
+    async () => {
+      await app?.stop();
+    },
+  ),
+});
 
 /**
  * The assistant in a tenant App (docs/tenant-apps.md, "The assistant"): drawn
@@ -13,15 +25,6 @@ import { TENANT_HTTP_HEADERS as headers } from '../packages/mistri/src/shared/te
  * set through Manage tenants' own routes, as the operator would.
  */
 let app: TenantAdministrationFixture;
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  app = await startTenantAdministration({ assistant: true });
-});
-test.afterAll(async () => {
-  await app?.stop();
-});
-
 /** The platform owner sets North's switch through the administration routes. */
 async function setSwitch(enabled: boolean) {
   const origin = app.origin;

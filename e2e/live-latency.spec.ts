@@ -1,3 +1,4 @@
+import { BUILD_MS } from './support/budgets';
 /**
  * Live sync's commit-to-paint, measured (DESIGN budget: p50 ≤ 600 ms, p95 ≤ 1.2 s on a quiet machine). Opt-in, since
  * a number taken on a shared, loaded machine says nothing: `TABLEWALK_LIVE_LATENCY=1`, and `TABLEWALK_TEST_PG` for the
@@ -17,7 +18,7 @@ for (const engine of ['sqlite', 'postgres'] as const)
   test(`commit to paint on ${engine}`, async ({ browser }) => {
     test.skip(!process.env.TABLEWALK_LIVE_LATENCY, 'opt-in: TABLEWALK_LIVE_LATENCY=1');
     test.skip(engine === 'postgres' && !process.env.TABLEWALK_TEST_PG, 'needs TABLEWALK_TEST_PG');
-    test.setTimeout(240_000);
+    test.setTimeout(BUILD_MS);
     const app = await startSessionApp({
       live: true,
       history: true,

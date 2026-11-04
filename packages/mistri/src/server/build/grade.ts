@@ -21,7 +21,7 @@
  * Screenshots are left for questions of taste.
  */
 import { resolveTheme } from '@mistriwork/engine/shared/themeResolve.js';
-import { statSync } from 'node:fs';
+import { appDirectoryWord } from '@mistriwork/engine/server/config/profile.js';
 import { readFile, stat } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import type { Browser, Page } from 'playwright-core';
@@ -73,7 +73,7 @@ import { componentInks } from '@mistriwork/engine/shared/theme.js';
 import { authoredRoles } from '../../shared/themeCheck.js';
 
 const GRADE_USAGE =
-  'mistri grade [<app-dir>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>]\n' +
+  'mistri grade [--app <dir>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>]\n' +
   '                [<route>…] [--as <role|email|all> [--tenant <id>]] [--theme <id|all> [--palette <id|all>]] [--json] [--browser <path>]';
 const GRADE_EXIT = { clean: 0, couldNotGrade: 1, errors: 2 } as const;
 
@@ -116,22 +116,16 @@ function readFlags(argv: string[]): {
       options[key] = value(i++, arg);
     } else if (takesValue.has(arg)) options.rest.push(arg, value(i++, arg));
     else if (arg.startsWith('-')) options.rest.push(arg);
-    // The first bare word that is a directory is the App; a database file or URL is the start's; the rest are routes.
-    else if (!options.app && !options.routes.length && isDirectory(arg)) options.app = arg;
+    // A database file or URL is the start's; the rest are routes. An App is named with --app, never by position.
+    else if (isAppDirectory(arg))
+      throw new Refusal(`${arg} is an App's directory, and an App is named with --app: mistri grade --app ${arg}`);
     else if (/^(postgres|postgresql|sqlite):/i.test(arg) || /\.(db|db3|sqlite|sqlite3)$/i.test(arg)) options.rest.push(arg);
     else options.routes.push(arg);
   }
-  options.app ??= '.';
   return options;
 }
 
-const isDirectory = (path: string) => {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-};
+const isAppDirectory = (path: string) => appDirectoryWord('mistri grade', path) !== undefined;
 
 /**
  * The page's accessibility tree once it has stopped changing: two reads a beat apart that agree (bounded). A strip of
@@ -371,7 +365,8 @@ export async function runGrade(
   return withShotRun(warn, async (run) => {
     try {
       const options = readFlags(argv);
-      const appDir = resolve(options.app!);
+      if (!options.app) throw new Refusal("--app <dir> names the App to grade, or run it in the App's directory.");
+      const appDir = resolve(options.app);
       if (!(await stat(appDir).catch(() => undefined))?.isDirectory()) throw new Refusal(`${options.app} is not a directory.`);
       if (options.theme?.includes(',')) throw new Refusal('--theme grades in one theme, or every one: --theme all.');
       const everyTheme = options.theme === 'all',

@@ -1,6 +1,7 @@
 import { CRM, CRM_DB, expect, type Page, test } from './support/ownServers';
 import { startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { LONG_MS } from './support/budgets';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
 test.use({ servers: ['crm'] });
@@ -238,7 +239,7 @@ test.describe('Compass: one address per record', () => {
 test.describe('Forecourt: a public record carries its name', () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
   // The seed draws the studio photos before the server starts.
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   test.beforeEach(async () => {
     sample = await startSample('forecourt');
   });

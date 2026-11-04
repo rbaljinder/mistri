@@ -17,7 +17,7 @@ import { applyServerTimeouts } from '@mistriwork/engine/server/serverTimeouts.js
 import { platformRequests } from '@mistriwork/engine/server/http/traceRequest.js';
 import { probe } from '@mistriwork/engine/server/http/probes.js';
 import { observerRoute } from '../observe/mount.js';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { isDeepStrictEqual } from 'node:util';
 import { isPromise, isProxy } from 'node:util/types';
 import {
@@ -53,7 +53,7 @@ import type { VerifiedSessionInstance } from '../auth/auth.js';
 import { businessCommandHttpError } from '../commands/businessCommandHttp.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
 import { doorRefusal, writes as changesSomething, type Bound } from '@mistriwork/engine/server/http/trust.js';
-import { setBaselineHeaders } from '@mistriwork/engine/server/http/baselineHeaders.js';
+import { frontDoor } from '@mistriwork/engine/server/http/frontDoor.js';
 import { dispatchResourceReadHttp } from '@mistriwork/engine/server/resourceReadHttp.js';
 import { APP_READS } from '../app/appReads.js';
 import { createTenantContexts, TenantContextsBusy, tenantLeaseFailureCode } from './tenantContexts.js';
@@ -622,8 +622,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
   /* People arriving, a few at a time (tenantArrivals.ts): a burst of them queued here, cheaply, instead of for the
      readers the people already in are using, where they waited past the pool's limit and were answered busy. */
   const arrivals = arrivalGate(arrivalWidth());
-  const server = createServer((req, res) => {
-    setBaselineHeaders(req, res, (raw.bound as Bound | undefined)?.trustedProxies);
+  /* It queues no one: its callers are the platform's own, and a pool's line is the front's (admit: false). */
+  const server = frontDoor({ trustedProxies: () => (raw.bound as Bound | undefined)?.trustedProxies, admit: false }, (req, res) => {
     let finish!: () => void;
     const held = new Promise<void>((resolve) => {
       finish = resolve;

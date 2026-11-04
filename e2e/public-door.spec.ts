@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /**
  * What a signed-out visitor meets at a public door, in a browser
  * (test/fixtures/apps/door): the landing's hero with its badge, photo tiles
@@ -29,7 +30,7 @@ function rows(app: Fixture, sql: string) {
 }
 
 test.describe('A public door', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeAll(async () => {
     app = await startDoorApp();

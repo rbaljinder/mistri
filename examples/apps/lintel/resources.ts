@@ -1,4 +1,4 @@
-import { action, computed, count, latest, machine, sum, today } from '@mistriwork/mistri/app';
+import { action, computed, rollup, machine, today } from '@mistriwork/mistri/app';
 import type { Resources } from './mistri-schema.d.ts';
 
 /* What Lintel says about each table, once, wherever its records appear: how
@@ -22,9 +22,9 @@ export const resources = {
     access: 'write',
     recordLabel: 'name',
     rollups: {
-      homes: count('unit'),
-      vacant: count('unit', { query: 'available' }),
-      open_repairs: count('maintenance_request', { whose: 'unit_id.property_id', query: 'outstanding' }),
+      homes: rollup.count('unit'),
+      vacant: rollup.count('unit', { query: 'available' }),
+      open_repairs: rollup.count('maintenance_request', { whose: 'unit_id.property_id', query: 'outstanding' }),
     },
     labels: { year_built: 'Built', manager_id: 'Property manager' },
   },
@@ -50,8 +50,8 @@ export const resources = {
     noun: 'home',
     computed: { rent_per_sqft: computed.number('market_rent / sqft') },
     rollups: {
-      open_repairs: count('maintenance_request', { query: 'outstanding' }),
-      resident: latest('lease', 'resident_id', { query: "status != 'ended' and status != 'draft'", sort: 'start_on' }),
+      open_repairs: rollup.count('maintenance_request', { query: 'outstanding' }),
+      resident: rollup.latest('lease', 'resident_id', { query: "status != 'ended' and status != 'draft'", sort: 'start_on' }),
     },
     display: {
       market_rent: dollars,
@@ -87,8 +87,8 @@ export const resources = {
     access: 'write',
     recordLabel: 'name',
     rollups: {
-      balance: sum('charge', 'amount', { whose: 'lease_id.resident_id', query: 'unpaid' }),
-      open_requests: count('maintenance_request', { query: 'outstanding' }),
+      balance: rollup.sum('charge', 'amount', { whose: 'lease_id.resident_id', query: 'unpaid' }),
+      open_requests: rollup.count('maintenance_request', { query: 'outstanding' }),
     },
     display: {
       // A resident is a person: their initials beside their name wherever it is said, and large over their record.
@@ -114,9 +114,9 @@ export const resources = {
     access: 'write',
     recordLabel: '{unit_id.property_id.name} #{unit_id.number}',
     rollups: {
-      balance: sum('charge', 'amount', { query: 'unpaid' }),
-      charged: sum('charge', 'amount'),
-      paid: sum('payment', 'amount'),
+      balance: rollup.sum('charge', 'amount', { query: 'unpaid' }),
+      charged: rollup.sum('charge', 'amount'),
+      paid: rollup.sum('payment', 'amount'),
     },
     display: {
       rent: dollars,
@@ -208,7 +208,7 @@ export const resources = {
        the key (test/row-policy-label-template.test.ts). */
     recordLabel: '{title}',
     rollups: {
-      parts_used: sum('request_part', 'quantity'),
+      parts_used: rollup.sum('request_part', 'quantity'),
     },
     display: {
       category: { values: { hvac: 'Heating and cooling' } },
@@ -316,7 +316,7 @@ export const resources = {
     // A supplier's catalog arrives as a spreadsheet: new SKUs are imported, never typed.
     import: true,
     recordLabel: 'name',
-    rollups: { used: sum('request_part', 'quantity'), received: sum('part_receipt', 'quantity') },
+    rollups: { used: rollup.sum('request_part', 'quantity'), received: rollup.sum('part_receipt', 'quantity') },
     display: {
       unit_cost: dollars,
       on_hand: { format: 'number', tone: { '= 0': 'bad', '<= 2': 'warn' } },

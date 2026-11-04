@@ -1,3 +1,4 @@
+import { SHOT_MS } from './support/budgets';
 /**
  * Signing in through an OpenID Connect provider in a real browser: the App's
  * own server (spawned over a temporary database and config, on a port of its
@@ -132,7 +133,7 @@ export default defineApp({
 
 test('a person signs in through the identity provider, and one with no role is told so at the door', async ({ page }) => {
   // The App's own server compiles the shell for its first visit (tsx, Vite's middleware): minutes on a busy machine.
-  test.setTimeout(150_000);
+  test.setTimeout(SHOT_MS);
   const idp = await startMockOidc();
   const app = await startApp(idp).catch(async (error) => {
     await idp.close();

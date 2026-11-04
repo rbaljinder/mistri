@@ -1429,6 +1429,7 @@ function parseDashboardView(
       (s) =>
         isRecord(s) &&
         s.kind !== 'note' &&
+        s.kind !== 'banner' &&
         s.kind !== 'view' &&
         s.kind !== 'firstRun' &&
         s.kind !== 'activity' &&
@@ -1685,10 +1686,13 @@ function parseDashSections(
         embeds.push(s.view as string);
         return section;
       }
-      const kind = String(s.kind ?? '');
-      if (!(DASH_KINDS as readonly string[]).includes(kind)) {
+      const authored = String(s.kind ?? '');
+      /* A banner is a note drawn as one: its own kind to the author, a note of variant 'banner' once read. */
+      const banner = authored === 'banner';
+      const kind = banner ? 'note' : authored;
+      if (!(DASH_KINDS as readonly string[]).includes(authored)) {
         throw new Error(
-          `${here} has an unknown kind "${kind}". Use "metric", "breakdown", "rows", "chart", "note", "matrix", "funnel", "board", "firstRun", "custom", "activity", "find", "branding", "integrations" or "view", each written with its helper: metric(), breakdown(), rows(), chart(), note(), matrix(), funnel(), board(), firstRun(), custom(), activity(), find(), brandingForm(), integrationsForm(), embed().`,
+          `${here} has an unknown kind "${authored}". Use "metric", "breakdown", "rows", "chart", "note", "banner", "matrix", "funnel", "board", "firstRun", "custom", "activity", "find", "branding", "integrations" or "view", each written with its helper: metric(), breakdown(), rows(), chart(), note(), banner(), matrix(), funnel(), board(), firstRun(), custom(), activity(), find(), brandingForm(), integrationsForm(), embed().`,
         );
       }
       if (kind === 'firstRun') {
@@ -1703,7 +1707,7 @@ function parseDashSections(
        dashboard's window controls on for a section the window never reached.
        A key another kind reads is named as that kind's ("only a chart
        carries"); a key no kind reads is a typo and gets the list. */
-      const takes = SECTION_KEYS[kind as AppDashSection['kind']];
+      const takes = SECTION_KEYS[authored as keyof typeof SECTION_KEYS];
       for (const key of Object.keys(s)) {
         if (takes.includes(key) || /^[$_]/.test(key)) continue;
         /* A key renamed within its own kind is told as the rename: "only a view carries" for a metric's `view` sent the
@@ -1712,7 +1716,7 @@ function parseDashSections(
         if (renamed) throw new Error(`${here} has "${key}", which is now ${renamed}.`);
         const owners = (Object.keys(SECTION_KEYS) as Array<AppDashSection['kind']>).filter((k) => SECTION_KEYS[k].includes(key));
         if (owners.length) throw new Error(`${here} has "${key}", which only a ${owners.map(sectionWord).join(' or ')} carries.`);
-        throw new Error(`${here} (a ${sectionWord(kind)}) ${unknownKey(key, takes, keyHomesOf(key))}.`);
+        throw new Error(`${here} (a ${sectionWord(authored)}) ${unknownKey(key, takes, keyHomesOf(key))}.`);
       }
       if (kind === 'custom') return parseCustomDashSection(s, here, data);
       if (kind === 'activity') return parseActivitySection(s, here, data);
@@ -1731,13 +1735,13 @@ function parseDashSections(
           ...(s.width === undefined ? {} : { width: s.width as SectionWidth }),
         };
       }
-      let banner: Pick<AppDashSection, 'variant' | 'eyebrow' | 'image'> = {};
+      let bannerKeys: Pick<AppDashSection, 'variant' | 'eyebrow' | 'image'> = {};
       if (kind === 'note') {
         if (typeof s.text !== 'string' || !s.text.trim()) throw new Error(`${here} is a note and has no "text".`);
         if (s.action !== undefined) {
           parseAppLinkAction(s.action, `${here}, "action"`);
         }
-        banner = parseNoteBanner(s, here, data);
+        bannerKeys = parseNoteBanner(s, here, data, banner);
       } else if (s.from === undefined ? !defaultTable : typeof s.from !== 'string' || !s.from.trim()) {
         throw new Error(
           `${here} has no "from"${
@@ -1897,6 +1901,14 @@ function parseDashSections(
       }
       if (s.target !== undefined && s.shape === 'donut')
         throw new Error(`${here} is a donut, which has no scale to draw a "target" on. Use a line or stacked bars.`);
+      if (kind === 'chart' && s.sort !== undefined) {
+        if (s.shape !== 'bar' && s.shape !== 'donut')
+          throw new Error(`${here} has a "sort", which orders the categories of a bar chart or a donut; a line runs along its key.`);
+        if (s.sort !== 'value' && s.sort !== 'category')
+          throw new Error(
+            `${here} has a "sort" of ${JSON.stringify(s.sort)}. Use "value" (largest first) or "category" (the key's own order).`,
+          );
+      }
       for (const key of ['title', 'query', 'measure', 'x', 'compare', 'by', 'sort', 'over'] as const) {
         if (s[key] !== undefined && (typeof s[key] !== 'string' || !(s[key] as string).trim())) {
           throw new Error(`${here} has a "${key}" that is not a non-empty string.`);
@@ -2013,7 +2025,7 @@ function parseDashSections(
         /* A section's mark: beside its title, or a note's over its guidance. */
         ...(s.icon !== undefined ? { icon: parseIcon(s.icon, here) } : {}),
         ...(kind === 'note' && s.action !== undefined ? { action: parseAppLinkAction(s.action, `${here}, "action"`) } : {}),
-        ...banner,
+        ...bannerKeys,
         query,
         measure: s.measure === undefined ? undefined : (s.measure as string).trim(),
         compare,
@@ -2085,7 +2097,7 @@ function embedSection(
   data: ParsedData,
   aside: boolean,
 ): AppDashSection {
-  allowKeys(s, VIEW_SECTION_KEYS, `${at} (a view)`);
+  allowKeys(s, VIEW_SECTION_KEYS, `${at} (a view)`, { tab: 'is now "listTab": the list tab\'s address word' });
   const listViews = [...views.values()].filter((view) => view.kind === 'list').map((view) => view.key);
   const parsed = typeof s.view === 'string' ? views.get(s.view) : undefined;
   if (!parsed || parsed.kind !== 'list') {
@@ -2103,16 +2115,16 @@ function embedSection(
     throw new Error(`${at} has a "limit" that is not a positive whole number.`);
   }
   let tab = view.tabs?.[0];
-  if (s.tab !== undefined) {
+  if (s.listTab !== undefined) {
     /* A tab is named by its address word, the one its URL carries (`?tab=`): a label is said in the reader's
        language and changes with `msg()`, the word does not. */
-    tab = view.tabs?.find((candidate) => tabKey(candidate) === s.tab);
+    tab = view.tabs?.find((candidate) => tabKey(candidate) === s.listTab);
     if (!tab) {
-      const byLabel = view.tabs?.find((candidate) => candidate.label === s.tab);
+      const byLabel = view.tabs?.find((candidate) => candidate.label === s.listTab);
       throw new Error(
         byLabel
-          ? `${at} names the tab "${String(s.tab)}" by its label. Name a tab by its address word: "${tabKey(byLabel)}".`
-          : `${at} names the tab "${String(s.tab)}", which the view "${key}" does not have. ` +
+          ? `${at} names the tab "${String(s.listTab)}" by its label. Name a tab by its address word: "${tabKey(byLabel)}".`
+          : `${at} names the tab "${String(s.listTab)}", which the view "${key}" does not have. ` +
               (view.tabs?.length ? `Its tabs: ${view.tabs.map((candidate) => tabKey(candidate)).join(', ')}.` : 'It has no tabs.'),
       );
     }

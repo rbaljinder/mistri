@@ -183,7 +183,7 @@ on its parent. Its README names the nearest first-shot recipe, and why.
    look, light and dark, at a desk and on a phone, with an index page. Install the browser once
    with `npm install --save-dev playwright && npx playwright install --only-shell chromium`, before the first shot.
 5. **Compare and fix** against the guide's worked example, then go round again.
-6. **Grade it**: `npx @mistriwork/mistri grade . --config ../mistri.json` measures
+6. **Grade it**: `npx @mistriwork/mistri grade --config ../mistri.json` measures
    every page at a desk, on a phone and in the dark ([below](#grade-before-handing-back)).
 
 To spend fewer tokens, ask for the short forms: `npx @mistriwork/mistri schema --brief`
@@ -216,11 +216,11 @@ not told to), and their
 journal and event store are provisioned once, with the server stopped:
 `npx @mistriwork/mistri migrate stores up --app .`.
 
-**Run it and test it.** `npx @mistriwork/mistri dev .` serves the App with a
+**Run it and test it.** `npx @mistriwork/mistri dev` serves the App with a
 throwaway session secret and prints a sign-in for every role, kept in
 `.mistri/` (which the scaffold's `.gitignore` names). With `auth.me`, each
 role's account takes the email of a row of that table, so `me` is someone in
-the data. `npx @mistriwork/mistri test init .`
+the data. `npx @mistriwork/mistri test init`
 writes `tests/`: a journey per role and a permissions matrix from
 `authority.lock`, run with `node --test 'tests/*.test.ts'`. They stand on
 `@mistriwork/mistri/testing`: `host.as(role)` signs a role in, and `.update`, `.command`
@@ -322,8 +322,8 @@ finding with its fix, at the file and line that declares the page, then what
 it covered and skipped. An error fails it, whatever the score.
 
 ```sh
-npx @mistriwork/mistri grade . --config ../mistri.json            # findings, coverage, then the verdict
-npx @mistriwork/mistri grade . --config ../mistri.json --as desk  # as a role sees it
+npx @mistriwork/mistri grade --config ../mistri.json            # findings, coverage, then the verdict
+npx @mistriwork/mistri grade --config ../mistri.json --as desk  # as a role sees it
 ```
 
 Run it last, after `check` and `check --design`, and fix each error (exit code

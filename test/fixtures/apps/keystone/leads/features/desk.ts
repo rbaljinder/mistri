@@ -1,4 +1,4 @@
-import { action, count, defineFeature, fields, header, history, listView, page, related } from '@mistriwork/mistri/app';
+import { action, rollup, defineFeature, fields, header, history, listView, page, related } from '@mistriwork/mistri/app';
 import type { Feature } from '../mistri-schema.d.ts';
 import { dealStatus, dollars, miles, months, perMonth, rate } from '../vocab.ts';
 
@@ -68,7 +68,7 @@ export const desk = defineFeature({
         term_months: months,
         updated_at: { format: 'relative' },
       },
-      rollups: { trades: count('trade_in', { whose: 'deal_id' }) },
+      rollups: { trades: rollup.count('trade_in', { whose: 'deal_id' }) },
       actions: {
         submitToLender: submitToKeystoneAction,
         markContracted: action('Mark contracted', { command: 'markContracted' }),

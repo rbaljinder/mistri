@@ -1,7 +1,7 @@
 /** One listener for independently configured App servers. Each child keeps
  * its registry, policy and authentication gate; requests are never proxied or
  * rewritten here. Children must be configured with their public base path. */
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   appMounts,
   appHome,
@@ -13,8 +13,8 @@ import {
 } from '@mistriwork/engine/shared/mount.js';
 import { applyServerTimeouts } from '@mistriwork/engine/server/serverTimeouts.js';
 import { probe } from '@mistriwork/engine/server/http/probes.js';
-import { forwardedClient } from '@mistriwork/engine/server/http/trust.js';
-import { withAdmission } from '@mistriwork/engine/adapters/poolAdmission.js';
+import { frontDoor } from '@mistriwork/engine/server/http/frontDoor.js';
+import type { ProxyRange } from '@mistriwork/engine/server/http/trust.js';
 import { SOURCE_CLIENT, attachDevClient, closeDevClientHmr, retireDevClient } from '@mistriwork/engine/server/devclient.js';
 import {
   createTenantHostRouter,
@@ -79,7 +79,14 @@ export async function createSuite(
     public?: boolean;
     open: (basePath: string, options: { allowedHosts: readonly string[] }) => Promise<Omit<SuiteHost, 'id'>>;
   }>,
-  addresses: { base?: string; mounts?: Readonly<Record<string, string>>; publicOrigin?: string; hosts?: readonly TenantHostIntent[] } = {},
+  addresses: {
+    base?: string;
+    mounts?: Readonly<Record<string, string>>;
+    publicOrigin?: string;
+    hosts?: readonly TenantHostIntent[];
+    /** The proxies whose forwarded address and protocol are read, beyond loopback (trust.ts); the baseline's HSTS follows it. */
+    trustedProxies?: readonly ProxyRange[];
+  } = {},
   identity?: {
     route(req: IncomingMessage, res: ServerResponse): Promise<void> | undefined;
     entry?(
@@ -155,18 +162,25 @@ export async function createSuite(
     const selected = target(req.url);
     return selected?.id === intent.app ? selected : undefined;
   };
-  const server = createServer((req, res) =>
-    /* The suite's own reads (its sign-in entry, its flag console) wait in a pool's line as their client's
-       (poolAdmission.ts); an App it hands the request to files it again, under its own door. */
-    withAdmission(forwardedClient(req), () => {
-      if (stopping) {
-        res.writeHead(503).end('The suite is stopping.');
-        return;
-      }
-      if (!hostRouter.accept(req)) {
-        res.writeHead(403).end('Invalid host.');
-        return;
-      }
+  /* The suite's own reads (its sign-in entry, its flag console) wait in a pool's line as their client's
+     (poolAdmission.ts); an App it hands the request to files it again, under its own door. Its own answers
+     (a stop, a Host it does not serve) carry the baseline headers like every App's. */
+  const server = frontDoor(
+    {
+      trustedProxies: addresses.trustedProxies,
+      guard: (req, res) => {
+        if (stopping) {
+          res.writeHead(503).end('The suite is stopping.');
+          return true;
+        }
+        if (!hostRouter.accept(req)) {
+          res.writeHead(403).end('Invalid host.');
+          return true;
+        }
+        return false;
+      },
+    },
+    (req, res) => {
       res.once('finish', () => {
         if (stopping) setImmediate(() => server.closeIdleConnections());
       });
@@ -268,7 +282,7 @@ export async function createSuite(
         });
         return;
       }
-    }),
+    },
   );
   server.on('upgrade', (req, socket, head) => {
     if (stopping || !hostRouter.accept(req)) {

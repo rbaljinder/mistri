@@ -62,10 +62,10 @@ A decision applies only with a model you measured on records people already sett
 
 ```sh
 mistri decide eval routeRepair --app examples/apps/lintel --jobs examples/apps/lintel/jobs.ts \
-  --policy examples/apps/lintel/policy.ts --truth "status is done" --dry
+  --policy examples/apps/lintel/policy.ts --truth "status is done" --dry-run
 ```
 
-`--dry` prints what one record would send. Without it the command prints the count and a cost estimate, and asks only with `--yes`. `--pin` writes the provider's model version into `decisions.lock` beside `app.ts`, only when the share it would apply was wrong at most 2% of the time. A different model version only suggests until you measure it again.
+`--dry-run` prints what one record would send. Without it the command prints the count and a cost estimate, and asks only with `--yes`. `--pin` writes the provider's model version into `decisions.lock` beside `app.ts`, only when the share it would apply was wrong at most 2% of the time. A different model version only suggests until you measure it again.
 In a tenant App a customer's decisions run only after the platform owner turns them on for that customer, per provider, in **Account → Manage tenants**; each customer's members see only their own customer's suggestions.
 
 ## Common mistakes

@@ -69,7 +69,7 @@ const schema: DatabaseSchema = {
 };
 const page = (...sections: PageSection[]): PageDef => ({ id: 'record', name: 'Record', base: 'incident', sections });
 const list = { kind: 'list' as const, from: 'note', path: 'incident_id' };
-const stream = { from: 'note', path: 'incident_id', at: 'at', show: 'name' };
+const stream = { from: 'note', path: 'incident_id', at: 'at', text: 'name' };
 const literal = 'PRIVATE_LITERAL';
 
 test('page validation and projection both reject unavailable shown fields without mutating definitions', () => {
@@ -106,8 +106,8 @@ const hiddenSections: Array<[string, PageSection]> = [
   ['breakdown joined key', { kind: 'breakdown', from: 'note', path: 'incident_id', by: 'site_id.hidden_secret' }],
   ['breakdown filter', { kind: 'breakdown', from: 'note', path: 'incident_id', by: 'name', filter: `hidden_secret = ${literal}` }],
   ['timeline date', { kind: 'timeline', streams: [{ ...stream, at: 'hidden_secret' }] }],
-  ['timeline show', { kind: 'timeline', streams: [{ ...stream, show: 'hidden_secret' }] }],
-  ['timeline detail', { kind: 'timeline', streams: [{ ...stream, detail: 'site_id.hidden_secret' }] }],
+  ['timeline text', { kind: 'timeline', streams: [{ ...stream, text: 'hidden_secret' }] }],
+  ['timeline badge', { kind: 'timeline', streams: [{ ...stream, badge: 'site_id.hidden_secret' }] }],
   ['timeline filter', { kind: 'timeline', streams: [{ ...stream, filter: `hidden_secret = ${literal}` }] }],
   ['timeline relationship', { kind: 'timeline', streams: [{ ...stream, path: 'hidden_id' }] }],
 ];
@@ -144,7 +144,7 @@ test('readable sections retain defaults, paths, comparisons, sorting and non-nul
     { kind: 'metric', from: 'note', path: 'incident_id', fn: 'count', filter: 'name contains hello' },
     { kind: 'metric', from: 'note', path: 'incident_id', fn: 'sum', column: 'amount' },
     { kind: 'breakdown', from: 'note', path: 'site_id', of: 'site_id', by: 'site_id.name', filter: 'name contains hello' },
-    { kind: 'timeline', streams: [stream, { ...stream, detail: 'readonly', filter: 'name contains hello' }] },
+    { kind: 'timeline', streams: [stream, { ...stream, badge: 'readonly', filter: 'name contains hello' }] },
   );
   const before = structuredClone(definition);
   for (const section of definition.sections) assert.equal(fieldAccessiblePage(schema, page(section)), true, JSON.stringify(section));

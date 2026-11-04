@@ -66,3 +66,16 @@ test('LCP, CLS and INP are reported as vitals when the page is hidden, each once
   expect(vitals[2].sources).toEqual([{ node: 'click on button' }]);
   Reflect.deleteProperty(document, 'visibilityState');
 });
+
+test('the browser’s benign ResizeObserver notes are not page errors, and a real error still is', async () => {
+  const fetch = vi.fn(async () => new Response('{}'));
+  vi.stubGlobal('fetch', fetch);
+  const { startBeacon } = await import('./beacon.js');
+  startBeacon();
+  for (const message of ['ResizeObserver loop completed with undelivered notifications.', 'ResizeObserver loop limit exceeded'])
+    window.dispatchEvent(new ErrorEvent('error', { message }));
+  window.dispatchEvent(new ErrorEvent('error', { message: 'x is not a function' }));
+  const errors = reports(fetch).filter((report) => report.kind === 'error');
+  // A listener from the module the first test started is still on the window, so the real one may arrive twice.
+  expect([...new Set(errors.map((report) => report.message))]).toEqual(['x is not a function']);
+});

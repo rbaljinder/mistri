@@ -162,7 +162,7 @@ test('a start on a Node older than the floor says so in one line; the floor is t
     `mistri needs Node ${NODE_FLOOR} or newer; this is Node 22.12.0. Install Node ${NODE_FLOOR} (https://nodejs.org) and run it again.`,
   );
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { engines: { node: string } };
-  assert.match(pkg.engines.node, new RegExp(`^>=${NODE_FLOOR}\\.\\d+\\.\\d+$`), 'the floor is the major engines names');
+  assert.match(pkg.engines.node, new RegExp(`^>=${NODE_FLOOR}(\\.\\d+\\.\\d+)?$`), 'the floor is the major engines names');
 });
 
 test('sign-in beyond this machine at an http public address is warned of, naming the https fix; loopback and https are not', () => {

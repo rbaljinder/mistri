@@ -7,44 +7,35 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { Frame } from '@playwright/test';
-import { expect, test } from './support/harness';
+import { expect, test as base } from './support/harness';
+import { fixture } from './support/fixture';
 import { openShot, shotContext } from '../packages/mistri/src/server/build/shot';
+import { SLOW_MS } from './support/budgets';
 
-/**
- * TC6: a theme's suggested menu placement (defineTheme's `shell.placement`) is seen where a theme is tried: the
- * theme bench's frames move the menu as the spec being written says, and shot draws a look shot by name with the
- * menu where it suggests. Both drew it where the App wore it.
- *
- * A server of its own over a fresh database (listen(0), mkdtemp), with --dev for the bench.
- */
-let origin = '';
-let directory = '';
-let child: ChildProcess | undefined;
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'mistri-theme-placement-'));
-  const db = join(directory, 'shop.db');
-  const source = new DatabaseSync(db);
-  try {
-    source.exec(`CREATE TABLE supplier (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      directory = mkdtempSync(join(tmpdir(), 'mistri-theme-placement-'));
+      const db = join(directory, 'shop.db');
+      const source = new DatabaseSync(db);
+      try {
+        source.exec(`CREATE TABLE supplier (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
       CREATE TABLE part (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
       INSERT INTO supplier VALUES (1, 'Cascade Cycle Supply');
       INSERT INTO part VALUES (1, 'Chain');`);
-  } finally {
-    source.close();
-  }
-  const config = join(directory, 'connections.json');
-  writeFileSync(config, JSON.stringify({ connections: [{ name: 'shop', url: db, writable: true }] }));
-  const app = join(directory, 'app');
-  mkdirSync(join(app, 'node_modules'), { recursive: true });
-  mkdirSync(join(app, 'node_modules', '@mistriwork'), { recursive: true });
-  symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(app, 'node_modules', '@mistriwork', 'mistri'), 'dir');
-  writeFileSync(join(app, 'package.json'), '{ "type": "module" }\n');
-  writeFileSync(
-    join(app, 'app.ts'),
-    `import { defineApp, defineTheme, listView } from '@mistriwork/mistri/app';
+      } finally {
+        source.close();
+      }
+      const config = join(directory, 'connections.json');
+      writeFileSync(config, JSON.stringify({ connections: [{ name: 'shop', url: db, writable: true }] }));
+      const app = join(directory, 'app');
+      mkdirSync(join(app, 'node_modules'), { recursive: true });
+      mkdirSync(join(app, 'node_modules', '@mistriwork'), { recursive: true });
+      symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(app, 'node_modules', '@mistriwork', 'mistri'), 'dir');
+      writeFileSync(join(app, 'package.json'), '{ "type": "module" }\n');
+      writeFileSync(
+        join(app, 'app.ts'),
+        `import { defineApp, defineTheme, listView } from '@mistriwork/mistri/app';
 // Plain says nothing of the menu, so the App wears it at the side; Harbor suggests the top.
 const plain = defineTheme({ id: 'plain', label: 'Plain', extends: 'lumen' });
 const harbor = defineTheme({ id: 'harbor', label: 'Harbor', extends: 'lumen', shell: { placement: 'top' } });
@@ -59,63 +50,75 @@ export default defineApp({
   ui: { customThemes: [plain, harbor], theme: { preset: 'plain' } },
 });
 `,
-  );
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  origin = `http://127.0.0.1:${port}`;
-  const started = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port), '--dev'],
-    {
-      cwd: resolve('.'),
-      env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      );
+      const reservation = createServer();
+      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
+      const port = (reservation.address() as { port: number }).port;
+      await new Promise<void>((done) => reservation.close(() => done()));
+      origin = `http://127.0.0.1:${port}`;
+      const started = spawn(
+        process.execPath,
+        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port), '--dev'],
+        {
+          cwd: resolve('.'),
+          env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      child = started;
+      let log = '';
+      started.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      started.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
+        started.stdout!.on('data', () => {
+          if (log.includes('Listening on ')) {
+            clearTimeout(timer);
+            done();
+          }
+        });
+        started.once('exit', () => {
+          clearTimeout(timer);
+          fail(new Error(`The fixture exited: ${log}`));
+        });
+      });
     },
-  );
-  child = started;
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
-    started.stdout!.on('data', () => {
-      if (log.includes('Listening on ')) {
-        clearTimeout(timer);
-        done();
+    async () => {
+      if (child && child.exitCode === null) {
+        const closed = once(child, 'close');
+        child.kill('SIGTERM');
+        const force = setTimeout(() => child?.kill('SIGKILL'), 5000);
+        try {
+          await closed;
+        } finally {
+          clearTimeout(force);
+        }
       }
-    });
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The fixture exited: ${log}`));
-    });
-  });
+      rmSync(directory, { recursive: true, force: true });
+    },
+  ),
 });
 
-test.afterAll(async () => {
-  if (child && child.exitCode === null) {
-    const closed = once(child, 'close');
-    child.kill('SIGTERM');
-    const force = setTimeout(() => child?.kill('SIGKILL'), 5000);
-    try {
-      await closed;
-    } finally {
-      clearTimeout(force);
-    }
-  }
-  rmSync(directory, { recursive: true, force: true });
-});
+/**
+ * TC6: a theme's suggested menu placement (defineTheme's `shell.placement`) is seen where a theme is tried: the
+ * theme bench's frames move the menu as the spec being written says, and shot draws a look shot by name with the
+ * menu where it suggests. Both drew it where the App wore it.
+ *
+ * A server of its own over a fresh database (listen(0), mkdtemp), with --dev for the bench.
+ */
+let origin = '';
+let directory = '';
+let child: ChildProcess | undefined;
 
 /** Whether a frame draws the App's menu in the bar on top (app.js), rather than at the side. */
 const onTop = (frame: Frame) => frame.evaluate(() => document.body.classList.contains('app-topnav'));
 
 test("the bench's frames move the menu as the theme being written suggests", async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   await page.setViewportSize({ width: 2200, height: 900 });
   await page.goto(`${origin}/_mistri/theme/`);
   // The first visit compiles the client under tsx (devclient.ts): give it the time a cold start takes.
@@ -155,7 +158,7 @@ test("the bench's frames move the menu as the theme being written suggests", asy
 });
 
 test('shot draws a look shot by name with the menu where it suggests', async ({ browser }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   const look = { app: 'shop', theme: 'harbor', own: true, label: 'Harbor', placement: 'top' as const };
   for (const [worn, top] of [
     [undefined, false],

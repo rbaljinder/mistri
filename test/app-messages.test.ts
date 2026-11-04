@@ -400,9 +400,10 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
   test("one rule for what a caption is: every key it names takes msg() in the authored types, but the few that are not a reader's words", () => {
     /* Each with why it stays text. A command's inputs are parsed when defineCommand runs, before any catalog is
        read, and the same contract is the App API's and MCP's; the served shapes are said already; an API's words are
-       its OpenAPI document's, one per App, not a reader's; a composer's template `text` names a column. */
+       its OpenAPI document's, one per App, not a reader's; a composer's template `text` and a timeline row's `text` name a column. */
     const STRING_ONLY = new Set([
       'app.d.ts TimelineComposer.text',
+      'app.d.ts TimelineStream.text',
       'app.d.ts ApiExposureOptions.description',
       'app.d.ts DraftApiConfig.label',
       'app.d.ts DraftApiConfig.description',
@@ -436,8 +437,8 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       'model.d.ts AppCommandRule.message',
       /* A display's subtitle names a column of the record, not words. */
       'app.d.ts AppDisplayRule.subtitle',
-      /* An embed names its tab by the tab's address word, which no language changes. */
-      'app.d.ts AppViewDashSection.tab',
+      /* A headline's subtitle names a column of the record too. */
+      'app.d.ts HeadlineSection.subtitle',
     ]);
     const found = new Set<string>();
     const property = new RegExp(`\\b(${[...CAPTION_KEYS].join('|')})\\??: ([^;,)=]*)`, 'g');

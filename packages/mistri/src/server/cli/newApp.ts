@@ -147,7 +147,7 @@ export default defineApp({
       private: true,
       type: 'module',
       scripts: {
-        dev: 'mistri dev .',
+        dev: 'mistri dev',
         check: 'mistri check',
         start: 'mistri --app .',
         migrate: 'mistri migrate up',
@@ -173,7 +173,7 @@ export default defineApp({
     'npm run check     # types, typecheck and validation, the one command of the loop',
     '```',
     '',
-    'To feel a remote database while you build, serve with `npx @mistriwork/mistri dev . --db-latency 20`: each round trip then waits',
+    'To feel a remote database while you build, serve with `npx @mistriwork/mistri dev --db-latency 20`: each round trip then waits',
     '20 ms, a typical cloud distance, and the cost of every request shows in the dev log.',
     '',
     '- `app.ts` — the whole App: the `task` resource, its tabs, form and actions, the list and the record page.',

@@ -1,6 +1,7 @@
 import { expect, test } from './support/harness';
 import { startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { FIXTURE_MS } from './support/budgets';
 
 /* Thread's labels: rows of label linked to an issue through issue_label,
    toned chips under the issue's title. One goes with its ×, another comes
@@ -9,7 +10,7 @@ test.describe('Thread labels', () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     sample = await startSample('thread');
   });
   test.afterAll(async () => {

@@ -3,6 +3,7 @@ import type { Request } from '@playwright/test';
 import { startSample, PAYDAY_ADMIN } from './support/sampleServer';
 import { ROOM_BUDGETS } from '../scripts/statement-budgets.mjs';
 import { statementShape } from '../packages/engine/src/adapters/telemetry/statement.js';
+import { BUILD_MS } from './support/budgets';
 
 /* What a room asks the server and the database, held to its budget
    (scripts/statement-budgets.mjs), counted by the dev observer's own
@@ -12,7 +13,7 @@ import { statementShape } from '../packages/engine/src/adapters/telemetry/statem
    on one SQLite file; Thread, whose home is the busiest dashboard of the
    samples. Each on its own server, over a fresh seed. */
 test.describe('statement budgets', () => {
-  test.setTimeout(240_000);
+  test.setTimeout(BUILD_MS);
 
   const CATALOG =
     /\b(pg_catalog|pg_class|pg_attribute|pg_trigger|pg_collation|pg_namespace|information_schema|sqlite_master|sqlite_schema|pragma_\w+|PRAGMA)\b/i;

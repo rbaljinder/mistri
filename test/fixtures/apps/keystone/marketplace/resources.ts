@@ -1,4 +1,4 @@
-import { count, min } from '@mistriwork/mistri/app';
+import { rollup } from '@mistriwork/mistri/app';
 import type { Resources } from './mistri-schema.d.ts';
 
 /* What the marketplace says about each table, once, wherever its rows appear:
@@ -45,8 +45,8 @@ export const resources = {
   },
   dealer: {
     rollups: {
-      for_sale: count('vehicle', { whose: 'dealer_id', query: 'status in (listed, pending)' }),
-      from_price: min('vehicle', 'list_price', { whose: 'dealer_id', query: 'status in (listed, pending)' }),
+      for_sale: rollup.count('vehicle', { whose: 'dealer_id', query: 'status in (listed, pending)' }),
+      from_price: rollup.min('vehicle', 'list_price', { whose: 'dealer_id', query: 'status in (listed, pending)' }),
     },
     display: {
       kind: { values: { franchise: 'Franchise dealer', independent: 'Independent dealer' } },

@@ -13,6 +13,8 @@ export interface AppSourceDefinition {
   references?: readonly DeclaredReference[];
   /** The App's TEXT columns it declares dates within this source, in its local names. */
   dates?: readonly DeclaredDate[];
+  /** The App's narrowed resources within this source, local name → their conditions (appNarrowed.ts). */
+  narrowed?: Readonly<Record<string, string>>;
   /** The one engine schema this source sees of its connection (`sources.<name>.schema`). */
   scope?: string;
   /**
@@ -125,7 +127,7 @@ export function createAppSourceCatalog(
       throw new Error(`Invalid app source name "${name}". Use a non-reserved identifier, such as "operations".`);
     }
     const physical = source.scope === undefined ? source.schema : schemaScoped(source.schema, source.scope);
-    catalogs.set(name, appResourceCatalog(physical, source.resources, source.references, source.dates));
+    catalogs.set(name, appResourceCatalog(physical, source.resources, source.references, source.dates, source.narrowed));
     groupOf.set(name, source.group ?? name);
   }
   if (defaultSource !== undefined && !catalogs.has(defaultSource))
@@ -180,7 +182,22 @@ export function createAppSourceCatalog(
      unique within one connection (a schema-qualified name), so a table and
      its connection always say which source it belongs to. */
   const members = new Map<string, Map<string, string>>();
+  /* A narrowed resource's copy of a table (appNarrowed.ts) is a second name for it, never the one it answers to:
+     kept apart, with the conditions its reads stand on, by group. */
+  const copies = new Map<string, Map<string, string>>();
+  const narrowed = new Map<string, Map<string, import('@mistriwork/engine/shared/filter.js').Filter>>();
   for (const [resource, target] of targets) {
+    const own = catalogs.get(target.source)!;
+    const fixed = own.narrowed?.get(target.table);
+    if (fixed) {
+      const kept = narrowed.get(target.group) ?? new Map();
+      narrowed.set(target.group, kept.set(resource, fixed));
+    }
+    if (fixed && own.toLogical(target.physicalTable) !== target.table) {
+      const kept = copies.get(target.group) ?? new Map<string, string>();
+      copies.set(target.group, kept.set(resource, target.physicalTable));
+      continue;
+    }
     const physical = members.get(target.group) ?? new Map<string, string>();
     if (physical.has(target.physicalTable)) {
       throw new Error(
@@ -220,6 +237,8 @@ export function createAppSourceCatalog(
   const groups = new Map<string, AppResourceCatalog>();
   for (const [group, physical] of members) {
     const logical = new Map([...physical].map(([id, resource]) => [resource, id]));
+    for (const [resource, id] of copies.get(group) ?? []) logical.set(resource, id);
+    const fixed = narrowed.get(group);
     const names = Object.keys(sources).filter((name) => groupOf.get(name) === group);
     const scoped = names.some((name) => sources[name].scope !== undefined);
     const full = connectionOf.get(group)!.schema;
@@ -231,6 +250,7 @@ export function createAppSourceCatalog(
       toPhysical: (resource) => logical.get(resource) ?? refuseResource(resource),
       toLogical: (id) => physical.get(id) ?? refuseTable(id),
       ...(scoped ? { bounds: { full, within: within(full, new Set(physical.keys())) } } : {}),
+      ...(fixed?.size ? { narrowed: fixed } : {}),
     });
   }
   return {

@@ -64,7 +64,7 @@ describe('mistri build, the command', () => {
     assert.match(unknown.err, /unknown option "--minify"/);
     const help = await run(['build', '--help']);
     assert.equal(help.code, 0);
-    assert.match(help.out, /mistri build --app <dir> \[--app-entry <file>\] \[--out <dir>\]/);
+    assert.match(help.out, /mistri build \[--app <dir>\] \[--app-entry <file>\] \[--out <dir>\]/);
   });
 
   test('builds Tick: typechecked without a tsconfig, validated, bundled', async () => {

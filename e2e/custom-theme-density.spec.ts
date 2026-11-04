@@ -2,6 +2,7 @@ import { COMPASS, expect, type Page, test } from './support/ownServers';
 import { focusStops, inPage, probePage, type Probe } from '../packages/mistri/src/server/build/gradeProbe';
 import { TAP } from '../packages/mistri/src/server/build/gradeJudge';
 import type { Browser } from '@playwright/test';
+import { SLOW_MS } from './support/budgets';
 
 // This worker's own Compass (support/ownServers.ts): the spec runs in the parallel lane.
 test.use({ servers: ['crm'] });
@@ -45,7 +46,7 @@ const thinRings = async (page: Page) =>
 
 for (const density of ['compact', 'comfortable', 'spacious'])
   test(`Meridian at ${density}: the New form stands clear of the list, and every ring is 2px`, async ({ browser }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(SLOW_MS);
     const desk = await opened(browser, '/leads/new', density, { width: 1280 });
     try {
       await expect(desk.page.locator('.newpanel .insert-field').first()).toBeVisible();

@@ -202,7 +202,7 @@ test('shot and grade read a config from another folder the same way', { timeout:
   assert.equal(shot.code, 0, `${shot.out}\n${shot.err}`);
   // The one row of the file beside the config: an empty file opened here would have no table at all.
   assert.match(shot.out, /table: .*Name — 1 row/);
-  const grade = await run(['grade', '../app', '--config', '../mistri.json'], here);
+  const grade = await run(['grade', '--app', '../app', '--config', '../mistri.json'], here);
   assert.equal(grade.code, 0, `${grade.out}\n${grade.err}`);
   assert.match(grade.out, /^grade: .*; score \d+\/100$/m);
   assert.deepEqual(readdirSync(here), [], 'nothing was opened where the commands ran');

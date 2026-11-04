@@ -415,8 +415,8 @@ describe('scaffoldApp', () => {
         ['Next order', 'orders', 'customer_id'],
         ['Next order', 'orders', 'customer_id', { query: 'status = open', sort: 'due_on asc', region: 'aside' }],
       ],
-      count: [['orders'], ['orders', { whose: 'customer_id' }]],
-      sum: [
+      'rollup.count': [['orders'], ['orders', { whose: 'customer_id' }]],
+      'rollup.sum': [
         ['orders', 'total_amount'],
         ['orders', 'total_amount', { query: 'status = open' }],
       ],
@@ -641,7 +641,7 @@ describe('the veneer helpers compose real config', () => {
       {
         kind: 'timeline',
         title: 'Notes',
-        streams: [stream('orders', 'customer_id', 'created_on', 'reference', { detail: 'status' })],
+        streams: [stream('orders', 'customer_id', 'created_on', 'reference', { badge: 'status' })],
         limit: 10,
       },
     ]);

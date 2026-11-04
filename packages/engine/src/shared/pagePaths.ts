@@ -3,7 +3,16 @@
  * root, the filter that pins it to one root row, and the list and metric
  * views a section runs. Pure; nothing fetches.
  */
-import { columnOrRollup, findTable, labelColumn, primaryKey, type DatabaseSchema, type ForeignKey, type TableMeta } from './schema.js';
+import {
+  columnOrRollup,
+  findTable,
+  labelColumn,
+  linkTarget,
+  primaryKey,
+  type DatabaseSchema,
+  type ForeignKey,
+  type TableMeta,
+} from './schema.js';
 import { MAX_PATH_DEPTH, hopName, parseViewQuery, validateView, type ViewDef, type ViewFilter } from './view.js';
 import { quoteValue, saidAt } from './query.js';
 import { type PageMetric, type PageList, type PageDef, type PageCustom, DEFAULT_PAGE_LIST_LIMIT, GROUPS_DEFAULT } from './pageModel.js';
@@ -550,9 +559,13 @@ export function listView(
       : [];
   /* A current card is titled by its row's name, which its facts leave out. */
   const titled = section.presentation === 'card' ? [labelColumn(table)].filter((name): name is string => Boolean(name)) : [];
+  /* A card over a link table is named by, and opens, the record its far reference names: that column is read. */
+  const opened =
+    section.presentation === 'card' ? [linkTarget(table, section.path, section.opens)].filter((name): name is string => Boolean(name)) : [];
   const columns = [
     ...new Set([
       ...titled,
+      ...opened,
       ...(section.columns?.length ? section.columns : defaultColumns(table, section.path, resolved.path!)),
       ...cardColumns,
       ...groupFactPaths(section),

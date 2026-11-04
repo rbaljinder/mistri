@@ -56,6 +56,20 @@ test('a second figure under the first, the small print under the actions, and fo
   expect(container.querySelector('dl')).toBeNull();
 });
 
+test("a subtitle is the figure's second line, read from a column of the record, and is not drawn when the column is empty", () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const draw = (row: Record<string, unknown>) =>
+    render(
+      <QueryClientProvider client={client}>
+        <PageHeadline tableId="vehicle" row={row} paths={['price']} column={() => undefined} subtitle="period" actions={[]} />
+      </QueryClientProvider>,
+    );
+  const { container, unmount } = draw({ price: 4200, period: 'per month' });
+  expect(container.querySelector('.page-headline-figure .page-headline-subtitle')).toHaveTextContent('per month');
+  unmount();
+  expect(draw({ price: 4200, period: null }).container.querySelector('.page-headline-subtitle')).toBeNull();
+});
+
 test('an empty field fills nothing, and a record with no second figure draws none', () => {
   expect(
     prefilledFormLink(

@@ -162,19 +162,22 @@ export function parseStepsShape(s: Record<string, unknown>, here: string): void 
       throw new Error(`${here} has a note for "${value}" that is not a line of 1 to 80 characters.`);
 }
 
-/** A note as the dashboard's banner: its tag and picture belong to the banner alone, and a banner says what it
-    introduces in a title. The picture is a row of a file resource; whether the reader may see it is the file route's. */
+/** A dashboard's banner (`banner()`), served as a note drawn as a banner: its tag and picture belong to the banner
+    alone, and a banner says what it introduces in a title. The picture is a row of a file resource; whether the
+    reader may see it is the file route's. A note takes the quiet or callout variant the pages' notes take. */
 export function parseNoteBanner(
   s: Record<string, unknown>,
   here: string,
   data: ParsedData,
+  banner: boolean,
 ): Pick<AppDashSection, 'variant' | 'eyebrow' | 'image'> {
-  if (s.variant === undefined) {
-    for (const key of ['eyebrow', 'image'])
-      if (s[key] !== undefined) throw new Error(`${here} has an "${key}", which only a banner carries: add variant: 'banner'.`);
-    return {};
+  if (!banner) {
+    if (s.variant === 'banner') throw new Error(`${here} has variant: 'banner', which is its own section now: banner(title, text).`);
+    if (s.variant === undefined) return {};
+    if (s.variant !== 'quiet' && s.variant !== 'callout')
+      throw new Error(`${here} has a "variant" of "${String(s.variant)}". A note takes 'quiet' or 'callout'.`);
+    return { variant: s.variant };
   }
-  if (s.variant !== 'banner') throw new Error(`${here} has a "variant" of "${String(s.variant)}". A dashboard's note takes 'banner'.`);
   if (typeof s.title !== 'string' || !s.title.trim()) throw new Error(`${here} is a banner and has no "title": say what it introduces.`);
   const out: Pick<AppDashSection, 'variant' | 'eyebrow' | 'image'> = {
     variant: 'banner',

@@ -1,3 +1,4 @@
+import { FIXTURE_MS, LONG_MS } from './support/budgets';
 /**
  * The two front doors, and the room behind each.
  *
@@ -28,11 +29,11 @@ async function expectNoSidewaysScroll(page: Page) {
 
 test.describe("Ignition landing and the lender's realm", () => {
   test.skip(IGNITION_SKIP !== false, String(IGNITION_SKIP));
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   let app: IgnitionFixture;
   test.beforeAll(async () => {
     // Two databases seeded and a server started: the setting above times the tests, not this hook (Playwright).
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     app = await startIgnition();
   });
   test.afterAll(async () => {

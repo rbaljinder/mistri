@@ -10,7 +10,7 @@
  * command catalog refuses an exposed lookup into another (apiCommandCatalog.ts).
  * Nothing is promised across requests. */
 import { Refusal, type Adapter } from '@mistriwork/engine/adapters/adapter.js';
-import { declaredDates, declaredReferences, logicalResource, physicalBindings, type AppDef } from '../../shared/app.js';
+import { declaredDates, declaredReferences, logicalResource, narrowedBindings, physicalBindings, type AppDef } from '../../shared/app.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { mapOpenedAppRuntimeResources } from '../app/appRuntimeResourceMapping.js';
 import type { AppAdapterSource } from '../app/appSourceAdapter.js';
@@ -114,6 +114,7 @@ export function laneResources(
       resources: physicalBindings(app, source || undefined),
       references: declaredReferences(app, source || undefined),
       dates: declaredDates(app, source || undefined),
+      narrowed: narrowedBindings(app, source || undefined),
       // A read never writes, on its lane or any other.
       writable: false,
       group: connection,

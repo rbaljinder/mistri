@@ -17,7 +17,7 @@ import { execFile, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { browserInstallLine, installedChromiums, runShot } from '../packages/mistri/src/server/build/shot.js';
+import { browserInstallLine, installedChromiums, runShot, systemBrowsers } from '../packages/mistri/src/server/build/shot.js';
 import { runAgent } from '../packages/mistri/src/server/cli/agentInit.js';
 import { installMistri } from './support/installedMistri.js';
 import { entryFor } from './support/bins.js';
@@ -263,6 +263,32 @@ describe('a fresh project, as it is set up', () => {
     ]);
     assert.deepEqual(installedChromiums({ PLAYWRIGHT_BROWSERS_PATH: join(home, 'none') }, join(home, 'nobody'), 'linux'), []);
     rmSync(home, { recursive: true, force: true });
+  });
+
+  test("shot falls back to the machine's Chrome, Edge or Chromium by their own installers' paths, CHROME_PATH first", () => {
+    const has =
+      (...paths: string[]) =>
+      (path: string) =>
+        paths.includes(path);
+    assert.deepEqual(systemBrowsers({}, 'darwin', '/Users/a', has('/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge')), [
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    ]);
+    assert.deepEqual(
+      systemBrowsers(
+        { CHROME_PATH: '/opt/mine/chrome' },
+        'linux',
+        '/home/a',
+        has('/usr/bin/chromium', '/opt/mine/chrome', '/usr/bin/google-chrome'),
+      ),
+      ['/opt/mine/chrome', '/usr/bin/google-chrome', '/usr/bin/chromium'],
+    );
+    const edge = join('C:\\Program Files (x86)', 'Microsoft', 'Edge', 'Application', 'msedge.exe');
+    assert.deepEqual(systemBrowsers({ 'PROGRAMFILES(X86)': 'C:\\Program Files (x86)' }, 'win32', 'C:\\Users\\a', has(edge)), [edge]);
+    assert.deepEqual(
+      systemBrowsers({}, 'linux', '/home/a', () => false),
+      [],
+      'nothing found: the caller says --browser <path>',
+    );
   });
 
   test('shot --browser (or CHROME) naming no file is refused before anything is served', async () => {

@@ -51,7 +51,7 @@ import { MATRIX_MODES, MATRIX_SIZES, matrixFile, matrixIndex } from './shotMatri
 import { CONFIG_SECTIONS } from '../serviceConnections.js';
 
 const SHOT_USAGE =
-  'mistri shot --app <dir> [<route>…] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>]\n' +
+  'mistri shot [--app <dir>] [<route>…] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>]\n' +
   '               [--theme <id|all>] [--palette <id>] [--compare <look>] [--recipes <part>] [--dark | --light] [--phone | --desk | --both] [--width <px>]\n' +
   '               [--click <name>] [--type <field> <text>] [--press <key>] [--wait-for <text>] [--matrix]\n' +
   '               [--full] [--scale <1-3>] [--as <role|email> [--tenant <id>]] [--out <dir>] [--text] [--browser <path>]';
@@ -387,6 +387,44 @@ export function installedChromiums(
 }
 
 /**
+ * The Chrome, Edge or Chromium the machine has by its own installer, in the places each puts it, for a machine where
+ * Playwright's own browser cannot be downloaded (a corporate proxy that re-signs TLS). `CHROME_PATH` leads, as
+ * `CHROME` does for the one named. `exists` is a parameter so the choice is tested over paths that are not there.
+ */
+export function systemBrowsers(
+  environment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  home = homedir(),
+  exists: (path: string) => boolean = existsSync,
+): string[] {
+  const named = environment.CHROME_PATH ? [environment.CHROME_PATH] : [];
+  const places: string[] =
+    platform === 'darwin'
+      ? ['Google Chrome', 'Microsoft Edge', 'Chromium'].flatMap((name) =>
+          ['/Applications', join(home, 'Applications')].map((root) => join(root, `${name}.app`, 'Contents', 'MacOS', name)),
+        )
+      : platform === 'win32'
+        ? [environment.PROGRAMFILES, environment['PROGRAMFILES(X86)'], environment.LOCALAPPDATA]
+            .filter((root): root is string => Boolean(root))
+            .flatMap((root) => [
+              join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+              join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+              join(root, 'Chromium', 'Application', 'chrome.exe'),
+            ])
+        : [
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/opt/google/chrome/chrome',
+            '/usr/bin/microsoft-edge',
+            '/usr/bin/microsoft-edge-stable',
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser',
+            '/snap/bin/chromium',
+          ];
+  return [...new Set([...named, ...places])].filter((path) => exists(path));
+}
+
+/**
  * The browser shot opens: the one named (`--browser`, else `CHROME`) and nothing else; else Playwright's own, the
  * machine's Chrome, and then any Chromium another Playwright installed here.
  *
@@ -414,6 +452,13 @@ async function launch(chromium: BrowserType, scratch: string, named?: string): P
             return await chromium.launch({ executablePath });
           } catch {
             /* another build; the next */
+          }
+        }
+        for (const executablePath of systemBrowsers()) {
+          try {
+            return await chromium.launch({ executablePath });
+          } catch {
+            /* one that will not start under Playwright; the next */
           }
         }
         throw first;
@@ -1319,7 +1364,7 @@ class ShotRun {
   async open(options: ShotRunOptions): Promise<OpenedShotRun> {
     const warn = this.warn;
     const log = console.log;
-    if (!options.app) throw new Refusal('--app <dir> names the App to shoot.');
+    if (!options.app) throw new Refusal("--app <dir> names the App to shoot, or run it in the App's directory.");
     try {
       options.browser ??= process.env.CHROME || undefined;
       if (options.browser && !existsSync(options.browser))
@@ -1516,8 +1561,8 @@ class ShotRun {
         /* Playwright is there and its browser is not: the one line that installs it, not the package again. */
         throw new Refusal(
           /Executable doesn't exist/i.test(said)
-            ? `Playwright's headless Chromium is not installed. Run: ${found.install}, or name a browser: --browser <path>`
-            : `Chromium did not start (${said}). Run: ${found.install}, or name a browser: --browser <path>`,
+            ? `no browser to shoot with: Playwright's Chromium is not installed and no Chrome, Edge or Chromium was found. Name one with --browser <path> (or CHROME_PATH), or install Playwright's: ${found.install}`
+            : `no browser to shoot with: it did not start (${said}) and no Chrome, Edge or Chromium was found. Name one with --browser <path> (or CHROME_PATH), or install Playwright's: ${found.install}`,
         );
       }));
       /* Each role a person signs in as, by an account the bootstrapped administrator makes, and signed out first. */

@@ -15,7 +15,7 @@
  * The block takes paths and nothing else: a `${NAME}` reference, a key it does not know, or a file that is not
  * there is refused by name. It is not a second App definition: it names modules and defines nothing.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { configFileName, product } from '../product.js';
@@ -44,7 +44,7 @@ interface ProjectProfile {
 /** What a run resolved, said before anything else and carried in `--json` as `context`. */
 interface ProjectContext {
   readonly config?: { readonly path: string; readonly from: ConfigFrom };
-  readonly app?: { readonly path: string; readonly from: 'flag' | 'profile' };
+  readonly app?: { readonly path: string; readonly from: 'flag' | 'profile' | 'cwd' };
   readonly entries: Partial<Record<ProfileEntry, { readonly path: string; readonly from: 'flag' | 'profile' }>>;
   /** Where a flag overrode the profile: what the profile said. */
   readonly over: Partial<Record<ProfileEntry | 'dir', string>>;
@@ -56,12 +56,32 @@ export class ProfileRefusal extends Error {}
 /** What an App command takes of the profile: the App, and which entries. */
 export interface ProfileTakes {
   readonly entries: readonly ProfileEntry[];
-  /** `dev` also takes the App as its first word. */
-  readonly positional?: boolean;
+  /** Without `--app` or a profile's `dir`, the working directory is the App when it holds an App entry. */
+  readonly cwdApp?: boolean;
   /** The command prints the context in its own output and `--json` (check, migrate); another says it on stderr. */
   readonly says?: boolean;
   /** False where the command reads no App (`migrate diff` reads schema.sql and the config's connection). */
   readonly app?: boolean;
+}
+
+/** The files an App's directory is known by: the entry `loadApp` reads. */
+const APP_ENTRY_FILES = ['app.ts', 'app.mjs', 'app.json'] as const;
+
+/** Whether a directory holds an App entry. */
+export const holdsApp = (dir: string): boolean => APP_ENTRY_FILES.some((name) => existsSync(join(dir, name)));
+
+/**
+ * A word typed where a database, a route or a target goes that is an App's directory: the App is named with
+ * `--app`, never by position, so it is refused rather than read as one. Undefined when the word is anything else.
+ */
+export function appDirectoryWord(command: string, word: string | undefined): string | undefined {
+  if (word === undefined || word.startsWith('-')) return undefined;
+  try {
+    if (!statSync(word).isDirectory() || !holdsApp(word)) return undefined;
+  } catch {
+    return undefined;
+  }
+  return `${word} is an App's directory, and an App is named with --app: ${command} --app ${word}`;
 }
 
 const shown = (path: string) => {
@@ -162,8 +182,7 @@ export function applyProfile(argv: readonly string[], takes: ProfileTakes, env: 
   /* A suite's Apps are the suite's to name (`migrate stores up --suite`): the profile's one App is not added to it. */
   const suite = out.includes('--suite');
   const apps = flagged(out, '--app');
-  const positional = takes.positional && out[0] !== undefined && !out[0].startsWith('-') ? out[0] : undefined;
-  const named = apps.length === 1 ? apps[0] : positional;
+  const named = apps.length === 1 ? apps[0] : undefined;
   const explicit = flagged(out, '--config').at(-1);
   const naming = out.includes('--db') || out.includes('-d');
   const found =
@@ -181,6 +200,10 @@ export function applyProfile(argv: readonly string[], takes: ProfileTakes, env: 
   } else if (profile?.dir !== undefined && !suite && takes.app !== false) {
     app = { path: profile.dir, from: 'profile' };
     out.push('--app', shown(profile.dir));
+  } else if (apps.length === 0 && takes.cwdApp && !suite && takes.app !== false && holdsApp('.')) {
+    /* The one rule: no --app and no profile, the App is the directory the person is in, when it is one. */
+    app = { path: resolve('.'), from: 'cwd' };
+    out.push('--app', '.');
   }
   const entries: ProjectContext['entries'] = {};
   if (apps.length <= 1 && !suite && takes.app !== false)
@@ -252,7 +275,12 @@ export function contextLines(
     : 'no config file';
   const lines = [`Context: ${where}`];
   const row = (key: string, path: string | undefined, from: string) => lines.push(`  ${key.padEnd(9)} ${(path ?? '—').padEnd(13)} ${from}`);
-  if (context.app) row('app', shown(context.app.path), context.app.from === 'profile' ? 'mistri.json' : over(context, 'dir', 'flag'));
+  if (context.app)
+    row(
+      'app',
+      shown(context.app.path),
+      context.app.from === 'profile' ? 'mistri.json' : context.app.from === 'cwd' ? 'the working directory' : over(context, 'dir', 'flag'),
+    );
   for (const entry of ['commands', 'jobs', 'policy', 'entry'] as const) {
     const own = context.entries[entry] ?? more[entry];
     if (!own) {

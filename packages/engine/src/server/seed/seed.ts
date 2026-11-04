@@ -352,6 +352,8 @@ class Taken {
 function textFor(dice: Dice, plan: Plan, column: ColumnMeta, person: Person, n: number, personLike: boolean, companyLike: boolean): Value {
   const name = column.name.toLowerCase();
   const table = plan.table;
+  /* A uuid column holds a uuid whatever it is called: `code` and `key` are words for text. */
+  if (/uuid/i.test(column.type)) return uuid(dice);
   if (/(^|_)e?mail(_address)?$/.test(name))
     return companyLike && !personLike
       ? `hello@${slug(person.company)}.example.com`
@@ -636,7 +638,10 @@ export async function seedDatabase(adapter: Adapter, schema: DatabaseSchema, opt
             const options = rowList(ref.table).filter((row) => row[ref.column] != null);
             if (!options.length) {
               if (column.nullable) values[column.name] = null;
-              else ok = false;
+              else
+                throw new SeedRefusal(
+                  `${table.name}.${column.name} references ${ref.table}.${ref.column}, which has no rows to point at, so no ${table.name} row can be made.`,
+                );
               continue;
             }
             /* The first rows go one to each parent, so none is childless; the rest favor a few, as a busy doctor or a
@@ -649,8 +654,23 @@ export async function seedDatabase(adapter: Adapter, schema: DatabaseSchema, opt
             }
             let order = ordersOf.get(column.name);
             if (!order) ordersOf.set(column.name, (order = crowd(dice, options)));
-            if (!covering && (table.unique ?? []).includes(column.name)) {
-              ok = false;
+            /* A reference that is unique (a primary key that is also a foreign key: a profile is its customer's) draws
+               each parent once, whatever the reference is called or typed; it is never made distinct by editing the key. */
+            if ((table.unique ?? []).includes(column.name) || (column.primaryKey && primary.length === 1)) {
+              const free = order.rows.find((row) => !taken.has(`${table.id}.${column.name}`, row[ref.column] as Value));
+              if (!free) {
+                if (made > 0) {
+                  ok = false;
+                  continue;
+                }
+                throw new SeedRefusal(
+                  `${table.name}.${column.name} is unique and references ${ref.table}.${ref.column}, which has ${options.length} ${options.length === 1 ? 'row' : 'rows'}` +
+                    ` and every one already has a ${table.name} row, so there is no key left to give it.` +
+                    ' Add rows to the parent, or leave this table out.',
+                );
+              }
+              parents.set(column.name, free);
+              values[column.name] = free[ref.column] as Value;
               continue;
             }
             const parent = covering ? order.rows[made]! : order.pick(dice);
@@ -778,28 +798,48 @@ export async function seedDatabase(adapter: Adapter, schema: DatabaseSchema, opt
             }
           }
         }
-        /* Never repeat what must be unique: a second "Ada Lam" gets a number, a second pair is skipped. */
+        /* Never repeat what must be unique, in the column's own terms: a second "Ada Lam" gets a number, a uuid a fresh
+           uuid, a date the next day, an integer the next integer; a second pair is skipped. A reference is drawn above. */
         for (const column of table.unique ?? []) {
           const key = `${table.id}.${column}`;
           const value = values[column];
-          if (value === undefined || value === null) continue;
+          if (value === undefined || value === null || plan.refs.has(column)) continue;
           if (!taken.has(key, value)) continue;
+          const meta = table.columns.find((c) => c.name === column)!;
+          const kind = moment(meta, types);
           let changed: Value | undefined;
           for (let k = 2; k < 1000 && changed === undefined; k++) {
-            const next =
-              typeof value === 'number'
-                ? value + k * 1000
-                : /@/.test(String(value))
-                  ? String(value).replace('@', `${k}@`)
-                  : `${value} ${k}`;
+            const next: Value | undefined = /uuid/i.test(meta.type)
+              ? uuid(dice)
+              : kind
+                ? (() => {
+                    const at = new Date(String(value));
+                    return Number.isNaN(at.getTime()) ? undefined : written(new Date(at.getTime() + (k - 1) * DAY), kind);
+                  })()
+                : typeof value === 'number'
+                  ? value + (k - 1)
+                  : /@/.test(String(value))
+                    ? String(value).replace('@', `${k}@`)
+                    : `${value} ${k}`;
+            if (next === undefined) break;
             if (!taken.has(key, next)) changed = next;
           }
+          if (changed === undefined && !meta.nullable)
+            throw new SeedRefusal(
+              `${table.name}.${column} must be unique, and no new ${meta.type || 'value'} could be made that is not already taken.`,
+            );
           values[column] = changed ?? null;
         }
         const pairKeys = pairs.map(([a, b]) => `${table.id}.${a}+${b}`);
         if (pairs.some(([a, b], i) => values[a] != null && values[b] != null && taken.has(pairKeys[i], `${values[a]}\u0000${values[b]}`)))
           continue;
-        const inserted = await tx.insert({ table: table.id, values });
+        const inserted = await tx.insert({ table: table.id, values }).catch((error: unknown) => {
+          if (error instanceof SeedRefusal) throw error;
+          const column = (error as { column?: unknown }).column;
+          throw new SeedRefusal(
+            `${table.name}${typeof column === 'string' && column ? `.${column}` : ''}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
         const row = { ...values, ...(inserted.row ?? {}), ...inserted.key };
         for (const column of table.unique ?? []) if (row[column] != null) taken.add(`${table.id}.${column}`, row[column] as Value);
         pairs.forEach(([a, b], i) => taken.add(pairKeys[i], `${row[a]}\u0000${row[b]}`));

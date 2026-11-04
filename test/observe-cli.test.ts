@@ -88,6 +88,27 @@ test('a start without --dev has no observer; with --dev it is found, and speaks 
       assert.equal(found.status, 0, found.stderr);
       assert.equal(found.stdout.trim(), `${dev.base}/_mistri/observe/`);
 
+      // --errors: a request the server refused is one tab-separated line (kind, path, message, trace id); --json is the observer's own answer.
+      await fetch(`${dev.base}/api/no-such-route`);
+      const errorsOut = spawnSync(process.execPath, ['--import', 'tsx', CLI, 'observe', '--errors'], {
+        env,
+        encoding: 'utf8',
+        timeout: 60_000,
+      });
+      assert.equal(errorsOut.status, 0, errorsOut.stderr);
+      const line = errorsOut.stdout.split('\n').find((each) => each.includes('/api/no-such-route'));
+      assert.ok(line, errorsOut.stdout);
+      assert.equal(line.split('\t').length, 4, line);
+      const asJson = spawnSync(process.execPath, ['--import', 'tsx', CLI, 'observe', '--errors', '--json', '--url', dev.base], {
+        env,
+        encoding: 'utf8',
+        timeout: 60_000,
+      });
+      assert.ok(
+        JSON.parse(asJson.stdout).errors.some((entry: { path?: string }) => entry.path === '/api/no-such-route'),
+        asJson.stdout,
+      );
+
       const messages = [
         {
           jsonrpc: '2.0',

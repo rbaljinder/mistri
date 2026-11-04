@@ -146,11 +146,11 @@ export const lenderBook = defineFeature({
           'Activity',
           [
             stream('assignment_history', 'application_id', 'assigned_on', 'assigned_to.name', {
-              detail: 'reason',
+              badge: 'reason',
               author: 'assigned_by.name',
             }),
-            stream('application_review', 'application_id', 'opened_on', 'kind', { detail: 'summary', author: 'reviewer_id.name' }),
-            stream('loan_decision', 'application_id', 'recorded_on', 'outcome', { detail: 'record_note', author: 'decided_by.name' }),
+            stream('application_review', 'application_id', 'opened_on', 'kind', { badge: 'summary', author: 'reviewer_id.name' }),
+            stream('loan_decision', 'application_id', 'recorded_on', 'outcome', { badge: 'record_note', author: 'decided_by.name' }),
           ],
           { limit: 20 },
         ),

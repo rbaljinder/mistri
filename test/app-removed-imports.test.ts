@@ -32,7 +32,7 @@ test('an App that imports several removed helpers hears all of them at once, wit
     for (const name of ['money', 'number', 'relative', 'tones'])
       assert.match(error.message, new RegExp(`"${name}" — write the rule as data`));
     assert.match(error.message, /features\/sales\.mjs/);
-    assert.match(error.message, /"lisst" — did you mean "latest"/);
+    assert.match(error.message, /"lisst" — it is not part of @mistriwork\/mistri\/app any more/);
     assert.match(error.message, /5 imports/);
     return true;
   });

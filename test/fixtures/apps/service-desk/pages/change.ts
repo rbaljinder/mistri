@@ -32,7 +32,7 @@ export const changePage = page(
       'Activity',
       [
         stream('change_note', 'change_id', 'created_at', 'name', {
-          detail: 'body',
+          badge: 'body',
         }),
       ],
       {

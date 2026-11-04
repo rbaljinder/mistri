@@ -1,3 +1,4 @@
+import { BUILD_MS } from './support/budgets';
 /**
  * A document on paper (components/Document.tsx), as a field report printed one: a saved statement that said
  * "yesterday", captions too faint to read, a dark screen's pale ink on the white sheet, and "Skip to content" in the
@@ -12,7 +13,7 @@ import { THEME_PRESETS } from '../packages/engine/src/shared/themePresets';
 let sample: Awaited<ReturnType<typeof startSample>>;
 let stub: { id: number; pay_date: string; period_start: string; period_end: string };
 
-test.setTimeout(240_000);
+test.setTimeout(BUILD_MS);
 
 test.beforeAll(async () => {
   sample = await startSample('payday');

@@ -17,7 +17,7 @@ export const loanPages = {
       fields(['principal_balance', 'amount_due', 'days_past_due']),
       timeline(
         'Servicing notes',
-        [stream('servicing_note', 'loan_id', 'created_at', 'kind', { detail: 'body', author: 'author_id.name' })],
+        [stream('servicing_note', 'loan_id', 'created_at', 'kind', { badge: 'body', author: 'author_id.name' })],
         { limit: 20, tab: 'Notes' },
       ),
       related('Schedule', 'installment', 'loan_id', {

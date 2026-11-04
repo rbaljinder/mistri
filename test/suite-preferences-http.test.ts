@@ -78,7 +78,11 @@ async function fixture(t: TestContext) {
     {
       baseURL: origin,
       trustedOrigins: [origin],
-      environment: { BETTER_AUTH_SECRET: 'suite-preferences-test-secret-at-least-thirty-two-characters' },
+      environment: {
+        BETTER_AUTH_SECRET: 'suite-preferences-test-secret-at-least-thirty-two-characters',
+        MISTRI_TEST_AUTH_LIMITS: 'off',
+        NODE_ENV: 'test',
+      },
     },
   );
   const call = async (url = path, init: RequestInit = {}) => {

@@ -16,6 +16,7 @@ import {
   focusStops,
 } from '../packages/mistri/src/server/build/gradeProbe';
 import { judge, MOTION, TAP, type GradeCode } from '../packages/mistri/src/server/build/gradeJudge';
+import { BUILD_MS } from './support/budgets';
 
 /**
  * `mistri grade`'s probe, held to fixture pages: each measurement finds the
@@ -368,7 +369,7 @@ for (const [code, body, window] of defects) {
 }
 
 test('mistri grade on Tick: every view and a record, each finding a line with its fix, then a score', async () => {
-  test.setTimeout(240_000);
+  test.setTimeout(BUILD_MS);
   const directory = mkdtempSync(join(tmpdir(), 'mistri-grade-'));
   try {
     const db = join(directory, 'tick.db');
@@ -383,6 +384,7 @@ test('mistri grade on Tick: every view and a record, each finding a line with it
             'tsx',
             resolve('packages/mistri/src/server/index.ts'),
             'grade',
+            '--app',
             'examples/apps/tick',
             '--config',
             `${db}.json`,

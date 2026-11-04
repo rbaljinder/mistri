@@ -16,7 +16,7 @@ import { pathEqualityFilter } from '../resourceRequests.js';
 import { canEditRow, pendingCount, sameRow, stagedVersion, subscribeStaged } from '../write.js';
 import type { AppAction } from '@mistriwork/engine/schema/model.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
-import { factWord } from '@mistriwork/engine/shared/appCards.js';
+import { factWord, HEADER_FACTS_SHOWN } from '@mistriwork/engine/shared/appCards.js';
 import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { shell } from '../shellMode.js';
 import { isPinned, togglePinned } from '../pagemarks.js';
@@ -509,6 +509,30 @@ function useRecordHeader({
       : undefined;
   const adornments = new Map(facts.map((path) => [path, adornedAt(path)] as const));
   const shown = facts.filter((path) => filled(path) || adornments.get(path));
+  const fact = (path: string) => {
+    const labels = section.factLabels;
+    const word =
+      labels && Object.hasOwn(labels, path)
+        ? factWord(labels[path], row[path], columnDisplay(base.id, path) as { format?: string; unit?: string; bar?: boolean } | null)
+        : undefined;
+    const before = word !== undefined && labels![path].position === 'before';
+    return (
+      <li key={path} className="page-fact">
+        {/* A fact is a captioned value, as a field is: "Close date" over "Dec 11, 2026". An authored word
+            ("3 beds", "Asking $22,495") is its own caption. */}
+        {word === undefined && (
+          <span className="page-fact-caption">
+            {captionOf(path)}
+            <span className="visually-hidden">: </span>
+          </span>
+        )}
+        {before && <span className="page-fact-word">{word} </span>}
+        {filled(path) && said(path)}
+        {word !== undefined && !before && <span className="page-fact-word"> {word}</span>}
+        {adornments.get(path)}
+      </li>
+    );
+  };
   return {
     /* Its caption is heard, not seen: beside the name a chip is its own word. */
     status:
@@ -519,32 +543,19 @@ function useRecordHeader({
         </span>
       ) : null,
     facts: shown.length ? (
-      <ul className="page-facts page-head-facts" aria-label={say('common.keyFacts')}>
-        {shown.map((path) => {
-          const labels = section.factLabels;
-          const word =
-            labels && Object.hasOwn(labels, path)
-              ? factWord(labels[path], row[path], columnDisplay(base.id, path) as { format?: string; unit?: string; bar?: boolean } | null)
-              : undefined;
-          const before = word !== undefined && labels![path].position === 'before';
-          return (
-            <li key={path} className="page-fact">
-              {/* A fact is a captioned value, as a field is: "Close date" over "Dec 11, 2026". An authored word
-                  ("3 beds", "Asking $22,495") is its own caption. */}
-              {word === undefined && (
-                <span className="page-fact-caption">
-                  {captionOf(path)}
-                  <span className="visually-hidden">: </span>
-                </span>
-              )}
-              {before && <span className="page-fact-word">{word} </span>}
-              {filled(path) && said(path)}
-              {word !== undefined && !before && <span className="page-fact-word"> {word}</span>}
-              {adornments.get(path)}
-            </li>
-          );
-        })}
-      </ul>
+      <>
+        <ul className="page-facts page-head-facts" aria-label={say('common.keyFacts')}>
+          {shown.slice(0, HEADER_FACTS_SHOWN).map(fact)}
+        </ul>
+        {/* Past the line the rest fold into a disclosure of the head's own, closed, so the head's height is the same
+            before and after it is opened by anyone. */}
+        {shown.length > HEADER_FACTS_SHOWN && (
+          <details className="page-head-more">
+            <summary>{say('common.more')}</summary>
+            <ul className="page-facts page-head-facts">{shown.slice(HEADER_FACTS_SHOWN).map(fact)}</ul>
+          </details>
+        )}
+      </>
     ) : null,
   };
 }

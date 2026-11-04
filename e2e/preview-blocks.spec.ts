@@ -1,3 +1,4 @@
+import { FIXTURE_MS } from './support/budgets';
 /**
  * Three 0.8.13 blocks (Preview) in a real browser, over the Desk blocks fixture's own server: a conversation's other
  * side (a timeline's `side`), a calendar's shaded spans (`backdrop`), and an author's component on a dashboard, told
@@ -23,7 +24,7 @@ test.describe('0.8.13 preview blocks', () => {
   let app: Fixture;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     app = await startDeskBlocks();
   });
   test.afterAll(async () => {

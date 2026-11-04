@@ -97,8 +97,8 @@ export interface Section {
   text?: string;
   icon?: import('@mistriwork/engine/shared/appIcons.js').AppIconName;
   action?: { label: string; view: string };
-  /** note: the dashboard's banner, its tag and its picture. */
-  variant?: 'banner';
+  /** note: quiet or callout, or the banner a `banner()` is served as, with its tag and its picture. */
+  variant?: 'quiet' | 'callout' | 'banner';
   eyebrow?: string;
   image?: import('@mistriwork/engine/shared/servedApp.js').LandingImage;
   error?: string;

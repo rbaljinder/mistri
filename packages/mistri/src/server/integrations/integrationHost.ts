@@ -13,6 +13,7 @@ import type { EventPublicationTransport } from '../events/eventPublisher.js';
 import { channelTransports } from './integrationChannels.js';
 import type { CapturedIntegrations } from './integrationDeclaration.js';
 import { createIntegrationRuntime, registerIntegrationRuntime, type IntegrationRuntime } from './integrationRuntime.js';
+import { causeText } from '../observe/failureCause.js';
 
 /* Held messages are looked at every half minute: quiet hours end on the minute, and nobody waits on a held text. */
 const HELD_MS = 30_000;
@@ -48,7 +49,7 @@ export async function openAppIntegrations(
     if (stopping) return;
     running = channels
       .sendDue()
-      .catch(() => console.error('mistri: held channel messages could not be sent; they are tried again shortly.'))
+      .catch((cause) => console.error(`mistri: held channel messages could not be sent; they are tried again shortly: ${causeText(cause)}`))
       .finally(() => {
         running = undefined;
         if (!stopping) timer = setTimeout(loop, HELD_MS);

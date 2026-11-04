@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /**
  * A public command form's files and signature, in a browser: a file the field
  * does not take is refused in the server's words, pictures are sent as they
@@ -33,7 +34,7 @@ function read<T>(app: Fixture, sql: string): T[] {
 }
 
 test.describe("A command form's files", () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startIntakeApp([], 'repairs');

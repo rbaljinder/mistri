@@ -1,4 +1,4 @@
-import { action, count, machine, max, sum } from '@mistriwork/mistri/app';
+import { action, rollup, machine } from '@mistriwork/mistri/app';
 import type { Resources } from './mistri-schema.d.ts';
 import { stockSparkline } from './components.ts';
 
@@ -29,11 +29,11 @@ export const resources = {
     defined: { specs: { from: 'attribute', per: 'category_id' } },
     // Stock is never typed here: it is the sum of the bins, read from the ledger's side.
     rollups: {
-      on_hand: sum('stock_level', 'qty'),
-      stock_value: sum('stock_level', 'value'),
-      on_order: sum('po_line', 'open_qty', { query: 'open' }),
-      locations: count('stock_level', { query: 'in_stock' }),
-      last_moved: max('stock_movement', 'moved_at'),
+      on_hand: rollup.sum('stock_level', 'qty'),
+      stock_value: rollup.sum('stock_level', 'value'),
+      on_order: rollup.sum('po_line', 'open_qty', { query: 'open' }),
+      locations: rollup.count('stock_level', { query: 'in_stock' }),
+      last_moved: rollup.max('stock_movement', 'moved_at'),
     },
     display: {
       stock_value: usd,
@@ -84,17 +84,17 @@ export const resources = {
   },
   category: {
     noun: { one: 'category', many: 'categories' },
-    rollups: { products: count('product', { query: 'active' }) },
+    rollups: { products: rollup.count('product', { query: 'active' }) },
     labels: { name: 'Category' },
   },
   supplier: {
     access: 'write',
     rollups: {
-      products: count('product', { query: 'active' }),
-      open_orders: count('purchase_order', { query: 'open' }),
-      received_recently: count('purchase_order', { query: 'status = received and received_on = last 90 days' }),
+      products: rollup.count('product', { query: 'active' }),
+      open_orders: rollup.count('purchase_order', { query: 'open' }),
+      received_recently: rollup.count('purchase_order', { query: 'status = received and received_on = last 90 days' }),
       // A rollup of a rollup: each purchase order's open value, summed — what the supplier still owes the depot.
-      open_value: sum('purchase_order', 'open_value'),
+      open_value: rollup.sum('purchase_order', 'open_value'),
     },
     display: { open_value: usd },
     labels: {
@@ -110,11 +110,11 @@ export const resources = {
   /* ---------- the buildings ---------- */
   warehouse: {
     rollups: {
-      stock_value: sum('stock_level', 'value'),
-      units: sum('stock_level', 'qty'),
-      stocked: count('stock_level', { query: 'in_stock' }),
-      to_pick: count('pick_list', { query: 'status = to_pick' }),
-      bins: count('bin', { query: 'active = true' }),
+      stock_value: rollup.sum('stock_level', 'value'),
+      units: rollup.sum('stock_level', 'qty'),
+      stocked: rollup.count('stock_level', { query: 'in_stock' }),
+      to_pick: rollup.count('pick_list', { query: 'status = to_pick' }),
+      bins: rollup.count('bin', { query: 'active = true' }),
     },
     display: { stock_value: usd, units },
     labels: {
@@ -130,9 +130,9 @@ export const resources = {
     },
     access: 'write',
     rollups: {
-      units: sum('stock_level', 'qty'),
-      skus: count('stock_level', { query: 'in_stock' }),
-      value: sum('stock_level', 'value'),
+      units: rollup.sum('stock_level', 'qty'),
+      skus: rollup.count('stock_level', { query: 'in_stock' }),
+      value: rollup.sum('stock_level', 'value'),
     },
     display: { zone: { tone: { receiving: 'info', reserve: 'neutral', pick: 'neutral' } }, value: usd, units },
     labels: {
@@ -197,11 +197,11 @@ export const resources = {
     recordLabel: 'PO-{id}',
     noun: 'purchase order',
     rollups: {
-      total: sum('po_line', 'amount'),
-      open_value: sum('po_line', 'open_value', { query: 'open' }),
-      lines: count('po_line'),
-      units: sum('po_line', 'qty_ordered'),
-      open_units: sum('po_line', 'open_qty'),
+      total: rollup.sum('po_line', 'amount'),
+      open_value: rollup.sum('po_line', 'open_value', { query: 'open' }),
+      lines: rollup.count('po_line'),
+      units: rollup.sum('po_line', 'qty_ordered'),
+      open_units: rollup.sum('po_line', 'open_qty'),
     },
     display: {
       // Each stage its mark: a draft being written, sent on its way, part in, all in, called off.
@@ -320,7 +320,7 @@ export const resources = {
 
   /* ---------- orders and the floor ---------- */
   customer: {
-    rollups: { orders: count('sales_order') },
+    rollups: { orders: rollup.count('sales_order') },
     labels: { name: 'Customer' },
   },
   sales_order: {
@@ -337,10 +337,10 @@ export const resources = {
     noun: 'order',
     // An order's stage is its pick list's: these say where it is without a column the floor must keep in step.
     rollups: {
-      lines: count('order_line'),
-      units: sum('order_line', 'qty'),
-      released: count('pick_list'),
-      shipped_at: max('pick_list', 'shipped_at'),
+      lines: rollup.count('order_line'),
+      units: rollup.sum('order_line', 'qty'),
+      released: rollup.count('pick_list'),
+      shipped_at: rollup.max('pick_list', 'shipped_at'),
     },
     // A priority reads as signal bars beside its word, a rush as a flame.
     display: {
@@ -420,10 +420,10 @@ export const resources = {
     recordLabel: 'CC-{id}',
     noun: 'cycle count',
     rollups: {
-      lines: count('cycle_count_line'),
-      counted: count('cycle_count_line', { query: 'counted_qty is not empty' }),
-      variance_units: sum('cycle_count_line', 'variance'),
-      variance_value: sum('cycle_count_line', 'variance_value'),
+      lines: rollup.count('cycle_count_line'),
+      counted: rollup.count('cycle_count_line', { query: 'counted_qty is not empty' }),
+      variance_units: rollup.sum('cycle_count_line', 'variance'),
+      variance_value: rollup.sum('cycle_count_line', 'variance_value'),
     },
     display: { status: { tone: { counting: 'warn', completed: 'good' } }, variance_value: usd },
     labels: {

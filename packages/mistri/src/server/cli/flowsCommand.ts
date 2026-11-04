@@ -9,7 +9,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const FLOWS_USAGE = `mistri flows start <resource> --app <dir> --jobs <file>
+const FLOWS_USAGE = `mistri flows start <resource> [--app <dir>] --jobs <file>
                      [--where <query>] [--flow <id>] [--tenant <id> --policy <file>] [--dry-run]
                      [<db> | --db <target> | --config <path>]`;
 
@@ -71,7 +71,7 @@ export async function runFlowsCommand(
     rest.push(arg);
   }
   const appDir = flags['--app'] !== undefined ? resolve(flags['--app']) : undefined;
-  if (appDir === undefined) return fail(`name the App with --app <dir>.\n${FLOWS_USAGE}`);
+  if (appDir === undefined) return fail(`name the App with --app <dir>, or run it in the App's directory.\n${FLOWS_USAGE}`);
   if (!existsSync(appDir)) return fail(`${flags['--app']} is not a directory.`);
   const jobsFile = flags['--jobs'];
   if (jobsFile === undefined) return fail(`name the jobs module that declares the flowRunner with --jobs <file>.\n${FLOWS_USAGE}`);

@@ -45,7 +45,7 @@ async function freePort(): Promise<number> {
 async function start(
   port: number,
 ): Promise<{ child: ChildProcess; out: string; signIns: Map<string, { email: string; password: string }> }> {
-  const child = spawn(process.execPath, ['--import', 'tsx', ENTRY, 'dev', app, '--port', String(port)], {
+  const child = spawn(process.execPath, ['--import', 'tsx', ENTRY, 'dev', '--app', app, '--port', String(port)], {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -117,7 +117,7 @@ test('a busy port is one line naming it and --port', async (t) => {
   await once(busy, 'listening');
   t.after(() => busy.close());
   const { port } = busy.address() as { port: number };
-  const run = spawnSync(process.execPath, ['--import', 'tsx', ENTRY, 'dev', app, '--port', String(port)], {
+  const run = spawnSync(process.execPath, ['--import', 'tsx', ENTRY, 'dev', '--app', app, '--port', String(port)], {
     env,
     encoding: 'utf8',
     timeout: 60_000,
@@ -128,13 +128,13 @@ test('a busy port is one line naming it and --port', async (t) => {
 });
 
 test('dev refuses NODE_ENV=production and a directory with no App', () => {
-  const production = spawnSync(process.execPath, ['--import', 'tsx', ENTRY, 'dev', app], {
+  const production = spawnSync(process.execPath, ['--import', 'tsx', ENTRY, 'dev', '--app', app], {
     env: { ...env, NODE_ENV: 'production' },
     encoding: 'utf8',
   });
   assert.equal(production.status, 2);
   assert.match(production.stderr, /NODE_ENV is production/);
-  const none = spawnSync(process.execPath, ['--import', 'tsx', ENTRY, 'dev', work], { env, encoding: 'utf8' });
+  const none = spawnSync(process.execPath, ['--import', 'tsx', ENTRY, 'dev', '--app', work], { env, encoding: 'utf8' });
   assert.equal(none.status, 2);
   assert.match(none.stderr, /has no app\.ts/);
 });

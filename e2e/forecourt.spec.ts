@@ -2,6 +2,7 @@ import { expect, test } from './support/harness';
 import { FORECOURT_STAFF, startSample } from './support/sampleServer';
 import { DatabaseSync } from 'node:sqlite';
 import { scalar } from './support/db';
+import { LONG_MS } from './support/budgets';
 
 /**
  * Forecourt, the public site: a signed-out visitor's journey from the front
@@ -15,7 +16,7 @@ import { scalar } from './support/db';
 test.describe('Forecourt, browsed signed out', () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
   // The seed draws 210 studio photos before the server starts.
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   test.beforeEach(async () => {
     sample = await startSample('forecourt');
   });

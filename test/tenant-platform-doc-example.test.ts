@@ -129,6 +129,7 @@ function fixture(t: TestContext, commands = COMMANDS(), { provisioned = true } =
     MISTRI_AUTH_ADMIN_PASSWORD: '',
     MISTRI_DIAGNOSTICS: '',
     MISTRI_TEST_AUTH_LIMITS: 'off',
+    NODE_ENV: 'test',
     XDG_CONFIG_HOME: join(directory, 'xdg'),
   };
   const args = [
@@ -378,7 +379,17 @@ test('mistri dev serves the tenant App and does not restart over its own state',
   const [, , , ...rest] = f.args;
   const child = spawn(
     process.execPath,
-    ['--import', 'tsx', entry, 'dev', f.appDir, ...rest.filter((arg) => arg !== '--app' && arg !== f.appDir), '--port', String(number)],
+    [
+      '--import',
+      'tsx',
+      entry,
+      'dev',
+      '--app',
+      f.appDir,
+      ...rest.filter((arg) => arg !== '--app' && arg !== f.appDir),
+      '--port',
+      String(number),
+    ],
     {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],

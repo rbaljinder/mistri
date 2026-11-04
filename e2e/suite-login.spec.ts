@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /** Suite login in a browser, over a Keystone-shaped SQLite suite (Keystone
  * itself needs PostgreSQL): Lender at the root, Dealer, Leads and Customer
  * mounted beside it. Each test owns its suite on a port of its own. */
@@ -6,7 +7,7 @@ import { expect, test } from './support/harness';
 import { noteOf, startSuiteLogin, SUITE_LOGIN_PASSWORD, type SuiteLogin, type SuiteLoginApp } from '../test/support/suiteLoginFixture';
 
 test.use({ storageState: { cookies: [], origins: [] }, carryFirstPaint: false });
-test.setTimeout(90_000);
+test.setTimeout(SLOW_MS);
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     if (location.protocol === 'http:' || location.protocol === 'https:') localStorage.setItem('mistri.tour.v1', 'done');

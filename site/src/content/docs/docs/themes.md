@@ -168,7 +168,7 @@ parts: { status: { case: 'upper' } },
 
 Lintel lists it in `ui.customThemes: [lintel, blueprint, hearth, tidelight]` and still wears its own. Each reader finds Blueprint under Preferences, Visual theme, beside the built-in looks; the theme `ui.theme` names is marked "This App's theme", and Reset puts a reader back on it. Name `ui.theme: { preset: 'blueprint' }` and Blueprint is the one marked.
 
-`mistri grade examples/apps/lintel --theme blueprint` measures the rendered pages (Lintel's 26 at 1280, 768, 390 and 320 wide, and at 390 in dark).
+`mistri grade --app examples/apps/lintel --theme blueprint` measures the rendered pages (Lintel's 26 at 1280, 768, 390 and 320 wide, and at 390 in dark).
 
 ## Three themes to start from
 

@@ -502,7 +502,8 @@ export function Sections({
     const tabbed = (section: PageSection) =>
       section.kind === 'list' && section.presentation !== 'gallery' && (section.width === undefined || !inAppPage());
     /* Outside a strip, such a list is left out or said in one line with its neighbours (PageEmptyRun.tsx). */
-    const emptyable = (section: PageSection) => section.kind === 'list' && Boolean(section.emptyMode) && section.presentation !== 'card';
+    const emptyable = (section: PageSection) =>
+      section.kind === 'list' && Boolean(section.emptyMode) && (section.presentation !== 'card' || section.emptyMode === 'hide');
     /* Where a tab holds nothing but such lists, it never ends up with nothing. */
     const onlyEmptyable = items.length > 0 && items.every(({ section }) => emptyable(section));
     for (let i = 0; i < items.length; i += 1) {

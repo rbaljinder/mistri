@@ -12,7 +12,7 @@ export const issuePage = page(
     fields(['description'], { title: 'Description', width: 'half' }),
     // One place for the conversation: the updates as they happened, who wrote
     // them, oldest first (newest last) like a conversation and read to its end, and the way to add one, bound to this issue.
-    timeline('Activity', [stream('comment', 'issue_id', 'created_at', 'name', { detail: 'body', author: 'author_id.name' })], {
+    timeline('Activity', [stream('comment', 'issue_id', 'created_at', 'name', { badge: 'body', author: 'author_id.name' })], {
       width: 'half',
       limit: 12,
       newest: 'last',

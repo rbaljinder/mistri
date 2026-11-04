@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/mistri",
-  "version": "1.0.0-rc.15",
+  "version": "1.0.0-rc.16",
   "description": "The App framework: a few lines of TypeScript, a complete App, served from your own database.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -144,9 +144,9 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.15",
-    "@mistriwork/kit": "1.0.0-rc.15",
-    "@mistriwork/ui": "1.0.0-rc.15",
+    "@mistriwork/engine": "1.0.0-rc.16",
+    "@mistriwork/kit": "1.0.0-rc.16",
+    "@mistriwork/ui": "1.0.0-rc.16",
     "intl-messageformat": "12.1.2",
     "marked": "^18.1.0",
     "sanitize-html": "^2.18.0",
@@ -166,7 +166,7 @@
     "@tanstack/react-router": "^1.0.0",
     "@testing-library/react": "^16.3.0",
     "@types/react": "^19.2.0",
-    "next": ">=14.1 <17",
+    "next": ">=15.1 <17",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router": ">=6.4 <8",
@@ -220,6 +220,6 @@
     "better-auth": "1.7.10"
   },
   "engines": {
-    "node": ">=24.22.1"
+    "node": ">=24"
   }
 }

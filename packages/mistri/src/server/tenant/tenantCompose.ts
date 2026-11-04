@@ -33,6 +33,7 @@ type Resources = Record<
   {
     recordLabel?: string | false;
     defined?: Record<string, { per?: string }>;
+    display?: Record<string, { subtitle?: string }>;
     actions?: Array<{ when?: string; command?: { id: string; version: number; target: string } }>;
   }
 >;
@@ -94,6 +95,7 @@ export async function composeTenantRecordPage(options: {
     app: true,
     recordLabel: (table: string) => resources[table]?.recordLabel,
     defined: (table: string) => resources[table]?.defined,
+    display: (table: string, column: string) => resources[table]?.display?.[column],
   };
   const rows = typeof options.rows === 'number' ? options.rows : 10;
   const { row, reads } = recordPageReads(names, page, base, plans, key, {

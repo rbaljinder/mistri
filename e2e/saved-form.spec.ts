@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /**
  * A public form saved on every step, in a browser: personal details, address,
  * income and a co-applicant, each saved to the App's own tables on Next; the
@@ -45,7 +46,7 @@ async function next(page: Page, heading: string) {
 }
 
 test.describe('A public form saved on every step', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startSavedFormApp();

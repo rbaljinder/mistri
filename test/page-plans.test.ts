@@ -36,7 +36,7 @@ test('every section retains its index, planner payload and HTTP shaping', () => 
     { kind: 'metric', ...relation, fn: 'count' },
     { kind: 'metric', ...relation, fn: 'sum', column: 'amount' },
     { kind: 'breakdown', ...relation, by: 'amount', limit: 4 },
-    { kind: 'timeline', streams: [{ ...relation, at: 'at', show: 'id', detail: 'id' }] },
+    { kind: 'timeline', streams: [{ ...relation, at: 'at', text: 'id', badge: 'id' }] },
   ]);
   const before = structuredClone({ schema, definition, key });
   const plans = planPageSections(schema, definition, key, {}, now);
@@ -83,7 +83,7 @@ test('one supplied date resolves relative filters for lists, metrics, breakdowns
       { kind: 'list', ...filtered },
       { kind: 'metric', ...filtered, fn: 'count' },
       { kind: 'breakdown', ...filtered, by: 'amount' },
-      { kind: 'timeline', limit: 9, streams: [{ ...filtered, at: 'at', show: 'id' }] },
+      { kind: 'timeline', limit: 9, streams: [{ ...filtered, at: 'at', text: 'id' }] },
     ]),
     key,
     {},
@@ -132,8 +132,8 @@ test('bad section and stream paths retain local errors without dropping siblings
       {
         kind: 'timeline',
         streams: [
-          { from: 'child', path: 'missing', at: 'at', show: 'id' },
-          { ...relation, at: 'at', show: 'id' },
+          { from: 'child', path: 'missing', at: 'at', text: 'id' },
+          { ...relation, at: 'at', text: 'id' },
         ],
       },
     ]),

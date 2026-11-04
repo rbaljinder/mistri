@@ -1,4 +1,4 @@
-import { action, defineApp, listView, machine, sum } from '@mistriwork/mistri/app';
+import { action, defineApp, listView, machine, rollup } from '@mistriwork/mistri/app';
 import type { App } from './mistri-schema.d.ts';
 
 /* Ladle: a cooking school's staff App. Its declared rooms are the classes and the bookings; the door's check-in is a
@@ -30,8 +30,8 @@ export default defineApp({
       labels: { booked: 'Seats booked' },
       // Seats taken, by party: a cancelled booking frees its seats; who has walked in is counted apart.
       rollups: {
-        booked: sum('booking', 'party_size', { query: 'status != cancelled' }),
-        arrived: sum('booking', 'party_size', { query: 'status = checked_in' }),
+        booked: rollup.sum('booking', 'party_size', { query: 'status != cancelled' }),
+        arrived: rollup.sum('booking', 'party_size', { query: 'status = checked_in' }),
       },
       segments: {
         upcoming: { query: 'status = scheduled and starts_at >= today', label: 'Upcoming' },

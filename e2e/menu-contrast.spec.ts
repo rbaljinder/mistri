@@ -3,6 +3,7 @@ import { readings } from './support/contrast';
 import type { ThemeDefinition } from '../packages/engine/schema/theme.js';
 import { RECIPE_MENU } from '../packages/engine/src/shared/themeRecipes.js';
 import { checkTheme } from '../packages/mistri/src/shared/themeCheck.js';
+import { BUILD_MS } from './support/budgets';
 
 // This spec controls boot API responses; exercise their fetch fallback.
 test.use({ carryFirstPaint: false });
@@ -42,7 +43,7 @@ const theme = (bar: string, nav: string): ThemeDefinition => ({
 const MENU = ':is(.sidebar, .app-mode .topbar) :is(a, button, span, h2, h3, div, svg)';
 
 test('the menu draws in nav.ink and nav.muted on nav.ground under every bar and nav recipe, placement and mode', async ({ page }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(BUILD_MS);
   /* Every bar, and beside them every nav recipe once — each marks the current entry its own way, and an inverted
      block once kept the bar's muted caret on it — without multiplying the page loads by six. */
   const bars = Object.keys(RECIPE_MENU.bar),

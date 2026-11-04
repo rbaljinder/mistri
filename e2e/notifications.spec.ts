@@ -2,6 +2,7 @@ import { expect, test, type Page } from './support/harness';
 import { COMMONS_ADMIN, DEPOT_ADMIN, confirmEmail, startSample } from './support/sampleServer';
 import { scalar } from './support/db';
 import { chooseTab } from './support/tabs';
+import { SHOT_MS } from './support/budgets';
 
 /**
  * Notifications, in the two samples that send them. A write tells the
@@ -47,7 +48,7 @@ async function command(page: Page, origin: string, app: string, body: Record<str
 }
 
 test.describe('Notifications', () => {
-  test.setTimeout(150_000);
+  test.setTimeout(SHOT_MS);
 
   for (const width of [1440, 390]) {
     test(`${width}px: a reply tells the thread's author, whose bell, menu and inbox say so, and nobody else hears`, async ({ browser }) => {

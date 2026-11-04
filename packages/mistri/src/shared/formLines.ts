@@ -5,7 +5,7 @@
  * as a grid under the record's fields, and the server inserts them with the
  * record, in its transaction, each one the insert the reader could make of
  * that row alone (dataWriteRoutes.ts). `form.live` names the resource's own
- * computed columns and rollups — `subtotal: sum('order_line', 'line_total')`,
+ * computed columns and rollups — `subtotal: rollup.sum('order_line', 'line_total')`,
  * `total: computed.number('subtotal + shipping')` — and the form says each as
  * its fields and lines change, worked out by the one evaluator the server's
  * statement agrees with (computedValue.ts `evaluateComputed`). What the form says
@@ -161,7 +161,7 @@ export function liveValues(
       const child = via && tableNamed(schema, via.table);
       const held = (child && rows[child.id]) ?? [];
       if (child && !rollup.of && !rollup.filter && rollup.fn !== 'latest') {
-        /* As the aggregate does: a count of the rows, a sum of their values (0 where none has one), and a least or most with nothing where none has one. */
+        /* As the aggregate does: a count of the rows, a sum of their values (0 where none has one), and a mean, least or most with nothing where none has one. */
         const figures = held
           .map((row) => rowValue(child, row, rollup.column ?? '', rollup.expression))
           .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
@@ -172,9 +172,11 @@ export function liveValues(
               ? figures.reduce((a, b) => a + b, 0)
               : !figures.length
                 ? null
-                : rollup.fn === 'min'
-                  ? Math.min(...figures)
-                  : Math.max(...figures);
+                : rollup.fn === 'avg'
+                  ? figures.reduce((a, b) => a + b, 0) / figures.length
+                  : rollup.fn === 'min'
+                    ? Math.min(...figures)
+                    : Math.max(...figures);
       }
     } else if (computed) {
       result = evaluateComputed(computed.expr, clock, (path) =>

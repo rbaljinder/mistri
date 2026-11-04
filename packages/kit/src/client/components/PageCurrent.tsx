@@ -8,6 +8,7 @@
  * telehealth" on Noah's page); the columns its `show` names are the facts,
  * in that order, each dressed by its display rule, and nothing else the read
  * carried to name or open the row; "View lease" says so again at the foot.
+ * A card over a link table is named by, and opens, the far record its link row points at (`opens`).
  * With no such row the card says what that means, in the author's words
  * where there are some.
  */
@@ -29,6 +30,7 @@ export function CurrentCard({
   labels,
   referenceLabels,
   record,
+  opens,
   title,
   noun,
   empty,
@@ -45,6 +47,8 @@ export function CurrentCard({
   /** Column → the joined column naming the record it references. */
   referenceLabels?: Record<string, string>;
   record: { key: Record<string, unknown> | null; label: string } | undefined;
+  /** The record the card opens in place of its own row, where that row is a link between two records. */
+  opens?: { table: TableMeta; column: string; key: Record<string, unknown>; label: string; noun: string };
   /** The name the card is titled by, where it says less than the record's own (its parent's name left out);
       null where it is the page's own name, which the heading already says. */
   title?: string | null;
@@ -58,12 +62,16 @@ export function CurrentCard({
      where the App names none: that column is the title, not a fact the
      author asked for. */
   const asked = (show?.length ? show.filter((name) => columns.includes(name)) : columns).filter(
-    (name) => name !== naming && !keys.includes(name),
+    (name) => name !== naming && !keys.includes(name) && name !== opens?.column,
   );
   const facts = asked.filter((name) => row && row[name] !== null && row[name] !== undefined && row[name] !== '');
   const metadata = presentationColumns(state.schema, table, facts);
+  /* What the card's name and its foot open: the far record of a link row, else the row itself. */
+  const target = opens
+    ? { table: opens.table, key: opens.key as Record<string, unknown> | null, label: opens.label, noun: opens.noun }
+    : record && { table, key: record.key, label: record.label, noun };
   const open = () => {
-    if (record?.key) void openRecord(table.id, record.key, record.label);
+    if (target?.key) void openRecord(target.table.id, target.key, target.label);
   };
   return (
     <div className="page-card page-current">
@@ -72,12 +80,17 @@ export function CurrentCard({
         <>
           {title !== null && (
             <p className="page-card-title">
-              {record.key ? (
-                <button type="button" className="ref-jump page-card-name" data-opens={opensRecord(table.id, record.key)} onClick={open}>
-                  {title ?? record.label}
+              {target?.key ? (
+                <button
+                  type="button"
+                  className="ref-jump page-card-name"
+                  data-opens={opensRecord(target.table.id, target.key)}
+                  onClick={open}
+                >
+                  {title ?? target.label}
                 </button>
               ) : (
-                <span>{title ?? record.label}</span>
+                <span>{title ?? target?.label}</span>
               )}
             </p>
           )}
@@ -97,10 +110,15 @@ export function CurrentCard({
               })}
             </dl>
           )}
-          {record.key && (
+          {target?.key && (
             <p className="page-card-foot">
-              <button type="button" className="ref-jump page-card-more" data-opens={opensRecord(table.id, record.key)} onClick={open}>
-                {say('common.view', { noun })}
+              <button
+                type="button"
+                className="ref-jump page-card-more"
+                data-opens={opensRecord(target.table.id, target.key)}
+                onClick={open}
+              >
+                {say('common.view', { noun: target.noun })}
               </button>
             </p>
           )}

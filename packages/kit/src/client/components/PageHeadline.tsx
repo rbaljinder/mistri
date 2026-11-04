@@ -48,6 +48,8 @@ interface PageHeadlineProps {
   actions: ReadonlyArray<PageHeadlineAction>;
   /** A second figure under the first. */
   subfigure?: string;
+  /** A line of words under the figure, read from a column of the record (a frequency under an income). */
+  subtitle?: string;
   /** The figure's earlier value, struck through beside it when it is set and higher. */
   was?: string;
   /** Small print under the actions. */
@@ -76,7 +78,7 @@ export function wasShown(row: Record<string, unknown>, figure: string | undefine
   return Number.isFinite(then) && Number.isFinite(now) && then > now;
 }
 
-export function PageHeadline({ tableId, row, paths, column, actions, subfigure, was, note }: PageHeadlineProps) {
+export function PageHeadline({ tableId, row, paths, column, actions, subfigure, subtitle, was, note }: PageHeadlineProps) {
   useMessageLanguage();
   const caption = (path: string) => (columnLabel(tableId, path) as string | null) ?? humanName(path.split('.').pop() ?? path);
   const [figure, ...facts] = paths;
@@ -106,6 +108,7 @@ export function PageHeadline({ tableId, row, paths, column, actions, subfigure, 
   });
   const [asking, setAsking] = useState<{ view: string; prefill: string } | null>(null);
   const second = subfigure !== undefined && hasValue(row[subfigure]);
+  const line = subtitle !== undefined && hasValue(row[subtitle]);
   const earlier = wasShown(row, figure, was);
   const shownFacts = facts.filter((path) => hasValue(row[path]));
   return (
@@ -113,7 +116,7 @@ export function PageHeadline({ tableId, row, paths, column, actions, subfigure, 
       {figure !== undefined && (
         <p className="page-headline-figure">
           <span className="visually-hidden">{caption(figure)}: </span>
-          <Value col={column(figure)} value={row[figure]} tableId={tableId} compact row={row} />
+          <Value col={column(figure)} value={row[figure]} tableId={tableId} compact row={row} subtitled />
           {earlier && (
             <>
               {' '}
@@ -122,6 +125,13 @@ export function PageHeadline({ tableId, row, paths, column, actions, subfigure, 
                 <Value col={column(was!)} value={row[was!]} tableId={tableId} compact />
               </s>
             </>
+          )}
+          {/* The second line of the figure, in its cell: a frequency under an income. It rides in the figure's own
+              paragraph so the grid under it, with or without a second figure, is the one it was. */}
+          {line && (
+            <span className="page-headline-subtitle">
+              <Value col={column(subtitle!)} value={row[subtitle!]} tableId={tableId} compact />
+            </span>
           )}
         </p>
       )}

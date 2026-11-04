@@ -99,19 +99,23 @@ export const computed = Object.freeze({
   boolean: (value) => ({ type: 'boolean', value }),
   number: (value) => ({ type: 'number', value }),
   date: (value) => ({ type: 'date', value }),
+  /** A member of a JSON column, as text (Preview): `computed.text('filters_json.make')`. */
+  text: (value) => ({ type: 'text', value }),
 });
 /* ---------- rollups: one number about the rows that point at a record ---------- */
 
-/** resource rollup: how many `from` rows point at the record — `count('task', { query: 'status = open' })`. */
-export const count = (from, opts = {}) => ({ fn: 'count', from, ...opts });
-/** resource rollup: the sum of a column of those rows — `sum('order_line', 'amount')`. */
-export const sum = (from, column, opts = {}) => ({ fn: 'sum', from, column, ...opts });
-/** resource rollup: the least value of a column of those rows — `min('invoice', 'due_on')`. */
-export const min = (from, column, opts = {}) => ({ fn: 'min', from, column, ...opts });
-/** resource rollup: the greatest value of a column of those rows — `max('activity', 'happened_on')`. */
-export const max = (from, column, opts = {}) => ({ fn: 'max', from, column, ...opts });
-/** resource rollup: a column of the newest of those rows — `latest('payment', 'status')`, by key or by `opts.by`. */
-export const latest = (from, column, opts = {}) => ({ fn: 'latest', from, column, ...opts });
+/** resource rollups: one number about the `from` rows that point at the record, by name under `rollups` —
+    `rollup.count('task', { query: 'status = open' })`, `rollup.sum('order_line', 'amount')`, `rollup.avg('review', 'stars')`,
+    `rollup.min('invoice', 'due_on')`, `rollup.max('activity', 'happened_on')`, and `rollup.latest('payment', 'status')`,
+    a column of the newest of those rows, by key or by `opts.sort`. */
+export const rollup = Object.freeze({
+  count: (from, opts = {}) => ({ fn: 'count', from, ...opts }),
+  sum: (from, column, opts = {}) => ({ fn: 'sum', from, column, ...opts }),
+  avg: (from, column, opts = {}) => ({ fn: 'avg', from, column, ...opts }),
+  min: (from, column, opts = {}) => ({ fn: 'min', from, column, ...opts }),
+  max: (from, column, opts = {}) => ({ fn: 'max', from, column, ...opts }),
+  latest: (from, column, opts = {}) => ({ fn: 'latest', from, column, ...opts }),
+});
 
 /* A metric and a breakdown say the same thing on a dashboard and on a page:
    rows of a table, measured. On a page, given `whose`, the rows point at the
@@ -130,6 +134,8 @@ export const breakdown = (title, from, by, opts = {}) => measured('breakdown', t
 export const rows = (title, from, opts = {}) => ({ kind: 'rows', title, from, ...opts });
 /** The author speaking, on a dashboard or a record's page. */
 export const note = (text, opts = {}) => ({ kind: 'note', text, ...opts });
+/** A dashboard's introduction: `banner('Pipeline review', 'Work the leads that came in this week.', { eyebrow, action, image })`. */
+export const banner = (title, text, opts = {}) => ({ kind: 'banner', title, text, ...opts });
 /** A new App's first steps on its home: `firstRun('Welcome', [{ label: 'Add your first customer', to: 'customers' }])`. */
 export const firstRun = (title, steps, opts = {}) => ({ kind: 'firstRun', title, steps, ...opts });
 /** dashboard section: two keys crossed, heat by the measure — `matrix('Pipeline', 'opportunity', 'stage, month close_date')`. */
@@ -138,7 +144,7 @@ export const matrix = (title, from, by, opts = {}) => ({ kind: 'matrix', title, 
 export const funnel = (title, from, stages, opts = {}) => ({ kind: 'funnel', title, from, stages, ...opts });
 /** dashboard section: lanes of cards by a column's values — `board('Order flow', 'work_order', 'status', { primary: 'reference', lines: ['customer_id.name'] })`. */
 export const board = (title, from, by, opts = {}) => ({ kind: 'board', title, from, by, ...opts });
-/** A dashboard view: sections about whole tables — metric, chart, breakdown, rows, note, matrix, board — and `embed()`s of list views. Its key in `views` is its address. */
+/** A dashboard view: sections about whole tables — metric, chart, breakdown, rows, note, banner, matrix, board — and `embed()`s of list views. Its key in `views` is its address. */
 export const dashboard = (label, sections, opts = {}) => ({ kind: 'dashboard', label, sections, ...opts });
 /** dashboard section: recent changes across resources, from their record history — `activity('Latest updates', { pick_list: { icon: 'truck' } })`. */
 export const activity = (title, resources, opts = {}) => ({ kind: 'activity', title, resources, ...opts });
@@ -262,7 +268,7 @@ export const document = (base, sections, opts) => {
   return { base, sections, document: paper, ...(realm === undefined ? {} : { realm }), ...(roles === undefined ? {} : { roles }) };
 };
 /** One timeline stream — the dated child rows a `timeline` section merges. */
-export const stream = (from, whose, at, show, opts = {}) => ({ from, whose, at, show, ...opts });
+export const stream = (from, whose, at, text, opts = {}) => ({ from, whose, at, text, ...opts });
 /** Page: a group of the record's own fields — `fields(['name', 'status'], { title: 'Identity' })`. */
 export const fields = (show, opts = {}) => ({ kind: 'fields', show, ...opts });
 /** Page: rows whose reference points to this record (`related('Visits', 'visit', 'patient_id')`), or rows

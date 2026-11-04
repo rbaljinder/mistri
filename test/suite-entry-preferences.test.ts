@@ -82,7 +82,13 @@ async function fixture(t: TestContext, publicRoot = false, engine: Engine = 'sql
       name: 'Suite',
       store: where.store,
       grants: where.grants,
-      environment: { BETTER_AUTH_SECRET: 'test-suite-entry-preferences-secret-longer-than-thirty-two-characters' },
+      /* The identity sees only these names: the sign-in rate limit is off where NODE_ENV says test (auth/requestRules.ts),
+         or the accounts a run signs up from one address meet 429. */
+      environment: {
+        BETTER_AUTH_SECRET: 'test-suite-entry-preferences-secret-longer-than-thirty-two-characters',
+        MISTRI_TEST_AUTH_LIMITS: 'off',
+        NODE_ENV: 'test',
+      },
     },
   };
   let identity: Awaited<ReturnType<typeof openSuiteIdentity>> | undefined, suite: Awaited<ReturnType<typeof createSuite>> | undefined;

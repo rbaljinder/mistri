@@ -1,4 +1,4 @@
-import { count, max, sum } from '@mistriwork/mistri/app';
+import { rollup } from '@mistriwork/mistri/app';
 import type { Resources } from './mistri-schema.d.ts';
 
 /* What Commons says about each resource, once, wherever its records appear:
@@ -13,10 +13,10 @@ export const resources = {
     access: 'write',
     noun: 'board',
     rollups: {
-      threads: count('thread', { query: 'listed' }),
+      threads: rollup.count('thread', { query: 'listed' }),
       // Two hops, as a rollup of a rollup: each listed thread's replies, summed.
-      replies: sum('thread', 'replies', { query: 'listed' }),
-      last_thread: max('thread', 'created_at', { query: 'listed' }),
+      replies: rollup.sum('thread', 'replies', { query: 'listed' }),
+      last_thread: rollup.max('thread', 'created_at', { query: 'listed' }),
     },
     display: {
       threads: { format: 'number' },
@@ -31,11 +31,11 @@ export const resources = {
     access: 'write',
     noun: 'member',
     rollups: {
-      threads: count('thread', { query: 'listed' }),
-      posts: count('post', { query: 'published' }),
-      warnings: count('warning'),
+      threads: rollup.count('thread', { query: 'listed' }),
+      posts: rollup.count('post', { query: 'published' }),
+      warnings: rollup.count('warning'),
       // Through their posts, two references away: what the forum has given back.
-      reactions_received: count('reaction', { whose: 'post_id.author_id' }),
+      reactions_received: rollup.count('reaction', { whose: 'post_id.author_id' }),
     },
     display: {
       // A member reads as a person wherever they are named: their picture (initials where there is none), their handle under the name.
@@ -66,9 +66,9 @@ export const resources = {
     // A moderator tags a thread from its page: one link row per chip.
     tags: { through: 'thread_tag', to: 'tag', toneOf: 'tone' },
     rollups: {
-      replies: count('post', { query: 'published and opening = false' }),
-      last_activity: max('post', 'created_at', { query: 'published' }),
-      photos: count('post_image'),
+      replies: rollup.count('post', { query: 'published and opening = false' }),
+      last_activity: rollup.max('post', 'created_at', { query: 'published' }),
+      photos: rollup.count('post_image'),
     },
     display: {
       // A locked thread wears its lock, a held one its hourglass: the mark before the word.
@@ -92,8 +92,8 @@ export const resources = {
     // A post has no title of its own: who wrote it, and where.
     recordLabel: '{author_id.display_name} in {thread_id.title}',
     rollups: {
-      reactions: count('reaction'),
-      open_reports: count('report', { query: 'open' }),
+      reactions: rollup.count('reaction'),
+      open_reports: rollup.count('report', { query: 'open' }),
     },
     display: {
       status: { tone: { held: 'warn', hidden: 'bad', '*': 'neutral' } },

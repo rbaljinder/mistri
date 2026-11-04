@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /**
  * A loaded server, from a browser: reads that take seconds, and a session check that misses once. Its own server on a
  * `listen(0)` port over a `mkdtemp` database (support/sessionServer.ts), so it runs beside others.
@@ -12,7 +13,7 @@ import { expect, test } from './support/harness';
 import { SESSION_APP_ID, startSessionApp } from './support/sessionServer';
 
 test.describe('under load', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Awaited<ReturnType<typeof startSessionApp>>;
   test.beforeEach(async () => {
     app = await startSessionApp({ live: true, history: true });

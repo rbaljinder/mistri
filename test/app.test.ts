@@ -496,7 +496,7 @@ describe('dashboards in the nav', () => {
     assert.throws(() => dashApp({ label: 'B', sections: [{ kind: 'note' }] }), /is a note and has no "text"/);
     assert.throws(
       () => dashApp({ label: 'B', sections: [{ kind: 'metric', from: 't', text: 'hi' }] }),
-      /"text", which only a note carries/,
+      /"text", which only a note or banner carries/,
     );
   });
 

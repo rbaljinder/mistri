@@ -15,6 +15,7 @@ import {
   type AdministrationTenantImage,
 } from '../packages/mistri/src/shared/tenantAdministration.js';
 import { TENANT_HTTP_HEADERS as headers } from '../packages/mistri/src/shared/tenantContext.js';
+import { SLOW_MS } from './support/budgets';
 
 type Fixture = TenantAdministrationFixture;
 type Snapshot = ReturnType<Fixture['snapshot']>;
@@ -319,7 +320,7 @@ function gate() {
 
 test.describe('native tenant administration browser integration', () => {
   test.use({ timezoneId: 'UTC' });
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startTenantAdministration();

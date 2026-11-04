@@ -1,4 +1,4 @@
-import { action, count, max, min, sum } from '@mistriwork/mistri/app';
+import { action, rollup } from '@mistriwork/mistri/app';
 import type { Resources } from './mistri-schema.d.ts';
 import { orderResources } from './orders.ts';
 
@@ -26,15 +26,15 @@ export const resources = {
     recordLabel: '{title}',
     tags: { through: 'product_tag', to: 'tag', toneOf: 'tone' },
     rollups: {
-      variants: count('variant', { query: 'active = true' }),
+      variants: rollup.count('variant', { query: 'active = true' }),
       // A rollup of a rollup: each variant's units across the three locations, summed.
-      on_hand: sum('variant', 'on_hand'),
-      price_from: min('variant', 'price_amount'),
-      price_to: max('variant', 'price_amount'),
+      on_hand: rollup.sum('variant', 'on_hand'),
+      price_from: rollup.min('variant', 'price_amount'),
+      price_to: rollup.max('variant', 'price_amount'),
       // A line names its variant; the product is one hop further, and a cancelled order sold nothing.
-      units_sold: sum('order_line', 'quantity', { whose: 'variant_id.product_id', query: 'sold' }),
-      revenue: sum('order_line', 'line_amount', { whose: 'variant_id.product_id', query: 'sold' }),
-      images: count('product_image'),
+      units_sold: rollup.sum('order_line', 'quantity', { whose: 'variant_id.product_id', query: 'sold' }),
+      revenue: rollup.sum('order_line', 'line_amount', { whose: 'variant_id.product_id', query: 'sold' }),
+      images: rollup.count('product_image'),
     },
     display: {
       status: { tone: { active: 'good', draft: 'info', archived: 'neutral' } },
@@ -76,14 +76,14 @@ export const resources = {
   tag: {
     access: 'write',
     recordLabel: '{name}',
-    rollups: { products: count('product_tag') },
+    rollups: { products: rollup.count('product_tag') },
     labels: { name: 'Tag' },
   },
   product_tag: { access: 'write', delete: true, noun: 'product tag' },
   collection: {
     access: 'write',
     recordLabel: '{title}',
-    rollups: { products: count('collection_product') },
+    rollups: { products: rollup.count('collection_product') },
     display: { published: { tone: { true: 'good', false: 'neutral' } } },
     labels: { title: 'Collection' },
     form: { show: ['title', 'handle', 'description', 'published'], defaults: { published: false } },
@@ -107,9 +107,9 @@ export const resources = {
     // Named as the order's line says it, so a picker, a ledger row and the line all read alike; the SKU is its second line.
     recordLabel: '{product_id.title} · {color} / {size}',
     rollups: {
-      on_hand: sum('inventory_level', 'on_hand'),
-      sold: sum('order_line', 'quantity', { query: 'sold' }),
-      last_moved: max('inventory_movement', 'moved_at'),
+      on_hand: rollup.sum('inventory_level', 'on_hand'),
+      sold: rollup.sum('order_line', 'quantity', { query: 'sold' }),
+      last_moved: rollup.max('inventory_movement', 'moved_at'),
     },
     display: {
       product_id: { subtitle: 'sku' },
@@ -137,10 +137,10 @@ export const resources = {
   location: {
     recordLabel: '{name}',
     rollups: {
-      units: sum('inventory_level', 'on_hand'),
-      stocked: count('inventory_level', { query: 'on_hand > 0' }),
-      to_pack: count('fulfillment', { query: 'status = pending' }),
-      to_ship: count('fulfillment', { query: 'status = packed' }),
+      units: rollup.sum('inventory_level', 'on_hand'),
+      stocked: rollup.count('inventory_level', { query: 'on_hand > 0' }),
+      to_pack: rollup.count('fulfillment', { query: 'status = pending' }),
+      to_ship: rollup.count('fulfillment', { query: 'status = packed' }),
     },
     display: { kind: { tone: { store: 'info', warehouse: 'neutral' } }, units },
     labels: { name: 'Location', ships_online: 'Ships online orders', stocked: 'Variants in stock' },
@@ -197,9 +197,9 @@ export const resources = {
     favorite: true,
     recordLabel: '{name}',
     rollups: {
-      orders: count('sales_order', { query: 'live' }),
-      spent: sum('sales_order', 'total_amount', { query: 'live' }),
-      last_order: max('sales_order', 'placed_at'),
+      orders: rollup.count('sales_order', { query: 'live' }),
+      spent: rollup.sum('sales_order', 'total_amount', { query: 'live' }),
+      last_order: rollup.max('sales_order', 'placed_at'),
     },
     display: { spent: usd, last_order: { format: 'relative' }, accepts_marketing: { tone: { true: 'good', false: 'neutral' } } },
     labels: {
@@ -220,9 +220,9 @@ export const resources = {
     access: 'write',
     recordLabel: '{code}',
     rollups: {
-      uses: count('sales_order', { query: 'live' }),
-      given: sum('sales_order', 'discount_amount', { query: 'live' }),
-      sales: sum('sales_order', 'total_amount', { query: 'live' }),
+      uses: rollup.count('sales_order', { query: 'live' }),
+      given: rollup.sum('sales_order', 'discount_amount', { query: 'live' }),
+      sales: rollup.sum('sales_order', 'total_amount', { query: 'live' }),
     },
     display: {
       percent_off: { unit: '%' },

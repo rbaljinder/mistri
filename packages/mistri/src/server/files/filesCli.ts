@@ -37,7 +37,7 @@ import { imageHashOfHex, variantHash, variantsPrefix } from '../http/imageVarian
 import { sharedVariantsOf } from '../http/fileRows.js';
 
 export const FILES_USAGE =
-  'mistri migrate files <status | up | sweep> --app <dir> [<db> | --db <target> | --config <path>] [--connection <name>] [--policy <file>] [--dry-run]';
+  'mistri migrate files <status | up | sweep> [--app <dir>] [<db> | --db <target> | --config <path>] [--connection <name>] [--policy <file>] [--dry-run]';
 
 const EXIT = { ok: 0, couldNot: 1, failed: 3 } as const;
 /** Rows read per page while moving: enough to keep a bucket busy, few enough that 25 MB files stay in hand. */
@@ -92,7 +92,8 @@ export async function runFiles(sub: string, input: FilesInput, write: (line: str
   if (sub !== 'status' && sub !== 'up' && sub !== 'sweep') return fail(`"${sub}" is not a files command. ${FILES_USAGE}`);
   if (input.dryRun && sub === 'status') return fail('--dry-run is for up and sweep; status changes nothing.');
   const app = input.loaded?.app;
-  if (!app || input.appDir === undefined) return fail(`files reads an App's file resources: name it with --app <dir>. ${FILES_USAGE}`);
+  if (!app || input.appDir === undefined)
+    return fail(`files reads an App's file resources: name it with --app <dir>, or run this in its directory. ${FILES_USAGE}`);
   const tenant = isTenantApp(app);
   if (input.policy !== undefined && !tenant) return fail('--policy is for a tenant App, whose files are filed by tenant.');
   let columns: Map<string, string> | undefined;

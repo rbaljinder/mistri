@@ -23,6 +23,7 @@ import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { emailChannelSender } from '../integrations/integrationChannels.js';
 import type { EmailTransport } from './email.js';
 import { createUnsubscribeRoute, issueUnsubscribeToken, UNSUBSCRIBE_PATH } from './unsubscribe.js';
+import { causeText } from '../observe/failureCause.js';
 
 /* Queued mail is looked at every ten seconds: a person may be waiting on it, and a write never waits for it. */
 const LOOP_MS = 10_000;
@@ -134,7 +135,7 @@ export async function openContactMail(
   const loop = () => {
     if (stopping) return;
     running = tick()
-      .catch(() => console.error('mistri: queued email could not be sent; it is tried again shortly.'))
+      .catch((cause) => console.error(`mistri: queued email could not be sent; it is tried again shortly: ${causeText(cause)}`))
       .finally(() => {
         running = undefined;
         if (!stopping) timer = setTimeout(loop, LOOP_MS);

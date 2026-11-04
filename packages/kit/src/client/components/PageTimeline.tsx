@@ -5,7 +5,7 @@
  * the same related-create plan and form a related list uses.
  */
 import { useContext, useId, useLayoutEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { findTable, labelPath, state } from '../core.js';
 import { shell } from '../shellMode.js';
 import { resourceOf } from './appRooms.js';
@@ -115,6 +115,7 @@ function Row({
       <Value tableId={r.table} col={r.textColumn} value={r.text} compact links wholeText={conversation} />
     );
   const tone = r.tone ? { 'data-tone': r.tone } : {};
+  const body = <div className="timeline-text prose">{words}</div>;
   if (isEvent(r))
     return (
       <li className="timeline-row is-compact" data-timeline-row {...tone}>
@@ -135,6 +136,9 @@ function Row({
       ) : (
         <span className="timeline-avatar" aria-hidden="true" />
       )}
+      {/* The main value leads a row nobody wrote: its words first, then the quieter line (detail, source, when). A
+          message reads who, what kind and when over its words. */}
+      {!r.by && body}
       <span className="timeline-head">
         {r.by && (continued ? <span className="visually-hidden">{r.by}</span> : <span className="timeline-by">{r.by}</span>)}
         {r.detail != null && (
@@ -145,7 +149,7 @@ function Row({
         {multi && <span className="timeline-source">{r.source}</span>}
         <When at={r.when} />
       </span>
-      <div className="timeline-text prose">{words}</div>
+      {r.by && body}
       {reacted && r.entry && <Reactions reactions={reacted.reactions} entry={r.entry} tally={reacted.tally} />}
     </li>
   );
@@ -197,9 +201,16 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
   const atFoot = useRef(true);
   /* A row's line and detail are values of their stream's table, dressed by its display rules and drawn by its
      value components as a grid cell is; `table` is whose rules they are. */
-  const data = useQuery<TimelineRow[]>({
-    queryKey: ['page-timeline', plan.streams, section.limit, section.tone, section.compact, section.streams],
+  /* "Show more" asks for another `limit` rows of every stream, on demand: the first page is the rows the page's
+     plan already asked, so a section nobody opens further costs no more than before. */
+  const step = section.limit ?? 20;
+  const [pages, setPages] = useState(1);
+  const data = useQuery<{ rows: TimelineRow[]; more: boolean }>({
+    queryKey: ['page-timeline', plan.streams, section.limit, section.tone, section.compact, section.streams, pages],
+    /* The rows already drawn stay while the next page comes, so the list does not blank or jump. */
+    placeholderData: keepPreviousData,
     queryFn: async () => {
+      let streamMore = false;
       const answers = await Promise.all(
         streams.map(async (stream, s) => {
           /* The stream as authored: its own tone and compact stand over the section's rules. */
@@ -218,12 +229,13 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
             { table: (id) => findTable(id) as TableMeta | undefined, namePath: (target) => labelPath(target) },
             stream,
           )!;
-          const view = asked.view;
+          const view = pages > 1 ? { ...asked.view, limit: step * pages } : asked.view;
           const named = asked.view !== stream.view ? asked.view.columns?.at(-1)?.path : undefined;
           const byPath = named ?? stream.by;
           const others = asked.side ? api('/api/view/run', { view: asked.side, offset: 0 }) : undefined;
           const [got, otherRows] = await Promise.all([api('/api/view/run', { view, offset: 0 }), others]);
           if (!('view' in got)) throw new Error(got.errors[0]?.message ?? say('thisActivityStreamCould'));
+          if (got.more) streamMore = true;
           if (otherRows && !('view' in otherRows)) throw new Error(otherRows.errors[0]?.message ?? say('thisActivityStreamCould'));
           const keyOf = (row: Record<string, unknown>, names: string[], cols: string[]) =>
             JSON.stringify(stream.key!.map((column) => row[cols[names.indexOf(column)] ?? column] ?? null));
@@ -233,19 +245,19 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
           const names = (view.columns ?? []).map((c) => c.path);
           const cols: string[] = got.columns ?? names;
           const atCol = cols[names.indexOf(stream.at)] ?? stream.at;
-          const showCol = cols[names.indexOf(stream.show)] ?? stream.show;
-          const detailCol = stream.detail ? (cols[names.indexOf(stream.detail)] ?? stream.detail) : null;
+          const showCol = cols[names.indexOf(stream.text)] ?? stream.text;
+          const detailCol = stream.badge ? (cols[names.indexOf(stream.badge)] ?? stream.badge) : null;
           const byCol = byPath ? (cols[names.indexOf(byPath)] ?? byPath) : null;
           const markCol = (name: string) => cols[names.indexOf(name)] ?? name;
           const entryCol = stream.reacts ? markCol(stream.reacts) : undefined;
-          const shown = table && listColumn(table, stream.show);
-          const detailed = table && stream.detail ? listColumn(table, stream.detail) : undefined;
+          const shown = table && listColumn(table, stream.text);
+          const detailed = table && stream.badge ? listColumn(table, stream.badge) : undefined;
           return got.rows.map((row): TimelineRow => ({
             when: row[atCol] == null ? '' : String(row[atCol]),
             text: row[showCol] ?? null,
-            ...(shown ? { textColumn: { ...shown, name: stream.show } } : {}),
+            ...(shown ? { textColumn: { ...shown, name: stream.text } } : {}),
             detail: detailCol && row[detailCol] != null && row[detailCol] !== '' ? row[detailCol] : null,
-            ...(detailed ? { detailColumn: { ...detailed, name: stream.detail! } } : {}),
+            ...(detailed ? { detailColumn: { ...detailed, name: stream.badge! } } : {}),
             table: table?.id ?? stream.from,
             by: byCol && row[byCol] != null ? String(row[byCol]) : null,
             source: streamSource(stream.from, table),
@@ -271,11 +283,11 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
           }));
         }),
       );
-      return answers
+      const merged = answers
         .flat()
         .filter((r) => r.when)
-        .sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0))
-        .slice(0, section.limit ?? 20);
+        .sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0));
+      return { rows: merged.slice(0, step * pages), more: streamMore || merged.length > step * pages };
     },
     staleTime: 0,
   });
@@ -332,14 +344,14 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
     scroller.scrollTop = scroller.scrollHeight;
   }, [conversation, scroller, data.data]);
   /* Reactions are counted for the entries on the page, once they are known: one read for all of them. */
-  const entries = [...new Set((data.data ?? []).flatMap((r) => (r.entry && !isEvent(r) ? [r.entry.value] : [])))];
+  const entries = [...new Set((data.data?.rows ?? []).flatMap((r) => (r.entry && !isEvent(r) ? [r.entry.value] : [])))];
   const { tally, waiting } = useReactionTally(section.reactions, entries);
   const reacted: Reacted = section.reactions && tally ? { reactions: section.reactions, tally } : undefined;
   /* Rows with reactions wait for them too, under the same skeleton: a row of kinds arriving later pushed every message
      below it down. */
   if (data.isPending || (sided && !sidesHere) || (section.reactions && (!reactionsHere || waiting))) return <Loading section={section} />;
   if (data.isError) return <SectionBox section={section} body={null} foldable={false} broken={(data.error as Error).message} />;
-  const rows = conversation ? [...(data.data ?? [])].reverse() : (data.data ?? []);
+  const rows = conversation ? [...(data.data?.rows ?? [])].reverse() : (data.data?.rows ?? []);
   /* A message names its stream only where the messages come from more than one: a conversation whose second stream
      is all quiet lines (time logged) said "Activity" over every message, a word that told the reader nothing. */
   const multi = new Set(rows.filter((r) => !isEvent(r)).map((r) => r.source)).size > 1;
@@ -390,6 +402,15 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
   );
   /* The composer sends through the App's commands (TimelineComposer.tsx), drawn through the shell's slot. */
   const { TimelineComposer } = shell().slots;
+  /* Older rows come in place: above a conversation (its oldest is at the top), below a feed. The button holds its row
+     whether or not it is working, so nothing moves under the pointer. */
+  const showMore = data.data?.more && (
+    <div className="timeline-more">
+      <button type="button" className="ghost" disabled={data.isPlaceholderData} onClick={() => setPages(pages + 1)}>
+        {say('showMore')}
+      </button>
+    </div>
+  );
   return (
     <SectionBox
       section={section}
@@ -397,6 +418,7 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
       body={
         <>
           {composeButton}
+          {conversation && showMore}
           {rows.length ? (
             <div
               className={conversation ? 'timeline-scroll' : undefined}
@@ -434,6 +456,7 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
           ) : (
             <Empty text={say('nothingDatedYetForThisRecord')} />
           )}
+          {!conversation && showMore}
           {section.composer && !preview && shell().inApp() && TimelineComposer && (
             <TimelineComposer
               composer={section.composer}

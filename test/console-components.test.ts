@@ -48,10 +48,10 @@ test('Console component artifact loads from an installed tree without source or 
   // editor and the experiment's comparison and verdict ship in the one component a room is. It loads only when the room
   // is opened, never on an App's first paint; every source in it is still the room's own, which the check above holds.
   assert.ok(Buffer.byteLength(script) < 96_000, 'the room stays a small component, not a second client');
-  // 334.5 KB since rc.12 (measured 334,167; 333.3 KB at rc.11): every source in the map is still the room's own or the kit's
+  // 335 KB since rc.16 (measured 334,640; 334.5 KB at rc.12): every source in the map is still the room's own or the kit's
   // (the check above holds that); the kit's message catalogs, which each room embeds, grew with rc.12's chunk-failure copy
-  // and the money entry.
-  assert.ok(Buffer.byteLength(compiled.files[`${entry.js}.map`]) < 334_500, 'the map contains only component sources');
+  // and the money entry, and with rc.16's "Show more" and empty-field words.
+  assert.ok(Buffer.byteLength(compiled.files[`${entry.js}.map`]) < 335_000, 'the map contains only component sources');
   assert.ok(entry.css && compiled.files[entry.css], 'the scoped stylesheet ships with the room');
 
   // Only the emitted loader and its normal source-mode signal exist here:

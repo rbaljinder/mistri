@@ -70,7 +70,10 @@ const app = (rollups: unknown, extra: Record<string, unknown> = {}) =>
 const problems = (rollups: unknown) => appRollupRules(app(rollups), schema).problems;
 
 test('a rollup block is refused by name when its shape is wrong', () => {
-  assert.throws(() => app({ total: { fn: 'avg', from: 'po_line', column: 'amount' } }), /"fn" of "avg"\. Use "count", "sum", "min", "max"/);
+  assert.throws(
+    () => app({ total: { fn: 'median', from: 'po_line', column: 'amount' } }),
+    /"fn" of "median"\. Use "count", "sum", "avg", "min", "max"/,
+  );
   assert.throws(() => app({ lines: { fn: 'count', from: 'po_line', column: 'amount' } }), /counts rows and names a "column"/);
   assert.throws(() => app({ total: { fn: 'sum', from: 'po_line' } }), /is a sum and needs a "column"/);
   assert.throws(

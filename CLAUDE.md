@@ -249,7 +249,7 @@ range widens.
 
 - `npm test` (add live Postgres via `TABLEWALK_TEST_PG` +
   `TABLEWALK_REQUIRE_LIVE=1`, seeded by `npm run seed:live`) and `npm run e2e` must both be green. CI enforces both;
-  the release workflow re-runs them on the tag.
+  the release workflow requires a green CI run on the tagged commit and re-runs neither.
 - `npm run test:ci-parity` (seconds; after `npm run build` for the bundle
   margins) — what only CI used to catch: Dockerfile COPY sources and build
   inputs, stale CLI/DSL references, a bundle measure within 0.1% of its ceiling.

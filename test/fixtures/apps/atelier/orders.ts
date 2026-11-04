@@ -1,4 +1,4 @@
-import { action, computed, count, latest, machine, sum } from '@mistriwork/mistri/app';
+import { action, computed, rollup, machine } from '@mistriwork/mistri/app';
 
 /* An order and the three records that follow it, each with its own machine:
    the order itself (open → confirmed → completed, or cancelled), its payment
@@ -54,12 +54,12 @@ export const orderResources = {
     recordLabel: '#{id} · {customer_id.name}',
     noun: 'order',
     rollups: {
-      lines: count('order_line'),
-      units: sum('order_line', 'quantity'),
-      refunded: sum('refund', 'refund_amount'),
-      returns: count('order_return'),
-      financial_status: latest('payment', 'status'),
-      fulfillment_status: latest('fulfillment', 'status'),
+      lines: rollup.count('order_line'),
+      units: rollup.sum('order_line', 'quantity'),
+      refunded: rollup.sum('refund', 'refund_amount'),
+      returns: rollup.count('order_return'),
+      financial_status: rollup.latest('payment', 'status'),
+      fulfillment_status: rollup.latest('fulfillment', 'status'),
     },
     display: {
       status: {
@@ -139,7 +139,7 @@ export const orderResources = {
     },
     access: 'write',
     recordLabel: 'Payment for #{sales_order_id}',
-    rollups: { refunds: count('refund') },
+    rollups: { refunds: rollup.count('refund') },
     display: {
       status: financial,
       method: { values: { apple_pay: 'Apple Pay', paypal: 'PayPal' } },
@@ -217,7 +217,7 @@ export const orderResources = {
     favorite: true,
     recordLabel: 'Return {id} · #{sales_order_id}',
     noun: 'return',
-    rollups: { lines: count('return_line'), units: sum('return_line', 'quantity') },
+    rollups: { lines: rollup.count('return_line'), units: rollup.sum('return_line', 'quantity') },
     display: {
       status: {
         tone: { requested: 'warn', approved: 'info', received: 'info', refunded: 'good', rejected: 'neutral' },

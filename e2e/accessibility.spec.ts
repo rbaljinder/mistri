@@ -1,3 +1,4 @@
+import { BUILD_MS } from './support/budgets';
 /**
  * Every room, read by axe: the smoke rooms of an App and
  * the sample Apps' own pages, in several looks, light and dark.
@@ -103,7 +104,7 @@ async function painted(page: Page) {
   await expect.poll(async () => ((await page.locator('#content').textContent()) ?? '').trim().length).toBeGreaterThan(0);
 }
 
-test.describe.configure({ timeout: 240_000 });
+test.describe.configure({ timeout: BUILD_MS });
 
 test('an App’s smoke rooms, in every look', async ({ page }) => {
   const findings: Finding[] = [];

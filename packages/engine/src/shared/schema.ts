@@ -898,3 +898,20 @@ export function expectedValues(
   }
   return Object.keys(expected).length ? expected : undefined;
 }
+
+/**
+ * The reference a card over `table`'s row opens, where that row is a link (join) table's: the far side. The author's
+ * `opens` where they name one; otherwise, a table that is two references and nothing else of note (its key and
+ * dates aside) opens the one that `whose` — the reference back to the page's record — does not name. Any other table
+ * opens its own row, and gives none.
+ */
+export function linkTarget(table: TableMeta, whose: string, opens?: string): string | undefined {
+  if (opens) return opens;
+  if (whose.includes('.')) return undefined;
+  const references = table.columns.filter((column) => column.references && column.references.table !== table.id);
+  if (references.length !== 2 || !references.some((column) => column.name === whose)) return undefined;
+  const plain = table.columns.every(
+    (column) => column.primaryKey || references.includes(column) || (column.type !== undefined && columnKind(column.type) === 'date'),
+  );
+  return plain ? references.find((column) => column.name !== whose)?.name : undefined;
+}

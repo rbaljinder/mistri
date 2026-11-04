@@ -233,11 +233,11 @@ describe('a landing is refused by name', () => {
     refused({ sections: [] }, /views "welcome" needs a "hero": \{ heading, description\?, actions \}\./);
     refused(
       { hero: { ...HERO, subtitle: 'Hi' } },
-      /hero has no "subtitle"\. It takes: heading, description, actions, image, layout, search, highlights, badge, tiles, points\./,
+      /hero has no "subtitle"\. "subtitle" belongs inside a page section \(headline\)\. It takes: heading, description, actions, image, layout, search, highlights, badge, tiles, points\./,
     );
     refused(
       { hero: HERO, image: 'car.png' },
-      /views "welcome" has no "image"\. "image" belongs inside "presentation" \(cards\) or inside a dashboard section \(note\)\. It takes: kind, label, hero, sections\./,
+      /views "welcome" has no "image"\. "image" belongs inside "presentation" \(cards\) or inside a dashboard section \(banner\)\. It takes: kind, label, hero, sections\./,
     );
     refused(
       withSection({ kind: 'gallery', items: [] }),

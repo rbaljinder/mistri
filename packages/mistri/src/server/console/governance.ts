@@ -285,7 +285,15 @@ export async function consoleGovernanceApi(
   )
     return refuse(response, 400, 'invalid_request');
   // An email is looked up; anything else is an account id as the journal holds it. An unknown email finds no rows.
-  const actor = who === undefined ? undefined : who.includes('@') ? ((await governance.accountOf?.(who).catch(() => null)) ?? null) : who;
+  let actor: string | null | undefined = who;
+  if (who?.includes('@')) {
+    try {
+      actor = (await governance.accountOf?.(who)) ?? null;
+    } catch {
+      // A lookup that failed is not an email that matched nothing: an empty feed would read as "no one did anything".
+      return refuse(response, 503, 'unavailable');
+    }
+  }
   if (actor === null) {
     send(response, 200, { ok: true, rows: [] });
     return true;

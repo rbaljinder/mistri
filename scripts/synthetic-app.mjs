@@ -157,7 +157,6 @@ const HELPERS = [
   'board',
   'cards',
   'chart',
-  'count',
   'current',
   'dashboard',
   'defineFeature',
@@ -170,7 +169,7 @@ const HELPERS = [
   'queue',
   'related',
   'rows',
-  'sum',
+  'rollup',
   'machine',
 ];
 const q = JSON.stringify;
@@ -210,8 +209,8 @@ function featureModule({ domain, owner, tables }, { schema }) {
           .slice(0, 3)
           .map((child, i) =>
             i === 1
-              ? `${child}_total: sum(${q(child)}, 'amount', { whose: '${root}_id' })`
-              : `${child}_count: count(${q(child)}, { whose: '${root}_id' })`,
+              ? `${child}_total: rollup.sum(${q(child)}, 'amount', { whose: '${root}_id' })`
+              : `${child}_count: rollup.count(${q(child)}, { whose: '${root}_id' })`,
           )
           .join(', ')} }`,
       );

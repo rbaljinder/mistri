@@ -688,7 +688,7 @@ export const views = {
   try {
     writeFileSync(
       join(elsewhere, 'app.ts'),
-      source.replace('site: {},', "site: { rollups: { waiting: count('site', { query: 'status = waiting' }) } },"),
+      source.replace('site: {},', "site: { rollups: { waiting: rollup.count('site', { query: 'status = waiting' }) } },"),
     );
     writeFileSync(
       join(elsewhere, 'commands.ts'),

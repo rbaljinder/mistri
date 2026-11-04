@@ -30,7 +30,7 @@ import { compareVersions, newMigration, readMigrations } from './files.js';
 import { FLYWAY_COMMANDS, runFlyway } from './flyway.js';
 import { migrateBaseline, migrateRepair, migrateUp, migrateValidate, migrationStatus, recordAround, type Status } from './runner.js';
 import { sayChange } from './snapshot.js';
-import { resolveTarget, targetDir, type TargetBinding } from './target.js';
+import { migrateWriteRefusal, resolveTarget, targetDir, type TargetBinding } from './target.js';
 import { product } from '../product.js';
 import { claimContext, contextJson, contextLines, fromProfile, projectContext } from '../config/profile.js';
 
@@ -195,6 +195,8 @@ export async function runMigrate<A extends MigrateApp>(
         'With --app, status prints the bootstrap plan (migrations, stores, sign-in store, seed, check) and up carries it out:\n' +
         '  the stores the App uses (--commands, --jobs, --policy name its modules), a PostgreSQL auth.store, then the check.\n' +
         '  validate --app exits 2 while any phase is pending. --json prints the plan as data.\n' +
+        'up, baseline and repair write to the database: without --app, a connection a config names must say "writable": true\n' +
+        '(a database named with --db, and --dry-run, are not asked).\n' +
         'Exit codes: 1 could not run, 2 files and history disagree, 3 a migration failed, 4 applied but the App no longer checks,\n' +
         '5 a store step failed.\n' +
         'mistri docs migrate is the guide.',
@@ -382,6 +384,10 @@ export async function runMigrate<A extends MigrateApp>(
     }
 
     const target = await resolveTarget(registry, config, flags, appDir, loaded?.binding);
+    /* An App's own database is the App's to migrate (`--app`): the plan it carries out is the deployment, and the
+       connection is the one it binds. The database browser, and a run with no App, answer to the flag. */
+    const refused = loaded ? undefined : migrateWriteRefusal(target.connection, command, dryRun);
+    if (refused) return fail(refused);
     if (DESIRED.includes(command)) {
       const file = schemaFile !== undefined ? resolve(schemaFile) : defaultSchemaFile(target.dir);
       /* The first migration is schema.sql itself: written before any diff tool

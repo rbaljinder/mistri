@@ -8,44 +8,34 @@ import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { Page } from '@playwright/test';
 import { PART_SELECTORS } from '../packages/mistri/src/server/app/themePartSelectors';
-import { expect, test } from './support/harness';
+import { expect, test as base } from './support/harness';
+import { fixture } from './support/fixture';
 
-/**
- * What a theme says beyond the recipe menu, drawn: the built-in look where a rule was folded into the type roles,
- * and (TH-3) a band under every other row, a pattern behind the page and the menu, a part's own colors, the icons'
- * weight and a theme's own stylesheet. One App wears each theme by the reader's pick, as `shot` switches them.
- *
- * A server of its own over a fresh database (listen(0), mkdtemp).
- */
-let origin = '';
-let directory = '';
-let child: ChildProcess | undefined;
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'mistri-theme-expression-'));
-  const db = join(directory, 'yard.db');
-  const source = new DatabaseSync(db);
-  try {
-    source.exec(
-      `CREATE TABLE job (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL, total REAL NOT NULL, due_on TEXT NOT NULL);`,
-    );
-    const job = source.prepare('INSERT INTO job VALUES (?, ?, ?, ?, ?)');
-    for (let i = 1; i <= 12; i++) job.run(i, `Job ${i}`, i % 3 ? 'Open' : 'Done', i * 120, `2026-09-${String(i).padStart(2, '0')}`);
-  } finally {
-    source.close();
-  }
-  const config = join(directory, 'connections.json');
-  writeFileSync(config, JSON.stringify({ connections: [{ name: 'yard', url: db, writable: true }] }));
-  const app = join(directory, 'app');
-  mkdirSync(join(app, 'node_modules'), { recursive: true });
-  mkdirSync(join(app, 'node_modules', '@mistriwork'), { recursive: true });
-  symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(app, 'node_modules', '@mistriwork', 'mistri'), 'dir');
-  writeFileSync(join(app, 'package.json'), '{ "type": "module" }\n');
-  writeFileSync(
-    join(app, 'app.ts'),
-    `import { dashboard, defineApp, defineTheme, listView, metric } from '@mistriwork/mistri/app';
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      directory = mkdtempSync(join(tmpdir(), 'mistri-theme-expression-'));
+      const db = join(directory, 'yard.db');
+      const source = new DatabaseSync(db);
+      try {
+        source.exec(
+          `CREATE TABLE job (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL, total REAL NOT NULL, due_on TEXT NOT NULL);`,
+        );
+        const job = source.prepare('INSERT INTO job VALUES (?, ?, ?, ?, ?)');
+        for (let i = 1; i <= 12; i++) job.run(i, `Job ${i}`, i % 3 ? 'Open' : 'Done', i * 120, `2026-09-${String(i).padStart(2, '0')}`);
+      } finally {
+        source.close();
+      }
+      const config = join(directory, 'connections.json');
+      writeFileSync(config, JSON.stringify({ connections: [{ name: 'yard', url: db, writable: true }] }));
+      const app = join(directory, 'app');
+      mkdirSync(join(app, 'node_modules'), { recursive: true });
+      mkdirSync(join(app, 'node_modules', '@mistriwork'), { recursive: true });
+      symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(app, 'node_modules', '@mistriwork', 'mistri'), 'dir');
+      writeFileSync(join(app, 'package.json'), '{ "type": "module" }\n');
+      writeFileSync(
+        join(app, 'app.ts'),
+        `import { dashboard, defineApp, defineTheme, listView, metric } from '@mistriwork/mistri/app';
 const dressed = defineTheme({
   id: 'dressed',
   label: 'Dressed',
@@ -74,61 +64,73 @@ export default defineApp({
   ui: { customThemes: [dressed, sheeted], theme: { preset: 'lumen' } },
 });
 `,
-  );
-  writeFileSync(
-    join(app, 'sheeted.css'),
-    '[data-part="stat"] {\n  border-top: 3px solid var(--accent);\n}\n[data-part="stat"]:hover {\n  background-color: var(--accent-soft);\n}\n',
-  );
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  origin = `http://127.0.0.1:${port}`;
-  const started = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
-    {
-      cwd: resolve('.'),
-      env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      );
+      writeFileSync(
+        join(app, 'sheeted.css'),
+        '[data-part="stat"] {\n  border-top: 3px solid var(--accent);\n}\n[data-part="stat"]:hover {\n  background-color: var(--accent-soft);\n}\n',
+      );
+      const reservation = createServer();
+      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
+      const port = (reservation.address() as { port: number }).port;
+      await new Promise<void>((done) => reservation.close(() => done()));
+      origin = `http://127.0.0.1:${port}`;
+      const started = spawn(
+        process.execPath,
+        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
+        {
+          cwd: resolve('.'),
+          env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      child = started;
+      let log = '';
+      started.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      started.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
+        started.stdout!.on('data', () => {
+          if (log.includes('Listening on ')) {
+            clearTimeout(timer);
+            done();
+          }
+        });
+        started.once('exit', () => {
+          clearTimeout(timer);
+          fail(new Error(`The fixture exited: ${log}`));
+        });
+      });
     },
-  );
-  child = started;
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
-    started.stdout!.on('data', () => {
-      if (log.includes('Listening on ')) {
-        clearTimeout(timer);
-        done();
+    async () => {
+      if (child && child.exitCode === null) {
+        const closed = once(child, 'close');
+        child.kill('SIGTERM');
+        const force = setTimeout(() => child?.kill('SIGKILL'), 5000);
+        try {
+          await closed;
+        } finally {
+          clearTimeout(force);
+        }
       }
-    });
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The fixture exited: ${log}`));
-    });
-  });
+      if (directory) rmSync(directory, { recursive: true, force: true });
+    },
+  ),
 });
 
-test.afterAll(async () => {
-  if (child && child.exitCode === null) {
-    const closed = once(child, 'close');
-    child.kill('SIGTERM');
-    const force = setTimeout(() => child?.kill('SIGKILL'), 5000);
-    try {
-      await closed;
-    } finally {
-      clearTimeout(force);
-    }
-  }
-  if (directory) rmSync(directory, { recursive: true, force: true });
-});
+/**
+ * What a theme says beyond the recipe menu, drawn: the built-in look where a rule was folded into the type roles,
+ * and (TH-3) a band under every other row, a pattern behind the page and the menu, a part's own colors, the icons'
+ * weight and a theme's own stylesheet. One App wears each theme by the reader's pick, as `shot` switches them.
+ *
+ * A server of its own over a fresh database (listen(0), mkdtemp).
+ */
+let origin = '';
+let directory = '';
+let child: ChildProcess | undefined;
 
 /** The App's page in the theme the reader picked (`shot`'s preference), once its look has arrived. */
 async function open(page: Page, path: string, theme?: string) {

@@ -44,7 +44,9 @@ export async function runDeployCommand(
       /* What the project profile names is read from it at each deploy, not copied (D11): the file says the rest. */
       const { config: full, from } = withProfile(request);
       if (!full.app) {
-        console.error('mistri deploy: init needs --app <dir>, the App the Worker is for, or an app block in mistri.json that names it.');
+        console.error(
+          "mistri deploy: init needs --app <dir>, the App the Worker is for (or run it in the App's directory), or an app block in mistri.json that names it.",
+        );
         return 1;
       }
       const profiled = from.filter((key) => (request as Record<string, unknown>)[key] === undefined);

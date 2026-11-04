@@ -18,8 +18,8 @@ The first line of the help says it: *mistri — the App framework: a few lines o
 | Command | What it does |
 | --- | --- |
 | `mistri --app <dir>` | serve an App (see --app below) |
-| `mistri check --app <dir>` | types, typecheck and validation of an App (see below) |
-| `mistri build --app <dir>` | make an App ready for production (see below) |
+| `mistri check [--app <dir>]` | types, typecheck and validation of an App (see below) |
+| `mistri build [--app <dir>]` | make an App ready for production (see below) |
 | `mistri new [<name>] [<dir>]` | a starter App with its own SQLite database: a task list in one app.ts, a schema and rows, for mistri dev |
 | `mistri new --brief <BRIEF.md> [<dir>]` | an App drafted from an approved brief: its schema, database, roles, commands and look (the mistri skill's step 0) |
 | `mistri new --template intake [<name>] [<dir>]` | a public multi-step intake: the stock form over one table, no page or CSS of its own |
@@ -29,16 +29,16 @@ The first line of the help says it: *mistri — the App framework: a few lines o
 | `mistri flags --help` | explicit flag control-store provisioning |
 | `mistri experiments --help` | explicit experiment evidence-store provisioning |
 | `mistri analytics --help` | behavior-analytics store provisioning and funnels |
-| `mistri shot --app <dir> [<route>…]` | an App's pages as PNG files, to look at (see below) |
-| `mistri grade [<app-dir>]` | an App's pages measured against the rubric (see below) |
+| `mistri shot [--app <dir>] [<route>…]` | an App's pages as PNG files, to look at (see below) |
+| `mistri grade [--app <dir>]` | an App's pages measured against the rubric (see below) |
 | `mistri theme show <look|.>` | a theme's every color, recipe, type and shape after extends, inherited values marked (see below) |
 | `mistri schema --brief [<db>]` | the schema as one line per table, for an agent's context |
 | `mistri explain <check-code>` | what a check code means, with a fix example |
 | `mistri messages extract [--app <dir>] [--locale <tag>]` | an App's words for a translator: a catalog's missing keys appended as comments, or its literal captions |
 | `mistri migrate <command>` | change the schema with versioned SQL files (see below) |
 | `mistri seed [--app <dir>]` | believable rows in an App's writable database (see below) |
-| `mistri dev [<app-dir>]` | serve an App with a dev secret and a sign-in per role (see below) |
-| `mistri test init [<app-dir>]` | a starter suite: a journey per role, a permissions matrix (see below) |
+| `mistri dev [--app <dir>]` | serve an App with a dev secret and a sign-in per role (see below) |
+| `mistri test init [--app <dir>]` | a starter suite: a journey per role, a permissions matrix (see below) |
 | `mistri flows start <resource>` | start a resource's flows on records already there (see below) |
 | `mistri jobs run <name>` | run one of an App's jobs at times now, once (see below) |
 | `mistri decide eval <name>` | measure a decision on settled records, and pin its model (see below) |
@@ -78,7 +78,7 @@ The server's flags: where the data is, how it is served, and what an App adds.
 | `--no-config` | Ignore any config file |
 | `--no-live` | Turn live sync off, even for an App that asks for it (live: true): its open pages then refresh on focus and after their own saves. Nothing is written to the change store and /api/live answers 204. |
 | `--db-latency <ms>` | Development only: every database round trip waits this long before it is sent (a pipelined batch pays once), to feel a remote database on this machine; 20 is a typical cloud distance. Or set MISTRI_DEV_DB_LATENCY. Refused under NODE_ENV=production and when serving a build. |
-| `--app <dir>` | Serve an app: a directory whose app.ts (or app.mjs / app.json) declares its resources, views, navigation and pages. Repeatable; with more than one, every app names its connection. A save reloads it; a change to its grants, sources or sign-in needs a restart. mistri docs getting-started is where to begin. One App is served at the root (/leases/12); several each under its id (/lintel/leases/12). |
+| `--app <dir>` | Serve an app: a directory whose app.ts (or app.mjs / app.json) declares its resources, views, navigation and pages. Repeatable; with more than one, every app names its connection. A save reloads it; a change to its grants, sources or sign-in needs a restart. mistri docs getting-started is where to begin. One App is served at the root (/leases/12); several each under its id (/lintel/leases/12). --app names the App on every command that takes one (check, build, shot, grade, dev, test init, flows, jobs, decide, tenant, deploy init, migrate files). Left out, the App is the current directory when it holds an app.ts (or app.mjs / app.json). seed, migrate, messages extract and theme show read it left out as no App. A directory typed where a database or route goes is refused, never read as the App. |
 | `--mount` | <app>=<path> Where an App is served, over that default: / makes it the main App at the root, /billing puts it there. Repeatable, one per App. Or "mount" in the config. |
 | `--base-path <path>` | The path a reverse proxy serves this server under, like /tools: every address, asset, API call, cookie and link carries it. Or "basePath" in the config, or set MISTRI_BASE_PATH. |
 | `--app-entry <file>` | With one --app: the manifest to read, when it is not the directory's own app.ts. The directory stays the App's root: its components, pages/, features/ and authority.lock. |
@@ -110,12 +110,12 @@ The server's flags: where the data is, how it is served, and what an App adds.
 The one command of the loop.
 
 ```text
-mistri check --app <dir> [--app-entry <file>]
+mistri check [--app <dir>] [--app-entry <file>]
                 [<db> | --db <target> | --config <path>]
                 [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>]
                 [--routes [--mount <app>=<path>] [--base-path <path>]]
                 [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
-                [--no-index-check]
+                [--no-index-check] [--no-query-check]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
                 [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
 
@@ -139,6 +139,10 @@ step runs; the errors print first, and warnings are advisory (unless
 lists them in full. On PostgreSQL an indexes step names each foreign key, default
 sort, fixed filter, ownership column and search the App reads by that no index
 leads (index-missing), with the CREATE INDEX that adds it; --no-index-check skips it.
+A queries step has the database EXPLAIN each read the App's pages would make
+(lists, related and grouped lists, timelines, breakdowns, figures, rollups, and its own list tabs, dashboard figures and segments): one a
+statement, never run, in a READ ONLY transaction on PostgreSQL. A read it refuses
+is a query-invalid error naming the page:section, list, dashboard or segment; --no-query-check skips it.
 --routes also prints every address the App answers to (/{app}/leads/{id},
 /{app}/leads/new, ...) and what each one opens. --design reads its pages,
 forms and shell for compositions that come out basic (a list cut beside an
@@ -195,7 +199,7 @@ checks and the common fixes: mistri docs check-codes.
 Its pages as PNG files, for the agent that built it.
 
 ```text
-mistri shot --app <dir> [<route>…] [<db> | --db <target> | --config <path>]
+mistri shot [--app <dir>] [<route>…] [<db> | --db <target> | --config <path>]
                [--commands <file>] [--jobs <file>] [--policy <file>]
                [--theme <id|all>] [--palette <id>]
                [--compare <look>] [--recipes <part>] [--dark | --light] [--phone | --desk | --both]
@@ -279,7 +283,9 @@ A record under any list over its table opens at the table's canonical address
                     errors) as compact text instead of writing PNG files
     --browser <path>  a Chromium or Chrome to shoot with (default: the CHROME
                     variable, else Playwright's own, the machine's Chrome,
-                    then any Chromium another Playwright version installed)
+                    any Chromium another Playwright version installed, then
+                    an installed Chrome, Edge or Chromium; CHROME_PATH names
+                    one of those)
 Needs Playwright's Chromium: install the playwright package where you run it,
 then install its headless Chromium (shot prints the exact command when it is
 missing); the machine's Chrome serves when Playwright's browser is missing.
@@ -318,7 +324,7 @@ Exit codes: 1 could not run, 2 refused (read-only, or rows already there).
 The rubric measured in a browser, not looked at.
 
 ```text
-mistri grade [<app-dir>] [<db> | --db <target> | --config <path>]
+mistri grade [--app <dir>] [<db> | --db <target> | --config <path>]
                 [--commands <file>] [--jobs <file>] [--policy <file>] [<route>…]
                 [--as <role|email|all> [--tenant <id>]] [--theme <id|all> [--palette <id|all>]]
                 [--json] [--browser <path>]
@@ -334,7 +340,7 @@ round, a record's name past two lines on a phone. One line per finding,
 errors first, "code file:line page@widths message — fix: …"; then what it
 covered and what it skipped, and why; then the verdict, which an error
 fails whatever the score, and the score out of 100.
-The App is <app-dir>, else the current directory. An App with sign-in is
+The App is --app <dir>, else the current directory. An App with sign-in is
 graded as the role that reads the most, unless --as names one (or an
 account, as shot's --as <email> does).
     --json          with grade: one JSON document of the findings and score
@@ -400,7 +406,9 @@ the database. validate fails on a changed, missing or failed file, a pending
 one, or drift. baseline records a database that already has tables as
 version 0, touching nothing, and writes its schema beside the migrations
 (baseline.schema.json, never run). repair removes failed entries, accepts
-changed files and marks missing ones deleted.
+changed files and marks missing ones deleted. up, baseline and repair write
+to the database, so without --app a connection a config names must say
+"writable": true; a database named with --db, and --dry-run, are not asked.
 
 diff, check and squash read the schema you want from schema.sql beside the
 migrations (db/migrations -> db/schema.sql). diff writes the next V file
@@ -464,7 +472,7 @@ also makes the tenant store and the journals the policy declares.
 are read, and a --jobs or --commands must name the build's own.
 Exit codes: 1 could not run, 2 a store refused, 3 a step failed.
 
-mistri migrate files status | up | sweep --app <dir>
+mistri migrate files status | up | sweep [--app <dir>]
                 [<db> | --db <target> | --config <path>] [--connection <name>]
                 [--policy <file>] [--dry-run]
 An App's files move to where each resource's storage says: up copies each
@@ -487,7 +495,7 @@ Exit codes: 1 could not run, 3 some files did not move.
 A backfill, run once beside the server.
 
 ```text
-mistri flows start <resource> --app <dir> --jobs <file>
+mistri flows start <resource> [--app <dir>] --jobs <file>
                 [--where <query>] [--flow <id>] [--tenant <id> --policy <file>]
                 [--dry-run] [<db> | --db <target> | --config <path>]
 Start a resource's created flows on the records already there, as though
@@ -504,7 +512,7 @@ Exit codes: 1 could not run.
 One of an App's jobs at times, once, by hand.
 
 ```text
-mistri jobs run <name> --app <dir> --jobs <file> [--wait <seconds>]
+mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
                 [<db> | --db <target> | --config <path>]
 Enqueues one run of the job in the App's job store, marked manual beside
 the slots the schedule enqueues, for the server started with --jobs to run
@@ -523,9 +531,9 @@ did not succeed.
 And pinning the model that earned it.
 
 ```text
-mistri decide eval <decision> --app <dir> --jobs <file> [--provider jev|anthropic]
+mistri decide eval <decision> [--app <dir>] --jobs <file> [--provider jev|anthropic]
                 [--limit <n>] [--truth "<query>"] [--max-cost <dollars>] [--max-error <share>]
-                [--dry] [--yes] [--pin] [--json <file>] [--policy <file>] [<db> | --db <target> | --config <path>]
+                [--dry-run] [--yes] [--pin] [--json <file>] [--policy <file>] [<db> | --db <target> | --config <path>]
 Asks a provider about records whose answer people settled (--truth narrows
 them; default every record with the field set, at most --limit, 500) and
 reports accuracy, Brier, calibration error, a reliability table and what the
@@ -533,7 +541,7 @@ declared thresholds would have applied, suggested and left. The records are
 read as the decision reads them, put back as they were before the answer was
 settled where the App keeps their history. It prints the count and a price
 that errs high first, and asks nothing without --yes or above --max-cost
-(default $5); --dry prints what one record would send. It writes nothing to
+(default $5); --dry-run prints what one record would send. It writes nothing to
 the database and never applies; --pin writes the model version into
 decisions.lock, which is what lets a decision apply, only when the share it
 would apply was wrong at most --max-error of the time (default 0.02).
@@ -547,9 +555,9 @@ Exit codes: 1 could not run, 2 not spent (no --yes, or over --max-cost),
 After mistri migrate stores up --policy.
 
 ```text
-mistri tenant init [<tenant>...] --app <dir> --policy <file>
+mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
 mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
-                --app <dir> --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
+                [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
 init opens the platform realm (when the App declares one) and puts each named
 tenant, active; one already there is left as it is, so it runs again after a
 stop part-way. grant grants <email> a membership of the platform realm, or
@@ -566,9 +574,9 @@ not run.
 A copy of a tenant to try changes in.
 
 ```text
-mistri tenant clone <source> <sandbox> --app <dir> --policy <file> [--samples]
-mistri tenant import <sandbox> --app <dir> --policy <file>
-mistri tenant clock <sandbox> --app <dir> --policy <file> --ahead <duration> [--rate <n>]
+mistri tenant clone <source> <sandbox> [--app <dir>] --policy <file> [--samples]
+mistri tenant import <sandbox> [--app <dir>] --policy <file>
+mistri tenant clock <sandbox> [--app <dir>] --policy <file> --ahead <duration> [--rate <n>]
                 [--operator <name>] [--commands <file>] [<db> | --db <target> | --config <path>]
 clone makes a new sandbox tenant from a copy of the source's rows of every
 resource the App marks clone: 'config' (and 'sample' with --samples), its
@@ -584,7 +592,7 @@ Exit codes: 1 could not run.
 Optional; an App also runs from its source.
 
 ```text
-mistri build --app <dir> [--app-entry <file>] [--out <dir>]
+mistri build [--app <dir>] [--app-entry <file>] [--out <dir>]
                 [--config <path>] [--commands <file>] [--jobs <file>]
                 [--policy <file>] [--dockerfile <file>]
 
@@ -620,7 +628,7 @@ Exit codes: 1 could not build, 2 typecheck, 3 validation, 4 bundle.
 A Worker in front of one always-on container.
 
 ```text
-mistri deploy init cloudflare --app <dir> [--config <path>] [--commands <file>] [--jobs <file>]
+mistri deploy init cloudflare [--app <dir>] [--config <path>] [--commands <file>] [--jobs <file>]
                 [--policy <file>] [--app-entry <file>] [--out <dir>] [--dir <dir>] [--force]
 mistri deploy [--dry-run] [--yes] [--allow-contract] [--allow-dirty]
                 [--migrate-url <url>] [--migrations <dir>] [--connection-limit <n>] [--verbose]
@@ -709,11 +717,11 @@ is left alone, and the exit code is 1.
 ## Running an App on this machine, and testing it
 
 ```text
-mistri dev [<app-dir>] [<db> | --db <target> | --config <path>] [options]
+mistri dev [--app <dir>] [<db> | --db <target> | --config <path>] [options]
 
 Serves the App (default: the current directory) as --app <dir> --dev does,
 with a throwaway session secret and an account per declared role, each
-sign-in printed. They are kept in <app-dir>/.mistri/ (the auth store too),
+sign-in printed. They are kept in <dir>/.mistri/ (the auth store too),
 so a restart signs the same people in; delete it to start over. Local and
 for development only: it refuses to run with NODE_ENV=production. The
 database is the App's mistri.json unless one is named. Where auth.me
@@ -723,7 +731,7 @@ tenant App, started with its --policy, gets an account per role that is a
 member of the first two tenants of its profile table, or of the platform
 realm for a platform role.
 
-mistri test init [<app-dir>] [--config <path>] [--force]
+mistri test init [--app <dir>] [--config <path>] [--force]
 
 Writes tests/start.ts, tests/journeys.test.ts and tests/permissions.test.ts
 into the App, on @mistriwork/mistri/testing alone: a journey per role (its views, a
@@ -774,6 +782,10 @@ convention, build); check --json and migrate --json carry it as context.
 
 ```text
   mistri observe [--url <base>]      print the running dev server's observer address
+  mistri observe --errors [--json] [--url <base>]
+                                     its recent page and server errors, one line each
+                                     (kind, path, message, trace id); --json is the
+                                     observer's own answer
   mistri observe --mcp [--url <base>]
                                      speak its telemetry to a coding agent on stdio:
                                      check (mistri check --json; no server needed),
@@ -812,7 +824,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--api-requests-per-minute` | [Options](#options) |
 | `--api-token-env` | [Options](#options) |
 | `--api-url` | [Options](#options) |
-| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
+| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
 | `--app-entry` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
 | `--app-mcp` | [Options](#options) |
 | `--append` | [Rows to look at](#rows-to-look-at) |
@@ -847,8 +859,8 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--dir` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill) |
 | `--dockerfile` | [Building an App for production](#building-an-app-for-production) |
 | `--drain-delay` | [Options](#options) |
-| `--dry` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
-| `--dry-run` | [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
+| `--dry-run` | [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
+| `--errors` | [Watching what a --dev server did](#watching-what-a---dev-server-did) |
 | `--export` | [Options](#options) |
 | `--fail-on-design-warning` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--fix` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
@@ -877,6 +889,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--no-config` | [Options](#options) |
 | `--no-index-check` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--no-live` | [Options](#options) |
+| `--no-query-check` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--open` | [Options](#options) |
 | `--openapi` | [Options](#options) |
 | `--operator` | [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |

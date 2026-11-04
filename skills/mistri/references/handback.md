@@ -20,11 +20,11 @@ without a word is not finished.
 - **Seed data**: `npx @mistriwork/mistri seed --app . --config ../mistri.json` (`--rows <n>` for more); a seed
   script beside the database (never in the App's folder) only for rows it cannot make: real names, per-table
   counts, status-consistent rows, the emails a row policy matches.
-- **Tests**: `npx @mistriwork/mistri test init .`, then `node --test 'tests/*.test.ts'` green, plus the App's
+- **Tests**: `npx @mistriwork/mistri test init`, then `node --test 'tests/*.test.ts'` green, plus the App's
   own journeys ([testing.md](testing.md)).
 - **Design**: `npx @mistriwork/mistri check --app . --design --fix`, then `check --design` with no warning left;
   `check --defaults` shows what the platform already infers, so nothing is restated.
-- **Grade**: `npx @mistriwork/mistri grade . --config ../mistri.json` reports nothing to fix.
+- **Grade**: `npx @mistriwork/mistri grade --config ../mistri.json` reports nothing to fix.
 - **Seen dark and on a phone**: `npx @mistriwork/mistri shot --app . --dark` and `npx @mistriwork/mistri shot --app . --phone`,
   each picture read; with a theme of its own, `theme show <id> --app . --diff <base>` says how far it stands from
   its base ([design-language.md](design-language.md)).

@@ -1,5 +1,6 @@
 import { expect, test } from './support/harness';
 import { FORECOURT_STAFF, startSample } from './support/sampleServer';
+import { FIXTURE_MS, LONG_MS } from './support/budgets';
 
 /**
  * A signed-out visitor of an App the public browses (Forecourt). At an
@@ -10,10 +11,10 @@ import { FORECOURT_STAFF, startSample } from './support/sampleServer';
  * all. This spec's own server (listen(0), a fresh database).
  */
 test.describe('a signed-out visitor', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   let sample: Awaited<ReturnType<typeof startSample>>;
   test.beforeAll(async () => {
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     sample = await startSample('forecourt-market');
   });
   test.afterAll(async () => {

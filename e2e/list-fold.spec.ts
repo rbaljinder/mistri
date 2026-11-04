@@ -1,4 +1,5 @@
 import { COMPASS, expect, test } from './support/ownServers';
+import { LONG_MS } from './support/budgets';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
 test.use({ servers: ['crm'] });
@@ -7,7 +8,7 @@ test.use({ servers: ['crm'] });
    words have wrapped (gridSizing.ts). The name set on two lines there wraps as its cell does: it was its own
    nowrap line, so "Redgate Analytics Holdi…" stood over a detail line that wrapped whole beneath it (G187). */
 test("a row's name over its folded columns wraps whole rather than being cut", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   await page.setViewportSize({ width: 820, height: 900 });
   await page.goto(`${COMPASS}/opportunities`);
   await expect(page.locator('td.has-more').first()).toBeVisible({ timeout: 60_000 });

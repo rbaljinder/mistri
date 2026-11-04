@@ -70,6 +70,8 @@ export interface PageFields {
   region?: SectionRegion;
   /** The tab of the record's section strip this section is drawn in; sections sharing a name share a panel. */
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   /** Paths relative to the root. Empty means "whatever the schema suggests". */
   paths?: string[];
@@ -97,6 +99,10 @@ export interface PageFields {
       `properties`: the record form's property rail — caption beside value, a hairline between rows, every
       field kept (an empty one is where a value is set) and editable in place where the record may change. */
   presentation?: 'summary' | 'headline' | 'facts' | 'table' | 'properties' | 'card' | 'header';
+  /** Authored `empty: 'hide' | 'show'` on a block of fields: the values the record does not have are left out ('hide') or
+      said as a dash ('show'). A property rail (the aside's default) hides them unless it says 'show'; a block with nothing
+      left to say is not drawn. A field the reader may fill in place stays, as the place to set it. */
+  emptyMode?: 'hide' | 'show';
   /** `fields`: each property is picked or typed in place; where the reader may not write the column, an action of theirs that sets it is offered as the picker. */
   edit?: true;
   /** `header`: the record's head as the author says it (a `header` section, DSL `header({ … })`), drawn in the head wherever it is
@@ -118,6 +124,8 @@ export interface PageFields {
   actions?: PageHeadlineAction[];
   /** A headline's second figure, under the first and smaller: an estimate, a unit price. */
   subfigure?: string;
+  /** A headline's line under its figure, read from a column of the record: an income's frequency. */
+  subtitle?: string;
   /** A headline's earlier value of its figure — a was-price — struck through beside it when it has one above the figure. */
   was?: string;
   /** A headline's line of small print under its actions: what the figures assume. */
@@ -167,6 +175,8 @@ export interface PageMetric {
   region?: SectionRegion;
   /** The tab of the record's section strip this section is drawn in; sections sharing a name share a panel. */
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   fn: 'count' | 'sum' | 'min' | 'max' | 'avg';
   /**
@@ -262,6 +272,8 @@ export interface PageList {
       The record itself is left out when `from` is the page's own table. Such a list has no `path` (it is ''):
       its rows are not the record's children. */
   similar?: PageSimilar;
+  /** A `current()` card's reference column whose record it opens in place of its own row (a link table's far side). */
+  opens?: string;
   /**
    * Written as `embed(view, { whose })`: the key of the App list view this
    * section draws, its rows narrowed to those pointing at the record. The
@@ -275,6 +287,8 @@ export interface PageList {
   region?: SectionRegion;
   /** The tab of the record's section strip this section is drawn in; sections sharing a name share a panel. */
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   from: string;
   path: string;
@@ -336,6 +350,8 @@ export interface PageBreakdown {
   region?: SectionRegion;
   /** The tab of the record's section strip this section is drawn in; sections sharing a name share a panel. */
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   from: string;
   path: string;
@@ -351,6 +367,8 @@ export interface PageBreakdown {
   filter?: string;
   /** Groups shown, biggest first. */
   limit?: number;
+  /** Authored `empty: 'hide'`: the section is left out while there is nothing to count, rather than drawn empty. */
+  emptyMode?: 'hide';
   /** How each figure is said, as a metric's: `percent` (0–100), `number` or `money`; and a word after it. */
   format?: FigureFormat;
   unit?: string;
@@ -375,6 +393,8 @@ export interface PageChart {
   region?: SectionRegion;
   /** The tab of the record's section strip this section is drawn in; sections sharing a name share a panel. */
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   from: string;
   path: string;
@@ -399,6 +419,12 @@ export interface PageChart {
   height?: number;
   /** A goal ruled across a line or stacked bars. */
   target?: number;
+  /** A line's curve, as on a dashboard chart: "smooth" draws a monotone curve through the points. */
+  curve?: 'smooth' | 'straight';
+  /** A donut's words for the figure in its middle ("Total visitors"), as on a dashboard chart. */
+  total?: string;
+  /** Authored `empty: 'hide'`: the section is left out while there is nothing to draw, rather than drawn empty. */
+  emptyMode?: 'hide';
   /** How each figure is said, as a metric's: `percent` (0–100), `number` or `money`; and a word after it. */
   format?: FigureFormat;
   unit?: string;
@@ -449,10 +475,10 @@ export interface TimelineStream {
   path: string;
   /** The date column the stream is ordered and merged by. */
   at: string;
-  /** The line itself: a column of `from`, or a dotted path. */
-  show: string;
-  /** A quieter second word — a kind, an author. */
-  detail?: string;
+  /** The row's text, its main value: a column of `from`, or a dotted path. It leads a row nobody wrote; in a message it sits under who, the badge and when. */
+  text: string;
+  /** The row's badge: a quieter word — a kind, a status. In a message it sits beside who and when, over the text; after the text in a row nobody wrote. */
+  badge?: string;
   /** Who wrote it: a column of `from`, or a dotted path — said beside its date. */
   by?: string;
   /** Extra narrowing, in the query language, resolved against `from`. */
@@ -495,9 +521,12 @@ export interface PageTimeline {
   region?: SectionRegion;
   /** The tab of the record's section strip this section is drawn in; sections sharing a name share a panel. */
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   streams: TimelineStream[];
-  /** Per stream, before the merge. */
+  /** Per stream, before the merge: the rows drawn first. Where a stream has more, a "Show more" asks for another
+      `limit` of each, on demand. */
   limit?: number;
   /** A composer: adds a row of the first stream, bound to this record. */
   create?: RelatedCreate<string>;
@@ -604,6 +633,8 @@ interface PageHistory {
   region?: SectionRegion;
   /** The tab of the record's section strip this section is drawn in; sections sharing a name share a panel. */
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   /** Writes shown before "Show earlier changes", 1 to 100. Default 8. */
   limit?: number;
@@ -626,6 +657,8 @@ interface PageFlows {
   region?: SectionRegion;
   /** The tab of the record's section strip this section is drawn in; sections sharing a name share a panel. */
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   width?: SectionWidth;
   offsetLeft?: SectionOffset;
@@ -648,6 +681,8 @@ interface PageDiagram {
   region?: SectionRegion;
   /** The tab of the record's section strip this section is drawn in; sections sharing a name share a panel. */
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   width?: SectionWidth;
   offsetLeft?: SectionOffset;
@@ -672,6 +707,8 @@ export interface PageCustom {
   kind: 'custom';
   region?: SectionRegion;
   tab?: string;
+  /** A mark drawn before the section's heading: one of the App's icons. */
+  icon?: import('./appIcons.js').AppIconName;
   title?: string;
   component: import('./appComponents.js').ComponentDecl;
   /** The record's own fields the component reads, label paths welcome. */

@@ -197,7 +197,7 @@ store is absent, check and a start name it and print this command. In code,
 `provisionStores` from `@mistriwork/mistri/maintenance` does the same, one store at a time
 (`only: ['tenant-store']` with `app: { tenant: binding }`).
 
-`mistri dev ./leads --policy ./leads/server/tenant-policy.ts --commands ./leads/commands.ts`
+`mistri dev --app ./leads --policy ./leads/server/tenant-policy.ts --commands ./leads/commands.ts`
 prints a sign-in per role: each account is a member of the first two tenants of
 the profile table, or of the platform realm for a platform role. In tests,
 `host.tenant(id, { roles })` makes a member the same way

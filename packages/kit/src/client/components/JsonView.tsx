@@ -29,17 +29,19 @@ import {
 } from './jsonModel.js';
 import { say } from '../copy/record/components/JsonView.js';
 
-export function JsonView({ value }: { value: object }) {
+export function JsonView({ value, bar = true }: { value: object; bar?: boolean }) {
   const [raw, setRaw] = useState(false);
   const locale = formatLocale();
   return (
     <div className="json-view">
-      <div className="json-bar">
-        <button type="button" className="json-tool" aria-pressed={raw} onClick={() => setRaw(!raw)}>
-          {say('raw')}
-        </button>
-        <CopyButton value={value} />
-      </div>
+      {bar && (
+        <div className="json-bar">
+          <button type="button" className="json-tool" aria-pressed={raw} onClick={() => setRaw(!raw)}>
+            {say('raw')}
+          </button>
+          <CopyButton value={value} />
+        </div>
+      )}
       {raw ? (
         <pre className="json-raw" tabIndex={0} aria-label={say('rawJson')}>
           {prettyJson(value)}

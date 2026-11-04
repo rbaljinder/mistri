@@ -39,6 +39,8 @@ import { lanes } from './scripts/e2e-lanes.mjs';
 /* Every server this config starts, and every spec's own, inherits it: the specs sign in many times from 127.0.0.1,
    so Better Auth's per-address limits are lifted on a loopback server (auth.ts authLimitsOffForTests). */
 process.env.MISTRI_TEST_AUTH_LIMITS ??= 'off';
+/* The seam is read only in a process that says it is a test (auth/requestRules.ts), and the servers inherit this. */
+process.env.NODE_ENV ??= 'test';
 
 /* Which lane this invocation is: `scripts/test-e2e.mjs` runs the suite twice
    and says so here, because `webServer` is a property of the whole config and

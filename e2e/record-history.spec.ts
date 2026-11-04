@@ -6,9 +6,110 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { expect, test } from './support/harness';
+import { expect, test as base } from './support/harness';
+import { fixture } from './support/fixture';
 import { scalar } from './support/db';
 import { provisionSqliteRecordHistory } from '../packages/mistri/src/adapters/history/sqliteRecordHistory.js';
+
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      directory = mkdtempSync(join(tmpdir(), 'mistri-record-history-browser-'));
+      db = join(directory, 'records.db');
+      const source = new DatabaseSync(db);
+      try {
+        source.exec(`
+      CREATE TABLE person (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+      INSERT INTO person VALUES (1, 'Ada North'), (2, 'Bea South');
+      CREATE TABLE task (id INTEGER PRIMARY KEY, subject TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'on_hold', 'done')),
+        owner_id INTEGER REFERENCES person(id), budget INTEGER);
+      INSERT INTO task VALUES (1, 'Call the depot', 'open', 1, 500), (2, 'File the report', 'open', 2, 100);`);
+      } finally {
+        source.close();
+      }
+      provisionSqliteRecordHistory(db);
+      const config = join(directory, 'connections.json');
+      writeFileSync(config, JSON.stringify({ connections: [{ name: 'history', url: db, writable: true }] }));
+      const appDirectory = join(directory, 'app');
+      mkdirSync(appDirectory);
+      writeFileSync(
+        join(appDirectory, 'app.json'),
+        JSON.stringify({
+          id: 'history',
+          name: 'History proof',
+          connection: 'history',
+          resources: {
+            task: {
+              access: 'write',
+              labels: { subject: 'Subject', owner_id: 'Owner', budget: 'Budget' },
+              audit: { redact: ['budget'] },
+              actions: { putOnHold: { label: 'Put on hold', set: { status: 'on_hold' }, when: 'status = open' } },
+            },
+            person: {},
+          },
+          views: {
+            tasks: { kind: 'list', from: 'task', label: 'Tasks', show: ['subject', 'status', 'owner_id.name'], editable: ['owner_id'] },
+          },
+          pages: {
+            task: { base: 'task', sections: [{ kind: 'fields', show: ['subject', 'status', 'owner_id', 'budget'] }, { kind: 'history' }] },
+          },
+          home: 'tasks',
+          nav: ['tasks'],
+        }),
+      );
+      const reservation = createServer();
+      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
+      const port = (reservation.address() as { port: number }).port;
+      await new Promise<void>((done) => reservation.close(() => done()));
+      origin = `http://127.0.0.1:${port}`;
+      const started = spawn(
+        process.execPath,
+        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', appDirectory, '--port', String(port)],
+        {
+          cwd: resolve('.'),
+          env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      child = started;
+      let log = '';
+      started.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      started.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 20_000);
+        const ready = () => {
+          if (log.includes('Listening on ')) {
+            clearTimeout(timer);
+            done();
+          }
+        };
+        started.stdout!.on('data', ready);
+        started.once('exit', () => {
+          clearTimeout(timer);
+          fail(new Error(`The fixture exited: ${log}`));
+        });
+      });
+    },
+    async () => {
+      if (child && child.exitCode === null) {
+        const closed = once(child, 'close');
+        child.kill('SIGTERM');
+        const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+        try {
+          await closed;
+        } finally {
+          clearTimeout(force);
+        }
+      }
+      rmSync(directory, { recursive: true, force: true });
+    },
+  ),
+});
 
 /**
  * A record page's `history()`: a cell edited in a list, a Save on the page
@@ -24,105 +125,6 @@ let origin = '';
 let db = '';
 let directory = '';
 let child: ChildProcess | undefined;
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'mistri-record-history-browser-'));
-  db = join(directory, 'records.db');
-  const source = new DatabaseSync(db);
-  try {
-    source.exec(`
-      CREATE TABLE person (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
-      INSERT INTO person VALUES (1, 'Ada North'), (2, 'Bea South');
-      CREATE TABLE task (id INTEGER PRIMARY KEY, subject TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'on_hold', 'done')),
-        owner_id INTEGER REFERENCES person(id), budget INTEGER);
-      INSERT INTO task VALUES (1, 'Call the depot', 'open', 1, 500), (2, 'File the report', 'open', 2, 100);`);
-  } finally {
-    source.close();
-  }
-  provisionSqliteRecordHistory(db);
-  const config = join(directory, 'connections.json');
-  writeFileSync(config, JSON.stringify({ connections: [{ name: 'history', url: db, writable: true }] }));
-  const appDirectory = join(directory, 'app');
-  mkdirSync(appDirectory);
-  writeFileSync(
-    join(appDirectory, 'app.json'),
-    JSON.stringify({
-      id: 'history',
-      name: 'History proof',
-      connection: 'history',
-      resources: {
-        task: {
-          access: 'write',
-          labels: { subject: 'Subject', owner_id: 'Owner', budget: 'Budget' },
-          audit: { redact: ['budget'] },
-          actions: { putOnHold: { label: 'Put on hold', set: { status: 'on_hold' }, when: 'status = open' } },
-        },
-        person: {},
-      },
-      views: {
-        tasks: { kind: 'list', from: 'task', label: 'Tasks', show: ['subject', 'status', 'owner_id.name'], editable: ['owner_id'] },
-      },
-      pages: {
-        task: { base: 'task', sections: [{ kind: 'fields', show: ['subject', 'status', 'owner_id', 'budget'] }, { kind: 'history' }] },
-      },
-      home: 'tasks',
-      nav: ['tasks'],
-    }),
-  );
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  origin = `http://127.0.0.1:${port}`;
-  const started = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', appDirectory, '--port', String(port)],
-    {
-      cwd: resolve('.'),
-      env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  child = started;
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 20_000);
-    const ready = () => {
-      if (log.includes('Listening on ')) {
-        clearTimeout(timer);
-        done();
-      }
-    };
-    started.stdout!.on('data', ready);
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The fixture exited: ${log}`));
-    });
-  });
-});
-
-test.afterAll(async () => {
-  if (child && child.exitCode === null) {
-    const closed = once(child, 'close');
-    child.kill('SIGTERM');
-    const force = setTimeout(() => child.kill('SIGKILL'), 5000);
-    try {
-      await closed;
-    } finally {
-      clearTimeout(force);
-    }
-  }
-  rmSync(directory, { recursive: true, force: true });
-});
 
 test("a cell, a Save and an action each become one entry on the record, in the App's words", async ({ page }) => {
   await page.goto(`${origin}/history/tasks`);

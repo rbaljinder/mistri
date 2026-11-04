@@ -1,5 +1,5 @@
 /**
- * `mistri dev [<app-dir>]`: the App on this machine with nothing to set up first.
+ * `mistri dev [--app <dir>]`: the App on this machine with nothing to set up first.
  *
  * Serving an App with sign-in wants a session secret, an administrator and an
  * account per role before anyone can look at a role's screens; an agent
@@ -8,7 +8,7 @@
  * arguments to `--app <dir> --dev …`, and once the server answers, makes the
  * accounts and prints a sign-in for each.
  *
- * Everything it keeps lives in `<app-dir>/.mistri/` — the secret and the
+ * Everything it keeps lives in `<dir>/.mistri/` — the secret and the
  * passwords (dev.json), the auth store (XDG_CONFIG_HOME points there) — so a
  * restart signs the same people in, and deleting the folder starts over. The
  * folder ignores itself, and the scaffold's .gitignore names it as well.
@@ -16,16 +16,16 @@
  * which is why it refuses to run under NODE_ENV=production.
  */
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import type { LoadedApp } from '../app/apps.js';
-import { findConfig } from '@mistriwork/engine/server/config/profile.js';
+import { appDirectoryWord, findConfig, holdsApp } from '@mistriwork/engine/server/config/profile.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { isTenantApp } from '../../shared/appModel.js';
 import { columnKind, primaryKey, tableNamed } from '@mistriwork/engine/shared/schema.js';
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
 
-const USAGE = 'mistri dev [<app-dir>] [<db> | --db <target> | --config <path>] [serve options]';
+const USAGE = 'mistri dev [--app <dir>] [<db> | --db <target> | --config <path>] [serve options]';
 const ADMIN = 'admin@example.test';
 
 export class DevRefusal extends Error {}
@@ -83,19 +83,18 @@ export function prepareDev(argv: string[], env: NodeJS.ProcessEnv = process.env)
       'dev makes throwaway accounts and a session secret kept on this machine, and NODE_ENV is production. ' +
         'Serve a deployment with mistri --app <dir>, BETTER_AUTH_SECRET and its own accounts.',
     );
-  let args = [...argv];
+  const args = [...argv];
   let dir = '.';
   const named = args.indexOf('--app');
   if (named >= 0) {
     dir = args[named + 1] ?? '';
     args.splice(named, 2);
-  } else if (args[0] && !args[0].startsWith('-') && existsSync(args[0]) && statSync(args[0]).isDirectory()) {
-    dir = args[0];
-    args = args.slice(1);
+  } else {
+    const typed = appDirectoryWord('mistri dev', args[0]);
+    if (typed) throw new DevRefusal(typed);
   }
   const app = resolve(dir);
-  if (!['app.ts', 'app.mjs', 'app.json'].some((name) => existsSync(join(app, name))))
-    throw new DevRefusal(`${app} has no app.ts (or app.mjs / app.json): name the App's directory. ${USAGE}`);
+  if (!holdsApp(app)) throw new DevRefusal(`${app} has no app.ts (or app.mjs / app.json): name the App's directory with --app. ${USAGE}`);
 
   /* The config is found before XDG_CONFIG_HOME moves into .mistri/, by the one rule every App command reads
      (engine config/profile.ts): the App's own mistri.json, the working directory's, the person's own. Named, since

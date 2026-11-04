@@ -67,7 +67,14 @@ export async function startSuiteLogin() {
       apps.push({ id, directory: `./${id}`, config: `./${id}/connections.json`, mount: spec.mount });
     }
     const file = join(dir, 'suite.json');
-    const environment = { SECRET: 'suite-login-fixture-secret-longer-than-thirty-two-characters' };
+    /* The identity opens with only the names its config maps (identity.environment), not process.env, so the sign-in
+       seam reaches it by a mapping too: it is honored only where NODE_ENV says test (auth/requestRules.ts), and a few
+       accounts sign up from one address within ten seconds. */
+    const environment = {
+      SECRET: 'suite-login-fixture-secret-longer-than-thirty-two-characters',
+      LIMITS: 'off',
+      MODE: 'test',
+    };
     writeFileSync(
       file,
       JSON.stringify({
@@ -78,7 +85,7 @@ export async function startSuiteLogin() {
           name: 'Keystone',
           store: './identity.db',
           grants: './grants.db',
-          environment: { BETTER_AUTH_SECRET: 'SECRET' },
+          environment: { BETTER_AUTH_SECRET: 'SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
           landing: [{ app: 'lender', roles: ['officer'] }, { app: 'dealer', roles: ['manager'] }, { app: 'customer' }],
         },
       }),

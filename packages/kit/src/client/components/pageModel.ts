@@ -21,6 +21,9 @@ export interface PageSection {
   sort?: string;
   height?: number;
   target?: number;
+  /** A line chart's curve and a donut's middle words, as a dashboard chart's. */
+  curve?: 'smooth' | 'straight';
+  total?: string;
   /** A note's words, mark and one way on. */
   text?: string;
   icon?: import('@mistriwork/engine/shared/appIcons.js').AppIconName;
@@ -48,8 +51,8 @@ export interface PageSection {
     from: string;
     path: string;
     at: string;
-    show: string;
-    detail?: string;
+    text: string;
+    badge?: string;
     by?: string;
     filter?: string;
     side?: string;
@@ -100,15 +103,17 @@ export interface PageSection {
   headerActions?: string[];
   /** A headline's second figure, its figure's earlier value, and small print. */
   subfigure?: string;
+  subtitle?: string;
   was?: string;
   note?: string;
   /** A similar list: rows of the page's own table sharing the record's `same` values, `near` its numbers. */
   similar?: import('@mistriwork/engine/shared/pageModel.js').PageSimilar;
+  opens?: string;
   workflow?: ResolvedWorkflowStatus;
   create?: RelatedCreate<string>;
   empty?: import('@mistriwork/engine/shared/listPresentations.js').AppListEmpty;
   /** Authored `empty: 'hide' | 'collapse'`: the list is left out, or said in one line, while it has no rows. */
-  emptyMode?: 'hide' | 'collapse';
+  emptyMode?: 'hide' | 'collapse' | 'show';
   /** The rows under a header for each record they share (shared/pageModel.ts, PageGroup); `limit` is then the rows to a group. */
   group?: import('@mistriwork/engine/shared/pageModel.js').PageGroup;
   /** Columns summed in the list's footer, over every row it matches. */
@@ -161,8 +166,8 @@ export interface SectionPlan {
     view?: ViewDef;
     from: string;
     at: string;
-    show: string;
-    detail?: string;
+    text: string;
+    badge?: string;
     by?: string;
     /** A timeline's `side`: the stream's key columns, and its read narrowed to the other party's rows. */
     key?: string[];

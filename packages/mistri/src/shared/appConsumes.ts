@@ -17,7 +17,7 @@
  * Receiving stock is then a New form on the receipt, with no command.
  *
  * A balance that is stored and must refuse an oversell is `consumes`; a figure
- * that is only read is a rollup (`sum('work_order_part', 'quantity')`).
+ * that is only read is a rollup (`rollup.sum('work_order_part', 'quantity')`).
  *
  * This module is the catalog's half: what a rule names, resolved once, and the
  * problems that keep an App from loading — a reference the line does not

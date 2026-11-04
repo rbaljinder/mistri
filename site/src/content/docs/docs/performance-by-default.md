@@ -19,7 +19,7 @@ mistri keeps an App fast by counting round trips to the database, because the di
 Feel the distance while you build. A database on your laptop answers in a fraction of a millisecond, so a request that makes forty round trips looks instant until it is deployed.
 
 ```sh
-npx @mistriwork/mistri dev . --db-latency 20
+npx @mistriwork/mistri dev --db-latency 20
 ```
 
 `--db-latency <ms>` (or `MISTRI_DEV_DB_LATENCY`) delays every database round trip by that long. It is refused under `NODE_ENV=production` and when serving a build. While you develop, each request that touched the database logs its cost:

@@ -1291,6 +1291,13 @@
 .page-section-bar > .page-section-head {
   flex: 1 1 auto;
 }
+/* A section's mark leads its heading, in the heading's quieter ink (a dashboard section's is the same, Chart.css). */
+.page-section-head .dash-section-icon {
+  flex: none;
+  margin-right: var(--space-3);
+  vertical-align: -2px;
+  color: var(--ink-muted);
+}
 .page-section-bar > .page-related-create {
   flex-wrap: wrap;
   justify-content: flex-start;

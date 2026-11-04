@@ -38,15 +38,14 @@ const dash = (sections: unknown[], more: Record<string, unknown> = {}) => ({
 });
 const sections = (parsed: ReturnType<typeof app>) => (parsed.views.overview as AppDashboardView).sections;
 
-test("a banner is a note's variant: a title, a short eyebrow, an action and a file row's picture", () => {
+test("a banner is a section of its own: a title, a short eyebrow, an action and a file row's picture", () => {
   const [banner] = sections(
     app(
       dash([
         {
-          kind: 'note',
+          kind: 'banner',
           title: 'Turn visitors into customers',
           text: 'Create a campaign.',
-          variant: 'banner',
           eyebrow: ' Growth ',
           action: { label: 'Open tasks', to: 'tasks' },
           image: { from: 'picture', key: 1, alt: 'A desk with a plant' },
@@ -58,17 +57,14 @@ test("a banner is a note's variant: a title, a short eyebrow, an action and a fi
   assert.equal(banner.eyebrow, 'Growth');
   assert.equal(banner.image?.from, 'picture');
   assert.throws(() => app(dash([{ kind: 'note', text: 'x', eyebrow: 'New' }])), /only a banner carries/);
-  assert.throws(() => app(dash([{ kind: 'note', text: 'x', variant: 'hero' }])), /takes 'banner'/);
-  assert.throws(() => app(dash([{ kind: 'note', text: 'x', variant: 'banner' }])), /has no "title"/);
-  assert.throws(() => app(dash([{ kind: 'note', title: 'T', text: 'x', variant: 'banner', eyebrow: 'x'.repeat(41) }])), /short tag/);
-  assert.throws(
-    () => app(dash([{ kind: 'note', title: 'T', text: 'x', variant: 'banner', image: { from: 'picture', key: 1 } }])),
-    /needs an "alt"/,
-  );
-  assert.throws(
-    () => app(dash([{ kind: 'note', title: 'T', text: 'x', variant: 'banner', image: { from: 'task', key: 1, alt: 'a' } }])),
-    /image/,
-  );
+  assert.throws(() => app(dash([{ kind: 'note', text: 'x', variant: 'hero' }])), /takes 'quiet' or 'callout'/);
+  assert.throws(() => app(dash([{ kind: 'note', text: 'x', variant: 'banner' }])), /its own section now: banner\(title, text\)/);
+  assert.throws(() => app(dash([{ kind: 'banner', text: 'x' }])), /has no "title"/);
+  assert.equal(sections(app(dash([{ kind: 'note', text: 'x', variant: 'callout' }])))[0].variant, 'callout');
+  assert.equal(sections(app(dash([{ kind: 'note', text: 'x', variant: 'quiet' }])))[0].variant, 'quiet');
+  assert.throws(() => app(dash([{ kind: 'banner', title: 'T', text: 'x', eyebrow: 'x'.repeat(41) }])), /short tag/);
+  assert.throws(() => app(dash([{ kind: 'banner', title: 'T', text: 'x', image: { from: 'picture', key: 1 } }])), /needs an "alt"/);
+  assert.throws(() => app(dash([{ kind: 'banner', title: 'T', text: 'x', image: { from: 'task', key: 1, alt: 'a' } }])), /image/);
 });
 
 test("steps are a breakdown's shape over one plain column, with a short note per value", () => {
