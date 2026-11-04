@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /** The Console's Operations and Analytics rooms on a disposable native
  * Console with its own stores: both rooms open, and a dead job is redriven. */
 import { mkdirSync } from 'node:fs';
@@ -11,7 +12,7 @@ test.use({ deviceScaleFactor: 2 });
 for (const width of [1280, 390])
   test(`Console Operations and Analytics at ${width}px`, async ({ page, context }, info) => {
     // A fresh Console compiles its client cold through Vite, and walks two rooms.
-    test.setTimeout(90_000);
+    test.setTimeout(SLOW_MS);
     const cleanups: (() => Promise<void>)[] = [];
     const operations = consoleOperations();
     cleanups.push(() => operations.close());

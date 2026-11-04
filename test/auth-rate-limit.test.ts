@@ -26,6 +26,7 @@ describe("Better Auth's per-address limits", () => {
   let host: AppHost;
   let loaded: Awaited<ReturnType<typeof loadApp>>;
   const saved = process.env[TEST_AUTH_LIMITS];
+  const savedEnv = process.env.NODE_ENV;
 
   before(async () => {
     tmp = mkdtempSync(join(tmpdir(), 'mistri-auth-rate-limit-'));
@@ -66,6 +67,8 @@ describe("Better Auth's per-address limits", () => {
   after(() => {
     if (saved === undefined) delete process.env[TEST_AUTH_LIMITS];
     else process.env[TEST_AUTH_LIMITS] = saved;
+    if (savedEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = savedEnv;
     server?.close();
     server?.closeAllConnections();
     host.auth?.close();
@@ -98,14 +101,40 @@ describe("Better Auth's per-address limits", () => {
     );
   });
 
-  test('the seam lifts the limit on loopback', async () => {
+  test('the seam lifts the limit on loopback in a process that says it is a test', async () => {
     process.env[TEST_AUTH_LIMITS] = 'off';
+    process.env.NODE_ENV = 'test';
     host.auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin], listenHost: '127.0.0.1' });
     assert.deepEqual(await attempts(5), [401, 401, 401, 401, 401]);
   });
 
+  test('the seam is ignored, and said, outside a test even on loopback: a proxied production server listens there', async () => {
+    process.env[TEST_AUTH_LIMITS] = 'off';
+    process.env.NODE_ENV = 'production';
+    const said: string[] = [];
+    const error = console.error;
+    console.error = (...args: unknown[]) => void said.push(args.join(' '));
+    try {
+      host.auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin], listenHost: '127.0.0.1' });
+      // A second server in the same process says nothing more: one warning, not one per start.
+      host.auth.close();
+      host.auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin], listenHost: '127.0.0.1' });
+    } finally {
+      console.error = error;
+    }
+    const lines = said.filter((line) => line.includes(`${TEST_AUTH_LIMITS}=off is ignored`));
+    assert.equal(lines.length, 1, said.join('\n'));
+    assert.match(lines[0], /NODE_ENV is "production", not "test"/);
+    const statuses = await attempts(5);
+    assert.ok(
+      statuses.slice(3).every((status) => status === 429),
+      statuses.join(' '),
+    );
+  });
+
   test('the seam is ignored, and said, for a server that listens beyond loopback', async () => {
     process.env[TEST_AUTH_LIMITS] = 'off';
+    process.env.NODE_ENV = 'test';
     const said: string[] = [];
     const error = console.error;
     console.error = (...args: unknown[]) => void said.push(args.join(' '));

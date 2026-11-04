@@ -1,5 +1,5 @@
 /**
- * A rollup's query through references (appRollups.ts): `count('task', { whose:
+ * A rollup's query through references (appRollups.ts): `rollup.count('task', { whose:
  * 'project_id.client_id', query: 'project_id.status != closed' })` — which rows
  * count is said about the rows they name, so a product's units sold leave out
  * cancelled orders without a status copied onto every line. What the catalog

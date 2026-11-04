@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /** Owned suite entry/navigation acceptance. Requires a current built client.
  * Every test owns its databases and reserved ephemeral port; no preview server.
  * Bare-root defaults must never override an explicit switch to the root App. */
@@ -66,7 +67,7 @@ async function startNavigationSuite(switcher: AppSwitcherConfig) {
       apps.push({ id, directory: `./${id}`, config: `./${id}/connections.json`, mount: id === 'lender' ? '/' : '/benefits' });
     }
     const file = join(dir, 'suite.json');
-    const environment = { SECRET: 'owned-navigation-suite-secret-longer-than-thirty-two-characters' };
+    const environment = { SECRET: 'owned-navigation-suite-secret-longer-than-thirty-two-characters', LIMITS: 'off', MODE: 'test' };
     writeFileSync(
       file,
       JSON.stringify({
@@ -78,7 +79,7 @@ async function startNavigationSuite(switcher: AppSwitcherConfig) {
           name: 'Navigation Suite',
           store: './identity.db',
           grants: './grants.db',
-          environment: { BETTER_AUTH_SECRET: 'SECRET' },
+          environment: { BETTER_AUTH_SECRET: 'SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
         },
       }),
     );
@@ -147,7 +148,7 @@ const test = base.extend<{ suite: Suite; switcher: AppSwitcherConfig }>({
   },
 });
 test.use({ storageState: { cookies: [], origins: [] }, carryFirstPaint: false, viewport: { width: 390, height: 844 } });
-test.setTimeout(90_000);
+test.setTimeout(SLOW_MS);
 test.beforeEach(async ({ page }) => {
   await prepare(page);
 });

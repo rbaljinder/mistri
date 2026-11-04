@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { APP_PAGE_PERMISSIONS_POLICY, PERMISSIONS_POLICY } from '../packages/engine/src/server/http/baselineHeaders.js';
 import { builtClient, shellPolicy } from '../packages/engine/src/server/clientHttp.js';
 
 const ENTRY = 'assets/index-AbC123_x.js';
@@ -286,6 +287,16 @@ test('the directory is read once: a file that appears later is not served', asyn
   put('assets/late-12345678.js', JS, false);
   const reply = await ask('/assets/late-12345678.js');
   assert.equal(reply.headers['content-type'], 'text/html; charset=utf-8');
+});
+
+test('an App page lets its own origin use the camera (the scan input); a file does not say, so the baseline stands', async () => {
+  const page = await ask('/', { 'accept-encoding': 'br' });
+  assert.equal(page.headers['permissions-policy'], APP_PAGE_PERMISSIONS_POLICY);
+  assert.match(APP_PAGE_PERMISSIONS_POLICY, /camera=\(self\)/);
+  assert.match(APP_PAGE_PERMISSIONS_POLICY, /microphone=\(\)/);
+  // Only the camera differs: nothing else was loosened with it.
+  assert.equal(APP_PAGE_PERMISSIONS_POLICY.replace('camera=(self)', 'camera=()'), PERMISSIONS_POLICY);
+  assert.equal((await ask(`/${ENTRY}`)).headers['permissions-policy'], undefined);
 });
 
 test('the page carries its Content-Security-Policy, its inline script pinned by hash; files do not', async () => {

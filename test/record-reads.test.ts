@@ -235,3 +235,11 @@ test("a timeline's reads are the section's own: the author's name beside its row
   );
   assert.ok(reads.every((read) => read.path === '/api/view/run' && read.body.offset === 0));
 });
+
+test("a shown column's display `subtitle` is read with the record, through a reference too", () => {
+  const display = (table: string, name: string) => (table === 'account' && name === 'name' ? { subtitle: 'tier' } : undefined);
+  const read = { ...names, display };
+  assert.ok(fieldsColumns(read, account, { kind: 'fields', paths: ['name'] }).fetched.includes('tier'));
+  assert.ok(fieldsColumns(read, deal, { kind: 'fields', paths: ['account_id.name'] }).fetched.includes('account_id.tier'));
+  assert.ok(!fieldsColumns(names, account, { kind: 'fields', paths: ['name'] }).fetched.includes('tier'));
+});

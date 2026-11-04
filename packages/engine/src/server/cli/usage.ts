@@ -19,7 +19,11 @@ export function flagWordsOf(usage: string): string[] {
 /** What was probably meant, said the way a person would type it, or nothing when nothing is near. */
 export async function didYouMean(said: string, among: readonly string[]): Promise<string> {
   const { distance, nearest } = await import('../../shared/suggest.js');
-  const near = nearest(said, among);
+  /* Never the spelling that was typed: "Did you mean --brief?" to --brief is no help. */
+  const near = nearest(
+    said,
+    among.filter((word) => word !== said),
+  );
   return near !== undefined && distance(said.toLowerCase(), near.toLowerCase()) <= Math.max(1, Math.floor(said.length / 3))
     ? ` Did you mean ${near}?`
     : '';
@@ -38,4 +42,14 @@ export async function packageVersion(): Promise<string> {
   } catch {
     return '0.0.0';
   }
+}
+
+/** The commands whose usage spells `flag` (`mistri schema --brief`), for a flag typed where no command takes it. */
+export function commandsTaking(usage: string, bin: string, flag: string): string[] {
+  const out = new Set<string>();
+  for (const line of usage.split('\n')) {
+    const command = new RegExp(`^ {2}${bin} ([a-z][a-z-]*)(?=\\s|$)`).exec(line)?.[1];
+    if (command && new RegExp(`(?<![\\w-])${flag}(?![\\w-])`).test(line)) out.add(command);
+  }
+  return [...out];
 }

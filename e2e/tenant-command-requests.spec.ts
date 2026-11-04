@@ -1,6 +1,7 @@
 import { test, expect, type Page } from './support/harness.js';
 import { follow } from './support/app.js';
 import { startTenantAssignment, type TenantAssignmentFixture } from './support/tenantProofServer.js';
+import { SLOW_MS } from './support/budgets';
 
 /*
  * What one command costs a tenant's record page once it lands (G173). A
@@ -53,7 +54,7 @@ async function settled(page: Page, asked: string[]) {
 }
 
 test.describe('one tenant command on a record page', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startTenantAssignment();

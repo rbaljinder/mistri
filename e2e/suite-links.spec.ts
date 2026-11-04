@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 /** Checked authored CTAs across real independent App hosts and their external mounts. */
 import { createServer } from 'node:http';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -11,7 +12,7 @@ import { changeSuiteGrant } from '../packages/mistri/src/server/cli/suiteGrant';
 test('notes and headlines use checked mounted links, fresh grants and document navigation', async ({ page, context }) => {
   // Two cold App hosts and five document loads share this journey's budget.
   // CI reaches the final revoked-grant navigation just as the default 40s ends.
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   const directory = mkdtempSync(join(tmpdir(), 'tw-suite-links-'));
   let suite: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   try {

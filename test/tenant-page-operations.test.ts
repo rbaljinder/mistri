@@ -89,7 +89,7 @@ test('alternate-unique root values anchor lists/counts/sums/breakdowns/timelines
     { kind: 'metric', from: 'child', path: 'parent_code', fn: 'count' },
     { kind: 'metric', from: 'child', path: 'parent_code', fn: 'sum', column: 'amount' },
     { kind: 'breakdown', from: 'child', path: 'parent_code', by: 'name' },
-    { kind: 'timeline', streams: [{ from: 'child', path: 'parent_code', at: 'at', show: 'name' }] },
+    { kind: 'timeline', streams: [{ from: 'child', path: 'parent_code', at: 'at', text: 'name' }] },
   );
   const before = structuredClone({ key, definition }),
     result = await tenantPagePlan(f.adapter, f.schema, definition, key, now);
@@ -120,7 +120,7 @@ test('about-parent lookup via unique code supplies actual parent PK and every re
       { kind: 'list', from: 'site_child', path: 'site_code', of: 'site_code', columns: ['id'] },
       { kind: 'list', from: 'site_child_pk', path: 'site_id', of: 'site_code', columns: ['id'] },
       // A timeline stream's `about` is planned the same way, on the same scoped read.
-      { kind: 'timeline', streams: [{ from: 'site_child', path: 'site_code', at: 'amount', show: 'id', of: 'site_code' }] },
+      { kind: 'timeline', streams: [{ from: 'site_child', path: 'site_code', at: 'amount', text: 'id', of: 'site_code' }] },
     );
   const result = await tenantPagePlan(f.adapter, f.schema, definition, { id: 'parent-id-a' }, now);
   const timeline = result.plans[3];
@@ -245,7 +245,7 @@ for (const section of [
   childList,
   { kind: 'metric' as const, from: 'child', path: 'parent_code', fn: 'count' as const },
   { kind: 'breakdown' as const, from: 'child', path: 'parent_code', by: 'name' },
-  { kind: 'timeline' as const, streams: [{ from: 'child', path: 'parent_code', at: 'at', show: 'name' }] },
+  { kind: 'timeline' as const, streams: [{ from: 'child', path: 'parent_code', at: 'at', text: 'name' }] },
 ])
   test(`NULL alternate root key refuses ${section.kind} planning instead of selecting unrelated NULL children`, async (t) => {
     const f = await fixture(t);

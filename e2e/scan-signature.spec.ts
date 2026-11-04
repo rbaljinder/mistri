@@ -1,13 +1,14 @@
 import { expect, test, type Page } from './support/harness';
 import { DEPOT_ADMIN, startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { TOUR_MS } from './support/budgets';
 
 /* The two inputs a display rule gives a column that is not typed as text — a code the camera reads (`scan`) and a
    signature drawn on a pad (`signature`) — filled in a real browser and saved, each read back from the database.
    Depot holds both: a product's UPC and a pick list's proof of delivery. The scan is the typed path (a browser
    under test has no camera); the camera's own decoding is the unit test's (builtInInputs.test.tsx). */
 test.describe('scan and signature fields', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(TOUR_MS);
 
   const signIn = async (page: Page, origin: string) => {
     const login = await page.request.post(`${origin}/api/auth/sign-in/email`, { headers: { origin }, data: DEPOT_ADMIN });

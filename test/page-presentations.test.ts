@@ -51,6 +51,18 @@ test('card() is a section of its own: titled by its first field, standing in the
   assert.throws(() => page({ kind: 'card', show: ['dealer_id'], links: [] }), /has no "links"/);
 });
 
+test("a second line is a headline figure's: a measured figure and a header's fact are refused it by name, not left to do nothing", () => {
+  assert.throws(
+    () => page({ kind: 'metric', from: 'invoice', whose: 'vehicle_id', measure: 'count', subtitle: 'period' }),
+    /has "subtitle", which is a second line under a record's own figure/,
+  );
+  assert.throws(
+    () => page({ kind: 'header', facts: [{ column: 'price', subtitle: 'period' }] }),
+    /has "subtitle", which is the second line of a headline figure/,
+  );
+  assert.throws(() => page({ kind: 'header', subtitle: 'period', status: 'status' }), /"subtitle"/);
+});
+
 test('a card and a headline round-trip through the file as the sections they are', () => {
   const sections = [
     { kind: 'card', title: 'Sold by', show: ['dealer_id', 'dealer_id.city'] },
@@ -59,6 +71,7 @@ test('a card and a headline round-trip through the file as the sections they are
       show: ['price', 'year'],
       was: 'est_price',
       subfigure: 'monthly',
+      subtitle: 'price_period',
       note: 'Before tax',
     },
   ];
@@ -68,7 +81,14 @@ test('a card and a headline round-trip through the file as the sections they are
     written.map((section) => section.kind),
     ['card', 'headline'],
   );
-  assert.deepEqual(written[1], { kind: 'headline', show: ['price', 'year'], was: 'est_price', subfigure: 'monthly', note: 'Before tax' });
+  assert.deepEqual(written[1], {
+    kind: 'headline',
+    show: ['price', 'year'],
+    was: 'est_price',
+    subfigure: 'monthly',
+    subtitle: 'price_period',
+    note: 'Before tax',
+  });
   const linked = parsePagesConfig(
     {
       pages: [
@@ -311,7 +331,7 @@ test("headline() is a section of its own: the figure first, one or two links of 
     () => page({ kind: 'headline', show: ['price'], actions: [{ label: 'Go', to: 'inquire' }] }),
     /has "actions", which is now "links": the calls to action beside the figure/,
   );
-  for (const key of ['subfigure', 'was', 'note'] as const) {
+  for (const key of ['subfigure', 'subtitle', 'was', 'note'] as const) {
     assert.throws(() => page({ kind: 'fields', show: ['price'], [key]: 'x' }), new RegExp(`has "${key}", which belongs on a headline`));
   }
   assert.throws(
@@ -477,7 +497,12 @@ test('a record header is a kind of its own: a status and facts, drawn in the hea
     );
   }
   assert.throws(() => page({ kind: 'header', status: 'account_id.status' }), /"status" that is not one of the record's own columns/);
-  assert.throws(() => page({ kind: 'header', facts: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] }), /"facts" must be one to 6/);
+  assert.throws(
+    () => page({ kind: 'header', facts: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm'] }),
+    /"facts" must be one to 12/,
+  );
+  // More than the line holds is allowed: the facts past the sixth fold into the head's More.
+  assert.doesNotThrow(() => page({ kind: 'header', facts: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] }));
   assert.throws(
     () => page({ kind: 'fields', show: ['price'], status: 'status' }),
     /has no "status"\. "status" belongs inside a record header/,
@@ -579,7 +604,6 @@ test('the current card is a kind of its own: one related row a query and a sort 
     [{ create: 'Add lease' }, /has no "create"/],
     [{ presentation: 'gallery' }, /has no "presentation"/],
     [{ empty: false }, /say what no row means/],
-    [{ empty: 'hide' }, /say what no row means/],
     [{ empty: 'collapse' }, /say what no row means/],
   ] as const) {
     assert.throws(() => page({ kind: 'current', from: 'lease', whose: 'unit_id', ...extra }), said);

@@ -12,8 +12,8 @@ mistri — the App framework: a few lines of TypeScript, a complete App
 over your own database.
 
   mistri --app <dir>              serve an App (see --app below)
-  mistri check --app <dir>        types, typecheck and validation of an App (see below)
-  mistri build --app <dir>        make an App ready for production (see below)
+  mistri check [--app <dir>]      types, typecheck and validation of an App (see below)
+  mistri build [--app <dir>]      make an App ready for production (see below)
   mistri new [<name>] [<dir>]     a starter App with its own SQLite database: a task
                                   list in one app.ts, a schema and rows, for mistri dev
   mistri new --brief <BRIEF.md> [<dir>]
@@ -31,9 +31,9 @@ over your own database.
   mistri flags --help             explicit flag control-store provisioning
   mistri experiments --help       explicit experiment evidence-store provisioning
   mistri analytics --help         behavior-analytics store provisioning and funnels
-  mistri shot --app <dir> [<route>…]
+  mistri shot [--app <dir>] [<route>…]
                                   an App's pages as PNG files, to look at (see below)
-  mistri grade [<app-dir>]        an App's pages measured against the rubric (see below)
+  mistri grade [--app <dir>]      an App's pages measured against the rubric (see below)
   mistri theme show <look|.>      a theme's every color, recipe, type and shape after
                                   extends, inherited values marked (see below)
   mistri schema --brief [<db>]    the schema as one line per table, for an agent's context
@@ -43,8 +43,8 @@ over your own database.
                                   keys appended as comments, or its literal captions
   mistri migrate <command>        change the schema with versioned SQL files (see below)
   mistri seed [--app <dir>]       believable rows in an App's writable database (see below)
-  mistri dev [<app-dir>]          serve an App with a dev secret and a sign-in per role (see below)
-  mistri test init [<app-dir>]    a starter suite: a journey per role, a permissions matrix (see below)
+  mistri dev [--app <dir>]        serve an App with a dev secret and a sign-in per role (see below)
+  mistri test init [--app <dir>]  a starter suite: a journey per role, a permissions matrix (see below)
   mistri flows start <resource>
                                   start a resource's flows on records already there (see below)
   mistri jobs run <name>          run one of an App's jobs at times now, once (see below)
@@ -170,6 +170,14 @@ Options:
                       mistri docs getting-started is where to begin.
                       One App is served at the root (/leases/12); several
                       each under its id (/lintel/leases/12).
+                      --app names the App on every command that takes one
+                      (check, build, shot, grade, dev, test init, flows, jobs,
+                      decide, tenant, deploy init, migrate files). Left out, the
+                      App is the current directory when it holds an app.ts (or
+                      app.mjs / app.json). seed, migrate, messages extract and
+                      theme show read it left out as no App. A directory typed
+                      where a database or route goes is refused, never read as
+                      the App.
       --mount <app>=<path>
                       Where an App is served, over that default: / makes it
                       the main App at the root, /billing puts it there.
@@ -301,12 +309,12 @@ Options:
 
 Checking an App while authoring it — the one command of the loop:
 
-  mistri check --app <dir> [--app-entry <file>]
+  mistri check [--app <dir>] [--app-entry <file>]
                   [<db> | --db <target> | --config <path>]
                   [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>]
                   [--routes [--mount <app>=<path>] [--base-path <path>]]
                   [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
-                  [--no-index-check]
+                  [--no-index-check] [--no-query-check]
                   [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
                   [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
 
@@ -330,6 +338,10 @@ Checking an App while authoring it — the one command of the loop:
   lists them in full. On PostgreSQL an indexes step names each foreign key, default
   sort, fixed filter, ownership column and search the App reads by that no index
   leads (index-missing), with the CREATE INDEX that adds it; --no-index-check skips it.
+  A queries step has the database EXPLAIN each read the App's pages would make
+  (lists, related and grouped lists, timelines, breakdowns, figures, rollups, and its own list tabs, dashboard figures and segments): one a
+  statement, never run, in a READ ONLY transaction on PostgreSQL. A read it refuses
+  is a query-invalid error naming the page:section, list, dashboard or segment; --no-query-check skips it.
   --routes also prints every address the App answers to (/{app}/leads/{id},
   /{app}/leads/new, ...) and what each one opens. --design reads its pages,
   forms and shell for compositions that come out basic (a list cut beside an
@@ -382,7 +394,7 @@ Checking an App while authoring it — the one command of the loop:
 
 Looking at an App — its pages as PNG files, for the agent that built it:
 
-  mistri shot --app <dir> [<route>…] [<db> | --db <target> | --config <path>]
+  mistri shot [--app <dir>] [<route>…] [<db> | --db <target> | --config <path>]
                  [--commands <file>] [--jobs <file>] [--policy <file>]
                  [--theme <id|all>] [--palette <id>]
                  [--compare <look>] [--recipes <part>] [--dark | --light] [--phone | --desk | --both]
@@ -466,7 +478,9 @@ Looking at an App — its pages as PNG files, for the agent that built it:
                       errors) as compact text instead of writing PNG files
       --browser <path>  a Chromium or Chrome to shoot with (default: the CHROME
                       variable, else Playwright's own, the machine's Chrome,
-                      then any Chromium another Playwright version installed)
+                      any Chromium another Playwright version installed, then
+                      an installed Chrome, Edge or Chromium; CHROME_PATH names
+                      one of those)
   Needs Playwright's Chromium: install the playwright package where you run it,
   then install its headless Chromium (shot prints the exact command when it is
   missing); the machine's Chrome serves when Playwright's browser is missing.
@@ -497,7 +511,7 @@ Rows to look at — a draft judged on believable data, with no seed script:
 
 Grading an App — the rubric measured in a browser, not looked at:
 
-  mistri grade [<app-dir>] [<db> | --db <target> | --config <path>]
+  mistri grade [--app <dir>] [<db> | --db <target> | --config <path>]
                   [--commands <file>] [--jobs <file>] [--policy <file>] [<route>…]
                   [--as <role|email|all> [--tenant <id>]] [--theme <id|all> [--palette <id|all>]]
                   [--json] [--browser <path>]
@@ -513,7 +527,7 @@ Grading an App — the rubric measured in a browser, not looked at:
   errors first, "code file:line page@widths message — fix: …"; then what it
   covered and what it skipped, and why; then the verdict, which an error
   fails whatever the score, and the score out of 100.
-  The App is <app-dir>, else the current directory. An App with sign-in is
+  The App is --app <dir>, else the current directory. An App with sign-in is
   graded as the role that reads the most, unless --as names one (or an
   account, as shot's --as <email> does).
       --json          with grade: one JSON document of the findings and score
@@ -571,7 +585,9 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
   one, or drift. baseline records a database that already has tables as
   version 0, touching nothing, and writes its schema beside the migrations
   (baseline.schema.json, never run). repair removes failed entries, accepts
-  changed files and marks missing ones deleted.
+  changed files and marks missing ones deleted. up, baseline and repair write
+  to the database, so without --app a connection a config names must say
+  "writable": true; a database named with --db, and --dry-run, are not asked.
 
   diff, check and squash read the schema you want from schema.sql beside the
   migrations (db/migrations -> db/schema.sql). diff writes the next V file
@@ -635,7 +651,7 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
   are read, and a --jobs or --commands must name the build's own.
   Exit codes: 1 could not run, 2 a store refused, 3 a step failed.
 
-  mistri migrate files status | up | sweep --app <dir>
+  mistri migrate files status | up | sweep [--app <dir>]
                   [<db> | --db <target> | --config <path>] [--connection <name>]
                   [--policy <file>] [--dry-run]
   An App's files move to where each resource's storage says: up copies each
@@ -653,7 +669,7 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
   Exit codes: 1 could not run, 3 some files did not move.
 
 Starting flows on records already there — a backfill, run once beside the server:
-  mistri flows start <resource> --app <dir> --jobs <file>
+  mistri flows start <resource> [--app <dir>] --jobs <file>
                   [--where <query>] [--flow <id>] [--tenant <id> --policy <file>]
                   [--dry-run] [<db> | --db <target> | --config <path>]
   Start a resource's created flows on the records already there, as though
@@ -665,7 +681,7 @@ Starting flows on records already there — a backfill, run once beside the serv
   Exit codes: 1 could not run.
 
 Running a job now — one of an App's jobs at times, once, by hand:
-  mistri jobs run <name> --app <dir> --jobs <file> [--wait <seconds>]
+  mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
                   [<db> | --db <target> | --config <path>]
   Enqueues one run of the job in the App's job store, marked manual beside
   the slots the schedule enqueues, for the server started with --jobs to run
@@ -679,9 +695,9 @@ Running a job now — one of an App's jobs at times, once, by hand:
   did not succeed.
 
 Measuring a decision before it applies — and pinning the model that earned it:
-  mistri decide eval <decision> --app <dir> --jobs <file> [--provider jev|anthropic]
+  mistri decide eval <decision> [--app <dir>] --jobs <file> [--provider jev|anthropic]
                   [--limit <n>] [--truth "<query>"] [--max-cost <dollars>] [--max-error <share>]
-                  [--dry] [--yes] [--pin] [--json <file>] [--policy <file>] [<db> | --db <target> | --config <path>]
+                  [--dry-run] [--yes] [--pin] [--json <file>] [--policy <file>] [<db> | --db <target> | --config <path>]
   Asks a provider about records whose answer people settled (--truth narrows
   them; default every record with the field set, at most --limit, 500) and
   reports accuracy, Brier, calibration error, a reliability table and what the
@@ -689,7 +705,7 @@ Measuring a decision before it applies — and pinning the model that earned it:
   read as the decision reads them, put back as they were before the answer was
   settled where the App keeps their history. It prints the count and a price
   that errs high first, and asks nothing without --yes or above --max-cost
-  (default $5); --dry prints what one record would send. It writes nothing to
+  (default $5); --dry-run prints what one record would send. It writes nothing to
   the database and never applies; --pin writes the model version into
   decisions.lock, which is what lets a decision apply, only when the share it
   would apply was wrong at most --max-error of the time (default 0.02).
@@ -698,9 +714,9 @@ Measuring a decision before it applies — and pinning the model that earned it:
   --policy, and the records are read as its service reads them when served.
 
 A tenant App's first boot — after mistri migrate stores up --policy:
-  mistri tenant init [<tenant>...] --app <dir> --policy <file>
+  mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
   mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
-                  --app <dir> --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
+                  [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
   init opens the platform realm (when the App declares one) and puts each named
   tenant, active; one already there is left as it is, so it runs again after a
   stop part-way. grant grants <email> a membership of the platform realm, or
@@ -712,9 +728,9 @@ A tenant App's first boot — after mistri migrate stores up --policy:
   not run.
 
 A tenant App's sandboxes — a copy of a tenant to try changes in:
-  mistri tenant clone <source> <sandbox> --app <dir> --policy <file> [--samples]
-  mistri tenant import <sandbox> --app <dir> --policy <file>
-  mistri tenant clock <sandbox> --app <dir> --policy <file> --ahead <duration> [--rate <n>]
+  mistri tenant clone <source> <sandbox> [--app <dir>] --policy <file> [--samples]
+  mistri tenant import <sandbox> [--app <dir>] --policy <file>
+  mistri tenant clock <sandbox> [--app <dir>] --policy <file> --ahead <duration> [--rate <n>]
                   [--operator <name>] [--commands <file>] [<db> | --db <target> | --config <path>]
   clone makes a new sandbox tenant from a copy of the source's rows of every
   resource the App marks clone: 'config' (and 'sample' with --samples), its
@@ -726,7 +742,7 @@ A tenant App's sandboxes — a copy of a tenant to try changes in:
 
 Building an App for production — optional; an App also runs from its source:
 
-  mistri build --app <dir> [--app-entry <file>] [--out <dir>]
+  mistri build [--app <dir>] [--app-entry <file>] [--out <dir>]
                   [--config <path>] [--commands <file>] [--jobs <file>]
                   [--policy <file>] [--dockerfile <file>]
 
@@ -758,7 +774,7 @@ Building an App for production — optional; an App also runs from its source:
 
 Deploying an App to Cloudflare Containers — a Worker in front of one always-on container:
 
-  mistri deploy init cloudflare --app <dir> [--config <path>] [--commands <file>] [--jobs <file>]
+  mistri deploy init cloudflare [--app <dir>] [--config <path>] [--commands <file>] [--jobs <file>]
                   [--policy <file>] [--app-entry <file>] [--out <dir>] [--dir <dir>] [--force]
   mistri deploy [--dry-run] [--yes] [--allow-contract] [--allow-dirty]
                   [--migrate-url <url>] [--migrations <dir>] [--connection-limit <n>] [--verbose]
@@ -839,11 +855,11 @@ Giving a coding agent the App skill:
 
 Running an App on this machine, and testing it:
 
-  mistri dev [<app-dir>] [<db> | --db <target> | --config <path>] [options]
+  mistri dev [--app <dir>] [<db> | --db <target> | --config <path>] [options]
 
   Serves the App (default: the current directory) as --app <dir> --dev does,
   with a throwaway session secret and an account per declared role, each
-  sign-in printed. They are kept in <app-dir>/.mistri/ (the auth store too),
+  sign-in printed. They are kept in <dir>/.mistri/ (the auth store too),
   so a restart signs the same people in; delete it to start over. Local and
   for development only: it refuses to run with NODE_ENV=production. The
   database is the App's mistri.json unless one is named. Where auth.me
@@ -853,7 +869,7 @@ Running an App on this machine, and testing it:
   member of the first two tenants of its profile table, or of the platform
   realm for a platform role.
 
-  mistri test init [<app-dir>] [--config <path>] [--force]
+  mistri test init [--app <dir>] [--config <path>] [--force]
 
   Writes tests/start.ts, tests/journeys.test.ts and tests/permissions.test.ts
   into the App, on @mistriwork/mistri/testing alone: a journey per role (its views, a
@@ -896,6 +912,10 @@ convention, build); check --json and migrate --json carry it as context.
 Watching what a --dev server did:
 
   mistri observe [--url <base>]      print the running dev server's observer address
+  mistri observe --errors [--json] [--url <base>]
+                                     its recent page and server errors, one line each
+                                     (kind, path, message, trace id); --json is the
+                                     observer's own answer
   mistri observe --mcp [--url <base>]
                                      speak its telemetry to a coding agent on stdio:
                                      check (mistri check --json; no server needed),
@@ -946,14 +966,14 @@ mistri — the App framework: a few lines of TypeScript, a complete App
 over your own database.
 
   mistri --app <dir>              serve an App
-  mistri dev [<app-dir>]          serve an App with a dev secret and a sign-in per role
-  mistri check --app <dir>        types, typecheck and validation of an App
-  mistri build --app <dir>        make an App ready for production
+  mistri dev [--app <dir>]        serve an App with a dev secret and a sign-in per role
+  mistri check [--app <dir>]      types, typecheck and validation of an App
+  mistri build [--app <dir>]      make an App ready for production
   mistri migrate <command>        change the schema with versioned SQL files
   mistri seed [--app <dir>]       believable rows in an App's writable database
-  mistri shot --app <dir>         an App's pages as PNG files
-  mistri grade [<app-dir>]        an App's pages measured against the rubric
-  mistri test init [<app-dir>]    a starter suite: a journey per role, a permissions matrix
+  mistri shot [--app <dir>]       an App's pages as PNG files
+  mistri grade [--app <dir>]      an App's pages measured against the rubric
+  mistri test init [--app <dir>]  a starter suite: a journey per role, a permissions matrix
   mistri docs [topic]             the App reference, offline
   mistri explain <check-code>     what a check code means, with a fix example
   and: new, deploy, suite, virtual, flags, experiments, analytics, theme, schema, messages,

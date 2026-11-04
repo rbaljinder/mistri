@@ -3,9 +3,10 @@ import { expect, test } from './support/harness';
 import { startSample, PAYDAY_ADMIN } from './support/sampleServer';
 import { scalar } from './support/db';
 import { chooseTab } from './support/tabs';
+import { LONG_MS } from './support/budgets';
 
 test.describe('Payday payroll workflow', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   for (const built of [false, true]) {
     test(`${built ? 'built' : 'source'}: review and approval persist across sessions`, async ({ page, browser }) => {
       const sample = await startSample('payday', { built });

@@ -123,7 +123,7 @@ describe('the bike shop draft', async () => {
     const line = resources.work_order_part as { computed: Record<string, unknown>; form: { defaults: Record<string, unknown> } };
     assert.deepEqual(line.computed.line_total, { type: 'number', value: 'quantity * unit_price' });
     assert.deepEqual(line.form.defaults.unit_price, { from: 'part_id.price' });
-    assert.ok(/parts_total: sum\('work_order_part', 'line_total'\)/.test(files['resources.ts']), files['resources.ts']);
+    assert.ok(/parts_total: rollup\.sum\('work_order_part', 'line_total'\)/.test(files['resources.ts']), files['resources.ts']);
     // Money, the flag, the due date and the people avatar are the runtime's conventions: the draft writes none of them.
     assert.ok(!/format: 'money'|relative|avatar|values: \{ 0:/.test(files['resources.ts']));
     assert.deepEqual((resources.work_orders as { types: unknown }).types, {
@@ -419,6 +419,107 @@ describe('tablewalk seed, on PostgreSQL', { skip: PG ? false : 'TABLEWALK_TEST_P
         assert.equal(typeof order.is_rush, 'boolean');
         assert.equal(order.completed_on !== null, order.status === 'collected');
       }
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${scratch} CASCADE`);
+      await client.end();
+    }
+  });
+});
+
+/* A field report: a table whose uuid primary key is also its foreign key (a profile is its customer's, one to one)
+   was made "unique" by appending text to a repeated value, which is no uuid. */
+const ONE_TO_ONE = `
+CREATE TABLE people (id UUID NOT NULL PRIMARY KEY, name TEXT NOT NULL, code UUID NOT NULL UNIQUE, born_on DATE NOT NULL UNIQUE, ordinal INTEGER NOT NULL UNIQUE);
+CREATE TABLE profiles (id UUID NOT NULL PRIMARY KEY REFERENCES people(id), bio TEXT);
+`;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function oneToOne(sql = ONE_TO_ONE): { file: string; adapter: Adapter } {
+  const file = join(dir, `one-${++made}.db`);
+  const db = new DatabaseSync(file);
+  db.exec(sql);
+  db.close();
+  return { file, adapter: connect(file, { schemas: [] }) };
+}
+
+describe('tablewalk seed, uniqueness by type', () => {
+  test('a primary key that is also a foreign key draws each parent once, and every value is a valid uuid', async () => {
+    const { file, adapter } = oneToOne();
+    try {
+      await seedDatabase(adapter, await adapter.introspect(), { rows: 12, seed: 3, today: TODAY });
+      const people = rowsOf(file, 'SELECT id, code, born_on, ordinal FROM people');
+      const profiles = rowsOf(file, 'SELECT id FROM profiles');
+      assert.ok(profiles.length > 0);
+      assert.equal(new Set(profiles.map((p) => p.id)).size, profiles.length, 'no parent drawn twice');
+      for (const row of profiles)
+        assert.ok(
+          people.some((p) => p.id === row.id),
+          'each points at a person',
+        );
+      for (const row of [...people, ...profiles]) assert.match(String(row.id), UUID);
+      for (const row of people) if (row.code != null) assert.match(String(row.code), UUID);
+      assert.equal(new Set(people.map((p) => p.born_on)).size, people.length, 'dates stay distinct, and dates');
+      for (const row of people) assert.match(String(row.born_on), /^\d{4}-\d{2}-\d{2}$/);
+      assert.equal(new Set(people.map((p) => p.ordinal)).size, people.length);
+    } finally {
+      await adapter.close();
+    }
+  });
+
+  test('--append draws only the parents not yet taken', async () => {
+    const { file, adapter } = oneToOne();
+    try {
+      const schema = await adapter.introspect();
+      await seedDatabase(adapter, schema, { rows: 6, seed: 3, today: TODAY });
+      const first = rowsOf(file, 'SELECT id FROM profiles').length;
+      await seedDatabase(adapter, schema, { rows: 6, seed: 4, today: TODAY, append: true });
+      const all = rowsOf(file, 'SELECT id FROM profiles');
+      assert.equal(new Set(all.map((p) => p.id)).size, all.length);
+      assert.ok(all.length >= first);
+    } finally {
+      await adapter.close();
+    }
+  });
+
+  test('a database error in a table says which table', async () => {
+    const { adapter } = oneToOne("CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT NOT NULL CHECK (title = 'never'));");
+    try {
+      await assert.rejects(seedDatabase(adapter, await adapter.introspect(), { rows: 2, seed: 1, today: TODAY }), (error: unknown) => {
+        assert.ok(error instanceof SeedRefusal);
+        assert.match((error as Error).message, /notes/);
+        return true;
+      });
+    } finally {
+      await adapter.close();
+    }
+  });
+});
+
+describe('tablewalk seed, uniqueness by type, on PostgreSQL', { skip: PG ? false : 'TABLEWALK_TEST_PG is not set' }, () => {
+  test('a uuid primary key that is a foreign key fills with real uuids, one per parent', async () => {
+    type Client = { connect(): Promise<void>; query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }>; end(): Promise<void> };
+    const module = 'pg';
+    const pg = (await import(module)) as { default: { Client: new (options: unknown) => Client } };
+    const scratch = `tw_seed_uuid_${process.pid}`;
+    const client = new pg.default.Client({ connectionString: PG });
+    await client.connect();
+    try {
+      await client.query(`DROP SCHEMA IF EXISTS ${scratch} CASCADE; CREATE SCHEMA ${scratch}; SET search_path TO ${scratch};`);
+      await client.query(`
+        CREATE TABLE people (id uuid PRIMARY KEY, name text NOT NULL, code uuid NOT NULL UNIQUE, born_on date NOT NULL UNIQUE, ordinal integer NOT NULL UNIQUE);
+        CREATE TABLE profiles (id uuid PRIMARY KEY REFERENCES people(id), bio text);`);
+      const adapter = connect(PG!, { schemas: [scratch] });
+      try {
+        await seedDatabase(adapter, await adapter.introspect(), { rows: 12, seed: 3, today: TODAY });
+      } finally {
+        await adapter.close();
+      }
+      const profiles = (await client.query(`SELECT id::text AS id FROM ${scratch}.profiles`)).rows;
+      assert.ok(profiles.length > 0);
+      assert.equal(new Set(profiles.map((p) => p.id)).size, profiles.length);
+      const orphans = await client.query(
+        `SELECT 1 FROM ${scratch}.profiles p LEFT JOIN ${scratch}.people q ON q.id = p.id WHERE q.id IS NULL`,
+      );
+      assert.equal(orphans.rows.length, 0);
     } finally {
       await client.query(`DROP SCHEMA IF EXISTS ${scratch} CASCADE`);
       await client.end();

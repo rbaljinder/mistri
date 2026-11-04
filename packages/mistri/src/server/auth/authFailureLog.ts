@@ -12,8 +12,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-
-const MESSAGE_LIMIT = 200;
+import { describeCause as describeAuthError } from '../observe/failureCause.js';
 
 /** A route's words are lowercase and hyphenated; anything else in the path (a token, an id) is a parameter. */
 function authRouteOf(pathname: string, under: string): string {
@@ -22,20 +21,6 @@ function authRouteOf(pathname: string, under: string): string {
     .split('/')
     .map((segment) => (segment === '' || /^[a-z][a-z-]{0,39}$/.test(segment) ? segment : ':param'))
     .join('/');
-}
-
-/** What an error may say in a log: its name, and its message without addresses or runs that could be secrets. */
-function describeAuthError(error: unknown): { name: string; message: string } {
-  const name =
-    error && typeof error === 'object' && typeof (error as { name?: unknown }).name === 'string' ? (error as Error).name : typeof error;
-  const raw =
-    error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string' ? (error as Error).message : '';
-  const message = raw
-    .replace(/[^\s@]+@[^\s@]+/g, '<address>')
-    .replace(/[A-Za-z0-9_\-+/=.]{32,}/g, '<redacted>')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return { name, message: message.length > MESSAGE_LIMIT ? `${message.slice(0, MESSAGE_LIMIT)}…` : message };
 }
 
 interface Slot {

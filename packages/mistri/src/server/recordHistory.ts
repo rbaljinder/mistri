@@ -122,16 +122,16 @@ function registryHistory(registry: Registry): RegistryHistory {
 
 function mergedBinding(byApp: Map<string, RecordHistoryBinding>): RecordHistoryBinding {
   const merged = new Map<string, RecordHistoryRule>();
-  for (const binding of byApp.values()) {
-    for (const [table, rule] of binding) {
-      const known = merged.get(table);
-      // Two Apps over one table: each keeps what the stricter one keeps.
-      if (!known || rule.redact === 'values') merged.set(table, rule);
-      else if (known.redact !== 'values')
-        merged.set(table, { redact: new Set([...known.redact, ...(rule.redact as ReadonlySet<string>)]) });
-    }
-  }
+  // Two Apps over one table: each keeps what the stricter one keeps.
+  for (const binding of byApp.values()) for (const [table, rule] of binding) merged.set(table, stricter(merged.get(table), rule));
   return merged;
+}
+
+/** Of two rules over one table, what the stricter keeps: no values where either keeps none, else each one's redactions. */
+function stricter(known: RecordHistoryRule | undefined, rule: RecordHistoryRule): RecordHistoryRule {
+  if (!known || rule.redact === 'values') return rule;
+  if (known.redact === 'values') return known;
+  return { ...rule, redact: new Set([...known.redact, ...(rule.redact as ReadonlySet<string>)]) };
 }
 
 /**
@@ -171,10 +171,12 @@ async function bindAppRecordHistory(
   if (!rules.size && !state) return;
   const history = registryHistory(registry);
   const perConnection = new Map<string, Map<string, RecordHistoryRule>>(resources.connections.map((connection) => [connection, new Map()]));
-  for (const [resource, rule] of rules)
-    perConnection
-      .get(resources.connectionFor(resource))
-      ?.set(resources.toPhysical(resource), withBookkeeping(rule, findTable(resources.schema, resource)));
+  /* Several resources over one table (narrowed, appNarrowed.ts) share its log: it keeps what the strictest keeps. */
+  for (const [resource, rule] of rules) {
+    const binding = perConnection.get(resources.connectionFor(resource));
+    const physical = resources.toPhysical(resource);
+    binding?.set(physical, stricter(binding.get(physical), withBookkeeping(rule, findTable(resources.schema, resource))));
+  }
   for (const [connection, binding] of perConnection) {
     const byApp = history.byConnection.get(connection) ?? new Map<string, RecordHistoryBinding>();
     const was = byApp.get(loaded.app.id);

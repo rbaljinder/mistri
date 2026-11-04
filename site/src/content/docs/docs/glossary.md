@@ -35,7 +35,7 @@ each one.
 - **[Segment](/docs/segments/)**: a query named once on a resource and used by name in tabs, metrics and the API.
 - **[Decision](/docs/decisions/)**: one field of a record a model answers, offered as a suggestion until it has earned applying itself.
 - **[Live sync](/docs/live-sync/)**: open pages following what other people change, without a reload.
-- **[Rollup](/docs/dsl-resources/#rollups)**: a count, sum, min or max over a record's related rows, or a column of the newest of them (`latest`).
+- **[Rollup](/docs/dsl-resources/#rollups)**: a count, sum, average, min or max over a record's related rows (`rollup.count`, `rollup.sum`, …), or a column of the newest of them (`rollup.latest`).
 - **[Computed column](/docs/dsl-resources/#computed-columns)**: a column worked out from the record's own, never stored.
 - **[Machine](/docs/actions/)**: the states and transitions a record moves through.
 - **[Presentation](/docs/lists/)**: how a list or section draws its rows: a board, a calendar, cards.

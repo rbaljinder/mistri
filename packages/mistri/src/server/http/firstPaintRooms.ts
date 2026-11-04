@@ -370,7 +370,14 @@ type DashboardView = { sections: AskedSection[]; aside?: AskedSection[]; filters
  * themselves; so does a whole dashboard with a first run, whose sections
  * wait on it.
  */
-function dashboardReads(input: RoomInput, rules: ListRules, key: string, plan: RoomPlan): void {
+export function dashboardReads(
+  input: RoomInput,
+  rules: ListRules,
+  key: string,
+  plan: RoomPlan,
+  /* The period each windowed section is over, by its window key: `mistri check` asks every window (build/checkQueries.ts). */
+  periods: Readonly<Record<string, string>> = {},
+): void {
   const view = Object.hasOwn(input.payload.views, key) ? (input.payload.views[key] as unknown as DashboardView) : undefined;
   if (!view || !Array.isArray(view.sections)) return;
   const all = [...view.sections, ...(view.aside ?? [])];
@@ -395,7 +402,7 @@ function dashboardReads(input: RoomInput, rules: ListRules, key: string, plan: R
   ] as const) {
     for (const raw of sections) {
       if (raw.error) continue;
-      const section = raw.windows?.length ? windowed(raw, sectionPeriod(raw, {})) : windowed(raw, view.window ?? null);
+      const section = raw.windows?.length ? windowed(raw, sectionPeriod(raw, periods)) : windowed(raw, view.window ?? null);
       if (section.kind === 'metric') {
         breakdown(measureText(section, section.query), 1);
         if (section.compare) breakdown(measureText(section, section.compare), 1);

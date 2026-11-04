@@ -97,7 +97,7 @@ describe('mistri check, the command', () => {
     assert.match(lines[1], /^ {2}schema types {2}skipped the App keeps its types inline/);
     assert.match(lines[2], /^ {2}typecheck {5}passed {2}tsc \d+\.\d+\.\d+, 1 file, no tsconfig\.json$/);
     assert.match(lines[3], /^ {2}validation {4}passed {2}Tick: ok$/);
-    assert.match(lines.at(-1)!, /^Checked in [\d.]+s: 2 of 3 steps passed, the rest skipped as said\.$/);
+    assert.match(lines.at(-1)!, /^Checked in [\d.]+s: 3 of 4 steps passed, the rest skipped as said\.$/);
   });
 
   test('writes missing schema types, then a type error fails the typecheck with exit code 3, a hint and where', async () => {
@@ -116,7 +116,7 @@ describe('mistri check, the command', () => {
     assert.match(ran.out, /hint: "complted" is not a column of task, nor a label path from it through its references/);
     // Every step runs, so one pass has every finding: validation names it too.
     assert.match(ran.out, /validation {4}failed/);
-    assert.match(ran.out, /typecheck and validation failed \(1 of 3 passed\) in [\d.]+s\. Exit 3\.$/m);
+    assert.match(ran.out, /typecheck and validation failed \(2 of 4 passed\) in [\d.]+s\. Exit 3\.$/m);
   });
 
   test('a query naming a column the table lacks fails the typecheck, and the error names the column', async () => {

@@ -2,6 +2,7 @@ import { expect, test } from './support/harness';
 import { startSample } from './support/sampleServer';
 import { rows, scalar } from './support/db';
 import { expandSegments } from '../packages/engine/src/shared/query.js';
+import { FIXTURE_MS } from './support/budgets';
 
 // Metadata interception in this spec exercises the boot fetch fallback.
 test.use({ carryFirstPaint: false });
@@ -14,7 +15,7 @@ test.describe('Service Atlas ITSM', () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     sample = await startSample('service-desk');
   });
   test.afterAll(async () => {

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { join, resolve } from 'node:path';
 import { expect, test } from './support/harness';
+import { BUILD_MS, TOUR_MS } from './support/budgets';
 
 /**
  * `mistri shot --text`, run as an agent runs it: the same serve, sign-in
@@ -52,7 +53,7 @@ function shot(
 }
 
 test('--text says what a list page shows, writes no file and is far smaller than a picture', async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(TOUR_MS);
   const out = join(directory, 'never');
   const ran = await shot(['tasks', '--text', '--out', out]);
   expect(ran.code, ran.err).toBe(0);
@@ -65,14 +66,14 @@ test('--text says what a list page shows, writes no file and is far smaller than
 });
 
 test('--text on a missing record says the page, not a failure of the command', async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(TOUR_MS);
   const ran = await shot(['/tasks/999999', '--text']);
   expect(ran.code, ran.err).toBe(0);
   expect(ran.out).toMatch(/^\/tasks\/999999/);
 });
 
 test('--as <email> signs in as an account already there, over a copy of its store, the password never said', async () => {
-  test.setTimeout(240_000);
+  test.setTimeout(BUILD_MS);
   /* An App with sign-in, and its first start's administrator: the account a person already has, in the store a plain
      start keeps under XDG_CONFIG_HOME. */
   const app = join(directory, 'signed');

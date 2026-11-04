@@ -36,7 +36,7 @@ import type { SqlStyle } from './filter.js';
 import { noteRead } from './query.js';
 import type { ColumnMeta, DatabaseSchema } from './schema.js';
 
-export const COMPUTED_TYPES = ['boolean', 'number', 'date'] as const;
+export const COMPUTED_TYPES = ['boolean', 'number', 'date', 'text'] as const;
 export type ComputedType = (typeof COMPUTED_TYPES)[number];
 
 /** A span a date moves by: `3 days`, `term months`. */
@@ -60,7 +60,23 @@ export type ComputedNode =
   | { k: 'empty'; of: ComputedNode; negate: boolean }
   | ComputedSpan
   | { k: 'call'; fn: ComputedFunction; args: ComputedNode[] }
+  | ComputedJson
   | { k: 'op'; op: ComputedOp; left: ComputedNode; right: ComputedNode };
+
+/**
+ * A member of a JSON column, read as text: `filters_json.make`, `payload.customer.city`. Authored as a path; the
+ * catalog that knows `filters_json` is a JSON column, and no reference, makes it this (appComputed.ts). Each key is
+ * an identifier (the tokenizer's word), so it is written into the statement's path literal as it stands. The
+ * database is never asked whether the member is there: one that is not has no value.
+ * @preview
+ */
+export interface ComputedJson {
+  k: 'json';
+  /** The table's own JSON column. */
+  column: string;
+  /** The members walked, outermost first. */
+  keys: string[];
+}
 
 /** The functions an expression may call (computedParse.ts COMPUTED_FUNCTIONS): each written alike on every engine and worked out alike in JavaScript. */
 export type ComputedFunction = 'coalesce' | 'round' | 'min' | 'max' | 'abs';
@@ -135,8 +151,9 @@ export class ComputedError extends Error {
 export function computedReads(node: ComputedNode): string[] {
   const out: string[] = [];
   const walk = (n: ComputedNode) => {
-    if (n.k === 'path') {
-      if (!out.includes(n.path)) out.push(n.path);
+    if (n.k === 'path' || n.k === 'json') {
+      const path = n.k === 'path' ? n.path : n.column;
+      if (!out.includes(path)) out.push(path);
       return;
     }
     if (n.k === 'op') {
@@ -171,6 +188,9 @@ export function computedKind(node: ComputedNode, kindOf: (path: string) => Value
       }
       case 'number':
         return 'number';
+      case 'json':
+        if (!kindOf(n.column)) throw new Error(`"${n.column}" is not a column here.`);
+        return 'text';
       case 'text':
       case 'me':
       case 'nobody':
@@ -348,6 +368,8 @@ export function compileComputed(
     switch (n.k) {
       case 'path':
         return column(n.path);
+      case 'json':
+        return jsonMember(column(n.column), n.keys, dialect);
       case 'number':
         return String(n.value);
       case 'text':
@@ -431,6 +453,20 @@ export function compileComputed(
       : `(CASE WHEN ${truthy(computed.expr)} THEN 1 ELSE 0 END)`;
   }
   return sql(computed.expr);
+}
+
+/**
+ * A JSON member as text, alike on both engines: PostgreSQL's `#>>` gives text, and a yes-or-no as `true`/`false`;
+ * SQLite's `json_extract` gives a number as a number and a yes-or-no as 1 or 0, so it is said as PostgreSQL says it.
+ * An object or an array is its JSON text on both. The keys are identifiers (ComputedJson), never quoted text.
+ */
+function jsonMember(column: string, keys: readonly string[], dialect: Dialect): string {
+  if (dialect === 'postgres') return `(${column} #>> '{${keys.join(',')}}')`;
+  const at = `'$${keys.map((key) => `."${key}"`).join('')}'`;
+  return (
+    `(CASE json_type(${column}, ${at}) WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' ` +
+    `ELSE CAST(json_extract(${column}, ${at}) AS TEXT) END)`
+  );
 }
 
 /* ---------- an expression, in JavaScript ---------- */

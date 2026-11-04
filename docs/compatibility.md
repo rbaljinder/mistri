@@ -109,14 +109,16 @@ tools and the `check` codes, each `public` or `preview`.
 - **Adding a name** is one command, `node scripts/public-surface.mjs --write`,
   and the regenerated file goes in the same commit, so the review sees what
   was added and whether it is public or preview. A new preview key is also
-  added to `PREVIEW` (or `PREVIEW_CLI`, or a JSDoc `@preview` on an export) in
-  that script, beside its Preview row on the status page.
+  added to `PREVIEW_PATHS` (or `PREVIEW_EXPORTS`, `PREVIEW_ENTRIES`, `PREVIEW_CLI`,
+  `PREVIEW_COMMAND_FIELDS`, `PREVIEW_CODES`, or a JSDoc `@preview` on an export) in
+  `packages/mistri/src/shared/preview.ts`, which `mistri check` reads too, beside its
+  Preview row on the status page.
 - **Removing, renaming or demoting a public name** is a break. From 1.0.0
   (read off `package.json`'s version) the test says so, and `--write` refuses
   to regenerate it away; deprecate the name instead. A major release
   regenerates with `--write --major`.
 - **Promoting a preview name** moves its status page row to Stable, drops its
-  rule from `PREVIEW`, and regenerates the inventory.
+  rule from `preview.ts`, and regenerates the inventory.
 
 Store layouts are held by `test/fixtures/store-layouts/`, each store's DDL
 (`scripts/store-layouts.mjs`), walked by `test/store-upgrades.test.ts`. Before

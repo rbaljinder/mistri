@@ -228,6 +228,9 @@ export function FieldsSection({
   const presentation = section.presentation ?? (section.region === 'aside' ? 'properties' : 'summary');
   const rail = presentation === 'properties';
   const filled = (path: string) => row[path] !== null && row[path] !== undefined && row[path] !== '';
+  /* A rail leaves out the values the record does not have, as a header's facts do, unless it says 'show'; any block can
+     ask. A field the reader may fill in place is not one of them: it is where the value is set. */
+  const hideEmpty = section.emptyMode === 'hide' || (rail && section.emptyMode !== 'show');
   /* A value as a line of facts or a card says it: a reference is the record
      it names, by its label where the section fetched one, never its key. */
   const said = (path: string, compact?: boolean) => {
@@ -243,7 +246,7 @@ export function FieldsSection({
         row={row}
       />
     ) : (
-      <Value col={column} value={row[path]} tableId={base.id} compact={compact} row={row} />
+      <Value col={column} value={row[path]} tableId={base.id} compact={compact} row={row} subtitled />
     );
   };
   /* A headline is the record offered: its figure, its facts and what to do next. */
@@ -260,6 +263,7 @@ export function FieldsSection({
             column={columnAt}
             actions={section.actions ?? []}
             subfigure={section.subfigure}
+            subtitle={section.subtitle}
             was={section.was}
             note={section.note}
           />
@@ -391,6 +395,7 @@ export function FieldsSection({
   /* A group that follows a reference to nothing — "Converted to" on a lead
      that has not been — is one dash, not four labels over four dashes. */
   if (stem && shell().inApp() && paths.length && paths.every((p) => row[p] === null || row[p] === undefined)) {
+    if (hideEmpty) return null;
     return (
       <SectionBox
         section={section}
@@ -505,6 +510,8 @@ export function FieldsSection({
           />
         </dd>
       );
+    } else if (hideEmpty && !filled(path) && !adorned) {
+      return null;
     } else if (value === null || value === undefined) {
       /* A text a section is only about, with nothing in it, is one muted line saying so, not a dash alone in the
          room of a paragraph. */
@@ -536,7 +543,7 @@ export function FieldsSection({
     } else {
       dd = (
         <dd>
-          <Value col={column} value={value} tableId={base.id} row={row} />
+          <Value col={column} value={value} tableId={base.id} row={row} subtitled />
           {adorned}
         </dd>
       );
@@ -569,6 +576,8 @@ export function FieldsSection({
       </div>
     );
   });
+  /* Nothing left to say: the block is not drawn, as a header with no facts is not. A writable block keeps its fields. */
+  if (hideEmpty && !fields.some(Boolean) && !section.workflow) return null;
   const columns = typeof section.columns === 'number' ? section.columns : undefined;
   /* Both are lists of terms, so both are drawn as one: a property rail says
      caption beside value, the grid says them in columns. A grid of <dt>/<dd>

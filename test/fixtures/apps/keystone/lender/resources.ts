@@ -1,4 +1,4 @@
-import { action, count, max, min, sum } from '@mistriwork/mistri/app';
+import { action, rollup } from '@mistriwork/mistri/app';
 import type { Resources } from './mistri-schema.d.ts';
 
 /* What the lender's App says about each of the suite's thirty-one tables,
@@ -38,11 +38,11 @@ export const resources = {
     rollups: {
       /* The lender's file, read onto the application the dealer submitted: one file each, so min is its value.
          Not the bureau score: a rollup over a column some roles may not read breaks the whole record for them. */
-      decision_due: min('underwriting_file', 'decision_due_at'),
-      assigned: count('underwriting_file', { query: 'underwriter_id is not empty' }),
-      open_stips: count('stipulation', { whose: 'application_id', query: 'status in (requested, received)' }),
-      stips_to_clear: count('stipulation', { whose: 'application_id', query: 'status = received' }),
-      open_alerts: count('decision_alert', { query: 'resolved_at is empty' }),
+      decision_due: rollup.min('underwriting_file', 'decision_due_at'),
+      assigned: rollup.count('underwriting_file', { query: 'underwriter_id is not empty' }),
+      open_stips: rollup.count('stipulation', { whose: 'application_id', query: 'status in (requested, received)' }),
+      stips_to_clear: rollup.count('stipulation', { whose: 'application_id', query: 'status = received' }),
+      open_alerts: rollup.count('decision_alert', { query: 'resolved_at is empty' }),
     },
     display: {
       status: { tone: { conditioned: 'warn', countered: 'warn', approved: 'good', funded: 'good', declined: 'bad', '*': 'neutral' } },
@@ -189,8 +189,8 @@ export const resources = {
     noun: 'customer',
     recordLabel: '{first_name} {last_name}',
     rollups: {
-      loans: count('loan'),
-      balance: sum('loan', 'principal_balance', { query: LIVE_LOAN }),
+      loans: rollup.count('loan'),
+      balance: rollup.sum('loan', 'principal_balance', { query: LIVE_LOAN }),
     },
     display: { balance: usd, last_name: { avatar: true } },
     labels: {
@@ -217,10 +217,10 @@ export const resources = {
     view: 'loans',
     recordLabel: '{loan_number} · {customer_id.first_name} {customer_id.last_name}',
     rollups: {
-      pending_payments: count('payment', { whose: 'loan_id', query: 'status = pending' }),
-      installments_left: count('installment', { whose: 'loan_id', query: 'status in (upcoming, due, past_due)' }),
-      last_paid_on: max('payment', 'received_on', { whose: 'loan_id', query: 'status = posted' }),
-      late_fees: sum('payment', 'late_fee', { whose: 'loan_id', query: 'status = posted' }),
+      pending_payments: rollup.count('payment', { whose: 'loan_id', query: 'status = pending' }),
+      installments_left: rollup.count('installment', { whose: 'loan_id', query: 'status in (upcoming, due, past_due)' }),
+      last_paid_on: rollup.max('payment', 'received_on', { whose: 'loan_id', query: 'status = posted' }),
+      late_fees: rollup.sum('payment', 'late_fee', { whose: 'loan_id', query: 'status = posted' }),
     },
     display: {
       status: { tone: { current: 'good', past_due: 'warn', delinquent: 'bad', charged_off: 'bad', paid_off: 'neutral' } },
@@ -366,15 +366,15 @@ export const resources = {
     favorite: true,
     noun: 'dealer',
     rollups: {
-      applications: count('loan_application', { query: 'submitted_at = last 90 days' }),
-      approved: count('loan_application', { query: 'status in (approved, countered, funded) and submitted_at = last 90 days' }),
-      declined: count('loan_application', { query: 'status = declined and submitted_at = last 90 days' }),
-      funded_volume: sum('funding', 'amount', { query: 'status = funded and funded_on = last 90 days' }),
-      funded_this_month: count('funding', { query: 'status = funded and funded_on = this month' }),
-      book: sum('loan', 'principal_balance', { query: LIVE_LOAN }),
-      delinquent_loans: count('loan', { query: 'status = delinquent' }),
-      listings: count('vehicle', { query: 'status = listed' }),
-      last_visit: max('dealer_visit', 'happened_on'),
+      applications: rollup.count('loan_application', { query: 'submitted_at = last 90 days' }),
+      approved: rollup.count('loan_application', { query: 'status in (approved, countered, funded) and submitted_at = last 90 days' }),
+      declined: rollup.count('loan_application', { query: 'status = declined and submitted_at = last 90 days' }),
+      funded_volume: rollup.sum('funding', 'amount', { query: 'status = funded and funded_on = last 90 days' }),
+      funded_this_month: rollup.count('funding', { query: 'status = funded and funded_on = this month' }),
+      book: rollup.sum('loan', 'principal_balance', { query: LIVE_LOAN }),
+      delinquent_loans: rollup.count('loan', { query: 'status = delinquent' }),
+      listings: rollup.count('vehicle', { query: 'status = listed' }),
+      last_visit: rollup.max('dealer_visit', 'happened_on'),
     },
     display: {
       status: { tone: { active: 'good', prospect: 'info', on_hold: 'warn', terminated: 'bad' } },
@@ -512,9 +512,9 @@ export const resources = {
     },
     noun: { one: 'staff member', many: 'staff' },
     rollups: {
-      open_files: count('underwriting_file', { whose: 'underwriter_id', query: 'decided_by is empty' }),
-      decided: count('underwriting_file', { whose: 'decided_by' }),
-      dealers: count('dealer', { whose: 'relationship_manager_id' }),
+      open_files: rollup.count('underwriting_file', { whose: 'underwriter_id', query: 'decided_by is empty' }),
+      decided: rollup.count('underwriting_file', { whose: 'decided_by' }),
+      dealers: rollup.count('dealer', { whose: 'relationship_manager_id' }),
     },
     display: { name: { avatar: true, subtitle: 'title' } },
     labels: {

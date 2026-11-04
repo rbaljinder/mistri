@@ -452,7 +452,7 @@ describe('a feature says only what a feature may', () => {
     );
     refuses(
       app({ features: [inventory({ resources: { vehicle: { lable: {} } } })] }),
-      /: features "inventory", resources "vehicle" has no "lable"\. Did you mean "labels"\? It takes: physical, access/,
+      /: features "inventory", resources "vehicle" has no "lable"\. Did you mean "labels"\? It takes: physical, query, access/,
     );
     refuses(app({ features: [{ id: 'empty' }] }), /: features "empty" contributes nothing/);
     refuses(app({ features: [{ id: 'Stock', views: {} }] }), /: features 1 needs an "id" of lowercase letters, digits and hyphens/);

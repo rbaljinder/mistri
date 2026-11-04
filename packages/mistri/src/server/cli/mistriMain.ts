@@ -44,16 +44,28 @@ const PRINT_ONLY = new Set(['--help', '-h', '--version', '-v', '-V']);
  * and the entries it reads, each where no flag names it. The table is docs/bootstrap-plan.md's, per command.
  */
 const PROFILE_TAKES: Record<string, ProfileTakes & { bare?: boolean }> = {
-  check: { entries: ['commands', 'jobs', 'policy', 'entry'], says: true, bare: true },
+  check: { entries: ['commands', 'jobs', 'policy', 'entry'], says: true, bare: true, cwdApp: true },
+  /* `migrate` and `seed` read an omitted --app as no App: the working directory's is taken only by `migrate files`. */
   migrate: { entries: ['commands', 'jobs', 'policy', 'entry'], says: true },
-  build: { entries: ['commands', 'jobs', 'policy', 'entry'], bare: true },
-  shot: { entries: ['commands', 'jobs', 'policy'], bare: true },
-  grade: { entries: ['commands', 'jobs', 'policy'], bare: true },
+  build: { entries: ['commands', 'jobs', 'policy', 'entry'], bare: true, cwdApp: true },
+  shot: { entries: ['commands', 'jobs', 'policy'], bare: true, cwdApp: true },
+  grade: { entries: ['commands', 'jobs', 'policy'], bare: true, cwdApp: true },
   seed: { entries: ['entry'], bare: true },
-  tenant: { entries: ['policy'] },
-  flows: { entries: ['jobs', 'policy'] },
-  jobs: { entries: ['jobs'] },
-  decide: { entries: ['jobs'] },
+  tenant: { entries: ['policy'], cwdApp: true },
+  flows: { entries: ['jobs', 'policy'], cwdApp: true },
+  jobs: { entries: ['jobs'], cwdApp: true },
+  decide: { entries: ['jobs'], cwdApp: true },
+  deploy: { entries: [], cwdApp: true },
+  test: { entries: [], cwdApp: true },
+};
+
+/** The word in the position a database, route or target goes, per command: an App's directory there is refused. */
+const POSITIONAL_AT: Record<string, (argv: readonly string[]) => string | undefined> = {
+  grade: (argv) => argv[0],
+  shot: (argv) => argv[0],
+  check: (argv) => argv[0],
+  build: (argv) => argv[0],
+  test: (argv) => (argv[0] === 'init' ? argv[1] : undefined),
 };
 
 export const main: Main = async () => {
@@ -64,6 +76,12 @@ export const main: Main = async () => {
     console.error(MISTRI.shortUsage);
     process.exitCode = 2;
     return;
+  }
+  /* `mistri --config x.json schema --brief`: the flags that name what a command works on may come first. */
+  if (/^--(config|app|db|schema)(=|$)/.test(process.argv[2])) {
+    const { existsSync } = await import('node:fs');
+    const { globalsAfterCommand } = await import('./globalFlags.js');
+    process.argv = globalsAfterCommand(process.argv, new Set([...Object.keys(MISTRI_COMMANDS), 'schema', 'dev', 'serve']), existsSync);
   }
   if (process.argv[2] === 'schema' && (process.argv.includes('--help') || process.argv.includes('-h'))) {
     process.stdout.write((await import('./usage.js')).SCHEMA_USAGE);
@@ -80,8 +98,25 @@ export const main: Main = async () => {
        by the one rule, applied under the flags this command takes. */
     /* `migrate new`, `diff`, `check` and `squash` read files and the config's connection, not the App. */
     const appless = process.argv[2] === 'migrate' && ['new', 'diff', 'check', 'squash'].includes(process.argv[3] ?? '');
-    const takes: (ProfileTakes & { bare?: boolean }) | undefined = appless ? { entries: [], app: false } : PROFILE_TAKES[process.argv[2]];
+    const takes: (ProfileTakes & { bare?: boolean }) | undefined = appless
+      ? { entries: [], app: false }
+      : process.argv[2] === 'migrate' && process.argv[3] === 'files'
+        ? { ...PROFILE_TAKES.migrate, cwdApp: true }
+        : PROFILE_TAKES[process.argv[2]];
     let argv = process.argv.slice(3);
+    const word = POSITIONAL_AT[process.argv[2]]?.(argv);
+    const typedApp =
+      word !== undefined && !word.startsWith('-')
+        ? (await import('@mistriwork/engine/server/config/profile.js')).appDirectoryWord(
+            `mistri ${process.argv[2]}${process.argv[2] === 'test' ? ' init' : ''}`,
+            word,
+          )
+        : undefined;
+    if (typedApp) {
+      console.error(`mistri: ${typedApp}`);
+      process.exitCode = 2;
+      return;
+    }
     /* A command whose first word is a verb (`migrate up`, `jobs run`) is left alone when typed bare: its usage says
        what it takes, where a flag added under it would read as the verb. */
     if (takes && (argv.length || takes.bare)) {
@@ -115,24 +150,20 @@ export const main: Main = async () => {
   ]);
   /* `mistri dev`: the serve path below with a dev environment settled first (cli/devMode.ts), not a server of its own. */
   let dev: import('./devMode.js').DevSession | undefined;
-  /* A start reads the profile as every App command does: dev with the App as its first word, a plain start with
-     --app. A child a command started (check's validation) was given its entries as flags, so nothing is added. */
-  const profiled = async (argv: string[], positional: boolean): Promise<string[] | undefined> => {
+  /* A start reads the profile as every App command does: dev and a plain start alike, the App named with --app. A child a command started (check's validation) was given its entries as flags, so nothing is added. */
+  const profiled = async (argv: string[], dev: boolean): Promise<string[] | undefined> => {
     /* A print-and-exit flag reads no file, so it does not load the profile's reader either (cli-startup.test.ts). */
     if (argv.some((arg) => PRINT_ONLY.has(arg))) return argv;
     const { applyProfile, contextLines, fromProfile, projectContext, ProfileRefusal } =
       await import('@mistriwork/engine/server/config/profile.js');
     try {
-      const applied = applyProfile(argv, {
-        entries: positional ? ['commands', 'jobs', 'policy'] : ['commands', 'jobs', 'policy', 'entry'],
-        positional,
-      });
+      const applied = applyProfile(argv, { entries: dev ? ['commands', 'jobs', 'policy'] : ['commands', 'jobs', 'policy', 'entry'] });
       /* Said before the start's own lines, where the profile decided any of it. */
       if (fromProfile(projectContext())) for (const line of contextLines(projectContext())) console.log(line);
       return applied;
     } catch (error) {
       if (!(error instanceof ProfileRefusal)) throw error;
-      console.error(`mistri${positional ? ' dev' : ''}: ${error.message}`);
+      console.error(`mistri${dev ? ' dev' : ''}: ${error.message}`);
       process.exitCode = 2;
       return undefined;
     }
@@ -153,7 +184,9 @@ export const main: Main = async () => {
   /* `mistri serve --app …` read `serve` as the database to open, and the refusal that followed spoke of
      alternate modes. Serving is what a start does; a file called serve is still opened. */
   if (process.argv[2] === 'serve' && !(await import('node:fs')).existsSync('serve')) {
-    console.error('mistri: there is no serve command: a start serves. Run mistri --app <dir> [--config <path>] …, or mistri dev <dir>.');
+    console.error(
+      'mistri: there is no serve command: a start serves. Run mistri --app <dir> [--config <path>] …, or mistri dev [--app <dir>].',
+    );
     process.exitCode = 2;
     return;
   }

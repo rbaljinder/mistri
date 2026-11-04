@@ -1,3 +1,4 @@
+import { FIXTURE_MS, LONG_MS } from './support/budgets';
 /**
  * The ordered workflow strip, on a tenant-owned record.
  *
@@ -37,11 +38,11 @@ const actions = (page: Page) => page.locator('.page-head-actions .page-action');
 
 test.describe('Ignition workflow strips', () => {
   test.skip(IGNITION_SKIP !== false, String(IGNITION_SKIP));
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   let app: IgnitionFixture;
   test.beforeAll(async () => {
     // Two databases seeded and a server started: the setting above times the tests, not this hook (Playwright).
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     app = await startIgnition();
   });
   test.afterAll(async () => {

@@ -1,3 +1,4 @@
+import { LONG_MS } from './support/budgets';
 /**
  * `mistri new --template intake`, walked in a browser: the starter a person gets is a public multi-step intake made of
  * the stock blocks alone — a progress bar, icon cards, a Yes and a No, two names in a row, a rule said at the step that
@@ -28,7 +29,7 @@ const progress = (page: Page, step: number, label: string) =>
   expect(page.getByRole('progressbar', { name: `Step ${step} of 5: ${label}` })).toBeVisible();
 
 test.describe('The intake template', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   let app: Started;
   test.beforeEach(async () => {
     app = await startNewIntake();

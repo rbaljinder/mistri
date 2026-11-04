@@ -479,9 +479,9 @@ test('an App is typed to what it declares: hidden columns apart, and a table onl
       join(dir, 'app.ts'),
       [
         'import type { App, Rows } from "./mistri-schema.d.ts";',
-        'import { count, listView } from "@mistriwork/mistri/app";',
+        'import { rollup, listView } from "@mistriwork/mistri/app";',
         'export default { name: "Shop", connection: "shop",',
-        '  resources: { product: { access: "write", hidden: ["cost"], rollups: { lines: count("line", { whose: "product_id" }) } }, ledger: { access: "write" }, line: {} },',
+        '  resources: { product: { access: "write", hidden: ["cost"], rollups: { lines: rollup.count("line", { whose: "product_id" }) } }, ledger: { access: "write" }, line: {} },',
         '  auth: { roles: { staff: { read: ["product", "line"] } } },',
         '  views: { products: listView("product", { show: ["name", "lines"] }) }, home: "products" } satisfies App;',
         'export const margin = (row: Rows["product"]) => (row.price ?? 0) - (row.cost ?? 0);',

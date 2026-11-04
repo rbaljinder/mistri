@@ -160,6 +160,10 @@ const unit: TableMeta = {
     col('rent', 'NUMERIC'),
     col('balance', 'NUMERIC'),
     col('mileage', 'INTEGER'),
+    col('f5', 'TEXT'),
+    col('f6', 'TEXT'),
+    col('f7', 'TEXT'),
+    col('f8', 'TEXT'),
   ] as TableMeta['columns'],
 };
 const lease: TableMeta = {
@@ -732,6 +736,87 @@ describe('related list options', () => {
     expect(await screen.findByRole('heading', { name: 'Invoices' })).toBeVisible();
   });
 
+  test("empty: 'hide' leaves a breakdown and a chart with nothing to draw out of the page, and keeps one with groups", async () => {
+    const breakdown = {
+      kind: 'breakdown' as const,
+      from: 'invoice',
+      by: 'status',
+      path: 'customer_id',
+      title: 'By status',
+      emptyMode: 'hide' as const,
+    };
+    const chart = {
+      kind: 'chart' as const,
+      from: 'invoice',
+      by: 'status',
+      fn: 'count' as const,
+      shape: 'donut' as const,
+      path: 'customer_id',
+      title: 'Mix',
+      emptyMode: 'hide' as const,
+    };
+    const groups = { base: 'invoice', by: [{ path: 'status' }], measures: [{ fn: 'count', alias: 'value' }], limit: 5 };
+    const shape = (rows: unknown[]) => ({
+      breakdown: { ...groups },
+      resolved: [],
+      ms: 1,
+      offset: 0,
+      columns: ['status', 'value'],
+      rows,
+      total: rows.length,
+    });
+    const reply = (rows: unknown[]) => shape(rows) as never;
+    breakdownOverride = reply([]);
+    draw({
+      page: { ...page, sections: [{ kind: 'fields', paths: ['id', 'name'] }, breakdown, chart] },
+      plans: [
+        { index: 1, breakdown: groups as never },
+        { index: 2, breakdown: groups as never },
+      ],
+    });
+    await waitFor(() => expect(calls.some((call) => call.path === '/api/breakdown' || call.path === '/api/breakdowns')).toBe(true));
+    await waitFor(() => expect(screen.queryByText('Loading')).toBeNull());
+    expect(screen.queryByRole('heading', { name: 'By status' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Mix' })).toBeNull();
+    expect(screen.queryByText('Nothing to count yet.')).toBeNull();
+    cleanup();
+    breakdownOverride = reply([{ status: 'paid', value: 5 }]);
+    draw({
+      page: { ...page, sections: [{ kind: 'fields', paths: ['id', 'name'] }, breakdown, chart] },
+      plans: [
+        { index: 1, breakdown: groups as never },
+        { index: 2, breakdown: groups as never },
+      ],
+    });
+    expect(await screen.findByRole('heading', { name: 'By status' })).toBeVisible();
+    cleanup();
+    breakdownOverride = { ...shape([{ key_1: 'paid', value: 5 }]), columns: ['key_1', 'value'] } as never;
+    draw({
+      page: { ...page, sections: [{ kind: 'fields', paths: ['id', 'name'] }, chart] },
+      plans: [{ index: 1, breakdown: { ...groups, by: [{ path: 'status', alias: 'key_1' }] } as never }],
+    });
+    expect(await screen.findByRole('heading', { name: 'Mix' })).toBeVisible();
+  });
+
+  test("a section's icon is drawn before its heading, and a section without one draws none", async () => {
+    allEmpty();
+    draw({
+      page: {
+        ...page,
+        sections: [
+          { kind: 'fields', paths: ['id', 'name'] },
+          { ...invoices, icon: 'receipt' as never },
+        ],
+      },
+      plans: [{ index: 1, view }],
+    });
+    const heading = await screen.findByRole('heading', { name: 'Invoices' });
+    expect(heading.querySelector(':scope > .dash-section-icon')).not.toBeNull();
+    cleanup();
+    draw({ page: { ...page, sections: [{ kind: 'fields', paths: ['id', 'name'] }, invoices] }, plans: [{ index: 1, view }] });
+    expect((await screen.findByRole('heading', { name: 'Invoices' })).querySelector('.dash-section-icon')).toBeNull();
+  });
+
   test("a grouped list composes with empty: 'hide' by its groups: no groups leaves it out, and a group brings it back", async () => {
     allEmpty();
     const groups = { base: 'invoice', by: [{ path: 'customer_id' }], measures: [{ fn: 'count', alias: 'group_rows' }], limit: 5 };
@@ -1063,7 +1148,7 @@ describe('typed section reads', () => {
         view: invalidView,
         counts: true,
         ...(kind === 'breakdown' ? { breakdown: { base: 'invoice', by: [{ path: 'status' }], measures: [{ fn: 'count' as const }] } } : {}),
-        streams: [{ from: 'invoice', at: 'created_at', show: 'id', view: invalidView }],
+        streams: [{ from: 'invoice', at: 'created_at', text: 'id', view: invalidView }],
       };
       const { onLabel } = draw({ page: { ...page, sections: [{ kind, from: 'invoice', paths: ['name'] }] }, plans: [plan] });
       const problem = await screen.findByText(withMessage ? message : fallback[kind]);
@@ -1094,7 +1179,7 @@ describe('typed section reads', () => {
   test('a nonempty activity stream missing its view is broken without sending a request', async () => {
     draw({
       page: { ...page, sections: [{ kind: 'timeline', from: 'invoice' }] },
-      plans: [{ index: 0, streams: [{ from: 'invoice', at: 'created_at', show: 'id' }] }],
+      plans: [{ index: 0, streams: [{ from: 'invoice', at: 'created_at', text: 'id' }] }],
     });
     expect(await screen.findByText('This activity stream has no view definition.')).toBeInTheDocument();
     expect(calls).toEqual([]);
@@ -1105,7 +1190,7 @@ describe('typed section reads', () => {
     const view = viewDefinition('activity', 'invoice', ['created_at', 'total', 'customer_id']);
     draw({
       page: { ...page, sections: [{ kind: 'timeline', from: 'invoice', title: 'Activity' }] },
-      plans: [{ index: 0, streams: [{ from: 'invoice', at: 'created_at', show: 'total', by: 'customer_id', view }] }],
+      plans: [{ index: 0, streams: [{ from: 'invoice', at: 'created_at', text: 'total', by: 'customer_id', view }] }],
     });
     const row = (await screen.findByText('Called back')).closest('.timeline-row') as HTMLElement;
     // Who wrote it leads the row's header; a day alone has no time of day, and the day heads its rows.
@@ -1130,11 +1215,11 @@ describe('typed section reads', () => {
             {
               from: 'invoice',
               at: 'created_at',
-              show: 'id',
-              detail: 'total',
+              text: 'id',
+              badge: 'total',
               view: viewDefinition('bills', 'invoice', ['created_at', 'id', 'total']),
             },
-            { from: 'note', at: 'created_at', show: 'body', view: viewDefinition('notes', 'note', ['created_at', 'body']) },
+            { from: 'note', at: 'created_at', text: 'body', view: viewDefinition('notes', 'note', ['created_at', 'body']) },
           ],
         },
       ],
@@ -2092,6 +2177,57 @@ test("a record header is drawn in the head: the page's word over the name, the s
   // The header names the record, and no section on the page is it.
   await waitFor(() => expect(onLabel).toHaveBeenCalledWith('Maple Court B103'));
   expect(document.querySelectorAll('.page-section .page-facts')).toHaveLength(0);
+});
+
+test("a header's facts past the sixth fold into its More, closed, and the first six stay in the line", async () => {
+  appMode = true;
+  labelled = 'name';
+  viewRows = [
+    {
+      id: 4,
+      name: 'Maple Court B103',
+      status: 'occupied',
+      beds: 3,
+      rent: 1450,
+      balance: 5,
+      mileage: 7,
+      f5: 'e',
+      f6: 'f',
+      f7: 'g',
+      f8: 'h',
+    },
+  ];
+  drawUnit([{ kind: 'fields', presentation: 'header', paths: ['beds', 'rent', 'balance', 'mileage', 'f5', 'f6', 'f7', 'f8'] }]);
+  const head = document.querySelector('.page-head')!;
+  await waitFor(() => expect(head.querySelector('.page-head-facts:not([aria-hidden])')).not.toBeNull());
+  const line = head.querySelectorAll(':scope > .page-head-facts > .page-fact');
+  expect(line).toHaveLength(6);
+  const more = head.querySelector('details.page-head-more') as HTMLDetailsElement;
+  expect(more.open).toBe(false);
+  expect(more.querySelector('summary')?.textContent).toBe('More');
+  expect([...more.querySelectorAll('.page-fact')].map((fact) => fact.textContent)).toEqual([
+    expect.stringMatching(/g/),
+    expect.stringMatching(/h/),
+  ]);
+});
+
+test("a property rail leaves out the values the record lacks, is not drawn when none is left, and 'show' keeps the dashes", async () => {
+  appMode = true;
+  labelled = 'name';
+  viewRows = [{ id: 4, name: 'Maple Court B103', status: null, beds: 3, rent: null, balance: null, mileage: null }];
+  drawUnit([
+    { kind: 'fields', title: 'Terms', presentation: 'properties', paths: ['beds', 'rent', 'balance'] },
+    { kind: 'fields', title: 'Nothing', presentation: 'properties', paths: ['rent', 'balance'] },
+    { kind: 'fields', title: 'Dashes', presentation: 'properties', emptyMode: 'show', paths: ['beds', 'rent'] },
+    { kind: 'fields', title: 'Summary', presentation: 'summary', emptyMode: 'hide', paths: ['beds', 'mileage'] },
+  ]);
+  await waitFor(() => expect(screen.getByText('Terms')).toBeInTheDocument());
+  const rows = (title: string) =>
+    [...screen.getByText(title).closest('section')!.querySelectorAll('.page-field dt')].map((dt) => dt.textContent);
+  await waitFor(() => expect(rows('Terms')).toEqual(['beds']), { timeout: 1500 });
+  expect(screen.queryByText('Nothing')).toBeNull();
+  expect(rows('Dashes')).toEqual(['beds', 'rent']);
+  expect(rows('Summary')).toEqual(['beds']);
 });
 
 test("a fact's word agrees with a count and nothing else, and a unit is said once", async () => {

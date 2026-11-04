@@ -441,6 +441,7 @@ export function withDefaultAside(schema: DatabaseSchema, page: PageDef): PageDef
     section.paths?.forEach((path) => shown.add(path.split('.')[0]));
     if (section.status) shown.add(section.status);
     if (section.was) shown.add(section.was.split('.')[0]);
+    if (section.subtitle) shown.add(section.subtitle.split('.')[0]);
   }
   const name = labelColumn(base);
   const paths = railOf(base.columns.filter((column) => readable(base, column) && column.name !== name && !shown.has(column.name)));

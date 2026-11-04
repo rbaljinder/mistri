@@ -1,5 +1,6 @@
 import { expect, test } from './support/harness';
 import { startSample } from './support/sampleServer';
+import { FIXTURE_MS, LONG_MS } from './support/budgets';
 
 /**
  * The startup outline's "Check that the server is running" (index.html's
@@ -9,10 +10,10 @@ import { startSample } from './support/sampleServer';
  * is moved on rather than waited for. This spec's own server (listen(0)).
  */
 test.describe('the startup notice', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   let sample: Awaited<ReturnType<typeof startSample>>;
   test.beforeAll(async () => {
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     sample = await startSample('tick');
   });
   test.afterAll(async () => {

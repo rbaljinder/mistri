@@ -1311,7 +1311,7 @@
             "qr",
             "address"
           ],
-          "description": "money: currency formatting (metrics compact to \"$27.9M\"). percent: the value is 0\u2013100, shown with %. number: separators forced on. relative: a date said from today (\"in 3 days\", \"64 days ago\"), the date itself in the tooltip. date: a day said absolutely (\"Sep 4, 2026\"), the same on any day for any reader; a stored date never shifts. datetime: a moment with its time and zone (\"Sep 4, 2026, 2:30 PM PDT\"), said in timezone, else the App's ui.timezone. items: a text of one item per line, drawn as a list (a line of them where there is no room). duration: a number of seconds said as its two largest units (\"2h 15m\"), the seconds in the tooltip. email, phone, url: a value of that shape is a link to write to, call or open; an App links a column named like one without a rule. richText: sanitized HTML, drawn formatted on a record and as an excerpt in a list, edited in the rich text editor; the server sanitizes every write and reads Markdown into it. avatars: the people on a thing (an array, a JSON array, or one name per line or comma) as up to three overlapping initials discs and a \"+N\"; takes nothing else. rating: a whole number of stars out of outOf (5). color: a hex color as its swatch and code. time, month, year: a time of day, a month, a year in the reader's words, each edited in its native picker. json: a JSON document as a tree, edited as text whose problem is said while it is typed; the server refuses a write that is not JSON. qr: the value as a QR code to scan. address: a postal address drawn on its lines, a link to a map search for it (no map is fetched). These draw the value their own way."
+          "description": "money: currency formatting (metrics compact to \"$27.9M\"). percent: the value is 0\u2013100, shown with %. number: separators forced on. relative: a date said from today (\"in 3 days\", \"64 days ago\"), the date itself in the tooltip. date: a day said absolutely (\"Sep 4, 2026\"), the same on any day for any reader; a stored date never shifts. datetime: a moment with its time and zone (\"Sep 4, 2026, 2:30 PM PDT\"), said in timezone, else the App's ui.timezone. items: a text of one item per line, or a list column (text[], jsonb array), drawn as a list (a line of them, comma between, where there is no room; a list column is chips otherwise). duration: a number of seconds said as its two largest units (\"2h 15m\"), the seconds in the tooltip. email, phone, url: a value of that shape is a link to write to, call or open; an App links a column named like one without a rule. richText: sanitized HTML, drawn formatted on a record and as an excerpt in a list, edited in the rich text editor; the server sanitizes every write and reads Markdown into it. avatars: the people on a thing (an array, a JSON array, or one name per line or comma) as up to three overlapping initials discs and a \"+N\"; takes nothing else. rating: a whole number of stars out of outOf (5). color: a hex color as its swatch and code. time, month, year: a time of day, a month, a year in the reader's words, each edited in its native picker. json: a JSON document as a tree, edited as text whose problem is said while it is typed; the server refuses a write that is not JSON. qr: the value as a QR code to scan. address: a postal address drawn on its lines, a link to a map search for it (no map is fetched). These draw the value their own way."
         },
         "face": { "enum": ["data", "ui", "code"], "description": "The face this column's values are set in, over the look's own: data (the look's data face, usually monospace), ui (the interface's reading face) or code (always monospace, for a VIN or a hash). Left out, an App sets a key, a reference, a code or a QR value in the data face and any other text in the reading face. A rule with a component takes no face, the component sets its own; masked: true takes none either." },
         "timezone": { "type": "string", "minLength": 1, "description": "With format date or datetime: the IANA zone a moment is said in, over the App's ui.timezone (\"America/New_York\"). A stored date alone never shifts." },
@@ -1597,6 +1597,12 @@
           "type": "string",
           "minLength": 1,
           "description": "The physical table id when it is not inferred. The only place an engine-schema-qualified id (\"public.opportunity\") appears."
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Preview. The conditions every read of this resource stands on, in the query language (\"kind = order\"): how one table is bound as several resources. A filter, never a grant; read-only for now."
         },
         "access": {
           "enum": [
@@ -2015,21 +2021,22 @@
                 "enum": [
                   "boolean",
                   "number",
-                  "date"
+                  "date",
+                  "text"
                 ]
               },
               "value": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 500,
-                "description": "The expression: columns and paths through references, numbers, quoted text, true, false, today, now, me, comparisons, and, or, not, in (…), is empty, + - * /, date spans (+ 3 months), and coalesce(a, b, …), round(x) or round(x, places), abs(x), min(a, b, …) and max(a, b, …)."
+                "description": "The expression: columns and paths through references, a JSON column's member as text (filters_json.make, Preview: computed.text('filters_json.make')), numbers, quoted text, true, false, today, now, me, comparisons, and, or, not, in (…), is empty, + - * /, date spans (+ 3 months), and coalesce(a, b, …), round(x) or round(x, places), abs(x), min(a, b, …) and max(a, b, …)."
               }
             }
           }
         },
         "rollups": {
           "type": "object",
-          "description": "Numbers about the rows that point at each record, by name, read like columns wherever a column is (a list's show, a sort, a condition, a command's when, a page's fields, display and labels): count(from), sum, min or max (from, column), or latest (from, column), a column of the newest row. Computed in the record's own statement through the child's grants and row scope; never written.",
+          "description": "Numbers about the rows that point at each record, by name, read like columns wherever a column is (a list's show, a sort, a condition, a command's when, a page's fields, display and labels): rollup.count(from), rollup.sum, rollup.avg, rollup.min or rollup.max (from, column), or rollup.latest (from, column), a column of the newest row. Computed in the record's own statement through the child's grants and row scope; never written.",
           "propertyNames": {
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
           },
@@ -2045,6 +2052,7 @@
                 "enum": [
                   "count",
                   "sum",
+                  "avg",
                   "min",
                   "max",
                   "latest"
@@ -2058,7 +2066,7 @@
               "column": {
                 "type": "string",
                 "minLength": 1,
-                "description": "The column of `from` a sum, min, max or latest reads; a count names none. A sum, min or max may read a computed column of `from` that reads only its row's own columns, written inline; a latest reads a stored column of any type, and serves its vocabulary."
+                "description": "The column of `from` a sum, avg, min, max or latest reads; a count names none. A sum, avg, min or max may read a computed column of `from` that reads only its row's own columns, written inline; a latest reads a stored column of any type, and serves its vocabulary."
               },
               "sort": {
                 "type": "string",
@@ -3913,8 +3921,7 @@
               "const": "metric"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "icon": {
               "$ref": "#/$defs/appIcon",
@@ -4030,8 +4037,7 @@
               "const": "breakdown"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "icon": {
               "$ref": "#/$defs/appIcon",
@@ -4149,8 +4155,7 @@
               "const": "rows"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "icon": {
               "$ref": "#/$defs/appIcon",
@@ -4265,8 +4270,7 @@
               "const": "chart"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "icon": {
               "$ref": "#/$defs/appIcon",
@@ -4316,10 +4320,12 @@
               "description": "A line's curve: smooth draws a monotone curve through the points."
             },
             "total": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 40,
+              "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 40 }, { "$ref": "page.schema.json#/$defs/messageRef" }],
               "description": "A donut's words for the figure in its middle, said under it."
+            },
+            "sort": {
+              "enum": ["value", "category"],
+              "description": "The order of a bar chart's or donut's categories: value (largest first) or category (the key's own order). Absent, a category with an order of its own keeps it and any other goes largest first."
             },
             "over": {
               "type": "string",
@@ -4399,8 +4405,7 @@
               "const": "note"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "text": {
               "type": "string",
@@ -4418,8 +4423,50 @@
               ]
             },
             "variant": {
-              "const": "banner",
-              "description": "The dashboard's introduction: a ground of its own, a larger title, the action a button, room for a picture. Needs a title."
+              "enum": ["quiet", "callout"],
+              "description": "quiet: small print, no mark. callout: a ground of its own. Absent: the plain note."
+            },
+            "area": { "$ref": "#/$defs/dashArea" },
+            "width": {
+              "enum": [
+                "full",
+                "two-thirds",
+                "half",
+                "third"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "title",
+            "text"
+          ],
+          "description": "The dashboard's introduction: a ground of its own, a larger title, the action a button, room for a picture.",
+          "properties": {
+            "kind": {
+              "const": "banner"
+            },
+            "title": {
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The words. Plain text; blank lines separate paragraphs."
+            },
+            "icon": {
+              "$ref": "#/$defs/appIcon",
+              "description": "A curated mark above the guidance."
+            },
+            "action": {
+              "oneOf": [
+                { "type": "object", "additionalProperties": false, "required": ["label", "to"], "properties": { "label": { "type": "string", "pattern": "\\S" }, "to": { "type": "string", "pattern": "\\S" } } },
+                { "type": "object", "additionalProperties": false, "required": ["label", "to"], "properties": { "label": { "type": "string", "pattern": "\\S" }, "to": { "$ref": "#/$defs/appTargetStatic" } } }
+              ]
             },
             "eyebrow": {
               "type": "string",
@@ -4462,8 +4509,7 @@
               "const": "matrix"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "icon": {
               "$ref": "#/$defs/appIcon",
@@ -4555,8 +4601,7 @@
               "const": "funnel"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "icon": {
               "$ref": "#/$defs/appIcon",
@@ -4655,8 +4700,7 @@
               "description": "hide leaves the board out of the dashboard while it has nothing to draw."
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "icon": {
               "$ref": "#/$defs/appIcon",
@@ -4720,8 +4764,7 @@
             },
             "area": { "$ref": "#/$defs/dashArea" },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "description": {
               "type": "string",
@@ -4773,8 +4816,7 @@
               "const": "custom"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "area": { "$ref": "#/$defs/dashArea" },
             "width": {
@@ -4915,8 +4957,7 @@
               "const": "activity"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "icon": {
               "$ref": "#/$defs/appIcon",
@@ -4973,8 +5014,7 @@
               "const": "find"
             },
             "title": {
-              "type": "string",
-              "minLength": 1
+              "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
             },
             "icon": {
               "$ref": "#/$defs/appIcon",
@@ -5014,7 +5054,7 @@
           "description": "A tenant's own Branding form, for its admins: what the App's branding.allow lets them change, with a live preview. Needs the App's branding.",
           "properties": {
             "kind": { "const": "branding" },
-            "title": { "type": "string", "minLength": 1 },
+            "title": { "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
             "icon": { "$ref": "#/$defs/appIcon", "description": "A curated mark in the section’s heading row." },
             "area": { "$ref": "#/$defs/dashArea" },
             "width": { "enum": ["full", "two-thirds", "half", "third"] }
@@ -5027,7 +5067,7 @@
           "description": "The integrations' settings form: each integration's secrets, set or not, entered by the jobs module's integrations.editors.",
           "properties": {
             "kind": { "const": "integrations" },
-            "title": { "type": "string", "minLength": 1 },
+            "title": { "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
             "icon": { "$ref": "#/$defs/appIcon", "description": "A curated mark in the section’s heading row." },
             "area": { "$ref": "#/$defs/dashArea" },
             "width": { "enum": ["full", "two-thirds", "half", "third"] }
@@ -5071,7 +5111,7 @@
             "third"
           ]
         },
-        "tab": {
+        "listTab": {
           "type": "string",
           "minLength": 1,
           "description": "One of the view's tabs by its address word, as its URL carries it; a label is refused. Default: its first tab."

@@ -2,6 +2,7 @@
 import { test, expect, type Page, type Locator } from './support/harness.js';
 import { follow } from './support/app.js';
 import { rows } from './support/db.js';
+import { SLOW_MS } from './support/budgets';
 /* A command is one journal row; its audit is that row's targets, read back one row each. */
 import { sqliteAuditRows } from '../test/support/commandTargets.js';
 import { startTenantAssignment, type TenantAssignmentFixture } from './support/tenantProofServer.js';
@@ -233,7 +234,7 @@ async function openHistory(page: Page, app: Fixture, form: Locator, receipt: Rec
 }
 
 test.describe('Ignition tenant assignment browser proof', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startTenantAssignment();

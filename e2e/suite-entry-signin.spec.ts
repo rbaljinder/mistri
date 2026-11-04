@@ -66,7 +66,11 @@ async function openEntrySuite() {
           name: 'Suite',
           store: join(dir, 'identity.db'),
           grants: join(dir, 'grants.db'),
-          environment: { BETTER_AUTH_SECRET: 'test-entry-browser-secret-longer-than-thirty-two-characters' },
+          environment: {
+            BETTER_AUTH_SECRET: 'test-entry-browser-secret-longer-than-thirty-two-characters',
+            MISTRI_TEST_AUTH_LIMITS: 'off',
+            NODE_ENV: 'test',
+          },
         },
       },
       deployments,

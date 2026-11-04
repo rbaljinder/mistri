@@ -343,7 +343,7 @@ decisions 6 and 9 deferred.
 | `page` and `iterate` | 3 | `commandDb.ts`, `engine/src/shared/keysetPage.ts` (reused), `commands/businessCommandExecution.ts` (signal) |
 | `snapshot: true` | 3 | `commands/businessCommands.ts`, `adapters/postgres.ts`, `adapters/postgresTransactionHandle.ts`, the check rule |
 | Workflow recipe and resume test | 2 | a test, the workflows page |
-| Tests (SQLite, PostgreSQL serial lane, adversarial, combinations) | 3 | `test/command-aggregates*.test.ts`, `test/postgres-command-aggregates.test.ts`, `test/combinations.test.ts` |
+| Tests (SQLite, PostgreSQL serial lane, adversarial, combinations) | 3 | `test/command-aggregates*.test.ts` (`command-aggregates-engines.test.ts` is the PostgreSQL lane), `test/combinations.test.ts` |
 | Docs and a sample App | 1 | `site/src/content/docs/docs/commands.md`, `CHANGELOG.md`, Lintel or Ignition |
 
 Policy reads (`policy/policyDb.ts`), page loaders (`commands/pageLoaderRun.ts`)

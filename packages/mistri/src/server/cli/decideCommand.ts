@@ -11,7 +11,7 @@
  *
  * It spends the operator's money, so it says how much first: the count and a
  * price that errs high, refused without `--yes` and above `--max-cost`
- * (default $5); `--dry` prints exactly what one record would send and asks
+ * (default $5); `--dry-run` prints exactly what one record would send and asks
  * nothing. It writes nothing and never applies. `--pin` writes the pin into
  * decisions.lock only when the share it would apply was wrong at most
  * `--max-error` of the time (default 2%).
@@ -21,8 +21,8 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { StoredRecordChange } from '../../adapters/history/recordHistory.js';
 
-const USAGE = `mistri decide eval <decision> --app <dir> --jobs <file> [--provider jev|anthropic] [--limit <n>]
-                    [--truth "<query>"] [--max-cost <dollars>] [--max-error <share>] [--dry] [--yes]
+const USAGE = `mistri decide eval <decision> [--app <dir>] --jobs <file> [--provider jev|anthropic] [--limit <n>]
+                    [--truth "<query>"] [--max-cost <dollars>] [--max-error <share>] [--dry-run] [--yes]
                     [--pin] [--json <file>] [--policy <file>] [<db> | --db <target> | --config <path>]`;
 
 const HELP = `${USAGE}
@@ -38,7 +38,7 @@ const HELP = `${USAGE}
   --provider <name>  who is asked (default the decision's first provider)
   --max-cost <$>     refuse to start, and stop, past this spend (default 5)
   --max-error <p>    the applied share's error a pin allows (default 0.02)
-  --dry              print what one record would send, and ask nothing
+  --dry-run          print what one record would send, and ask nothing
   --yes              spend: without it, only the estimate is printed
   --pin              write the provider's model version into decisions.lock
                      when the applied share's error is within --max-error
@@ -53,7 +53,7 @@ Exit codes: 1 could not run, 2 not spent (no --yes, or over --max-cost),
 
 const EXIT = { ok: 0, couldNot: 1, unspent: 2, unpinned: 3 } as const;
 const VALUED = ['--app', '--jobs', '--provider', '--limit', '--truth', '--max-cost', '--max-error', '--json'];
-const FLAGS = ['--dry', '--yes', '--pin'];
+const FLAGS = ['--dry-run', '--yes', '--pin'];
 
 export async function runDecideCommand(
   argv: readonly string[],
@@ -90,7 +90,7 @@ export async function runDecideCommand(
     rest.push(arg);
   }
   const appDir = flags['--app'] === undefined ? undefined : resolve(flags['--app']);
-  if (appDir === undefined) return fail(`name the App with --app <dir>.\n${USAGE}`);
+  if (appDir === undefined) return fail(`name the App with --app <dir>, or run it in the App's directory.\n${USAGE}`);
   if (!existsSync(appDir)) return fail(`${flags['--app']} is not a directory.`);
   const jobsFile = flags['--jobs'];
   if (jobsFile === undefined) return fail(`name the jobs module that declares the decision with --jobs <file>.\n${USAGE}`);
@@ -101,7 +101,8 @@ export async function runDecideCommand(
   const maxError = flags['--max-error'] === undefined ? undefined : Number(flags['--max-error']);
   if (maxError !== undefined && (!Number.isFinite(maxError) || maxError < 0 || maxError >= 1))
     return fail('--max-error is a share from 0 to below 1: 0.02 is 2%.');
-  if (set.has('--dry') && (set.has('--yes') || set.has('--pin'))) return fail('--dry asks nothing: it goes without --yes and --pin.');
+  if (set.has('--dry-run') && (set.has('--yes') || set.has('--pin')))
+    return fail('--dry-run asks nothing: it goes without --yes and --pin.');
 
   const [{ parseArgs }, { readStartupConfig }, { Registry, redact }] = await Promise.all([
     import('@mistriwork/engine/server/cli/args.js'),
@@ -285,7 +286,7 @@ export async function runDecideCommand(
           `${history ? '' : ` (${app.id} keeps no history of ${decision.target})`}: an answer that changed the record since may flatter the result.`,
       );
 
-    if (set.has('--dry')) {
+    if (set.has('--dry-run')) {
       const first = items[0];
       write(`One record of ${items.length}, as it would be sent to ${providerName} (nothing is sent):`);
       write(JSON.stringify({ question: decision.question, inputs: first.inputs, answer: first.answer }, null, 2));

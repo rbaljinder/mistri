@@ -17,7 +17,7 @@ npx @mistriwork/mistri dev                   # serve it; a save reloads it
 npx @mistriwork/mistri check --app .         # schema types, typecheck and validation, as CI runs them
 ```
 
-Node 24.22.1 or newer.
+Node 24 or newer.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/src/assets/home/hero-dark.webp" />
@@ -144,13 +144,13 @@ npx @mistriwork/mistri shot --app . <route> --both      # PNGs at a desk and on 
 `mistri.json` sits outside the App's folder, as on the `--scaffold-app` path,
 add `--config ../mistri.json` to `check`, `shot`, `dev` and `grade`.
 
-**4. Accept it.** Walk the journey in `npx @mistriwork/mistri dev .` (create,
+**4. Accept it.** Walk the journey in `npx @mistriwork/mistri dev` (create,
 change, reload, an invalid value, an empty list, a denied action, a phone), then:
 
 ```bash
-npx @mistriwork/mistri test init .      # a journey per role and a permissions matrix
+npx @mistriwork/mistri test init      # a journey per role and a permissions matrix
 node --test 'tests/*.test.ts'
-npx @mistriwork/mistri grade .          # every page at a desk, on a phone and in the dark; fix until no error
+npx @mistriwork/mistri grade          # every page at a desk, on a phone and in the dark; fix until no error
 ```
 
 Finish with the skill's `references/handback.md` checklist, and report the
@@ -358,7 +358,7 @@ npx @mistriwork/mistri dev
 An unpaid invoice now has **Record payment**. Given a date after today, it is
 refused next to the field and nothing is written. The auditor has no such
 button, and the server refuses the command for that role even when it is
-called directly. `npx @mistriwork/mistri test init .` writes a test suite: a
+called directly. `npx @mistriwork/mistri test init` writes a test suite: a
 journey per role and a permissions matrix.
 
 More: [the DSL in one App](https://mistriwork.dev/docs/dsl-tour/) reads the
@@ -380,7 +380,7 @@ npm test          # typecheck, lint, client checks, the unit suite, the componen
 npm run build     # emit dist/, runnable by plain node
 ```
 
-The repository's `.node-version` names the minimum Node (24.22.1) for version managers.
+The repository's `.node-version` names the minimum Node (24) for version managers.
 
 The packages live under `packages/` (`mistri`, `create-mistri`,
 `@mistriwork/engine`, `@mistriwork/ui`, `@mistriwork/kit` and

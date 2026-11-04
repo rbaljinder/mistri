@@ -78,6 +78,10 @@ export interface AppCardsList {
 export const CARDS_MAX_LINES = 4;
 /** How many values a card's facts line says. */
 const CARDS_MAX_FACTS = 6;
+/** How many facts a record header says before the rest wait in its More: the first of them stay in the line. */
+export const HEADER_FACTS_SHOWN = 6;
+/** How many a header may name at all; past the line they fold, so an author never moves one into a side block to fit. */
+export const HEADER_MAX_FACTS = 12;
 /** How many values stand along a card's foot. */
 const CARDS_MAX_FOOTER = 4;
 const CARDS_IMAGE_KEYS = ['about', 'from', 'whose', 'sort'] as const;
@@ -161,6 +165,8 @@ export function parseFacts(
     allowKeys(entry, ['column', 'before', 'after'], `${at}, ${key}`, {
       label: 'is now "after" (a word after the value) or "before" (a word before it)',
       position: 'is gone: "before" is a word before the value, "after" a word after it',
+      subtitle:
+        'is the second line of a headline figure (headline(figure, { subtitle })); a fact is one line, so its words go in "before" or "after"',
     });
     const path = entry.column.trim();
     const word = (value: unknown, which: 'before' | 'after') => {

@@ -294,19 +294,21 @@ function pageFindings(catalog: Catalog, page: PageDef): DesignFinding[] {
       say(
         'aside-metrics',
         `${metrics.length} metric cards beside the aside wrap onto a second row → name them as rollups on the resource ` +
-          `(rollups: { open: count('…', { query: 'status = open' }) }) and show them as fields([...], { presentation: 'summary' }), or drop the aside.`,
+          `(rollups: { open: rollup.count('…', { query: 'status = open' }) }) and show them as fields([...], { presentation: 'summary' }), or drop the aside.`,
       );
     }
   }
 
   // 5. Stacked related lists, unless the page says so on purpose (listTabs: false) or is a document: paper has no
   //    tabs (appDocuments.ts), so its lists are every line, one under another, by design.
+  let stacked = false;
   if (page.listTabs === undefined && page.document === undefined) {
     let run: PageList[] = [];
     const flush = () => {
       /* A list of the one row that matters — the current lease, the latest visit — is a card, not a tab. */
       const one = run.find((section) => section.limit === 1 || /^(current|latest|active|next|last)\b/i.test(section.title ?? ''));
-      if (run.length >= 2)
+      if (run.length >= 2) {
+        stacked = true;
         say(
           'stacked-lists',
           `${run.length} related lists stand one under another (${run.map((section) => titled(section, 'untitled')).join(', ')}), a scroll away from the record ` +
@@ -315,6 +317,7 @@ function pageFindings(catalog: Catalog, page: PageDef): DesignFinding[] {
               ? `; and ${titled(one, 'the one-row list')} is one row, a card: current(${quote(one.title ?? '…')}, ${quote(one.from)}, ${quote(one.path)}, { query: '…', sort: '… desc' }).`
               : '.'),
         );
+      }
       run = [];
     };
     for (const section of main) {
@@ -329,6 +332,53 @@ function pageFindings(catalog: Catalog, page: PageDef): DesignFinding[] {
       else flush();
     }
     flush();
+  }
+
+  // 5b. A record's long sections (its timeline, its related lists) in the main column with no tab among them: the
+  //     record's own facts end up a long scroll above the activity. stacked-lists already says it for a run of lists.
+  if (base && !stacked && page.listTabs === undefined && page.document === undefined) {
+    const long = main.filter(
+      (section) =>
+        section.kind === 'timeline' ||
+        (section.kind === 'list' && !isCards(section) && section.width !== 'half' && section.width !== 'third'),
+    );
+    if (long.length >= 2 && !main.some((section) => section.tab !== undefined))
+      say(
+        'activity-not-tabbed',
+        `${long.map((section) => titled(section, section.kind === 'timeline' ? 'the timeline' : 'a related list')).join(', ')} are ${long.length} long sections in the main column and none sits in a tab, ` +
+          `so the record's own fields end up a scroll above its activity → give each a tab, so a person chooses one panel at a time: ${long.map((section) => `${titled(section, section.kind === 'timeline' ? 'the timeline' : 'a list')}: tab: '${section.title ?? (section.kind === 'timeline' ? 'Activity' : '…')}'`).join(', ')}.`,
+      );
+  }
+
+  // 5c. A summary that is only counts: how many children the record has, not what it says.
+  if (base) {
+    const isCount = (path: string) => {
+      const landed = tryResolvePath(catalog.schema, base.id, path).resolved;
+      return landed?.rollup?.fn === 'count';
+    };
+    for (const section of fieldsOf(sections)) {
+      const paths = section.paths ?? [];
+      if (section.presentation !== 'summary' || paths.length < 2 || !paths.every(isCount)) continue;
+      say(
+        'count-only-summary',
+        `the summary (${paths.slice(0, 4).join(', ')}) is only counts of the record's children → lead with what the record says: its status, an amount, a date, the owner, ` +
+          'and let the counts be tab badges or a line in the aside.',
+      );
+    }
+    let run = 0;
+    const flushMetrics = () => {
+      if (run >= 2)
+        say(
+          'count-only-summary',
+          `${run} metric cards in a row are all counts → lead with what the record says: its status, an amount, a date, the owner, and let the counts be tab badges or a line in the aside.`,
+        );
+      run = 0;
+    };
+    for (const section of sections) {
+      if (section.kind === 'metric' && section.fn === 'count') run++;
+      else flushMetrics();
+    }
+    flushMetrics();
   }
 
   // 6. A title and nothing else: a page of some size that opens on a block of plain fields or a table, with no header.
@@ -506,7 +556,7 @@ function resourceFindings(catalog: Catalog, shown: Map<string, Set<string>>, pag
 
     // 15. A template that prints a timestamp or a decimal raw.
     if (typeof resource.recordLabel === 'string' && resource.recordLabel.includes('{')) {
-      const fields = [...resource.recordLabel.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]);
+      const fields = [...resource.recordLabel.matchAll(/\{([^}]+)\}/g)].flatMap((match) => match[1].split(/\s\?\?\s/));
       /* A day beside the parent it tells apart is a name: a monthly charge is
          "Cole Moreau · rent due 2026-08-31", and refused it became "Cole Moreau ·
          rent", six times on one screen. A date alone, a time or an amount is not. */

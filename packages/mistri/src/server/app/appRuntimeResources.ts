@@ -1,5 +1,5 @@
 import { Refusal, type Adapter } from '@mistriwork/engine/adapters/adapter.js';
-import { declaredDates, declaredReferences, homeSourceOf, physicalBindings, type AppDef } from '../../shared/app.js';
+import { declaredDates, declaredReferences, homeSourceOf, narrowedBindings, physicalBindings, type AppDef } from '../../shared/app.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { AppResources } from './appResources.js';
 import type { AppAdapterSource } from './appSourceAdapter.js';
@@ -173,6 +173,7 @@ function mapSources(
       resources: physicalBindings(app, source),
       references: declaredReferences(app, source),
       dates: declaredDates(app, source),
+      narrowed: narrowedBindings(app, source),
       writable: registry.configOf(owner)?.writable === true,
       group: owner,
       ...(scope === undefined ? {} : { scope }),

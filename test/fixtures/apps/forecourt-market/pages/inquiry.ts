@@ -15,7 +15,7 @@ export const inquiryPage = page(
       actions: ['bookTestDrive', 'recordOffer', 'markSold', 'assignInquiry', 'logCall'],
       destructive: ['markLost'],
     }),
-    timeline('Conversation', [stream('inquiry_message', 'inquiry_id', 'sent_at', 'body', { author: 'author', detail: 'kind' })], {
+    timeline('Conversation', [stream('inquiry_message', 'inquiry_id', 'sent_at', 'body', { author: 'author', badge: 'kind' })], {
       newest: 'last',
       limit: 60,
       composer: { reply: 'replyToBuyer', note: 'addNote' },

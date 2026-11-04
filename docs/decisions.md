@@ -113,7 +113,7 @@ answer people settled (`--truth`), with their inputs put back as they were
 before the answer where record history keeps them, and reports accuracy,
 Brier, calibration error, a reliability table and what the thresholds would
 have done. It prints the count and an estimate first and spends only with
-`--yes` under `--max-cost`; `--dry` prints what one record would send, for a
+`--yes` under `--max-cost`; `--dry-run` prints what one record would send, for a
 consent review. It writes nothing and never applies. `--pin` writes the pin
 only when the share it would apply was wrong at most `--max-error` (2%).
 A row-policy App names its policy (`--policy`) and is read as its service

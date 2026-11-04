@@ -182,7 +182,11 @@ function main() {
     try {
       /* The suites sign in from 127.0.0.1 more often than Better Auth's per-address limits allow; test-node.mjs lifts
          them the same way (auth.ts authLimitsOffForTests), and a selection must run the files as the gate does. */
-      const env = { ...process.env, MISTRI_TEST_AUTH_LIMITS: process.env.MISTRI_TEST_AUTH_LIMITS ?? 'off' };
+      const env = {
+        ...process.env,
+        MISTRI_TEST_AUTH_LIMITS: process.env.MISTRI_TEST_AUTH_LIMITS ?? 'off',
+        NODE_ENV: process.env.NODE_ENV ?? 'test',
+      };
       execFileSync(command, args, { cwd: ROOT, stdio: 'inherit', env });
     } catch (error) {
       process.exit(typeof error.status === 'number' ? error.status : 1);

@@ -1,7 +1,7 @@
 /**
  * Rollups: one number about the rows that point at a record — an order's
  * line total, an account's open deals — declared once on the resource
- * (`rollups: { line_total: sum('order_line', 'amount') }`) and read wherever
+ * (`rollups: { line_total: rollup.sum('order_line', 'amount') }`) and read wherever
  * a column of the record is: a list's `show`, a sort, a tab's condition, a
  * record page's fields, a card's figure and facts, a queue's facts, a
  * picker's query, a dashboard's measure and a breakdown's key — and through
@@ -29,7 +29,7 @@ import type { Filter } from './filter.js';
 import type { ComputedColumn } from './computed.js';
 import type { ColumnMeta } from './schema.js';
 
-export const ROLLUP_FNS = ['count', 'sum', 'min', 'max', 'latest'] as const;
+export const ROLLUP_FNS = ['count', 'sum', 'avg', 'min', 'max', 'latest'] as const;
 export type RollupFn = (typeof ROLLUP_FNS)[number];
 
 /** A rollup as the catalog serves it and a view carries it: no request ever supplies one. */
@@ -91,13 +91,13 @@ export interface Rollup {
   type: string;
   /**
    * Set when `column` names a rollup of the child rather than one of its
-   * columns — a customer's `lines: sum('sales_order', 'lines')`, the count
+   * columns — a customer's `lines: rollup.sum('sales_order', 'lines')`, the count
    * of its orders' lines, which is how a rollup reaches two hops. The inner
    * rollup is compiled inside the outer one's aggregate, each through its own
    * child's relation, so a row policy narrows both levels. One level only:
    * the inner one reads a column (appRollupRules says so when it does not).
    *
-   * A rollup whose `whose` walks two references (`sum('time_entry', 'hours',
+   * A rollup whose `whose` walks two references (`rollup.sum('time_entry', 'hours',
    * { whose: 'task_id.project_id' })`) is served in the same shape: the outer
    * reads the middle table (`task.project_id`) with no column of its own,
    * the inner the rows and column declared, with the declared query. A count

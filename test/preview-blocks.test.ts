@@ -61,7 +61,7 @@ const SCHEMA: DatabaseSchema = {
   ],
 };
 
-const MESSAGES = { from: 'message', whose: 'ticket_id', at: 'sent_at', show: 'body', author: 'author_id' };
+const MESSAGES = { from: 'message', whose: 'ticket_id', at: 'sent_at', text: 'body', author: 'author_id' };
 const page = (section: Record<string, unknown>): PageDef =>
   parsePagesConfig({ pages: [{ id: 'ticket', label: 'Ticket', base: 'ticket', sections: [section] }] }, 'pages')[0];
 const conversation = (extra: Record<string, unknown> = {}, streams: unknown[] = [MESSAGES]) =>
@@ -100,7 +100,7 @@ describe("a conversation's other side", () => {
     );
     assert.match(validatePage(SCHEMA, conversation({ side: 'author_id = 1 sort sent_at' })).error ?? '', /"side": it is a condition/);
     /* A stream about another row has no way back to the record: never on a side that names it, and refused one of its own. */
-    const about = { from: 'company_note', whose: 'company_id', about: 'company_id', at: 'written_at', show: 'body' };
+    const about = { from: 'company_note', whose: 'company_id', about: 'company_id', at: 'written_at', text: 'body' };
     assert.equal(validatePage(SCHEMA, conversation({ side: 'author_id = record.caller_id' }, [MESSAGES, about])).error, undefined);
     assert.match(
       validatePage(SCHEMA, conversation({ side: 'author_id = record.caller_id' }, [about])).error ?? '',
@@ -112,7 +112,7 @@ describe("a conversation's other side", () => {
     );
   });
 
-  const WORK = { from: 'work_time', whose: 'ticket_id', at: 'logged_at', show: 'note', author: 'person_id' };
+  const WORK = { from: 'work_time', whose: 'ticket_id', at: 'logged_at', text: 'note', author: 'person_id' };
   const sidesOf = (def: PageDef) =>
     (
       planPageSections(SCHEMA, def, { id: 7 }, {}, new Date(0)) as Array<{ streams: Array<{ side?: { view?: { filter?: unknown } } }> }>

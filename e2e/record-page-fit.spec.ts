@@ -5,32 +5,18 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { expect, test } from './support/harness';
+import { expect, test as base } from './support/harness';
+import { fixture } from './support/fixture';
 import { card, chart, dashboard, fields, headline, metric, page, related } from '../packages/mistri/schema/app.mjs';
 
-/**
- * A record page composed the way the samples compose one, drawn in a real
- * browser, for the defects that only a layout shows: a related list beside
- * an aside cut its status column off at the edge; on a phone the whole aside
- * came up after the first section, ahead of the lists; a page chart over
- * months stood in count order; a day chart's hidden data table made the
- * dashboard scroll thousands of pixels into nothing; a 0/1 flag read "0";
- * and a multi-word status read "partially paid" beside "Paid".
- *
- * A server of its own over a fresh database (listen(0), mkdtemp).
- */
-let origin = '';
-let directory = '';
-let child: ChildProcess | undefined;
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'mistri-record-page-fit-'));
-  const db = join(directory, 'leases.db');
-  const source = new DatabaseSync(db);
-  try {
-    source.exec(`
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      directory = mkdtempSync(join(tmpdir(), 'mistri-record-page-fit-'));
+      const db = join(directory, 'leases.db');
+      const source = new DatabaseSync(db);
+      try {
+        source.exec(`
       CREATE TABLE unit (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
       INSERT INTO unit VALUES (1, 'Maple Court 102');
       CREATE TABLE lease (id INTEGER PRIMARY KEY, unit_id INTEGER NOT NULL REFERENCES unit(id), tenant TEXT NOT NULL, rent REAL NOT NULL,
@@ -52,140 +38,156 @@ test.beforeAll(async () => {
         status TEXT NOT NULL CHECK (status IN ('cleared', 'pending', 'returned')));
       INSERT INTO receipt VALUES (1, 1, 'RCPT-2026-0001', '2026-03-03', 450, 'bank transfer', 'cleared'),
         (2, 1, 'RCPT-2026-0002', '2026-04-03', 1200, 'cashier check', 'pending');`);
-    const insert = source.prepare(
-      'INSERT INTO payment (lease_id, due_on, amount, paid_on, method, reference, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    );
-    /* Two years of days for the dashboard's day chart; the lease's own months
-       hold more payments in the older months, so count order is not time order. */
-    for (let day = 0; day < 700; day += 1) {
-      const due = new Date(Date.UTC(2024, 9, 1 + day)).toISOString().slice(0, 10);
-      insert.run(2 + (day % 3), due, 100, due, 'transfer', `REF-${day}`, 'Autopay', 'paid');
-    }
-    const months: Array<[string, number]> = [
-      ['2026-01-03', 3],
-      ['2026-02-03', 1],
-      ['2026-03-03', 2],
-    ];
-    for (const [due, times] of months) {
-      for (let n = 0; n < times; n += 1)
-        insert.run(
-          1,
-          due,
-          2003,
-          null,
-          'bank transfer',
-          `LEASE-1-${due}-${n}`,
-          'Rent for the month, sent late',
-          n ? 'partially paid' : 'paid',
+        const insert = source.prepare(
+          'INSERT INTO payment (lease_id, due_on, amount, paid_on, method, reference, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         );
-    }
-  } finally {
-    source.close();
-  }
-  const config = join(directory, 'connections.json');
-  writeFileSync(config, JSON.stringify({ connections: [{ name: 'leases', url: db }] }));
-  const appDirectory = join(directory, 'app');
-  mkdirSync(appDirectory);
-  writeFileSync(
-    join(appDirectory, 'app.json'),
-    JSON.stringify({
-      id: 'leases',
-      name: 'Leases',
-      connection: 'leases',
-      resources: {
-        lease: { display: { status: { tone: { active: 'good', 'in review': 'info', ended: 'neutral' } } } },
-        payment: { display: { status: { tone: { paid: 'good', late: 'bad', 'partially paid': 'warn' } } } },
-        unit: {},
-        charge: {},
-        deposit: {},
-        inspection: {},
-        memo: {},
-        receipt: { display: { status: { tone: { cleared: 'good', pending: 'warn', returned: 'bad' } } } },
-      },
-      views: {
-        overview: dashboard('Overview', [chart('Payments by day', 'payment', 'day due_on', { shape: 'bar' })]),
-        leases: { kind: 'list', from: 'lease', label: 'Leases', show: ['tenant', 'status'] },
-        units: { kind: 'list', from: 'unit', label: 'Units', show: ['name'] },
-        memos: { kind: 'list', from: 'memo', label: 'Memos', show: ['label'] },
-      },
-      pages: {
-        unit: page(
-          'unit',
-          [
-            fields(['name']),
-            related('Charges', 'charge', 'unit_id', { show: ['label'] }),
-            related('Deposits', 'deposit', 'unit_id', { show: ['label'] }),
-            related('Inspections', 'inspection', 'unit_id', { show: ['label'] }),
-            related('Memos', 'memo', 'unit_id', { show: ['label'] }),
-          ],
-          { empty: 'collapse' },
-        ),
-        memo: page('memo', [
-          fields(['label']),
-          related('Receipts', 'receipt', 'memo_id', {
-            show: ['reference', 'received_on', 'amount', 'method', 'status'],
-            region: 'aside',
-          }),
-        ]),
-        lease: page('lease', [
-          fields(['tenant', 'status', 'auto_renew']),
-          metric('Payments made', 'payment', { whose: 'lease_id', width: 'half' }),
-          related('Payments', 'payment', 'lease_id', {
-            show: ['due_on', 'reference', 'amount', 'paid_on', 'method', 'note', 'status'],
-            sort: 'due_on desc',
-          }),
-          chart('Payments by month', 'payment', 'month due_on', { whose: 'lease_id', shape: 'bar' }),
-          headline('rent', { region: 'aside' }),
-          card('Unit', 'unit_id', ['name'], { region: 'aside' }),
-          fields(['auto_renew'], { title: 'Terms', region: 'aside' }),
-        ]),
-      },
-      home: 'leases',
-      nav: ['overview', 'leases', 'units'],
-    }),
-  );
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  origin = `http://127.0.0.1:${port}`;
-  const started = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', appDirectory, '--port', String(port)],
-    {
-      cwd: resolve('.'),
-      env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  child = started;
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 20_000);
-    const ready = () => {
-      if (log.includes('Listening on ')) {
-        clearTimeout(timer);
-        done();
+        /* Two years of days for the dashboard's day chart; the lease's own months
+       hold more payments in the older months, so count order is not time order. */
+        for (let day = 0; day < 700; day += 1) {
+          const due = new Date(Date.UTC(2024, 9, 1 + day)).toISOString().slice(0, 10);
+          insert.run(2 + (day % 3), due, 100, due, 'transfer', `REF-${day}`, 'Autopay', 'paid');
+        }
+        const months: Array<[string, number]> = [
+          ['2026-01-03', 3],
+          ['2026-02-03', 1],
+          ['2026-03-03', 2],
+        ];
+        for (const [due, times] of months) {
+          for (let n = 0; n < times; n += 1)
+            insert.run(
+              1,
+              due,
+              2003,
+              null,
+              'bank transfer',
+              `LEASE-1-${due}-${n}`,
+              'Rent for the month, sent late',
+              n ? 'partially paid' : 'paid',
+            );
+        }
+      } finally {
+        source.close();
       }
-    };
-    started.stdout!.on('data', ready);
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The fixture exited: ${log}`));
-    });
-  });
+      const config = join(directory, 'connections.json');
+      writeFileSync(config, JSON.stringify({ connections: [{ name: 'leases', url: db }] }));
+      const appDirectory = join(directory, 'app');
+      mkdirSync(appDirectory);
+      writeFileSync(
+        join(appDirectory, 'app.json'),
+        JSON.stringify({
+          id: 'leases',
+          name: 'Leases',
+          connection: 'leases',
+          resources: {
+            lease: { display: { status: { tone: { active: 'good', 'in review': 'info', ended: 'neutral' } } } },
+            payment: { display: { status: { tone: { paid: 'good', late: 'bad', 'partially paid': 'warn' } } } },
+            unit: {},
+            charge: {},
+            deposit: {},
+            inspection: {},
+            memo: {},
+            receipt: { display: { status: { tone: { cleared: 'good', pending: 'warn', returned: 'bad' } } } },
+          },
+          views: {
+            overview: dashboard('Overview', [chart('Payments by day', 'payment', 'day due_on', { shape: 'bar' })]),
+            leases: { kind: 'list', from: 'lease', label: 'Leases', show: ['tenant', 'status'] },
+            units: { kind: 'list', from: 'unit', label: 'Units', show: ['name'] },
+            memos: { kind: 'list', from: 'memo', label: 'Memos', show: ['label'] },
+          },
+          pages: {
+            unit: page(
+              'unit',
+              [
+                fields(['name']),
+                related('Charges', 'charge', 'unit_id', { show: ['label'] }),
+                related('Deposits', 'deposit', 'unit_id', { show: ['label'] }),
+                related('Inspections', 'inspection', 'unit_id', { show: ['label'] }),
+                related('Memos', 'memo', 'unit_id', { show: ['label'] }),
+              ],
+              { empty: 'collapse' },
+            ),
+            memo: page('memo', [
+              fields(['label']),
+              related('Receipts', 'receipt', 'memo_id', {
+                show: ['reference', 'received_on', 'amount', 'method', 'status'],
+                region: 'aside',
+              }),
+            ]),
+            lease: page('lease', [
+              fields(['tenant', 'status', 'auto_renew']),
+              metric('Payments made', 'payment', { whose: 'lease_id', width: 'half' }),
+              related('Payments', 'payment', 'lease_id', {
+                show: ['due_on', 'reference', 'amount', 'paid_on', 'method', 'note', 'status'],
+                sort: 'due_on desc',
+              }),
+              chart('Payments by month', 'payment', 'month due_on', { whose: 'lease_id', shape: 'bar' }),
+              headline('rent', { region: 'aside' }),
+              card('Unit', 'unit_id', ['name'], { region: 'aside' }),
+              fields(['auto_renew'], { title: 'Terms', region: 'aside' }),
+            ]),
+          },
+          home: 'leases',
+          nav: ['overview', 'leases', 'units'],
+        }),
+      );
+      const reservation = createServer();
+      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
+      const port = (reservation.address() as { port: number }).port;
+      await new Promise<void>((done) => reservation.close(() => done()));
+      origin = `http://127.0.0.1:${port}`;
+      const started = spawn(
+        process.execPath,
+        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', appDirectory, '--port', String(port)],
+        {
+          cwd: resolve('.'),
+          env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      child = started;
+      let log = '';
+      started.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      started.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 20_000);
+        const ready = () => {
+          if (log.includes('Listening on ')) {
+            clearTimeout(timer);
+            done();
+          }
+        };
+        started.stdout!.on('data', ready);
+        started.once('exit', () => {
+          clearTimeout(timer);
+          fail(new Error(`The fixture exited: ${log}`));
+        });
+      });
+    },
+    async () => {
+      child?.kill();
+      rmSync(directory, { recursive: true, force: true });
+    },
+  ),
 });
 
-test.afterAll(async () => {
-  child?.kill();
-  rmSync(directory, { recursive: true, force: true });
-});
+/**
+ * A record page composed the way the samples compose one, drawn in a real
+ * browser, for the defects that only a layout shows: a related list beside
+ * an aside cut its status column off at the edge; on a phone the whole aside
+ * came up after the first section, ahead of the lists; a page chart over
+ * months stood in count order; a day chart's hidden data table made the
+ * dashboard scroll thousands of pixels into nothing; a 0/1 flag read "0";
+ * and a multi-word status read "partially paid" beside "Paid".
+ *
+ * A server of its own over a fresh database (listen(0), mkdtemp).
+ */
+let origin = '';
+let directory = '';
+let child: ChildProcess | undefined;
 
 const section = (page: import('@playwright/test').Page, title: string) =>
   page

@@ -5,6 +5,105 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.16
+
+- **From a field report.**
+  - `check` warns (`subtitle-unseen`) when a column with a display `subtitle` is shown in a card, a board, a record's header facts or a card section, none of which draw it; before, the second line was dropped without a word.
+  - A column's display `subtitle` is drawn as the second line in a block of fields and under a headline's figure too, and the record reads it with the row; cards, boards, header facts and summary figures do not draw it.
+  - `subtitle` is refused by name where it would do nothing: on a measured figure (`metric`, `breakdown`, `chart`) and on a header's fact, each told where a second line does work (`headline(figure, { subtitle })`).
+  - An untitled page figure names what it counts in words ("Visit attachment"), not the table's stored name.
+  - A list of plain values (a `text[]`, a JSON array) is one line of words, comma between and no brackets, wherever there is one line to give it: a header's fact, a figure, a list cell ("Ram, Truck"); chips stay in a block of fields. `format: 'items'` on such a column lays its items one to a line in a block of fields instead of chips.
+  - A property rail (the aside's block of fields) leaves out the values a record does not have, as a header's facts do, and is not drawn when none is left; a field the reader may fill in place stays, as the place to set it. `empty: 'hide' | 'show'` on `fields` asks for either on any block. Preview.
+  - A headline figure takes a `subtitle`, the key a list cell uses: a column of the record drawn as a second line under the figure, such as an income's frequency under the income. It is read with the record, checked against the schema, and left out when empty. Preview.
+  - A record header names up to twelve facts: the first six stay in its line and the rest fold into a More disclosure under it (closed, so the head's height does not change when it is opened), where an author used to push them into a side block.
+  - `mistri seed` makes a unique value in its column's own terms: a fresh uuid, the next day, the next integer; a primary key that is also a foreign key draws each parent once and stops with a message naming the table and column when the parent has no row to give. A column of uuid type holds a uuid whatever its name, and a database error says which table (and column) it was filling.
+  - A command's connection flags (`--config`, `--app`, `--db`, `--schema`) may come before it: `mistri --config x.json schema --brief`. A flag typed where no command takes it is told which command it belongs to, and the "Did you mean" suggestion never repeats the spelling that was typed.
+  - The connection warning that a read-only connection's role can do more (a superuser) has its own check code, `superuser-connection`, not `invalid-app`.
+  - The Node floor is 24 (was 24.22.1): the higher floor came with the image's security patch level, and nothing in mistri needs a particular 24.x (`setAuthorizer` is feature-detected). The container image keeps its pinned patch release.
+  - `mistri shot` falls back to an installed Chrome, Edge or Chromium (macOS, Linux and Windows paths, and `CHROME_PATH`) when Playwright's browser is missing, and fails in one line naming `--browser <path>` and the install command.
+  - `index-missing` holds back suggestions on tables under 10,000 estimated rows (one line counts them; `check --warnings` lists them) and never offers a search index on a hidden column.
+  - An array of plain values is drawn as its values, each through the column's display words, with no Raw or Copy over it (they stay on a document); a timeline row nobody wrote leads with its main value, and the timeline docs say which column feeds which part of a row.
+  - A list grouped by a reference on PostgreSQL no longer fails with "column reference is ambiguous" when the group's table has a column of the key's own name (items grouped by `hold_id`, `holds` having a `hold_id`): the empty group, sorted last, tests the key by its expression, not its output name.
+  - The observe error log no longer records the browser's benign "ResizeObserver loop completed with undelivered notifications" (or the older "loop limit exceeded") as a page error.
+  - A page timeline's `limit` is the rows it draws first; where a stream has more, "Show more" reads another `limit` of each stream in place, and only when pressed.
+  - A timeline row's parts are named as drawn: `text` (the main value) and `badge` (the quiet word with it), once `show` and `detail` (see Renamed). The timeline docs carry a labeled picture of a message and a row nobody wrote.
+  - A record's name may fall back: `recordLabel: '{nickname ?? full_name ?? company_id.name}'` is the first path with a value, in every list, picker, breadcrumb and title; `check` validates every path in the chain.
+  - A `current()` card takes `empty: 'hide'` (the card is left out while there is no current row), as the `[empty-run]` advice says; before, the loader refused the very word the advice suggested.
+  - A card over a link (join) table is named by, and opens, the record the link points at ("View conversation", not "View linked conversation"): `current(…, { opens: 'conversation_id' })` names the reference (Preview), and a table of two references, a key and dates finds it unasked.
+  - `mistri observe --errors` prints the running dev server's recent page and server errors, one line each (kind, path, message, trace id); `--json` gives the observer's own answer. Preview.
+  - Two design checks: `activity-not-tabbed` (a record page's main column holds two or more long sections, a timeline or related lists, and none sits in a tab) and `count-only-summary` (a summary or a row of metric cards that only counts the record's children).
+  - `mistri check` asks the database about the reads the App's pages would make: a queries step has it EXPLAIN each distinct statement of the lists, related and grouped lists, timelines, breakdowns, figures and rollups, and the App's own rooms: every list tab (grouped and sorted as the room asks it), every dashboard figure in every window it can be over, and each named segment (planned, never run; a READ ONLY transaction on PostgreSQL). A refusal is a `query-invalid` error naming the `page:section`, `list:`, `dashboard:` or `segment:` with the database's own message; a statement that can only fail for a parameter the run cannot supply is counted as skipped, and the step line says how many were checked and skipped. `--no-query-check` leaves the step out. Preview.
+  - When `check` rewrites `mistri-schema.d.ts`, it prints the columns that are gone: `removed orders.legacy_code`, or `possibly renamed orders.reference_id → orders.submission_id` where one column went and one of its type arrived on the same table.
+  - *Preview:* a table may be bound as several resources, each with a `query`, the fixed conditions every read of it
+    stands on (`orderEvents: { physical: 'audit_event', query: 'kind = order', references: { correlation_id: { to:
+    'orders' } } }`). Lists, counts, search, record pages, related and reverse lists, timelines, figures, breakdowns,
+    rollups, `any` conditions, exports, activity feeds, record histories, command choices and the App API read only
+    the rows the conditions admit; they are a filter under the table's row policy, never a grant. A narrowed resource is
+    read-only for now, and every write through it is refused, as are `notify`, `flows`, `triggers` and a search pack on
+    it, which would follow every write to the table. `mistri check` proves each query against its table, refuses a table bound twice without one, and warns
+    (`narrowed-overlap`) when two queries may both hold of a row.
+  - *Preview:* `computed.text('filters_json.make')` reads a member of a JSON column as text, to show, sort and filter on
+    (PostgreSQL `#>>`, SQLite `json_extract`). `mistri check` proves the column is json or jsonb; it cannot know the
+    member is there.
+- **Marked Preview for 1.0:** what rc.11 to rc.15 added that no more than one sample App uses, so the Stable promise
+  covers less to keep. They work as documented and may change in any 1.x release (`mistri check` lists the ones an App
+  uses, nested keys too); calendar `end`, a list's `totals`, the older display rules and `RowQuery` stay Stable.
+  - *App keys:* a timeline's `reactions`; a display rule's `copy`, `timezone`, `whole` and `format: 'address'`; a
+    metric's `figure`; a list's `group`; a calendar's `span`; a form field's `tree`; `ui.shell.breadcrumbs.home` and `top`.
+  - *Command inputs:* `field.time`, `field.files`, `field.signature`, `as: 'rating'`, `as: 'scan'`, `as: 'color'` and
+    `field.reference({ tree })`.
+  - *Names:* `TimelineReactions`; `count`, `sum`, `avg`, `min`, `max`, `period`, `Aggregated`, `Boundary`, `GroupBy`,
+    `Grouped`, `GroupKey`, `GroupRow`, `Measure`, `Measures`, `MeasureWord`, `Page` and `Period` from `/commands`;
+    `Loaded` from `/page` and `/ui`; the embed router adapters `/react/next`, `/react/react-router` and
+    `/react/tanstack-router` with their three hooks.
+  - *Check codes:* `command-trigger`, `trigger-double-write`, `trigger-lock` and `trigger-unknown`, which follow the
+    already-Preview triggers.
+  `mistri check` now finds a Preview key wherever it is nested, and the public-surface inventory lists the command
+  inputs under `./commands: field.*` and can mark a check code Preview.
+- **The scan input can reach the camera.** An App's page, signed in or public, now answers with
+  `Permissions-Policy: camera=(self)`, so `field.text({ as: 'scan' })` can ask for it; the API, the assets and every
+  other answer keep `camera=()`.
+- **`mistri decide eval --dry` is `--dry-run`**, as in every other command that can show a plan. The old spelling is
+  gone, not aliased.
+- **`MISTRI_TEST_AUTH_LIMITS=off` needs `NODE_ENV=test`.** The seam that lifts sign-in's per-address limits was honored
+  on any loopback server, which also describes a production server behind a reverse proxy on the same machine. It is now
+  ignored, with one warning, unless the process says it is a test; `mistri/testing`'s host already does.
+- **A governance journal search whose account lookup fails answers 503.** Searching the audit by an email whose lookup
+  threw answered 200 with no rows, which read as no one having acted; it is now `503 unavailable`, as the console's other
+  failed reads are. An email that matches no account still finds no rows.
+- **A failed send says why.** A password reset, verification or email-change message, the queued-email loop and the held
+  channel messages logged only "could not be sent". The line now ends with the error's name and `code` and a short message
+  with addresses, URLs and long tokens taken out, so a refused login, a bad recipient and a network that is down read
+  differently.
+- **The `next` peer range is `>=15.1 <17`.** It said `>=14.1`, but Next 14 runs React 18 and mistri's `react` peer is
+  `^19.2`, so no install could satisfy both. Next 15.1 is the first to run React 19 stable.
+- **`migrate up`, `baseline` and `repair` honor `"writable"`.** They wrote DDL and history to a named connection whether or
+  not its config said it may be written. Without `--app`, a connection a config names must now say `"writable": true`;
+  `status`, `diff`, `check`, `--dry-run`, a database named with `--db` and an App's own `--app` run are as before.
+- **`--app <dir>` names the App on every command that takes one**, and is the working directory's App when left out.
+  `dev`, `grade` and `test init` lose their positional App directory; a directory that holds an App, typed where a
+  database or route goes, is refused with the `--app` spelling.
+- **A dashboard `banner()` is its own section kind**, and a section's `note` means a callout or a quiet line only. A
+  dashboard view section's `tab` is `listTab`, so it no longer reads as a page tab.
+- **Rollups are one namespace and gain `avg`.** `rollup.count`, `rollup.sum`, `rollup.avg`, `rollup.min`, `rollup.max` and
+  `rollup.latest` replace the bare `count`, `sum`, `min`, `max` and `latest` exports of `@mistriwork/mistri/app`, which
+  read as the commands' own builders. `avg` over two references is refused: a mean of means is the wrong figure. A
+  rollup's averaged whole-number column is typed `numeric`.
+- **Page and dashboard sections widened.** A page chart takes `curve` and `total`, a dashboard chart `sort`
+  (`'value'` or `'category'`), every page section an `icon`, and a page chart or breakdown `empty: 'hide'`.
+- **A dashboard section's `title` takes a message in the schema**, as its type always said; the loader resolves the
+  message before any parser reads it.
+
+### Renamed
+
+| Old | New | Where it shows |
+| --- | --- | --- |
+| `mistri dev <dir>`, `mistri grade <dir>`, `mistri test init <dir>` | `mistri dev --app <dir>`, and so on | The three commands that took the App as a positional argument. |
+| `banner(…)` as a `note` section | `banner(…)` as a `banner` section | A dashboard that declares a banner; a quiet or callout note keeps `note`. |
+| `tab` on a dashboard view section | `listTab` | A dashboard section that shows a list view on a chosen tab. |
+| `count(…)`, `sum(…)`, `min(…)`, `max(…)`, `latest(…)` from `@mistriwork/mistri/app` | `rollup.count(…)`, `rollup.sum(…)`, `rollup.min(…)`, `rollup.max(…)`, `rollup.latest(…)` | A resource's `rollups`. The commands' own `count`, `sum`, `min`, `max`, `avg` from `@mistriwork/mistri/commands` are unchanged. |
+| `show` and `detail` on a timeline `stream(…)` | `text` and `badge` | A timeline stream, in `stream(from, whose, at, text, { badge })`, in a page's `streams` and in the schema: the names now say the parts as the row draws them (the main value leads; the badge sits beside who and when). The old names are refused with the new ones. |
+
 ## 1.0.0-rc.15
 
 - **The rename is finished in mistri's own surface.** What an App author's stylesheet, a host page, a shared cache, a

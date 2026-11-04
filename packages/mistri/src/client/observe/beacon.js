@@ -77,6 +77,14 @@ function badge() {
   });
 }
 
+/**
+ * The browser's own note that it deferred a resize notification to the next frame ("ResizeObserver loop completed
+ * with undelivered notifications", and "ResizeObserver loop limit exceeded" before it). Nothing is broken and nothing
+ * was lost, so it is not a page error to report.
+ */
+const isResizeObserverNote = (/** @type {unknown} */ message) =>
+  typeof message === 'string' && /^ResizeObserver loop (completed with undelivered notifications|limit exceeded)/.test(message);
+
 export function startBeacon() {
   // The request the page made last, from the header a --dev server adds (server/http/traceRequest.ts).
   const original = window.fetch.bind(window);
@@ -87,6 +95,7 @@ export function startBeacon() {
     return response;
   };
   window.addEventListener('error', (event) => {
+    if (isResizeObserverNote(event.message)) return;
     send({
       kind: 'error',
       message: event.message || String(event.error),

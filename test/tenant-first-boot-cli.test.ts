@@ -235,7 +235,7 @@ test('grant makes the account where mistri dev signs in once dev has started the
 
   // mistri dev's start: the folder it keeps, and the environment it serves under. Its sign-in reads this store.
   const dev: NodeJS.ProcessEnv = { XDG_CONFIG_HOME: own };
-  prepareDev([f.appDir], dev);
+  prepareDev(['--app', f.appDir], dev);
   const signsIn = appAuthStore(loaded, dev);
   assert.notEqual(signsIn, start);
   const north = await f.run('grant', 'north@example.test', '--roles', 'staff', '--tenant', 'north');

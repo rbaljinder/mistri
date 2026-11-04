@@ -60,7 +60,7 @@ function forum({ reaction = [] as ColumnMeta[], keys = [] as ForeignKey[] } = {}
   };
 }
 
-const STREAM = { from: 'post', whose: 'thread_id', at: 'created_at', show: 'body', author: 'author_id.display_name' };
+const STREAM = { from: 'post', whose: 'thread_id', at: 'created_at', text: 'body', author: 'author_id.display_name' };
 const REACTIONS = { from: 'reaction', kinds: KINDS, command: 'reactToPost' };
 
 function threadPage(reactions: Record<string, unknown> = REACTIONS): PageDef {

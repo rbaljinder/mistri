@@ -36,7 +36,7 @@ const read = (path) => readFileSync(join(ROOT, path), 'utf8');
 /* ---------- preview status ---------- */
 
 /* The one list of what stays Preview (packages/mistri/src/shared/preview.ts), shared with `mistri check`. */
-const { PREVIEW_PATHS, PREVIEW_ENTRIES, PREVIEW_EXPORTS, PREVIEW_CLI } = await tsImport(
+const { PREVIEW_PATHS, PREVIEW_ENTRIES, PREVIEW_EXPORTS, PREVIEW_CLI, PREVIEW_CODES, PREVIEW_COMMAND_FIELDS } = await tsImport(
   '../packages/mistri/src/shared/preview.ts',
   import.meta.url,
 );
@@ -290,12 +290,23 @@ async function packageSection() {
         const name = `${key}: ${exported.name}`;
         entries[name] = tagged || previewEntries.has(key) || PREVIEW_EXPORT_NAMES.has(name) ? 'preview' : 'public';
       }
+      if (key === './commands') Object.assign(entries, await commandFieldEntries(key));
     }
     return entries;
   } finally {
     api.close();
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+/** `field` is one export whose members are the command inputs an author writes (`field.files(…)`); the export alone
+ * would leave each unnamed. Every kind, and the options PREVIEW_COMMAND_FIELDS names (`field.number.as = "rating"`),
+ * are listed under it, so a kind or an option can be Preview, and one that is added shows in the inventory. */
+async function commandFieldEntries(entry) {
+  const { field } = await tsImport('../packages/mistri/src/server/commands/commandFields.ts', import.meta.url);
+  const names = new Set([...Object.keys(field).map((kind) => `field.${kind}`), ...PREVIEW_COMMAND_FIELDS]);
+  const preview = new Set(PREVIEW_COMMAND_FIELDS);
+  return Object.fromEntries([...names].map((name) => [`${entry}: ${name}`, preview.has(name) ? 'preview' : 'public']));
 }
 
 /* ---------- 2b. the packages the tree is to be cut into ---------- */
@@ -351,7 +362,10 @@ async function checkCodesSection() {
   const { VALIDATION_CODES } = await tsImport('../packages/mistri/src/server/build/checkProblems.ts', import.meta.url);
   const codes = new Set(VALIDATION_CODES.map((entry) => entry.code));
   for (const match of read('site/src/content/docs/docs/check-codes.md').matchAll(/^\| `([a-z][a-z0-9-]*)` \|/gm)) codes.add(match[1]);
-  return Object.fromEntries([...codes].map((code) => [code, 'public']));
+  /* A code that reports a Preview feature is as free to change as the feature (PREVIEW_CODES). */
+  const preview = new Set(PREVIEW_CODES);
+  for (const code of preview) if (!codes.has(code)) throw new Error(`public-surface: PREVIEW_CODES names "${code}", which no finding says`);
+  return Object.fromEntries([...codes].map((code) => [code, preview.has(code) ? 'preview' : 'public']));
 }
 
 /* ---------- the inventory ---------- */

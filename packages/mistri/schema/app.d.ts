@@ -441,7 +441,7 @@ export interface AppFormField<Field extends string = string> {
   /** A reference: offer its records as the hierarchy one of their columns makes — `{ tree: 'parent_id' }`, the
       referenced table's column naming each record's parent. The picker opens on the records with no parent, reads a
       branch's children as it is opened, says the chosen record's path (Hardware › Laptops › Batteries), and typing
-      searches every level, each match said with its path. */
+      searches every level, each match said with its path. @preview */
   tree?: string;
 }
 
@@ -457,7 +457,7 @@ export interface AppDisplayRule {
       a moment is the day it falls on in `timezone`. datetime: a moment with its time and zone ("Sep 4, 2026,
       2:30 PM PDT"), said in `timezone`, else the App's `ui.timezone`, else the zone the server writes in; a stored
       date alone is still its day. What a statement, a ledger or a log says, where "3 days ago" is wrong tomorrow.
-      items: a text of one item per line, drawn as a list (a line of them where there is no room).
+      items: a text of one item per line, or a list column (text[], jsonb array), drawn as a list (a line of them, comma between, where there is no room; a list column is chips otherwise).
       duration: a number of seconds said as its two largest units — "2h 15m", "3d 4h".
       email, phone, url: the value is a link — mail, a call, a page opened beside the App — where it has that
       shape. A column named like one (`email`, `phone`, `website`) is linked without a rule.
@@ -475,7 +475,7 @@ export interface AppDisplayRule {
       qr: the value as a QR code to scan — an asset tag, a link — with the value under it; the text in a list.
       address: a postal address, one part per line as typed, drawn on its lines as a link that opens a map search
       for it beside the App; nothing is fetched to draw it, and a list says it on one line. A New form asks it in a
-      box of several lines.
+      box of several lines. (`address` is @preview.)
       These draw the value their own way, and take no currency, unit, tone (but a rating), bar, icons or values. */
   format?:
     | 'money'
@@ -506,7 +506,7 @@ export interface AppDisplayRule {
       A rule with a `component` takes no face, the component sets its own; `masked: true` takes none either. */
   face?: 'data' | 'ui' | 'code';
   /** With format "date" or "datetime": the IANA zone a moment is said in, over the App's `ui.timezone`:
-      `paid_at: { format: 'datetime', timezone: 'America/New_York' }`. A stored date alone never shifts. */
+      `paid_at: { format: 'datetime', timezone: 'America/New_York' }`. A stored date alone never shifts. @preview */
   timezone?: string;
   /** With format "rating": the stars of its scale, 3 to 10 (5 when unsaid). The value is a whole number of
       them, edited by picking a star. */
@@ -527,7 +527,7 @@ export interface AppDisplayRule {
   /** A copy button beside the value on a record — a tracking number, an account number, a code to paste
       elsewhere: `tracking_number: { copy: true }`. It copies the stored value and says so in a toast; it waits for
       a pointer or keyboard focus at a desk and stays on touch. Not with `masked: true` or `signature`, and a value a
-      `masked` prefix hides is not copied. */
+      `masked` prefix hides is not copied. @preview */
   copy?: true;
   /** With format "richText": who an @ names — the resource of people, the column stored as the handle, the column shown
       or a template of their columns (`labelColumn: '{first_name} {last_name}'`); typing after the @ matches any word of the label
@@ -559,7 +559,7 @@ export interface AppDisplayRule {
   /** For "money": a whole amount is said without its minor digits — "$24,495", not "$24,495.00" — for a listing where
       cents are noise, a car's price: `price: { format: 'money', whole: true }`. An amount that has cents still shows them
       ("$24,495.50"): the option never hides money. Every screen, a document and the server-drawn public page say it so;
-      a CSV export stays exact. */
+      a CSV export stays exact. @preview */
   whole?: true;
   /** With "number", "money" or no format on a numeric column: the unit said after the figure — "mi", "kg", "/mo" (a leading slash joins
       without a space: "$242/mo"). At most 12 characters. */
@@ -589,7 +589,7 @@ export interface AppDisplayRule {
       the database declares (an enum, a `CHECK (stage IN (…))`) sorts in that declared order, in lists, the column
       menu and the API; free text sorts as text. At most 80 characters a word. */
   values?: Readonly<Record<string, string>>;
-  /** Another column of the same record, said as a muted second line under the value in lists. */
+  /** Another column of the same record, said as a muted second line under the value in lists, and in a block of fields and a headline's figure. Not drawn in cards, boards, header facts or summary figures. */
   subtitle?: string;
   /** A small tinted square before the value in a list's cell: an App icon, in the accent's tint, or with `toneOf`
       another column of the same record whose own `tone` rule tints each row's square —
@@ -740,6 +740,12 @@ export interface AppResource<Column extends string = string, Page extends string
   /** The physical table id when it is not inferred. The only place an
       engine-schema-qualified id ("public.opportunity") appears. */
   physical?: string;
+  /** The conditions every read of this resource stands on, in the query language: how one table is bound as
+      several resources (`orderEvents: { physical: 'audit_event', query: 'kind = order' }`). A filter, never a grant:
+      row policies still apply. Fixed conditions on the table's own columns only; a narrowed resource is read-only
+      for now, and a table is bound again only with one.
+      @preview */
+  query?: string;
   /** The App's ceiling for this resource. An App serves only the resources
       it declares, signed in or not, and a declared one reads; say `'write'` for
       one the App writes. With `auth.roles`, roles grant within the ceilings. */
@@ -929,14 +935,14 @@ export interface AppResource<Column extends string = string, Page extends string
       resource whose writes are its commands', `{ command, match }` runs that command once per row, on the record the
       row's `match` columns find. On a tenant App every row lands in the member's own tenant. */
   import?: boolean | AppImport<Column>;
-  /** Numbers about the rows that point at each record, by name — `{ lines: count('order_line'), total: sum('order_line',
-      'amount') }` — read like columns wherever a column is: a list's `show`, a sort, a tab's condition, a page's fields,
+  /** Numbers about the rows that point at each record, by name — `{ lines: rollup.count('order_line'), total:
+      rollup.sum('order_line', 'amount') }` — read like columns wherever a column is: a list's `show`, a sort, a tab's condition, a page's fields,
       `display` and `labels`. Computed in the record's own statement, through the child's grants and row scope; never
       written, and never offered by a form. */
   rollups?: Record<string, AppRollup>;
   /** Named conditions on this resource's rows, each read as one word — `{ open: 'status = open', overdue: { query:
       'open and due_on < today', label: 'Late' } }`: a tab names one (`tabs: ['open']`), a source does
-      (`metric('Overdue', 'work_order.overdue')`), so does a rollup (`count('work_order', { segment: 'open' })`). Its label
+      (`metric('Overdue', 'work_order.overdue')`), so does a rollup (`rollup.count('work_order', { segment: 'open' })`). Its label
       is its name said as words unless it gives one. A reader who may not read a column one names is served none of it. */
   segments?: Record<string, AppSegment>;
   /** This row uses up a number on the record it points at, kept true on every write: an insert takes `by` from the
@@ -1072,19 +1078,20 @@ export interface AppImport<Column extends string = string, Command extends strin
 /** A computed column: what it comes to, and its expression. `computed.boolean('…')` writes one. A rollup's `column`
     and a dashboard window's `over` may name one that reads only its row's own columns. */
 export interface AppComputed {
-  type: 'boolean' | 'number' | 'date';
+  type: 'boolean' | 'number' | 'date' | 'text';
   value: string;
 }
 
-/** A rollup: `count` of the `from` rows pointing at the record, or the `sum`, `min` or `max` of one of their columns.
-    Over no rows a count and a sum are 0; a min, max or latest is empty. `whose` names the reference when `from` points here more than once, or two references when `from` points at a record
-    that points here (`sum('time_entry', 'hours', { whose: 'task_id.project_id' })`, read under the reader's grants on
+/** A rollup: `count` of the `from` rows pointing at the record, or the `sum`, `avg`, `min` or `max` of one of their columns.
+    Over no rows a count and a sum are 0; an avg, min, max or latest is empty. An `avg` through two references is refused:
+    the average of each middle record's average is not the average of the rows. `whose` names the reference when `from` points here more than once, or two references when `from` points at a record
+    that points here (`rollup.sum('time_entry', 'hours', { whose: 'task_id.project_id' })`, read under the reader's grants on
     both tables); `query` narrows which rows count, over `from`'s own columns and paths through its references to a
     stored column (`'status = open'`, `'sales_order_id.status != cancelled'`). The column may be a
-    computed one of `from` (`sum('task', 'overrun')`), written inline, so long as it reads only its row's own columns:
+    computed one of `from` (`rollup.sum('task', 'overrun')`), written inline, so long as it reads only its row's own columns:
     not a rollup, a reference or `me`. */
 export interface AppRollup<From extends string = string, Column extends string = string, Whose extends string = string> {
-  fn: 'count' | 'sum' | 'min' | 'max' | 'latest';
+  fn: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'latest';
   from: From;
   column?: Column;
   whose?: Whose;
@@ -1322,7 +1329,7 @@ export interface AppCalendarList<Column extends string = string, OneHop extends 
   /** What one page shows. 'month' (the default): the days of a month. 'week' or 'day': a time grid, the hours down
       the side and each record placed by its start and `end`, records that overlap side by side, a line at the
       present moment; a record is dragged to another time or day, Alt and an arrow moving it half an hour or a day.
-      Both read timestamp columns (`date`, and `end` where given). A phone reads the week or the day as an agenda. */
+      Both read timestamp columns (`date`, and `end` where given). A phone reads the week or the day as an agenda. @preview */
   span?: 'month' | 'week' | 'day';
   /** A local text column or one-hop reference label path, like `employee_id.name`. Absent, the record's name. */
   primary?: OneHop;
@@ -1582,7 +1589,7 @@ export interface AppListView<Table extends string = string, Column extends strin
       breakdown over everything the list's conditions match, not the page, so a group a page divides is counted whole.
       Within a group the rows keep the list's own order; a reader's sort of the grouped column turns the groups around.
       A grid only, and not beside a hand `order`, which ranks the whole list. (A record page's related list groups with
-      an object, `group: { by }`, as it pages its groups and reads facts of the record each one is.) */
+      an object, `group: { by }`, as it pages its groups and reads facts of the record each one is.) @preview */
   group?: Column;
   /** Row height: 'comfortable' (default) or 'compact', for a list read as a ledger. A reader's zoom still applies. A grid only
       (a split's list is one). */
@@ -1690,7 +1697,7 @@ export interface MetricDashSection extends DashTableSection, DashFigureWords {
   /** How money is said on the card: `'exact'` (the default), to the currency's minor digits at any size —
       "$28,123.45", a balance read to the cent — or `'compact'` from a thousand, "$28.1K", for a revenue card
       glanced at beside its trend. Its change and its goal follow it; the card's title and what a screen reader
-      hears are exact either way. */
+      hears are exact either way. @preview */
   figure?: 'exact' | 'compact';
   /** A goal for the measure: a meter under the number, and the share reached said beside it. A number, or a goal
       read from data in the metric's own words — `{ from: 'quota', query: 'period = this quarter', measure: 'sum amount' }`;
@@ -1762,6 +1769,10 @@ export interface ChartDashSection extends DashTableSection, DashFigureWords {
   curve?: 'smooth' | 'straight';
   /** A donut's words for the figure in its middle — "Total visitors" — said under it. At most 40 characters. */
   total?: string | AppMessageRef;
+  /** The order of a bar chart's or donut's categories: `'value'` (largest first) or `'category'` (the key's own order:
+      its allowed values in their order, a scale by its size, any other by its name). Absent, a key with an order of its
+      own keeps it and any other goes largest first. A line runs along its key, so it takes none. */
+  sort?: 'value' | 'category';
   /** A goal drawn as a rule in the ink on a line, bar, stacked or waterfall chart, and said beside it; not on a
       donut, scatter, heat map or treemap. */
   target?: number;
@@ -1861,18 +1872,30 @@ export interface NoteDashSection extends DashSectionCommon {
   icon?: AppIcon;
   /** One of the App's rooms to open: a list, a dashboard or a signed-in form view, as an empty list's action and nav open. */
   action?: AppLinkAction;
-  /** 'banner': the dashboard's introduction — a ground of its own across the width, the title larger, the action a
-      button, and room for a picture on the right. The look dresses it (its `banner` recipe). Needs a `title`. */
-  variant?: 'banner';
-  /** A banner's short tag over its title ("New", "Growth"), at most 40 characters. */
+  /** 'quiet': small print, no mark. 'callout': a ground of its own, for what must be seen. Absent: the plain note.
+      The same words a record page's note takes. */
+  variant?: 'quiet' | 'callout';
+}
+
+/** The dashboard's introduction: a ground of its own across the width, the title larger, the action a button, and
+    room for a picture on the right. The look dresses it (its `banner` recipe). */
+export interface BannerDashSection extends DashSectionCommon {
+  kind: 'banner';
+  readonly [madeBy]: 'banner';
+  /** What the banner introduces: required, and larger than a note's. */
+  title: string | AppMessageRef;
+  /** The words. Plain text; blank lines separate paragraphs. */
+  text: string | AppMessageRef;
+  /** A curated mark above the guidance. */
+  icon?: AppIcon;
+  /** One of the App's rooms to open: a list, a dashboard or a signed-in form view. */
+  action?: AppLinkAction;
+  /** A short tag over the title ("New", "Growth"), at most 40 characters. */
   eyebrow?: string | AppMessageRef;
-  /** A banner's picture: one row of a file resource, by its record key, with alt text of at most 200 characters.
+  /** A picture: one row of a file resource, by its record key, with alt text of at most 200 characters.
       A reader whose role cannot read that resource sees the banner without it. */
   image?: { from: string; key: string | number; alt: string | AppMessageRef };
 }
-
-/** The keys only a dashboard's banner note takes. */
-type BannerOnly = 'variant' | 'eyebrow' | 'image';
 
 /** One step of a first run: the next action, and the list view whose New form it opens. */
 export interface FirstRunStep<View extends string = string> {
@@ -2014,7 +2037,7 @@ export interface IntegrationsDashSection extends DashSectionCommon {
 /** One section of a dashboard, by kind. */
 export type AppDashSection =
   | MetricDashSection | BreakdownDashSection | RowsDashSection | ChartDashSection
-  | NoteDashSection | MatrixDashSection | FunnelDashSection | BoardDashSection | FirstRunDashSection | CustomDashSection | ActivityDashSection
+  | NoteDashSection | BannerDashSection | MatrixDashSection | FunnelDashSection | BoardDashSection | FirstRunDashSection | CustomDashSection | ActivityDashSection
   | FindDashSection | BrandingDashSection | IntegrationsDashSection;
 
 /** A list view drawn read-only inside a dashboard: the rows its room opens on, drawn as it draws them.
@@ -2034,7 +2057,7 @@ export interface AppViewDashSection<View extends string = Lowercase<string>> {
   area?: string;
   /** One of the view's tabs by its address word (`'all'`, the segment's name), as its URL carries it; a label is
       refused, since it is said in the reader's language. Default: its first tab. */
-  tab?: string;
+  listTab?: string;
   /** Rows; per lane for a board. */
   limit?: number;
   /** The date column the dashboard's window narrows it by. */
@@ -2253,6 +2276,8 @@ export type AppView = AppListView | AppDashboardView | AppLandingView | AppFormV
 
 interface SectionCommon {
   title?: string | AppMessageRef;
+  /** A curated mark drawn before the section's heading. A note's own `icon` stands over its words instead. */
+  icon?: AppIcon;
   /** Optional record side panel; absent means the main region. A page with no `'aside'` section gets a default one of the
       record's remaining fields (`page(…, { aside: false })` opts out). */
   region?: SectionRegion;
@@ -2288,6 +2313,10 @@ export interface FieldsSection extends SectionCommon {
       status moved by its machine's actions). The server judges every write as it always does; a reader who may do neither
       sees the values, read-only. For a summary or a property rail. */
   editable?: true;
+  /** What a block does with the values the record does not have. 'hide' leaves them out, as a header's facts do, and
+      the whole block when none is left; 'show' says each as a dash. Default: 'hide' for a property rail (the aside's),
+      'show' otherwise. A field the reader may fill in place (`editable`) stays, as the place to set it. */
+  empty?: 'hide' | 'show';
 }
 
 /** A box for the record a reference names — who sells a car, who owns an account — made by `card()`: the reference
@@ -2320,6 +2349,8 @@ export interface HeadlineSection extends SectionCommon {
   })[];
   /** A second figure, under the first and smaller: an estimate, a unit price. */
   subfigure?: string;
+  /** A line of words under the figure, read from a column of the record: the frequency under an income (`subtitle: 'income_frequency'`). */
+  subtitle?: string;
   /** An earlier value of the figure — a number or money column, `was: 'was_price'` — struck through beside
       the figure while it is set and above it, and not drawn otherwise. A fact with no value is left out. */
   was?: string;
@@ -2374,8 +2405,12 @@ export interface CurrentSection extends Pick<SectionCommon, 'title' | 'region' |
   query?: string;
   /** Which of them is current, written like the query bar: "starts_on desc". */
   sort?: string;
-  /** What no current row means. */
-  empty?: AppListEmpty;
+  /** What no current row means, in words; `'hide'` leaves the card out while there is none. */
+  empty?: AppListEmpty | 'hide';
+  /** The reference column of `from` whose record the card opens, named by that record: for a link (join) table, the
+      far side — `current('Conversation', 'ticket_conversation', 'ticket_id', { opens: 'conversation_id' })`. Absent,
+      a table that is only two references (and keys and dates) opens the one `whose` does not name; any other opens its own row. */
+  opens?: string;
 }
 
 /** How a section's figures are said: a metric's, a breakdown's bars, a chart's axis. */
@@ -2507,6 +2542,8 @@ export interface BreakdownSection extends SectionCommon, SectionFigureWords {
   /** One of the table's segments (`resources.<table>.segments`), its conditions ANDed with `query`. */
   segment?: string;
   limit?: number;
+  /** `'hide'` leaves the breakdown out of the page while it has nothing to count. */
+  empty?: 'hide';
 }
 
 export interface TimelineStream {
@@ -2515,9 +2552,10 @@ export interface TimelineStream {
   whose: string;
   /** The date column the stream is ordered and merged by. */
   at: string;
-  /** The line each row becomes: a column, or a dotted path. */
-  show: string;
-  detail?: string;
+  /** The row's text, its main value: a column, or a dotted path. It leads a row nobody wrote. */
+  text: string;
+  /** The row's badge: a quieter word beside who and when (a kind, a status), a column or a dotted path. */
+  badge?: string;
   /** Who wrote each row: a column of `from`, or a dotted path, said beside its date. */
   author?: string;
   /** Extra narrowing, in the query language. */
@@ -2569,13 +2607,14 @@ export interface TimelineSection extends SectionCommon {
   side?: string;
   /** Reactions under each entry, a quiet row of kinds with their counts — a forum's Like and Thanks under each post:
       `reactions: { from: 'reaction', kinds: ['like', 'thanks'], command: 'reactToPost' }`. Counted in one read per page,
-      the reader's own pressed; pressing one runs the App's own command on the entry, under the reader's grants. */
+      the reader's own pressed; pressing one runs the App's own command on the entry, under the reader's grants. @preview */
   reactions?: TimelineReactions;
 }
 
 /**
  * A timeline's reactions: rows of `from`, one per person, per kind, per entry. The three columns are inferred where
  * `from` has exactly one candidate for each; with none or several, the check refuses and names the key to add.
+ * @preview
  */
 export interface TimelineReactions {
   /** The table whose rows are the reactions. */
@@ -2678,6 +2717,12 @@ export interface ChartSection extends SectionCommon, SectionFigureWords {
   height?: number;
   /** A goal ruled across a line or stacked bars; not on a donut. */
   target?: number;
+  /** A line's curve: "smooth" draws a monotone curve through the points, which never overshoots one. Only on a line. */
+  curve?: 'smooth' | 'straight';
+  /** A donut's words for the figure in its middle — "Total visitors" — said under it. At most 40 characters. Only on a donut. */
+  total?: string | AppMessageRef;
+  /** `'hide'` leaves the chart out of the page while it has nothing to draw. */
+  empty?: 'hide';
 }
 
 /** The author speaking on a record's page — guidance, a policy, what to do next: `note('Call within a day.')`. */
@@ -2987,7 +3032,7 @@ export interface AppShell {
       (a list, a dashboard, a form, a page) draws its own heading row and no bar, and the bar appears once the walk
       goes deeper (a record, a related list, a record's tab), starting at the first room's name. `top: true` draws it
       above those first rooms too, and `home: true` starts it with the home mark. `true` is both, the whole trail
-      everywhere; `false` never draws it. */
+      everywhere; `false` never draws it. `top` and `home` are @preview. */
   breadcrumbs?: boolean | { top?: boolean; home?: boolean };
   /** false keeps each room's heading for a screen reader only, and drops a list's empty chip row and count. Default true. */
   heading?: boolean;
@@ -3843,31 +3888,45 @@ export declare const computed: {
   boolean<const V extends string>(value: V): { type: 'boolean'; value: V };
   number<const V extends string>(value: V): { type: 'number'; value: V };
   date<const V extends string>(value: V): { type: 'date'; value: V };
+  /** A computed text: a member of a JSON column, read as text, display only (`computed.text('filters_json.make')`,
+      `computed.text('payload.customer.city')`). `mistri check` proves the column is json or jsonb; it cannot know
+      the member is there, and a row without it shows nothing.
+      @preview */
+  text<const V extends string>(value: V): { type: 'text'; value: V };
 };
 
 /* ---------- rollups: one number about the rows that point at a record ---------- */
 
-/** A rollup counting the `from` rows that point at the record: `count('task', { query: 'status = open' })`. */
-export declare function count<const F extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment'> & QueryGuard<F, O> = {}>(
-  from: F, opts?: O,
-): NoInfer<{ fn: 'count'; from: F } & Authored<O>>;
-/** A rollup summing a column of the `from` rows that point at the record: `sum('order_line', 'amount')`. */
-export declare function sum<const F extends string, const C extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment'> & QueryGuard<F, O> = {}>(
-  from: F, column: RollupColumn<F, 'sum', C>, opts?: O,
-): NoInfer<{ fn: 'sum'; from: F; column: C } & Authored<O>>;
-/** A rollup: the least value of a column of the `from` rows — `min('invoice', 'due_on', { query: 'status = open' })`. */
-export declare function min<const F extends string, const C extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment'> & QueryGuard<F, O> = {}>(
-  from: F, column: RollupColumn<F, 'min', C>, opts?: O,
-): NoInfer<{ fn: 'min'; from: F; column: C } & Authored<O>>;
-/** A rollup: the greatest value of a column of the `from` rows — `max('activity', 'happened_on')`. */
-export declare function max<const F extends string, const C extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment'> & QueryGuard<F, O> = {}>(
-  from: F, column: RollupColumn<F, 'max', C>, opts?: O,
-): NoInfer<{ fn: 'max'; from: F; column: C } & Authored<O>>;
-/** A rollup: a column of the newest `from` row — `latest('payment', 'status')`, the order's payment status, read
-    where it is written rather than copied onto the order. Newest by its key, or by `sort`, a date or a number. */
-export declare function latest<const F extends string, const C extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment' | 'sort'> & QueryGuard<F, O> = {}>(
-  from: F, column: RollupColumn<F, 'latest', C>, opts?: O,
-): NoInfer<{ fn: 'latest'; from: F; column: C } & Authored<O>>;
+/** The rollups a resource declares, one number about the rows that point at a record:
+    `rollups: { open: rollup.count('task', { query: 'status = open' }), billed: rollup.sum('order_line', 'amount') }`. */
+export declare const rollup: {
+  /** A rollup counting the `from` rows that point at the record: `rollup.count('task', { query: 'status = open' })`. */
+  count<const F extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment'> & QueryGuard<F, O> = {}>(
+    from: F, opts?: O,
+  ): NoInfer<{ fn: 'count'; from: F } & Authored<O>>;
+  /** A rollup summing a column of the `from` rows that point at the record: `rollup.sum('order_line', 'amount')`. */
+  sum<const F extends string, const C extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment'> & QueryGuard<F, O> = {}>(
+    from: F, column: RollupColumn<F, 'sum', C>, opts?: O,
+  ): NoInfer<{ fn: 'sum'; from: F; column: C } & Authored<O>>;
+  /** A rollup: the mean of a column of the `from` rows — `rollup.avg('review', 'stars', { query: 'published' })`. Empty
+      over no rows, and not offered through two references (`whose: 'a_id.b_id'`), where a mean of means is the wrong figure. */
+  avg<const F extends string, const C extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment'> & QueryGuard<F, O> = {}>(
+    from: F, column: RollupColumn<F, 'avg', C>, opts?: O,
+  ): NoInfer<{ fn: 'avg'; from: F; column: C } & Authored<O>>;
+  /** A rollup: the least value of a column of the `from` rows — `rollup.min('invoice', 'due_on', { query: 'status = open' })`. */
+  min<const F extends string, const C extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment'> & QueryGuard<F, O> = {}>(
+    from: F, column: RollupColumn<F, 'min', C>, opts?: O,
+  ): NoInfer<{ fn: 'min'; from: F; column: C } & Authored<O>>;
+  /** A rollup: the greatest value of a column of the `from` rows — `rollup.max('activity', 'happened_on')`. */
+  max<const F extends string, const C extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment'> & QueryGuard<F, O> = {}>(
+    from: F, column: RollupColumn<F, 'max', C>, opts?: O,
+  ): NoInfer<{ fn: 'max'; from: F; column: C } & Authored<O>>;
+  /** A rollup: a column of the newest `from` row — `rollup.latest('payment', 'status')`, the order's payment status, read
+      where it is written rather than copied onto the order. Newest by its key, or by `sort`, a date or a number. */
+  latest<const F extends string, const C extends string, const O extends Pick<AppRollup, 'whose' | 'query' | 'segment' | 'sort'> & QueryGuard<F, O> = {}>(
+    from: F, column: RollupColumn<F, 'latest', C>, opts?: O,
+  ): NoInfer<{ fn: 'latest'; from: F; column: C } & Authored<O>>;
+};
 
 /** The day the form opens, on a date column: `defaults: { due_on: today }`. */
 export declare const today: AutoValue<'today'>;
@@ -3920,16 +3979,17 @@ export declare function rows<T extends string, Over extends string = never, cons
   opts?: O & NoInfer<QueryGuard<T, O>> & { over?: Over },
 ): NoInfer<{ kind: 'rows'; readonly [madeBy]: 'rows'; title: string | AppMessageRef; from: QueryTable<T>; over?: NoInfer<Over> } & Authored<O>>;
 /** The author speaking — on a dashboard or on a record's page: `note('Call within a day.', { title: 'Next step' })`.
-    A plain note stands in either; a banner is a dashboard's, and `quiet` and `callout` are a page's. */
-export declare function note(
-  text: string | AppMessageRef, opts?: Omit<NoteDashSection, Made | 'kind' | 'text' | BannerOnly>,
-): Omit<NoteDashSection, BannerOnly>;
+    A plain note stands in either, and `quiet` and `callout` dress it on both. */
 export declare function note(
   text: string | AppMessageRef, opts?: Omit<NoteDashSection, Made | 'kind' | 'text'>,
 ): NoteDashSection;
 export declare function note(
   text: string | AppMessageRef, opts: Omit<NoteSection, Made | 'kind' | 'text'>,
 ): NoteSection;
+/** A dashboard's introduction, a wide banner: `banner('Pipeline review', 'Work the leads that came in this week.', { eyebrow: 'This week', action })`. */
+export declare function banner(
+  title: string | AppMessageRef, text: string | AppMessageRef, opts?: Omit<BannerDashSection, Made | 'kind' | 'title' | 'text'>,
+): BannerDashSection;
 /** A new App's first steps: `firstRun('Welcome to Compass', [{ label: 'Add your first account', to: 'accounts' }], { description })`. */
 export declare function firstRun<const V extends string>(
   title: string | AppMessageRef, steps: readonly FirstRunStep<V>[], opts?: Pick<FirstRunDashSection, 'description'>,
@@ -4051,9 +4111,9 @@ export declare function document<T extends string, const Sec extends DocumentSec
   opts: AppDocument & Pick<AppPage, 'realm'> & { roles?: Ro },
 ): NoInfer<Omit<AppPage, 'base' | 'sections' | 'document'> & { base: T; sections: Authored<Sec>[]; document: AppDocument } & ([Ro] extends [never] ? {} : { roles: Ro })>;
 export declare function stream<const F extends string, const W extends string, const At extends string, const Show extends string,
-  const O extends Pick<TimelineStream, 'detail' | 'author' | 'query' | 'about' | 'side' | 'tone' | 'compact'> & QueryGuard<F, O> = {}>(
-  from: F, whose: W, at: At, show: Show, opts?: O,
-): NoInfer<{ from: F; whose: W; at: At; show: Show } & Authored<O>>;
+  const O extends Pick<TimelineStream, 'badge' | 'author' | 'query' | 'about' | 'side' | 'tone' | 'compact'> & QueryGuard<F, O> = {}>(
+  from: F, whose: W, at: At, text: Show, opts?: O,
+): NoInfer<{ from: F; whose: W; at: At; text: Show } & Authored<O>>;
 /** A group of the record's own fields: `fields(['name', 'status'], { title: 'Identity', columns: 2 })`. */
 export declare function fields<const Show extends string, const O extends Omit<FieldsSection, Made | 'kind' | 'show'> = {}>(
   show: readonly Show[], opts?: O): NoInfer<{ kind: 'fields'; readonly [madeBy]: 'fields'; show: Show[] } & Authored<O>>;
@@ -4283,11 +4343,11 @@ type TableSectionNames<Sec, S extends SchemaShape, R, T> = { from: T; over?: Col
   & (Sec extends BoardDashSection ? { by: ColumnOf<S, T>; primary?: LabelPath<S, R, T>; lines?: readonly LabelPath<S, R, T>[]; sort?: SortOf<S, R, T> }
     : Sec extends RowsDashSection ? { show?: readonly LabelPath<S, R, T>[]; sort?: SortOf<S, R, T> }
       : Sec extends { by: string } ? { by: string } : {});
-type TypedTableSection<Sec extends Exclude<AppDashSection, NoteDashSection>, S extends SchemaShape, R> =
+type TypedTableSection<Sec extends Exclude<AppDashSection, NoteDashSection | BannerDashSection>, S extends SchemaShape, R> =
   | { [T in TableOf<S>]: Omit<Sec, 'from' | 'over' | 'by' | 'show' | 'primary' | 'lines' | (Sec extends RowsDashSection | BoardDashSection ? 'sort' : never)>
     & TableSectionNames<Sec, S, R, T> }[TableOf<S>]
   | (Omit<Sec, 'from'> & { from?: undefined });
-type EachTableSection<Sec, S extends SchemaShape, R> = Sec extends Exclude<AppDashSection, NoteDashSection> ? TypedTableSection<Sec, S, R> : never;
+type EachTableSection<Sec, S extends SchemaShape, R> = Sec extends Exclude<AppDashSection, NoteDashSection | BannerDashSection> ? TypedTableSection<Sec, S, R> : never;
 /* An activity's resources are the schema's tables. */
 type TypedActivityDashSection<S extends SchemaShape> = Omit<ActivityDashSection, 'resources'> & { resources: Partial<Readonly<Record<TableOf<S>, ActivityResource>>> };
 /* A custom section's reads, each checked against its own resource: what it shows and sorts by, and its `over`. */
@@ -4300,8 +4360,8 @@ type TypedCustomDashSection<S extends SchemaShape, R> = Omit<CustomDashSection, 
   figures?: Readonly<Record<string, TypedCustomDashFigure<S>>>;
 };
 export type TypedDashSection<S extends SchemaShape, R extends SchemaReferences = never> =
-  NoteDashSection | TypedCustomDashSection<S, R> | TypedActivityDashSection<S>
-  | EachTableSection<Exclude<AppDashSection, NoteDashSection | CustomDashSection | ActivityDashSection>, S, R>;
+  NoteDashSection | BannerDashSection | TypedCustomDashSection<S, R> | TypedActivityDashSection<S>
+  | EachTableSection<Exclude<AppDashSection, NoteDashSection | BannerDashSection | CustomDashSection | ActivityDashSection>, S, R>;
 
 export interface TypedDashboardView<S extends SchemaShape, R extends SchemaReferences = never> extends Omit<AppDashboardView, 'sections' | 'aside' | 'from' | 'filters'> {
   from?: TableOf<S>;
@@ -4360,11 +4420,11 @@ export type TypedCurrentSection<S extends SchemaShape, R extends SchemaReference
 export type TypedBreakdownSection<S extends SchemaShape, R extends SchemaReferences = never, Base extends string = TableOf<S>> =
   { [F in TableOf<S>]: Omit<BreakdownSection, 'from' | 'whose' | 'about' | 'by'> & { by: LabelPath<S, R, F> } & Anchor<S, R, Base, F> }[TableOf<S>];
 export type TypedTimelineStream<S extends SchemaShape, R extends SchemaReferences = never, Base extends string = TableOf<S>> =
-  { [F in TableOf<S>]: Omit<TimelineStream, 'from' | 'whose' | 'at' | 'show' | 'detail' | 'author' | 'about'> & {
+  { [F in TableOf<S>]: Omit<TimelineStream, 'from' | 'whose' | 'at' | 'text' | 'badge' | 'author' | 'about'> & {
     from: F;
     at: ColumnOf<S, F>;
-    show: LabelPath<S, R, F>;
-    detail?: LabelPath<S, R, F>;
+    text: LabelPath<S, R, F>;
+    badge?: LabelPath<S, R, F>;
     author?: LabelPath<S, R, F>;
   } & (
     | { whose: ReferencePathTo<S, R, F, Base>; about?: undefined }

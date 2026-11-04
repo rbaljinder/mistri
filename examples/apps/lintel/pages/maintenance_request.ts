@@ -17,7 +17,7 @@ export default page(
       facts: ['unit_id', 'priority', 'assigned_to', 'scheduled_on'],
       actions: ['scheduleVisit', 'completeRequest', 'messageOffice'],
     }),
-    timeline('Conversation', [stream('request_note', 'request_id', 'sent_at', 'body', { author: 'author', detail: 'kind' })], {
+    timeline('Conversation', [stream('request_note', 'request_id', 'sent_at', 'body', { author: 'author', badge: 'kind' })], {
       newest: 'last',
       limit: 60,
       composer: { reply: 'replyToResident', note: 'addNote' },

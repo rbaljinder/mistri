@@ -2,6 +2,7 @@ import { COMPASS, expect, type Page, test } from './support/ownServers';
 import { ATELIER_ADMIN, startSample } from './support/sampleServer';
 import { inPage, probePage, type Probe } from '../packages/mistri/src/server/build/gradeProbe';
 import { TAP } from '../packages/mistri/src/server/build/gradeJudge';
+import { LONG_MS } from './support/budgets';
 
 // This worker's own Compass (support/ownServers.ts), and an Atelier of the test's own: the spec runs in the parallel lane.
 test.use({ servers: ['crm'], viewport: { width: 390, height: 844 }, hasTouch: true });
@@ -33,7 +34,7 @@ test("a record's New form: its pickers, its dates, its switch and the sheet's Cl
 });
 
 test("a command's form: its references and its choices take a finger", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   const sample = await startSample('atelier');
   try {
     const signIn = async (account: { email: string; password: string }) => {

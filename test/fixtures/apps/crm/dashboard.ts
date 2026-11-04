@@ -1,15 +1,17 @@
-import { breakdown, chart, dashboard, funnel, matrix, metric, note, rows } from '@mistriwork/mistri/app';
+import { banner, breakdown, chart, dashboard, funnel, matrix, metric, note, rows } from '@mistriwork/mistri/app';
 
 export const salesDashboard = dashboard(
   'Sales dashboard',
   [
     // The board's introduction: a ground of its own across the width, and the one next step it points at.
-    note('Work the leads that came in this week before they cool: the newest are first, with their source and owner.', {
-      title: 'Pipeline review',
-      variant: 'banner',
-      eyebrow: 'This week',
-      action: { label: 'Open leads', to: 'leads' },
-    }),
+    banner(
+      'Pipeline review',
+      'Work the leads that came in this week before they cool: the newest are first, with their source and owner.',
+      {
+        eyebrow: 'This week',
+        action: { label: 'Open leads', to: 'leads' },
+      },
+    ),
     metric('Open pipeline', 'opportunity', {
       query: 'open_pipeline',
       measure: 'sum amount as pipeline',

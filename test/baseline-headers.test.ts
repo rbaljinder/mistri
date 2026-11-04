@@ -10,7 +10,12 @@ import { join } from 'node:path';
 import type { Server } from 'node:http';
 import { createApp } from './support/createApp.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
-import { PERMISSIONS_POLICY, REFERRER_POLICY, STRICT_TRANSPORT } from '../packages/engine/src/server/http/baselineHeaders.js';
+import {
+  APP_PAGE_PERMISSIONS_POLICY,
+  PERMISSIONS_POLICY,
+  REFERRER_POLICY,
+  STRICT_TRANSPORT,
+} from '../packages/engine/src/server/http/baselineHeaders.js';
 import { makeDemoDatabase } from './make-demo-db.js';
 
 let tmp: string;
@@ -41,7 +46,8 @@ test('a page, an API answer and a refusal each carry the referrer and permission
     const res = await fetch(`${origin}${path}`);
     await res.arrayBuffer();
     assert.equal(res.headers.get('referrer-policy'), REFERRER_POLICY, path);
-    assert.equal(res.headers.get('permissions-policy'), PERMISSIONS_POLICY, path);
+    // The camera is an App page's alone (clientHttp.ts): the page may ask for it, the API and a refusal may not.
+    assert.equal(res.headers.get('permissions-policy'), path === '/' ? APP_PAGE_PERMISSIONS_POLICY : PERMISSIONS_POLICY, path);
     assert.match(PERMISSIONS_POLICY, /camera=\(\).*microphone=\(\).*geolocation=\(\)/);
     // Plain http: nothing pins this name to https.
     assert.equal(res.headers.get('strict-transport-security'), null, path);

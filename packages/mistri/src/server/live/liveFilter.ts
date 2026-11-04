@@ -45,6 +45,11 @@ export interface LiveGrant {
   readonly scope: true | RowScopeFilter;
   /** The scope's digest, with the App and table: subscribers that share one share a probe. */
   readonly fingerprint: string;
+  /** Other ids the reader knows the same table by: narrowed resources of it (appNarrowed.ts), told of its changes
+      with no keys, since a key of the table's is not a record of theirs until a read on their conditions says so. */
+  readonly aliases?: readonly string[];
+  /** The id itself is a narrowed resource's: told of the table's changes with no keys, as an alias is. */
+  readonly keyless?: true;
 }
 
 /** What a subscriber reads on one database, resolved under their own grants and session. */
@@ -176,11 +181,15 @@ export async function deliverChange(
     }
     if (keys !== 'many' && !keys.length) continue;
     told = true;
-    let table = into.tables.get(grant.id);
-    if (!table) into.tables.set(grant.id, (table = { keys: new Map(), kinds: new Set() }));
-    table.kinds.add(entry.kind);
-    if (keys === 'many' || table.keys === 'many') table.keys = 'many';
-    else for (const key of keys) table.keys.set(keyText(key), key);
+    const tell = (id: string, told: readonly LiveKey[] | 'many') => {
+      let table = into.tables.get(id);
+      if (!table) into.tables.set(id, (table = { keys: new Map(), kinds: new Set() }));
+      table.kinds.add(entry.kind);
+      if (told === 'many' || table.keys === 'many') table.keys = 'many';
+      else for (const key of told) table.keys.set(keyText(key), key);
+    };
+    tell(grant.id, grant.keyless ? 'many' : keys);
+    for (const alias of grant.aliases ?? []) tell(alias, 'many');
   }
   if (told && !(authority.actor && change.actor === authority.actor)) into.self = false;
   return told;

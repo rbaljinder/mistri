@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { expect, test, type Page } from './support/harness';
 import { startDeskBlocks } from './support/deskBlocksServer';
 import { startSample, PAYDAY_ADMIN } from './support/sampleServer';
+import { LONG_MS } from './support/budgets';
 
 /**
  * The ends of a record page and of the side menu, each on a server of its own (the parallel lane).
@@ -12,7 +13,7 @@ import { startSample, PAYDAY_ADMIN } from './support/sampleServer';
  * a list's last entry only while the list scrolls.
  */
 test.describe('the ends of a page', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
 
   async function signIn(page: Page, origin: string, data: { email: string; password: string }) {
     const response = await page.request.post(`${origin}/api/auth/sign-in/email`, { headers: { origin }, data });

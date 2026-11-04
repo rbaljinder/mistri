@@ -7,48 +7,36 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { Page } from '@playwright/test';
-import { expect, test } from './support/harness';
+import { expect, test as base } from './support/harness';
+import { fixture } from './support/fixture';
 
-/**
- * TC10: a workflow strip's step says its whole label in every theme. A label
- * of some length ("Waiting on the supplier") was one line: on a phone, where
- * the strip scrolls sideways, it ran past the window's edge and its fade, and
- * read "Waiting on th…". A label now takes up to two lines under its segment,
- * in the track and in the pills, at 1280, 390 and 320 wide.
- *
- * A server of its own over a fresh database (listen(0), mkdtemp).
- */
-const origins: Record<string, string> = {};
-let directory = '';
-const children: ChildProcess[] = [];
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'mistri-workflow-labels-'));
-  const db = join(directory, 'shop.db');
-  const source = new DatabaseSync(db);
-  try {
-    source.exec(`CREATE TABLE purchase_order (id INTEGER PRIMARY KEY, name TEXT NOT NULL, supplier TEXT NOT NULL, status TEXT NOT NULL, total REAL NOT NULL);
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      directory = mkdtempSync(join(tmpdir(), 'mistri-workflow-labels-'));
+      const db = join(directory, 'shop.db');
+      const source = new DatabaseSync(db);
+      try {
+        source.exec(`CREATE TABLE purchase_order (id INTEGER PRIMARY KEY, name TEXT NOT NULL, supplier TEXT NOT NULL, status TEXT NOT NULL, total REAL NOT NULL);
       INSERT INTO purchase_order VALUES (1, 'PO-1042', 'Cascade Cycle Supply', 'waiting_on_the_supplier', 4812.5);`);
-  } finally {
-    source.close();
-  }
-  const config = join(directory, 'connections.json');
-  writeFileSync(config, JSON.stringify({ connections: [{ name: 'shop', url: db, writable: true }] }));
-  /* Two Apps over the one database: the track (the default look's markers) and the pills (Lumen's). */
-  for (const [name, recipe] of [
-    ['track', 'markers'],
-    ['pills', 'pills'],
-  ] as const) {
-    const app = join(directory, name);
-    mkdirSync(join(app, 'node_modules'), { recursive: true });
-    mkdirSync(join(app, 'node_modules', '@mistriwork'), { recursive: true });
-    symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(app, 'node_modules', '@mistriwork', 'mistri'), 'dir');
-    writeFileSync(join(app, 'package.json'), '{ "type": "module" }\n');
-    writeFileSync(
-      join(app, 'app.ts'),
-      `import { defineApp, defineTheme, fields, listView, machine, page } from '@mistriwork/mistri/app';
+      } finally {
+        source.close();
+      }
+      const config = join(directory, 'connections.json');
+      writeFileSync(config, JSON.stringify({ connections: [{ name: 'shop', url: db, writable: true }] }));
+      /* Two Apps over the one database: the track (the default look's markers) and the pills (Lumen's). */
+      for (const [name, recipe] of [
+        ['track', 'markers'],
+        ['pills', 'pills'],
+      ] as const) {
+        const app = join(directory, name);
+        mkdirSync(join(app, 'node_modules'), { recursive: true });
+        mkdirSync(join(app, 'node_modules', '@mistriwork'), { recursive: true });
+        symlinkSync(join(resolve('.'), 'packages', 'mistri'), join(app, 'node_modules', '@mistriwork', 'mistri'), 'dir');
+        writeFileSync(join(app, 'package.json'), '{ "type": "module" }\n');
+        writeFileSync(
+          join(app, 'app.ts'),
+          `import { defineApp, defineTheme, fields, listView, machine, page } from '@mistriwork/mistri/app';
 const look = defineTheme({ id: 'look', label: 'Look', extends: 'lumen', recipes: { workflow: '${recipe}' } });
 export default defineApp({
   id: '${name}',
@@ -73,10 +61,39 @@ export default defineApp({
   ui: { customThemes: [look], theme: { preset: 'look' } },
 });
 `,
-    );
-    origins[name] = await serve(config, app);
-  }
+        );
+        origins[name] = await serve(config, app);
+      }
+    },
+    async () => {
+      for (const child of children)
+        if (child.exitCode === null) {
+          const closed = once(child, 'close');
+          child.kill('SIGTERM');
+          const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+          try {
+            await closed;
+          } finally {
+            clearTimeout(force);
+          }
+        }
+      rmSync(directory, { recursive: true, force: true });
+    },
+  ),
 });
+
+/**
+ * TC10: a workflow strip's step says its whole label in every theme. A label
+ * of some length ("Waiting on the supplier") was one line: on a phone, where
+ * the strip scrolls sideways, it ran past the window's edge and its fade, and
+ * read "Waiting on th…". A label now takes up to two lines under its segment,
+ * in the track and in the pills, at 1280, 390 and 320 wide.
+ *
+ * A server of its own over a fresh database (listen(0), mkdtemp).
+ */
+const origins: Record<string, string> = {};
+let directory = '';
+const children: ChildProcess[] = [];
 
 /** One tablewalk serving `app` on a free port; its origin. */
 async function serve(config: string, app: string): Promise<string> {
@@ -116,21 +133,6 @@ async function serve(config: string, app: string): Promise<string> {
   });
   return `http://127.0.0.1:${port}`;
 }
-
-test.afterAll(async () => {
-  for (const child of children)
-    if (child.exitCode === null) {
-      const closed = once(child, 'close');
-      child.kill('SIGTERM');
-      const force = setTimeout(() => child.kill('SIGKILL'), 5000);
-      try {
-        await closed;
-      } finally {
-        clearTimeout(force);
-      }
-    }
-  rmSync(directory, { recursive: true, force: true });
-});
 
 /** Each step's label as drawn: its words, the lines it takes, and whether its box cuts it or the window does. */
 async function steps(page: Page) {

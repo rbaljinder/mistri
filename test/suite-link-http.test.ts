@@ -144,10 +144,10 @@ async function fixture(t: TestContext, base: string, tenant = false, shared = tr
       config: join(home, 'connections.json'),
       mount: id === 'target' && !tenant ? '/' : id === 'target' ? '/dealer' : '/desk',
       ...(tenancy ? { policy: join(home, 'policy.mjs') } : {}),
-      environment: { BETTER_AUTH_SECRET: 'SECRET' },
+      environment: { BETTER_AUTH_SECRET: 'SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
     });
   }
-  const environment = { SECRET: 'suite-link-test-secret-longer-than-thirty-two-characters' };
+  const environment = { SECRET: 'suite-link-test-secret-longer-than-thirty-two-characters', LIMITS: 'off', MODE: 'test' };
   const file = join(directory, 'suite.json');
   writeFileSync(
     file,
@@ -161,7 +161,7 @@ async function fixture(t: TestContext, base: string, tenant = false, shared = tr
               id: 'shared',
               store: './identity.db',
               grants: './grants.db',
-              environment: { BETTER_AUTH_SECRET: 'SECRET' },
+              environment: { BETTER_AUTH_SECRET: 'SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
             },
           }
         : {}),

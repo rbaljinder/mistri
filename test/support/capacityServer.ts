@@ -155,6 +155,9 @@ const auth = await createAppAuth(served, {
   baseURL: ORIGIN,
   trustedOrigins: [ORIGIN],
   listenHost: '127.0.0.1',
+  /* This process runs as production (capacity-harness.mjs) so what is measured is what ships; only the sign-in seam is
+     told it is a test, which the harness's disposable accounts are. */
+  environment: { ...process.env, NODE_ENV: 'test' },
 });
 cleanups.push(() => auth.close());
 for (const [i, account] of accounts.entries()) {

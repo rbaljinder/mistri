@@ -61,6 +61,21 @@ export function readColumns(served: DatabaseSchema): Map<string, Set<string>> {
   return out;
 }
 
+/**
+ * A grant into the reader's tables by physical name. Several resources over one table (narrowed, appNarrowed.ts)
+ * share its one grant: the table's own resource leads and is told its keys, each narrowed one rides as an alias told
+ * none, and the columns are what any of them reads. Only invalidation crosses: a narrowed list hears of a sibling's
+ * change and reads again on its own conditions.
+ */
+function joinGrant(into: Map<string, LiveGrant>, physical: string, grant: LiveGrant, narrowed: boolean): void {
+  const own: LiveGrant = narrowed ? { ...grant, keyless: true } : grant;
+  const known = into.get(physical);
+  if (!known) return void into.set(physical, Object.freeze(own));
+  const columns = known.columns === 'all' || own.columns === 'all' ? ('all' as const) : new Set([...known.columns, ...own.columns]);
+  const [lead, other] = known.keyless && !own.keyless ? [own, known] : [known, own];
+  into.set(physical, Object.freeze({ ...lead, columns, aliases: [...(lead.aliases ?? []), other.id, ...(other.aliases ?? [])] }));
+}
+
 /** One table's grant, by its physical name, or undefined where the scope admits no row. */
 function grantFor(
   served: DatabaseSchema,
@@ -261,7 +276,8 @@ async function ordinaryAuthority(ctx: RequestContext, host: AppHost): Promise<Re
       if (app.resources?.[table.id]?.live === false) continue;
       const physical = resources.toPhysical(table.id);
       const grant = grantFor(served, table.id, columns.get(table.id)!, true, app.id, physical);
-      if (grant) tables.get(resources.connectionFor(table.id))?.set(physical, grant);
+      const into = tables.get(resources.connectionFor(table.id));
+      if (grant && into) joinGrant(into, physical, grant, app.resources?.[table.id]?.query !== undefined);
     }
     const actor = accountOf(identity) ?? '';
     return {
@@ -284,14 +300,17 @@ function policyAuthority(app: AppDef, req: IncomingMessage, policy: HttpAppPolic
   const columns = readColumns(served);
   const connections = [...new Set(served.tables.map((table) => scope.connectionFor(table.id)))].sort();
   const tables = new Map<string, Map<string, LiveGrant>>(connections.map((connection) => [connection, new Map()]));
-  const logical = new Map<string, string>();
+  const logical = new Map<string, string[]>();
   for (const table of served.tables) {
     if (app.resources?.[table.id]?.live === false) continue;
     const physical = scope.toPhysical(table.id);
     const grant = grantFor(served, table.id, columns.get(table.id)!, rows[table.id], app.id, physical);
     if (!grant) continue;
-    tables.get(scope.connectionFor(table.id))!.set(physical, grant);
-    logical.set(`${scope.connectionFor(table.id)}\u0000${physical}`, table.id);
+    joinGrant(tables.get(scope.connectionFor(table.id))!, physical, grant, app.resources?.[table.id]?.query !== undefined);
+    /* A probe asks each resource the reader has over the table, the narrowed ones on their own conditions: a key any
+       of them reads is one the table's grant hears of. */
+    const at = `${scope.connectionFor(table.id)}\u0000${physical}`;
+    logical.set(at, [...(logical.get(at) ?? []), table.id]);
   }
   return {
     connections,
@@ -300,13 +319,16 @@ function policyAuthority(app: AppDef, req: IncomingMessage, policy: HttpAppPolic
         actor,
         tables: tables.get(connection)!,
         probe: (table: string, keys: readonly LiveKey[]) => {
-          const id = logical.get(`${connection}\u0000${table}`);
-          if (!id) return Promise.resolve(new Set<string>());
-          return policy.withContext(req, (probing) => {
+          const ids = logical.get(`${connection}\u0000${table}`);
+          if (!ids) return Promise.resolve(new Set<string>());
+          return policy.withContext(req, async (probing) => {
             /* Asked as the reader the stream is for, or not at all. */
             if (probing.principal.id !== context.principal.id || probing.principal.kind !== context.principal.kind)
               throw new AppAccessDenied();
-            return probedKeys((request) => httpPolicyReads(probing).adapter.query(request), id, keys);
+            const found = new Set<string>();
+            for (const id of ids)
+              for (const key of await probedKeys((request) => httpPolicyReads(probing).adapter.query(request), id, keys)) found.add(key);
+            return found;
           });
         },
       }),

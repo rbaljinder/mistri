@@ -1,13 +1,12 @@
 import {
   action,
   card,
-  count,
+  rollup,
   defineFeature,
   fields,
   header,
   history,
   listView,
-  max,
   page,
   queue,
   related,
@@ -64,10 +63,10 @@ export const leads = defineFeature({
         created_at: { format: 'relative' },
       },
       rollups: {
-        touches: count('lead_activity', { whose: 'lead_id' }),
-        applicants: count('applicant', { whose: 'lead_id' }),
-        deals: count('deal', { whose: 'lead_id' }),
-        best_payment: max('deal', 'monthly_payment', { whose: 'lead_id', query: 'status != cancelled' }),
+        touches: rollup.count('lead_activity', { whose: 'lead_id' }),
+        applicants: rollup.count('applicant', { whose: 'lead_id' }),
+        deals: rollup.count('deal', { whose: 'lead_id' }),
+        best_payment: rollup.max('deal', 'monthly_payment', { whose: 'lead_id', query: 'status != cancelled' }),
       },
       actions: {
         startDeal: action('Start deal', { command: 'startDeal' }),
@@ -136,7 +135,7 @@ export const leads = defineFeature({
       [
         header({ status: 'status', facts: ['reference', 'source', 'created_at', 'next_follow_up_on'], destructive: ['markLeadLost'] }),
         fields(['touches', 'last_contact_at', 'best_payment']),
-        timeline('Activity', [stream('lead_activity', 'lead_id', 'created_at', 'kind', { detail: 'body' })], { limit: 30 }),
+        timeline('Activity', [stream('lead_activity', 'lead_id', 'created_at', 'kind', { badge: 'body' })], { limit: 30 }),
         related('Applicants', 'applicant', 'lead_id', {
           show: ['first_name', 'last_name', 'role', 'monthly_income'],
           empty: {

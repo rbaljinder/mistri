@@ -27,6 +27,7 @@
  * exactly its part (`rowPart`), as the client's own shared read already was
  * (pageFieldsRead.ts).
  */
+import { subtitlePath } from './subtitlePath.js';
 import { findTable, labelPath, primaryKey, type DatabaseSchema, type TableMeta } from './schema.js';
 import { DEFAULT_HISTORY_LIMIT, kindReading, type PageSection } from './pageModel.js';
 import { assertNever } from './model.js';
@@ -52,19 +53,22 @@ export interface RecordReadNames {
   readonly table?: (id: string) => TableMeta | undefined;
   /** A table's row-defined JSON columns (`resources.<r>.defined`): a section showing one also reads its `per`. */
   readonly defined?: (tableId: string) => Readonly<Record<string, { per?: string }>> | undefined;
+  /** A column's display rule (`resources.<r>.display`), where a shown column's `subtitle` is read with the record. */
+  readonly display?: (tableId: string, column: string) => { subtitle?: string } | null | undefined;
 }
 
 /** The parts of a section its reads are built from (client pageModel.ts PageSection, shared page.ts). */
 export interface ReadSection {
   readonly kind: PageSection['kind'];
   readonly hidden?: boolean;
-  readonly emptyMode?: 'hide' | 'collapse';
+  readonly emptyMode?: 'hide' | 'collapse' | 'show';
   /** A grouped related list reads its groups, then each group's rows (the rows wait on the groups). */
   readonly group?: unknown;
   readonly presentation?: unknown;
   readonly paths?: readonly string[];
   readonly status?: string;
   readonly subfigure?: string;
+  readonly subtitle?: string;
   readonly was?: string;
   readonly actions?: ReadonlyArray<{ readonly prefill?: Readonly<Record<string, string>>; readonly to?: AppTarget }>;
   readonly names?: boolean;
@@ -180,6 +184,7 @@ export function fieldsColumns(
     section.presentation === 'headline'
       ? [
           ...(section.subfigure ? [section.subfigure] : []),
+          ...(section.subtitle ? [section.subtitle] : []),
           ...(section.was ? [section.was] : []),
           ...(section.actions ?? []).flatMap((action) => [
             ...Object.values(action.prefill ?? {}),
@@ -187,8 +192,22 @@ export function fieldsColumns(
           ]),
         ].filter((path) => !paths.includes(path))
       : [];
-  const projection = referenceProjection(names.schema, base, [...paths, ...new Set(extra)], section.names !== false && names.app, (table) =>
-    namePathOf(names, table),
+  /* A column whose rule has a `subtitle` is drawn with it wherever it is a field, so the record reads it too
+     (the same rule a list's cell reads, listQuestion.ts subtitleColumns). */
+  const seconds = names.display
+    ? [...new Set([...paths, ...(section.presentation === 'headline' ? extra : [])])].flatMap((path) => {
+        const hop = path.lastIndexOf('.');
+        const owner = hop < 0 ? base.id : tableAtPrefix(names.schema, base.id, path.slice(0, hop))?.id;
+        const second = owner ? subtitlePath(names.display!(owner, path.slice(hop + 1)), path) : undefined;
+        return second ? [second] : [];
+      })
+    : [];
+  const projection = referenceProjection(
+    names.schema,
+    base,
+    [...new Set([...paths, ...extra, ...seconds])],
+    section.names !== false && names.app,
+    (table) => namePathOf(names, table),
   );
   const fetched = projection.fetched;
   if (namePath && !fetched.includes(namePath)) fetched.push(namePath);

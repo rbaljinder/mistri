@@ -41,6 +41,8 @@ makes the picture sharper without changing the layout.
 | `dashboard-columns` | A dashboard's `rows` at half, a third or two thirds of the page (or in an area of that width) shows more columns than fit there; the rest are left out | `show:` the ones that fit, or `width: 'full'` (an area of more columns) |
 | `area-too-narrow` | A `rows`, embedded list or `matrix` stands alone in a one-column area of `areas` three or four columns wide, where a list is names, not a table | give the area two columns of the template, or put a breakdown or a metric there |
 | `stacked-lists` | Two or more related lists stand one under another, on a page that is not a document (paper has no tabs) | `{ listTabs: true }` (or `false` to keep the stack); one row is `current(...)` |
+| `activity-not-tabbed` | A record page's main column has two or more long sections (a timeline, a related list) and none sits in a tab, so the record's own fields end up a scroll above its activity | `tab: 'Activity'` on the timeline and `tab: '…'` on each list |
+| `count-only-summary` | A record's summary, or a row of metric cards, is only counts of its children | lead with what the record says (its status, an amount, a date, the owner); counts become tab badges or a line in the aside |
 | `bare-title` | A page with no header opens with a block of fields or a table | `header({ status: 'stage', facts: [...] })`, then `fields([...])` |
 | `fields-by-type` | Fields grouped as Details, Links, Dates, Address | a summary, a properties rail in the aside, a `table` sheet |
 | `default-presentation` | A `fields` call says the presentation it would have drawn anyway: `properties` in the aside, `summary` in the main column | leave `presentation` out |
@@ -82,10 +84,10 @@ can wear as one table, `--palette all` each palette and `--as all` each role
 contract holds says its promise (`C1` to `C13`).
 
 ```sh
-npx @mistriwork/mistri grade . --config mistri.json
-npx @mistriwork/mistri grade . --config mistri.json --as manager --json
-npx @mistriwork/mistri grade . --config mistri.json --theme cadence
-npx @mistriwork/mistri grade . --config mistri.json --theme all --palette all --as all
+npx @mistriwork/mistri grade --config mistri.json
+npx @mistriwork/mistri grade --config mistri.json --as manager --json
+npx @mistriwork/mistri grade --config mistri.json --theme cadence
+npx @mistriwork/mistri grade --config mistri.json --theme all --palette all --as all
 ```
 
 | Code | Finding | Fix |

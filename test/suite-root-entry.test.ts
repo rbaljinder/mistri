@@ -71,7 +71,11 @@ async function fixture(t: TestContext, basePath = '') {
     {
       baseURL: `${origin}${basePath}`,
       trustedOrigins: [origin],
-      environment: { BETTER_AUTH_SECRET: 'test-suite-root-entry-secret-longer-than-thirty-two-characters' },
+      environment: {
+        BETTER_AUTH_SECRET: 'test-suite-root-entry-secret-longer-than-thirty-two-characters',
+        MISTRI_TEST_AUTH_LIMITS: 'off',
+        NODE_ENV: 'test',
+      },
     },
   );
   control = new DatabaseSync(store);

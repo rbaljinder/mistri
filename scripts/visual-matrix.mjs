@@ -87,6 +87,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 /* Every App server this starts inherits it, as the browser specs' do (playwright.config.ts): a page per look signs in
    from 127.0.0.1 hundreds of times, so Better Auth's per-address limits are lifted on a loopback server. */
 process.env.MISTRI_TEST_AUTH_LIMITS ??= 'off';
+process.env.NODE_ENV ??= 'test'; // the seam is read only where the process says it is a test (auth/requestRules.ts)
 export const OUT = join(ROOT, '.visual');
 export const LOOKS = ['workshop', 'lumen', 'mono', 'sage', 'ledger'];
 /* An App's own look: nothing chosen, so the App's `ui.theme` is what draws.

@@ -33,26 +33,27 @@ leaving it out means.
 ```ts
 account: {
   rollups: {
-    open_deals: count('opportunity', { query: 'stage != closed_won and stage != closed_lost' }),
-    open_pipeline: sum('opportunity', 'amount', { query: 'stage != closed_won and stage != closed_lost' }),
+    open_deals: rollup.count('opportunity', { query: 'stage != closed_won and stage != closed_lost' }),
+    open_pipeline: rollup.sum('opportunity', 'amount', { query: 'stage != closed_won and stage != closed_lost' }),
   },
 },
 ```
 
-`count`, `sum`, `min` and `max` read the rows that point at the record, and
-`latest` reads a column of the newest of them: an order's
-`financial_status: latest('payment', 'status')` is its payment's own word,
+`rollup.count`, `rollup.sum`, `rollup.avg`, `rollup.min` and `rollup.max` read the rows that point at the
+record (an average of no rows is empty, and none runs through two references), and
+`rollup.latest` reads a column of the newest of them: an order's
+`financial_status: rollup.latest('payment', 'status')` is its payment's own word,
 read where the payment writes it, so no command keeps a copy on the order in
 step (newest by key, or by `by`, a date). A
 rollup reads like a column in `show`, sorts, tabs, conditions, a command's
 `when`, cards and measures, and through a reference (`account_id.open_deals`). It reaches two
 hops (`whose: 'task_id.project_id'`), `latest` included: a customer's
-`last_service: latest('work_order', 'status', { whose: 'bike_id.customer_id' })` is the newest
+`last_service: rollup.latest('work_order', 'status', { whose: 'bike_id.customer_id' })` is the newest
 of all their bikes' orders. It is computed in the same statement under
 the grants and row policy of every table it walks, and is never written. Not
 on API sources. Its `query` may follow the rows' references, so a product's
 units sold leave out cancelled orders without a status copied onto each line:
-`sum('order_line', 'quantity', { whose: 'variant_id.product_id', query: 'sales_order_id.status != cancelled' })`.
+`rollup.sum('order_line', 'quantity', { whose: 'variant_id.product_id', query: 'sales_order_id.status != cancelled' })`.
 
 ## Segments
 
@@ -69,7 +70,7 @@ A segment names a query once. Its name is a word of the query language
 (`overdue and mine`), a tab names it (`tabs: ['open', { segment: 'overdue', sort: 'due_on' }]`),
 a section takes it as its source (`metric('Late', 'work_order.overdue')`,
 `related(..., { segment: 'open' })`), and a rollup counts it
-(`count('work_order', { segment: 'open' })`). A tab's label and its address
+(`rollup.count('work_order', { segment: 'open' })`). A tab's label and its address
 (`?tab=overdue`) are the segment's. A segment may name another, never in a
 loop, and a name a column, rollup or state already holds is refused. It only
 ever narrows: a reader who may not read a column it names is served no tab,
@@ -133,13 +134,65 @@ functions: `coalesce(a, b, …)` (the first with a value), `round(x)` or
 `max(a, b, …)` of numbers or dates, which have no value where one of theirs has
 none (`computed.number('max(owed - paid, 0)')`). It is
 written into the statement, so it shows, sorts, filters and tones like a
-column, and a rollup sums it (`sum('task', 'overrun')`) or a dashboard
+column, and a rollup sums it (`rollup.sum('task', 'overrun')`) or a dashboard
 window reads a computed date (`over: 'renews_on'`) when it reads only its
 row's own columns; it is never written, and `fields.write`, `form.show` and an action's
 `set` refuse it. A role is served it only where every column it reads is
 readable to that role. A fixed action's `set` takes the same kind of
 expression for a stamp (`computed.date('today + 14 days')`); anything heavier
 is a [command](/docs/commands/) or a database view.
+
+A member of a JSON column reads as text (Preview):
+`make: computed.text('filters_json.make')`, or deeper,
+`computed.text('payload.customer.city')`. It shows, sorts and filters like the
+others, on PostgreSQL (`#>>`) and SQLite (`json_extract`), and a yes-or-no
+member reads `true` or `false`. It is display only. `mistri check` proves
+`filters_json` is a json or jsonb column; it cannot know the member is there,
+so a row without it shows nothing.
+
+## Several resources over one table
+
+A table may be bound again when each binding after the first says a `query`
+(Preview): the conditions every read of that resource stands on.
+
+```ts
+resources: {
+  audit_event: {},
+  orderEvents: {
+    physical: 'audit_event',
+    query: 'kind = order',
+    references: { correlation_id: { to: 'orders' } },
+  },
+  chatEvents: {
+    physical: 'audit_event',
+    query: 'kind = conversation',
+    references: { correlation_id: { to: 'conversations' } },
+  },
+},
+```
+
+Each is a resource of its own: a list, a record page, related and reverse
+lists, rollups, breakdowns, an export and its App API operations. Its own
+`references` can say what a column points at, which the database cannot say
+for one that points at one of two tables. The conditions are ANDed into every
+read. They are a filter, never a grant: the table's row policy still applies,
+and it must give each of the table's resources the same rule. A row outside
+the conditions is no record of the resource, so its address finds nothing.
+
+The query is fixed conditions on the table's own columns: no `show` or
+`sort`, no dates relative to today and no paths. `mistri check` proves it
+against the table and warns (`narrowed-overlap`) when two queries may both
+hold of one row. A narrowed resource is read-only for now: write through its
+table's own resource. It takes no `access`, `delete`, `actions`, `machine`,
+`import`, `settings`, `file`, `clone`, `consumes` or `restocks`. Nor does it
+take `notify`, `flows`, `triggers` or a `search` pack, which follow every
+write to the table whatever its query says: declare them on the table's own
+resource. A reference points at the table's own resource rather than at a
+narrowed one, and a tenant App does not take one yet. The table keeps one
+record history, as strict as the strictest of its resources' `audit`; an
+activity feed says each change under the resource whose query holds of the
+row, and live sync tells a narrowed list that its table changed, never which
+rows.
 
 ## Unions
 
@@ -260,8 +313,8 @@ resource.
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `resources.*.computed` | object | Stable | Virtual columns, each a typed expression over the record's own columns in the query language's words, with today, now and me: { is_overdue: { type: 'boolean', value: 'due_on &lt; today and not completed' } }; hours and minutes move an instant (now - 30 minutes, due_at - 2 hours). Written into the statement, read like a column everywhere a column is; never written, never in a form, and served to a role only where every column it reads is. Used in `examples/apps/tick/app.ts`. |
-| `resources.*.computed.*.type` | `"boolean"` · `"number"` · `"date"` | Stable |  One of `boolean`, `date`, `number`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `resources.*.computed.*.value` | string | Stable | The expression: columns and paths through references, numbers, quoted text, true, false, today, now, me, comparisons, and, or, not, in (…), is empty, + - * /, date spans (+ 3 months), and coalesce(a, b, …), round(x) or round(x, places), abs(x), min(a, b, …) and max(a, b, …). Used in `examples/apps/lintel/views.ts`. |
+| `resources.*.computed.*.type` | `"boolean"` · `"number"` · `"date"` · `"text"` | Stable |  One of `boolean`, `date`, `number`, `text`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `resources.*.computed.*.value` | string | Stable | The expression: columns and paths through references, a JSON column's member as text (filters_json.make, Preview: computed.text('filters_json.make')), numbers, quoted text, true, false, today, now, me, comparisons, and, or, not, in (…), is empty, + - * /, date spans (+ 3 months), and coalesce(a, b, …), round(x) or round(x, places), abs(x), min(a, b, …) and max(a, b, …). Used in `examples/apps/lintel/views.ts`. |
 
 ## `resources.*.consumes`
 
@@ -312,11 +365,11 @@ resource.
 | `resources.*.display.*.bar` | number | Stable | Draw the value as a small bar: true on format "percent", which fills against 100; for any other number, the value that fills it (bar: 5 for a rating out of five). A tone rule colors the bar. One of `true`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `resources.*.display.*.colors` | object | Stable | Value → one of the theme's eight chart colors (1–8): the stripe and chip of a board card's category. Used in `examples/apps/lintel/blueprint.ts`. |
 | `resources.*.display.*.component` | object | Stable | A value renderer (kind 'value'): the App draws the value with it; sort, filter, totals and export keep the raw value. One of `&lt;component>`. |
-| `resources.*.display.*.copy` |  | Stable | A copy button beside the value on a record: the stored value copied, a toast saying so. Not with masked: true or signature. One of `true`. |
+| `resources.*.display.*.copy` |  | Preview | A copy button beside the value on a record: the stored value copied, a toast saying so. Not with masked: true or signature. One of `true`. |
 | `resources.*.display.*.currency` | string \| object | Stable | ISO 4217, for "money"; defaults to the App's currency, then USD. { column: 'currency_code' }: each row's own code, read from that text column of the resource. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.display.*.currency.column` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.display.*.face` | `"data"` · `"ui"` · `"code"` | Stable | The face this column's values are set in, over the look's own: data (the look's data face, usually monospace), ui (the interface's reading face) or code (always monospace, for a VIN or a hash). Left out, an App sets a key, a reference, a code or a QR value in the data face and any other text in the reading face. A rule with a component takes no face, the component sets its own; masked: true takes none either. One of `code`, `data`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `resources.*.display.*.format` | `"money"` · `"percent"` · `"number"` · `"relative"` · `"date"` · `"datetime"` · `"items"` · `"duration"` · `"email"` · `"phone"` · `"url"` · `"richText"` · `"avatars"` · `"rating"` · `"color"` · `"time"` · `"month"` · `"year"` · `"json"` · `"qr"` · `"address"` | Stable | money: currency formatting (metrics compact to "$27.9M"). percent: the value is 0–100, shown with %. number: separators forced on. relative: a date said from today ("in 3 days", "64 days ago"), the date itself in the tooltip. date: a day said absolutely ("Sep 4, 2026"), the same on any day for any reader; a stored date never shifts. datetime: a moment with its time and zone ("Sep 4, 2026, 2:30 PM PDT"), said in timezone, else the App's ui.timezone. items: a text of one item per line, drawn as a list (a line of them where there is no room). duration: a number of seconds said as its two largest units ("2h 15m"), the seconds in the tooltip. email, phone, url: a value of that shape is a link to write to, call or open; an App links a column named like one without a rule. richText: sanitized HTML, drawn formatted on a record and as an excerpt in a list, edited in the rich text editor; the server sanitizes every write and reads Markdown into it. avatars: the people on a thing (an array, a JSON array, or one name per line or comma) as up to three overlapping initials discs and a "+N"; takes nothing else. rating: a whole number of stars out of outOf (5). color: a hex color as its swatch and code. time, month, year: a time of day, a month, a year in the reader's words, each edited in its native picker. json: a JSON document as a tree, edited as text whose problem is said while it is typed; the server refuses a write that is not JSON. qr: the value as a QR code to scan. address: a postal address drawn on its lines, a link to a map search for it (no map is fetched). These draw the value their own way. One of `address`, `avatars`, `color`, `date`, `datetime`, `duration`, `email`, `items`, `json`, `money`, `month`, `number`, `percent`, `phone`, `qr`, `rating`, `relative`, `richText`, `time`, `url`, `year`. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.display.*.format` | `"money"` · `"percent"` · `"number"` · `"relative"` · `"date"` · `"datetime"` · `"items"` · `"duration"` · `"email"` · `"phone"` · `"url"` · `"richText"` · `"avatars"` · `"rating"` · `"color"` · `"time"` · `"month"` · `"year"` · `"json"` · `"qr"` · `"address"` | Stable | money: currency formatting (metrics compact to "$27.9M"). percent: the value is 0–100, shown with %. number: separators forced on. relative: a date said from today ("in 3 days", "64 days ago"), the date itself in the tooltip. date: a day said absolutely ("Sep 4, 2026"), the same on any day for any reader; a stored date never shifts. datetime: a moment with its time and zone ("Sep 4, 2026, 2:30 PM PDT"), said in timezone, else the App's ui.timezone. items: a text of one item per line, or a list column (text[], jsonb array), drawn as a list (a line of them, comma between, where there is no room; a list column is chips otherwise). duration: a number of seconds said as its two largest units ("2h 15m"), the seconds in the tooltip. email, phone, url: a value of that shape is a link to write to, call or open; an App links a column named like one without a rule. richText: sanitized HTML, drawn formatted on a record and as an excerpt in a list, edited in the rich text editor; the server sanitizes every write and reads Markdown into it. avatars: the people on a thing (an array, a JSON array, or one name per line or comma) as up to three overlapping initials discs and a "+N"; takes nothing else. rating: a whole number of stars out of outOf (5). color: a hex color as its swatch and code. time, month, year: a time of day, a month, a year in the reader's words, each edited in its native picker. json: a JSON document as a tree, edited as text whose problem is said while it is typed; the server refuses a write that is not JSON. qr: the value as a QR code to scan. address: a postal address drawn on its lines, a link to a map search for it (no map is fetched). These draw the value their own way. One of `avatars`, `color`, `date`, `datetime`, `duration`, `email`, `items`, `json`, `money`, `month`, `number`, `percent`, `phone`, `qr`, `rating`, `relative`, `richText`, `time`, `url`, `year`, `address`. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.display.*.icon` | string \| object | Stable | A small tinted square before the value in a list's cell: an App icon, or { mark, toneOf } where toneOf names another column of the record whose tone rule tints each row's square. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.display.*.icon.mark` | string | Stable |  |
 | `resources.*.display.*.icon.toneOf` | string | Stable |  |
@@ -343,11 +396,11 @@ resource.
 | `resources.*.display.*.slider.min` | number | Stable |  |
 | `resources.*.display.*.slider.step` | number | Stable |  |
 | `resources.*.display.*.subtitle` | string | Stable | Another column of the same record, said as a muted second line under the value in lists. |
-| `resources.*.display.*.timezone` | string | Stable | With format date or datetime: the IANA zone a moment is said in, over the App's ui.timezone ("America/New_York"). A stored date alone never shifts. Used in `examples/apps/lintel/app.ts`. |
+| `resources.*.display.*.timezone` | string | Preview | With format date or datetime: the IANA zone a moment is said in, over the App's ui.timezone ("America/New_York"). A stored date alone never shifts. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.display.*.tone` | object | Stable | Value → tone pills. Keys may be exact values, or numeric thresholds like ">= 90" — for numbers, the first satisfied threshold (in written order) wins. The key "*" is the fallback; values it does not name wear neutral. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `resources.*.display.*.unit` | string | Stable | With "number", "money" or no format on a numeric column: the unit said after the figure — "mi", "kg", "/mo" (a leading slash joins without a space: "$242/mo"). Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.display.*.values` | object | Stable | The words a vocabulary's values are said as: a map of stored value to word ({ "PUB": "Published" }); any value it does not name is still said as words, as are the values of a column with a tone (IN_REVIEW reads "In review"). The stored value still sorts, filters and keys tone and icons. Used in `examples/apps/lintel/resources.ts`. |
-| `resources.*.display.*.whole` |  | Stable | With "money": a whole amount is said without its minor digits ("$24,495"); an amount with cents still shows them ("$24,495.50"). For a listing price. A CSV export stays exact. One of `true`. |
+| `resources.*.display.*.whole` |  | Preview | With "money": a whole amount is said without its minor digits ("$24,495"); an amount with cents still shows them ("$24,495.50"). For a listing price. A CSV export stays exact. One of `true`. |
 
 ## `resources.*.favorite`
 
@@ -415,7 +468,7 @@ resource.
 | `resources.*.form.fields.*.label` | string | Stable | Static plain text. No row-value interpolation. |
 | `resources.*.form.fields.*.multiline` | boolean | Stable | A text column: true draws several lines, false one, whatever its type says. |
 | `resources.*.form.fields.*.placeholder` | string | Stable | Static plain text. No row-value interpolation. |
-| `resources.*.form.fields.*.tree` | string | Stable | A reference: offer its records as the hierarchy the referenced table's parent column makes ({ tree: 'parent_id' }): the records with no parent first, each branch read as it opens, the choice said with its path, and a search over every level. |
+| `resources.*.form.fields.*.tree` | string | Preview | A reference: offer its records as the hierarchy the referenced table's parent column makes ({ tree: 'parent_id' }): the records with no parent first, each branch read as it opens, the choice said with its path, and a search over every level. |
 | `resources.*.form.fields.*.where` | object | Stable | A reference: offer only the records whose column (the key) equals this form's field (the value): { project_id: 'project_id' }. Enforced on every write. |
 | `resources.*.form.groups` | array | Stable | Semantic presentation groups. The App checker also rejects duplicate members across groups and members excluded by show or read access. Ungrouped shown fields remain shown. Groups never grant access. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.form.groups[].description` | string | Stable | Static plain text. No row-value interpolation. Used in `examples/apps/lintel/app.ts`. |
@@ -554,6 +607,12 @@ resource.
 | --- | --- | --- | --- |
 | `resources.*.physical` | string | Stable | The physical table id when it is not inferred. The only place an engine-schema-qualified id ("public.opportunity") appears. |
 
+## `resources.*.query`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `resources.*.query` | string | Preview | Preview. The conditions every read of this resource stands on, in the query language ("kind = order"): how one table is bound as several resources. A filter, never a grant; read-only for now. |
+
 ## `resources.*.recordLabel`
 
 | Key | Type | Status | What it does |
@@ -597,9 +656,9 @@ resource.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `resources.*.rollups` | object | Stable | Numbers about the rows that point at each record, by name, read like columns wherever a column is (a list's show, a sort, a condition, a command's when, a page's fields, display and labels): count(from), sum, min or max (from, column), or latest (from, column), a column of the newest row. Computed in the record's own statement through the child's grants and row scope; never written. Used in `examples/apps/lintel/resources.ts`. |
-| `resources.*.rollups.*.column` | string | Stable | The column of `from` a sum, min, max or latest reads; a count names none. A sum, min or max may read a computed column of `from` that reads only its row's own columns, written inline; a latest reads a stored column of any type, and serves its vocabulary. Used in `examples/apps/lintel/app.ts`. |
-| `resources.*.rollups.*.fn` | `"count"` · `"sum"` · `"min"` · `"max"` · `"latest"` | Stable |  One of `count`, `latest`, `max`, `min`, `sum`. |
+| `resources.*.rollups` | object | Stable | Numbers about the rows that point at each record, by name, read like columns wherever a column is (a list's show, a sort, a condition, a command's when, a page's fields, display and labels): rollup.count(from), rollup.sum, rollup.avg, rollup.min or rollup.max (from, column), or rollup.latest (from, column), a column of the newest row. Computed in the record's own statement through the child's grants and row scope; never written. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.rollups.*.column` | string | Stable | The column of `from` a sum, avg, min, max or latest reads; a count names none. A sum, avg, min or max may read a computed column of `from` that reads only its row's own columns, written inline; a latest reads a stored column of any type, and serves its vocabulary. Used in `examples/apps/lintel/app.ts`. |
+| `resources.*.rollups.*.fn` | `"count"` · `"sum"` · `"avg"` · `"min"` · `"max"` · `"latest"` | Stable |  One of `avg`, `count`, `latest`, `max`, `min`, `sum`. |
 | `resources.*.rollups.*.from` | string | Stable | The resource whose rows point at this one. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.rollups.*.query` | string | Stable | Which of `from`'s rows count, in the query language over its own columns, its computed columns that read only its own row, and paths through its references to a stored column: "status = open", "sales_order_id.status != cancelled", "breaching = true". A computed column's `now` and `today` are the request's. |
 | `resources.*.rollups.*.segment` | string | Stable | One of from's segments: the rows it names are the ones counted, ANDed with query. Used in `examples/apps/tick/app.ts`. |

@@ -6,7 +6,93 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { expect, test } from './support/harness';
+import { expect, test as base } from './support/harness';
+import { fixture } from './support/fixture';
+
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      directory = mkdtempSync(join(tmpdir(), 'mistri-app-live-browser-'));
+      const db = join(directory, 'tasks.db');
+      const source = new DatabaseSync(db);
+      try {
+        source.exec(`
+      CREATE TABLE task (id INTEGER PRIMARY KEY, subject TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open');
+      INSERT INTO task VALUES (1, 'Call the depot', 'open'), (2, 'File the report', 'open');`);
+      } finally {
+        source.close();
+      }
+      const config = join(directory, 'connections.json');
+      writeFileSync(config, JSON.stringify({ connections: [{ name: 'live', url: db }] }));
+      appDirectory = join(directory, 'app');
+      mkdirSync(appDirectory);
+      writeFileSync(
+        join(appDirectory, 'app.ts'),
+        `import { task } from './resources.ts';
+export default {
+  id: 'live',
+  name: 'Live proof',
+  connection: 'live',
+  resources: { task },
+  views: { tasks: { kind: 'list', from: 'task', label: 'Tasks', show: ['subject', 'status'] } },
+  home: 'tasks',
+  nav: ['tasks'],
+};
+`,
+      );
+      writeFileSync(join(appDirectory, 'resources.ts'), resources('Status'));
+      const reservation = createServer();
+      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
+      const port = (reservation.address() as { port: number }).port;
+      await new Promise<void>((done) => reservation.close(() => done()));
+      origin = `http://127.0.0.1:${port}`;
+      const started = spawn(
+        process.execPath,
+        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', appDirectory, '--port', String(port)],
+        {
+          cwd: resolve('.'),
+          env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      child = started;
+      let log = '';
+      started.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      started.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 20_000);
+        const ready = () => {
+          if (log.includes('Listening on ')) {
+            clearTimeout(timer);
+            done();
+          }
+        };
+        started.stdout!.on('data', ready);
+        started.once('exit', () => {
+          clearTimeout(timer);
+          fail(new Error(`The fixture exited: ${log}`));
+        });
+      });
+    },
+    async () => {
+      if (child && child.exitCode === null) {
+        const closed = once(child, 'close');
+        child.kill('SIGTERM');
+        const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+        try {
+          await closed;
+        } finally {
+          clearTimeout(force);
+        }
+      }
+      rmSync(directory, { recursive: true, force: true });
+    },
+  ),
+});
 
 /**
  * The page follows the App's source (server/app/appLive.ts, client
@@ -27,90 +113,6 @@ const resources = (label: string) => `export const task = {
   labels: { status: '${label}' },
 };
 `;
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  directory = mkdtempSync(join(tmpdir(), 'mistri-app-live-browser-'));
-  const db = join(directory, 'tasks.db');
-  const source = new DatabaseSync(db);
-  try {
-    source.exec(`
-      CREATE TABLE task (id INTEGER PRIMARY KEY, subject TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open');
-      INSERT INTO task VALUES (1, 'Call the depot', 'open'), (2, 'File the report', 'open');`);
-  } finally {
-    source.close();
-  }
-  const config = join(directory, 'connections.json');
-  writeFileSync(config, JSON.stringify({ connections: [{ name: 'live', url: db }] }));
-  appDirectory = join(directory, 'app');
-  mkdirSync(appDirectory);
-  writeFileSync(
-    join(appDirectory, 'app.ts'),
-    `import { task } from './resources.ts';
-export default {
-  id: 'live',
-  name: 'Live proof',
-  connection: 'live',
-  resources: { task },
-  views: { tasks: { kind: 'list', from: 'task', label: 'Tasks', show: ['subject', 'status'] } },
-  home: 'tasks',
-  nav: ['tasks'],
-};
-`,
-  );
-  writeFileSync(join(appDirectory, 'resources.ts'), resources('Status'));
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  origin = `http://127.0.0.1:${port}`;
-  const started = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', appDirectory, '--port', String(port)],
-    {
-      cwd: resolve('.'),
-      env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  child = started;
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 20_000);
-    const ready = () => {
-      if (log.includes('Listening on ')) {
-        clearTimeout(timer);
-        done();
-      }
-    };
-    started.stdout!.on('data', ready);
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The fixture exited: ${log}`));
-    });
-  });
-});
-
-test.afterAll(async () => {
-  if (child && child.exitCode === null) {
-    const closed = once(child, 'close');
-    child.kill('SIGTERM');
-    const force = setTimeout(() => child.kill('SIGKILL'), 5000);
-    try {
-      await closed;
-    } finally {
-      clearTimeout(force);
-    }
-  }
-  rmSync(directory, { recursive: true, force: true });
-});
 
 test('a save is drawn where the reader stands, and a broken one is said over the last good App', async ({ page }) => {
   /* The page follows once its stream is open. */

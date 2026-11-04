@@ -428,12 +428,12 @@ test('a segment misspelled — as a source, an option, a tab or a word in a quer
   const compiled = compile(
     [
       'import type { Views } from "./mistri-schema.d.ts";',
-      'import { count, dashboard, listView, metric, rows } from "@mistriwork/mistri/app";',
+      'import { rollup, dashboard, listView, metric, rows } from "@mistriwork/mistri/app";',
       '// A rollup counts or sums the rows of a segment, as the segments doc says.',
-      'export const urgent = count("ticket", { segment: "urgent" });',
-      'export const openHigh = count("ticket", { segment: "open", query: "priority = high" });',
+      'export const urgent = rollup.count("ticket", { segment: "urgent" });',
+      'export const openHigh = rollup.count("ticket", { segment: "open", query: "priority = high" });',
       '// @ts-expect-error — "urgnet" is not a segment of ticket',
-      'export const typo = count("ticket", { segment: "urgnet" });',
+      'export const typo = rollup.count("ticket", { segment: "urgnet" });',
       'export const views = {',
       '  d: dashboard("Home", [',
       '    metric("Urgent", "ticket.urgent"),',

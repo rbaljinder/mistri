@@ -183,7 +183,7 @@ function normalizedPage(page: Record<string, unknown>): void {
 }
 
 /** What a normalized timeline stream may carry into a tenant host. */
-const STREAM_FIELDS = ['from', 'path', 'at', 'show', 'detail', 'by', 'filter', 'of'];
+const STREAM_FIELDS = ['from', 'path', 'at', 'text', 'badge', 'by', 'filter', 'of'];
 /** What a normalized App page may carry into a tenant host. */
 const PAGE_FIELDS = [
   'id',
@@ -263,6 +263,7 @@ export function captureTenantPages(app: AppDef, input: unknown): readonly PageDe
                 ...section,
                 ...(source.actions !== undefined ? { actions: source.actions } : {}),
                 ...(source.subfigure !== undefined ? { subfigure: source.subfigure } : {}),
+                ...(source.subtitle !== undefined ? { subtitle: source.subtitle } : {}),
                 ...(source.was !== undefined ? { was: source.was } : {}),
                 ...(source.note !== undefined ? { note: source.note } : {}),
               }

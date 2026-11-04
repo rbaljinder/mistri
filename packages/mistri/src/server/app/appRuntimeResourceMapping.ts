@@ -7,6 +7,7 @@ import {
   declaredReferences,
   defaultSourceOf,
   homeSourceOf,
+  narrowedBindings,
   physicalBindings,
   type AppDef,
 } from '../../shared/app.js';
@@ -24,7 +25,14 @@ export function mapOpenedAppRuntimeResources(
     const opened = sources.get('');
     if (!opened || sources.size !== 1 || bindings.size !== 1 || bindings.get('') !== connection)
       throw new Refusal('The application source is unavailable.');
-    const resources = createAppResources(opened.adapter, opened.schema, physicalBindings(app), declaredReferences(app), declaredDates(app));
+    const resources = createAppResources(
+      opened.adapter,
+      opened.schema,
+      physicalBindings(app),
+      declaredReferences(app),
+      declaredDates(app),
+      narrowedBindings(app),
+    );
     return {
       ...resources,
       connections: [connection],

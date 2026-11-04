@@ -1,10 +1,11 @@
 import { expect, test } from './support/harness';
 import { startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { LONG_MS } from './support/budgets';
 
 test.describe('Forecourt account workflows', () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   test.beforeEach(async () => {
     sample = await startSample('forecourt');
   });

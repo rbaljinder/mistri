@@ -5,5 +5,6 @@ export const say = defineMessages({
   thisActivityStreamHasNoView: 'This activity stream has no view definition.',
   thisActivityStreamCould: 'This activity stream could not be read.',
   nothingDatedYetForThisRecord: 'Nothing dated yet for this record.',
+  showMore: 'Show more',
   updates: { one: '{count} update', other: '{count} updates' },
 });

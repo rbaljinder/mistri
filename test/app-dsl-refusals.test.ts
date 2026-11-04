@@ -246,7 +246,7 @@ describe('an unknown key is offered the key it is a slip of, or told where it be
     [
       'a key a view section takes, on a note',
       { views: { tasks: LIST, d: { kind: 'dashboard', label: 'D', sections: [{ ...NOTE, tab: 'x' }] } } },
-      /section 1 \(a note\) has no "tab"\. "tab" belongs inside a dashboard section \(view\) or inside a page section\. It takes: kind, area, title, text, icon, action, width, variant, eyebrow, image\.$/,
+      /section 1 \(a note\) has no "tab"\. "tab" belongs inside a page section\. It takes: kind, area, title, text, icon, action, width, variant\.$/,
     ],
     [
       'a key ui.theme takes, in ui.shell',
@@ -307,7 +307,7 @@ describe("a wrong shape gets the shape's refusal", () => {
     [
       'a resource that is a string',
       { resources: { task: 'public.task' } },
-      /resources "task" is not an object\. A resource block is \{ physical\?, access\?/,
+      /resources "task" is not an object\. A resource block is \{ physical\?, query\?, access\?/,
     ],
     ['pages as a list', { pages: [{ label: 'Task', base: 'task' }] }, /"pages" must be an object of pages keyed by id\./],
     [

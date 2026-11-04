@@ -4,9 +4,81 @@ import { once } from 'node:events';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { expect, test, type Page } from './support/harness';
+import { expect, test as base, type Page } from './support/harness';
+import { fixture } from './support/fixture';
 import { TMP } from './support/fixtures';
 import { scalar } from './support/db';
+
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      const directory = mkdtempSync(join(TMP, 'inline-edit-'));
+      db = join(directory, 'crm.db');
+      execFileSync(process.execPath, [resolve('test/fixtures/databases/crm/make-crm-db.mjs'), db], {
+        stdio: 'pipe',
+        env: { ...process.env, MISTRI_CRM_TODAY: CRM_TODAY },
+      });
+      const config = join(directory, 'crm.json');
+      writeFileSync(config, JSON.stringify({ connections: [{ name: 'crm', url: db, writable: true }] }));
+      const reservation = createServer();
+      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
+      const port = (reservation.address() as { port: number }).port;
+      await new Promise<void>((done) => reservation.close(() => done()));
+      origin = `http://127.0.0.1:${port}`;
+      const started = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          'packages/mistri/src/server/index.ts',
+          '--config',
+          config,
+          '--app',
+          'test/fixtures/apps/crm',
+          '--port',
+          String(port),
+        ],
+        {
+          env: { ...process.env, XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0', MISTRI_CLOCK: CRM_CLOCK },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      child = started;
+      let log = '';
+      started.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      started.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => fail(new Error(`Compass did not start: ${log}`)), 20_000);
+        const ready = () => {
+          if (log.includes('Listening on ')) {
+            clearTimeout(timer);
+            done();
+          }
+        };
+        started.stdout!.on('data', ready);
+        started.once('exit', () => {
+          clearTimeout(timer);
+          fail(new Error(`Compass exited: ${log}`));
+        });
+      });
+    },
+    async () => {
+      if (!child || child.exitCode !== null) return;
+      const closed = once(child, 'close');
+      child.kill('SIGTERM');
+      const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+      try {
+        await closed;
+      } finally {
+        clearTimeout(force);
+      }
+    },
+  ),
+});
 
 /* The day the Compass database is seeded for, and the instant its server
    believes it is — fixtures.ts's CRM pair, spelled here because importing a
@@ -27,76 +99,6 @@ const CRM_CLOCK = `${CRM_TODAY}T16:00:00.000Z`;
 let origin = '';
 let db = '';
 let child: ChildProcess | undefined;
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  const directory = mkdtempSync(join(TMP, 'inline-edit-'));
-  db = join(directory, 'crm.db');
-  execFileSync(process.execPath, [resolve('test/fixtures/databases/crm/make-crm-db.mjs'), db], {
-    stdio: 'pipe',
-    env: { ...process.env, MISTRI_CRM_TODAY: CRM_TODAY },
-  });
-  const config = join(directory, 'crm.json');
-  writeFileSync(config, JSON.stringify({ connections: [{ name: 'crm', url: db, writable: true }] }));
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  origin = `http://127.0.0.1:${port}`;
-  const started = spawn(
-    process.execPath,
-    [
-      '--import',
-      'tsx',
-      'packages/mistri/src/server/index.ts',
-      '--config',
-      config,
-      '--app',
-      'test/fixtures/apps/crm',
-      '--port',
-      String(port),
-    ],
-    {
-      env: { ...process.env, XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0', MISTRI_CLOCK: CRM_CLOCK },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  child = started;
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`Compass did not start: ${log}`)), 20_000);
-    const ready = () => {
-      if (log.includes('Listening on ')) {
-        clearTimeout(timer);
-        done();
-      }
-    };
-    started.stdout!.on('data', ready);
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`Compass exited: ${log}`));
-    });
-  });
-});
-
-test.afterAll(async () => {
-  if (!child || child.exitCode !== null) return;
-  const closed = once(child, 'close');
-  child.kill('SIGTERM');
-  const force = setTimeout(() => child.kill('SIGKILL'), 5000);
-  try {
-    await closed;
-  } finally {
-    clearTimeout(force);
-  }
-});
 
 /** The Open tab of Tasks, as a table, and the key of the row at `index`. */
 async function openTasks(page: Page) {

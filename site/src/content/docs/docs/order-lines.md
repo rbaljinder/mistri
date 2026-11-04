@@ -9,7 +9,7 @@ Keep amounts in cents with each order's currency, edit its lines as a grid saved
 Three keys make an order: an amount kept in minor units, the lines asked as a grid and saved with the record in one transaction, and the totals said as the form is filled in.
 
 ```ts title="app.ts"
-import { computed, defineApp, listView, sum } from '@mistriwork/mistri/app';
+import { computed, defineApp, listView, rollup } from '@mistriwork/mistri/app';
 
 export default defineApp({
   name: 'Orders',
@@ -19,7 +19,7 @@ export default defineApp({
       computed: { line_total: computed.number('quantity * unit_price') } },
     sales_order: {
       access: 'write',
-      rollups: { subtotal: sum('order_line', 'line_total') },
+      rollups: { subtotal: rollup.sum('order_line', 'line_total') },
       computed: { total: computed.number('subtotal + shipping') },
       display: {
         shipping: { format: 'money', minor: true, currency: { column: 'currency' } },

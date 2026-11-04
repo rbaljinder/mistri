@@ -1,3 +1,4 @@
+import { FIXTURE_MS } from './support/budgets';
 /**
  * A reference picked from its hierarchy (`tree: 'parent_id'`), over the Desk blocks fixture's own server: a command's
  * reference (`field.reference('category', { …, tree: 'parent_id' })`) walked by the keyboard to a category three
@@ -24,7 +25,7 @@ test.describe('a reference picked from its hierarchy', () => {
   let app: Fixture;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     app = await startDeskBlocks();
   });
   test.afterAll(async () => {

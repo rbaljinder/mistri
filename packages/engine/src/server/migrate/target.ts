@@ -76,6 +76,24 @@ export function targetConnection(
   );
 }
 
+/** The commands that write DDL and history to the database; the rest only read it. */
+const WRITING = new Set(['up', 'baseline', 'repair']);
+
+/**
+ * Why a run may not write to this connection, or undefined. `"writable": true` is the config's statement about one
+ * named database (connections.ts), enforced wherever the server writes; migrate wrote DDL and its history table to a
+ * connection that said nothing of the kind. Only a connection a config names carries the flag: a database handed
+ * over on the command line (`<db>`, --db, DATABASE_URL) is the person's own act, as it always was, and a run that
+ * only prints a plan writes nothing, so neither is refused.
+ */
+export function migrateWriteRefusal(connection: ConnectionConfig, command: string, dryRun = false): string | undefined {
+  if (!WRITING.has(command) || dryRun || connection.source !== 'config' || connection.writable) return undefined;
+  return (
+    `"${connection.name}" is not writable, and ${command} changes its schema and its history table. ` +
+    `Set "writable": true on the connection in ${configFileName()} to allow it, or name the database with --db <url> if it is one you mean to change.`
+  );
+}
+
 function directoryOf(
   connection: ConnectionConfig | undefined,
   config: StartupConfig,

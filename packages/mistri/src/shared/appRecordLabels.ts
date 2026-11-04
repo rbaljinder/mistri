@@ -10,10 +10,13 @@ import { displayWord, vocabularyWord } from '@mistriwork/engine/shared/model.js'
 import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import {
   isLabelTemplate,
+  fieldText,
   maskedField,
+  maskedPath,
   nounTemplate,
   parseLabelTemplate,
   wordedField,
+  wordedPath,
   writesMask,
 } from '@mistriwork/engine/shared/recordLabel.js';
 import { resolvePath } from '@mistriwork/engine/shared/viewPaths.js';
@@ -103,10 +106,13 @@ export function appLabelTemplates(app: AppDef, schema: DatabaseSchema): Map<stri
     return parsed.parts
       .map((part) => {
         if ('text' in part) return part.text;
-        const mask = maskOf(table, part.path);
-        if (mask) return maskedField(part.path, mask.prefix);
-        const words = wordsOf(table, part.path);
-        return words ? wordedField(part.path, words) : `{${part.path}}`;
+        const said = (path: string): string => {
+          const mask = maskOf(table, path);
+          if (mask) return maskedPath(path, mask.prefix);
+          const words = wordsOf(table, path);
+          return words ? wordedPath(path, words) : path;
+        };
+        return fieldText([part.path, ...(part.or ?? []).map((other) => other.path)].map(said));
       })
       .join('');
   };

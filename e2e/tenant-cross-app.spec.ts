@@ -7,6 +7,7 @@ import { count, rows, scalar } from './support/db.js';
 import { startTenantProof, type TenantProofFixture } from './support/tenantProofServer.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
 import { isSelection, leaseOfSelection } from './support/tenantSelection.js';
+import { SLOW_MS } from './support/budgets';
 
 /* The App framework's tenant client lives in the mistri package, outside the kit's client root: Vite serves it by path. */
 const TENANT_BROWSER = `/@fs${fileURLToPath(new URL('../packages/mistri/src/client/tenantBrowser.ts', import.meta.url))}`;
@@ -196,7 +197,7 @@ const renew = (page: Page) =>
 
 for (const kind of ['ignition', 'thread'] as const)
   test.describe(`${kind} cross-App tenant proof`, () => {
-    test.setTimeout(90_000);
+    test.setTimeout(SLOW_MS);
     let app: Fixture;
     test.beforeEach(async () => {
       app = await startTenantProof(kind);

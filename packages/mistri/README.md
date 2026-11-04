@@ -10,11 +10,11 @@ already have — SQLite or PostgreSQL — and served from it.
 
 ```bash
 npm create mistri                               # a starter App, in a directory of its own
-npx @mistriwork/mistri dev ./my-app             # serve it with a dev secret and a sign-in per role
+npx @mistriwork/mistri dev --app ./my-app             # serve it with a dev secret and a sign-in per role
 npx @mistriwork/mistri check --app ./my-app     # schema types, typecheck and validation
 ```
 
-It needs Node 24.22.1 or newer. Browsing a database with no App is the database
+It needs Node 24 or newer. Browsing a database with no App is the database
 browser's, a package of its own: `npx tablewalk <db>`. The DSL is imported as
 `@mistriwork/mistri/app`, `@mistriwork/mistri/commands` and the rest until the names move.
 
@@ -27,7 +27,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.15; the
+These App features ship in mistri 1.0.0-rc.16; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -165,8 +165,8 @@ providers; it is an optional dependency, installed only by apps that ask.
 
 ```
 mistri --app <dir>            serve an App: its pages, commands and jobs (below)
-mistri check --app <dir>      types, typecheck and validation of an App (below)
-mistri build --app <dir>      make an App ready for production (below)
+mistri check [--app <dir>]    types, typecheck and validation of an App (below)
+mistri build [--app <dir>]    make an App ready for production (below)
 mistri deploy [init cloudflare|status|verify|rollback|logs]
                               check, migrate, deploy and verify an App on Cloudflare Containers (below)
 mistri new [<name>] [<dir>]   a starter App with its own SQLite database: a task
@@ -180,8 +180,8 @@ mistri new --template intake [<name>] [<dir>]
 mistri new --api <name> [<dir>]
                               an App that is only an API: a resource, a command,
                               its event, tokens and MCP; no pages
-mistri shot --app <dir>       an App's pages as PNG files, to look at (below)
-mistri grade [<app-dir>]      an App's pages measured against the rubric (below)
+mistri shot [--app <dir>]     an App's pages as PNG files, to look at (below)
+mistri grade [--app <dir>]    an App's pages measured against the rubric (below)
 mistri theme show <look|.>    a theme's every color, recipe, type and shape (below)
 mistri schema --brief         the schema as one line per table, for an agent's context
 mistri explain <code>         what a check code means, with its fix (below)
@@ -190,8 +190,8 @@ mistri messages extract [--app <dir>] [--locale <tag>]
                               keys appended as comments, or its literal captions
 mistri migrate <command>      change the schema with versioned SQL files (below)
 mistri seed [--app <dir>]     believable rows in an App's writable database (below)
-mistri dev [<app-dir>]        serve an App with a dev secret and a sign-in per role (below)
-mistri test init [<app-dir>]
+mistri dev [--app <dir>]        serve an App with a dev secret and a sign-in per role (below)
+mistri test init [--app <dir>]
                               a starter suite: a journey per role, a permissions matrix (below)
 mistri flows start <resource>
                               start a resource's flows on records already there (below)
@@ -293,6 +293,14 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
                               it reads no others. A save reloads the App; a
                               change to its grants, sources or sign-in needs a
                               restart (mistri docs reload-and-restart).
+                              --app names the App on every command that takes one
+                              (check, build, shot, grade, dev, test init, flows,
+                              jobs, decide, tenant, deploy init, migrate files);
+                              left out, the App is the current directory when it
+                              holds an app.ts (or app.mjs / app.json). seed,
+                              migrate, messages extract and theme show read it
+                              left out as no App. A directory typed where a
+                              database or route goes is refused.
                               One App is served at the root (/leases/12);
                               several each under its id (/lintel/leases/12)
       --mount <app>=<path>    where an App is served, over that default: /
@@ -421,12 +429,12 @@ mistri compare-openapi <previous.json> <current.json>
                               Requires no-follow/nonblocking file-open support;
                               Windows comparison is not supported yet.
 
-mistri check --app <dir> [--app-entry <file>]
+mistri check [--app <dir>] [--app-entry <file>]
                 [<db> | --db <target> | --config <path>]
                 [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>]
                 [--routes [--mount <app>=<path>] [--base-path <path>]]
                 [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
-                [--no-index-check]
+                [--no-index-check] [--no-query-check]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
                 [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
                               the authoring loop in one command: regenerate the
@@ -436,7 +444,7 @@ mistri check --app <dir> [--app-entry <file>]
                               (a props type for each custom component, from its
                               declaration), typecheck it (file:line, the
                               mismatch, a hint) and validate it. Every
-                              step runs; the errors print first, and warnings are advisory (unless --fail-on-design-warning is set) and print as one line a kind unless --warnings lists them in full. On PostgreSQL an indexes step names each read the App declares that no index leads (index-missing), with the CREATE INDEX that adds it; --no-index-check skips it. --routes also
+                              step runs; the errors print first, and warnings are advisory (unless --fail-on-design-warning is set) and print as one line a kind unless --warnings lists them in full. On PostgreSQL an indexes step names each read the App declares that no index leads (index-missing), with the CREATE INDEX that adds it; --no-index-check skips it A queries step has the database EXPLAIN each read the App's pages would make (lists, related and grouped lists, timelines, breakdowns, figures, rollups, and the App's own list tabs, dashboard figures in each window, and segments), one a statement and never run (a READ ONLY transaction on PostgreSQL); a read it refuses is a query-invalid error naming the page:section, list, dashboard or segment, and --no-query-check skips it. --routes also
                               prints every address the App answers to, as the
                               --mount and --base-path given would serve it, and
                               fails on a route another App's place would hide;
@@ -512,6 +520,8 @@ mistri migrate diff <name> | check | squash
                               on any of those; baseline records an existing
                               database as version 0 and writes
                               baseline.schema.json; repair fixes the history.
+                              Without --app, up, baseline and repair need
+                              "writable": true on a connection a config names.
                               A lock keeps two deploys apart. Exit 1 could
                               not run, 2 files and history disagree (with
                               --app, validate: a phase pending), 3 a
@@ -547,7 +557,7 @@ also makes the tenant store and the journals the policy declares.
 are read, and a --jobs or --commands must name the build's own.
 Exit codes: 1 could not run, 2 a store refused, 3 a step failed.
 
-mistri migrate files status | up | sweep --app <dir>
+mistri migrate files status | up | sweep [--app <dir>]
                 [<db> | --db <target> | --config <path>] [--connection <name>]
                 [--policy <file>] [--dry-run]
 An App's files move to where each resource's storage says: up copies each
@@ -564,7 +574,7 @@ server itself (a tenant App tenant by tenant); otherwise run sweep daily
 from cron.
 Exit codes: 1 could not run, 3 some files did not move.
 
-mistri flows start <resource> --app <dir> --jobs <file>
+mistri flows start <resource> [--app <dir>] --jobs <file>
                 [--where <query>] [--flow <id>] [--tenant <id> --policy <file>]
                 [--dry-run] [<db> | --db <target> | --config <path>]
 Start a resource's created flows on the records already there, as though
@@ -575,7 +585,7 @@ own columns), --flow to one flow; a tenant App runs one --tenant at a time,
 whose owner column its --policy names. Running it again starts nothing new.
 Exit codes: 1 could not run.
 
-mistri jobs run <name> --app <dir> --jobs <file> [--wait <seconds>]
+mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
                 [<db> | --db <target> | --config <path>]
 Enqueues one run of the job in the App's job store, marked manual beside
 the slots the schedule enqueues, for the server started with --jobs to run
@@ -588,9 +598,9 @@ slot: a first start never runs a missed one.
 Exit codes: 1 could not run, 2 still waiting when --wait ran out, 3 the run
 did not succeed.
 
-mistri decide eval <decision> --app <dir> --jobs <file> [--provider jev|anthropic]
+mistri decide eval <decision> [--app <dir>] --jobs <file> [--provider jev|anthropic]
                 [--limit <n>] [--truth "<query>"] [--max-cost <dollars>] [--max-error <share>]
-                [--dry] [--yes] [--pin] [--json <file>] [--policy <file>] [<db> | --db <target> | --config <path>]
+                [--dry-run] [--yes] [--pin] [--json <file>] [--policy <file>] [<db> | --db <target> | --config <path>]
 Asks a provider about records whose answer people settled (--truth narrows
 them; default every record with the field set, at most --limit, 500) and
 reports accuracy, Brier, calibration error, a reliability table and what the
@@ -598,7 +608,7 @@ declared thresholds would have applied, suggested and left. The records are
 read as the decision reads them, put back as they were before the answer was
 settled where the App keeps their history. It prints the count and a price
 that errs high first, and asks nothing without --yes or above --max-cost
-(default $5); --dry prints what one record would send. It writes nothing to
+(default $5); --dry-run prints what one record would send. It writes nothing to
 the database and never applies; --pin writes the model version into
 decisions.lock, which is what lets a decision apply, only when the share it
 would apply was wrong at most --max-error of the time (default 0.02).
@@ -606,9 +616,9 @@ Exit codes: 1 could not run, 2 not spent (no --yes, or over --max-cost),
 3 --pin asked and not earned. A row-policy App names its policy with
 --policy, and the records are read as its service reads them when served.
 
-mistri tenant init [<tenant>...] --app <dir> --policy <file>
+mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
 mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
-                --app <dir> --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
+                [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
 A tenant App's first boot, after `mistri migrate stores up --policy`, from
 a shell or a deployment's one-off job. init opens the platform realm (when the App declares one) and puts each named
 tenant, active; one already there is left as it is, so it runs again after a
@@ -620,9 +630,9 @@ line: the store the App names, else mistri dev's once dev has started the
 App there, else a plain start's; grant says which. Exit codes: 1 could
 not run.
 
-mistri tenant clone <source> <sandbox> --app <dir> --policy <file> [--samples]
-mistri tenant import <sandbox> --app <dir> --policy <file>
-mistri tenant clock <sandbox> --app <dir> --policy <file> --ahead <duration> [--rate <n>]
+mistri tenant clone <source> <sandbox> [--app <dir>] --policy <file> [--samples]
+mistri tenant import <sandbox> [--app <dir>] --policy <file>
+mistri tenant clock <sandbox> [--app <dir>] --policy <file> --ahead <duration> [--rate <n>]
                 [--operator <name>] [--commands <file>] [<db> | --db <target> | --config <path>]
 A tenant App's sandboxes: a copy of a tenant to try changes in. clone makes
 a new sandbox tenant from a copy of the source's rows of every resource the
@@ -652,7 +662,7 @@ Exit codes: 1 could not run.
                               and dropped (default the connection's server)
       --repeatable            with migrate new: an R__ file
 
-mistri shot --app <dir> [<route>…] [<db> | --db <target> | --config <path>]
+mistri shot [--app <dir>] [<route>…] [<db> | --db <target> | --config <path>]
                 [--theme <id|all>] [--palette <id>]
                 [--compare <look>] [--recipes <part>] [--dark | --light] [--phone | --desk | --both]
                 [--click <name>] [--type <field> <text>] [--press <key>] [--wait-for <text>] [--matrix]
@@ -728,7 +738,9 @@ mistri shot --app <dir> [<route>…] [<db> | --db <target> | --config <path>]
                               PNG files
       --browser <path>        with shot: a Chromium or Chrome to shoot with
                               (default: CHROME, else Playwright's own, the
-                              machine's Chrome, then any installed Chromium)
+                              machine's Chrome, any installed Chromium, then
+                              an installed Chrome, Edge or Chromium; CHROME_PATH
+                              names one of those)
 
 mistri seed [--app <dir>] [<db> | --db <target> | --config <path>]
                 [--connection <name>] [--rows <n>] [--seed <n>] [--append]
@@ -742,7 +754,7 @@ mistri seed [--app <dir>] [<db> | --db <target> | --config <path>]
       --seed <n>              with seed: the same rows again, on the same day
       --append                with seed: add to tables that already hold rows
 
-mistri grade [<app-dir>] [<db> | --db <target> | --config <path>] [<route>…]
+mistri grade [--app <dir>] [<db> | --db <target> | --config <path>] [<route>…]
                 [--as <role|email|all> [--tenant <id>]] [--theme <id|all> [--palette <id|all>]]
                 [--json] [--browser <path>]
                               serve the App as shot does and measure every
@@ -775,7 +787,7 @@ mistri theme show <look|theme-id|.> [--app <dir>] [--diff <look>] [--json]
                               look or theme
       --json                  with theme show: one JSON document
 
-mistri build --app <dir> [--app-entry <file>] [--out <dir>]
+mistri build [--app <dir>] [--app-entry <file>] [--out <dir>]
                 [--config <path>] [--commands <file>] [--jobs <file>]
                 [--policy <file>] [--dockerfile <file>]
                               typecheck, validate and bundle an App for
@@ -795,7 +807,7 @@ mistri build --app <dir> [--app-entry <file>] [--out <dir>]
                               it (tini, uid 1000, PORT, a /healthz health
                               check); run docker build from the project root
 
-mistri deploy init cloudflare --app <dir> [--config <path>] [--commands <file>] [--jobs <file>]
+mistri deploy init cloudflare [--app <dir>] [--config <path>] [--commands <file>] [--jobs <file>]
                 [--policy <file>] [--app-entry <file>] [--out <dir>] [--dir <dir>] [--force]
 mistri deploy [--dry-run] [--yes] [--allow-contract] [--allow-dirty]
                 [--migrate-url <url>] [--migrations <dir>] [--connection-limit <n>] [--verbose]
@@ -837,23 +849,25 @@ mistri agent init [--dir <project>] [--tool claude|codex|cursor|copilot|all] [--
       --tool <name>           with agent init: which agents; default all
       --force                 with agent init: replace a changed copy
 
-mistri dev [<app-dir>]        serve the App as --app <dir> --dev does, with a
+mistri dev [--app <dir>]        serve the App as --app <dir> --dev does, with a
                               throwaway session secret and an account per
                               declared role, each sign-in printed; kept in
-                              <app-dir>/.mistri/, local and dev only
+                              <dir>/.mistri/, local and dev only
                               (refused under NODE_ENV=production); with
                               auth.me, each account is one of its rows
 
-mistri test init [<app-dir>] [--config <path>] [--force]
+mistri test init [--app <dir>] [--config <path>] [--force]
                               write tests/ into the App on @mistriwork/mistri/testing:
                               a journey per role and a permissions matrix from
                               authority.lock, for Node's test runner
       --config <path>         with test init: the mistri.json its database is copied from
       --force                 with test init: write over the suite's files
 
-mistri observe [--mcp] [--url <base>]
+mistri observe [--mcp | --errors [--json]] [--url <base>]
                               the running --dev server's observer: print its
-                              address, or with --mcp speak its telemetry to a
+                              address, with --errors its recent page and server
+                              errors one line each (kind, path, message, trace
+                              id; --json for the observer's own answer), or with --mcp speak its telemetry to a
                               coding agent on stdio (check, which runs
                               mistri check --json and needs no server,
                               recent_errors, list_traces, get_trace, search_logs,

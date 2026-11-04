@@ -491,7 +491,7 @@ describe('a dashboard note may offer another App room', () => {
         board: {
           kind: 'dashboard',
           label: 'Board',
-          sections: [{ kind: 'note', variant: 'banner', title: 'Something to ask?', text: 'Ask the office.', action: action(to) }],
+          sections: [{ kind: 'banner', title: 'Something to ask?', text: 'Ask the office.', action: action(to) }],
           aside: [{ kind: 'note', text: 'Or ask here.', action: action(to) }],
         },
         tasks: { ...LIST, empty: { title: 'No tasks', action: action(to) } },
@@ -906,7 +906,7 @@ describe('dashboards embed list views', () => {
           ...DASH,
           sections: [
             { kind: 'view', view: 'tasks', limit: 5 },
-            { kind: 'view', view: 'tasks', tab: 'all', title: 'Everything' },
+            { kind: 'view', view: 'tasks', listTab: 'all', title: 'Everything' },
             { kind: 'view', view: 'q' },
           ],
           aside: [{ kind: 'view', view: 'b' }],
@@ -1002,12 +1002,18 @@ describe('dashboards embed list views', () => {
       /embeds "e", which is not a list view this App declares\. Its list views: tasks, q, b\./,
     );
     assert.throws(
-      () => parse({ views: { ...views, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', tab: 'Nope' }] } }, home: 'd', nav: ['d'] }),
+      () =>
+        parse({ views: { ...views, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', listTab: 'Nope' }] } }, home: 'd', nav: ['d'] }),
       /names the tab "Nope", which the view "tasks" does not have\. Its tabs: open, all\./,
     );
     assert.throws(
-      () => parse({ views: { ...views, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', tab: 'All' }] } }, home: 'd', nav: ['d'] }),
+      () =>
+        parse({ views: { ...views, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', listTab: 'All' }] } }, home: 'd', nav: ['d'] }),
       /names the tab "All" by its label\. Name a tab by its address word: "all"\./,
+    );
+    assert.throws(
+      () => parse({ views: { ...views, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', tab: 'all' }] } }, home: 'd', nav: ['d'] }),
+      /"tab", which is now "listTab"/,
     );
   });
 

@@ -79,6 +79,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
     return { rows: rowResults[String(body.q)] ?? [] };
   },
   columnDisplay: (table: string, column: string) => displays[`${table}.${column}`] ?? null,
+  columnLabel: () => null,
   columnKind,
   emptyWord: () => '—',
   findTable: (id: string) => tables[id],
@@ -475,6 +476,8 @@ describe('the screen', () => {
     await screen.findByText('lost');
     expect([...document.querySelectorAll('.board-lane-name')].map((n) => n.textContent)).toEqual(['lead', 'won', 'lost']);
     expect(calls.some((c) => c.body.text === 'deal count by stage')).toBe(true);
+    // Untitled, it is called by its table and column in words, never their stored names.
+    expect(screen.getByRole('heading', { name: 'Deal by Stage' })).toBeTruthy();
   });
 
   test('metrics say their figure and their delta, coloured the way the author said', async () => {

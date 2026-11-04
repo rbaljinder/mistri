@@ -94,7 +94,7 @@ test('one discovery rule: dev <dir> and check --app <dir> find the same file, an
   process.chdir(folder);
   t.after(() => process.chdir(here));
   const env = { XDG_CONFIG_HOME: join(folder, '.config') };
-  const dev = applyProfile(['scratch', '--port', '0'], { entries: ['commands', 'jobs', 'policy'], positional: true }, env);
+  const dev = applyProfile(['--app', 'scratch', '--port', '0'], { entries: ['commands', 'jobs', 'policy'] }, env);
   const devConfig = projectContext()?.config;
   const check = applyProfile(['--app', 'scratch'], { entries: ['commands', 'jobs', 'policy', 'entry'] }, env);
   assert.deepEqual(projectContext()?.config, devConfig);

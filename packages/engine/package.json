@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.15",
+  "version": "1.0.0-rc.16",
   "description": "The engine both products stand on: the adapters (SQLite, Postgres), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -339,6 +339,10 @@
     "./server/http/firstPaint.js": {
       "mistri-built": "./dist/server/http/firstPaint.js",
       "default": "./src/server/http/firstPaint.ts"
+    },
+    "./server/http/frontDoor.js": {
+      "mistri-built": "./dist/server/http/frontDoor.js",
+      "default": "./src/server/http/frontDoor.ts"
     },
     "./server/http/httpOperationRoutes.js": {
       "mistri-built": "./dist/server/http/httpOperationRoutes.js",
@@ -971,6 +975,6 @@
     "pg": "^8.23.0"
   },
   "engines": {
-    "node": ">=24.22.1"
+    "node": ">=24"
   }
 }

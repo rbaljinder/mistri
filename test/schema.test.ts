@@ -718,7 +718,13 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.15: a calendar's `span`, a week or a day as a time grid (one entry, one new name): 1685/508.
     // 1.0.0-rc.15: a list view's `group`, its grid's rows under heads (one entry; the name a related list's): 1686/508.
     // 1.0.0-rc.15: a form field's `tree`, a reference picked from its hierarchy (one entry, one new name): 1687/509.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1687, names: 509 });
+    // 1.0.0-rc.16: a dashboard's banner is its own section kind (the note lost eyebrow and image, the banner has them
+    // and a required title: 11 more entries, no new name): 1698/509.
+    // 1.0.0-rc.16: a dashboard embed's `tab` is `listTab` (the entry stays, one new name): 1698/510.
+    // 1.0.0-rc.16: a record page's sections take `icon`, its chart `curve`, `total` and `empty`, its breakdown `empty`, and
+    // a dashboard chart `sort` (19 more entries, no new name): 1717/510.
+    // 1.0.0-rc.16: a headline's `subtitle` and a fields block's `empty` (two entries, no new name), and a resource's `query` (one entry; `query` is a rollup's name already), and a current card's `opens` (two entries, the card's and the list's; `opens` is a name already): 1722/510.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1722, names: 510 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

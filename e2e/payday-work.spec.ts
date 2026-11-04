@@ -2,13 +2,14 @@ import { expect, test, type Page } from './support/harness';
 import { startSample, PAYDAY_ADMIN } from './support/sampleServer';
 import { count, scalar } from './support/db';
 import { chooseTab } from './support/tabs';
+import { SLOW_MS } from './support/budgets';
 
 /* Payday's second and third journeys: approving hourly timesheets together,
    the time-off decisions a balance can refuse, a signature reminder, and the
    person page that gathers pay, time off and documents. Each test starts its
    own server over a fresh seed. */
 test.describe('Payday people operations', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
 
   const signIn = async (page: Page, origin: string) => {
     const login = await page.request.post(`${origin}/api/auth/sign-in/email`, { headers: { origin }, data: PAYDAY_ADMIN });

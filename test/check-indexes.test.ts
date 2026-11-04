@@ -14,7 +14,13 @@ import { join, resolve } from 'node:path';
 import { after, describe, test } from 'node:test';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
 import type { DatabaseSchema, TableMeta } from '../packages/engine/src/shared/schema.js';
-import { indexFindings, readPgIndexes, SMALL_TABLE_ROWS, type PgIndex } from '../packages/mistri/src/server/build/checkIndexes.js';
+import {
+  holdBack,
+  indexFindings,
+  readPgIndexes,
+  SMALL_TABLE_ROWS,
+  type PgIndex,
+} from '../packages/mistri/src/server/build/checkIndexes.js';
 import type { AppDef } from '../packages/mistri/src/shared/appModel.js';
 import { liveSkip } from './live.js';
 import { pgClient, uuidPostgresDatabase } from './support/tenantDialects.js';
@@ -123,6 +129,34 @@ describe('indexFindings', () => {
       1,
       'an expression leads nothing',
     );
+  });
+
+  test('a hidden column is never offered a search index, whatever it is called', () => {
+    const tokens = {
+      ...schema(),
+      tables: [...schema().tables, table('session', [['id'], ['token', 'text'], ['label', 'text']], 50_000)],
+    } as DatabaseSchema;
+    const listed = (hidden: string[]) =>
+      indexFindings({
+        app: app({ sessions: { table: 'public.session' } }, { customer: {}, invoice: {}, session: { hidden } }),
+        pages: [],
+        schema: tokens,
+        indexes: [...primaries, index('session', ['id'])],
+      }).filter((finding) => finding.declaration.endsWith('.search'));
+    assert.ok(listed([]).length > 0, 'a search box over a text column is advised');
+    assert.deepEqual(
+      listed(['token', 'label']).map((finding) => finding.columns),
+      [],
+    );
+  });
+
+  test('small tables are held back and counted, and --warnings brings them all back', () => {
+    const found = indexFindings({ app: app(), pages: [], schema: schema(SMALL_TABLE_ROWS - 1), indexes: primaries });
+    assert.equal(found.length, 1);
+    assert.deepEqual(holdBack(found, false), { shown: [], held: found });
+    assert.deepEqual(holdBack(found, true), { shown: found, held: [] });
+    const large = indexFindings({ app: app(), pages: [], schema: schema(SMALL_TABLE_ROWS), indexes: primaries });
+    assert.deepEqual(holdBack(large, false), { shown: large, held: [] });
   });
 
   test('a small table is information, a large one a warning', () => {

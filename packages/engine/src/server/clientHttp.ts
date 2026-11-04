@@ -22,6 +22,7 @@ import { headingWeight, inheritThemePreset, lookNavRole } from '../shared/themeP
 import { typeTokens } from '../shared/themeType.js';
 import { fieldEdge } from '../shared/themeColor.js';
 import { recipeAttributes } from '../shared/themeRecipes.js';
+import { APP_PAGE_PERMISSIONS_POLICY } from './http/baselineHeaders.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -143,6 +144,13 @@ function withFrameAncestors(policy: string, origins: readonly string[] | undefin
   if (!origins?.length) return policy;
   return policy.replace("frame-ancestors 'self'", ["frame-ancestors 'self'", ...origins].join(' '));
 }
+
+/**
+ * An App's page may use the camera (the scan input); the database browser's
+ * has no such input and keeps the baseline's refusal (http/baselineHeaders.ts).
+ */
+const pagePermissions = (shell: ShellTitle | undefined): Record<string, string> =>
+  shell?.workbench ? {} : { 'permissions-policy': APP_PAGE_PERMISSIONS_POLICY };
 
 /** A page's whole policy: its own, the served Apps' egress, and who may frame it. */
 const pagePolicy = (policy: string, shell: ShellTitle | undefined) =>
@@ -589,6 +597,7 @@ export async function serveClient(files: ClientFiles, req: IncomingMessage, res:
                 ...(data || shell?.branding?.private ? { vary: 'Cookie' } : {}),
                 'x-content-type-options': 'nosniff',
                 'content-security-policy': pagePolicy(shellPolicy(html, { fromSource: true, socket: vite.socket }), shell),
+                ...pagePermissions(shell),
               });
               res.end(head ? undefined : html);
             } catch {
@@ -774,7 +783,12 @@ export function builtClient(dir: string): (req: IncomingMessage, res: ServerResp
         'x-content-type-options': 'nosniff',
         'content-type': asset.type,
         vary: asset.variants.length > 1 ? 'Accept-Encoding, Cookie' : 'Cookie',
-        ...(asset.policy ? { 'content-security-policy': pagePolicy(shell.mount?.base ? shellPolicy(text) : asset.policy, shell) } : {}),
+        ...(asset.policy
+          ? {
+              'content-security-policy': pagePolicy(shell.mount?.base ? shellPolicy(text) : asset.policy, shell),
+              ...pagePermissions(shell),
+            }
+          : {}),
       };
       if (head) {
         res.writeHead(200, headers).end();
@@ -797,7 +811,12 @@ export function builtClient(dir: string): (req: IncomingMessage, res: ServerResp
         'cache-control': privately ? PERSONAL : 'no-cache',
         ...(!privately ? { etag: strongTag(body) } : {}),
         'x-content-type-options': 'nosniff',
-        ...(asset.policy ? { 'content-security-policy': pagePolicy(shell?.mount?.base ? shellPolicy(text) : asset.policy, shell) } : {}),
+        ...(asset.policy
+          ? {
+              'content-security-policy': pagePolicy(shell?.mount?.base ? shellPolicy(text) : asset.policy, shell),
+              ...pagePermissions(shell),
+            }
+          : {}),
         ...(asset.variants.length > 1 || privately
           ? { vary: [asset.variants.length > 1 ? 'Accept-Encoding' : '', privately ? 'Cookie' : ''].filter(Boolean).join(', ') }
           : {}),
@@ -821,7 +840,7 @@ export function builtClient(dir: string): (req: IncomingMessage, res: ServerResp
       'cache-control': asset.cache,
       etag: variant.etag,
       'x-content-type-options': 'nosniff',
-      ...(asset.policy ? { 'content-security-policy': pagePolicy(asset.policy, shell) } : {}),
+      ...(asset.policy ? { 'content-security-policy': pagePolicy(asset.policy, shell), ...pagePermissions(shell) } : {}),
     };
     if (asset.variants.length > 1) headers.vary = 'Accept-Encoding';
     if (unchanged(req.headers['if-none-match'], variant.etag)) {

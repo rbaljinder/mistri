@@ -224,6 +224,12 @@ export function indexFindings({ app, pages, schema, indexes, owners = {} }: Inde
     });
   }
 
+  /* A hidden column is never a search field: the record does not show it, and a search over it would leak it. A trigram
+     index on a token or a secret is advice nobody should follow. */
+  const hiddenOf = (table: TableMeta): Set<string> =>
+    new Set(
+      resources.filter((resource) => resource.table.id === table.id).flatMap((resource) => app.resources?.[resource.name]?.hidden ?? []),
+    );
   const searched = new Set(resources.filter((resource) => app.resources?.[resource.name]?.search).map((resource) => resource.table.id));
   for (const [key, view] of Object.entries(app.views)) {
     const list = view as {
@@ -265,10 +271,19 @@ export function indexFindings({ app, pages, schema, indexes, owners = {} }: Inde
     ];
     for (const column of boxes) {
       const meta = table.columns.find((c) => c.name === column);
-      if (!meta || columnKind(meta.type) !== 'text') continue;
+      if (!meta || columnKind(meta.type) !== 'text' || hiddenOf(table).has(column)) continue;
       if ((byTable.get(keyOf(table)) ?? []).some((index) => index.trigram.includes(column))) continue;
       say(`views.${key}.search`, table, [column], `its search box matches ${column} with contains`, { trigram: true });
     }
   }
   return found;
+}
+
+/**
+ * What a run says of its findings: a table too small for an index to matter (information) is held back and counted
+ * in one line, unless `all` asks for every one (`mistri check --warnings`).
+ */
+export function holdBack(found: readonly IndexFinding[], all: boolean): { shown: IndexFinding[]; held: IndexFinding[] } {
+  const held = all ? [] : found.filter((finding) => finding.severity === 'info');
+  return { shown: all ? [...found] : found.filter((finding) => finding.severity !== 'info'), held };
 }

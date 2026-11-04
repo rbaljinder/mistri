@@ -23,7 +23,15 @@ import {
   type ValueKind,
 } from '@mistriwork/engine/shared/computed.js';
 import { parseComputed } from '@mistriwork/engine/shared/computedParse.js';
-import { columnKind, findTable, isFlagColumn, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import {
+  columnKind,
+  findTable,
+  isFlagColumn,
+  isJsonType,
+  tableNamed,
+  type DatabaseSchema,
+  type TableMeta,
+} from '@mistriwork/engine/shared/schema.js';
 import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
 import { tryResolvePath } from '@mistriwork/engine/shared/viewPaths.js';
 
@@ -38,6 +46,53 @@ function kindAt(schema: DatabaseSchema, table: TableMeta, path: string): { kind:
   if (isFlagColumn(column)) return { kind: 'boolean', native: columnKind(column.type) === 'boolean' };
   const kind = columnKind(column.type);
   return { kind: kind === 'other' ? 'text' : kind };
+}
+
+/**
+ * A path into one of the table's JSON columns (`filters_json.make`): the column and the members, or undefined for a
+ * path that is not one. A path through a reference, declared or the database's, keeps its meaning.
+ */
+function jsonPath(
+  schema: DatabaseSchema,
+  table: TableMeta,
+  path: string,
+): { column: string; keys: string[] } | { problem: string } | undefined {
+  const [first, ...keys] = path.split('.');
+  if (!keys.length) return undefined;
+  const column = table.columns.find((each) => each.name === first);
+  if (!column) return undefined;
+  if (isJsonType(column.type)) return { column: column.name, keys };
+  if (tryResolvePath(schema, table.id, path).resolved) return undefined;
+  if (schema.foreignKeys.some((key) => key.from.table === table.id && key.from.columns.includes(column.name))) return undefined;
+  return {
+    problem: `"${first}" is ${column.type || 'a column'}, not JSON, so "${path}" names nothing in it: a member path reads a json or jsonb column.`,
+  };
+}
+
+/** The expression with each path into a JSON column read as that column's member (ComputedJson). */
+function withJsonMembers(node: ComputedNode, schema: DatabaseSchema, table: TableMeta): ComputedNode {
+  const walk = (n: ComputedNode): ComputedNode => {
+    switch (n.k) {
+      case 'path': {
+        const found = jsonPath(schema, table, n.path);
+        if (!found) return n;
+        if ('problem' in found) throw new Error(found.problem);
+        return { k: 'json', column: found.column, keys: found.keys };
+      }
+      case 'op':
+        return { ...n, left: walk(n.left), right: walk(n.right) };
+      case 'call':
+        return { ...n, args: n.args.map(walk) };
+      case 'not':
+      case 'neg':
+      case 'empty':
+      case 'span':
+        return { ...n, of: walk(n.of) };
+      default:
+        return n;
+    }
+  };
+  return walk(node);
 }
 
 export function appComputedRules(
@@ -65,10 +120,10 @@ export function appComputedRules(
         );
         continue;
       }
-      const isColumn = (path: string) => Boolean(tryResolvePath(schema, table.id, path).resolved);
+      const isColumn = (path: string) => Boolean(tryResolvePath(schema, table.id, path).resolved) || Boolean(jsonPath(schema, table, path));
       let parsed: ComputedNode;
       try {
-        parsed = parseComputed(declared.value, isColumn);
+        parsed = withJsonMembers(parseComputed(declared.value, isColumn), schema, table);
       } catch (error) {
         const at =
           error instanceof ComputedError ? ` (at character ${error.at + 1}: "${declared.value.slice(error.at, error.at + 24)}")` : '';
@@ -98,8 +153,8 @@ export function appComputedRules(
       }
       if (kind !== declared.type) {
         problems.push(
-          `${here} is declared a ${declared.type}, and "${declared.value}" is a ${kind === 'span' ? 'span of days' : kind}. ` +
-            (kind === 'text' ? 'A computed column is a yes-or-no, a number or a date.' : `Declare it computed.${kind}(…).`),
+          `${here} is declared ${declared.type === 'text' ? 'text' : `a ${declared.type}`}, and "${declared.value}" is ${kind === 'span' ? 'a span of days' : kind === 'text' ? 'text' : `a ${kind}`}. ` +
+            (kind === 'span' ? 'A computed column is a yes-or-no, a number, a date or text.' : `Declare it computed.${kind}(…).`),
         );
         continue;
       }

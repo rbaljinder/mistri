@@ -114,7 +114,7 @@ test('results are values: an applied step, and a refusal with its status and cod
 for (const name of ['tick', 'payday', 'depot'] as const) {
   test(`test init writes a suite that passes on ${name}`, async () => {
     const dir = await exampleApp(name);
-    const init = cli(['test', 'init', dir]);
+    const init = cli(['test', 'init', '--app', dir]);
     assert.equal(init.status, 0, init.stderr);
     for (const file of ['start.ts', 'journeys.test.ts', 'permissions.test.ts']) {
       assert.ok(existsSync(join(dir, 'tests', file)), file);
@@ -125,11 +125,11 @@ for (const name of ['tick', 'payday', 'depot'] as const) {
       assert.doesNotMatch(readFileSync(join(dir, 'tests', file), 'utf8'), /from '(?!@mistriwork\/mistri\/testing'|node:|\.\/start\.ts')/);
 
     writeFileSync(join(dir, 'tests', 'journeys.test.ts'), '// mine\n');
-    const refused = cli(['test', 'init', dir]);
+    const refused = cli(['test', 'init', '--app', dir]);
     assert.equal(refused.status, 2);
     assert.match(refused.stderr, /already exist.*--force/s);
     assert.equal(readFileSync(join(dir, 'tests', 'journeys.test.ts'), 'utf8'), '// mine\n');
-    assert.equal(cli(['test', 'init', dir, '--force']).status, 0);
+    assert.equal(cli(['test', 'init', '--app', dir, '--force']).status, 0);
 
     const run = spawnSync(process.execPath, ['--import', 'tsx', '--test', 'tests/*.test.ts'], {
       cwd: dir,
@@ -152,7 +152,7 @@ test('test init writes a cross-table verb as the action on the record its comman
      order's action it found none and was skipped as pending, testing nothing. */
   const dir = join(work, 'apps', `depot-${++made}`);
   cpSync(join(ROOT, 'test', 'fixtures', 'apps', 'depot'), dir, { recursive: true });
-  assert.equal(cli(['test', 'init', dir]).status, 0);
+  assert.equal(cli(['test', 'init', '--app', dir]).status, 0);
   const journeys = readFileSync(join(dir, 'tests', 'journeys.test.ts'), 'utf8');
   assert.match(journeys, /Receive line \(receiveLine\): moves its purchase_order, run on a po_line record/);
   assert.match(journeys, /person\.act\('po_line', 'receive'\)/);
@@ -189,7 +189,7 @@ test('test init seeds a record a matrix row needs that the database has none of'
   );
   // A tsconfig that names no types: TypeScript 7 then loads no @types package, and the tests' node: imports are missing.
   writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true } }));
-  const init = cli(['test', 'init', dir]);
+  const init = cli(['test', 'init', '--app', dir]);
   assert.equal(init.status, 0, init.stderr);
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'tsconfig.json'), 'utf8')).compilerOptions, { strict: true, types: ['node'] });
   assert.match(init.stdout, /added "types": \["node"\] to .*tsconfig\.json/);
@@ -243,7 +243,7 @@ test('test init seeds the row a required reference points at when the database h
     ['customer', 'invoice'],
     { auditor: { read: ['customer', 'invoice'] }, biller: { read: ['customer', 'invoice'], write: ['invoice'] } },
   );
-  assert.equal(cli(['test', 'init', dir]).status, 0);
+  assert.equal(cli(['test', 'init', '--app', dir]).status, 0);
   const matrix = readFileSync(join(dir, 'tests', 'permissions.test.ts'), 'utf8');
   /* The parent first, and the invoice takes the key it was stored with: no NOT NULL failure, no guessed id. */
   assert.match(
@@ -272,7 +272,7 @@ test('test init seeds a chain of required references in order, and says a requir
     ['invoice', 'node'],
     { clerk: { read: ['invoice', 'node'], write: ['invoice', 'node'] } },
   );
-  assert.equal(cli(['test', 'init', dir]).status, 0);
+  assert.equal(cli(['test', 'init', '--app', dir]).status, 0);
   const matrix = readFileSync(join(dir, 'tests', 'permissions.test.ts'), 'utf8');
   assert.match(
     matrix,
@@ -291,7 +291,7 @@ test('test init seeds a parent whose rows leave a referred unique column empty, 
     ['entry', 'account'],
     { clerk: { read: ['entry', 'account'], write: ['entry'] } },
   );
-  assert.equal(cli(['test', 'init', dir]).status, 0);
+  assert.equal(cli(['test', 'init', '--app', dir]).status, 0);
   const matrix = readFileSync(join(dir, 'tests', 'permissions.test.ts'), 'utf8');
   assert.doesNotMatch(matrix, /required cycle/);
   assert.match(
@@ -303,7 +303,7 @@ test('test init seeds a parent whose rows leave a referred unique column empty, 
 test('test init writes a suite for a row-policy App: its policy and jobs served, a matrix of what it can know', async () => {
   const dir = await exampleApp('lintel');
   rmSync(join(dir, 'tests'), { recursive: true, force: true });
-  const init = cli(['test', 'init', dir]);
+  const init = cli(['test', 'init', '--app', dir]);
   assert.equal(init.status, 0, init.stderr);
   const start = readFileSync(join(dir, 'tests', 'start.ts'), 'utf8');
   assert.match(start, /args: \['--policy', 'policy\.ts', '--jobs', 'jobs\.ts'\]/);
@@ -346,7 +346,7 @@ test('test init names a command action by its id, not its place in the list', ()
      "one command" step. Named by its index, `act` found no such action and the step was skipped as pending. */
   const dir = join(work, 'apps', `commons-${++made}`);
   cpSync(join(ROOT, 'test', 'fixtures', 'apps', 'commons'), dir, { recursive: true });
-  const init = cli(['test', 'init', dir]);
+  const init = cli(['test', 'init', '--app', dir]);
   assert.equal(init.status, 0, init.stderr);
   const journeys = readFileSync(join(dir, 'tests', 'journeys.test.ts'), 'utf8');
   assert.match(journeys, /person\.act\('member', 'editProfile'\)/);
@@ -357,7 +357,7 @@ test('test init refuses what it cannot write a suite for', () => {
   const unknown = cli(['test', 'frobnicate']);
   assert.equal(unknown.status, 2);
   assert.match(unknown.stderr, /init/);
-  const missing = cli(['test', 'init', join(work, 'nowhere')]);
+  const missing = cli(['test', 'init', '--app', join(work, 'nowhere')]);
   assert.notEqual(missing.status, 0);
 });
 
@@ -412,7 +412,7 @@ test('test init writes a tenant App an isolation suite that passes: each resourc
     join(dir, 'mistri.json'),
   ]);
   assert.equal(up.status, 0, up.stdout + up.stderr);
-  const init = run(['test', 'init', dir]);
+  const init = run(['test', 'init', '--app', dir]);
   assert.equal(init.status, 0, init.stdout + init.stderr);
   assert.match(init.stdout, /wrote .*tests\/tenants\.test\.ts/);
   assert.doesNotMatch(init.stdout, /journeys|permissions/);

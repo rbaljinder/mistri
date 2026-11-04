@@ -21,6 +21,7 @@
  * and the fix named, booleans and shapes are refused rather than coerced,
  * and nothing is silently skipped.
  */
+import { checkNarrowed } from './appNarrowed.js';
 import { checkShellNew } from './appNewMenu.js';
 import { destinationProblem, servedView, servedViewKind } from './appDestinations.js';
 import { parseBrandingDeclaration } from './tenantBranding.js';
@@ -509,6 +510,7 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef): AppDef {
         `${where}: views "${key}" has a branding form, and the App declares no "branding": say what a tenant may change, branding: { allow, editors }.`,
       );
   checkTenancy(app, pages);
+  checkNarrowed(app, where);
   checkImports(app, where);
   checkStamps(app, where);
   checkMe(app, pages, where);

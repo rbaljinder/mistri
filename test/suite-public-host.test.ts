@@ -114,7 +114,11 @@ async function fixture(t: TestContext, policy: boolean | 'placement' = false) {
   const grantsDb = new DatabaseSync(join(directory, 'grants.db'));
   provisionSuiteGrantStore(grantsDb, 'shared');
   const grants = openSuiteGrantStore(grantsDb, 'shared');
-  const environment = { BETTER_AUTH_SECRET: 'test-public-host-secret-longer-than-thirty-two-characters' };
+  const environment = {
+    BETTER_AUTH_SECRET: 'test-public-host-secret-longer-than-thirty-two-characters',
+    MISTRI_TEST_AUTH_LIMITS: 'off',
+    NODE_ENV: 'test',
+  };
   const native = await createAppAuth(
     loaded(
       parseAppConfig(

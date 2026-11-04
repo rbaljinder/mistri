@@ -1,4 +1,4 @@
-import { calendar, cards, count, defineFeature, fields, listView, msg, navGroup, page, related, sum } from '@mistriwork/mistri/app';
+import { calendar, cards, rollup, defineFeature, fields, listView, msg, navGroup, page, related } from '@mistriwork/mistri/app';
 import type { Feature } from './mistri-schema.d.ts';
 
 export const peopleCards = cards('name', {
@@ -50,9 +50,9 @@ export const people = defineFeature({
     department: {
       // The department page's figures, named once so its summary sits beside the lead's rail without wrapping.
       rollups: {
-        headcount: count('employee', { query: 'on_staff' }),
-        starting_soon: count('employee', { query: 'employment_status = onboarding' }),
-        annual_salaries: sum('employee', 'salary'),
+        headcount: rollup.count('employee', { query: 'on_staff' }),
+        starting_soon: rollup.count('employee', { query: 'employment_status = onboarding' }),
+        annual_salaries: rollup.sum('employee', 'salary'),
       },
       labels: { name: 'Department', lead_id: 'Department lead' },
     },

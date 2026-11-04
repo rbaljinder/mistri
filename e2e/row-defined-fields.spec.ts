@@ -1,6 +1,7 @@
 import { expect, test, type Page } from './support/harness';
 import { DEPOT_ADMIN, startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { LONG_MS } from './support/budgets';
 
 /* Row-defined fields, in Depot: a product's specifications are the rows of
    `attribute` for its category (and those for every category), kept in its
@@ -9,7 +10,7 @@ import { scalar } from './support/db';
    form asks the chosen category's, and the Catalog rail offers them as
    facets. Each test owns its seed and its server (the parallel lane). */
 test.describe('Row-defined fields', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
 
   const signIn = async (page: Page, origin: string) => {
     const login = await page.request.post(`${origin}/api/auth/sign-in/email`, { headers: { origin }, data: DEPOT_ADMIN });

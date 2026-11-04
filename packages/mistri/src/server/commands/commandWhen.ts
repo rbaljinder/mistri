@@ -1,6 +1,6 @@
 /**
  * A command's `when` over its target's rollups and computed columns: `when: 'fulfillment_status =
- * pending'`, where `fulfillment_status` is `latest('fulfillment', 'status')`, a word read where it is written
+ * pending'`, where `fulfillment_status` is `rollup.latest('fulfillment', 'status')`, a word read where it is written
  * rather than copied onto the order.
  *
  * A `when` of the target's own columns is one condition in the read that fetches the row (businessCommandExecution
@@ -475,8 +475,10 @@ async function readRollup(
     if (dated !== undefined || !nullable) return dated ?? null;
     return (await first([{ column: by, op: 'isNull' }], key)) ?? null;
   }
-  // A sum reads every row's value: in pages, so a record with many rows is still summed whole. Over none it is 0.
+  // A sum reads every row's value: in pages, so a record with many rows is still summed whole. Over none it is 0;
+  // an avg over none is nothing, as the statement's is.
   let total = 0;
+  let counted = 0;
   for (let offset = 0; ; offset += PAGE) {
     const found = await reader.query({
       table: rollup.child,
@@ -488,9 +490,12 @@ async function readRollup(
     });
     for (const each of found.rows) {
       const figure = typedValue(child.meta, column, each[column]);
-      if (typeof figure === 'number') total += figure;
+      if (typeof figure === 'number') {
+        total += figure;
+        counted += 1;
+      }
     }
-    if (found.rows.length < PAGE) return total;
+    if (found.rows.length < PAGE) return rollup.fn === 'avg' ? (counted ? total / counted : null) : total;
   }
 }
 
@@ -499,7 +504,7 @@ const ordered = (value: ComputedValue): string | number | boolean | null =>
   value !== null && typeof value === 'object' ? ('day' in value ? value.day : value.instant.toISOString()) : value;
 
 /**
- * A rollup over a computed column of its rows (`sum('line', 'amount')`, `amount` being `qty * price`), read as the
+ * A rollup over a computed column of its rows (`rollup.sum('line', 'amount')`, `amount` being `qty * price`), read as the
  * subquery reads it: the expression worked out over each row the rollup counts, its reads read in this transaction
  * and in pages, then summed, or the least, greatest or newest kept. A row whose expression comes to nothing is left
  * out, as the aggregate leaves out a null.
@@ -528,6 +533,7 @@ async function readComputedRollup(
     return (await first([{ column: by, op: 'isNull' }], key)) ?? null;
   }
   let kept: ComputedValue = rollup.fn === 'sum' ? 0 : null;
+  let counted = 0;
   for (let offset = 0; ; offset += PAGE) {
     const found = await reader.query({
       table: rollup.child,
@@ -540,15 +546,18 @@ async function readComputedRollup(
     for (const each of found.rows) {
       const value = worked(each);
       if (value === null) continue;
-      if (rollup.fn === 'sum') {
-        if (typeof value === 'number') kept = (kept as number) + value;
+      if (rollup.fn === 'sum' || rollup.fn === 'avg') {
+        if (typeof value === 'number') {
+          kept = ((kept as number | null) ?? 0) + value;
+          counted += 1;
+        }
       } else if (kept === null) kept = value;
       else {
         const [a, b] = [ordered(value)!, ordered(kept)!];
         if (rollup.fn === 'min' ? a < b : a > b) kept = value;
       }
     }
-    if (found.rows.length < PAGE) return kept;
+    if (found.rows.length < PAGE) return rollup.fn === 'avg' ? (counted ? (kept as number) / counted : null) : kept;
   }
 }
 

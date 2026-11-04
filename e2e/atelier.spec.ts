@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { expect, test, type Page } from './support/harness';
 import { ATELIER_ADMIN, startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { LONG_MS } from './support/budgets';
 
 /* Atelier on its own server over its own seeded file: a staff account packs
    and ships a paid order from its fulfillment (told beside the field when the
@@ -43,7 +44,7 @@ async function verb(page: Page, name: string, fill?: (dialog: ReturnType<Page['g
 }
 
 test.describe('Atelier back office', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
 
   test('New order takes its products in the lines grid: named and pictured through the product, priced from the variant, a bad line refused at its cell', async ({
     page,

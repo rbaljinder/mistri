@@ -1,6 +1,7 @@
 import { expect, test } from './support/harness';
 import { startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { FIXTURE_MS } from './support/budgets';
 
 /* An issue's status moves only through Thread's actions: the server refuses any
    other change, a new issue starts where the form says, and Cancel issue asks
@@ -9,7 +10,7 @@ test.describe('Thread transitions', () => {
   let sample: Awaited<ReturnType<typeof startSample>>;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     sample = await startSample('thread');
   });
   test.afterAll(async () => {

@@ -133,6 +133,7 @@ export function sectionReads(schema: DatabaseSchema, base: string, section: Page
         ...(section.paths ?? []),
         section.status,
         section.subfigure,
+        section.subtitle,
         section.was,
         ...queryColumns(schema, base, section.when),
       ]);
@@ -155,8 +156,8 @@ export function sectionReads(schema: DatabaseSchema, base: string, section: Page
         on(stream.from, [
           stream.path,
           stream.at,
-          stream.show,
-          stream.detail,
+          stream.text,
+          stream.badge,
           stream.by,
           ...timelineMarkColumns(section, stream, findTable(schema, stream.from)),
           ...queryColumns(schema, stream.from, stream.filter),

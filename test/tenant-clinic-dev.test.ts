@@ -40,6 +40,7 @@ test('mistri dev serves a tenant App and prints a sign-in per role, each a membe
     HOME: work,
     MISTRI_AUDIT_KEY: 'k'.repeat(40),
     MISTRI_TEST_AUTH_LIMITS: 'off',
+    NODE_ENV: 'test',
     TSX_TSCONFIG_PATH: join(ROOT, 'tsconfig.json'),
   };
   const up = spawnSync(
@@ -54,7 +55,7 @@ test('mistri dev serves a tenant App and prints a sign-in per role, each a membe
     const port = await freePort();
     const child = spawn(
       process.execPath,
-      ['--import', 'tsx', ENTRY, 'dev', dir, '--policy', policy, '--commands', join(dir, 'commands.ts'), '--port', String(port)],
+      ['--import', 'tsx', ENTRY, 'dev', '--app', dir, '--policy', policy, '--commands', join(dir, 'commands.ts'), '--port', String(port)],
       { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let output = '';

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from './support/harness';
 import { startSample } from './support/sampleServer';
 import { rows } from './support/db';
+import { FIXTURE_MS, SHOT_MS } from './support/budgets';
 
 /**
  * Forecourt's public pages as a crawler and a first visit see them
@@ -60,11 +61,11 @@ async function measure(page: Page, origin: string, car: { path: string; title: s
 }
 
 test.describe('Forecourt public pages', () => {
-  test.setTimeout(150_000);
+  test.setTimeout(SHOT_MS);
   let drawn: Awaited<ReturnType<typeof startSample>>;
   let plain: Awaited<ReturnType<typeof startSample>>;
   test.beforeAll(async () => {
-    test.setTimeout(150_000);
+    test.setTimeout(FIXTURE_MS);
     drawn = await startSample('forecourt-market', { env: { MISTRI_ALLOWED_HOSTS: WHITE_LABEL } });
     // Drawing nothing on the server, and a sitemap of parts forty addresses long.
     plain = await startSample('forecourt-market', { env: { MISTRI_SSR: '0', MISTRI_SITEMAP_URLS: '40' } });

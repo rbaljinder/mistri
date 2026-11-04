@@ -55,6 +55,7 @@ Names, checksums and the history layout are Flyway's. To take over from Flyway, 
 
 ## Common mistakes
 
+- `up`, `baseline` or `repair` says the connection "is not writable" → they write to the database, so a connection your config names needs `"writable": true` (without `--app`); `--dry-run` and a database named with `--db` are not asked.
 - `up` refuses a database that has tables and no history → run `migrate baseline` once; nothing in it is changed.
 - `[pending-migration]` → a pending file failed on the scratch copy, or the files and their history disagree; fix the file, or `repair` after an edit you meant.
 - `[schema-types-stale]` → someone changed the database outside migrations; `mistri check` rewrites the types, and `status` lists the drift until a migration settles it (`ADD COLUMN IF NOT EXISTS note`).

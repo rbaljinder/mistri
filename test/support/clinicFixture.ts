@@ -88,7 +88,7 @@ export async function startClinic(t: TestContext, engine: Engine) {
   t.after(() => workspace.close());
   const url = await database(workspace, engine);
   const config = await workspace.write('mistri.json', { connections: [{ name: 'clinic-db', url, writable: true }] });
-  const environment = { MISTRI_AUDIT_KEY: randomBytes(32).toString('base64'), MISTRI_TEST_AUTH_LIMITS: 'off' };
+  const environment = { MISTRI_AUDIT_KEY: randomBytes(32).toString('base64'), MISTRI_TEST_AUTH_LIMITS: 'off', NODE_ENV: 'test' };
   // The stores, as the docs say to make them: one command, with the server stopped.
   const up = cli(workspace, ['migrate', 'stores', 'up', '--app', CLINIC, '--policy', POLICY, '--config', config], environment);
   if (up.status !== 0) throw new Error(`migrate stores up failed (${up.status}): ${up.stdout}${up.stderr}`);

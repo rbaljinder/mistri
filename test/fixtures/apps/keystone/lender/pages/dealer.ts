@@ -27,7 +27,7 @@ export const dealerPages = {
       }),
       timeline(
         'Visits',
-        [stream('dealer_visit', 'dealer_id', 'happened_on', 'summary', { detail: 'next_step', author: 'lender_user_id.name' })],
+        [stream('dealer_visit', 'dealer_id', 'happened_on', 'summary', { badge: 'next_step', author: 'lender_user_id.name' })],
         { limit: 12, tab: 'Visits' },
       ),
       related('Applications', 'loan_application', 'dealer_id', {

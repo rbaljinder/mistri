@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { DEFAULT_RESTART_TOKEN_ENV, DEFAULT_ROLL_TIMEOUT_MS, type DeployConfig, type DeployFlags } from './types.js';
 
 export const DEPLOY_USAGE =
-  'mistri deploy init cloudflare --app <dir> [--config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--app-entry <file>] [--out <dir>] [--dir <dir>] [--force]\n' +
+  'mistri deploy init cloudflare [--app <dir>] [--config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--app-entry <file>] [--out <dir>] [--dir <dir>] [--force]\n' +
   '  mistri deploy [--dry-run] [--yes] [--allow-contract] [--allow-dirty] [--migrate-url <url>] [--migrations <dir>] [--connection-limit <n>] [--verbose] [--backup-check <cmd>] [--smoke <cmd>] [--roll-timeout <minutes>] [--dir <dir>]\n' +
   '  mistri deploy verify [--roll] [--roll-timeout <minutes>] [--smoke <cmd>] [--dir <dir>]\n' +
   '  mistri deploy status | rollback [<deploy-id>] [--dry-run] | logs [--dir <dir>]';

@@ -1,3 +1,4 @@
+import { FIXTURE_MS, LONG_MS } from './support/budgets';
 /**
  * Tenancy, in a browser, on a real two-realm App — the first such proof in this
  * repository.
@@ -32,14 +33,14 @@ import {
 
 test.describe('Ignition tenancy', () => {
   test.skip(IGNITION_SKIP !== false, String(IGNITION_SKIP));
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   let app: IgnitionFixture;
   /* One deployment for the file: seeding creates fourteen native accounts and
      about seven hundred rows over two fresh databases, and no test here changes
      what another reads. */
   test.beforeAll(async () => {
     // Two databases seeded and a server started: the setting above times the tests, not this hook (Playwright).
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     app = await startIgnition();
   });
   test.afterAll(async () => {

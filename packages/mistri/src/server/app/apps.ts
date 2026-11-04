@@ -43,9 +43,10 @@ import {
   appRollupRules,
 } from '../../shared/app.js';
 import { resolveValidation, resourceValidation, SHORT_NAME_MAX } from '../../shared/app.js';
+import { narrowedOverlaps } from '../../shared/appNarrowed.js';
 import { compileAppDefinitionValidation } from './appValidation.js';
 import { compileAppStamps } from './appStamps.js';
-import { cardsProblem } from '@mistriwork/engine/shared/appCards.js';
+import { cardsColumns, cardsProblem, type AppCardsList } from '@mistriwork/engine/shared/appCards.js';
 import { missingAppImports, missingImportsMessage } from './appImports.js';
 import { servedApp, type AppPayload, type AppPayloadApp } from '../../shared/appPayload.js';
 import { appAddressBook, naturalKeyProblems, type AddressBook } from '../../shared/appAddress.js';
@@ -1290,6 +1291,8 @@ export function appAdvisories(loaded: LoadedApp, schema: DatabaseSchema): string
     ...mixedCurrencyWarnings(loaded.app),
     ...liveOffWarnings(loaded.app),
     ...shortNameWarnings(loaded.app),
+    ...narrowedOverlapWarnings(loaded.app, schema),
+    ...subtitleUnseenWarnings(loaded.app, loaded.pages, schema),
     ...notifyAdvisories(loaded.app, schema),
     ...valueLabelFindings(loaded.app).warnings,
   ].map((w) => `${manifest}: ${locateProblem(loaded.origins, w)}`);
@@ -1547,6 +1550,72 @@ function shortNameWarnings(app: LoadedApp['app']): string[] {
     `name [short-name]: "${app.name}" is ${length} characters, which a phone's bar and an installed icon cut short. ` +
       `Say a shortName of ${SHORT_NAME_MAX} or fewer for them; the full name stays the bar's accessible name and the page's title.`,
   ];
+}
+
+/** `[narrowed-overlap]`: two narrowed resources of one table whose queries may both hold of a row, which is then a
+    record of each. Said, not refused: overlapping views of one table can be what the author means; an equality or an
+    `in` on one column with values the other never takes is what proves two apart. */
+function narrowedOverlapWarnings(app: LoadedApp['app'], schema: DatabaseSchema): string[] {
+  const narrowed = Object.entries(app.resources ?? {}).flatMap(([name, resource]) => {
+    if (resource.query === undefined) return [];
+    /* The logical catalog holds the narrowed resource as a table of its own name; a query that does not parse is
+       the load's refusal, said there. */
+    const parsed = parseQuery(`${name} ${resource.query}`, { schema });
+    if (parsed.errors.length || !parsed.query) return [];
+    const table = `${resource.source ?? ''}\u0000${resource.physical ?? name.slice(name.indexOf('.') + 1)}`;
+    return [{ name, table, filter: parsed.query.filter }];
+  });
+  return narrowedOverlaps(narrowed).map(
+    ([a, b]) =>
+      `resources "${b}" [narrowed-overlap]: its query and "${a}"'s may both hold of one row, which is then a record of each. ` +
+      `If they are meant apart, say one column's values in each (kind = order, kind = conversation).`,
+  );
+}
+
+/** `[subtitle-unseen]`: a column whose display rule has a `subtitle`, shown where nothing draws that second line (a
+    card, a board's card, a record's header facts or a card section). Said, so the rule is not silently ignored: a list's
+    cell, a block of fields and a headline's figure are where it is drawn. */
+function subtitleUnseenWarnings(app: LoadedApp['app'], pages: readonly PageDef[], schema: DatabaseSchema): string[] {
+  const resources = (app.resources ?? {}) as Record<string, { display?: Record<string, { subtitle?: string }> }>;
+  /* A table id or a page's `base` is a resource's name, or the id the catalog gives it. */
+  const resourceOf = (table: string) =>
+    Object.hasOwn(resources, table) ? table : Object.keys(resources).find((name) => tableNamed(schema, name)?.id === table);
+  const warnings: string[] = [];
+  const say = (where: string, table: string, shown: readonly unknown[], surface: string) => {
+    const resource = resourceOf(table);
+    if (!resource) return;
+    for (const entry of new Set(
+      shown.map((each) => (typeof each === 'string' ? each : (each as { column?: string } | undefined)?.column)),
+    )) {
+      if (!entry || entry.includes('.')) continue;
+      const subtitle = resources[resource]?.display?.[entry]?.subtitle;
+      if (subtitle)
+        warnings.push(
+          `${where} [subtitle-unseen]: "${resource}.${entry}" has a display subtitle ("${subtitle}"), which ${surface} does not draw. ` +
+            `Show the column in a list or a block of fields, or drop the subtitle.`,
+        );
+    }
+  };
+  for (const [key, view] of Object.entries(app.views)) {
+    if (!('table' in view)) continue;
+    const presentation = (view as { presentation?: { kind?: string } }).presentation;
+    if (presentation?.kind === 'cards') say(`view "${key}"`, view.table, cardsColumns(presentation as AppCardsList), 'a card');
+    if (presentation?.kind === 'board') {
+      const board = presentation as { primary?: string; lines?: string[]; category?: string; footer?: readonly unknown[] };
+      say(`view "${key}"`, view.table, [board.primary, ...(board.lines ?? []), board.category, ...(board.footer ?? [])], 'a board card');
+    }
+  }
+  for (const page of pages) {
+    const where = `page "${page.id}"`;
+    for (const section of page.sections) {
+      if (section.kind === 'list' && typeof section.presentation === 'object' && section.presentation.kind === 'cards')
+        say(where, section.from, cardsColumns(section.presentation), 'a card');
+      if (section.kind === 'fields' && section.presentation === 'header')
+        say(where, page.base, section.paths ?? [], "a record's header facts");
+      if (section.kind === 'fields' && section.presentation === 'card') say(where, page.base, section.paths ?? [], 'a card section');
+    }
+  }
+  return warnings;
 }
 
 function liveOffWarnings(app: LoadedApp['app']): string[] {

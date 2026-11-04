@@ -1,3 +1,4 @@
+import { SHOT_MS } from './support/budgets';
 /**
  * Signing in from the host's own app, in a real browser. Compass signs people
  * in here (a wrapper beside this worker's CRM copy adds `auth`), and the
@@ -111,7 +112,7 @@ export default defineApp({ ...compass, auth: { providers: ['email'], defaultRole
 
 test("the host's page signs its person in, and the browser lands on Compass's leads signed in", async ({ page }) => {
   // The App's own server compiles the shell for its first visit (tsx, Vite's middleware): minutes on a busy machine.
-  test.setTimeout(150_000);
+  test.setTimeout(SHOT_MS);
   const compass = await startCompass();
   try {
     const lead = String(scalar(CRM_DB, "SELECT name FROM lead WHERE status = 'new' ORDER BY created_on DESC, id DESC LIMIT 1"));

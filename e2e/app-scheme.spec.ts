@@ -7,7 +7,31 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { Page } from '@playwright/test';
-import { expect, test } from './support/harness';
+import { expect, test as base } from './support/harness';
+import { fixture } from './support/fixture';
+
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      await Promise.all([start('night'), start('dusk')]);
+    },
+    async () => {
+      for (const { child, directory } of Object.values(servers)) {
+        if (child && child.exitCode === null) {
+          const closed = once(child, 'close');
+          child.kill('SIGTERM');
+          const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+          try {
+            await closed;
+          } finally {
+            clearTimeout(force);
+          }
+        }
+        if (directory) rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  ),
+});
 
 /**
  * An App whose theme says it is dark is sent dark. A first visit used to paint light and flip once the client had
@@ -94,28 +118,6 @@ export default defineApp({
   });
   servers[name] = { origin: `http://127.0.0.1:${port}`, child, directory };
 }
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  await Promise.all([start('night'), start('dusk')]);
-});
-
-test.afterAll(async () => {
-  for (const { child, directory } of Object.values(servers)) {
-    if (child && child.exitCode === null) {
-      const closed = once(child, 'close');
-      child.kill('SIGTERM');
-      const force = setTimeout(() => child.kill('SIGKILL'), 5000);
-      try {
-        await closed;
-      } finally {
-        clearTimeout(force);
-      }
-    }
-    if (directory) rmSync(directory, { recursive: true, force: true });
-  }
-});
 
 /** What the page is before any of the client's script has run: its scripts are refused, the inline boot script is not. */
 async function beforeTheClient(page: Page, origin: string, stored?: string) {

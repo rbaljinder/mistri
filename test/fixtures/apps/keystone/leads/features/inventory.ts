@@ -1,4 +1,4 @@
-import { count, defineFeature, fields, header, listView, page, related } from '@mistriwork/mistri/app';
+import { rollup, defineFeature, fields, header, listView, page, related } from '@mistriwork/mistri/app';
 import type { Feature } from '../mistri-schema.d.ts';
 import { dollars, miles, perMonth, vehicleStatus } from '../vocab.ts';
 
@@ -34,8 +34,8 @@ export const inventory = defineFeature({
       /* Counted in the dealer's own context, as every read of a tenant is,
          so it is this dealer's number and never another's. */
       rollups: {
-        leads: count('lead', { whose: 'vehicle_id', query: 'status != lost' }),
-        deals: count('deal', { whose: 'vehicle_id', query: 'status != cancelled' }),
+        leads: rollup.count('lead', { whose: 'vehicle_id', query: 'status != lost' }),
+        deals: rollup.count('deal', { whose: 'vehicle_id', query: 'status != cancelled' }),
       },
     },
     vehicle_photo: { recordLabel: 'caption' },

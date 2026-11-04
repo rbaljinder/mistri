@@ -9,17 +9,25 @@ released from their own repository (https://github.com/rbaljinder/tablewalk).
 
 ## Prepare and review
 
-1. Finish the release changelog and reconcile current-version statements in the
+1. Bump the version with `node scripts/bump-version.mjs <version>` (for example
+   `1.0.0-rc.16`). It sets the root and the six packages, the exact pins the
+   packages hold on each other, the version lines in `packages/mistri/README.md`
+   and the site's status page, `package-lock.json` (through `npm install
+   --package-lock-only`), and the changelog, whose `## Unreleased` becomes
+   `## <version>` with a fresh `## Unreleased` above it. `--check` verifies that
+   everything agrees and changes nothing; `test/bump-version.test.ts` runs it on
+   every `npm test`. `npm version` is not the way: it bumps the root alone.
+2. Finish the release changelog and reconcile current-version statements in the
    README, getting-started guide, capabilities page and roadmap. Historical
    release sections keep their original versions.
-2. Run the full local gates: `npm test` with live PostgreSQL/cache/search
+3. Run the full local gates: `npm test` with live PostgreSQL/cache/search
    fixtures, then `npm run e2e`. Keep them sequential because they share
    disposable fixtures. Run authored sample typechecks from a clean checkout,
    production/package checks, and site/Storybook checks when those change.
-3. Read `npm pack --dry-run` output. Only the package allowlist ships: `dist`,
+4. Read `npm pack --dry-run` output. Only the package allowlist ships: `dist`,
    `schema`, README, LICENSE and package metadata. Never include runtime
    credentials, private databases, maintainer notes or development fixtures.
-4. Open the release PR and wait for CI: all test/browser shards, installed
+5. Open the release PR and wait for CI: all test/browser shards, installed
    package checks and the example App's image build must pass. Keep the
    working branch as one amended commit; check remote state before a leased
    force push. Merge only the reviewed, passing revision.
@@ -31,14 +39,26 @@ release changelog entry, then push that tag. Publication requires explicit
 maintainer authorization. Never move a published release tag or attempt to
 reuse an npm version.
 
-- `release.yml` checks the version and tarballs, reruns live tests and browser
-  tests, then publishes the six packages to npm in dependency order. Full
-  releases update `latest`; prereleases publish under `next`.
+- `release.yml` checks that the tag matches every package's version and that
+  the tarballs hold what they should, then requires a green `ci.yml` run on
+  the tagged commit (`ci-green`): it re-runs no suite, so CI is where the live
+  and browser tests prove the commit. Only then does it publish the six
+  packages to npm in dependency order. Full releases update `latest`;
+  prereleases publish under `next`.
 - npm uses the trusted publisher configured for this repository and workflow.
   The workflow authenticates through GitHub OIDC; it does not require copying
   a local npm token into repository secrets.
 
 See the workflow file for the exact prerequisites and ordering.
+
+Publication is resumable. `scripts/publish-packages.mjs` publishes one package at
+a time in dependency order and skips any `name@version` that `npm view` says is
+already live, because `npm publish --workspaces` can stop after two of six and a
+version is permanent. If the job fails partway, run it again (re-run the failed
+job, or push nothing new): preflight warns about the packages already live and
+the publish step finishes the rest. Preflight fails only when every package is
+already live, or when the tag does not match the version. `--check` and
+`--dry-run` show the plan without publishing anything.
 
 ## Verify what users receive
 

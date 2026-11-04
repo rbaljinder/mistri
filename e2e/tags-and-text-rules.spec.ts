@@ -1,6 +1,7 @@
 import { CRM, expect, test } from './support/ownServers';
 import { startSample } from './support/sampleServer';
 import { rows } from './support/db';
+import { FIXTURE_MS } from './support/budgets';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
 test.use({ servers: ['crm'] });
@@ -30,7 +31,7 @@ test.describe('Thread: labels as a column, a filter and a field of the New form'
   test.setTimeout(60_000);
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     sample = await startSample('thread');
   });
   test.afterAll(async () => {

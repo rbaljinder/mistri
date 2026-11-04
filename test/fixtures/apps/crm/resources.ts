@@ -1,4 +1,4 @@
-import { action, computed, count, machine, max, sum, today } from '@mistriwork/mistri/app';
+import { action, computed, rollup, machine, today } from '@mistriwork/mistri/app';
 import type { Resources } from './mistri-schema.d.ts';
 
 /* What Compass says about each resource, once: which it writes, how values
@@ -104,10 +104,10 @@ export const resources = {
     },
     // What the deal page sums up: its quote and the work logged against it.
     rollups: {
-      lines: count('opportunity_line'),
-      units: sum('opportunity_line', 'qty'),
-      activities: count('activity'),
-      open_tasks: count('task', { query: 'open' }),
+      lines: rollup.count('opportunity_line'),
+      units: rollup.sum('opportunity_line', 'qty'),
+      activities: rollup.count('activity'),
+      open_tasks: rollup.count('task', { query: 'open' }),
     },
     // The deal's amount at its odds: a number of the row's own, summed under the list as a stored one is.
     computed: { weighted: computed.number('amount * probability / 100') },
@@ -162,10 +162,10 @@ export const resources = {
     // Its open deals, read like columns: shown, sorted and filtered in the
     // accounts list, computed from the opportunities in the same statement.
     rollups: {
-      open_deals: count('opportunity', { query: 'open_pipeline' }),
-      open_pipeline: sum('opportunity', 'amount', { query: 'open_pipeline' }),
-      won_value: sum('opportunity', 'amount', { query: 'stage = closed_won' }),
-      open_tasks: count('task', { query: 'open' }),
+      open_deals: rollup.count('opportunity', { query: 'open_pipeline' }),
+      open_pipeline: rollup.sum('opportunity', 'amount', { query: 'open_pipeline' }),
+      won_value: rollup.sum('opportunity', 'amount', { query: 'stage = closed_won' }),
+      open_tasks: rollup.count('task', { query: 'open' }),
     },
     labels: {
       name: 'Account',
@@ -179,9 +179,9 @@ export const resources = {
     access: 'write',
     // How much this person has been talked to, and when last.
     rollups: {
-      conversations: count('activity'),
-      minutes_logged: sum('activity', 'minutes'),
-      last_contacted: max('activity', 'happened_on'),
+      conversations: rollup.count('activity'),
+      minutes_logged: rollup.sum('activity', 'minutes'),
+      last_contacted: rollup.max('activity', 'happened_on'),
     },
     display: { minutes_logged: { unit: 'min' } },
     labels: {

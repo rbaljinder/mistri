@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { CRM, CRM_CLOCK, CRM_DB, expect, type Page, test } from './support/ownServers';
 import { startSavedFormApp } from './support/savedFormServer';
 import { scalar } from './support/db';
+import { LONG_MS, SLOW_MS } from './support/budgets';
 
 // This worker's own Compass (support/ownServers.ts) is the App at the root; the spec starts the other placements itself.
 test.use({ servers: ['crm'] });
@@ -125,7 +126,7 @@ test.describe('Compass, placed three ways', () => {
 
   for (const placement of PLACEMENTS) {
     test(`${placement.name}: a record, a tab, the New form and a dashboard's window`, async ({ page }) => {
-      test.setTimeout(90_000);
+      test.setTimeout(SLOW_MS);
       const server = placement.flags.length ? await startCompass(placement.flags) : { origin: CRM, stop: async () => {} };
       try {
         const at = (path: string) => `${placement.under}${path}`;
@@ -189,7 +190,7 @@ test.describe('An App that signs people in, placed three ways', () => {
     const flags = placement.flags.map((flag) => flag.replace('compass=/compass', 'saved-application=/saved-application'));
     const under = placement.under.replace('/compass', '/saved-application');
     test(`${placement.name}: its public form, its status check and its sign-in`, async ({ page }) => {
-      test.setTimeout(90_000);
+      test.setTimeout(SLOW_MS);
       const app = await startSavedFormApp(flags);
       try {
         const at = (path: string) => `${under}${path}`;
@@ -243,7 +244,7 @@ test.describe('An App that signs people in, placed three ways', () => {
 });
 
 test('the main App at the root beside another under its id', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   /* Tick and a second App over Tick's database in one process:
      `--mount tick=/` makes Tick the main App, the Desk keeps /desk, and each
      reads and writes its own addresses. */

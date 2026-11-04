@@ -24,26 +24,27 @@ leaving it out means.
 ```ts
 account: {
   rollups: {
-    open_deals: count('opportunity', { query: 'stage != closed_won and stage != closed_lost' }),
-    open_pipeline: sum('opportunity', 'amount', { query: 'stage != closed_won and stage != closed_lost' }),
+    open_deals: rollup.count('opportunity', { query: 'stage != closed_won and stage != closed_lost' }),
+    open_pipeline: rollup.sum('opportunity', 'amount', { query: 'stage != closed_won and stage != closed_lost' }),
   },
 },
 ```
 
-`count`, `sum`, `min` and `max` read the rows that point at the record, and
-`latest` reads a column of the newest of them: an order's
-`financial_status: latest('payment', 'status')` is its payment's own word,
+`rollup.count`, `rollup.sum`, `rollup.avg`, `rollup.min` and `rollup.max` read the rows that point at the
+record (an average of no rows is empty, and none runs through two references), and
+`rollup.latest` reads a column of the newest of them: an order's
+`financial_status: rollup.latest('payment', 'status')` is its payment's own word,
 read where the payment writes it, so no command keeps a copy on the order in
 step (newest by key, or by `by`, a date). A
 rollup reads like a column in `show`, sorts, tabs, conditions, a command's
 `when`, cards and measures, and through a reference (`account_id.open_deals`). It reaches two
 hops (`whose: 'task_id.project_id'`), `latest` included: a customer's
-`last_service: latest('work_order', 'status', { whose: 'bike_id.customer_id' })` is the newest
+`last_service: rollup.latest('work_order', 'status', { whose: 'bike_id.customer_id' })` is the newest
 of all their bikes' orders. It is computed in the same statement under
 the grants and row policy of every table it walks, and is never written. Not
 on API sources. Its `query` may follow the rows' references, so a product's
 units sold leave out cancelled orders without a status copied onto each line:
-`sum('order_line', 'quantity', { whose: 'variant_id.product_id', query: 'sales_order_id.status != cancelled' })`.
+`rollup.sum('order_line', 'quantity', { whose: 'variant_id.product_id', query: 'sales_order_id.status != cancelled' })`.
 
 ## Segments
 
@@ -60,7 +61,7 @@ A segment names a query once. Its name is a word of the query language
 (`overdue and mine`), a tab names it (`tabs: ['open', { segment: 'overdue', sort: 'due_on' }]`),
 a section takes it as its source (`metric('Late', 'work_order.overdue')`,
 `related(..., { segment: 'open' })`), and a rollup counts it
-(`count('work_order', { segment: 'open' })`). A tab's label and its address
+(`rollup.count('work_order', { segment: 'open' })`). A tab's label and its address
 (`?tab=overdue`) are the segment's. A segment may name another, never in a
 loop, and a name a column, rollup or state already holds is refused. It only
 ever narrows: a reader who may not read a column it names is served no tab,
@@ -124,13 +125,65 @@ functions: `coalesce(a, b, …)` (the first with a value), `round(x)` or
 `max(a, b, …)` of numbers or dates, which have no value where one of theirs has
 none (`computed.number('max(owed - paid, 0)')`). It is
 written into the statement, so it shows, sorts, filters and tones like a
-column, and a rollup sums it (`sum('task', 'overrun')`) or a dashboard
+column, and a rollup sums it (`rollup.sum('task', 'overrun')`) or a dashboard
 window reads a computed date (`over: 'renews_on'`) when it reads only its
 row's own columns; it is never written, and `fields.write`, `form.show` and an action's
 `set` refuse it. A role is served it only where every column it reads is
 readable to that role. A fixed action's `set` takes the same kind of
 expression for a stamp (`computed.date('today + 14 days')`); anything heavier
 is a [command](/docs/commands/) or a database view.
+
+A member of a JSON column reads as text (Preview):
+`make: computed.text('filters_json.make')`, or deeper,
+`computed.text('payload.customer.city')`. It shows, sorts and filters like the
+others, on PostgreSQL (`#>>`) and SQLite (`json_extract`), and a yes-or-no
+member reads `true` or `false`. It is display only. `mistri check` proves
+`filters_json` is a json or jsonb column; it cannot know the member is there,
+so a row without it shows nothing.
+
+## Several resources over one table
+
+A table may be bound again when each binding after the first says a `query`
+(Preview): the conditions every read of that resource stands on.
+
+```ts
+resources: {
+  audit_event: {},
+  orderEvents: {
+    physical: 'audit_event',
+    query: 'kind = order',
+    references: { correlation_id: { to: 'orders' } },
+  },
+  chatEvents: {
+    physical: 'audit_event',
+    query: 'kind = conversation',
+    references: { correlation_id: { to: 'conversations' } },
+  },
+},
+```
+
+Each is a resource of its own: a list, a record page, related and reverse
+lists, rollups, breakdowns, an export and its App API operations. Its own
+`references` can say what a column points at, which the database cannot say
+for one that points at one of two tables. The conditions are ANDed into every
+read. They are a filter, never a grant: the table's row policy still applies,
+and it must give each of the table's resources the same rule. A row outside
+the conditions is no record of the resource, so its address finds nothing.
+
+The query is fixed conditions on the table's own columns: no `show` or
+`sort`, no dates relative to today and no paths. `mistri check` proves it
+against the table and warns (`narrowed-overlap`) when two queries may both
+hold of one row. A narrowed resource is read-only for now: write through its
+table's own resource. It takes no `access`, `delete`, `actions`, `machine`,
+`import`, `settings`, `file`, `clone`, `consumes` or `restocks`. Nor does it
+take `notify`, `flows`, `triggers` or a `search` pack, which follow every
+write to the table whatever its query says: declare them on the table's own
+resource. A reference points at the table's own resource rather than at a
+narrowed one, and a tenant App does not take one yet. The table keeps one
+record history, as strict as the strictest of its resources' `audit`; an
+activity feed says each change under the resource whose query holds of the
+row, and live sync tells a narrowed list that its table changed, never which
+rows.
 
 ## Unions
 

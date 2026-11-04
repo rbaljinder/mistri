@@ -170,7 +170,7 @@ export default defineCommands({ submitInquiry });
       private: true,
       type: 'module',
       scripts: {
-        dev: 'mistri dev .',
+        dev: 'mistri dev',
         check: 'mistri check',
         start: 'mistri --app .',
         migrate: 'mistri migrate up',

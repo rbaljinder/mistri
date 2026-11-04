@@ -1360,7 +1360,7 @@ export async function createAppAuth(
       /* A directory is counted per connection, not per address, before Better Auth sees it (scimDirectory.ts). */
       rateLimit: {
         /* Always, not only where NODE_ENV says production: a server started without it was a password oracle. */
-        enabled: !authLimitsOffForTests(opts.listenHost ?? new URL(opts.baseURL).hostname),
+        enabled: !authLimitsOffForTests(opts.listenHost ?? new URL(opts.baseURL).hostname, environment),
         customStorage: { consume: signInState.consume },
         ...(provisioning ? { customRules: { '/scim/**': false } } : {}),
       },

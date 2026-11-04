@@ -1,3 +1,4 @@
+import { FIXTURE_MS } from './support/budgets';
 /**
  * A week of a calendar as a time grid (`span: 'week'`), over the Desk blocks fixture's own server: today's site
  * visits in their hours, the two that overlap side by side, one dragged to another time and its foot to another end
@@ -24,7 +25,7 @@ test.describe('a week of hours', () => {
   let app: Fixture;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     app = await startDeskBlocks();
   });
   test.afterAll(async () => {
@@ -35,6 +36,9 @@ test.describe('a week of hours', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
+    /* The now line is drawn only inside the grid's hours (seven to seven, widened by what it holds), so it is absent
+       before seven in the morning: the page's clock is noon today, whenever the suite runs. */
+    await page.clock.setFixedTime(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0));
     await login(page, app);
     await page.goto(`${app.origin}/schedule`);
     const grid = page.locator('.calendar-time');

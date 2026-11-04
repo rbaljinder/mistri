@@ -1,5 +1,6 @@
 import { expect, test, type Page } from './support/harness';
 import { COMMAND_APP_ID, startCommandApp } from './support/commandDeskServer';
+import { FIXTURE_MS } from './support/budgets';
 
 // The fixture App's own record page over disposable data; never the user's preview.
 test.describe('related-list layout stability', () => {
@@ -7,7 +8,7 @@ test.describe('related-list layout stability', () => {
   let app: Awaited<ReturnType<typeof startCommandApp>>;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     app = await startCommandApp();
   });
   test.afterAll(async () => {

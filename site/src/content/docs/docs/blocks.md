@@ -206,14 +206,12 @@ See it in the sample (`examples/apps/lintel/dashboards.ts:26`); the picture is a
 
 ![A warehouse App: four steps from To pick to Shipped, each with its count and a line.](../../../assets/gallery/steps.webp)
 
-### Note banner
+### Banner
 
 A wide banner with an eyebrow, a title and one action.
 
 ```ts
-note('Work the leads that came in this week before they cool.', {
-  title: 'Pipeline review',
-  variant: 'banner',
+banner('Pipeline review', 'Work the leads that came in this week before they cool.', {
   eyebrow: 'This week',
   action: { label: 'Open leads', to: 'leads' },
 })
@@ -397,7 +395,7 @@ A CRM App sets a deal's probability this way. The slider appears only while the 
 progress: { format: 'percent', ring: true }
 ```
 
-No sample App that runs on SQLite draws this one, so there is no picture; Ignition (PostgreSQL) uses it.
+No sample App draws this one, so there is no picture.
 
 ### Color
 
@@ -407,7 +405,7 @@ A swatch, edited in the color picker.
 brand_color: { format: 'color' }
 ```
 
-No sample App that runs on SQLite draws this one, so there is no picture; Ignition (PostgreSQL) uses it.
+No sample App draws this one, so there is no picture.
 
 ### Time, month and year
 
@@ -419,7 +417,7 @@ renews_in: { format: 'month' },
 founded: { format: 'year' }
 ```
 
-No sample App that runs on SQLite draws this one, so there is no picture; Ignition (PostgreSQL) uses it.
+No sample App draws this one, so there is no picture.
 
 ### JSON
 
@@ -429,7 +427,7 @@ A tree on the record, an excerpt in a list, and a monospaced editor that says wh
 specs: { format: 'json' }
 ```
 
-No sample App that runs on SQLite draws this one, so there is no picture; Ignition (PostgreSQL) uses it.
+No sample App draws this one, so there is no picture.
 
 ### QR
 
@@ -439,7 +437,7 @@ A code to scan, with its text under it.
 pass_code: { format: 'qr' }
 ```
 
-No sample App that runs on SQLite draws this one, so there is no picture; Ignition (PostgreSQL) uses it.
+No sample App draws this one, so there is no picture.
 
 ### Address
 

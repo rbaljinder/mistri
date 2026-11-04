@@ -12,7 +12,7 @@ import type { ResourceClientReply } from '@mistriwork/engine/shared/resourceHttp
 import { columnLabel, recordLabel, api as coreApi, findTable, openRecord, rowLabel, state, writeAllowed } from '../core.js';
 import { relatedRows } from '../prefs.js';
 import { formatBytes, formatNumber, formatRelativeDay } from '../locale.js';
-import { columnKind, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, linkTarget, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { recordViewKey, recordViewLabel, withoutParent, withoutParentName } from '@mistriwork/engine/shared/referenceModel.js';
 import { groupsBody, listView } from '@mistriwork/engine/shared/recordReads.js';
 import { GROUP_ROWS_DEFAULT, GROUPS_DEFAULT } from '@mistriwork/engine/shared/pageModel.js';
@@ -301,6 +301,22 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed }: Slot
     const noun = (app ? (resourceOf(table)?.noun?.one ?? recordNoun(undefined, table.name)) : table.name).toLocaleLowerCase();
     const shown = (got.columns ?? []).filter((name) => !(hidden as string[]).includes(name));
     const record = rows[0] ? recordForRow(rows[0]) : undefined;
+    /* A card over a link table opens, and is named by, the record its far reference names: "Conversation 12", not the
+       link row that holds the two (linkTarget). */
+    const farColumn = linkTarget(table, section.path ?? '', section.opens);
+    const farReference = farColumn ? table.columns.find((column) => column.name === farColumn)?.references : undefined;
+    const farTable = farReference ? (findTable(farReference.table) as TableMeta | undefined) : undefined;
+    const farValue = rows[0] && farColumn ? rows[0][farColumn] : undefined;
+    const far =
+      farColumn && farReference && farTable && farValue !== null && farValue !== undefined && farValue !== ''
+        ? {
+            table: farTable,
+            column: farColumn,
+            key: { [farReference.column]: farValue } as Record<string, unknown>,
+            label: String(rows[0]![labelColumns[farColumn] ?? ''] ?? farValue),
+            noun: (app ? (resourceOf(farTable)?.noun?.one ?? recordNoun(undefined, farTable.name)) : farTable.name).toLocaleLowerCase(),
+          }
+        : undefined;
     return (
       <section className={`${sectionClass(section)} page-card-section`}>
         <CurrentCard
@@ -312,7 +328,8 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed }: Slot
           referenceLabels={labelColumns}
           labels={(section as { labels?: Record<string, string> }).labels}
           record={record}
-          title={record && app ? cardTitle(record.label, recordName) : undefined}
+          opens={far}
+          title={far ? cardTitle(far.label, recordName) : record && app ? cardTitle(record.label, recordName) : undefined}
           noun={noun}
           /* Said with the record's noun, never the title: a title is a heading, not a noun ("In the shop now" said
              "No in the shop now right now."). */

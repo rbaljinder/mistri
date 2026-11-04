@@ -6,6 +6,7 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test } from './support/harness';
 import { TMP } from './support/fixtures';
+import { FIXTURE_MS, SLOW_MS } from './support/budgets';
 
 /**
  * @mistriwork/mistri/react as it ships: the BUILT library (dist/embed), in a host's page, started in a real browser.
@@ -28,10 +29,10 @@ const BUILT = resolve('packages/mistri/dist/embed/react/index.js');
 let origin = '';
 let child: ChildProcess | undefined;
 
-test.describe.configure({ timeout: 90_000 });
+test.describe.configure({ timeout: SLOW_MS });
 
 test.beforeAll(async () => {
-  test.setTimeout(120_000);
+  test.setTimeout(FIXTURE_MS);
   if (!existsSync(BUILT))
     throw new Error(`${BUILT} is missing: build @mistriwork/mistri/react first (npx vite build -c config/vite.embed.config.ts).`);
   const directory = mkdtempSync(join(TMP, 'embed-built-'));

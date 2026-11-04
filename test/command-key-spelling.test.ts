@@ -234,6 +234,7 @@ async function servedTenantApp(t: TestContext) {
     MISTRI_AUTH_ADMIN_PASSWORD: '',
     MISTRI_DIAGNOSTICS: '',
     MISTRI_TEST_AUTH_LIMITS: 'off',
+    NODE_ENV: 'test',
     XDG_CONFIG_HOME: join(directory, 'xdg'),
   };
   const port = await freePort(),

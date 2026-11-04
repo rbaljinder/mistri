@@ -69,7 +69,7 @@ export const home = dashboard(
       width: 'half',
       icon: 'chart-pie',
     }),
-    embed('queue', { title: 'Next in the queue', tab: 'all-open', limit: 6, icon: 'tray', width: 'half' }),
+    embed('queue', { title: 'Next in the queue', listTab: 'all-open', limit: 6, icon: 'tray', width: 'half' }),
     rows('Late decisions', 'loan_application', {
       query: 'open_alerts > 0',
       show: ['reference', 'decision_due'],

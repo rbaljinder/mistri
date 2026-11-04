@@ -81,7 +81,7 @@ export const operations = dashboard(
       icon: 'truck',
     }),
     // The open orders, worked where they are read: searched, filtered, and a selection's ship-by, priority or carrier set at once.
-    embed('orders', { title: 'Open orders', tab: 'open', limit: 8, icon: 'shopping-cart', interactive: true }),
+    embed('orders', { title: 'Open orders', listTab: 'open', limit: 8, icon: 'shopping-cart', interactive: true }),
   ],
   {
     icon: 'gauge',

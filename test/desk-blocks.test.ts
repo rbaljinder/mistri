@@ -16,7 +16,7 @@ type Fragment = Record<string, unknown>;
 const section = (body: Fragment) =>
   parsePagesConfig({ pages: [{ id: 'ticket', label: 'Ticket', base: 'ticket', sections: [body] }] }, 'pages')[0]
     .sections[0] as unknown as Record<string, unknown>;
-const STREAM = { from: 'message', whose: 'ticket_id', at: 'sent_at', show: 'body' };
+const STREAM = { from: 'message', whose: 'ticket_id', at: 'sent_at', text: 'body' };
 const timeline = (extra: Fragment = {}) => section({ kind: 'timeline', title: 'Conversation', streams: [STREAM], ...extra });
 
 describe('a conversation timeline', () => {

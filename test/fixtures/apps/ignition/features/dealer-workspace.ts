@@ -1,5 +1,5 @@
 import {
-  count,
+  rollup,
   dashboard,
   defineFeature,
   fields,
@@ -156,7 +156,7 @@ export const dealerWorkspace = defineFeature({
       /* How many of the dealership's applications finance this car: counted in
          the dealership's own context, as every read of a tenant is, so it is
          the dealer's number and never another's (tenant-rollups.test.ts). */
-      rollups: { applications: count('loan_application', { whose: 'vehicle_id' }) },
+      rollups: { applications: rollup.count('loan_application', { whose: 'vehicle_id' }) },
       display: {
         price: { format: 'money' },
         mileage: { unit: 'mi' },

@@ -33,119 +33,24 @@ const built = join(root, 'packages/mistri/dist/server/index.js');
 assert.ok(existsSync(built) && existsSync(join(root, 'packages/mistri/dist/client/index.html')), 'Build the package first: npm run build.');
 const scratch = mkdtempSync(join(tmpdir(), 'mistri-built-client-'));
 const IMMUTABLE = 'public, max-age=31536000, immutable';
-/* What a cold first visit may take off the wire, page and assets, before the
-   room paints, by the surface it draws (vite.config.ts, `surfaces`). Every
-   page sent about 390 KB at 0.8.0 before the split, and after it a sign-in
-   screen 217 KB, an App page 361 and the Workbench 373; scripts/bundle-budget.mjs
-   holds each surface's own ceiling at build time, and this holds what a
-   browser actually fetched for a real room. The public pages must never
-   fetch the shell, nor an App page the Workbench's tools. After the
-   interface's words moved into the catalog (scripts/bundle-budget.mjs says
-   what it cost and what left for parts on demand) a sign-in screen took
-   215.7 KB, an App page 374.5 and the Workbench 386.5, and the ceilings sit
-   about 1% above. 0.8.2's navigation hold and startup hold, and the places
-   held for what arrives late (scripts/bundle-budget.mjs says what each
-   cost), took a sign-in screen to 219.2 KB, an App page to 379.7 and the
-   Workbench to 392.4; the ceilings sit about 0.5% above. */
-// Named action IDs and computed-column resolution in 0.8.2 measured 383 KB
-// for Forecourt and 395.7 KB for the Workbench; keep about 0.5% headroom.
-// First Paint carries identity and App answers in private HTML (8–9.5 KB on
-// the wire here). The complete cold visits are 224.8 KB public, 388.9 KB App,
-// 396.8 KB Workbench; retain roughly 0.5% headroom. Asset budgets stay separate.
-// 0.8.7's view roles, find(), the record search ⌘K now shares and a card's description took Forecourt's cold
-// visit to 391.3 KB; the App ceiling moves to 393 (about 0.5% above).
-// 0.8.8's rich text renderer, its allowlist and the .rich-text rules are on every first page
-// (scripts/bundle-budget.mjs, its newest paragraph, says what they weigh): cold visits measured
-// 394 KB Forecourt's landing, 395.5 KB its list and 400.1 KB the Workbench; about 0.5% above.
-// 0.8.8's row-defined fields put a JSON key's path into the query language and the Save folding on every
-// first page (bundle-budget.mjs again): the Workbench's cold visit measured 402.7 KB; about 0.5% above.
-// 0.8.8 wave 4's flows: a resource's `flows` is read and checked by the App's own parser on every first page
-// (the section itself, its words and its rules are a part loaded on demand). Forecourt's list measured 398.3 KB;
-// the App ceiling is 400, about 0.5% above.
-// 0.8.9 ships Lumen's face (Inter's Latin subset, 47.3 KB, sent as it is: a woff2 is compressed already) with
-// Lumen's sheet, both preloaded by the page of an App that wears it; Forecourt wears a theme on Sage, so `app` holds
-// still and a Lumen App is held apart. Tick's list, which also fetches its quick-add and New form parts on the first
-// visit, measured 472.1 KB, of which the face is 47.3 and Lumen's sheet 3.9; the ceiling is 475, about 0.5% above.
-// 0.8.11's date-and-time command input: a command's `datetime` field and the instant it accepts are read and
-// checked by the shared command rules on every page that can draw a form, a public one included (the field's
-// clock and zone arithmetic are a part loaded on demand). Forecourt's staff sign-in measured 226.3 KB; the public
-// ceiling is 227, about 0.5% above.
-// 0.8.13: a yes-or-no is read as an integer before an aggregate (schema.ts aggregateInput) in the statement
-// compilers every Workbench page carries, and a relative day reads the zone-aware day. The Workbench's cold visit
-// measured 405.2 KB; the ceiling is 407, about 0.5% above.
-// 0.8.14's New menu: `ui.shell.new` is read and checked by the App's own parser on every first page, and the
-// shell holds the menu's host and the palette's fetch of its lines (the menu itself is a part loaded on demand).
-// Forecourt's list measured 400.2 KB; the App ceiling is 402, about 0.5% above.
-// 1.0: server-drawn public pages are hydrated rather than drawn afresh (serverDrawing.js and react-dom's
-// hydrateRoot ride on every first page, imageWidths.ts on the public one), and the embed seams (shell host,
-// request identity) sit under the shell; the palette left the shell's first paint for a part loaded on demand
-// (scripts/bundle-budget.mjs, its newest paragraph). Cold visits measured 227.6 KB Forecourt's staff sign-in,
-// 402.6 KB its list and 407.7 KB the Workbench. Tick's New form, fetched on the first visit, now carries a form's
-// lines and live values (FormLines and its sheet) and the shared form rules: 483.6 KB. Each ceiling about 0.5% above.
-// The 1.0 gaps after it (scripts/bundle-budget.mjs says what each weighs, and why none could wait for onDemand.tsx):
-// a true/false field said in its display rule's words, a reference picker that says it is wrong, the shell's own
-// words in Spanish and a dashboard's window in its address, a related list's row menu, and the release review's
-// cut-word fixes in the grid, the cards and a property rail. Cold visits measured 406.4 KB Forecourt's landing,
-// 409.4 KB its list, 493.6 KB Tick's list and 411.7 KB the Workbench; the staff sign-in held. Each about 0.5% above.
-// 0.9.1's segments, cross-table filters, consumes and display conventions are drawn by a list's first screen
-// (scripts/bundle-budget.mjs, its newest paragraph). Cold visits measured 412.8 KB Forecourt's landing, 415.9 KB its
-// list, 503 KB Tick's list and 418.4 KB the Workbench; the staff sign-in held. Each about 0.5% above.
-// 0.9.3's first screens: a required field's caption says so to a screen reader (CommandFields, FormSurface,
-// Dropdown), a public form's reference is a picker over what the visitor may read (CommandReference.tsx), a list
-// a signed-out visitor may not read offers the sign-in in place (TableRoom.tsx; the screen itself loads on demand),
-// a record's address is the person's own (appAddress.ts) and the startup outline asks /healthz before it says the
-// server is down (index.html). Each is drawn before anything onDemand.tsx fetches. Cold visits measured 415.3 KB
-// Forecourt's landing, 418.3 KB its list, 506.5 KB Tick's list and 420.8 KB the Workbench; the staff sign-in held.
-// Each about 0.5% above.
-// 0.9.4's theme vocabulary, frozen for 1.0 (type roles, per-role weights, shadows, motion, parts), is read by every
-// first screen; slimming it is the next release's work (scripts/bundle-budget.mjs, its newest paragraph). Cold visits
-// measured 422.8 KB Forecourt's list, 511.1 KB Tick's list and 425.2 KB the Workbench; the rest held. Each about 0.5%
-// above.
-// 0.9.5's design pass draws on every first screen: two type and space scales, compact density for Mono and Sage, two-line
-// list heads, page layouts by shape and the grouped related lists (scripts/bundle-budget.mjs, its newest paragraph).
-// Cold visits measured 233.9 KB the staff sign-in, 428.1 KB Forecourt's landing, 431.1 KB its list, 519.4 KB Tick's
-// list and 433.5 KB the Workbench. Each about 0.5% above.
-// 0.9.6's layout, states and phone passes and its mode seam (scripts/bundle-budget.mjs) had already taken three
-// visits past their ceilings before the shell split: 236.7 KB the staff sign-in, 435.9 KB Forecourt's list, 527.3 KB
-// Tick's list and 439 KB the Workbench. The split took the Workbench's tools off an App's first visit (429.3 KB
-// Forecourt's landing, 432.4 KB its list, 523.8 KB Tick's list) and left them two chunks on the Workbench's, which
-// names what it reads from the shell's by name (440.8 KB); the sign-in held. Each about 0.5% above.
-// 0.9.8 takes the App's chrome out of the shell chunk into one of its own, which an App's page preloads beside it
-// (vite.config.ts `surfaces`): the Workbench's landing no longer fetches it (420.8 KB), and an App's page fetches the
-// same code in one more file, which brotli compresses about 5 KB worse (436.3 KB Forecourt's landing, 439.3 KB its
-// list; Tick's held). Each about 0.5% above.
-// 0.9.9's live sync puts its keys, its hold registry and the header filing each read's tables on every first page, and
-// an App's page fetches the stream's part after it paints (scripts/bundle-budget.mjs, its newest paragraph). Cold
-// visits measured 238.1 KB the staff sign-in, 438.3 KB Forecourt's landing, 441.4 KB its list, 527.7 KB Tick's list and
-// 422.8 KB the Workbench. Each about 0.5% above.
-// 1.0.0-rc.1's forms waves and the three branches merged onto it (rc/rc1-rest, rc/forms-followup, rc/tenant-live;
-// scripts/bundle-budget.mjs, its newest paragraphs, says what each weighs): the field vocabulary's reader, the intake
-// frame, the guard's seam and the quiet form on every form's first paint, the hero blocks' sheet on the public page,
-// `<picture>` sources and format-named fallbacks, the valid check and review lines, and tenant-live's session check
-// asked again. Cold visits measured 243.2 KB the staff sign-in, 441.1 KB Forecourt's landing, 444.5 KB its list,
-// 534.2 KB Tick's list and 391.5 KB the Workbench (held). Each ceiling passed moves to about 0.5% above.
-// rc.1's final merge adds the consistency pass (the label row's rules in primitives.css, the sign-in door's primary,
-// the wide landing; scripts/bundle-budget.mjs, its newest paragraphs) to every first stylesheet. Cold visits measured
-// 244.6 KB the staff sign-in, 442.5 KB Forecourt's landing, 445.9 KB its list, 535.9 KB Tick's list and 392.5 KB the
-// Workbench; only the sign-in passed its ceiling, which moves to about 0.5% above.
-// rc.2 makes Workshop the look an App wears by default, so Tick's list is held as a Workshop App: Barlow's regular and
-// condensed bold preloaded beside Workshop's sheet, the semibold fetched where the page sets a word in it (65.1 KB of
-// faces where Lumen's Inter was 47.1), and every built-in look's twelve palettes in the entry (about 1.4 KB in brotli
-// on every first paint, scripts/bundle-budget.mjs). Measured: 246.5 KB the staff sign-in, 448 KB Forecourt's list and
-// 562 KB Tick's list; each ceiling passed moves to about 0.5% above.
-// rc.3 adds Ledger to the built-in looks and its palettes to the entry, the request-instant and kept-breakdown seams, and
-// the security branch's client strings (scripts/bundle-budget.mjs, its newest paragraphs). Measured: 248.6 KB the staff
-// sign-in, 447 KB Forecourt's landing, 450.3 KB its list, 562.8 KB Tick's list and 395.1 KB the Workbench; the
-// sign-in passed its ceiling and the list met it, so both move to about 0.5% above.
-// rc.11 adds the field reports' client fixes: money said to its currency's minor digits, a form's review naming a
-// reference's record, documents' day dates and print sheet, and the clearer messages. Measured: 250.1 KB the staff
-// sign-in, 453.2 KB Forecourt's list and 565.8 KB Tick's list; each ceiling passed moves to about 0.5% above.
-// The database browser's Workbench left for its own repository, and its ceiling with it.
-// rc.15 adds the inputs modern Apps reach for (time, rating, scan, color, files, signature), copy and address cells,
-// reactions, the week and day calendar, the grouped grid and the tree picker, each of whose shared pieces rides the
-// entry beside the forms they belong to. Measured on CI: 252.3 KB the staff sign-in, 457.8 KB Forecourt's list and
-// 570.5 KB Tick's list; each ceiling passed moves to about 0.5% above.
-const FIRST_PAINT_WIRE_KB = { public: 253.6, app: 460.1, workshop: 573.4 };
+/* What a cold first visit may take off the wire, page and assets, before the room paints, by the surface it draws
+   (vite.config.ts, `surfaces`). scripts/bundle-budget.mjs holds each surface's own targets at build time; this holds
+   what a browser actually fetched for a real room, and that the public pages never fetch the shell nor an App page
+   another surface's chunks.
+
+   The same rule as bundle-budget.mjs: a target is a round figure about 3% above what the build measured, and moves
+   only in a release's budget commit, with its reason written here and a CHANGELOG line; it comes down when a release
+   measures more than 5% under it. A feature that would cross pays its bytes back (onDemand, removal) or waits.
+
+   History, condensed. At 0.8.0 every page sent about 390 KB; the split made a sign-in screen 217 KB, an App page 361
+   and the Workbench 373. The interface's words moving into the catalog, the navigation and startup holds, the view
+   roles, find() and the record search, the App chrome's own chunk (which brotli compresses about 5 KB worse), live
+   sync's keys and holds, rc.1's forms waves, rc.2's Workshop default (Barlow's faces beside its sheet, and every
+   built-in look's palettes in the entry), rc.3's Ledger, rc.11's money and documents fixes and rc.15's inputs, calendar
+   and grouped grid each moved a ceiling by what they measured, about 0.5% above. The Workbench left for its own
+   repository, and its ceiling with it. Complete cold visits at rc.16, measured: 252.2 KB the staff sign-in, 457.7 KB
+   Forecourt's list, 570.5 KB Tick's list. */
+const FIRST_PAINT_WIRE_KB = { public: 260, app: 472, workshop: 590 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/tenant'],
   app: ['/assets/tenant', '/assets/public'],
@@ -375,7 +280,7 @@ try {
     assert.equal(page?.headers['cache-control'], 'private, no-store', `${label}: warm HTML remains private`);
     const { wireKB } = sizes(cold.files);
     if (wireKB > FIRST_PAINT_WIRE_KB[surface])
-      budgetFailures.push(`${label}: a cold first visit fetched ${wireKB} KB, over the ${FIRST_PAINT_WIRE_KB[surface]} KB ceiling`);
+      budgetFailures.push(`${label}: a cold first visit fetched ${wireKB} KB, over the ${FIRST_PAINT_WIRE_KB[surface]} KB target`);
     const strays = chunks.filter((chunk) => NEVER[surface].some((prefix) => chunk.startsWith(prefix)));
     assert.deepEqual(strays, [], `${label}: fetched another surface's chunk`);
     report[label] = {

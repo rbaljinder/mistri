@@ -33,6 +33,7 @@ export type CheckStep =
   | 'typecheck'
   | 'validation'
   | 'indexes'
+  | 'queries'
   | 'components'
   | 'routes'
   | 'design'
@@ -138,6 +139,8 @@ export const VALIDATION_CODES: ReadonlyArray<{ code: string; pattern: RegExp }> 
   { code: 'money-minor', pattern: /minor units|the currency column "/ },
   { code: 'form-lines', pattern: /\bform\.lines\b/ },
   { code: 'form-live', pattern: /\bform\.live\b/ },
+  /* A warning about the connection, not the App's declaration: it was reported as `invalid-app`, which reads as an error. */
+  { code: 'superuser-connection', pattern: /is read-only here, but its database role can do more/ },
 ];
 
 /** A code a sentence carries itself, `[outside-ceiling]`, or the one its words name. */

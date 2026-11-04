@@ -78,6 +78,7 @@ import { parseCaption } from '@mistriwork/engine/shared/appMessages.js';
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const RESOURCE_BLOCK_KEYS = [
   'physical',
+  'query',
   'access',
   'delete',
   'favorite',
@@ -255,7 +256,7 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
       const raw = plainRecord(
         value,
         at,
-        'an object. A resource block is { physical?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, audit?, settings?, import?, notify? }',
+        'an object. A resource block is { physical?, query?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, audit?, settings?, import?, notify? }',
       );
       allowKeys(raw, [...RESOURCE_BLOCK_KEYS, 'owner', 'clone', 'live'], at);
       if (dot < 0 && data.sources && !data.defaultSource) {
@@ -295,6 +296,15 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
       if (raw.physical !== undefined) {
         if (typeof raw.physical !== 'string' || !raw.physical.trim()) throw new Error(`${at} has a "physical" that is not a table id.`);
         resource.physical = raw.physical.trim();
+      }
+      /* The conditions every read stands on: shape here, the conditions against the table where the catalog is built
+         (appResources.ts), and what a narrowed resource may not do once the App is whole (appNarrowed.ts). */
+      if (raw.query !== undefined) {
+        if (typeof raw.query !== 'string' || !raw.query.trim() || raw.query.length > 500)
+          throw new Error(
+            `${at} has a "query" that is not conditions over its table's columns, at most 500 characters, like "kind = order".`,
+          );
+        resource.query = raw.query.trim();
       }
       /* A resource reads unless it says it writes: there is no 'read' to write. */
       if (raw.access !== undefined) {
@@ -700,7 +710,11 @@ function parseComputedColumns(raw: unknown, here: string): Record<string, AppCom
     if (!IDENTIFIER.test(name) || RESERVED_NAMES.has(name)) {
       throw new Error(`${at}: a computed column's name is read like a column's, so it is an identifier (letters, digits, underscores).`);
     }
-    const column = plainRecord(value, at, "a computed column: computed.boolean('…'), computed.number('…') or computed.date('…')");
+    const column = plainRecord(
+      value,
+      at,
+      "a computed column: computed.boolean('…'), computed.number('…'), computed.date('…') or computed.text('…')",
+    );
     allowKeys(column, ['type', 'value'], at);
     if (!(COMPUTED_TYPES as readonly unknown[]).includes(column.type)) {
       throw new Error(`${at} has a "type" of "${String(column.type)}". Use ${COMPUTED_TYPES.map((type) => `"${type}"`).join(', ')}.`);
@@ -798,7 +812,7 @@ function parseRollups(raw: unknown, here: string): Record<string, AppRollup> {
   const declared = plainRecord(
     raw,
     here,
-    "an object of name to rollup, such as { lines: count('order_line'), total: sum('order_line', 'amount') }",
+    "an object of name to rollup, such as { lines: rollup.count('order_line'), total: rollup.sum('order_line', 'amount') }",
   );
   const rollups: Record<string, AppRollup> = {};
   for (const [name, value] of Object.entries(declared)) {
@@ -809,7 +823,7 @@ function parseRollups(raw: unknown, here: string): Record<string, AppRollup> {
     const rollup = plainRecord(
       value,
       at,
-      'a rollup: count(from, opts?), sum(from, column, opts?), min(from, column, opts?), max(from, column, opts?) or latest(from, column, opts?)',
+      'a rollup: rollup.count(from, opts?), rollup.sum(from, column, opts?), rollup.avg(from, column, opts?), rollup.min(from, column, opts?), rollup.max(from, column, opts?) or rollup.latest(from, column, opts?)',
     );
     allowKeys(rollup, ['fn', 'from', 'column', 'whose', 'query', 'segment', 'sort'], at, {
       by: 'is now "sort": the column whose greatest value is the newest row',
@@ -821,7 +835,9 @@ function parseRollups(raw: unknown, here: string): Record<string, AppRollup> {
     if (typeof rollup.from !== 'string' || !rollup.from.trim())
       throw new Error(`${at} needs a "from": the resource whose rows point at this one.`);
     if (fn === 'count' && rollup.column !== undefined) {
-      throw new Error(`${at} counts rows and names a "column"; a count reads none. Drop it, or use sum, min or max.`);
+      throw new Error(
+        `${at} counts rows and names a "column"; a count reads none. Drop it, or use rollup.sum, rollup.avg, rollup.min or rollup.max.`,
+      );
     }
     if (fn !== 'count' && (typeof rollup.column !== 'string' || !rollup.column.trim() || rollup.column.includes('.'))) {
       throw new Error(`${at} is a ${fn} and needs a "column": one of ${String(rollup.from)}'s own columns.`);
@@ -832,6 +848,11 @@ function parseRollups(raw: unknown, here: string): Record<string, AppRollup> {
     if (rollup.sort !== undefined && (typeof rollup.sort !== 'string' || !rollup.sort.trim() || rollup.sort.includes('.'))) {
       throw new Error(`${at} has a "sort" that is not one of ${String(rollup.from)}'s own columns.`);
     }
+    /* A mean of each middle record's mean is not the mean of the rows, so a rollup through two references has no avg. */
+    if (fn === 'avg' && typeof rollup.whose === 'string' && rollup.whose.includes('.'))
+      throw new Error(
+        `${at} is an avg through two references ("${rollup.whose}"), where a mean of means is the wrong figure. Average through one reference, or take the sum and the count.`,
+      );
     for (const key of ['whose', 'query', 'segment'] as const) {
       if (rollup[key] !== undefined && (typeof rollup[key] !== 'string' || !(rollup[key] as string).trim())) {
         throw new Error(`${at} has a "${key}" that is not a non-empty string.`);
@@ -1521,7 +1542,14 @@ function parseValueIcons(raw: unknown, at: string): Record<string, AppIconName> 
    catalog (appStamps.ts). */
 function setExpressionValue(v: Record<string, unknown>, at: string): string {
   const keys = Object.keys(v);
-  if (keys.length !== 2 || typeof v.value !== 'string' || !v.value.trim() || !(COMPUTED_TYPES as readonly unknown[]).includes(v.type)) {
+  /* Text is no expression to set: a fixed text is written as itself, and a JSON member reads a column. */
+  if (
+    keys.length !== 2 ||
+    typeof v.value !== 'string' ||
+    !v.value.trim() ||
+    v.type === 'text' ||
+    !(COMPUTED_TYPES as readonly unknown[]).includes(v.type)
+  ) {
     throw new Error(`${at} an object that is not computed.date('…'), computed.number('…') or computed.boolean('…').`);
   }
   const judged = setExpression(v.value.trim());

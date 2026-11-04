@@ -480,6 +480,43 @@ describe('up, validate and repair on SQLite', () => {
 });
 
 describe('mistri migrate, the command', () => {
+  test('a named connection that is not writable refuses up, baseline and repair; reading and a plan stay allowed', async () => {
+    const root = join(work, 'cli-writable');
+    mkdirSync(join(root, 'migrations'), { recursive: true });
+    writeFileSync(join(root, 'migrations', 'V1__a.sql'), 'CREATE TABLE a (id INTEGER PRIMARY KEY);\n');
+    const db = join(root, 'shop.db');
+    new DatabaseSync(db).close();
+    const config = (writable: boolean | undefined) => {
+      const file = join(root, `mistri-${String(writable)}.json`);
+      writeFileSync(file, JSON.stringify({ connections: [{ name: 'shop', url: db, ...(writable === undefined ? {} : { writable }) }] }));
+      return ['--config', file, '--migrations', join(root, 'migrations')];
+    };
+    for (const command of ['up', 'baseline', 'repair']) {
+      const refused = await cli(['migrate', command, ...config(undefined)], {});
+      assert.equal(refused.code, 1, `${command}: ${refused.out}${refused.err}`);
+      assert.match(refused.err, /"shop" is not writable, and .* changes its schema and its history table\. Set "writable": true/);
+    }
+    const falsy = await cli(['migrate', 'up', ...config(false)], {});
+    assert.equal(falsy.code, 1);
+    const probe = new DatabaseSync(db);
+    assert.deepEqual(probe.prepare('SELECT name FROM sqlite_master').all(), [], 'nothing was written to the refused database');
+    probe.close();
+    assert.equal(
+      (await cli(['migrate', 'status', ...config(undefined)], {})).code,
+      2,
+      'status reads: nothing applied yet, which is its exit 2',
+    );
+    const plan = await cli(['migrate', 'up', '--dry-run', ...config(undefined)], {});
+    assert.equal(plan.code, 0, plan.err);
+    assert.match(plan.out, /CREATE TABLE a/);
+    const allowed = await cli(['migrate', 'up', ...config(true)], {});
+    assert.equal(allowed.code, 0, allowed.err);
+    assert.equal(history(db).length, 1);
+    // A database named on the command line is the person's own act, as it was.
+    const other = join(root, 'other.db');
+    assert.equal((await cli(['migrate', 'up', '--db', other, '--no-config', '--migrations', join(root, 'migrations')], {})).code, 0);
+  });
+
   test('new, up with --dry-run, up, status and validate: their words and exit codes', async () => {
     const root = join(work, 'cli');
     mkdirSync(root);

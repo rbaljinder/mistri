@@ -2,6 +2,7 @@
 import { test, expect, type Page, type Locator } from './support/harness.js';
 import { follow } from './support/app.js';
 import { rows } from './support/db.js';
+import { SLOW_MS } from './support/budgets';
 /* A command is one journal row; its audit is that row's targets, read back one row each. */
 import { sqliteAuditRows } from '../test/support/commandTargets.js';
 import { startTenantInventory, type TenantInventoryFixture } from './support/tenantProofServer.js';
@@ -328,7 +329,7 @@ async function historyNavigation(page: Page, receipt: Receipt, mode: Mode, reaso
 }
 
 test.describe('Ignition tenant inventory browser proof', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Fixture;
   test.beforeEach(async () => {
     app = await startTenantInventory();

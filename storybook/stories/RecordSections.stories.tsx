@@ -203,9 +203,9 @@ export const Activity: StoryObj = {
             {
               from: 'activity',
               at: 'at',
-              show: 'body',
+              text: 'body',
               by: 'by',
-              detail: 'detail',
+              badge: 'detail',
               view: view('activity', 'activity', ['at', 'body', 'by', 'detail']),
             },
           ],
@@ -225,9 +225,9 @@ export const Conversation: StoryObj = {
             {
               from: 'message',
               at: 'at',
-              show: 'body',
+              text: 'body',
               by: 'by',
-              detail: 'kind',
+              badge: 'kind',
               view: view('message', 'message', ['at', 'body', 'by', 'kind']),
             },
           ],
@@ -317,7 +317,7 @@ export const Reactions: StoryObj = {
         {
           index: 0,
           streams: [
-            { from: 'post', at: 'at', show: 'body', by: 'by', reacts: 'id', view: view('post', 'post', ['at', 'body', 'by', 'id']) },
+            { from: 'post', at: 'at', text: 'body', by: 'by', reacts: 'id', view: view('post', 'post', ['at', 'body', 'by', 'id']) },
           ],
         },
       )}

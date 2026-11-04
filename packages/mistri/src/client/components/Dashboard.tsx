@@ -33,6 +33,7 @@ import {
 import { keepPreviousData, useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   columnDisplay,
+  columnLabel,
   findTable,
   go,
   labelColumn,
@@ -47,6 +48,7 @@ import { splitQuery } from '@mistriwork/kit/client/clauses.js';
 import { batchedBreakdown, batchedRun } from '@mistriwork/kit/client/breakdownBatch.js';
 import { ListEmpty } from '@mistriwork/kit/client/components/ListEmpty.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
+import { humanName } from '@mistriwork/engine/shared/model.js';
 import { droppedQuery, funnelBasis, funnelChains, funnelText, stageColumn } from '@mistriwork/engine/shared/funnel.js';
 import { Funnel, type FunnelDoor } from './Funnel.js';
 import { exportOffered, type AppListEmpty } from '@mistriwork/engine/shared/listPresentations.js';
@@ -124,6 +126,13 @@ import { liveFollowing } from '@mistriwork/kit/client/liveState.js';
 
 /* An author's component, and the page's side of @mistriwork/mistri/ui with it: fetched
    the first time a dashboard holds one, never for a dashboard without. */
+/* What a section with no title is called: its table and the column it groups by, in words ("Hold by Item"), never the
+   stored names ("hold by item_id"). */
+const untitled = (section: { table?: string; by?: string }) => {
+  const table = humanName(section.table ?? '');
+  return section.by ? `${table} by ${(columnLabel(section.table ?? '', section.by) as string | null) ?? humanName(section.by)}` : table;
+};
+
 const CustomDashSection = onDemand(() => import('./sdk/CustomSection.js'), 'CustomDashSection');
 /* A list that works as its room does, and the feed of recent changes: each fetched the first time a dashboard holds one. */
 const InteractiveList = onDemand(() => import('@mistriwork/kit/client/components/DashboardList.js'), 'InteractiveList');
@@ -424,7 +433,7 @@ export const Metric = memo(function Metric({
   onOpen,
   onErrorClick,
 }: MetricProps) {
-  const label = section.title ?? section.table ?? '';
+  const label = section.title ?? untitled(section);
   const windowNote = section.windowNote;
   const live = !section.error;
   const now = useMeasure(section, section.query, live);
@@ -980,6 +989,7 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
         limit={section.limit}
         target={typeof section.target === 'number' ? section.target : undefined}
         height={section.height}
+        arrange={section.sort === 'value' || section.sort === 'category' ? section.sort : undefined}
         say={sayer(section)}
         label={label}
         seriesLabel={seriesLabel}
@@ -1262,7 +1272,7 @@ function AsideRows({
   const keyed = got.map((row) => ({ row, key: Object.fromEntries(pk.map((k) => [k, row[k]])), label: String(row[first] ?? '') }));
   const records = keyed.map(({ key, label }) => ({ key, label }));
   return (
-    <ul className="dash-mini" aria-label={section.title ?? section.table}>
+    <ul className="dash-mini" aria-label={section.title ?? untitled(section)}>
       {keyed.map(({ row, key, label }, i) => (
         <li key={i}>
           <button
@@ -1334,7 +1344,7 @@ const List = memo(function List({ section, aside = false, period }: { section: S
       <div className="dash-list-head">
         <h2 className="page-section-title">
           <Mark section={section} />
-          {section.title ?? section.table}
+          {section.title ?? untitled(section)}
         </h2>
         <span className="stat dash-count">{count}</span>
         {period}
@@ -1419,7 +1429,7 @@ const Board = memo(function Board({ section: authored }: { section: Section }) {
       <div className="board-head">
         <h2 className="page-section-title">
           <Mark section={section} />
-          {section.title ?? `${section.table} by ${section.by}`}
+          {section.title ?? untitled(section)}
         </h2>
         <OpenFull section={section} />
       </div>
@@ -1690,11 +1700,11 @@ const Sections = memo(function Sections({
         /* The title says the window the figure is over (dashboardModel.ts,
        windowTitle): the reader's pick stands where the author's window was
        named, and a section the author windowed says nothing more until then. */
-        const said = raw.kind === 'metric' ? metricWindow(raw.title ?? raw.table ?? '', raw, windowNow) : undefined;
+        const said = raw.kind === 'metric' ? metricWindow(raw.title ?? untitled(raw), raw, windowNow) : undefined;
         const scoped = said
           ? { ...raw, title: said.title, ...(said.note ? { windowNote: said.note } : {}) }
           : raw.over
-            ? { ...raw, title: windowTitle(raw.title ?? raw.table ?? '', raw, windowNow) }
+            ? { ...raw, title: windowTitle(raw.title ?? untitled(raw), raw, windowNow) }
             : raw;
         return picked(windowed(scoped, windowNow), picks);
       }),
@@ -1788,7 +1798,7 @@ const Sections = memo(function Sections({
         const heading = (
           <h2 className="page-section-title">
             <Mark section={section} />
-            {section.title ?? `${section.table} by ${section.by}`}
+            {section.title ?? untitled(section)}
           </h2>
         );
         body = (

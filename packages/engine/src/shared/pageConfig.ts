@@ -9,7 +9,7 @@ import { parseRelatedCreate } from './relatedCreate.js';
 import { parseListEmpty } from './listEmpty.js';
 import { CHART_SHAPES, FIGURE_FORMATS, FIGURE_FORMAT_WORDS, allowKeys, humanName } from './model.js';
 import { headingOf } from './appNoun.js';
-import { CARDS_MAX_LINES, parseCards, parseFacts, type AppCardsList } from './appCards.js';
+import { CARDS_MAX_LINES, HEADER_MAX_FACTS, parseCards, parseFacts, type AppCardsList } from './appCards.js';
 import { parseIcon } from './appIcons.js';
 import { slug } from './slug.js';
 import { parsePageLayout } from './pageLayouts.js';
@@ -106,7 +106,7 @@ export const PAGE_KEYS = ['label', 'base', 'connection', 'listTabs', 'empty', 's
 export const APP_PAGE_KEYS = PAGE_KEYS.filter((key) => key !== 'connection' && key !== 'label');
 /* `aside` and `layout` are an App page's alone: the Workbench's pages draw what they say, in the record's one skeleton. */
 const WORKBENCH_PAGE_KEYS = PAGE_KEYS.filter((key) => key !== 'aside' && key !== 'layout');
-const SECTION_COMMON = ['kind', 'title', 'region', 'tab', 'width', 'offsetLeft', 'offsetRight', 'hidden', 'when'] as const;
+const SECTION_COMMON = ['kind', 'title', 'icon', 'region', 'tab', 'width', 'offsetLeft', 'offsetRight', 'hidden', 'when'] as const;
 /** A tab's name is a word or two across the strip, not a sentence. */
 const MAX_TAB_NAME = 40;
 /** The keys each page section kind takes. Anything else is refused by name. A `segment` is read before the
@@ -114,22 +114,22 @@ const MAX_TAB_NAME = 40;
 /* `view` is an authored kind with no section of its own: `embed(view, { whose })`
    is read into a related list that remembers the view (PageList.view). */
 export const PAGE_SECTION_KEYS: Record<PageSection['kind'] | 'view' | 'header' | 'current' | 'card' | 'headline', readonly string[]> = {
-  fields: [...SECTION_COMMON, 'show', 'columns', 'names', 'presentation', 'editable'],
+  fields: [...SECTION_COMMON, 'show', 'columns', 'names', 'presentation', 'editable', 'empty'],
   /* The record a reference names, in a box of its own: the first shown field is its title, the rest its facts. */
   card: [...SECTION_COMMON, 'show'],
   /* A figure with its facts, its earlier value, its estimate and the calls to action beside it. */
-  headline: [...SECTION_COMMON, 'show', 'links', 'subfigure', 'was', 'note'],
+  headline: [...SECTION_COMMON, 'show', 'links', 'subfigure', 'subtitle', 'was', 'note'],
   /* The record's head: drawn where the head is, so nothing that would place it elsewhere. */
   header: ['kind', 'status', 'facts', 'primary', 'destructive', 'actions'],
   /* The one current related row as a card: nothing to page, sum or add under it. */
-  current: ['kind', 'title', 'region', 'tab', 'width', 'when', 'from', 'whose', 'show', 'query', 'sort', 'empty'],
+  current: ['kind', 'title', 'icon', 'region', 'tab', 'width', 'when', 'from', 'whose', 'show', 'query', 'sort', 'empty', 'opens'],
   timeline: [...SECTION_COMMON, 'streams', 'limit', 'create', 'newest', 'composer', 'tone', 'compact', 'side', 'reactions'],
   history: [...SECTION_COMMON, 'limit'],
   flows: [...SECTION_COMMON],
   diagram: [...SECTION_COMMON],
   custom: [...SECTION_COMMON, 'component', 'record', 'rows', 'figures', 'props'],
   metric: [...SECTION_COMMON, 'from', 'whose', 'about', 'measure', 'query', 'segment', 'format', 'unit'],
-  breakdown: [...SECTION_COMMON, 'from', 'whose', 'about', 'by', 'measure', 'query', 'segment', 'limit', 'format', 'unit'],
+  breakdown: [...SECTION_COMMON, 'from', 'whose', 'about', 'by', 'measure', 'query', 'segment', 'limit', 'format', 'unit', 'empty'],
   chart: [
     ...SECTION_COMMON,
     'from',
@@ -138,6 +138,8 @@ export const PAGE_SECTION_KEYS: Record<PageSection['kind'] | 'view' | 'header' |
     'by',
     'measure',
     'shape',
+    'curve',
+    'total',
     'sort',
     'query',
     'segment',
@@ -146,8 +148,9 @@ export const PAGE_SECTION_KEYS: Record<PageSection['kind'] | 'view' | 'header' |
     'target',
     'format',
     'unit',
+    'empty',
   ],
-  note: [...SECTION_COMMON, 'text', 'icon', 'action', 'variant'],
+  note: [...SECTION_COMMON, 'text', 'action', 'variant'],
   view: [...SECTION_COMMON, 'view', 'whose', 'about', 'limit'],
   list: [
     ...SECTION_COMMON,
@@ -165,12 +168,13 @@ export const PAGE_SECTION_KEYS: Record<PageSection['kind'] | 'view' | 'header' |
     'totals',
     'same',
     'near',
+    'opens',
     'rowActions',
     'actions',
     'group',
   ],
 };
-export const STREAM_KEYS = ['from', 'whose', 'at', 'show', 'detail', 'author', 'query', 'about', 'side', 'tone', 'compact'] as const;
+export const STREAM_KEYS = ['from', 'whose', 'at', 'text', 'badge', 'author', 'query', 'about', 'side', 'tone', 'compact'] as const;
 
 /**
  * One page body: a tablewalk.json page, whose `id` is its own or derives
@@ -432,6 +436,7 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
   const placement = {
     ...(region === undefined ? {} : { region }),
     ...(tab === undefined ? {} : { tab }),
+    ...(s.icon === undefined ? {} : { icon: parseIcon(s.icon, at) }),
   };
   if (s.create !== undefined && kind !== 'list' && kind !== 'timeline')
     throw new Error(`${at}: create belongs on a related list or a timeline.`);
@@ -465,6 +470,7 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
         ? {
             actions: `belongs on a headline(figure, { links }). ${retiredFieldsForms()}`,
             subfigure: `belongs on a headline(figure, { subfigure }). ${retiredFieldsForms()}`,
+            subtitle: `belongs on a headline(figure, { subtitle }). ${retiredFieldsForms()}`,
             was: `belongs on a headline(figure, { was }). ${retiredFieldsForms()}`,
             note: `belongs on a headline(figure, { note }). ${retiredFieldsForms()}`,
           }
@@ -498,11 +504,21 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
         `${at}: "editable" belongs on the fields a reader edits — a summary or a property rail; a ${String(s.presentation)} says values, it does not hold them.`,
       );
     }
+    if (s.empty !== undefined && s.empty !== 'hide' && s.empty !== 'show') {
+      throw new Error(
+        `${at} has "empty": ${JSON.stringify(s.empty)}. A block of fields leaves out the values a record does not have ('hide') or says each as a dash ('show'); a property rail hides them unless it says 'show'.`,
+      );
+    }
     if (s.was !== undefined && (typeof s.was !== 'string' || !FIELD_PATH.test(s.was.trim()))) {
       throw new Error(`${at} has a "was" that is not a field name, like "was_price": the figure's earlier value.`);
     }
     if (s.subfigure !== undefined && (typeof s.subfigure !== 'string' || !FIELD_PATH.test(s.subfigure.trim()))) {
       throw new Error(`${at} has a "subfigure" that is not a field name or a label path like "account_id.name".`);
+    }
+    if (s.subtitle !== undefined && (typeof s.subtitle !== 'string' || !FIELD_PATH.test(s.subtitle.trim()))) {
+      throw new Error(
+        `${at} has a "subtitle" that is not a field name or a label path like "income_frequency": the line under the figure.`,
+      );
     }
     if (s.note !== undefined && (typeof s.note !== 'string' || !s.note.trim() || s.note.trim().length > 300)) {
       throw new Error(`${at} has a "note" that is not text of at most 300 characters.`);
@@ -528,8 +544,10 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
       names: s.names === false ? false : undefined,
       ...(s.presentation === undefined ? {} : { presentation: s.presentation as FieldPresentation }),
       ...(s.editable === true ? { edit: true as const } : {}),
+      ...(s.empty === 'hide' || s.empty === 'show' ? { emptyMode: s.empty } : {}),
       ...(s.links === undefined ? {} : { actions: parseHeadlineActions(s.links, at) }),
       ...(s.subfigure === undefined ? {} : { subfigure: (s.subfigure as string).trim() }),
+      ...(s.subtitle === undefined ? {} : { subtitle: (s.subtitle as string).trim() }),
       ...(s.was === undefined ? {} : { was: (s.was as string).trim() }),
       ...(s.note === undefined ? {} : { note: (s.note as string).trim() }),
     };
@@ -549,6 +567,16 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`${here} is not an object.`);
       const t = raw as Record<string, unknown>;
       refuseRenamed(t, here, ['path', 'tint']);
+      /* The parts as the row draws them. `show` and `detail` read the opposite of how they were drawn (the main value
+         leads, the badge sits beside who and when): they are refused with their new names, not read. */
+      for (const [was, now] of [
+        ['show', 'text'],
+        ['detail', 'badge'],
+      ] as const)
+        if (t[was] !== undefined)
+          throw new Error(
+            `${here} has "${was}", which is now "${now}"${now === 'text' ? " — the row's main value" : ' — the quiet word beside who and when'}.`,
+          );
       allowKeys(t, STREAM_KEYS, here);
       const from = typeof t.from === 'string' ? t.from.trim() : '';
       if (!from) throw new Error(`${here} has no "from" table.`);
@@ -556,8 +584,8 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
       if (!path) throw new Error(`${here} has no "whose" — the column that leads back to this record.`);
       const atCol = typeof t.at === 'string' ? t.at.trim() : '';
       if (!atCol) throw new Error(`${here} has no "at" — the date column the stream is ordered by.`);
-      const show = typeof t.show === 'string' ? t.show.trim() : '';
-      if (!show) throw new Error(`${here} has no "show" — the line each row becomes.`);
+      const text = typeof t.text === 'string' ? t.text.trim() : '';
+      if (!text) throw new Error(`${here} has no "text" — the line each row becomes.`);
       /* `query` is the one spelling; the internal stream keeps its `filter`.
          `author` says who wrote a row, where `by` groups one everywhere else;
          the internal stream keeps its `by`. */
@@ -579,8 +607,8 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
         from,
         path,
         at: atCol,
-        show,
-        detail: t.detail === undefined ? undefined : String(t.detail).trim() || undefined,
+        text,
+        badge: t.badge === undefined ? undefined : String(t.badge).trim() || undefined,
         by: t.author === undefined ? undefined : String(t.author).trim() || undefined,
         filter: filterRaw === undefined ? undefined : String(filterRaw).trim() || undefined,
         ...(typeof t.side === 'string' ? { side: t.side.trim() } : {}),
@@ -719,7 +747,6 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
       ...(when ? { when } : {}),
       ...(s.variant === undefined ? {} : { variant: s.variant as 'quiet' | 'callout' }),
       text: s.text.trim(),
-      ...(s.icon === undefined ? {} : { icon: parseIcon(s.icon, at) }),
       ...(action ? { action } : {}),
     };
   }
@@ -779,7 +806,11 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
           editable: 'is gone: the lines of a record are edited in its form (a form\'s "lines")',
           order: 'is gone with the editable lines; a list sorts with "sort"',
         }
-      : {},
+      : {
+          subtitle:
+            "is a second line under a record's own figure, read from a column of the record (headline(figure, { subtitle })); " +
+            'a measured figure has no record\'s column to read it from. Say it in the figure\'s "unit" or its title',
+        },
   );
   const from = typeof s.from === 'string' ? s.from.trim() : '';
   if (!from) throw new Error(`${at} has no "from" table.`);
@@ -873,6 +904,20 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
         sort = parsed![0].direction === 'desc' ? `${parsed![0].column} desc` : parsed![0].column;
       }
     }
+    if (s.curve !== undefined) {
+      if (s.curve !== 'smooth' && s.curve !== 'straight')
+        throw new Error(`${at} has a "curve" of ${JSON.stringify(s.curve)}. Use "smooth" or "straight".`);
+      if (s.shape !== undefined && s.shape !== 'line') throw new Error(`${at} is a ${String(s.shape)} chart; only a line has a "curve".`);
+    }
+    if (s.total !== undefined) {
+      if (s.shape !== 'donut') throw new Error(`${at} has a "total", which names a donut's middle figure; it is not a donut.`);
+      if (typeof s.total !== 'string' || !s.total.trim() || s.total.trim().length > 40)
+        throw new Error(`${at} has a "total" that is not a few words (at most 40 characters): what the middle figure counts.`);
+    }
+    if (s.empty !== undefined && s.empty !== 'hide')
+      throw new Error(
+        `${at} has "empty": ${JSON.stringify(s.empty)}. A chart takes 'hide', which leaves it out while it has nothing to draw.`,
+      );
     const { fn, column } = parseMeasure(s.measure, at);
     return {
       kind: 'chart',
@@ -895,6 +940,9 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
       ...(s.limit === undefined ? {} : { limit: s.limit as number }),
       ...(s.height === undefined ? {} : { height: s.height as number }),
       ...(s.target === undefined ? {} : { target: s.target as number }),
+      ...(s.curve === undefined ? {} : { curve: s.curve as 'smooth' | 'straight' }),
+      ...(s.total === undefined ? {} : { total: (s.total as string).trim() }),
+      ...(s.empty === 'hide' ? { emptyMode: 'hide' as const } : {}),
       ...figureWords,
     };
   }
@@ -907,6 +955,10 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
     if (s.limit !== undefined && (typeof s.limit !== 'number' || !Number.isInteger(s.limit) || s.limit < 1)) {
       throw new Error(`${at} has a "limit" that is not a positive whole number.`);
     }
+    if (s.empty !== undefined && s.empty !== 'hide')
+      throw new Error(
+        `${at} has "empty": ${JSON.stringify(s.empty)}. A breakdown takes 'hide', which leaves it out while it has nothing to count.`,
+      );
     const measure = parseMeasure(s.measure, at);
     return {
       kind: 'breakdown',
@@ -927,6 +979,7 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
       by,
       filter,
       limit: s.limit as number | undefined,
+      ...(s.empty === 'hide' ? { emptyMode: 'hide' as const } : {}),
       ...figureWords,
     };
   }
@@ -947,8 +1000,14 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
   /* The one current row as a card — the active lease, the latest visit —
      chosen by the list's query and sort: one row, so nothing to page, sum
      or add under it. */
-  if (current && (s.empty === false || s.empty === 'hide' || s.empty === 'collapse'))
-    throw new Error(`${at} is a current() card; say what no row means with "empty" guidance rather than leaving it out.`);
+  /* The reference a card over a link table opens, instead of the link row: judged against the catalog with the page. */
+  if (s.opens !== undefined && !current) throw new Error(`${at} has "opens", which belongs on a current() card.`);
+  if (s.opens !== undefined && (typeof s.opens !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(s.opens.trim())))
+    throw new Error(`${at} has an "opens" that is not a reference column of "${from}", e.g. "conversation_id".`);
+  if (current && (s.empty === false || s.empty === 'collapse'))
+    throw new Error(
+      `${at} is a current() card; say what no row means with "empty" guidance, or leave it out while there is none with empty: 'hide'.`,
+    );
   if (s.presentation !== undefined && s.presentation !== 'gallery' && !current) {
     const raw = s.presentation;
     if (!raw || typeof raw !== 'object' || Array.isArray(raw) || (raw as Record<string, unknown>).kind !== 'cards') {
@@ -1055,6 +1114,7 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
     ...(shown?.labels ? { labels: shown.labels } : {}),
     filter,
     limit: s.presentation === 'card' ? 1 : (s.limit as number | undefined),
+    ...(typeof s.opens === 'string' ? { opens: s.opens.trim() } : {}),
     orderBy: parseSort(s.sort, at),
     ...(s.create === undefined ? {} : s.create === false ? { noCreate: true as const } : { create: parseRelatedCreate(s.create, at) }),
     ...(s.empty === undefined || emptyMode ? {} : { empty: parseListEmpty(s.empty, at) }),
@@ -1196,7 +1256,7 @@ function parseHeader(s: Record<string, unknown>, at: string): PageSection {
       `${at}: a record header says something: a "status", "facts", its "primary" verb, its "destructive" ones or the "actions" it draws.`,
     );
   }
-  const facts = s.facts === undefined ? undefined : parseFacts(s.facts, `${at}, header`);
+  const facts = s.facts === undefined ? undefined : parseFacts(s.facts, `${at}, header`, 'facts', HEADER_MAX_FACTS);
   return {
     kind: 'fields',
     presentation: 'header',

@@ -300,6 +300,48 @@ test('switched off, or without its store, live sync is not served and nothing is
   }
 });
 
+/* Two resources over one table, each on fixed conditions (appNarrowed.ts): a reader of one is told the table changed
+   and reads again on its conditions, never a key of the other kind's rows. */
+const NARROWED = {
+  ...ORDINARY,
+  auth: { ...ORDINARY.auth, roles: { admin: { read: true, write: true }, rider: { read: ['orderEvents'], write: false } } },
+  resources: {
+    event: { access: 'write' },
+    orderEvents: { physical: 'event', query: 'kind = order' },
+    chatEvents: { physical: 'event', query: 'kind = conversation' },
+  },
+  views: { events: { kind: 'list', from: 'orderEvents' } },
+  home: 'events',
+  nav: ['events'],
+};
+const NARROWED_SQL = `CREATE TABLE event(id INTEGER PRIMARY KEY, kind TEXT NOT NULL, note TEXT NOT NULL);
+  INSERT INTO event VALUES (1, 'order', 'placed'), (3, 'conversation', 'hello');`;
+
+test(
+  'a narrowed resource hears its table change with no keys, and a reader of it never a key of the other kind',
+  { timeout: 90_000 },
+  async (t) => {
+    const server = await policyServer(t, { app: NARROWED, sql: NARROWED_SQL, live: true });
+    const owner = await server.owner();
+    const rider = await server.signUp('rider');
+    const riding = await follow(t, server, rider, 'spoke');
+    const owning = await follow(t, server, owner, 'spoke');
+    assert.equal((await server.api('update', { table: 'event', key: { id: 3 }, values: { note: 'hello again' } }, owner)).status, 200);
+    await owning.until(() => owning.changes().length >= 1);
+    await riding.until(() => riding.changes().length >= 1);
+    // The table's own resource is told the key; each narrowed one only that the table changed.
+    assert.deepEqual(Object.assign({}, ...owning.changes().map((event) => event.data.tables)), {
+      event: { keys: [{ id: 3 }], kinds: ['update'] },
+      orderEvents: { keys: 'many', kinds: ['update'] },
+      chatEvents: { keys: 'many', kinds: ['update'] },
+    });
+    assert.deepEqual(Object.assign({}, ...riding.changes().map((event) => event.data.tables)), {
+      orderEvents: { keys: 'many', kinds: ['update'] },
+    });
+    assert.doesNotMatch(riding.text(), /"id":3|hello again|chatEvents|"event"/);
+  },
+);
+
 test('a resource left out with live: false is never told, and writes no change row of its own', { timeout: 90_000 }, async (t) => {
   const app = { ...ORDINARY, resources: { job: { access: 'write' }, ledger: { access: 'write', live: false } } };
   const server = await policyServer(t, { app, sql: ORDINARY_SQL, live: true });

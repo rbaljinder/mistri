@@ -1,3 +1,4 @@
+import { SLOW_MS } from './support/budgets';
 // e2e-client: source — imports /sessionIdentity.ts from the page
 /**
  * Live sync in a tenant App, from two browsers: two people in one tenant (Northstar) on one discussion, one changing
@@ -18,7 +19,7 @@ const APP_ID = 'tenant-thread-notes';
 const TARGET = tenantProofRows.north.target;
 
 test.describe('live sync in a tenant App', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(SLOW_MS);
   let app: Awaited<ReturnType<typeof startTenantApp>>;
   test.beforeEach(async () => {
     app = await startTenantApp({ appId: APP_ID, tenantProof: 'thread', notes: true });

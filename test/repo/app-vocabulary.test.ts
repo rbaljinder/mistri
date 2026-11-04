@@ -104,6 +104,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'owner',
       'page',
       'physical',
+      'query',
       'recordLabel',
       'references',
       'restocks',

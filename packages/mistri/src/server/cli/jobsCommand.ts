@@ -9,7 +9,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const JOBS_USAGE = `mistri jobs run <name> --app <dir> --jobs <file> [--wait <seconds>]
+const JOBS_USAGE = `mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
                     [<db> | --db <target> | --config <path>]`;
 
 const HELP = `${JOBS_USAGE}
@@ -60,7 +60,7 @@ export async function runJobsCommand(
     rest.push(arg);
   }
   const appDir = flags['--app'] !== undefined ? resolve(flags['--app']) : undefined;
-  if (appDir === undefined) return fail(`name the App with --app <dir>.\n${JOBS_USAGE}`);
+  if (appDir === undefined) return fail(`name the App with --app <dir>, or run it in the App's directory.\n${JOBS_USAGE}`);
   if (!existsSync(appDir)) return fail(`${flags['--app']} is not a directory.`);
   const jobsFile = flags['--jobs'];
   if (jobsFile === undefined) return fail(`name the jobs module that declares the job with --jobs <file>.\n${JOBS_USAGE}`);

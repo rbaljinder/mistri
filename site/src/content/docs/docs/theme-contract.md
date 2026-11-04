@@ -12,8 +12,8 @@ carries its promise, `"promise": "C2"`, in `check --json` and in grade's JSON,
 and `mistri explain C2` prints the row below.
 
 ```sh
-npx @mistriwork/mistri grade . --config mistri.json --theme all
-npx @mistriwork/mistri grade . --config mistri.json --theme all --palette all --as all --json
+npx @mistriwork/mistri grade --config mistri.json --theme all
+npx @mistriwork/mistri grade --config mistri.json --theme all --palette all --as all --json
 ```
 
 `--theme all` grades every theme the App can wear: its own look, the built-in

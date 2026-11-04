@@ -10,7 +10,7 @@ import { configureServerSettings } from '../../adapters/serverSettings.js';
 import { configurePostgresPools } from '../../adapters/postgresPool.js';
 import { configureLockTimeout, configureWriterPool } from '../../adapters/writeLanes.js';
 import { postgresPoolFlags, shutdownTimings, type Options } from './args.js';
-import { didYouMean, packageVersion } from './usage.js';
+import { commandsTaking, didYouMean, packageVersion } from './usage.js';
 import { envName } from '../product.js';
 
 /** A main: what a binary runs (bin.ts). Each binary has one, and a start that is the other's is refused by name. */
@@ -55,8 +55,13 @@ export async function answeredFirst(opts: Options, product: Product): Promise<bo
      line that said what was wrong. */
   if (opts.unknown) {
     const flag = opts.unknown.split(/[ =]/)[0];
+    /* A flag the usage does spell, typed where it does not apply: say where it does, not that it is unknown. A flag
+       given twice ("--jobs (may be supplied only once)") applies here; it is said as it is. */
+    const homes = product.flagWords.includes(flag) && !opts.unknown.includes('(') ? commandsTaking(product.usage, bin, flag) : [];
     console.error(
-      `${bin}: unknown option "${opts.unknown}".${opts.unknown === flag ? await didYouMean(flag, product.flagWords) : ''} ${bin} --help lists the options.`,
+      homes.length
+        ? `${bin}: ${flag} is an option of ${homes.map((home) => `${bin} ${home}`).join(' and ')}, not of a start: name the command first (${bin} ${homes[0]} … ${flag}). ${bin} --help lists the options.`
+        : `${bin}: unknown option "${opts.unknown}".${opts.unknown === flag ? await didYouMean(flag, product.flagWords) : ''} ${bin} --help lists the options.`,
     );
     process.exit(1);
   }

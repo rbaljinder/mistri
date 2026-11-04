@@ -598,11 +598,12 @@ export interface AppDashSection {
   icon?: AppIconName;
   /** note: one link to one of the App's rooms: a list, a dashboard or a signed-in form view (appDestinations.ts). */
   action?: import('@mistriwork/engine/shared/appLinks.js').AppLinkAction;
-  /** note: 'banner', the dashboard's introduction, dressed by the look's `banner` recipe. */
-  variant?: 'banner';
-  /** note, a banner: its short tag over the title. */
+  /** note: 'quiet' or 'callout'; a banner (`banner()`, the dashboard's introduction, dressed by the look's `banner`
+      recipe) is served as a note of variant 'banner'. */
+  variant?: 'quiet' | 'callout' | 'banner';
+  /** A banner's short tag over the title. */
   eyebrow?: string;
-  /** note, a banner: its picture, one row of a file resource. */
+  /** A banner's picture, one row of a file resource. */
   image?: LandingImage;
   /** The query language, without the leading table name. */
   query?: string;
@@ -883,6 +884,14 @@ export interface AppAuditDef {
 export interface ResourceDef {
   /** The physical table in its source's catalog, when the name alone does not find it. */
   physical?: string;
+  /**
+   * Conditions every read of this resource stands on, in the query language over its table's own columns
+   * (`"kind = order"`): one table read as several resources, each its own list, record page and reverse list. A
+   * table may be bound again only with a query. A filter, never a grant: the table's row policy still applies, and a
+   * row outside it is no record of this resource. Read-only (appNarrowed.ts).
+   * @preview
+   */
+  query?: string;
   /** The named source the resource lives in; absent for an App without `sources`. */
   source?: string;
   /** The App's ceiling for this resource. A declared resource reads; `'write'`
@@ -1038,8 +1047,8 @@ export interface AppConsumes {
 }
 
 /**
- * A rollup as authored: `count('task', { whose: 'account_id', query: 'status = open' })`,
- * `sum('order_line', 'amount')`. `from` is a resource whose rows point at
+ * A rollup as authored: `rollup.count('task', { whose: 'account_id', query: 'status = open' })`,
+ * `rollup.sum('order_line', 'amount')`. `from` is a resource whose rows point at
  * this one through one reference (`whose`, needed only when there are two),
  * or through two (`whose: 'task_id.project_id'`, appRollups.ts);
  * `query` narrows which of them count, over their own columns.
@@ -1241,6 +1250,7 @@ export const DASH_KINDS = [
   'rows',
   'chart',
   'note',
+  'banner',
   'matrix',
   'funnel',
   'board',
@@ -1330,6 +1340,19 @@ export function physicalBindings(app: Pick<AppDef, 'resources'>, source?: string
     bindings[name.slice(name.indexOf('.') + 1)] = resource.physical;
   }
   return bindings;
+}
+
+/**
+ * One catalog's narrowed resources, local name → the conditions its reads stand on (`ResourceDef.query`): of
+ * `source`, or, without one, of an App without named sources.
+ */
+export function narrowedBindings(app: Pick<AppDef, 'resources'>, source?: string): Record<string, string> {
+  const narrowed: Record<string, string> = {};
+  for (const [name, resource] of Object.entries(app.resources ?? {})) {
+    if (resource.query === undefined || resource.source !== source) continue;
+    narrowed[name.slice(name.indexOf('.') + 1)] = resource.query;
+  }
+  return narrowed;
 }
 
 /** The source a reference's target belongs to: its resource block's, as parsing recorded it. */
@@ -1453,7 +1476,8 @@ export const LATER = {
     read into the section's `show`. A board takes no `width`: its lanes
     always have the dashboard's whole width. A `segment` is read before the
     section is (appSegments.ts unfoldSegments), as its word in `query`. */
-export const SECTION_KEYS: Record<AppDashSection['kind'], readonly string[]> = {
+/** Per authored kind: a `banner` is served as a note, so it is a key here and not a kind of the served section. */
+export const SECTION_KEYS: Record<AppDashSection['kind'] | 'banner', readonly string[]> = {
   metric: [
     'kind',
     'area',
@@ -1511,6 +1535,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'], readonly string[]> = {
     'shape',
     'curve',
     'total',
+    'sort',
     'over',
     'windows',
     'limit',
@@ -1559,7 +1584,8 @@ export const SECTION_KEYS: Record<AppDashSection['kind'], readonly string[]> = {
     'empty',
   ],
   board: ['kind', 'area', 'title', 'icon', 'from', 'query', 'segment', 'by', 'lanes', 'primary', 'lines', 'sort', 'limit', 'over', 'empty'],
-  note: ['kind', 'area', 'title', 'text', 'icon', 'action', 'width', 'variant', 'eyebrow', 'image'],
+  note: ['kind', 'area', 'title', 'text', 'icon', 'action', 'width', 'variant'],
+  banner: ['kind', 'area', 'title', 'text', 'icon', 'action', 'width', 'eyebrow', 'image'],
   firstRun: ['kind', 'area', 'title', 'description', 'steps'],
   custom: ['kind', 'area', 'title', 'width', 'component', 'rows', 'figures', 'props'],
   activity: ['kind', 'area', 'title', 'icon', 'resources', 'limit', 'width'],
@@ -1576,7 +1602,7 @@ export const VIEW_SECTION_KEYS = [
   'title',
   'icon',
   'width',
-  'tab',
+  'listTab',
   'limit',
   'over',
   'windows',

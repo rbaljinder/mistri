@@ -1,6 +1,6 @@
 {
   "name": "mistri-workspace",
-  "version": "1.0.0-rc.15",
+  "version": "1.0.0-rc.16",
   "private": true,
   "description": "The workspace root: the packages under packages/ (mistri, create-mistri, @mistriwork/cloudflare, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
@@ -100,7 +100,7 @@
     "vitest": "^5.0.1"
   },
   "engines": {
-    "node": ">=24.22.1"
+    "node": ">=24"
   },
   "knip": {
     "workspaces": {

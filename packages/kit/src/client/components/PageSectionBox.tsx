@@ -12,6 +12,7 @@ import { useContext, useEffect, useRef, type ReactNode } from 'react';
 import { disclosure, findTable } from '../core.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { GridSkeleton } from './Skeleton.js';
+import { Icon } from './Icon.js';
 import { sectionClass, type PageSection } from './pageModel.js';
 import { PageRenderContext, spoken } from './pageContext.js';
 import { useMessageLanguage } from './useMessageLanguage.js';
@@ -22,6 +23,10 @@ import { say } from '../copy/record/components/PageSectionBox.js';
 /* A suggested page titles a related list by its table's name (`visit_attachment`), which an App says as words, as
    every untitled list's head already is. An authored title has words or capitals of its own and is left as written. */
 const titled = (title: string) => (/^[a-z][a-z0-9_.]*$/.test(title) ? spoken(title) : title);
+
+/** A section's mark leading its heading. A note draws its own over its words, so it has none here. */
+const mark = (section: PageSection) =>
+  section.icon && section.kind !== 'note' ? <Icon name={section.icon} size={16} className="dash-section-icon" /> : null;
 
 /** A section's box: its heading, or a fold when it is a later group of fields. */
 export function SectionBox({
@@ -86,7 +91,10 @@ export function SectionBox({
       <section className={sectionClass(section)}>
         <details className="page-fold" ref={details} open>
           <summary className="page-section-head page-fold-head">
-            <span>{heading}</span>
+            <span>
+              {mark(section)}
+              {heading}
+            </span>
           </summary>
           {content}
         </details>
@@ -101,6 +109,7 @@ export function SectionBox({
   const room = section.view && !preview ? navigate?.(section.view) : undefined;
   const headed = heading && (
     <h2 className={gallery ? 'page-section-head visually-hidden' : 'page-section-head'}>
+      {mark(section)}
       {room ? (
         <a className="page-section-link" {...room}>
           {heading}
@@ -128,7 +137,12 @@ export function SectionBox({
 export function Loading({ section }: { section: PageSection }) {
   return (
     <section className={`${sectionClass(section)} loading`}>
-      {section.title && <h2 className="page-section-head">{titled(section.title)}</h2>}
+      {section.title && (
+        <h2 className="page-section-head">
+          {mark(section)}
+          {titled(section.title)}
+        </h2>
+      )}
       {section.kind === 'list' ? <GridSkeleton columns={4} rows={3} /> : <div className="sk-bar" />}
     </section>
   );

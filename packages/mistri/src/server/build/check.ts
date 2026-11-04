@@ -60,7 +60,9 @@ import { componentTypes } from '../typegenComponents.js';
 import { checkApp } from './build.js';
 import { documentedFix } from './checkCodes.js';
 import { connectionBudgets, deployFindings } from './checkDeploy.js';
-import { SMALL_TABLE_ROWS, indexFindings, readPgIndexes } from './checkIndexes.js';
+import { schemaChanges } from './schemaChanges.js';
+import { appConnection, pageQueryFailures } from './checkQueries.js';
+import { SMALL_TABLE_ROWS, holdBack, indexFindings, readPgIndexes } from './checkIndexes.js';
 import { asDeployFinding, migrationsToJudge } from './deployMigrations.js';
 import { migrationFindings } from './migrationSafety.js';
 import type { ServedFacts } from './servedHosts.js';
@@ -72,7 +74,7 @@ import { chooseLayout } from '@mistriwork/engine/shared/pageLayouts.js';
 import { inferredFormDefaults } from '../../shared/formRules.js';
 import { fixRepeatedQueries, fixRestated } from './checkFix.js';
 import { promiseOf } from './themeContract.js';
-import { previewKeysUsed } from '../../shared/preview.js';
+import { previewFieldsUsed, previewKeysUsed } from '../../shared/preview.js';
 import { hint, parseTsc, readableTypeErrors, shorten, typecheckApp } from './typecheck.js';
 import {
   componentCode,
@@ -137,7 +139,7 @@ const CHECK_EXIT = {
 } as const;
 
 const CHECK_USAGE =
-  'mistri check --app <dir> [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--no-index-check] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]';
+  'mistri check [--app <dir>] [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--no-index-check] [--no-query-check] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]';
 
 /* `pending` is the stores step's alone: what `mistri migrate up --app` makes, which no change to the App fixes. */
 type Status = 'passed' | 'failed' | 'skipped' | 'pending';
@@ -442,17 +444,20 @@ export async function schemaTypes(registry: Registry, loaded: LoadedApp | undefi
   if (existing !== undefined && sameTypes(existing, types)) {
     return step('passed', `${TYPES} matches the database`);
   }
+  /* What the new file lacks that the old one had: the columns a migration took, said where the author is looking. */
+  const lost = existing === undefined ? [] : schemaChanges(existing, types).map((change) => `  ${change}`);
   if (!write)
     return step(
       'failed',
       existing === undefined ? `the App has no ${TYPES} yet` : `${TYPES} is older than the database — ${drift(existing, types)}`,
+      lost,
     );
   await writeFile(file, typesFileText(types));
   return existing === undefined
     ? step('passed', `wrote ${TYPES} from the database`)
     : /* Said as what changed, not why: an App that binds a resource, adds a
        rollup or narrows a role changes the file as surely as a migration. */
-      step('passed', `updated ${TYPES} to match the database and the App's resources — ${drift(existing, types)}`);
+      step('passed', `updated ${TYPES} to match the database and the App's resources — ${drift(existing, types)}`, lost);
 }
 
 /* The lines mistri check sends to stderr that are only its startup narration. */
@@ -735,6 +740,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
   let failOnDesignWarning = false;
   let showWarnings = false;
   let indexCheck = true;
+  let queryCheck = true;
   let pending = false;
   let pendingOn: string | undefined;
   let deploy = false;
@@ -758,7 +764,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           '--fail-on-design-warning includes design checks and fails with exit 4 when they report warnings.\n' +
           '--warnings lists every warning in full; without it they are one line a kind after the errors (a failing App was buried under ~60 of them).\n' +
           "--defaults prints every rule the platform infers for each resource (mistri docs conventions) and the layout each page is drawn in, and whether the App's own wins.\n" +
-          '--no-index-check skips the indexes step: on PostgreSQL, the foreign keys, default sorts, fixed filters, ownership columns and searches the App reads by that no index leads with (index-missing, with the CREATE INDEX that adds it).\n' +
+          '--no-index-check skips the indexes step: on PostgreSQL, the foreign keys, default sorts, fixed filters, ownership columns and searches the App reads by that no index leads with (index-missing, with the CREATE INDEX that adds it; tables under 10,000 rows are counted in one line, and --warnings lists those too).\n' +
+          "--no-query-check skips the queries step: the database EXPLAINs each read the App's pages would make (lists, related and grouped lists, timelines, breakdowns, figures, rollups) and says the ones it refuses (query-invalid, with the page:section); nothing is run, and PostgreSQL plans them in a READ ONLY transaction.\n" +
           '--bump <command> moves a command whose contract changed to its next version in authority.lock (its API route, receipts and jobs follow).\n' +
           "--pending judges the App against the schema as it will be after the pending migrations (mistri migrate), applied to a scratch copy, or with --pending-on <url> to the scratch database that URL names (a branch of the database, never the App's own). Exit 6: one failed there.\n" +
           "--deploy judges whether the App survives a container being replaced (mistri docs build-and-deploy): it refuses a source or auth.store on a SQLite file, the default auth.store, and a missing BETTER_AUTH_SECRET or ${NAME} the environment lacks, and with --replicas <n> above one it warns about per-process rate limits. It also reads the migrations not yet applied and warns about a statement that breaks the code still running (a dropped or renamed column or table, a type change, SET NOT NULL, a NOT NULL column without a default), as expand/contract steps; mark a deliberate one with a '-- mistri: contract' comment on the line before it, and add --strict-migrations to fail on the rest. Run it with the deployment's environment. Exit 7.\n" +
@@ -790,6 +797,10 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     }
     if (argv[i] === '--no-index-check') {
       indexCheck = false;
+      continue;
+    }
+    if (argv[i] === '--no-query-check') {
+      queryCheck = false;
       continue;
     }
     if (argv[i] === '--fail-on-design-warning') {
@@ -871,7 +882,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     rest.push(argv[i]);
   }
   if (!app) {
-    console.error(`mistri check: --app <dir> names the App to check. ${CHECK_USAGE}`);
+    console.error(`mistri check: --app <dir> names the App to check, or run it in the App's directory. ${CHECK_USAGE}`);
     return CHECK_EXIT.couldNotCheck;
   }
   if (replicas !== undefined && !deploy) {
@@ -1203,8 +1214,10 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
 
     /* 2b. The indexes the App's reads lean on (checkIndexes.ts), read before validation: on PostgreSQL they say
        what the older, leading-column advice in validation's warnings said, and say it with the fix. */
-    const ran = indexCheck && loaded ? await indexStep(registry, loaded, opts.policy) : undefined;
+    const ran = indexCheck && loaded ? await indexStep(registry, loaded, opts.policy, showWarnings) : undefined;
     const indexed = ran?.step;
+    /* 2c. What the database says of the reads the App's pages make (checkQueries.ts): planned, never run. */
+    const queried = queryCheck && loaded ? await queryStep(registry, loaded) : undefined;
     const OLD_INDEX_ADVICE = /leads no index|has no trigram index/;
 
     // 3. Validation: the real mistri check, as CI runs it.
@@ -1294,7 +1307,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       );
     };
     /* The Preview features the App uses (packages/mistri/src/shared/preview.ts): said once, as information; the check still passes. */
-    const preview = loaded ? previewKeysUsed(loaded.app) : [];
+    const preview = loaded ? [...previewKeysUsed(loaded.app), ...previewFieldsUsed(loaded.commands?.registry)] : [];
     const previewFinding = preview.length
       ? problem(
           'validation',
@@ -1334,6 +1347,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
 
     if (storesStep) steps.push(storesStep);
     if (indexed) steps.push(indexed);
+    if (queried?.step) steps.push(queried.step);
 
     if (unloaded)
       steps.push(
@@ -1621,6 +1635,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     if (warned.size) write(`  ${warningSummary(warned)}`);
     /* An indexes step that could not run is one note, not a step: a step would change every SQLite App's count of them. */
     if (ran?.note) write(`  indexes: ${ran.note}`);
+    if (queried?.note) write(`  queries: ${queried.note}`);
     /* The Preview features the App uses: one line, not a step's, since it fails nothing (the finding is info). */
     const previewed = steps.flatMap((step) => step.problems ?? []).find((found) => found.code === PREVIEW_FEATURE);
     if (previewed) write(`  preview: ${previewed.message}`);
@@ -1703,7 +1718,12 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
  * The indexes step: the App's declared access paths against the database's index list, on PostgreSQL. It never
  * fails the check. Where it cannot run (SQLite, a role that may not read the catalog) it says one note instead.
  */
-async function indexStep(registry: Registry, loaded: LoadedApp, policyFile: string | undefined): Promise<{ step?: Step; note?: string }> {
+async function indexStep(
+  registry: Registry,
+  loaded: LoadedApp,
+  policyFile: string | undefined,
+  all = false,
+): Promise<{ step?: Step; note?: string }> {
   const app = loaded.app;
   const bound = app.connection ?? (app.sources ? app.sources[homeSourceOf(app)!]?.connection : undefined);
   const connection = bound
@@ -1726,18 +1746,30 @@ async function indexStep(registry: Registry, loaded: LoadedApp, policyFile: stri
         Object.entries(policy?.ownership ?? {}).flatMap(([id, owner]) => (owner.kind === 'tenant' ? [[id, owner.column]] : [])),
       );
     }
-    const found = indexFindings({ app, pages: loaded.pages, schema: withRollups(app, schema), indexes, ...(owners ? { owners } : {}) });
+    const every = indexFindings({ app, pages: loaded.pages, schema: withRollups(app, schema), indexes, ...(owners ? { owners } : {}) });
+    /* A table too small for an index to matter is not worth a line each: a small local database gave seventy. They are
+       counted in one line, and listed with --warnings. */
+    const { shown: found, held } = holdBack(every, all);
     const warnings = found.filter((finding) => finding.severity === 'warning').length;
     return {
       step: {
         name: 'indexes',
         status: 'passed',
-        detail: found.length
-          ? `${found.length} read${found.length === 1 ? '' : 's'} no index leads (${warnings} on tables of ${SMALL_TABLE_ROWS.toLocaleString('en-US')} rows or more)`
-          : 'every foreign key, sort, filter and search the App reads by is led by an index',
-        lines: found.map(
-          (finding) => `${finding.severity === 'warning' ? 'warning: ' : 'note: '}${finding.message} Add: ${finding.fix} [index-missing]`,
-        ),
+        detail:
+          (found.length
+            ? `${found.length} read${found.length === 1 ? '' : 's'} no index leads (${warnings} on tables of ${SMALL_TABLE_ROWS.toLocaleString('en-US')} rows or more)`
+            : 'every foreign key, sort, filter and search the App reads by is led by an index') +
+          (held.length ? `; ${held.length} held back on smaller tables` : ''),
+        lines: [
+          ...found.map(
+            (finding) => `${finding.severity === 'warning' ? 'warning: ' : 'note: '}${finding.message} Add: ${finding.fix} [index-missing]`,
+          ),
+          ...(held.length
+            ? [
+                `note: ${held.length} index suggestion${held.length === 1 ? '' : 's'} held back on tables under ${SMALL_TABLE_ROWS.toLocaleString('en-US')} rows, where an index rarely matters; mistri check --warnings lists ${held.length === 1 ? 'it' : 'them all'}.`,
+              ]
+            : []),
+        ],
         problems: found.map((finding) =>
           problem(
             'indexes',
@@ -1751,6 +1783,41 @@ async function indexStep(registry: Registry, loaded: LoadedApp, policyFile: stri
     };
   } catch (error) {
     return { note: `skipped, could not read the indexes: ${(error as Error).message}` };
+  }
+}
+
+/**
+ * The queries step: every read the App's pages would make, planned by its database (checkQueries.ts). A refusal is a
+ * `query-invalid` error with the page and section; where the database cannot be asked it says one note instead.
+ */
+async function queryStep(registry: Registry, loaded: LoadedApp): Promise<{ step?: Step; note?: string }> {
+  const app = loaded.app;
+  const connection = appConnection(registry, app);
+  if (!connection) return {};
+  if (isTenantApp(app)) return { note: 'skipped, a tenant App reads through its tenants, which this run does not open.' };
+  try {
+    const { failures, statements, skipped, sections } = await pageQueryFailures(registry, app, loaded.pages, connection.id);
+    return {
+      step: {
+        name: 'queries',
+        status: failures.length ? 'failed' : 'passed',
+        detail:
+          (failures.length
+            ? `${failures.length} read${failures.length === 1 ? '' : 's'} the database refused`
+            : `the database planned the ${statements} statement${statements === 1 ? '' : 's'} of the App's lists, dashboards, segments and ${sections} page section${sections === 1 ? '' : 's'}`) +
+          `; ${statements} checked, ${skipped} skipped (a parameter this run cannot supply)`,
+        lines: failures.map((failure) => `${failure.at}: ${failure.message} [query-invalid]`),
+        problems: failures.map((failure) =>
+          problem('queries', 'query-invalid', `${failure.at}: the database refused this read: ${failure.message}`, {
+            path: failure.path,
+            file: shown(loaded.path),
+            fix: "The message is the database's own: a column that two joined tables share, a type that cannot be compared, a function it lacks. Change the section's columns, query, sort or group, or the column it reads.",
+          }),
+        ),
+      },
+    };
+  } catch (error) {
+    return { note: `skipped, could not plan the pages' reads: ${(error as Error).message}` };
   }
 }
 

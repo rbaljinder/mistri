@@ -410,7 +410,7 @@ function probe(source: string): string {
 }
 
 test('a registered schema checks query strings at the helper that names the table', () => {
-  const source = `import { listView, metric, chart, breakdown, matrix, rows, board, related, current, count, sum, dashboard, page } from '@mistriwork/mistri/app';
+  const source = `import { listView, metric, chart, breakdown, matrix, rows, board, related, current, rollup, dashboard, page } from '@mistriwork/mistri/app';
     import { defineCommand, field } from '../packages/mistri/src/server/commands.ts';
     ${QUERY_SCHEMA}
 
@@ -429,7 +429,7 @@ test('a registered schema checks query strings at the helper that names the tabl
     ]);
     export const p = page('work_order', [related('Tasks', 'task', 'order_id', { query: 'done = false', sort: 'subject' }),
       current('Latest', 'task', 'order_id', { query: 'subject contains "x"' })]);
-    export const r = count('task', { query: 'done = false' });
+    export const r = rollup.count('task', { query: 'done = false' });
     export const command = defineCommand({ source: 'main', target: 'work_order', when: 'status = open and is_open = true',
       input: { task: field.reference('task', { by: 'id', labelColumn: 'subject', query: 'done = false sort subject' }) }, handle() {} });
     // An untyped table is not judged here.
@@ -470,7 +470,7 @@ test('a registered schema checks query strings at the helper that names the tabl
     // @ts-expect-error A page section's query is read against its from.
     export const badRelated = related('Tasks', 'task', 'order_id', { query: 'done = sometimes' });
     // @ts-expect-error A rollup's query too.
-    export const badRollup = sum('task', 'id', { query: 'subjct = x' });
+    export const badRollup = rollup.sum('task', 'id', { query: 'subjct = x' });
     // @ts-expect-error A command's when is read against its target.
     export const badWhen = defineCommand({ source: 'main', target: 'work_order', when: 'status = shut', handle() {} });
     // @ts-expect-error A picker's query is read against the resource it picks from.
@@ -557,7 +557,7 @@ test('the strings whose table is their place are read too, against a generated r
       options: { allowImportingTsExtensions: true },
     });
   };
-  const source = `import { action, component, custom, defineApp, defineFeature, fields, listView, max, metric, page, sum } from '@mistriwork/mistri/app';
+  const source = `import { action, component, custom, defineApp, defineFeature, fields, listView, rollup, metric, page } from '@mistriwork/mistri/app';
     export const tile = component('tile', { module: './tile.tsx' });
 
     // What reads passes, computed columns among the names.
@@ -568,7 +568,7 @@ test('the strings whose table is their place are read too, against a generated r
       metric('Over', 'task', { whose: 'order_id', measure: 'sum order_id.age' }),
       // Two operators: each term ends at the next one.
       metric('Share', 'task', { measure: 'sum overrun / sum estimate * 100 as share', format: 'percent' }),
-      sum('task', 'overrun'), max('task', 'estimate', { query: 'overrun > 2' }),
+      rollup.sum('task', 'overrun'), rollup.max('task', 'estimate', { query: 'overrun > 2' }),
       page('work_order', [fields(['reference'], { when: 'is_late = true and status = open' })]),
       custom('Tile', tile, { rows: { open: { from: 'task', query: 'overrun > 0', sort: 'overrun desc', show: ['subject'] } } }),
     ];
@@ -589,11 +589,14 @@ test('the strings whose table is their place are read too, against a generated r
     // @ts-expect-error Every term of a computed measure is read, past the first operator too.
     export const badTerm = metric('Share', 'task', { measure: 'sum overrun / sum estimate * sum overrn' });
     // @ts-expect-error A rollup's column is one of its rows' own.
-    export const badRollup = sum('task', 'overrn');
+    export const badRollup = rollup.sum('task', 'overrn');
     // @ts-expect-error A sum reads numbers.
-    export const textRollup = sum('task', 'subject');
+    export const textRollup = rollup.sum('task', 'subject');
+    // @ts-expect-error An avg reads numbers.
+    export const textMean = rollup.avg('task', 'subject');
+    export const goodMean = rollup.avg('task', 'overrun');
     // @ts-expect-error A rollup reads a column of its own rows, not a path.
-    export const pathRollup = sum('task', 'order_id.age');
+    export const pathRollup = rollup.sum('task', 'order_id.age');
     // @ts-expect-error A section's when is read against the page's base.
     export const badSection = page('work_order', [fields(['reference'], { when: 'is_lat = true' })]);
     // @ts-expect-error A custom section's rows are read against their own table.
@@ -610,8 +613,8 @@ test('the strings whose table is their place are read too, against a generated r
   `;
   assert.equal(check(source), '');
 
-  const messages = check(`import { action, defineFeature, sum } from '@mistriwork/mistri/app';
-    export const a = sum('task', 'subject');
+  const messages = check(`import { action, defineFeature, rollup } from '@mistriwork/mistri/app';
+    export const a = rollup.sum('task', 'subject');
     export const b = defineFeature({ id: 'g', resources: { task: { actions: { finish: action('Finish', { set: { done: true }, when: 'overrn > 0' }) } } } });
   `);
   assert.match(messages, /subject is text; a sum reads numbers/);

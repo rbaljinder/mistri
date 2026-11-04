@@ -16,7 +16,7 @@ import { presentationColumns } from './columnPresentation.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { formatNumber } from '../locale.js';
-import { inAppPage, PageRenderContext, usePageApi, type SlotProps } from './pageContext.js';
+import { inAppPage, PageRenderContext, spoken, usePageApi, type SlotProps } from './pageContext.js';
 import { Loading, SectionBox } from './PageSectionBox.js';
 import { dressFor, groupLabel, withUnit, type DisplayRule } from './valueModel.js';
 import { barShare, CurrencyFigures, EXACT, figureSayer, namedGroups, orderGroups, sayer } from './dashboardModel.js';
@@ -94,7 +94,7 @@ export function MetricSection({ section, plan }: SlotProps) {
         body={
           <button type="button" className="page-metric-value" disabled tabIndex={-1} aria-hidden="true" style={{ visibility: 'hidden' }}>
             <span className="metric-number">0</span>
-            <span className="metric-of">{section.title ? '' : section.from}</span>
+            <span className="metric-of">{section.title ? '' : spoken(section.from ?? '')}</span>
           </button>
         }
       />
@@ -165,7 +165,7 @@ export function MetricSection({ section, plan }: SlotProps) {
           onClick={open ?? undefined}
         >
           <span className="metric-number">{said}</span>
-          <span className="metric-of">{section.title ? '' : section.from}</span>
+          <span className="metric-of">{section.title ? '' : spoken(section.from ?? '')}</span>
         </button>
       }
     />
@@ -184,6 +184,7 @@ export function BreakdownSection({ section, plan, base }: SlotProps) {
     enabled: !plan.empty && Boolean(plan.breakdown),
     staleTime: 0,
   });
+  if (section.emptyMode === 'hide' && plan.empty) return null;
   if (plan.empty) {
     /* Said as the reader would: which reference is unset, not a column's name. */
     const reference = section.of
@@ -210,6 +211,7 @@ export function BreakdownSection({ section, plan, base }: SlotProps) {
     section.by ?? '',
   )?.allowed;
   const rows = orderGroups(got.rows, keyName, countName, allowed);
+  if (!rows.length && section.emptyMode === 'hide') return null;
   // A table's name ("campaign_member") is the Workbench's vocabulary, not an
   // App reader's; a breakdown's title names groups, so it cannot be reused.
   if (!rows.length)
@@ -307,6 +309,8 @@ export function ChartSection({ section, plan, base }: SlotProps) {
     enabled: !plan.empty && Boolean(plan.breakdown),
     staleTime: 0,
   });
+  /* `empty: 'hide'`: a chart with nothing to draw leaves the page, as a related list does. */
+  if (section.emptyMode === 'hide' && plan.empty) return null;
   if (plan.empty) {
     const reference = section.of
       ? inAppPage()
@@ -328,6 +332,7 @@ export function ChartSection({ section, plan, base }: SlotProps) {
         broken={(got && 'errors' in got ? got.errors[0]?.message : undefined) ?? sayCopy('thisChartCouldNotBeRead')}
       />
     );
+  if (section.emptyMode === 'hide' && !got.rows.length) return null;
   const from = section.from ?? '';
   /* Each key's column, its period dropped: "month issued_on" is labelled as issued_on is. */
   const [first = '', second = ''] = (section.by ?? '').split(',').map((key) => key.trim().split(/\s+/).pop() ?? '');
@@ -369,6 +374,8 @@ export function ChartSection({ section, plan, base }: SlotProps) {
           shape={section.shape}
           limit={section.limit}
           target={section.target}
+          curve={section.curve}
+          total={section.total}
           height={section.height}
           say={say}
           label={namedGroups(got, got.columns[0], firstLabel.say)}

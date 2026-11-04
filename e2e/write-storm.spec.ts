@@ -1,3 +1,4 @@
+import { BUILD_MS, FIXTURE_MS } from './support/budgets';
 /**
  * What one write costs a tenant's page, with its database 25 ms away.
  *
@@ -124,11 +125,11 @@ async function settle(asked: Asked[], quiet = 2500, timeout = 60_000): Promise<v
 
 test.describe('a write on a tenant record page, 25 ms from its database', () => {
   test.skip(IGNITION_SKIP !== false, String(IGNITION_SKIP));
-  test.setTimeout(240_000);
+  test.setTimeout(BUILD_MS);
   let app: IgnitionFixture;
   let proxy: LatencyProxy;
   test.beforeAll(async () => {
-    test.setTimeout(180_000);
+    test.setTimeout(FIXTURE_MS);
     proxy = await startLatencyProxy(process.env.TABLEWALK_TEST_PG!, 25);
     app = await startIgnition({ live: true, route: (url) => proxy.route(url), env: { MISTRI_AHEAD_REPORT: '1' } });
   });

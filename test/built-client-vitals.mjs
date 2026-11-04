@@ -306,7 +306,7 @@ const APPS = {
     const fixture = await startIgnition({
       directory: join(scratch, 'ignition'),
       entry: ['--conditions=mistri-built', built.mistri],
-      env: { MISTRI_TEST_AUTH_LIMITS: 'off' },
+      env: { MISTRI_TEST_AUTH_LIMITS: 'off', NODE_ENV: 'test' },
     });
     return { origin: fixture.origin, stop: fixture.stop, fixture };
   },

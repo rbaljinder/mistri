@@ -1,7 +1,8 @@
 # Publish on a version tag.
 #
 # Does nothing until a tag matching `v*` is pushed, so it is safe to sit here
-# unused. `npm version patch && git push --follow-tags` is what starts it.
+# unused. `node scripts/bump-version.mjs <version>` makes the bump (every package, the pins, the lockfile, the
+# changelog); the tag is pushed on the merged commit on main, and that is what starts it.
 #
 # The shape of this file is the whole safety argument, so it is worth stating:
 #
@@ -26,8 +27,8 @@ on:
   push:
     tags: ['v*']
 
-# One release at a time, and never cancelled mid-flight: interrupting
-# `npm publish --workspaces` between two packages is a half-release.
+# One release at a time, and never cancelled mid-flight: interrupting the publish between two packages is a
+# half-release (which running the job again finishes: scripts/publish-packages.mjs skips what is already live).
 concurrency:
   group: release
   cancel-in-progress: false
@@ -58,20 +59,12 @@ jobs:
           done
           echo "releasing $tag"
 
-      - name: This version is not already on npm
+      - name: This version is not already all on npm
         run: |
-          # Every package is published at the release's version, so none of
-          # them may have it already.
-          for manifest in packages/*/package.json; do
-            name="$(node -p "require('./$manifest').name")"
-            ver="$(node -p "require('./$manifest').version")"
-            code="$(curl -fsS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$name/$ver" || true)"
-            if [ "$code" = "200" ]; then
-              echo "::error::$name@$ver is already published — a version is permanent, so bump it" >&2
-              exit 1
-            fi
-            echo "$name@$ver is unpublished (registry said $code)"
-          done
+          # A version is permanent, so a release whose every package is live has nothing to publish: bump it. One that
+          # is only partly live is a publish that stopped halfway, and running the job again finishes it, so that is
+          # a warning (scripts/publish-packages.mjs, which asks `npm view` for each package).
+          node scripts/publish-packages.mjs --check
 
       - run: npm ci
 
@@ -143,13 +136,14 @@ jobs:
       # auth error rather than publishing — for each of the six packages (create-mistri
       # and @mistriwork/cloudflare among them: each trusted publisher is configured separately).
       #
-      # Every package, in dependency order (npm walks `workspaces` as listed:
-      # engine, ui, kit, mistri, create-mistri, cloudflare): a package depends
-      # on those before it at exactly this version (mistri on engine, kit and
-      # ui; create-mistri on mistri), so publishing one alone installs
-      # nothing.
+      # Every package, one at a time, in dependency order (engine, ui, kit,
+      # mistri, create-mistri, cloudflare): a package depends on those before
+      # it at exactly this version (mistri on engine, kit and ui; create-mistri
+      # on mistri), so publishing one alone installs nothing. `npm publish
+      # --workspaces` is not atomic, so a failure after the second package left
+      # a release the next run refused; the script skips any name@version the
+      # registry already has, and running this job again publishes the rest.
       #
-      # A prerelease (1.0.0-rc.2) goes out under `next`, never `latest`: npm refuses one without a --tag.
-      - run: |
-          tag="$(node -p "require('./package.json').version.includes('-') ? 'next' : 'latest'")"
-          npm publish --workspaces --access public --tag "$tag"
+      # A prerelease (1.0.0-rc.2) goes out under `next`, never `latest`: npm refuses one without a --tag, and the
+      # script says it.
+      - run: node scripts/publish-packages.mjs

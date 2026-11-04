@@ -112,3 +112,32 @@ test('named as the page is, says no name of its own, and still opens from its fo
   await userEvent.click(screen.getByRole('button', { name: 'View review file' }));
   expect(opened[0]).toEqual(['visit', { id: 7 }, 'AL-1006']);
 });
+
+test('a card over a link row is named by, and opens, the record the link points at', async () => {
+  const conversation: TableMeta = { ...visit, id: 'conversation', name: 'conversation' };
+  const link: TableMeta = {
+    ...visit,
+    id: 'ticket_conversation',
+    name: 'ticket_conversation',
+    columns: [
+      { name: 'ticket_id', type: 'INTEGER', nullable: false, primaryKey: false, references: { table: 'ticket', column: 'id' } },
+      { name: 'conversation_id', type: 'INTEGER', nullable: false, primaryKey: false, references: { table: 'conversation', column: 'id' } },
+    ],
+  };
+  render(
+    <CurrentCard
+      table={link}
+      caption="Conversation"
+      row={{ ticket_id: 1, conversation_id: 12 }}
+      columns={['ticket_id', 'conversation_id']}
+      record={{ key: { ticket_id: 1, conversation_id: 12 }, label: 'link' }}
+      opens={{ table: conversation, column: 'conversation_id', key: { id: 12 }, label: 'Billing question', noun: 'conversation' }}
+      title="Billing question"
+      noun="linked conversation"
+      empty={null}
+    />,
+  );
+  expect(document.querySelectorAll('.page-card-fact')).toHaveLength(1);
+  await userEvent.click(screen.getByRole('button', { name: 'View conversation' }));
+  expect(opened).toEqual([['conversation', { id: 12 }, 'Billing question']]);
+});

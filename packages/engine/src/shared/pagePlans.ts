@@ -39,8 +39,8 @@ type HttpPagePlan =
         {
           from: string;
           at: string;
-          show: string;
-          detail?: string;
+          text: string;
+          badge?: string;
           by?: string;
           /** With a `side`: the stream's key columns, and the same read narrowed to the other party's rows. */
           key?: string[];
@@ -116,7 +116,7 @@ export function planPageSections(
             path: stream.path,
             columns: [
               ...new Set(
-                [stream.at, stream.show, stream.detail, stream.by, ...streamMarks(stream), ...keyColumns, reacts].filter((c): c is string =>
+                [stream.at, stream.text, stream.badge, stream.by, ...streamMarks(stream), ...keyColumns, reacts].filter((c): c is string =>
                   Boolean(c),
                 ),
               ),
@@ -134,8 +134,8 @@ export function planPageSections(
           return {
             from: stream.from,
             at: stream.at,
-            show: stream.show,
-            detail: stream.detail,
+            text: stream.text,
+            badge: stream.badge,
             by: stream.by,
             view: built.view,
             empty: built.empty,

@@ -2,6 +2,17 @@
   "note": "The feature-to-test map: each row is a feature, the public names it owns (surface: a prefix of a test/fixtures/public-surface.json entry, as \"dsl: …\", \"cli: …\" or \"package: export …\"; a trailing $ means that name alone) and the tests that exercise it (file, and a title that file holds). test/coverage-map.test.ts fails when a public name has no row, a cited test is gone, a browser row has no spec, a row leans on an example that does not ship, or a row only Lintel covers names a key Lintel no longer spells. unmapped lists the public names no test exercises yet: it may only shrink. risk marks the features the 0.9.2 example retirement put at risk (R1–R14).",
   "rows": [
     {
+      "id": "narrowed-resources",
+      "surface": [
+        "dsl: app: resources.*.query"
+      ],
+      "tests": [
+        {
+          "file": "test/narrowed-resources.test.ts"
+        }
+      ]
+    },
+    {
       "id": "segments",
       "surface": ["dsl: app: resources.*.segments"],
       "tests": [
@@ -1066,6 +1077,8 @@
       "surface": ["cli: flag --no-config"],
       "tests": [{ "file": "test/server-shutdown-cli.test.ts" }, { "file": "test/http-openapi-boot.test.ts" }]
     },
+    { "id": "cli-flag-no-query-check", "surface": ["cli: flag --no-query-check"], "tests": [{ "file": "test/check-queries.test.ts" }] },
+    { "id": "cli-flag-errors", "surface": ["cli: flag --errors"], "tests": [{ "file": "test/observe-cli.test.ts" }] },
     { "id": "cli-flag-no-index-check", "surface": ["cli: flag --no-index-check"], "tests": [{ "file": "test/check-indexes.test.ts" }] },
     { "id": "cli-flag-no-live", "surface": ["cli: flag --no-live"], "tests": [{ "file": "test/live-sync-route.test.ts" }] },
     { "id": "cli-flag-open", "surface": ["cli: flag --open"], "tests": [{ "file": "test/cli-open-defaults.test.ts" }] },
@@ -1209,7 +1222,6 @@
       "id": "decisions",
       "surface": [
         "cli: command decide",
-        "cli: flag --dry",
         "cli: flag --limit",
         "cli: flag --max-cost",
         "cli: flag --max-error",

@@ -248,10 +248,9 @@ export async function readRecordActivityFor(options: {
       ...(to === undefined ? {} : { to }),
       ...(owners ? { owners } : {}),
     });
-    for (const row of read) {
-      const owner = here.find((each) => each.physical === row.resource);
-      if (owner) rows.push({ ...row, from: owner });
-    }
+    /* Each resource over the row's table hears of it: two narrowed resources of one table (appNarrowed.ts) share its
+       log, and which of them the row is a record of is the reader's read below, which stands on their conditions. */
+    for (const row of read) for (const owner of here) if (owner.physical === row.resource) rows.push({ ...row, from: owner });
   }
   // Newest first across stores; within one store, the order the rows were appended.
   rows.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.id - a.id));

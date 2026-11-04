@@ -22,6 +22,8 @@ let suite: Awaited<ReturnType<typeof startConfiguredSuite>>;
 const environment: NodeJS.ProcessEnv = {
   SECRET: 'test-only-suite-oidc-secret-longer-than-thirty-two',
   IDP_SECRET: 'mock-client-secret-0123456789',
+  LIMITS: 'off',
+  MODE: 'test',
 };
 
 before(async () => {
@@ -71,7 +73,7 @@ before(async () => {
         id: 'suite',
         store: './identity.db',
         grants: './grants.db',
-        environment: { BETTER_AUTH_SECRET: 'SECRET', WORKFORCE_SECRET: 'IDP_SECRET' },
+        environment: { BETTER_AUTH_SECRET: 'SECRET', WORKFORCE_SECRET: 'IDP_SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
         providers: ['email', 'oidc:workforce'],
         signUp: 'open',
         services: [

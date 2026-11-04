@@ -532,7 +532,7 @@ export async function runBuild(argv: string[], usage: string): Promise<number> {
           : undefined;
     if (refusal) {
       console.error(
-        `mistri build: ${refusal}. mistri build --app <dir> [--app-entry <file>] [--out <dir>] [--config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--dockerfile <file>]`,
+        `mistri build: ${refusal}. mistri build [--app <dir>] [--app-entry <file>] [--out <dir>] [--config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--dockerfile <file>]`,
       );
       return BUILD_EXIT.couldNotBuild;
     }
@@ -540,7 +540,7 @@ export async function runBuild(argv: string[], usage: string): Promise<number> {
     i++;
   }
   if (!request.app) {
-    console.error('mistri build: --app <dir> names the App to build.');
+    console.error("mistri build: --app <dir> names the App to build, or run it in the App's directory.");
     return BUILD_EXIT.couldNotBuild;
   }
   /* The Dockerfile that runs this same build in its own stage: nothing is built here, so none of the build's

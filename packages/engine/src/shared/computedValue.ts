@@ -128,6 +128,8 @@ export function evaluateComputed(
         const v = read(n.path);
         return v === undefined || v === '' ? null : v;
       }
+      case 'json':
+        return jsonMember(read(n.column), n.keys);
       case 'op': {
         if (n.op === 'and' || n.op === 'or') {
           const l = truth(value(n.left)),
@@ -172,6 +174,25 @@ export function evaluateComputed(
   };
   const result = value(node);
   return result === null && isCondition(node) ? false : result;
+}
+
+/* A JSON member as the statement reads it (computed.ts jsonMember): text, a yes-or-no as `true`/`false`, an object
+   or an array as its JSON. The column arrives as its text (SQLite) or already read (PostgreSQL's driver). */
+function jsonMember(stored: unknown, keys: readonly string[]): ComputedValue {
+  let at: unknown = stored;
+  if (typeof at === 'string') {
+    try {
+      at = JSON.parse(at);
+    } catch {
+      return null;
+    }
+  }
+  for (const key of keys) {
+    if (at === null || typeof at !== 'object' || Array.isArray(at) || !Object.hasOwn(at, key)) return null;
+    at = (at as Record<string, unknown>)[key];
+  }
+  if (at === null || at === undefined) return null;
+  return typeof at === 'object' ? JSON.stringify(at) : String(at);
 }
 
 /**

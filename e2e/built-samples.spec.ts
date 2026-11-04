@@ -1,6 +1,7 @@
 import { expect, test } from './support/harness';
 import { FORECOURT_STAFF, startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { FIXTURE_MS, LONG_MS } from './support/budgets';
 
 /**
  * Thread and Forecourt served from `mistri build` output instead of their
@@ -12,14 +13,14 @@ for (const name of ['thread', 'forecourt'] as const) {
   test.describe(`${name}, served from its build`, () => {
     let sample: Awaited<ReturnType<typeof startSample>>;
     // The build typechecks the App first, and Forecourt's seed draws its photos.
-    test.setTimeout(120_000);
+    test.setTimeout(LONG_MS);
     /* The hook needs its own budget: `test.setTimeout` in describe scope reaches
        the tests, never the hooks, so the build ran on the config's 40 s while
        this line claimed to give it two minutes. It only started failing when a
        second worker began competing for the CPU the build wants — the parallel
        lane exposed it rather than caused it. */
     test.beforeAll(async () => {
-      test.setTimeout(180_000);
+      test.setTimeout(FIXTURE_MS);
       sample = await startSample(name, { built: true });
     });
     test.afterAll(async () => {

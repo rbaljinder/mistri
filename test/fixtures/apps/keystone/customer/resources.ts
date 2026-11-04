@@ -1,4 +1,4 @@
-import { action, count, sum } from '@mistriwork/mistri/app';
+import { action, rollup } from '@mistriwork/mistri/app';
 import type { Resources } from './mistri-schema.d.ts';
 
 /* What the servicing App says about each table, once. Every row here is the
@@ -55,9 +55,9 @@ export const resources = {
        it out. A ceiling here would be the tidier place, but a command's
        target may carry no resource-level field rule yet. */
     rollups: {
-      paid_to_date: sum('payment', 'amount', { whose: 'loan_id', query: 'status = posted' }),
-      payments_left: count('installment', { whose: 'loan_id', query: 'status = upcoming or status = due or status = past_due' }),
-      payments_made: count('installment', { whose: 'loan_id', query: 'status = paid' }),
+      paid_to_date: rollup.sum('payment', 'amount', { whose: 'loan_id', query: 'status = posted' }),
+      payments_left: rollup.count('installment', { whose: 'loan_id', query: 'status = upcoming or status = due or status = past_due' }),
+      payments_made: rollup.count('installment', { whose: 'loan_id', query: 'status = paid' }),
     },
     display: {
       principal: usd,

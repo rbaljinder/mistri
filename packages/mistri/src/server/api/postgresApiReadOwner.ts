@@ -12,7 +12,7 @@ import { throwIfCancelled, withCancellation } from '@mistriwork/engine/adapters/
 import type { AppHost, LoadedApp } from '../app/apps.js';
 import { appProblems } from '../app/apps.js';
 import { captureTenantData } from '@mistriwork/engine/server/evidence.js';
-import { homeSourceOf, physicalBindings, resolveAppAccess } from '../../shared/app.js';
+import { declaredDates, declaredReferences, homeSourceOf, narrowedBindings, physicalBindings, resolveAppAccess } from '../../shared/app.js';
 import { appSourceConnections, loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { mapOpenedAppRuntimeResources } from '../app/appRuntimeResourceMapping.js';
 import { authorizeResources } from '../app/appAccess.js';
@@ -188,6 +188,9 @@ export async function createPostgresApiReadOwner(
                   adapter: postgresSnapshotReads(read),
                   schema: read.schema,
                   resources: physicalBindings(app, source || undefined),
+                  references: declaredReferences(app, source || undefined),
+                  dates: declaredDates(app, source || undefined),
+                  narrowed: narrowedBindings(app, source || undefined),
                   writable: false,
                 },
               ],

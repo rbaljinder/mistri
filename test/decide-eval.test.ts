@@ -3,7 +3,7 @@
  * calibration, what the thresholds would have done), `evaluateDecision` in an
  * App's own tests, and `mistri decide eval` on a real database — the estimate
  * it refuses to spend without `--yes` or above `--max-cost`, the one record
- * `--dry` shows, and the pin `--pin` writes only when the applied share was
+ * `--dry-run` shows, and the pin `--pin` writes only when the applied share was
  * right often enough. Every answer is scripted: no network.
  */
 import assert from 'node:assert/strict';
@@ -104,45 +104,48 @@ test('evaluateDecision measures a decision in an App test, against a scripted mo
   );
 });
 
-test('mistri decide eval: an estimate first, one record on --dry, and a pin only when it was earned', { timeout: 240_000 }, async (t) => {
-  const workspace = await createTestWorkspace();
-  t.after(() => workspace.close());
-  const database = await workspace.database('desk.db', (db) =>
-    db.exec(`
+test(
+  'mistri decide eval: an estimate first, one record on --dry-run, and a pin only when it was earned',
+  { timeout: 240_000 },
+  async (t) => {
+    const workspace = await createTestWorkspace();
+    t.after(() => workspace.close());
+    const database = await workspace.database('desk.db', (db) =>
+      db.exec(`
       CREATE TABLE incident (id INTEGER PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'new', category TEXT);
       INSERT INTO incident (id, title, status, category) VALUES
         (1, 'VPN down for everyone', 'closed', 'network'), (2, 'Printer jams on floor 3', 'closed', 'printer'),
         (3, 'Laptop is slow', 'closed', 'hardware'), (4, 'Wifi drops', 'closed', 'network'), (5, 'New one', 'new', NULL);
     `),
-  );
-  await workspace.write('app/app.json', {
-    id: 'desk',
-    name: 'Desk',
-    sources: { desk: { connection: 'desk' } },
-    resources: { incident: { access: 'write', actions: { categorize: { label: 'Categorize', command: 'categorize' } } } },
-    auth: {
-      providers: ['email'],
-      store: workspace.path('auth.db'),
-      roles: { automation: { read: true, commands: ['categorize'] } },
-    },
-    views: { incidents: { kind: 'list', from: 'incident' } },
-    home: 'incidents',
-  });
-  const commandsFile = workspace.path('app/commands.mjs');
-  writeFileSync(
-    commandsFile,
-    `import { defineCommand, defineCommands, field } from ${src('packages/mistri/src/server/commands.ts')};
+    );
+    await workspace.write('app/app.json', {
+      id: 'desk',
+      name: 'Desk',
+      sources: { desk: { connection: 'desk' } },
+      resources: { incident: { access: 'write', actions: { categorize: { label: 'Categorize', command: 'categorize' } } } },
+      auth: {
+        providers: ['email'],
+        store: workspace.path('auth.db'),
+        roles: { automation: { read: true, commands: ['categorize'] } },
+      },
+      views: { incidents: { kind: 'list', from: 'incident' } },
+      home: 'incidents',
+    });
+    const commandsFile = workspace.path('app/commands.mjs');
+    writeFileSync(
+      commandsFile,
+      `import { defineCommand, defineCommands, field } from ${src('packages/mistri/src/server/commands.ts')};
 export default defineCommands({
   categorize: defineCommand({ source: 'desk', target: 'incident',
     input: { category: field.choice(['network', 'hardware', 'printer']) },
     async handle({ db, record }, input) { await db.incident.update(record, { category: input.category }); } }),
 });
 `,
-  );
-  const jobsFile = workspace.path('app/jobs.mjs');
-  writeFileSync(
-    jobsFile,
-    `import { defineDecision, defineDecisions, defineJobs } from ${src('packages/mistri/src/server/jobs.ts')};
+    );
+    const jobsFile = workspace.path('app/jobs.mjs');
+    writeFileSync(
+      jobsFile,
+      `import { defineDecision, defineDecisions, defineJobs } from ${src('packages/mistri/src/server/jobs.ts')};
 export default defineJobs({}, {
   principals: { triage: { roles: ['automation'] } },
   decisions: defineDecisions({
@@ -154,97 +157,98 @@ export default defineJobs({}, {
   }),
 });
 `,
-  );
-  const config = workspace.path('mistri.json');
-  writeFileSync(config, JSON.stringify({ connections: [{ name: 'desk', url: database, writable: true }] }));
-  const script = (laptop: string) => {
-    const path = workspace.path(`script-${laptop}.json`);
-    writeFileSync(
-      path,
-      JSON.stringify({
-        model: 'jev-1',
-        modelVersion: 'jev-1-2026-10',
-        costMicros: 2_000,
-        decisions: {
-          triageCategory: [
-            { when: { title: 'VPN' }, answer: 'network', probability: 0.97 },
-            { when: { title: 'Printer' }, answer: 'printer', probability: 0.95 },
-            { when: { title: 'Laptop' }, answer: laptop, probability: 0.92 },
-            { answer: 'network', probability: 0.6 },
-          ],
-        },
-      }),
     );
-    return path;
-  };
-  const evalCli = (extra: string[], laptop = 'hardware') =>
-    runCli(
-      [
-        'decide',
-        'eval',
-        'triageCategory',
-        '--app',
-        workspace.path('app'),
-        '--jobs',
-        jobsFile,
-        '--commands',
-        commandsFile,
-        '--config',
-        config,
-        ...extra,
-      ],
-      childEnv({ XDG_CONFIG_HOME: workspace.path('config'), MISTRI_DECIDE_SCRIPT: script(laptop) }),
-    );
-  const lockPath = workspace.path('app/decisions.lock');
+    const config = workspace.path('mistri.json');
+    writeFileSync(config, JSON.stringify({ connections: [{ name: 'desk', url: database, writable: true }] }));
+    const script = (laptop: string) => {
+      const path = workspace.path(`script-${laptop}.json`);
+      writeFileSync(
+        path,
+        JSON.stringify({
+          model: 'jev-1',
+          modelVersion: 'jev-1-2026-10',
+          costMicros: 2_000,
+          decisions: {
+            triageCategory: [
+              { when: { title: 'VPN' }, answer: 'network', probability: 0.97 },
+              { when: { title: 'Printer' }, answer: 'printer', probability: 0.95 },
+              { when: { title: 'Laptop' }, answer: laptop, probability: 0.92 },
+              { answer: 'network', probability: 0.6 },
+            ],
+          },
+        }),
+      );
+      return path;
+    };
+    const evalCli = (extra: string[], laptop = 'hardware') =>
+      runCli(
+        [
+          'decide',
+          'eval',
+          'triageCategory',
+          '--app',
+          workspace.path('app'),
+          '--jobs',
+          jobsFile,
+          '--commands',
+          commandsFile,
+          '--config',
+          config,
+          ...extra,
+        ],
+        childEnv({ XDG_CONFIG_HOME: workspace.path('config'), MISTRI_DECIDE_SCRIPT: script(laptop) }),
+      );
+    const lockPath = workspace.path('app/decisions.lock');
 
-  // Without --yes: the count and a price that errs high, and nothing asked.
-  const unspent = await evalCli([]);
-  assert.equal(unspent.code, 2, unspent.out + unspent.err);
-  assert.match(unspent.out, /4 records to ask jev, about \$0\.01 at most/);
-  assert.match(unspent.out, /run again with --yes/);
-  assert.match(unspent.out, /4 records are asked about as they are now/, 'no history: the leak is said, not hidden');
+    // Without --yes: the count and a price that errs high, and nothing asked.
+    const unspent = await evalCli([]);
+    assert.equal(unspent.code, 2, unspent.out + unspent.err);
+    assert.match(unspent.out, /4 records to ask jev, about \$0\.01 at most/);
+    assert.match(unspent.out, /run again with --yes/);
+    assert.match(unspent.out, /4 records are asked about as they are now/, 'no history: the leak is said, not hidden');
 
-  const over = await evalCli(['--yes', '--max-cost', '0.001']);
-  assert.equal(over.code, 2, over.out + over.err);
-  assert.match(over.out, /above --max-cost/);
+    const over = await evalCli(['--yes', '--max-cost', '0.001']);
+    assert.equal(over.code, 2, over.out + over.err);
+    assert.match(over.out, /above --max-cost/);
 
-  const dry = await evalCli(['--dry']);
-  assert.equal(dry.code, 0, dry.out + dry.err);
-  assert.match(dry.out, /nothing is sent/);
-  assert.match(dry.out, /"question": "Which category is this incident\?"/);
-  assert.match(dry.out, /"title": "VPN down for everyone"/);
+    const dry = await evalCli(['--dry-run']);
+    assert.equal(dry.code, 0, dry.out + dry.err);
+    assert.match(dry.out, /nothing is sent/);
+    assert.match(dry.out, /"question": "Which category is this incident\?"/);
+    assert.match(dry.out, /"title": "VPN down for everyone"/);
 
-  // The laptop answered wrong and sure of it: a third of what would apply was wrong.
-  const wrong = await evalCli(['--yes', '--pin'], 'printer');
-  assert.equal(wrong.code, 3, wrong.out + wrong.err);
-  assert.match(wrong.out, /Not pinned: the applied share was wrong 33\.3% of the time/);
-  assert.equal(existsSync(lockPath), false, 'nothing is written when the pin is not earned');
+    // The laptop answered wrong and sure of it: a third of what would apply was wrong.
+    const wrong = await evalCli(['--yes', '--pin'], 'printer');
+    assert.equal(wrong.code, 3, wrong.out + wrong.err);
+    assert.match(wrong.out, /Not pinned: the applied share was wrong 33\.3% of the time/);
+    assert.equal(existsSync(lockPath), false, 'nothing is written when the pin is not earned');
 
-  const report = workspace.path('report.json');
-  const earned = await evalCli(['--yes', '--pin', '--json', report]);
-  assert.equal(earned.code, 0, earned.out + earned.err);
-  assert.match(earned.out, /Pinned jev jev-1-2026-10 for "triageCategory"/);
-  const evaluation = JSON.parse(readFileSync(report, 'utf8'));
-  assert.deepEqual([evaluation.n, evaluation.accuracy, evaluation.costMicros], [4, 1, 8_000]);
-  const pins = readDecisionLock(readFileSync(lockPath, 'utf8')).get('triageCategory')?.pins ?? [];
-  assert.deepEqual(
-    pins.map((pin) => [pin.provider, pin.modelVersion, pin.n, pin.error]),
-    [['jev', 'jev-1-2026-10', 3, 0]],
-  );
-  // The eval never applied, and asked nothing about the record with no settled answer.
-  const db = new DatabaseSync(database, { readOnly: true });
-  try {
+    const report = workspace.path('report.json');
+    const earned = await evalCli(['--yes', '--pin', '--json', report]);
+    assert.equal(earned.code, 0, earned.out + earned.err);
+    assert.match(earned.out, /Pinned jev jev-1-2026-10 for "triageCategory"/);
+    const evaluation = JSON.parse(readFileSync(report, 'utf8'));
+    assert.deepEqual([evaluation.n, evaluation.accuracy, evaluation.costMicros], [4, 1, 8_000]);
+    const pins = readDecisionLock(readFileSync(lockPath, 'utf8')).get('triageCategory')?.pins ?? [];
     assert.deepEqual(
-      db
-        .prepare('SELECT category FROM incident ORDER BY id')
-        .all()
-        .map((row) => row.category),
-      ['network', 'printer', 'hardware', 'network', null],
+      pins.map((pin) => [pin.provider, pin.modelVersion, pin.n, pin.error]),
+      [['jev', 'jev-1-2026-10', 3, 0]],
     );
-  } finally {
-    db.close();
-  }
-});
+    // The eval never applied, and asked nothing about the record with no settled answer.
+    const db = new DatabaseSync(database, { readOnly: true });
+    try {
+      assert.deepEqual(
+        db
+          .prepare('SELECT category FROM incident ORDER BY id')
+          .all()
+          .map((row) => row.category),
+        ['network', 'printer', 'hardware', 'network', null],
+      );
+    } finally {
+      db.close();
+    }
+  },
+);
 
 test('mistri decide eval on a row-policy App reads as its service, through the policy it names', { timeout: 240_000 }, async (t) => {
   const workspace = await createTestWorkspace();
@@ -254,11 +258,11 @@ test('mistri decide eval on a row-policy App reads as its service, through the p
   const env = { ...childEnv(), LINTEL_MAIL_SECRET: 'decide-eval-mail-secret', PAYMENT_CALLBACK_SECRET: 'decide-eval-callback-secret' };
   const args = ['decide', 'eval', 'routeRepair', '--app', 'examples/apps/lintel', '--jobs', 'examples/apps/lintel/jobs.ts'];
   // Without the policy its reads would be the whole database, which the service never sees.
-  const refused = await runCli([...args, '--config', `${file}.json`, '--dry'], env);
+  const refused = await runCli([...args, '--config', `${file}.json`, '--dry-run'], env);
   assert.equal(refused.code, 1, refused.out + refused.err);
   assert.match(refused.err, /reads its rows under a policy: name it with --policy/);
 
-  const dry = await runCli([...args, '--policy', 'examples/apps/lintel/policy.ts', '--config', `${file}.json`, '--dry'], env);
+  const dry = await runCli([...args, '--policy', 'examples/apps/lintel/policy.ts', '--config', `${file}.json`, '--dry-run'], env);
   assert.equal(dry.code, 0, dry.out + dry.err);
   const sent = JSON.parse(dry.out.slice(dry.out.indexOf('{'))) as {
     inputs: Record<string, unknown>;

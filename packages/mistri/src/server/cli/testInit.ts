@@ -1,5 +1,5 @@
 /**
- * `mistri test init [<app-dir>]`: a starter suite for an App, runnable
+ * `mistri test init [--app <dir>]`: a starter suite for an App, runnable
  * with `node --test`, that uses nothing but `@mistriwork/mistri/testing`.
  *
  * An agent that built an App wrote its own test plumbing — request shapes it
@@ -32,6 +32,7 @@
  * that is there unless --force, and prints each file it wrote.
  */
 import { startupReport } from '@mistriwork/engine/shared/refusal.js';
+import { appDirectoryWord } from '@mistriwork/engine/server/config/profile.js';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -79,7 +80,7 @@ async function nodeTypesFor(dir: string): Promise<string[]> {
   return said;
 }
 
-const USAGE = 'mistri test init [<app-dir>] [--config <mistri.json>] [--force]';
+const USAGE = 'mistri test init [--app <dir>] [--config <mistri.json>] [--force]';
 
 class Refusal extends Error {}
 
@@ -644,11 +645,15 @@ function readFlags(argv: string[]) {
     else if (arg === '--config') {
       config = rest[++i];
       if (!config || config.startsWith('-')) throw new Refusal("--config needs the mistri.json that names the App's database.");
+    } else if (arg === '--app') {
+      if (dir !== undefined) throw new Refusal(`--app may be supplied only once. ${USAGE}`);
+      dir = rest[++i];
+      if (!dir || dir.startsWith('-')) throw new Refusal(`--app needs the App's directory. ${USAGE}`);
     } else if (arg.startsWith('-')) throw new Refusal(`unknown option "${arg}". ${USAGE}`);
-    else if (dir === undefined) dir = arg;
-    else throw new Refusal(`one App directory, not "${dir}" and "${arg}". ${USAGE}`);
+    else throw new Refusal(appDirectoryWord('mistri test init', arg) ?? `unexpected "${arg}": the App is named with --app. ${USAGE}`);
   }
-  return { dir: resolve(dir ?? '.'), config, force };
+  if (dir === undefined) throw new Refusal(`--app <dir> names the App to write the suite into. ${USAGE}`);
+  return { dir: resolve(dir), config, force };
 }
 
 export async function runTestCommand(argv: string[]): Promise<number> {

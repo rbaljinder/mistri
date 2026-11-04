@@ -1,3 +1,4 @@
+import { BUILD_MS, FIXTURE_MS, LONG_MS } from './support/budgets';
 /**
  * What a tenant App says, on the sample that is one: its records by their
  * names, never their opaque composite keys, its tabs by their names, the
@@ -31,11 +32,11 @@ const keysOnPage = async (page: Page) => {
 
 test.describe('Ignition says names', () => {
   test.skip(IGNITION_SKIP !== false, String(IGNITION_SKIP));
-  test.setTimeout(120_000);
+  test.setTimeout(LONG_MS);
   let app: IgnitionFixture;
   test.beforeAll(async () => {
     // Two databases seeded and a server started: the setting above times the tests, not this hook (Playwright).
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     app = await startIgnition();
   });
   test.afterAll(async () => {
@@ -143,7 +144,7 @@ test.describe('Ignition says names', () => {
   /* `mistri shot` on a tenant App: a fresh account in shot's own store,
      granted the role in the context named, chooses that context in every tab. */
   test('shot signs in to a dealership, or to the lender, and shoots the rooms of that realm', async () => {
-    test.setTimeout(240_000);
+    test.setTimeout(BUILD_MS);
     const directory = mkdtempSync(join(tmpdir(), 'mistri-ignition-shot-'));
     const reader = join(directory, 'real-config');
     try {

@@ -29,7 +29,7 @@ Each write of a line moves `part.on_hand`:
 
 Use it for a stored balance that must never go below zero. It applies on every door: Save, a list cell, an import, the App API, MCP and a command's own writes. Writing the line is the whole grant, so no role needs write access to `on_hand`.
 
-For a figure you only read, such as units used so far, use a rollup (`sum('work_order_part', 'quantity')`) and store nothing.
+For a figure you only read, such as units used so far, use a rollup (`rollup.sum('work_order_part', 'quantity')`) and store nothing.
 
 ## Options
 

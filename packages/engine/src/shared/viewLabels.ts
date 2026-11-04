@@ -19,7 +19,7 @@ import {
   type ResolvedPath,
   type ViewDef,
 } from './viewPaths.js';
-import { LABEL_SEGMENT, labelPrefix, parseLabelTemplate } from './recordLabel.js';
+import { LABEL_SEGMENT, labelPrefix, parseLabelTemplate, type LabelField } from './recordLabel.js';
 import { MASK } from './model.js';
 import { rollupColumnMeta, type ComputedPath, type Rollup } from './rollups.js';
 import { compileComputed, computedColumnMeta, type ComputedPath as ExpressionPath, type ValueKind } from './computed.js';
@@ -409,22 +409,27 @@ export function viewPaths(schema: DatabaseSchema, view: ViewDef, plan: JoinPlan,
       style.concat(
         parts.map((part) => {
           if ('text' in part) return literal(part.text);
-          const value = style.text(plain(at(prefix, part.path)));
-          /* A masked column says its placeholder in the name too, computed here
-         like the rest of it, so no list, picker or breadcrumb reads the value. */
-          if (part.mask?.prefix) {
-            return `CASE WHEN SUBSTR(${value}, 1, ${[...part.mask.prefix].length}) = ${literal(part.mask.prefix)} THEN ${literal(part.mask.prefix + MASK)} ELSE COALESCE(${value}, '') END`;
-          }
-          if (part.mask) return `CASE WHEN ${value} IS NULL THEN '' ELSE ${literal(MASK)} END`;
-          /* A stored value said as its display rule's word, as a cell says it:
-         the words are the catalog's, held to what every engine reads alike. */
-          if (part.words) {
-            const cases = Object.entries(part.words)
-              .map(([stored, word]) => `WHEN ${literal(stored)} THEN ${literal(word)}`)
-              .join(' ');
-            return `CASE ${value} ${cases} ELSE COALESCE(${value}, '') END`;
-          }
-          return `COALESCE(${value}, '')`;
+          const one = (field: LabelField): string => {
+            const value = style.text(plain(at(prefix, field.path)));
+            /* A masked column says its placeholder in the name too, computed here
+               like the rest of it, so no list, picker or breadcrumb reads the value. */
+            if (field.mask?.prefix) {
+              return `CASE WHEN SUBSTR(${value}, 1, ${[...field.mask.prefix].length}) = ${literal(field.mask.prefix)} THEN ${literal(field.mask.prefix + MASK)} ELSE COALESCE(${value}, '') END`;
+            }
+            if (field.mask) return `CASE WHEN ${value} IS NULL THEN '' ELSE ${literal(MASK)} END`;
+            /* A stored value said as its display rule's word, as a cell says it:
+               the words are the catalog's, held to what every engine reads alike. */
+            if (field.words) {
+              const cases = Object.entries(field.words)
+                .map(([stored, word]) => `WHEN ${literal(stored)} THEN ${literal(word)}`)
+                .join(' ');
+              return `CASE ${value} ${cases} ELSE COALESCE(${value}, '') END`;
+            }
+            return `COALESCE(${value}, '')`;
+          };
+          /* A fallback chain is its first alternative with a value: each said as it would alone, an empty text
+             counting as none, so a blank nickname gives way to the name behind it. */
+          return part.or ? `COALESCE(${[part, ...part.or].map((field) => `NULLIF(${one(field)}, '')`).join(', ')}, '')` : one(part);
         }),
       ),
     );

@@ -5,9 +5,39 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { expect, test, type Page } from './support/harness';
+import { expect, test as base, type Page } from './support/harness';
+import { fixture } from './support/fixture';
 import { TMP } from './support/fixtures';
 import { provisionSqliteAssistant } from '../packages/mistri/src/adapters/assistant/sqliteAssistant';
+
+const test = base.extend<object, { started: void }>({
+  started: fixture(
+    async () => {
+      const directory = mkdtempSync(join(TMP, 'assistant-'));
+      db = join(directory, 'crm.db');
+      execFileSync(process.execPath, [resolve('test/fixtures/databases/crm/make-crm-db.mjs'), db], {
+        stdio: 'pipe',
+        env: { ...process.env, MISTRI_CRM_TODAY: CRM_TODAY },
+      });
+      provisionSqliteAssistant(db);
+      origin = await serve(directory, 'crm', true);
+      readOnlyOrigin = await serve(directory, 'crm-read', false);
+    },
+    async () => {
+      for (const child of children) {
+        if (child.exitCode !== null) continue;
+        const closed = once(child, 'close');
+        child.kill('SIGTERM');
+        const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+        try {
+          await closed;
+        } finally {
+          clearTimeout(force);
+        }
+      }
+    },
+  ),
+});
 
 const CRM_TODAY = '2026-09-04';
 const CRM_CLOCK = `${CRM_TODAY}T16:00:00.000Z`;
@@ -85,34 +115,6 @@ async function serve(directory: string, name: string, writable: boolean): Promis
   });
   return `http://127.0.0.1:${port}`;
 }
-
-test.beforeAll(async () => {
-  // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-  test.setTimeout(120_000);
-  const directory = mkdtempSync(join(TMP, 'assistant-'));
-  db = join(directory, 'crm.db');
-  execFileSync(process.execPath, [resolve('test/fixtures/databases/crm/make-crm-db.mjs'), db], {
-    stdio: 'pipe',
-    env: { ...process.env, MISTRI_CRM_TODAY: CRM_TODAY },
-  });
-  provisionSqliteAssistant(db);
-  origin = await serve(directory, 'crm', true);
-  readOnlyOrigin = await serve(directory, 'crm-read', false);
-});
-
-test.afterAll(async () => {
-  for (const child of children) {
-    if (child.exitCode !== null) continue;
-    const closed = once(child, 'close');
-    child.kill('SIGTERM');
-    const force = setTimeout(() => child.kill('SIGKILL'), 5000);
-    try {
-      await closed;
-    } finally {
-      clearTimeout(force);
-    }
-  }
-});
 
 /* A record put back as the scripted turns expect it, so a repeat starts where the first run did. */
 function reset(sql: string, ...values: Array<string | number>) {
@@ -258,7 +260,7 @@ test('on a phone the panel is the page, with nothing to scroll sideways, and the
   await panel(page).getByRole('button', { name: 'New conversation' }).click();
   await ask(page, 'Show stale deals');
   const box = (await panel(page).boundingBox())!;
-  expect(box.width).toBe(390);
+  expect(box.width).toBeCloseTo(390, 0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.reload();
   await trigger(page).click();

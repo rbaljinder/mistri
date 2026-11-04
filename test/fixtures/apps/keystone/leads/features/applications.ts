@@ -2,7 +2,7 @@ import {
   action,
   appLink,
   card,
-  count,
+  rollup,
   defineFeature,
   fields,
   header,
@@ -79,7 +79,7 @@ export const applications = defineFeature({
         decided_at: { format: 'relative' },
       },
       rollups: {
-        stipulations_open: count('stipulation', { whose: 'application_id', query: 'status = requested' }),
+        stipulations_open: rollup.count('stipulation', { whose: 'application_id', query: 'status = requested' }),
       },
       actions: {
         withdrawApplication: withdrawAction,

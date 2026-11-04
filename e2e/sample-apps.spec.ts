@@ -1,13 +1,14 @@
 import { expect, test } from './support/harness';
 import { startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { FIXTURE_MS } from './support/budgets';
 
 for (const name of ['relay', 'thread'] as const) {
   test.describe(name, () => {
     let sample: Awaited<ReturnType<typeof startSample>>;
     test.beforeAll(async () => {
       // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-      test.setTimeout(120_000);
+      test.setTimeout(FIXTURE_MS);
       sample = await startSample(name);
     });
     test.afterAll(async () => {

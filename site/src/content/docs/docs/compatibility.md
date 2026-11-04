@@ -33,9 +33,9 @@ breaking.
 
 ## Supported environment
 
-Node 24.22.1 or newer (every package's `engines`; CI runs Node 24). Optional peers
+Node 24 or newer (every package's `engines`; CI runs Node 24, and the container image pins a newer patch release for its security fixes: the floor is what mistri needs, not what it ships on). Optional peers
 are bounded to the majors mistri supports: TypeScript 7 (`>=7 <8`),
-React 19, Next.js 14.1 to 16, React Router 6.4 to 7, and TanStack Router 1.
+React 19, Next.js 15.1 to 16 (the first to run React 19; Next 14 runs React 18), React Router 6.4 to 7, and TanStack Router 1.
 A new major of a peer is a mistri release's work to support, not a range you
 widen yourself.
 
@@ -60,6 +60,11 @@ At 1.0 these stay Preview:
 - `mistri deploy` and `@mistriwork/cloudflare`.
 - `roundTrips` in `@mistriwork/mistri/testing`.
 - The triggers a row-policy App names (`resources.<t>.triggers`).
+- What rc.11 to rc.15 added that no more than one sample App uses: timeline reactions, a display rule's `copy`,
+  `timezone`, `whole` and `address`, a metric's `figure`, a list's `group`, a calendar's `span`, a reference's `tree`,
+  the crumb bar's `home` and `top`, the command inputs `field.time`, `field.files`, `field.signature` and `as:
+  'rating'`, `'scan'` and `'color'`, the command aggregates (`count`, `sum`, `avg`, `min`, `max`, `period`), the embed
+  router adapters, and the `check` codes that follow the triggers.
 
 A feature added in a 1.x release may ship as Preview too. The
 [status page](/docs/status/) marks each one in its tables.

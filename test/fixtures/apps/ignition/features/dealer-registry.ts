@@ -1,4 +1,4 @@
-import { action, count, defineFeature, fields, header, listView, metric, navGroup, page, related } from '@mistriwork/mistri/app';
+import { action, rollup, defineFeature, fields, header, listView, metric, navGroup, page, related } from '@mistriwork/mistri/app';
 import type { Feature } from '../mistri-schema.d.ts';
 
 /* The lender's dealer registry: one row per dealership, which is also the
@@ -38,7 +38,7 @@ export const dealerRegistry = defineFeature({
       actions: { rotateIntakeAddress: action('Rotate intake address', { command: 'rotateIntakeAddress' }) },
       // The lender's view across every dealership: what each has with the lender now.
       rollups: {
-        in_flight: count('loan_application', {
+        in_flight: rollup.count('loan_application', {
           whose: 'tenant_id',
           query: 'status != approved and status != declined and status != withdrawn',
         }),

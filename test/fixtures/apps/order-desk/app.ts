@@ -6,7 +6,7 @@
  * to that one spec: two orders, one in dollars and one in yen. Do not grow it
  * to demonstrate a feature; author a fixture beside it, or a public sample.
  */
-import { computed, defineApp, fields, listView, page, related, sum } from '@mistriwork/mistri/app';
+import { computed, defineApp, fields, listView, page, related, rollup } from '@mistriwork/mistri/app';
 import type { App } from './mistri-schema.d.ts';
 
 const money = { format: 'money', minor: true, currency: { column: 'currency' } } as const;
@@ -27,7 +27,7 @@ export default defineApp({
     sales_order: {
       noun: 'order',
       access: 'write',
-      rollups: { subtotal: sum('order_line', 'line_total') },
+      rollups: { subtotal: rollup.sum('order_line', 'line_total') },
       computed: { total: computed.number('subtotal + shipping') },
       display: { shipping: money, subtotal: money, total: money },
       form: {

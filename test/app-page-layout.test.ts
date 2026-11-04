@@ -55,7 +55,7 @@ function refused(body: object): { code: string; message: string } {
 }
 
 const header = { kind: 'header', status: 'status', facts: ['beds'] };
-const thread = { kind: 'timeline', title: 'Conversation', streams: [{ from: 'unit', whose: 'id', at: 'name', show: 'notes' }] };
+const thread = { kind: 'timeline', title: 'Conversation', streams: [{ from: 'unit', whose: 'id', at: 'name', text: 'notes' }] };
 const photos = { kind: 'list', title: 'Photos', from: 'unit', whose: 'id', presentation: 'gallery' };
 const price = { kind: 'headline', show: ['rent'], region: 'aside' };
 const parts = { kind: 'list', title: 'Parts used', from: 'unit', whose: 'id', show: ['name', 'beds'] };

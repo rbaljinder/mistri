@@ -22,7 +22,12 @@ export const LABEL_SEGMENT = '$label';
    `{token|masked}` draws a placeholder for any value, `{token|masked:ENC:}` for a
    value starting with that prefix — a column's `masked` display rule
    reaching the record's name, which is computed in the statement. */
-type LabelPart = { text: string } | { path: string; mask?: { prefix?: string }; words?: Record<string, string> };
+export type LabelField = { path: string; mask?: { prefix?: string }; words?: Record<string, string> };
+/* A field may carry a fallback, `{nickname ?? name ?? company_id.name}`: the first of its paths with a value, an
+   empty text counting as none. `path` is the first; `or` the rest, in order. */
+type LabelPart = { text: string } | (LabelField & { or?: LabelField[] });
+/** The words between a field's alternatives. */
+const FALLBACK = ' ?? ';
 const MASK_MARK = '|masked';
 /* Or its words: `{token|words:…}`, the column's display rule (`values`,
    `humanize`, a vocabulary's words) reaching the name the way it reaches a
@@ -64,22 +69,16 @@ export function parseLabelTemplate(template: string): { parts: LabelPart[]; path
     if (open > 0) parts.push({ text: rest.slice(0, open) });
     const end = rest.indexOf('}', open);
     if (end === -1) return { problem: `"${template}" opens a "{" it never closes.` };
-    let field = rest.slice(open + 1, end);
-    let words: Record<string, string> | undefined;
-    const worded = field.indexOf(WORDS_MARK);
-    if (worded !== -1) {
-      words = readWords(field.slice(worded + WORDS_MARK.length));
-      if (!words) return { problem: `"{${field}}" in "${template}" is not a column or a reference path, like {id} or {customer_id.name}.` };
-      field = field.slice(0, worded);
+    const alternatives = rest.slice(open + 1, end).split(/\s\?\?\s/);
+    const fields: LabelField[] = [];
+    for (const field of alternatives) {
+      const one = parseField(field, template);
+      if ('problem' in one) return one;
+      fields.push(one);
+      paths.push(one.path);
     }
-    const marked = field.indexOf(MASK_MARK);
-    const path = (marked === -1 ? field : field.slice(0, marked)).trim();
-    const after = marked === -1 ? undefined : field.slice(marked + MASK_MARK.length);
-    if (!FIELD.test(path) || path.split('.').includes(LABEL_SEGMENT) || (after !== undefined && after !== '' && !after.startsWith(':'))) {
-      return { problem: `"{${field}}" in "${template}" is not a column or a reference path, like {id} or {customer_id.name}.` };
-    }
-    parts.push({ path, ...(after === undefined ? {} : { mask: after ? { prefix: after.slice(1) } : {} }), ...(words ? { words } : {}) });
-    paths.push(path);
+    const [first, ...others] = fields;
+    parts.push(others.length ? { ...first, or: others } : first);
     rest = rest.slice(end + 1);
   }
   if (!paths.length) return { problem: `"${template}" names no column; put one in braces, like "PO-{id}".` };
@@ -90,6 +89,28 @@ export function parseLabelTemplate(template: string): { parts: LabelPart[]; path
   }
   return { parts, paths };
 }
+
+/* One field's path and the marks the server writes after it (mask, words), or why it is not one. */
+function parseField(source: string, template: string): LabelField | { problem: string } {
+  let field = source;
+  let words: Record<string, string> | undefined;
+  const worded = field.indexOf(WORDS_MARK);
+  if (worded !== -1) {
+    words = readWords(field.slice(worded + WORDS_MARK.length));
+    if (!words) return { problem: `"{${field}}" in "${template}" is not a column or a reference path, like {id} or {customer_id.name}.` };
+    field = field.slice(0, worded);
+  }
+  const marked = field.indexOf(MASK_MARK);
+  const path = (marked === -1 ? field : field.slice(0, marked)).trim();
+  const after = marked === -1 ? undefined : field.slice(marked + MASK_MARK.length);
+  if (!FIELD.test(path) || path.split('.').includes(LABEL_SEGMENT) || (after !== undefined && after !== '' && !after.startsWith(':'))) {
+    return { problem: `"{${field}}" in "${template}" is not a column or a reference path, like {id} or {customer_id.name}.` };
+  }
+  return { path, ...(after === undefined ? {} : { mask: after ? { prefix: after.slice(1) } : {} }), ...(words ? { words } : {}) };
+}
+
+/** A template field's text, written back from its alternatives' own (a masked one marked, a worded one with its words). */
+export const fieldText = (alternatives: readonly string[]): string => `{${alternatives.join(FALLBACK)}}`;
 
 /* A words map as a field carries it, or undefined when it is not one: every
    key and word a string every engine reads alike inside quotes. */
@@ -107,11 +128,15 @@ function readWords(encoded: string): Record<string, string> | undefined {
 }
 
 /** A template field for a path whose stored values are said as words, as the server writes it into a served template. */
-export const wordedField = (path: string, words: Record<string, string>): string =>
-  `{${path}${WORDS_MARK}${encodeURIComponent(JSON.stringify(words))}}`;
+export const wordedField = (path: string, words: Record<string, string>): string => `{${wordedPath(path, words)}}`;
+/** The same inside a fallback chain, without its braces. */
+export const wordedPath = (path: string, words: Record<string, string>): string =>
+  `${path}${WORDS_MARK}${encodeURIComponent(JSON.stringify(words))}`;
 
 /** A template field for a masked path, as the server writes it into a served template. */
-export const maskedField = (path: string, prefix?: string): string => `{${path}${MASK_MARK}${prefix ? `:${prefix}` : ''}}`;
+export const maskedField = (path: string, prefix?: string): string => `{${maskedPath(path, prefix)}}`;
+/** The same inside a fallback chain, without its braces. */
+export const maskedPath = (path: string, prefix?: string): string => `${path}${MASK_MARK}${prefix ? `:${prefix}` : ''}`;
 
 /** Whether an authored template writes a mask itself: that is the column's display rule's to say. */
 export const writesMask = (template: string): boolean => template.includes(MASK_MARK) || template.includes(WORDS_MARK);

@@ -51,7 +51,7 @@ test('the links name the repository, its issues and the site', () => {
     assert.equal(manifest.repository.directory, `packages/${dir}`);
     assert.equal(manifest.bugs.url, 'https://github.com/rbaljinder/mistri/issues');
     assert.equal(manifest.homepage, 'https://mistriwork.dev');
-    assert.equal(manifest.engines.node, '>=24.22.1');
+    assert.equal(manifest.engines.node, '>=24');
   }
 });
 

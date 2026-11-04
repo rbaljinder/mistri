@@ -1,6 +1,7 @@
 import { expect, test, type Page } from './support/harness';
 import { DEPOT_ADMIN, startSample } from './support/sampleServer';
 import { scalar } from './support/db';
+import { SHOT_MS } from './support/budgets';
 
 /**
  * Row-driven flows (preview), in Depot: a purchase order drafted over
@@ -11,7 +12,7 @@ import { scalar } from './support/db';
  * `--jobs`, over a copy of the seed: the parallel lane.
  */
 test.describe('Flows', () => {
-  test.setTimeout(150_000);
+  test.setTimeout(SHOT_MS);
 
   const signIn = async (page: Page, origin: string) => {
     const login = await page.request.post(`${origin}/api/auth/sign-in/email`, { headers: { origin }, data: DEPOT_ADMIN });

@@ -1,7 +1,7 @@
 # Testing an App, in five layers
 
 Tests import `@mistriwork/mistri/testing` and nothing from mistri's `src/`. Start
-with `npx @mistriwork/mistri test init .`: it writes `tests/` (a journey per role and a
+with `npx @mistriwork/mistri test init`: it writes `tests/` (a journey per role and a
 permissions matrix from `authority.lock`, run with `node --test 'tests/*.test.ts'`)
 on the kit's helpers, so no test hand-writes a request. `host.as(role)` signs a
 role in; on the signed-in client, `.update(table, key, values)`,

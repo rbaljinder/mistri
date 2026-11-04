@@ -1,6 +1,7 @@
 import { expect, test, type Page } from './support/harness';
 import { scalar } from './support/db';
 import { startMultisourceApp } from './support/multisourceServer';
+import { FIXTURE_MS } from './support/budgets';
 
 async function navigate(page: Page, destination: 'Operations' | 'Inventory') {
   /* Folded, the one level of groups is labelled sections: the destination is one tap away.
@@ -28,7 +29,7 @@ test.describe('one App with independently owned database sources', () => {
   let app: Awaited<ReturnType<typeof startMultisourceApp>>;
   test.beforeAll(async () => {
     // A describe-level timeout does not cover this hook (Playwright): the fixture started here needs its own.
-    test.setTimeout(120_000);
+    test.setTimeout(FIXTURE_MS);
     app = await startMultisourceApp();
   });
   test.afterAll(async () => {

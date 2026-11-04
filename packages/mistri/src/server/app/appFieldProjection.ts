@@ -127,8 +127,8 @@ export function fieldAccessiblePage(schema: DatabaseSchema, page: PageDef): bool
                   path: stream.path,
                   columns: [
                     stream.at,
-                    stream.show,
-                    ...(stream.detail ? [stream.detail] : []),
+                    stream.text,
+                    ...(stream.badge ? [stream.badge] : []),
                     ...timelineMarkColumns(section, stream, findTable(schema, stream.from)),
                   ],
                   filter: stream.filter,

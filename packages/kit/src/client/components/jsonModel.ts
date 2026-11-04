@@ -198,6 +198,15 @@ export function previewOf(value: object): string {
   return `{ ${shown.join(', ')}${more ? `, +${more}` : ''} }`;
 }
 
+/** A list of plain values said as words, comma between: where one line is all there is room for (a cell, a header's
+    fact, a figure). A null among them is a gap nobody reads. */
+export function itemsText(items: readonly unknown[]): string {
+  return items
+    .filter((item) => item !== null && item !== undefined)
+    .map((item) => String(item))
+    .join(', ');
+}
+
 /** What a scalar is best shown as. */
 export type Scalar =
   | { kind: 'null' }

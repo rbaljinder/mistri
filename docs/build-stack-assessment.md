@@ -161,7 +161,7 @@ exists.
 server serves `src/client` through Vite's middleware
 (`packages/engine/src/server/devclient.ts`), so `npm run dev` and every test suite run
 from source with nothing built. The client imports `src/shared` directly.
-`test/mirrors.test.ts` and its eleven copies are gone — what remains of it
+The old mirrors suite and its eleven copies are gone — what remains of it
 is `test/agreement.test.ts`, the client readings that are not copies.
 `check-client-imports.mjs` is replaced by Oxlint's `no-undef`, which also
 found a duplicated `aria-label` on the first run. The type and geometry

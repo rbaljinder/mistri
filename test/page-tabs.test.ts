@@ -14,7 +14,7 @@ test('any section may name its tab, trimmed, and the page export spells it back'
     { kind: 'list', from: 'task', whose: 'deal_id', tab: 'Work' },
     { kind: 'metric', from: 'task', whose: 'deal_id', tab: 'Work' },
     { kind: 'breakdown', from: 'task', whose: 'deal_id', by: 'status', tab: 'Work' },
-    { kind: 'timeline', streams: [{ from: 'note', whose: 'deal_id', at: 'noted_at', show: 'body' }], tab: 'Details' },
+    { kind: 'timeline', streams: [{ from: 'note', whose: 'deal_id', at: 'noted_at', text: 'body' }], tab: 'Details' },
     { kind: 'fields', show: ['stage'] },
   ]);
   assert.deepEqual(

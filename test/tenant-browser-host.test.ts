@@ -82,7 +82,11 @@ async function fixture(t: TestContext, browser = true, mount?: AddressMount, sui
   auth = await createAppAuth(loaded, {
     baseURL: `${origin}${mount?.base ?? ''}`,
     trustedOrigins: [origin],
-    environment: { BETTER_AUTH_SECRET: 'synthetic-browser-host-secret-at-least-thirty-two-characters' },
+    environment: {
+      BETTER_AUTH_SECRET: 'synthetic-browser-host-secret-at-least-thirty-two-characters',
+      MISTRI_TEST_AUTH_LIMITS: 'off',
+      NODE_ENV: 'test',
+    },
   });
   owner = await createTenantAuthenticatedHttpServer({
     loaded,
