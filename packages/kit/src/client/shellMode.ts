@@ -53,6 +53,8 @@ interface TenantRequests {
   read(path: string, body: Record<string, unknown> | undefined, connection: string | null | undefined): Promise<unknown>;
   mutate(path: string, body: unknown, connection: string | null | undefined): Promise<unknown>;
   isMutation(path: string): boolean;
+  /** The streamed export on the lease: the file, or the server's answer where it is not one. */
+  exportFile?(body: { q: string; format: string; columns: readonly string[] }): Promise<Response>;
 }
 
 /** How a tenant's links are read and written (tenantLink.ts). */

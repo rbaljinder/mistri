@@ -5,6 +5,7 @@
  * Every reply that comes from it is stamped with where it came from.
  */
 import { learnValueLabels } from '../app/valueLabels.js';
+import { withNarrowedFixed } from '../../shared/appNarrowed.js';
 import type { Adapter, QueryRequest, QueryResult, InsertRequest, UpdateRequest } from '@mistriwork/engine/adapters/adapter.js';
 import { validatePage, type PageDef } from '@mistriwork/engine/shared/page.js';
 import {
@@ -121,7 +122,7 @@ function cutSchema(app: AppDef, pruned: DatabaseSchema, transitions: Served['tra
       ),
     })),
   };
-  const schema = withLabelTemplates(app, cut);
+  const schema = withNarrowedFixed(app, withLabelTemplates(app, cut));
   byApp.set(app, { inputs, schema });
   return schema;
 }
@@ -262,7 +263,13 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
       // Each record's name, as this reader's catalog can say it (recordLabel.ts),
       // and the rollups whose child rows it can read (appRollups.ts), and the
       // computed columns whose inputs it can (appComputed.ts), `me` its own.
-      schema = withRollups(host.app.app, withLabelTemplates(host.app.app, schema), clockNow(), signedInAs(identity) ?? null, zone);
+      schema = withRollups(
+        host.app.app,
+        withNarrowedFixed(host.app.app, withLabelTemplates(host.app.app, schema)),
+        clockNow(),
+        signedInAs(identity) ?? null,
+        zone,
+      );
       // A section this reader cannot read is left out, never the page (readablePage).
       ctx.configPages = ctx.configPages
         .flatMap((page) => readablePage(schema, page) ?? [])

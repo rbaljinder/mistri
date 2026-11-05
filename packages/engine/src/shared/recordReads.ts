@@ -28,6 +28,8 @@
  * (pageFieldsRead.ts).
  */
 import { subtitlePath } from './subtitlePath.js';
+import { listSecondLineColumns } from './appListColumns.js';
+import type { AppCardsList } from './appCards.js';
 import { findTable, labelPath, primaryKey, type DatabaseSchema, type TableMeta } from './schema.js';
 import { DEFAULT_HISTORY_LIMIT, kindReading, type PageSection } from './pageModel.js';
 import { assertNever } from './model.js';
@@ -170,6 +172,21 @@ export function defaultFieldPaths(base: TableMeta, app: boolean): string[] {
   return read.length ? read : base.columns.map((c) => c.name);
 }
 
+/**
+ * The second lines of the columns at `paths`: a column whose rule has a `subtitle` is drawn with it wherever it is a
+ * field, a header's fact or a card's title, so the record reads it too (the same rule a list's cell reads,
+ * listQuestion.ts subtitleColumns). A path through a reference reads it from the table it reaches.
+ */
+function secondLines(names: RecordReadNames, base: TableMeta, paths: readonly string[]): string[] {
+  if (!names.display) return [];
+  return paths.flatMap((path) => {
+    const hop = path.lastIndexOf('.');
+    const owner = hop < 0 ? base.id : tableAtPrefix(names.schema, base.id, path.slice(0, hop))?.id;
+    const second = owner ? subtitlePath(names.display!(owner, path.slice(hop + 1)), path) : undefined;
+    return second ? [second] : [];
+  });
+}
+
 /** A fields section's columns: what it shows, the names of what it references, the record's name, and its workflow's field. */
 export function fieldsColumns(
   names: RecordReadNames,
@@ -192,16 +209,7 @@ export function fieldsColumns(
           ]),
         ].filter((path) => !paths.includes(path))
       : [];
-  /* A column whose rule has a `subtitle` is drawn with it wherever it is a field, so the record reads it too
-     (the same rule a list's cell reads, listQuestion.ts subtitleColumns). */
-  const seconds = names.display
-    ? [...new Set([...paths, ...(section.presentation === 'headline' ? extra : [])])].flatMap((path) => {
-        const hop = path.lastIndexOf('.');
-        const owner = hop < 0 ? base.id : tableAtPrefix(names.schema, base.id, path.slice(0, hop))?.id;
-        const second = owner ? subtitlePath(names.display!(owner, path.slice(hop + 1)), path) : undefined;
-        return second ? [second] : [];
-      })
-    : [];
+  const seconds = secondLines(names, base, [...new Set([...paths, ...(section.presentation === 'headline' ? extra : [])])]);
   const projection = referenceProjection(
     names.schema,
     base,
@@ -261,6 +269,8 @@ export function headerColumns(
   const fetched = projection.fetched;
   const namePath = namePathOf(names, base);
   if (namePath && !fetched.includes(namePath)) fetched.push(namePath);
+  /* A fact's second line is drawn under its value, as a field's is. */
+  for (const second of secondLines(names, base, section.paths ?? [])) if (!fetched.includes(second)) fetched.push(second);
   return { fetched, labels: projection.labels };
 }
 
@@ -290,11 +300,21 @@ function probeColumns(names: RecordReadNames, base: TableMeta): string[] {
   return [...primaryKey(base), ...(namePath ? [namePath] : [])];
 }
 
+const isCards = (presentation: unknown): presentation is AppCardsList =>
+  typeof presentation === 'object' && presentation !== null && (presentation as { kind?: unknown }).kind === 'cards';
+
 /** A related list's first request: its planned view at the reader's page size, with the names and keys a row needs. */
 export function listView<V extends ReadView>(names: RecordReadNames, section: ReadSection, plan: ReadPlan<V>, rows: number) {
   const table = names.table ? names.table(section.from ?? '') : findTable(names.schema, section.from ?? '');
   const limit = section.limit ?? rows;
-  const view: V | undefined = plan.view && !section.limit ? { ...plan.view, limit } : plan.view;
+  const sized: V | undefined = plan.view && !section.limit ? { ...plan.view, limit } : plan.view;
+  /* Cards read the second lines of the columns they draw with one (appListColumns.ts listSecondLineColumns). */
+  const drawn = (sized as { columns?: ReadonlyArray<{ path: string }> } | undefined)?.columns;
+  const seconds =
+    table && drawn && isCards(section.presentation)
+      ? secondLines(names, table, listSecondLineColumns(section.presentation)).filter((path) => !drawn.some((c) => c.path === path))
+      : [];
+  const view: V | undefined = seconds.length ? { ...sized!, columns: [...drawn!, ...seconds.map((path) => ({ path }))] } : sized;
   const explicit = (target: TableMeta) => (names.recordLabel(target.id) === undefined ? undefined : namePathOf(names, target));
   type Columns = Array<{ path: string; alias?: string }>;
   return view && table

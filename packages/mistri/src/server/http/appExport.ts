@@ -7,20 +7,36 @@
 import { appExportable } from '../../shared/appAccess.js';
 import { sessionRoles } from '../../shared/appViewRoles.js';
 import { majorText, minorToMajor, rowCurrency } from '@mistriwork/engine/shared/money.js';
-import { findTable } from '@mistriwork/engine/shared/schema.js';
+import { findTable, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import type { AppDef } from '../../shared/app.js';
 import { readMeSets, textsMentionMe } from '../app/appMe.js';
 import { appForConnection } from '../app/apps.js';
 import type { PostContext } from '@mistriwork/engine/server/http/context.js';
 import type { ExportHooks } from '@mistriwork/engine/server/http/exportRoute.js';
 
-/** Whether this request's person may export a table (`''`: any table). Everyone may where the App does not grant by role. */
-function exportsTable(post: PostContext): (tableId: string) => boolean {
-  const host = post.appHosts?.length
+/** The App this request reads, where it reads one. */
+function hostOf(post: PostContext) {
+  return post.appHosts?.length
     ? appForConnection(post.appHosts, post.connection, post.registry.configOf(post.connection)?.name)
     : undefined;
-  const allowed = host && appExportable(host.app.app, post.schema, sessionRoles(post.role), post.principal !== undefined);
+}
+
+/** Whether this request's person may export a table (`''`: any table). Everyone may where the App does not grant by role. */
+function exportsTable(post: PostContext): (tableId: string) => boolean {
+  const app = hostOf(post)?.app.app;
+  return app ? appExportsTable(app, post.schema, sessionRoles(post.role), post.principal !== undefined) : () => true;
+}
+
+/** Whether a person with `roles` may export a table of `app` (`''`: any table): a single App's request, or a tenant's lease. */
+export function appExportsTable(
+  app: AppDef,
+  schema: DatabaseSchema,
+  roles: readonly string[],
+  signedIn: boolean,
+): (tableId: string) => boolean {
+  const allowed = appExportable(app, schema, roles, signedIn);
   /* `ui.export: false` is the App's one switch and it holds here, not only on the menu: with role grants it is a ceiling over them. */
-  const off = host?.app.app.ui?.export === false;
+  const off = app.ui?.export === false;
   return (tableId) => !off && (!allowed || (tableId ? allowed.has(tableId) : allowed.size > 0));
 }
 
@@ -33,12 +49,18 @@ function exportsTable(post: PostContext): (tableId: string) => boolean {
  * the unit from the API.
  */
 function csvAmounts(post: PostContext, tableId: string): ((row: Record<string, unknown>) => Record<string, unknown>) | undefined {
-  const host = post.appHosts?.length
-    ? appForConnection(post.appHosts, post.connection, post.registry.configOf(post.connection)?.name)
-    : undefined;
-  const table = findTable(post.schema, tableId);
-  if (!host || !table) return undefined;
-  const app = host.app.app;
+  const app = hostOf(post)?.app.app;
+  return app && appCsvAmounts(app, post.schema, tableId);
+}
+
+/** What a CSV of `app`'s table says for each row (csvAmounts above): a single App's request, or a tenant's lease. */
+export function appCsvAmounts(
+  app: AppDef,
+  schema: DatabaseSchema,
+  tableId: string,
+): ((row: Record<string, unknown>) => Record<string, unknown>) | undefined {
+  const table = findTable(schema, tableId);
+  if (!table) return undefined;
   const resources = (app.resources ?? {}) as Record<string, { display?: Record<string, unknown> }>;
   const display = (resources[table.id] ?? resources[table.name])?.display ?? {};
   const money = Object.entries(display).filter(

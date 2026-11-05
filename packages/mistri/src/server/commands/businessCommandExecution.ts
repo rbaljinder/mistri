@@ -18,6 +18,7 @@ import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedRea
 import { ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
 import { lockTimedOut } from '@mistriwork/engine/adapters/writeLanes.js';
 import { AppAccessDenied } from '../app/appAccess.js';
+import { NarrowedRefusal } from '../app/appNarrowedWrites.js';
 import { AppValidationDenied, ConsumesRefused } from '../app/appValidationDenied.js';
 import { hasAppScopeCommandEventOwner, hasTenantCommandEventOwner, type BusinessCommandBinding } from './businessCommandAccess.js';
 import {
@@ -1405,6 +1406,10 @@ async function executeUntraced(
        could never succeed. */
     if (cause instanceof ScopeRefusal) throw recordRefusalCause(new BusinessCommandExecutionError('forbidden', outcome), cause);
     if (cause instanceof CommandInputError) throw new BusinessCommandExecutionError('invalid_input', outcome, cause.field);
+    /* A write a narrowed resource's query does not allow (appNarrowedWrites.ts): the record's state, said in its own
+       sentence, where it fell through to temporarily_unavailable, a retry that could never succeed. */
+    if (cause instanceof NarrowedRefusal)
+      throw recordRefusalCause(new BusinessCommandExecutionError('ineligible_state', outcome, undefined, undefined, cause.message), cause);
     /* A handler's write the App's rules refused (a text rule, a row-defined
        field): the input was wrong, not the server, so said as the field it
        names. It fell through to temporarily_unavailable, a retry that could

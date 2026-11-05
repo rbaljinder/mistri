@@ -16,7 +16,7 @@ import { migratePostgresAuthStore } from '../packages/mistri/src/adapters/auth/p
 import { migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
 import { provisionStores } from '../packages/mistri/src/server/maintenance.js';
 import { serveApi, tokenCli } from './appApiCli.js';
-import { SHOP_TABLES, writeShopApp } from './appApiShop.js';
+import { SHOP_TABLES, shelfThroughApi, writeShopApp } from './appApiShop.js';
 import { liveSkip } from './live.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
@@ -26,7 +26,7 @@ interface Client extends PgQuery {
   on(event: 'error', listener: (error: Error) => void): unknown;
 }
 
-async function pgShop(t: TestContext) {
+async function pgShop(t: TestContext, narrowed = false) {
   const module = 'pg';
   const pg = (await import(module)) as { default: { Client: new (options: unknown) => Client } };
   const control = new pg.default.Client({ connectionString: LIVE, statement_timeout: 10000 });
@@ -54,7 +54,9 @@ async function pgShop(t: TestContext) {
   await business.connect();
   await business.query(SHOP_TABLES.replace(/INTEGER PRIMARY KEY/g, 'SERIAL PRIMARY KEY'));
   // Seeded rows took their ids by hand: the sequences start past them.
-  for (const table of ['item', 'ticket', 'vault']) await business.query(`SELECT setval(pg_get_serial_sequence('${table}','id'), 1)`);
+  if (narrowed) await business.query("INSERT INTO item(id,name,note) VALUES (2,'Crate','shelf')");
+  for (const table of ['item', 'ticket', 'vault'])
+    await business.query(`SELECT setval(pg_get_serial_sequence('${table}','id'), ${narrowed && table === 'item' ? 2 : 1})`);
   await migratePostgresCommandJournal(businessUrl);
   await provisionStores({ postgres: businessUrl }, { app: { id: 'shop', source: 'business' } });
   await migratePostgresAuthStore(authUrl);
@@ -71,7 +73,7 @@ async function pgShop(t: TestContext) {
   } finally {
     await accounts.end();
   }
-  const { appDir, config, commands } = writeShopApp(directory, { business: businessUrl, authStore: authUrl, physical: true });
+  const { appDir, config, commands } = writeShopApp(directory, { business: businessUrl, authStore: authUrl, physical: true, narrowed });
   writeFileSync(join(appDir, 'authority.lock'), (await loadApp(appDir)).authority!.report);
   const common = ['--app', appDir, '--config', config, '--store-id', randomUUID()];
   const provisioned = await tokenCli(['provision', ...common]);
@@ -112,6 +114,20 @@ async function pgShop(t: TestContext) {
 
 const json = { 'content-type': 'application/json' };
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
+
+test(
+  'PostgreSQL: a narrowed resource through the API and App MCP: writes stay inside its query',
+  { skip: liveSkip('postgres', LIVE), timeout: 300000 },
+  async (t) => {
+    const f = await pgShop(t, true);
+    const editor = await f.issue('editor');
+    const s = await serveApi(t, f, 'shop');
+    await s.started;
+    await shelfThroughApi(t, f, s.base, editor, async (text) => ((await f.sql(text)) as { rows: Record<string, unknown>[] }).rows[0]);
+    s.child.kill('SIGTERM');
+    assert.equal(await s.closed, 0);
+  },
+);
 
 test(
   "PostgreSQL: generic writes under the role's editor rules, and a feed that shows a token only what its roles read",

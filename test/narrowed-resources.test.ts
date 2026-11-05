@@ -6,7 +6,8 @@
  * Every read through a narrowed resource stands on its conditions: a row outside them is absent from its list,
  * count, search, record page, related and reverse lists, timeline, breakdown, figure, rollup and export, and from a
  * command's reads. The correlation ids collide on purpose (order 1 and conversation 1), so a read that dropped the
- * conditions would show the other kind's rows. A write through one is refused: it is read-only for now.
+ * conditions would show the other kind's rows. A write through one is kept inside its conditions
+ * (narrowed-writes.test.ts); here, one without access: 'write' is read-only as any resource is.
  */
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -271,7 +272,7 @@ test("related and reverse lists, timelines, breakdowns, figures, rollups, any-co
   });
 });
 
-test('a write through a narrowed resource is refused on every door; its table writes as before', async () => {
+test("a narrowed resource without access: 'write' is read-only on every door; its table writes as before", async () => {
   await serve(definition(), async (call) => {
     const refused = (answer: Answer, what: string) => {
       assert.ok(answer.status >= 400, `${what}: ${answer.status} ${answer.text}`);
@@ -295,12 +296,17 @@ test('the loader refuses what a narrowed resource cannot be yet, and a table bou
     ...base,
     resources: { ...base.resources, orderEvents: { ...base.resources.orderEvents, ...patch } },
   });
-  assert.throws(() => parseAppConfig(withResource({ access: 'write' }), 'x'), /read-only for now/);
-  assert.throws(() => parseAppConfig(withResource({ delete: true }), 'x'), /read-only for now|access 'write'/);
-  assert.throws(
-    () => parseAppConfig(withResource({ actions: { flip: { label: 'Flip', set: { kind: 'conversation' } } } }), 'x'),
-    /read-only for now/,
-  );
+  // What writes through its query is a narrowed resource's as it is any resource's (narrowed-writes.test.ts).
+  for (const patch of [
+    { access: 'write' },
+    { access: 'write', delete: true },
+    { access: 'write', actions: { flip: { label: 'Flip', set: { note: 'flipped' } } } },
+    { access: 'write', import: true },
+    { access: 'write', notify: [{ on: 'insert', to: 'note', title: 'New event' }] },
+  ])
+    assert.doesNotThrow(() => parseAppConfig(withResource(patch), 'x'), JSON.stringify(patch));
+  // What writes a row some other way is not yet.
+  assert.throws(() => parseAppConfig(withResource({ access: 'write', settings: 'Preferences' }), 'x'), /does not take it yet \(Preview\)/);
   const twice = { ...base, resources: { ...base.resources, allEvents: { physical: 'audit_event' } } };
   assert.throws(() => parseAppConfig(twice, 'x'), /bound again only with a "query"/);
   const pointing = {
@@ -319,7 +325,6 @@ test('the loader refuses what a narrowed resource cannot be yet, and a table bou
   assert.throws(() => parseAppConfig(tenant, 'x'), /a tenant App does not take yet/);
   // What follows every write to the table, whatever the conditions say: declared on the table's own resource.
   for (const [key, value] of [
-    ['notify', [{ on: 'insert', to: 'correlation_id', title: 'New event' }]],
     ['flows', { from: 'flow', steps: 'step' }],
     ['triggers', ['audit_stamp']],
     ['search', { connection: 'search', fields: ['note'] }],
@@ -593,7 +598,7 @@ test('a command input whose choices come from a narrowed resource offers only it
   }
 });
 
-test("a command's transaction reads a narrowed resource on its conditions and cannot write through it", async () => {
+test("a command's transaction reads a narrowed resource on its conditions and writes inside them", async () => {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-narrowed-tx-'));
   const file = join(directory, 'n.db');
   const db = new DatabaseSync(file);
@@ -620,13 +625,8 @@ test("a command's transaction reads a narrowed resource on its conditions and ca
       assert.equal(await tx.count('orderEvents'), ORDER_EVENTS.length);
       await assert.rejects(
         async () => tx.update({ table: 'orderEvents', key: { id: 1 }, values: { kind: 'conversation' } }),
-        /read-only for now/,
+        /would move the row out/,
       );
-      await assert.rejects(
-        async () => tx.insert({ table: 'orderEvents', values: { kind: 'conversation', note: 'x', at: '2026-01-09' } }),
-        /read-only for now/,
-      );
-      await assert.rejects(async () => tx.remove({ table: 'orderEvents', key: { id: 1 } }), /read-only for now/);
     });
   } finally {
     await registry.closeAll();

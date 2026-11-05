@@ -46,7 +46,7 @@ test('a mistri name resolves through the workspace and exports something', async
 });
 
 test('the engine and the kit import, and export what their source does', async () => {
-  for (const name of ['@mistriwork/engine', '@mistriwork/kit']) {
+  for (const name of ['@mistriwork/engine', '@mistriwork/engine/host', '@mistriwork/kit']) {
     const entry = table.entries[name];
     assert.ok(entry, `${name} is in the table`);
     const [ours, source] = await Promise.all([import(name), import(join(root, entry.source))]);

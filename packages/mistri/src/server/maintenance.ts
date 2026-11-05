@@ -420,7 +420,7 @@ export interface ProvisionStoresOptions {
   /** The `--jobs` module, with `app.commands`. */
   readonly jobs?: JobModule;
   /** Stores that need no binding, by their id in the store list: `record-history`, `inbox`, `branding`, `assistant`, `decisions`,
-   * `tenant-sandboxes`, `integrations`, `live-change`, `schema-epoch`. Given the App's `definition` (and `pages`) and no `only`, every
+   * `tenant-sandboxes`, `integrations`, `live-change`, `schema-epoch`, `undo-journal` (the Workbench's). Given the App's `definition` (and `pages`) and no `only`, every
    * one of them the App declares is made (declaredStores.ts); given both, an `only` that names one the App does not declare is
    * refused, so a hand-kept list cannot drift from the App. Also a tenant App's own, which need `app.tenant`:
    * `tenant-store`, `tenant-administration`, `tenant-invitations`, `tenant-support-audit`, made in that order

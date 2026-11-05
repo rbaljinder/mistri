@@ -24,6 +24,7 @@ import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js'
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { cardsImageSort, factWord, type AppCardsList } from '@mistriwork/engine/shared/appCards.js';
 import { Value } from './Value.js';
+import { Subtitled, secondLine } from './SecondLine.js';
 import { dressFor, hueOf, initialsOf, maskedText, type DisplayRule } from './valueModel.js';
 import { Icon, type IconName } from './Icon.js';
 import { useListOrder, type ListOrder } from './useListOrder.js';
@@ -176,6 +177,14 @@ export function CardsList({
     const { column, value } = namedCell(table, name, row, referenceLabels);
     return <Value col={column} value={value} tableId={table.id} compact />;
   };
+  /* The figure and a captioned line have room for their column's second line (`subtitle`), quiet under the value; a
+     summary, a foot and a badge are one line each (appListColumns.ts listSecondLineColumns). A label path's rule is
+     its own table's, so only the row's own columns are asked. */
+  const saidWithSecond = (row: Record<string, unknown>, name: string) => (
+    <Subtitled tableId={table.id} column={name.includes('.') ? undefined : name} row={row}>
+      {said(row, name)}
+    </Subtitled>
+  );
   // A line or a fact may be a label path ("dealer_id.name"): its caption is the App's, else its last step's.
   const caption = (name: string) => (columnLabel(table.id, name) as string | null) ?? humanName(name.split('.').pop() ?? name);
   const present = (row: Record<string, unknown>, name: string) => row[name] !== null && row[name] !== undefined && row[name] !== '';
@@ -217,6 +226,7 @@ export function CardsList({
           const key = keyOf(table, row) as Record<string, unknown> | null;
           const id = ordering.id(row);
           const title = titleOf(row);
+          const titleSecond = spec.primary.includes('.') ? undefined : secondLine(table.id, spec.primary, row);
           const src = typeof image === 'string' ? cardImageAddress(row[image]) : leadOf(row);
           const avatar = spec.media === 'avatar';
           /* An icon tile leads the card in a picture's place: it is no picture, so the card keeps its text layout. */
@@ -275,13 +285,14 @@ export function CardsList({
                       <span>{title}</span>
                     )}
                   </h3>
+                  {titleSecond !== undefined && <p className="cards-subtitle">{titleSecond}</p>}
                   {description !== undefined && (
                     <p className="cards-description" title={description}>
                       {description}
                     </p>
                   )}
                   {(!hasMedia || avatar) && badge}
-                  {spec.value && row[spec.value] != null && <p className="cards-value">{said(row, spec.value)}</p>}
+                  {spec.value && row[spec.value] != null && <p className="cards-value">{saidWithSecond(row, spec.value)}</p>}
                   {spec.facts?.some((name) => present(row, name)) ? (
                     <p className="cards-summary">
                       {spec.facts.filter((name) => present(row, name)).map((name) => fact(row, name, 'cards-summary-item'))}
@@ -292,7 +303,7 @@ export function CardsList({
                       {spec.lines.map((name) => (
                         <div key={name} className="cards-fact">
                           <dt>{caption(name)}</dt>
-                          <dd>{said(row, name)}</dd>
+                          <dd>{saidWithSecond(row, name)}</dd>
                         </div>
                       ))}
                     </dl>

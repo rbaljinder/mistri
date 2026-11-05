@@ -14,6 +14,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import type { ColumnMeta, TableMeta } from '../../../../engine/src/shared/schema.js';
 import { writeValues } from '../resourceRequests.js';
+import { withNarrowedFixed } from '../../../../mistri/src/shared/appNarrowed.js';
 
 const calls: Array<{ path: string; body: unknown }> = [];
 const answers: Record<string, unknown> = {};
@@ -220,6 +221,32 @@ describe('what the form asks for', () => {
       path: '/api/insert',
       body: { table: 'lead', values: { name: 'Ada', company: 'Acme', source: 'event' } },
     });
+  });
+
+  test("a narrowed resource's New form leaves out the columns its query fixes, as it does any column the server sets", async () => {
+    const user = userEvent.setup();
+    const insert = vi.fn().mockResolvedValue({ key: { id: 7 } });
+    // The served catalog marks what the query fixes as not writable; the server fills it on insert (appNarrowedWrites.ts).
+    const served = withNarrowedFixed(
+      { resources: { lead: { query: 'status = qualified and source = event' } } },
+      {
+        label: '',
+        dialect: 'sqlite',
+        readAt: '',
+        tables: [lead],
+        foreignKeys: [],
+      },
+    ).tables[0]!;
+    expect(served.columns.filter((column) => column.writable === false).map((column) => column.name)).toEqual(['status', 'source']);
+    draw(<NewRecordForm {...props()} table={served} insert={insert} />);
+    expect(screen.queryByLabelText(/^Status/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Source' })).toBeNull();
+    expect(document.querySelectorAll('.insert-field')).toHaveLength(4);
+    await user.type(screen.getByLabelText('Name'), 'Ada');
+    await user.type(screen.getByLabelText('Company'), 'Acme');
+    await user.click(screen.getByRole('button', { name: /^Add$/ }));
+    await vi.waitFor(() => expect(insert).toHaveBeenCalled());
+    expect(insert.mock.calls[0]![0]).toEqual({ name: 'Ada', company: 'Acme' });
   });
 
   test('richer forms render authored groups and preserve ungrouped fields after them', () => {

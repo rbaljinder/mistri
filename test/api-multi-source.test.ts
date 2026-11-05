@@ -314,3 +314,99 @@ test(
     for (const changed of ['stock', 'sales'] as const) await t.test(changed, (t) => ddlRetires(t, 'postgres', changed));
   },
 );
+
+/* One connection with the same table in two engine schemas, its rows apart.
+   The App's source names `ops`; `public` holds rows a dropped scope would read. */
+const SCOPED = `CREATE SCHEMA ops; CREATE SCHEMA secret;
+   CREATE TABLE secret.credential(id int PRIMARY KEY, token text NOT NULL);
+   INSERT INTO secret.credential VALUES (1,'hunter2-token');
+   CREATE TABLE public.audit_event(id int PRIMARY KEY, kind text NOT NULL, note text NOT NULL);
+   CREATE TABLE ops.audit_event(id int PRIMARY KEY, kind text NOT NULL, note text NOT NULL,
+     credential_id int REFERENCES secret.credential(id));
+   INSERT INTO public.audit_event VALUES (1,'order','public one'),(2,'order','public two'),(9,'order','public nine');
+   INSERT INTO ops.audit_event VALUES (1,'order','ops one',1),(2,'conversation','ops chat',1),(3,'order','ops three',1);`;
+const AUX = `CREATE TABLE item(id int PRIMARY KEY, sku text NOT NULL); INSERT INTO item VALUES (1,'LNT-01');`;
+
+const scopedApp = (lanes: boolean) => (store: string) => ({
+  id: 'scoped',
+  name: 'Scoped',
+  sources: {
+    ops: { connection: 'main', schema: 'ops', default: true },
+    ...(lanes ? { aux: { connection: 'aux' } } : {}),
+  },
+  resources: {
+    audit_event: {},
+    orderEvents: { physical: 'ops.audit_event', query: 'kind = order' },
+    ...(lanes ? { 'aux.item': {} } : {}),
+  },
+  views: { events: { kind: 'list', from: 'orderEvents', sort: 'id asc' } },
+  home: 'events',
+  auth: { store, roles: { reader: { read: true } } },
+  api: {
+    version: 1,
+    roles: ['reader'],
+    resources: {
+      audit_event: { fields: ['id', 'kind', 'note'], sorts: ['id'] },
+      orderEvents: { fields: ['id', 'kind', 'note'], sorts: ['id'] },
+      ...(lanes ? { 'aux.item': { fields: ['id', 'sku'], sorts: ['id'] } } : {}),
+    },
+    views: ['events'],
+  },
+});
+
+test(
+  "PostgreSQL: one source's API reads its own engine schema and narrowed conditions, as the lanes of several do",
+  { skip: liveSkip('postgres', LIVE), timeout: 180000 },
+  async (t) => {
+    const answers = async (lanes: boolean) => {
+      const f = await apiOwnerFixture(t, {
+        engine: 'postgres',
+        app: scopedApp(lanes),
+        connections: { main: { sql: SCOPED }, ...(lanes ? { aux: { sql: AUX } } : {}) },
+        accounts: { reader: 'reader' },
+      });
+      const reader = await f.issue('reader', ['reader']);
+      const reads = await readOwner(f, 'postgres', 'number');
+      if (!lanes) {
+        /* The owner's mapping of its one lane is loading's: the connection's
+           whole catalog (public's table, the key into secret) cut to the
+           source's schema. Before, it kept the key and the table behind it. */
+        const opened = await f.registry.open('main');
+        const bindings = appSourceConnections(f.registry, f.app);
+        const mapped = laneResources(f.app, 'main', bindings, new Map([['main', opened.schema]]), 'main', opened.adapter);
+        const tables = (schema: { tables: { id: string }[] }) => schema.tables.map((table) => table.id).sort();
+        assert.deepEqual(tables(mapped.schema), ['audit_event', 'orderEvents']);
+        assert.deepEqual(tables(mapped.schema), tables(f.resources.schema));
+      }
+      return {
+        table: json(await reads.list(reader, 'list:audit_event', 'sort=id&count=true')),
+        narrowed: json(await reads.list(reader, 'list:orderEvents', 'sort=id&count=true')),
+        view: json(await reads.list(reader, 'view:events', '')),
+        item: json(await reads.item(reader, 'item:audit_event', '3')),
+        outside: await reads.item(reader, 'item:orderEvents', '2'),
+        missing: await reads.item(reader, 'item:orderEvents', '9'),
+        documents: bodyOf(await reads.spec(reader)) + bodyOf(await reads.tools(reader)),
+      };
+    };
+    const single = await answers(false);
+    const lanes = await answers(true);
+    const notes = (list: { items: { note: string }[] }) => list.items.map((row) => row.note);
+    // The source's own schema, never `public`'s rows of the same name.
+    assert.deepEqual(notes(single.table), ['ops one', 'ops chat', 'ops three']);
+    assert.equal(single.table.count.value, 3);
+    assert.deepEqual(single.item, { id: 3, kind: 'order', note: 'ops three' });
+    // The narrowed resource stands on its conditions inside that schema.
+    assert.deepEqual(notes(single.narrowed), ['ops one', 'ops three']);
+    assert.deepEqual(notes(single.view), ['ops one', 'ops three']);
+    // A row outside the conditions answers as one in another schema does: as nothing.
+    assert.deepEqual(single.outside, single.missing);
+    // A key out of the schema is not there: the documents name nothing behind it.
+    assert.doesNotMatch(single.documents, /secret|credential|hunter2/);
+    // And every answer is the one the lane mapping gives a source among several
+    // (whose documents also say which source each operation reads).
+    const { documents: _single, ...rows } = single;
+    const { documents: _lanes, ...laneRows } = lanes;
+    assert.doesNotMatch(_lanes, /secret|credential|hunter2/);
+    assert.deepEqual(rows, laneRows);
+  },
+);

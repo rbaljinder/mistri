@@ -682,6 +682,39 @@ export async function tenantReadApi(
   return value;
 }
 
+/**
+ * The streamed export on this tab's lease (server tenant/tenantHttp.ts): the file, or the server's JSON answer where it
+ * is not one, read by the caller as an ordinary export's (kit client/export.js `streamExport`). A file is kept only
+ * where its response names this very lease, as a read's rows are; a refusal falls back to `/api/run` there, which
+ * reads it as any read's.
+ */
+export async function tenantExport(body: { q: string; format: string; columns: readonly string[] }): Promise<Response> {
+  const snapshot = captureSessionIdentity();
+  const owner = selected(snapshot);
+  const address = `/api/export?${new URLSearchParams({ app: owner.appId, ...selector(owner.tenantId) })}`;
+  const response = await fetchServer(address, {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: {
+      [names.account]: snapshot.accountId!,
+      [names.app]: snapshot.appId!,
+      'content-type': 'application/json',
+      [names.tab]: owner.tabId,
+      [names.context]: owner.context,
+      [names.revision]: String(owner.revision),
+    },
+    body: JSON.stringify({ q: body.q, format: body.format, columns: [...body.columns] }),
+  });
+  account(snapshot);
+  if (response.headers.get('content-disposition') && !(response.ok && currentLease(snapshot, owner) && owns(response.headers, owner))) {
+    await response.body?.cancel().catch(() => {});
+    unverified(snapshot, owner);
+    throw unavailable();
+  }
+  return response;
+}
+
 const mutationFields: Record<(typeof MUTATION_PATHS)[number], readonly string[]> = {
   /* A record's lines (`form.lines`) go with its save; the row policy judges each one (scopedWrites.ts). */
   '/api/update': ['table', 'key', 'values', 'column', 'value', 'expected', 'lines'],

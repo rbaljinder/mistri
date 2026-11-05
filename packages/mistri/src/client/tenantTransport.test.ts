@@ -308,6 +308,32 @@ test('availability refuses a suspended lease before sending a request', async ()
   expect(fetcher).not.toHaveBeenCalled();
 });
 
+test('the streamed export is asked on the lease, and a file is kept only where it names that lease', async () => {
+  session.establishTenantSelection(proof());
+  const file = (owner = proof()) =>
+    new Response('id\r\n1\r\n', {
+      status: 200,
+      headers: { ...headers(owner), 'content-type': 'text/csv', 'content-disposition': 'attachment; filename="lead.csv"' },
+    });
+  const fetcher = vi.fn().mockResolvedValue(file());
+  vi.stubGlobal('fetch', fetcher);
+  const answer = await transport.tenantExport({ q: 'lead', format: 'csv', columns: ['id'] });
+  expect(await answer.text()).toBe('id\r\n1\r\n');
+  expect(fetcher.mock.calls[0][0]).toBe('/api/export?app=atlas&tenant=north');
+  expect(fetcher.mock.calls[0][1]).toMatchObject({
+    method: 'POST',
+    cache: 'no-store',
+    headers: { 'x-mistri-tab': 'tab-one', 'x-mistri-context': 'context-north', 'x-mistri-lease-revision': '1' },
+  });
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ q: 'lead', format: 'csv', columns: ['id'] });
+  // An answer that is not a file is the caller's to read: a refusal it falls back from.
+  fetcher.mockResolvedValueOnce(new Response('{"error":"unavailable"}', { status: 403 }));
+  expect((await transport.tenantExport({ q: 'lead', format: 'csv', columns: ['id'] })).status).toBe(403);
+  // Another lease's file is not this one's, and leaves the session to be verified again.
+  fetcher.mockResolvedValueOnce(file(proof('south', 'context-south')));
+  await expect(transport.tenantExport({ q: 'lead', format: 'csv', columns: ['id'] })).rejects.toThrow();
+});
+
 test('context monitoring forwards its abort signal without dropping owner assertions', async () => {
   session.establishTenantSelection(proof());
   const controller = new AbortController(),

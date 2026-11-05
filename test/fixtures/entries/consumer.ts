@@ -21,6 +21,7 @@ import * as mistriMaintenance from '@mistriwork/mistri/maintenance';
 import * as mistriOpenfeature from '@mistriwork/mistri/openfeature';
 import * as mistriIntegration from '@mistriwork/mistri/integration';
 import * as engine from '@mistriwork/engine';
+import * as engineHost from '@mistriwork/engine/host';
 import * as kit from '@mistriwork/kit';
 import * as kitVite from '@mistriwork/kit/vite';
 import * as ui from '@mistriwork/ui';
@@ -48,6 +49,7 @@ export const entries = {
   '@mistriwork/mistri/openfeature': some<keyof typeof mistriOpenfeature>(true),
   '@mistriwork/mistri/integration': some<keyof typeof mistriIntegration>(true),
   '@mistriwork/engine': some<keyof typeof engine>(true),
+  '@mistriwork/engine/host': some<keyof typeof engineHost>(true),
   '@mistriwork/kit': some<keyof typeof kit>(true),
   '@mistriwork/kit/vite': some<keyof typeof kitVite>(true),
   '@mistriwork/ui': some<keyof typeof ui>(true),

@@ -88,7 +88,7 @@ import {
 import type { TrailList } from '../recordTrail.js';
 import { useGridKeyboard } from './useGridKeyboard.js';
 import { useChangedRows } from '../liveState.js';
-import { textMeasure } from './textMeasure.js';
+import { fontLoaded, textMeasure } from './textMeasure.js';
 import { presentationColumns } from './columnPresentation.js';
 import { usePins } from './usePins.js';
 import { useStickyHead } from './useStickyHead.js';
@@ -869,12 +869,17 @@ export function Grid({
      status as a pill spends 41px there, one that says it as a dot and a word 12, and sizing every column for the
      wider kept 30px of every table's room in a status that never used it. -1: the cell holds no chip. */
   const [cellChips, setCellChips] = useState<number[]>([]);
+  /* Counts the times a face arrived after the columns were sized in its fallback: the sizes are read again, once for
+     each, so a table's columns never stay as the fallback face set them (textMeasure.ts). */
+  const [faceEpoch, setFaceEpoch] = useState(0);
   useLayoutEffect(() => {
     if (sizing !== 'fit' || !wrap.current) return;
     const element = wrap.current;
     /* The look says how wide its heads' characters set (gridSizing.ts); read
        again when the reader picks another look, which moves no width. */
+    let sizedInFallback = false;
     const measure = (contentWidth?: number) => {
+      sizedInFallback = false;
       const style = getComputedStyle(element);
       /* clientWidth rounds up fractional layout widths. At density zoom that
          can create a one-screen-pixel scroll range even when scrollWidth and
@@ -897,6 +902,7 @@ export function Grid({
           upper: face.textTransform === 'uppercase',
           tracking: parseFloat(face.letterSpacing) || 0,
         };
+        sizedInFallback = sizedInFallback || !fontLoaded(next.font);
         setHeadFace((was) => (was && was.font === next.font && was.upper === next.upper && was.tracking === next.tracking ? was : next));
       }
       /* A group's head is not a row of values: the first row that is one is sampled. */
@@ -907,6 +913,7 @@ export function Grid({
           const font = getComputedStyle(cell);
           return `${font.fontStyle} ${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;
         });
+        sizedInFallback = sizedInFallback || !fonts.every(fontLoaded);
         setCellFonts((was) => (was.join('|') === fonts.join('|') ? was : fonts));
         /* The widest chip of the sampled rows, not the first row's: a look may draw a neutral state as a bare word
            and the rest as pills, and sized by a first-row "Ready" Sage cut every "In review" pill to "In rev…". */
@@ -934,7 +941,17 @@ export function Grid({
     observer.observe(element);
     const themeChanged = () => measure();
     addHostListener(window, VISUAL_THEME_EVENT, themeChanged);
+    /* A face that arrives after the first measure: sized again with it, once, and only if the last measure was made
+       without it (a face already here moves nothing). */
+    const faces = globalThis.document?.fonts;
+    const arrived = () => {
+      if (!sizedInFallback) return;
+      measure();
+      setFaceEpoch((was) => was + 1);
+    };
+    faces?.addEventListener?.('loadingdone', arrived);
     return () => {
+      faces?.removeEventListener?.('loadingdone', arrived);
       observer.disconnect();
       removeHostListener(window, VISUAL_THEME_EVENT, themeChanged);
     };
@@ -1041,6 +1058,7 @@ export function Grid({
       headFace,
       cellChips,
       shift,
+      faceEpoch,
     ],
   );
   /* Column i's cell follows the expander's when there is one. */
@@ -1050,7 +1068,7 @@ export function Grid({
         ? (text: string, column: number) =>
             textMeasure(cellFonts[Math.min(column + (slotted ? 1 : 0), cellFonts.length - 1)])?.(text) ?? text.length * 8
         : undefined,
-    [cellFonts, slotted],
+    [cellFonts, slotted, faceEpoch],
   );
   /* An App's own list folds the columns its room cannot hold under the row's name, as a detail line, once its heads
      and words have wrapped (gridSizing.ts): they are moved, not lost, and the list does not scroll sideways. An

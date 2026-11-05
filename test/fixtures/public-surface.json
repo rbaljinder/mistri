@@ -4290,7 +4290,8 @@
     },
     "package @mistriwork/engine": {
       "preview": [
-        "entry @mistriwork/engine"
+        "entry @mistriwork/engine",
+        "entry @mistriwork/engine/host"
       ]
     },
     "package @mistriwork/ui": {

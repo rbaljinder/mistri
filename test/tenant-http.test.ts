@@ -306,11 +306,23 @@ test("batched tab counts and a count-free run pass the tenant allowlist and stay
   owned(run, a);
   assert.equal(run.body.total, undefined);
   assert.equal(rows(run).length, 1);
-  // A tenant host does not stream an export: the client reads it through /api/run instead.
-  const exported = await f.data('/api/export', a, { q: 'item' });
-  assert.notEqual(exported.status, 200);
-  assert.doesNotMatch(exported.text, /North item|South item/);
+  // The streamed export reads on the lease as a list does: this tenant's rows under the member's fields, owned by the lease.
+  const response = await fetch(f.base + f.select('/api/export'), {
+    method: 'POST',
+    headers: { cookie: 'fixture=alice', 'content-type': 'application/json', ...f.headers(a) },
+    body: JSON.stringify({ q: 'item sort name show name', format: 'json' }),
+    signal: AbortSignal.timeout(10000),
+  });
+  const file = await response.text();
+  assert.equal(response.status, 200, file);
+  const exported = { status: response.status, headers: response.headers, text: file, body: { rows: JSON.parse(file) as unknown } };
   noPrivate(exported);
+  const values = [a.appId, a.accountId, a.tenantId, a.tabId, a.context, String(a.revision)];
+  ownerHeaders.forEach((header, index) => assert.equal(exported.headers.get(header), values[index], header));
+  assert.match(String(exported.headers.get('cache-control')), /no-store/);
+  assert.deepEqual(exported.body.rows, [{ name: 'North item' }, { name: 'North item two' }]);
+  // Its question's mistakes are said as a read's are, and attest no lease.
+  denied(await f.data('/api/export', a, { q: 'item show tenant_id', format: 'json' }));
 });
 
 test('configured and suggested page plans and references stay on the selected tenant', async (t) => {

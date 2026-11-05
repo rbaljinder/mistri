@@ -67,7 +67,14 @@ export function ImportDialog({
   /* A reference is also said by the captions of its own paths: a sheet's
      "SKU" column names `product_id` where the App captions `product_id.sku`. */
   const labels = (activeApp()?.resources?.[table.id]?.labels ?? {}) as Record<string, string>;
-  const fields = importFields(table, def, (column) => columnLabel(table.id, column) ?? undefined).map((field) => ({
+  const fields = importFields(
+    table,
+    def,
+    (column) => columnLabel(table.id, column) ?? undefined,
+    undefined,
+    undefined,
+    new Set(activeApp()?.resources?.[table.id]?.fixed ?? []),
+  ).map((field) => ({
     ...field,
     aliases: Object.entries(labels)
       .filter(([path]) => path.startsWith(`${field.name}.`) && !path.slice(field.name.length + 1).includes('.'))

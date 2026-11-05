@@ -86,6 +86,12 @@ export function send(res: ServerResponse, status: number, body: unknown): void {
     return;
   }
   if (res.destroyed || res.writableEnded) return;
+  /* A reply already under way — a streamed export whose policy context failed after its rows went
+     (exportRoute.ts) — cannot become an error: it is cut, and the client sees a failed download. */
+  if (res.headersSent) {
+    res.destroy();
+    return;
+  }
   /* While the dev observer runs, a failure says where its trace is: the
      "Open in observer" link beside the refusal (observe/mount.ts). */
   const observe =

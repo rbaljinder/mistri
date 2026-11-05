@@ -164,6 +164,8 @@ export function importFields(
   minorOf: (column: string) => string | undefined = () => undefined,
   /** The column a minor column's row names its own currency in, when its rule says `currency: { column }`. */
   minorByOf: (column: string) => string | undefined = () => undefined,
+  /** Columns a narrowed resource's query sets on every new row (appNarrowed.ts): never a file's to fill. */
+  fixed: ReadonlySet<string> = new Set(),
 ): ImportField[] {
   if (def.command) {
     const matched = (def.match ?? []).flatMap((name) => {
@@ -200,7 +202,12 @@ export function importFields(
   }
   return table.columns
     .filter(
-      (column) => column.writable !== false && column.changesBy !== 'actions' && !isBinaryType(column.type) && column.identity !== 'always',
+      (column) =>
+        column.writable !== false &&
+        column.changesBy !== 'actions' &&
+        !isBinaryType(column.type) &&
+        column.identity !== 'always' &&
+        !fixed.has(column.name),
     )
     .map((column) => {
       const field = columnField(column, labelOf(column.name));

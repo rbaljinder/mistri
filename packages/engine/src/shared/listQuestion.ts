@@ -13,7 +13,7 @@
  */
 import { andQuery } from './query.js';
 import { splitQuery } from './clauses.js';
-import { listPresentationColumns } from './appListColumns.js';
+import { listPresentationColumns, listSecondLineColumns } from './appListColumns.js';
 import { findTable, labelPath, primaryKey, type DatabaseSchema, type TableMeta } from './schema.js';
 import { referenceProjection } from './referenceModel.js';
 import { tableAtPrefix } from './viewPaths.js';
@@ -156,7 +156,7 @@ export function showClause(rules: ListRules, spec: ListQuestionSpec): string {
       ...(naming ? [naming] : []),
       ...named,
       ...(spec.order ? [spec.order] : []),
-      ...subtitleColumns(rules, spec.table, names),
+      ...subtitleColumns(rules, spec.table, [...names, ...(spec.presentation ? listSecondLineColumns(spec.presentation) : [])]),
       ...editedReferences(rules, spec),
       ...(spec.opens ? [spec.opens] : []),
       ...(spec.group ? [spec.group] : []),

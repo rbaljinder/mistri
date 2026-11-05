@@ -8,20 +8,34 @@
  * and 175 ms of a blocked event loop at the ceiling), with a total counted
  * beside it that the file never used. Here a batch is read, written, and let
  * go, so memory stays flat whatever the size, the first byte leaves after
- * the first batch, and nothing is counted.
+ * the first batch, and nothing is counted. There is no row ceiling: a file
+ * holds every row the question matches, or as many as its own `limit` says.
+ *
+ * The next batch is read only once the last has been handed on: a write the
+ * connection cannot take yet waits for it to drain (backpressure), so a slow
+ * client holds the server to a batch in flight, not the whole file. A client
+ * that goes away stops the export — the statement in flight is cancelled
+ * (statementControl.ts) and nothing more is read.
  *
  * Each batch is the ordinary read through this request's own reader —
- * the same grants, fields and errors as `/api/run` — so an export can never
- * hold a row the list could not show. Batches follow the list's order with
- * the key as its tiebreak. Where that order is the key alone and every value
- * in it compares exactly (integers and text; anything on SQLite), a batch
- * starts after the last row of the one before (keyset): no row is skipped or
- * repeated however deep the file goes. Any other order pages by offset, as
- * the list's own pager does.
+ * the same grants, fields, row scope, narrowed resources and errors as
+ * `/api/run` — so an export can never hold a row the list could not show.
+ * Batches page the way the list's own pager does (keysetReadHttp.ts): in the
+ * list's order with the key as its tiebreak, each starting after the last row
+ * of the one before, as a continuation ANDed into the question's own filter,
+ * so a batch costs what the first one did however deep the file goes and no
+ * row is skipped or repeated. Where the list pages by offset — no primary
+ * key, a union, a sort through a reference or on a value that does not come
+ * back as it is stored — so does the file.
  *
- * Not offered inside a row-policy App — its replies are held until the policy
- * context settles, which a stream cannot be (handler.ts) — nor on a tenant
- * host; the client exports through `/api/run` there, as it always did.
+ * Inside a row-policy App each batch is a read of the policy's own facade,
+ * its row scope ANDed into the batch as into a list's page, and the file
+ * holds only what the reader's list could show. A policy reply is held until
+ * its context settles (handler.ts): the file's rows go as they are read, each
+ * already the reader's, but its last write waits for the context, so a
+ * context that fails after the rows were read cuts the connection and the
+ * browser never saves a file that looks whole. A tenant's lease streams the
+ * same way through `exportFile` (mistri: tenant/tenantHttp.ts).
  *
  * What an App decides of it is `ExportHooks` (mistri: http/appExport.ts): who
  * exports which table, who `me` is in the question, and what an amount kept
@@ -29,24 +43,27 @@
  * reads, as stored.
  */
 import type { ServerResponse } from 'node:http';
+import type { Adapter } from '../../adapters/adapter.js';
 import { createBrotliCompress, createGzip, constants as zlib } from 'node:zlib';
 import type { Writable } from 'node:stream';
-import type { Condition, Filter } from '../../adapters/adapter.js';
-import { MAX_LIMIT, clampLimit } from '../../shared/reads.js';
+import { withCancellation } from '../../adapters/statementControl.js';
 import { parseQuery } from '../../shared/query.js';
 import { textToView } from '../../shared/viewtext.js';
-import { findTable, primaryKey, resolveOrder, type DatabaseSchema, type Order, type TableMeta } from '../../shared/schema.js';
+import { findTable, resolveOrder, type DatabaseSchema, type TableMeta } from '../../shared/schema.js';
 import { backrefsTo, resolveAggregate, tryResolvePath, type ViewDef } from '../../shared/viewPaths.js';
 import { CRLF, csvField, csvRecord, jsonRecord } from '../../shared/csv.js';
+import type { PageStep } from '../../shared/keysetPage.js';
 import { readRecords, readView } from '../resourceReadOperations.js';
-import { acceptedEncoding, httpRead, send } from './reply.js';
+import { recordsPaging, settlePage, viewPaging } from '../keysetReadHttp.js';
+import { acceptedEncoding, httpRead, policyResponses, send } from './reply.js';
 import type { PostContext } from './context.js';
 import { rollupReads } from '../../shared/rollups.js';
 
 const EXPORT_PATH = '/api/export';
-/** Rows read per statement: large enough that a 100,000-row file is a hundred
- * reads, small enough that one batch is never a memory event. */
-const BATCH = 1000;
+/** Rows read per statement, and so the most the server holds of a file at once:
+ * large enough that a million-row file is a thousand reads, small enough that
+ * one batch is never a memory event. */
+export const EXPORT_BATCH = 1000;
 const FORMATS = {
   csv: { type: 'text/csv', extension: 'csv' },
   json: { type: 'application/json', extension: 'json' },
@@ -67,35 +84,72 @@ export interface ExportHooks {
   amounts?(post: PostContext, tableId: string): ((row: Record<string, unknown>) => Record<string, unknown>) | undefined;
 }
 
+/** One export, on what its host reads it through: the routes below, or a tenant's lease (mistri: tenant/tenantHttp.ts). */
+interface ExportAsked {
+  res: ServerResponse;
+  body: Record<string, unknown>;
+  /** The reader every batch is read through: this request's own, with its grants, fields and row scope. */
+  adapter: Adapter;
+  schema: DatabaseSchema;
+  now: () => Date;
+  /** Whether a table may be exported (`''`: any table). */
+  may: (tableId: string) => boolean;
+  person?: (text: string) => Promise<Person | undefined>;
+  amounts?: (tableId: string) => ((row: Record<string, unknown>) => Record<string, unknown>) | undefined;
+  /** Headers the file carries beside its own: a tenant lease's owner, which its client checks before it keeps the file. */
+  headers?: Record<string, string>;
+  /** A reply that is not the file (a refusal, the question's errors), sent the host's way. */
+  answer?: (status: number, body: unknown) => void;
+}
+
 export async function exportRoute(post: PostContext, hooks: ExportHooks): Promise<boolean> {
-  const { res, path, body, adapter, schema, appNow } = post;
-  if (path !== EXPORT_PATH) return false;
+  if (post.path !== EXPORT_PATH) return false;
+  const { person, amounts } = hooks;
+  const end = await exportFile({
+    res: post.res,
+    body: post.body,
+    adapter: post.adapter,
+    schema: post.schema,
+    now: post.appNow,
+    may: hooks.may(post),
+    ...(person ? { person: (text: string) => person(post, text) } : {}),
+    ...(amounts ? { amounts: (tableId: string) => amounts(post, tableId) } : {}),
+  });
+  if (!end) return true;
+  /* A row policy's reply waits for its context (handler.ts underPolicy): so does the file's last write. */
+  const held = policyResponses.get(post.res);
+  if (held) held.reply = end;
+  else end();
+  return true;
+}
+
+/**
+ * The export, streamed. Resolves with the file's last write, for the caller
+ * to make once whatever the reads ran in has settled; undefined when the
+ * answer was not a file (it was sent already) or the file was cut.
+ */
+export async function exportFile(asked: ExportAsked): Promise<(() => void) | undefined> {
+  const { res, body, adapter, schema, may } = asked;
+  const answer = asked.answer ?? ((status: number, value: unknown) => send(res, status, value));
+  const amountsOf = (tableId: string) => asked.amounts?.(tableId);
   /* An App that grants by role says who exports which table (appExportable); the file is refused where the Export menu is not offered. */
-  const may = hooks.may(post);
   if (!may('')) {
-    send(res, 403, { error: 'Export is not available to this person.' });
-    return true;
-  }
-  // Never reached in one (httpRowPolicyAllows), and refused here as well: a policy reply cannot stream.
-  if (post.rowPolicy) {
-    send(res, 403, {
-      error: 'This operation is unavailable in a row-policy application.',
-    });
-    return true;
+    answer(403, { error: 'Export is not available to this person.' });
+    return undefined;
   }
   const format = body.format ?? 'csv';
   if (typeof format !== 'string' || !Object.hasOwn(FORMATS, format)) {
-    send(res, 400, { error: 'format must be "csv", "json" or "ndjson".' });
-    return true;
+    answer(400, { error: 'format must be "csv", "json" or "ndjson".' });
+    return undefined;
   }
   if (body.columns !== undefined && (!Array.isArray(body.columns) || body.columns.some((column) => typeof column !== 'string'))) {
-    send(res, 400, { error: 'columns must be a list of column names.' });
-    return true;
+    answer(400, { error: 'columns must be a list of column names.' });
+    return undefined;
   }
   const text = String(body.q ?? '');
-  const me = await hooks.person?.(post, text);
+  const me = await asked.person?.(text);
   const person = me === undefined ? {} : { me };
-  const parsed = parseQuery(text, { schema, now: appNow(), ...person });
+  const parsed = parseQuery(text, { schema, now: asked.now(), ...person });
 
   /* A question only a view can answer (a path through a reference) exports
      as a view, paged by offset: its rows have no single key to resume from. */
@@ -103,77 +157,105 @@ export async function exportRoute(post: PostContext, hooks: ExportHooks): Promis
     const asView = textToView(schema, text, {
       id: 'export',
       name: '',
-      now: appNow(),
+      now: asked.now(),
       ...person,
     });
     if (asView.view && !asView.errors.length) {
       const view = asView.view;
       /* Every table the view reaches, not only its base: a column through a reference, an aggregate or a filter on one reads another table's rows into the file. */
       for (const reached of viewTables(schema, view))
-        if (!may(reached)) return refuseTable(res, reached === UNKNOWN_TABLE ? view.base : reached);
-      const total = clampLimit(view.limit ?? MAX_LIMIT);
-      const read = (offset: number) =>
-        httpRead(() => readView(adapter, schema, view, { limit: Math.min(BATCH, total - offset), offset }, 'none')).then(
-          ({ result }) => result,
+        if (!may(reached)) return refuseTable(answer, reached === UNKNOWN_TABLE ? view.base : reached);
+      const base = findTable(schema, view.base);
+      /* A union pages by offset: its rows have no one key order across branches (unionReads.ts), as the list's. */
+      const keyed = base && !base.union ? base : undefined;
+      let step: PageStep | undefined;
+      const read = async (offset: number, size: number) => {
+        const paging = keyed && viewPaging(schema, keyed, view, step);
+        /* Past the first batch with no boundary to resume from, the file goes on by offset in the same total order. */
+        const continued = paging && (!step || paging.continuation) ? paging : undefined;
+        const { result } = await httpRead(() =>
+          readView(
+            adapter,
+            schema,
+            continued?.view ?? view,
+            { limit: size, offset: continued?.continuation ? 0 : offset },
+            'none',
+            undefined,
+            continued?.continuation,
+          ),
         );
-      await stream(res, format as Format, view.base, total, read, requested(body) ?? undefined, hooks.amounts?.(post, view.base));
-      return true;
+        if (!continued) return result;
+        const settled = settlePage(continued.order, continued.extra, result);
+        step = settled.bounds ? { after: settled.bounds.last } : undefined;
+        return { columns: settled.columns, rows: settled.rows };
+      };
+      return stream(
+        res,
+        format as Format,
+        view.base,
+        rowsWanted(view.limit),
+        read,
+        requested(body) ?? undefined,
+        amountsOf(view.base),
+        asked.headers,
+      );
     }
   }
-  if (!parsed.query) {
-    send(res, 200, { errors: parsed.errors });
-    return true;
-  }
-  if (parsed.errors.length) {
-    send(res, 200, { errors: parsed.errors });
-    return true;
+  if (!parsed.query || parsed.errors.length) {
+    answer(200, { errors: parsed.errors });
+    return undefined;
   }
 
   const query = parsed.query;
   const table = findTable(schema, query.table);
   if (!table) {
-    send(res, 404, { error: `Unknown table "${query.table}"` });
-    return true;
+    answer(404, { error: `Unknown table "${query.table}"` });
+    return undefined;
   }
-  if (!may(table.id)) return refuseTable(res, table.id);
+  if (!may(table.id)) return refuseTable(answer, table.id);
   const wanted = requested(body) ?? (query.columns?.length ? query.columns : undefined);
   for (const reached of queryTables(schema, table, query, wanted))
-    if (!may(reached)) return refuseTable(res, reached === UNKNOWN_TABLE ? table.id : reached);
-  const total = clampLimit(query.limit ?? MAX_LIMIT);
-  const order = resolveOrder(table, query.orderBy).order;
-  const keyset = keysetOrder(table, order, schema.dialect);
-  /* The key is read even when the file does not show it: it is where the
-     next batch starts. It never reaches the file (`wanted` is the file's). */
-  const reading = wanted && keyset ? [...new Set([...wanted, ...keyset.map((o) => o.column)])] : wanted;
-  let after: Record<string, unknown> | undefined;
-  const read = async (offset: number) => {
+    if (!may(reached)) return refuseTable(answer, reached === UNKNOWN_TABLE ? table.id : reached);
+  /* The order the list reads in, made total with the key; an offset batch reads in it too. */
+  const order = schema.dialect === 'http' && !query.orderBy?.length ? undefined : resolveOrder(table, query.orderBy).order;
+  let step: PageStep | undefined;
+  const read = async (offset: number, size: number) => {
+    /* A union pages by offset: its rows have no one key order across branches (unionReads.ts), as the list's. */
+    const paging = table.union ? undefined : recordsPaging(table, schema.dialect, query.orderBy, wanted, query.filter, step);
+    /* Past the first batch with no boundary to resume from, the file goes on by offset in the same total order. */
+    const continued = paging && (!step || paging.continuation) ? paging : undefined;
+    /* An order column the file does not show is read for the boundary and taken out again (settlePage): it never
+       reaches the file, whose columns are `wanted`. */
+    const columns = continued?.columns ?? wanted;
     const { result } = await httpRead(() =>
       readRecords(
         adapter,
         schema,
         {
           ...query,
-          ...(reading ? { columns: reading } : {}),
-          orderBy: order,
-          filter: keyset && after ? beyond(query.filter, keyset, after) : query.filter,
-          limit: Math.min(BATCH, total - offset),
-          offset: keyset ? 0 : offset,
+          ...(columns ? { columns } : {}),
+          ...(order ? { orderBy: order } : {}),
+          limit: size,
+          offset: continued?.continuation ? 0 : offset,
         },
         'none',
+        undefined,
+        continued?.continuation,
       ),
     );
-    after = result.rows.at(-1);
-    return result;
+    if (!continued) return result;
+    const settled = settlePage(continued.order, continued.extra, result);
+    step = settled.bounds ? { after: settled.bounds.last } : undefined;
+    return { columns: settled.columns, rows: settled.rows };
   };
-  await stream(res, format as Format, table.id, total, read, wanted, hooks.amounts?.(post, table.id));
-  return true;
+  return stream(res, format as Format, table.id, rowsWanted(query.limit), read, wanted, amountsOf(table.id), asked.headers);
 }
 
-function refuseTable(res: ServerResponse, tableId: string): true {
-  send(res, 403, {
+function refuseTable(answer: (status: number, body: unknown) => void, tableId: string): undefined {
+  answer(403, {
     error: `Export of "${tableId}" is not available to this person.`,
   });
-  return true;
+  return undefined;
 }
 
 /** Stands for a table a view reaches that cannot be named (a many-valued condition it cannot resolve): never exportable. */
@@ -260,51 +342,18 @@ function requested(body: Record<string, unknown>): string[] | undefined {
   return Array.isArray(body.columns) && body.columns.length ? (body.columns as string[]) : undefined;
 }
 
-/* Types whose values come back exactly as stored on Postgres. */
-const EXACT_TYPE = /^(tiny|small|medium|big)?int(eger)?\d*\b|^(big|small)?serial|char|text|uuid/i;
-
-/**
- * The order a keyset can resume, or undefined. Only the key, and only
- * columns whose value comes back exactly as it is stored: an integer or text
- * on Postgres — a timestamp comes back to the millisecond and a
- * float rounded, and resuming "after" a rounded value repeats or skips rows —
- * and anything on SQLite, which hands back what it holds.
- */
-function keysetOrder(table: TableMeta, order: Order[], dialect: string): Order[] | undefined {
-  const key = primaryKey(table);
-  if (!key.length || order.length !== key.length || order.some((o, i) => o.column !== key[i])) return undefined;
-  if (dialect === 'http') return undefined;
-  const exact = order.every((o) => {
-    const column = table.columns.find((c) => c.name === o.column);
-    if (!column || column.nullable) return false;
-    return dialect === 'sqlite' || EXACT_TYPE.test(column.type);
-  });
-  return exact ? order : undefined;
+/** How many rows the file holds: the question's own `limit` where it says one, with no ceiling; every row otherwise. */
+function rowsWanted(limit: unknown): number {
+  const n = typeof limit === 'number' ? limit : typeof limit === 'string' && limit.trim() !== '' ? Number(limit) : NaN;
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : Infinity;
 }
 
-/**
- * The rows after `last` in `order`, within the question's own filter: for a
- * key (a, b) ascending, `a > x OR (a = x AND b > y)`, crossed with each of the
- * filter's OR-groups so every group keeps all of its own conditions. Values
- * are bound like any other condition's.
- */
-function beyond(filter: Filter | undefined, order: Order[], last: Record<string, unknown>): Filter {
-  const steps: Condition[][] = order.map((o, i) => [
-    ...order.slice(0, i).map((earlier) => ({
-      column: earlier.column,
-      op: '=' as const,
-      value: last[earlier.column] as Condition['value'],
-    })),
-    {
-      column: o.column,
-      op: o.direction === 'desc' ? ('<' as const) : ('>' as const),
-      value: last[o.column] as Condition['value'],
-    },
-  ]);
-  const groups = filter?.groups?.length ? filter.groups : [[]];
-  return {
-    groups: groups.flatMap((group) => steps.map((step) => [...group, ...step])),
-  };
+/** Said when the client went away mid-file: nothing reads it, it only stops the loop. */
+class Abandoned extends Error {
+  constructor() {
+    super('The export was abandoned.');
+    this.name = 'Abandoned';
+  }
 }
 
 async function stream(
@@ -312,68 +361,103 @@ async function stream(
   format: Format,
   table: string,
   total: number,
-  read: (offset: number) => Promise<{ columns: string[]; rows: Array<Record<string, unknown>> }>,
+  read: (offset: number, size: number) => Promise<{ columns: string[]; rows: Array<Record<string, unknown>> }>,
   wanted: string[] | undefined,
   amounts?: (row: Record<string, unknown>) => Record<string, unknown>,
-): Promise<void> {
-  /* The first batch is read before a byte is written: a refusal, a column
-     that does not exist, a database that is down all still answer as the
-     ordinary error they are, through the handler's own mapping. */
-  let batch = await read(0);
-  const columns = wanted ?? batch.columns;
-  const spec = FORMATS[format];
-  const encoding = acceptedEncoding(res);
-  res.writeHead(200, {
-    'content-type': `${spec.type}; charset=utf-8`,
-    'content-disposition': `attachment; filename="${table.replace(/[^\w.-]+/g, '_')}.${spec.extension}"`,
-    'cache-control': 'private, no-store',
-    'x-content-type-options': 'nosniff',
-    vary: 'Accept-Encoding',
-    ...(encoding ? { 'content-encoding': encoding } : {}),
-  });
-  const out: Writable =
-    encoding === 'br'
-      ? createBrotliCompress({
-          params: {
-            [zlib.BROTLI_PARAM_QUALITY]: 4,
-            [zlib.BROTLI_PARAM_MODE]: zlib.BROTLI_MODE_TEXT,
-          },
-        })
-      : encoding === 'gzip'
-        ? createGzip({ level: 6 })
-        : res;
-  if (out !== res) (out as unknown as NodeJS.ReadableStream).pipe(res);
-  const write = (chunk: string) =>
-    new Promise<void>((resolve, reject) => {
-      if (res.destroyed) return reject(new Error('The export was abandoned.'));
-      if (out.write(chunk)) resolve();
-      else out.once('drain', resolve);
-    });
+  headers: Record<string, string> = {},
+): Promise<(() => void) | undefined> {
+  /* A client that leaves stops the read in flight (the adapters watch this signal) and every one after it. */
+  const stop = new AbortController();
+  const left = () => {
+    if (!res.writableFinished) stop.abort();
+  };
+  res.once('close', left);
+  const reading = (offset: number) => withCancellation(stop.signal, () => read(offset, Math.min(EXPORT_BATCH, total - offset)));
   try {
-    /* A spreadsheet opens a UTF-8 CSV without a byte-order mark in the local
-       codepage; the browser's own export writes one too (export.js). */
-    if (format === 'csv') await write(`﻿${columns.map(csvField).join(',')}${CRLF}`);
-    let written = 0;
-    for (;;) {
-      const lines = batch.rows.map((row, i) =>
-        format === 'csv'
-          ? `${csvRecord(columns, amounts ? amounts(row) : row)}${CRLF}`
-          : format === 'ndjson'
-            ? `${JSON.stringify(jsonRecord(columns, row))}\n`
-            : // A JSON array as export.js's toJson writes one: two-space indent, one record per element.
-              `${written + i === 0 ? '[\n' : ',\n'}${JSON.stringify(jsonRecord(columns, row), null, 2).replace(/^/gm, '  ')}`,
-      );
-      if (lines.length) await write(lines.join(''));
-      written += batch.rows.length;
-      if (batch.rows.length < BATCH || written >= total) break;
-      batch = await read(written);
+    /* The first batch is read before a byte is written: a refusal, a column
+       that does not exist, a database that is down all still answer as the
+       ordinary error they are, through the handler's own mapping. */
+    let batch = await reading(0);
+    if (stop.signal.aborted) return undefined;
+    const columns = wanted ?? batch.columns;
+    const spec = FORMATS[format];
+    const encoding = acceptedEncoding(res);
+    res.writeHead(200, {
+      'content-type': `${spec.type}; charset=utf-8`,
+      'content-disposition': `attachment; filename="${table.replace(/[^\w.-]+/g, '_')}.${spec.extension}"`,
+      'cache-control': 'private, no-store',
+      'x-content-type-options': 'nosniff',
+      vary: 'Accept-Encoding',
+      ...(encoding ? { 'content-encoding': encoding } : {}),
+      ...headers,
+    });
+    const out: Writable =
+      encoding === 'br'
+        ? createBrotliCompress({
+            params: {
+              [zlib.BROTLI_PARAM_QUALITY]: 4,
+              [zlib.BROTLI_PARAM_MODE]: zlib.BROTLI_MODE_TEXT,
+            },
+          })
+        : encoding === 'gzip'
+          ? createGzip({ level: 6 })
+          : res;
+    if (out !== res) {
+      (out as unknown as NodeJS.ReadableStream).pipe(res);
+      stop.signal.addEventListener('abort', () => out.destroy(), { once: true });
     }
-    if (format === 'json') await write(written ? '\n]\n' : '[]\n');
-    out.end();
-  } catch {
-    /* Past the first byte a status cannot change: the connection is cut, so
-       the browser reports a failed download rather than saving half a file
-       that looks whole. */
-    res.destroy();
+    /* Backpressure: a chunk the connection cannot take yet holds the loop until it drains, so the next batch is
+       read only once this one is on its way. A client that leaves meanwhile ends the wait (a drain that never comes
+       would hold the loop and its batch for good). */
+    const write = (chunk: string) =>
+      new Promise<void>((resolve, reject) => {
+        if (stop.signal.aborted || res.destroyed) return reject(new Abandoned());
+        if (out.write(chunk)) return resolve();
+        const settle = (fn: () => void) => () => {
+          out.off('drain', drained);
+          stop.signal.removeEventListener('abort', gone);
+          fn();
+        };
+        const drained = settle(resolve);
+        const gone = settle(() => reject(new Abandoned()));
+        out.once('drain', drained);
+        stop.signal.addEventListener('abort', gone, { once: true });
+      });
+    try {
+      /* A spreadsheet opens a UTF-8 CSV without a byte-order mark in the local
+         codepage; the browser's own export writes one too (export.js). */
+      if (format === 'csv') await write(`\ufeff${columns.map(csvField).join(',')}${CRLF}`);
+      let written = 0;
+      for (;;) {
+        const lines = batch.rows.map((row, i) =>
+          format === 'csv'
+            ? `${csvRecord(columns, amounts ? amounts(row) : row)}${CRLF}`
+            : format === 'ndjson'
+              ? `${JSON.stringify(jsonRecord(columns, row))}\n`
+              : // A JSON array as export.js's toJson writes one: two-space indent, one record per element.
+                `${written + i === 0 ? '[\n' : ',\n'}${JSON.stringify(jsonRecord(columns, row), null, 2).replace(/^/gm, '  ')}`,
+        );
+        if (lines.length) await write(lines.join(''));
+        const size = Math.min(EXPORT_BATCH, total - written);
+        written += batch.rows.length;
+        if (batch.rows.length < size || written >= total) break;
+        batch = await reading(written);
+        if (stop.signal.aborted) throw new Abandoned();
+      }
+      if (format === 'json') await write(written ? '\n]\n' : '[]\n');
+      /* The last write is the caller's to make: a reply held for a context that has not settled yet waits for it. */
+      return () => {
+        if (!res.destroyed) out.end();
+      };
+    } catch {
+      /* Past the first byte a status cannot change: the connection is cut, so
+         the browser reports a failed download rather than saving half a file
+         that looks whole. */
+      stop.abort();
+      res.destroy();
+      return undefined;
+    }
+  } finally {
+    res.off('close', left);
   }
 }

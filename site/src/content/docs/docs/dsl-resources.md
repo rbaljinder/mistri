@@ -182,17 +182,42 @@ the conditions is no record of the resource, so its address finds nothing.
 The query is fixed conditions on the table's own columns: no `show` or
 `sort`, no dates relative to today and no paths. `mistri check` proves it
 against the table and warns (`narrowed-overlap`) when two queries may both
-hold of one row. A narrowed resource is read-only for now: write through its
-table's own resource. It takes no `access`, `delete`, `actions`, `machine`,
-`import`, `settings`, `file`, `clone`, `consumes` or `restocks`. Nor does it
-take `notify`, `flows`, `triggers` or a `search` pack, which follow every
-write to the table whatever its query says: declare them on the table's own
-resource. A reference points at the table's own resource rather than at a
-narrowed one, and a tenant App does not take one yet. The table keeps one
-record history, as strict as the strictest of its resources' `audit`; an
-activity feed says each change under the resource whose query holds of the
-row, and live sync tells a narrowed list that its table changed, never which
-rows.
+hold of one row.
+
+A write through a narrowed resource stays inside its query, on every door:
+New and Save, Delete, a fixed action, a machine's step, a CSV import, a
+command's `tx`, and the App API's and MCP's writes. So it takes `access:
+'write'`, `delete`, `actions`, `machine` and `import` as any resource does.
+
+- **Insert:** each equality of the query is set on the new row: through
+  `orderEvents`, `kind` is `order` whether or not the request gives it, and a
+  request that gives another value is refused. An import and the API's
+  `create` do not ask for those columns. A query that is not plain
+  equalities (an `in`, a range, an `or`) cannot say what a new row holds, so
+  that resource takes no new rows: add them through the table's own
+  resource.
+- **Update:** a change that would move the row out of the query is refused
+  and nothing is changed: the row is found by its key and the query, locked,
+  and read on the query again after the write, in the same transaction.
+- **Update and delete of a row outside the query** answer as a key nothing
+  holds does.
+
+A machine or an action declared on the narrowed resource guards the writes
+made through it; the table's own resource answers to its own rules.
+
+A `notify` rule on a narrowed resource is held to its query: it tells its
+people about the rows the query reads, whichever resource wrote them, and no
+others. Its query must then be conditions a notice can judge (`=`, `!=` and
+`in`). It does not take `settings`, `file`, `clone`, `consumes` or
+`restocks` yet, which write a row other than through its query. Nor does it
+take `flows`, `triggers` or a `search` pack, which follow every write to the
+table whatever its query says (a search index holds no query to read its
+rows on): declare them on the table's own resource. A reference points at
+the table's own resource rather than at a narrowed one, and a tenant App does
+not take one yet. The table keeps one record history, as strict as the
+strictest of its resources' `audit`; an activity feed says each change under
+the resource whose query holds of the row, and live sync tells a narrowed
+list that its table changed, never which rows.
 
 ## Unions
 
@@ -395,7 +420,7 @@ resource.
 | `resources.*.display.*.slider.max` | number | Stable |  |
 | `resources.*.display.*.slider.min` | number | Stable |  |
 | `resources.*.display.*.slider.step` | number | Stable |  |
-| `resources.*.display.*.subtitle` | string | Stable | Another column of the same record, said as a muted second line under the value in lists. |
+| `resources.*.display.*.subtitle` | string | Stable | Another column of the same record, said as a muted second line under the value: in lists, blocks of fields, header facts, card sections, headline figures, a card's title, figure and properties, and a board card's title. |
 | `resources.*.display.*.timezone` | string | Preview | With format date or datetime: the IANA zone a moment is said in, over the App's ui.timezone ("America/New_York"). A stored date alone never shifts. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.display.*.tone` | object | Stable | Value → tone pills. Keys may be exact values, or numeric thresholds like ">= 90" — for numbers, the first satisfied threshold (in written order) wins. The key "*" is the fallback; values it does not name wear neutral. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `resources.*.display.*.unit` | string | Stable | With "number", "money" or no format on a numeric column: the unit said after the figure — "mi", "kg", "/mo" (a leading slash joins without a space: "$242/mo"). Used in `examples/apps/lintel/app.ts`. |
@@ -611,7 +636,7 @@ resource.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `resources.*.query` | string | Preview | Preview. The conditions every read of this resource stands on, in the query language ("kind = order"): how one table is bound as several resources. A filter, never a grant; read-only for now. |
+| `resources.*.query` | string | Preview | Preview. The conditions every read of this resource stands on, in the query language ("kind = order"): how one table is bound as several resources. A filter, never a grant; a write through it stays inside it. |
 
 ## `resources.*.recordLabel`
 

@@ -52,6 +52,8 @@ import { slug } from '../shared/slug.js';
 import type { PublicConnection, SecretSource } from '../shared/connection.js';
 import { sqliteTargetFrom } from './configPaths.js';
 import { product } from './product.js';
+import { flushJournal } from './journal.js';
+import { keepWriteJournal } from './journalStore.js';
 export { sqliteTargetFrom } from './configPaths.js';
 export type { PublicConnection } from '../shared/connection.js';
 
@@ -640,6 +642,10 @@ export class Registry {
       /* The catalog as served: a hidden column is not in it, for any caller. */
       const schema = entry.config.hidden ? withoutHiddenColumns(read, entry.config.hidden, entry.config.name) : read;
       for (const hook of this.dialedHooks) hook(entry.config.id, adapter);
+      /* A writable connection keeps its Undo history in its database where the
+         store is provisioned (journalStore.ts), read back before the first
+         write; elsewhere it stays in memory, as it always has. */
+      if (entry.config.writable) await keepWriteJournal(entry.config.id, adapter, this.onWarning);
       /* Wrapped before it is stored, so nothing can reach the unwrapped one:
          the boundary is a property of the connection, not a rule each caller
          remembers. Introspection happens first because the catalog is the
@@ -774,6 +780,8 @@ export class Registry {
     const entries = [...this.entries.values()];
     const finish = entries.map((entry) => this.invalidateAdapter(entry));
     try {
+      // What the journal wrote behind lands before the handles it is written through close.
+      await Promise.all(entries.map((entry) => flushJournal(entry.config.id)));
       await Promise.allSettled(entries.map((entry) => entry.adapter?.close()));
     } finally {
       for (const done of finish) done();

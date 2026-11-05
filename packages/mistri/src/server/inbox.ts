@@ -154,9 +154,11 @@ function physicalRules(app: AppDef, resources: Pick<RuntimeResources, 'schema' |
     const email = contactEmailWording(app, resource, columns);
     const into = byConnection.get(connection) ?? new Map<string, NoticeRule[]>();
     byConnection.set(connection, into);
-    into.set(
-      table,
-      compiled.map((rule) =>
+    /* Each resource of one table adds its rules: a narrowed resource's beside its table's (appNarrowed.ts), each
+       held to its own query by its `when` (appNotify.ts). */
+    into.set(table, [
+      ...(into.get(table) ?? []),
+      ...compiled.map((rule) =>
         Object.freeze({
           app: app.id,
           on: rule.on,
@@ -175,7 +177,7 @@ function physicalRules(app: AppDef, resources: Pick<RuntimeResources, 'schema' |
           ...(rule.send ? { send: physicalSend(rule.send, path, email) } : {}),
         }),
       ),
-    );
+    ]);
   }
   if (byConnection.size > 1)
     throw new Error(

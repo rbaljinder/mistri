@@ -149,6 +149,14 @@ export const PROVISION: Readonly<Record<string, Provisioners>> = {
       await (await import('../../packages/mistri/src/adapters/live/postgresLiveChange.js')).provisionPostgresLiveChange(url);
     },
   },
+  'undo-journal': {
+    sqlite: async (path) => {
+      (await import('../../packages/engine/src/server/journalStore.js')).provisionSqliteWriteJournal(path);
+    },
+    postgres: async (url) => {
+      await (await import('../../packages/engine/src/server/journalStore.js')).provisionPostgresWriteJournal(url);
+    },
+  },
   inbox: {
     sqlite: async (path) => {
       (await import('../../packages/mistri/src/adapters/inbox/sqliteInbox.js')).provisionSqliteInbox(path);

@@ -78,6 +78,7 @@
  "e2e/keyboard-board-rail.spec.ts": 11.4,
  "e2e/keyboard-trail.spec.ts": 8.8,
  "e2e/ladle.spec.ts": 58.6,
+ "e2e/list-columns-stable.spec.ts": 13.1,
  "e2e/list-cross-filters.spec.ts": 8.9,
  "e2e/list-filter-bar.spec.ts": 10.9,
  "e2e/list-fold.spec.ts": 6.9,

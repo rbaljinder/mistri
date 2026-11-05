@@ -22,13 +22,13 @@ import { scopeApiRequest } from './requestIdentity.js';
 import { captureSessionIdentity } from './sessionIdentity.js';
 import { say } from './copy/workbench/export.js';
 import { portalRoot } from './shellHost.js';
+import { shell } from './shellMode.js';
 import { fetchServer } from './transport.js';
 
 export { csvField };
 
-/* Mirrors MAX_LIMIT in packages/engine/src/shared/reads.ts. The server clamps to it
-   regardless, so this is only here to keep the button honest about how many
-   rows "all matching" can actually mean. */
+/* Mirrors MAX_LIMIT in packages/engine/src/shared/reads.ts: the most one `/api/run` reads, which is all an export
+   holds only where the server cannot stream the file (streamExport below); a streamed file has no ceiling. */
 export const EXPORT_MAX_ROWS = MAX_LIMIT;
 
 /** A CSV document: a header row of column names, then one row per record. */
@@ -191,10 +191,11 @@ export function saveExport(kind, table, columns, rows) {
 /**
  * All matching rows, as a file the server streams (`POST /api/export`):
  * read in batches and written as each arrives, so neither side holds the
- * whole result as objects and nothing is counted. False where the server
- * does not offer it — a tenant host, a row-policy App (its replies wait for
- * the policy to settle, which a stream cannot) — and the caller exports
- * through `/api/run` as before.
+ * whole result as objects and nothing is counted. A tenant's file is asked
+ * on its lease (the shell's `tenant.exportFile`); a row-policy App's is read
+ * through the policy like its list. False where the server does not offer
+ * it — a support visit, whose every read is ledgered whole — and the caller
+ * exports through `/api/run` as before.
  *
  * @param {'csv' | 'json'} kind
  * @param {string} table
@@ -204,18 +205,8 @@ export function saveExport(kind, table, columns, rows) {
  */
 export async function streamExport(kind, table, q, columns) {
   const identity = captureSessionIdentity();
-  if (identity.tenantRequired) return false;
-  const { url, payload } = scopeApiRequest('/api/export', { q, format: kind, columns }, state.activeConnection);
-  const res = await fetchServer(url, {
-    method: 'POST',
-    credentials: 'same-origin',
-    cache: 'no-store',
-    headers: {
-      'content-type': 'application/json',
-      ...(identity.mode === 'authenticated' ? { 'x-mistri-account': identity.accountId } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
+  const res = identity.tenantRequired ? await onLease(kind, q, columns) : await ordinary(identity, kind, q, columns);
+  if (!res) return false;
   /* The file is the one answer with a disposition; anything else is JSON
      saying why not — a refusal to fall back from, or the query's error. */
   if (res.ok && res.headers.get('content-disposition')) {
@@ -231,4 +222,36 @@ export async function streamExport(kind, table, q, columns) {
   if ([401, 403, 404, 405].includes(res.status)) return false;
   const said = await res.json().catch(() => null);
   throw new Error(said?.errors?.[0]?.message ?? said?.error ?? say('theExportCouldNotBeRead'));
+}
+
+/**
+ * @param {ReturnType<typeof captureSessionIdentity>} identity
+ * @param {'csv' | 'json'} kind
+ * @param {string} q
+ * @param {string[]} columns
+ */
+function ordinary(identity, kind, q, columns) {
+  const { url, payload } = scopeApiRequest('/api/export', { q, format: kind, columns }, state.activeConnection);
+  return fetchServer(url, {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: {
+      'content-type': 'application/json',
+      ...(identity.mode === 'authenticated' ? { 'x-mistri-account': identity.accountId } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * The file on the tenant's lease, or undefined where the shell sends none (tenantTransport.ts `tenantExport`).
+ *
+ * @param {'csv' | 'json'} kind
+ * @param {string} q
+ * @param {string[]} columns
+ */
+async function onLease(kind, q, columns) {
+  const exportFile = shell().tenant?.exportFile;
+  return exportFile ? await exportFile({ q, format: kind, columns }) : undefined;
 }

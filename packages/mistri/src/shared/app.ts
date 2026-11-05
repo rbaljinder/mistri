@@ -21,7 +21,7 @@
  * and the fix named, booleans and shapes are refused rather than coerced,
  * and nothing is silently skipped.
  */
-import { checkNarrowed } from './appNarrowed.js';
+import { checkNarrowed, narrowedFixedColumns } from './appNarrowed.js';
 import { checkShellNew } from './appNewMenu.js';
 import { destinationProblem, servedView, servedViewKind } from './appDestinations.js';
 import { parseBrandingDeclaration } from './tenantBranding.js';
@@ -1948,6 +1948,8 @@ function resolveListView(
 export interface ResolvedResource extends ServedResource {
   /** Its rows may be imported from a CSV file (appImport.ts). */
   import?: import('./appImportDeclaration.js').AppImportDef;
+  /** With an import, the columns a narrowed resource's query sets on every new row (appNarrowed.ts): never a file's to fill. */
+  fixed?: string[];
 }
 
 /** The served machine: a state says the words the column's display gives it, else its own. */
@@ -2145,7 +2147,12 @@ export function resolveResources(app: AppDef, schema: DatabaseSchema): { resourc
       ...(resource.favorite ? { favorite: true as const } : {}),
       ...(resource.noun ? { noun: resource.noun } : {}),
       ...(resource.settings ? { settings: resource.settings } : {}),
-      ...(resource.import && !importIssue ? { import: resource.import } : {}),
+      ...(resource.import && !importIssue
+        ? (() => {
+            const fixed = narrowedFixedColumns(table, resource.query);
+            return { import: resource.import, ...(fixed.size ? { fixed: [...fixed] } : {}) };
+          })()
+        : {}),
     };
     if (Object.keys(served).length) resources[table.id] = served;
   }

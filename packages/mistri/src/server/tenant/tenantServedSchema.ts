@@ -5,6 +5,7 @@
  * what an App's catalog carries on the ordinary host as well.
  */
 import { appCatalog, servedSegments, withLabelTemplates, type AppDef } from '../../shared/app.js';
+import { withNarrowedFixed } from '../../shared/appNarrowed.js';
 import { computedConstants } from '../../shared/appComputed.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { foldConstants, readStatementInstantFrom, type ComputedNode } from '@mistriwork/engine/shared/computed.js';
@@ -259,6 +260,6 @@ function servedAfresh(context: ServedContext, app: AppDef, now: Date, me: string
   };
   /* withRollups, with what the App's catalog read of the clock and the reader watched: which segments a reader is
      served depends on the catalog's names alone, never on the instant it was parsed at. */
-  const read = readsOf(() => appCatalog(app, withLabelTemplates(app, served), now, me, context.zone, symbolic));
+  const read = readsOf(() => appCatalog(app, withNarrowedFixed(app, withLabelTemplates(app, served)), now, me, context.zone, symbolic));
   return { value: captureTenantData(servedSegments(read.value)), clock: read.clock, reader: read.reader };
 }

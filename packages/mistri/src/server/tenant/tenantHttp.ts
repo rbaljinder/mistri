@@ -34,12 +34,11 @@ import type { PageDef } from '@mistriwork/engine/shared/pageModel.js';
 import { wearing, type TenantLook } from './tenantLook.js';
 import { appZone } from '../../shared/appUi.js';
 import { localeWeekStart } from '@mistriwork/engine/shared/weekStart.js';
-import { readStoredFile, shownWrite, uploadValues } from '../http/fileRows.js';
-import { fileStoreTrouble, placeFile, writePlaced, type FileScope } from '../files/fileStorage.js';
+import { shownWrite, uploadValues } from '../http/fileRows.js';
+import { fileStoreTrouble, placeFile, writePlaced } from '../files/fileStorage.js';
 import { judgeLines } from '../http/formLinesWrite.js';
 import type { LineCollection } from '@mistriwork/engine/server/recordWriteOperations.js';
-import { findTable, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { sniffImage } from '../http/imageSniff.js';
+import { findTable } from '@mistriwork/engine/shared/schema.js';
 import {
   FILE_READ_PATH,
   FILE_UPLOAD_PATH,
@@ -85,6 +84,7 @@ import {
   IMPORT_BODY,
   TENANT_COMMAND_ROUTES as commands,
   TENANT_CONTROL_ROUTES as controls,
+  TENANT_EXPORT_PATH,
   TENANT_METADATA_GETS as metadataGets,
   TENANT_METADATA_POSTS as metadataPosts,
   TENANT_READ_ROUTES as reads,
@@ -94,6 +94,7 @@ import {
 } from './tenantHttpRoutes.js';
 import { servedBaseOf, tenantServedSchema, withRequestInstant } from './tenantServedSchema.js';
 import { lookupTenantPerson } from '../app/appMe.js';
+import { tenantExport, tenantFileRead } from './tenantFiles.js';
 import { TenantWriteFailure } from './tenantWriteSource.js';
 import { SUPPORT_HTTP_OPERATIONS, SUPPORT_HTTP_ROOT } from '../../shared/tenantSupport.js';
 import { SUPPORT_LOG_PATH, SUPPORT_SESSIONS_PATH, type SupportAuditReply, type SupportLogReply } from '../../shared/tenantSupportLog.js';
@@ -245,39 +246,6 @@ export function readAdapter(context: ReadContext): Adapter {
     ...context.data,
   });
 }
-/**
- * One file of a file resource, read on the lease: through the context's own
- * reader, so the member's grants and the tenant's rows are the only ones it
- * can reach. The bytes come back as base64 with the type the bytes say when
- * they are a picture asked for in place, and as a download otherwise — the
- * page makes a blob of it, never a link.
- */
-export async function tenantFileRead(
-  app: AppDef,
-  reader: Adapter,
-  schema: DatabaseSchema,
-  input: Record<string, unknown>,
-  scope: FileScope,
-): Promise<{ status: number; body: unknown }> {
-  const table = findTable(schema, typeof input.table === 'string' ? input.table : '');
-  const rule = table ? appFileRules(app, schema).rules.get(table.id) : undefined;
-  if (!table || !rule) return { status: 404, body: { error: 'This resource does not hold files.' } };
-  let stored: Awaited<ReturnType<typeof readStoredFile>>;
-  try {
-    stored = await readStoredFile(reader, table, rule, input.key, input.variant, scope);
-  } catch (error) {
-    const trouble = fileStoreTrouble(error, 'read');
-    if (!trouble) throw error;
-    return { status: 503, body: { error: trouble } };
-  }
-  if ('error' in stored) return { status: stored.status, body: { error: stored.error } };
-  const image = input.inline === true ? sniffImage(stored.bytes) : undefined;
-  return {
-    status: 200,
-    body: { name: stored.name, type: image ?? 'application/octet-stream', data: Buffer.from(stored.bytes).toString('base64') },
-  };
-}
-
 interface TenantHttpOptions {
   readonly app: AppDef;
   /** The look a save changed in place (tenantLook.ts, G175): worn by the App payload, never by its authority. */
@@ -709,6 +677,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         !(
           control ||
           reads.has(path) ||
+          path === TENANT_EXPORT_PATH ||
           writes.has(path) ||
           commands.has(path) ||
           path === '/api/schema' ||
@@ -772,6 +741,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       if (onSupport && path === '/api/pages/compose') return invalid(404);
       /* Nor the page's boot, which is many reads in one: its client asks each read alone (shared/tenantBoot.ts). */
       if (onSupport && path === TENANT_BOOT_PATH) return invalid(404);
+      /* Nor the streamed export: a support read is ledgered before its body is released, and a stream releases its rows
+         as they are read. Its client exports through `/api/run`, one ledgered read held to its ceiling. */
+      if (onSupport && path === TENANT_EXPORT_PATH) return invalid(403);
       let selectors = selected && !platform ? [url.searchParams.get('tenant')!] : [];
       if (selected && !platform) {
         parseTenantSelector(selectors);
@@ -1071,7 +1043,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         };
         return send(req, res, 200, body, ownerHeaders(viewer.context));
       }
-      if (reads.has(path) || path === '/api/schema' || metadataGets.has(path) || metadataPosts.has(path)) {
+      if (reads.has(path) || path === TENANT_EXPORT_PATH || path === '/api/schema' || metadataGets.has(path) || metadataPosts.has(path)) {
         // One read path for either realm's lease: the platform realm's context
         // presents its own commands and no edits, and reads across tenants.
         const within = <T>(run: (context: ReadContext) => Promise<T>) =>
@@ -1109,6 +1081,24 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             readAdapter(context),
           );
         };
+        if (path === TENANT_EXPORT_PATH) {
+          const readerEmail = computedSaysMe ? ((await sessionOf())?.identity.who ?? null) : null;
+          return tenantExport<ReadContext>({
+            req,
+            res,
+            body: input,
+            app,
+            now,
+            within: (exporting) =>
+              platform
+                ? contexts.withPlatformContext(req, expected, (context: PlatformReadContext, lease) => exporting(context, lease))
+                : contexts.withContext(req, selectors, expected, (context: TenantReadContext, lease) => exporting(context, lease)),
+            schemaOf: (context) => tenantServedSchema(context, app, new Date(now()), readerEmail),
+            reader: readAdapter,
+            person: tenantPerson,
+            settled: assertActive,
+          });
+        }
         /* The App and its pages as this context is offered them, in `locale` with the tenant's own `words`: what
            `/api/app` and `/api/pages` answer from, and what the page's boot plans its room from. Projected once per
            served schema, look, locale and words: the boot asks both routes together, and it was projected for each. */

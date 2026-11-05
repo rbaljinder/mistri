@@ -105,13 +105,16 @@ export function ExportControl({ entry, data }: { entry: Entry; data: ExportData 
     setOpen(false);
     // `selected` rather than what came back, so the file follows the declared order.
     saveExport(kind, data.table, selected, kind === 'csv' ? sheetAmounts(data.table, selected, rows) : rows);
+    /* Not streamed (a support visit): the one bounded read held whole, and the file says where it stopped. */
+    if (all && total > (EXPORT_MAX_ROWS as number)) toast(say('stoppedAtTheCap', { max: formatNumber(EXPORT_MAX_ROWS as number) }));
   };
 
   /* JSON and the agent hand-off are Workbench tools; an App's list offers the columns and the CSV. */
   const workbench = !shell().inApp();
   const kinds = workbench ? (['csv', 'json'] as const) : (['csv'] as const);
   const pageLabel = say('thisPageRows', { count: pageRows.length });
-  const allLabel = say('allMatchingRows', { capped: formatNumber(capped) });
+  /* Every row: the server streams the file with no ceiling (exportRoute.ts); only its fallback stops at the cap. */
+  const allLabel = say('allMatchingRows', { count: formatNumber(total) });
   return (
     <>
       <DropMenu
@@ -175,9 +178,7 @@ export function ExportControl({ entry, data }: { entry: Entry; data: ExportData 
             </DropItem>
           </div>
         )}
-        {total > (EXPORT_MAX_ROWS as number) && (
-          <p className="export-note">{say('cappedAtRowsTheSame', { max: formatNumber(EXPORT_MAX_ROWS as number) })}</p>
-        )}
+        {total > (EXPORT_MAX_ROWS as number) && <p className="export-note">{say('streamedPastTheCap')}</p>}
       </DropMenu>
       {choosing && (
         <ColumnChooser
@@ -294,8 +295,8 @@ function ColumnChooser({
 type MinorRule = { format?: string; minor?: true; currency?: string; currencyColumn?: string };
 /**
  * A CSV says money as the figure a sheet reads, as the server's streamed file
- * does (exportRoute.ts csvAmounts), and here where it cannot stream — a tenant
- * lease, a row policy, this page: a column kept in minor units, 1999, is
+ * does (appExport.ts csvAmounts), and here where it does not stream — a
+ * support visit, this page: a column kept in minor units, 1999, is
  * written 19.99 in its row's own currency.
  */
 function sheetAmounts(tableId: string, columns: readonly string[], rows: Array<Record<string, unknown>>) {

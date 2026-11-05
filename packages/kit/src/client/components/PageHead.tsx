@@ -22,6 +22,7 @@ import { shell } from '../shellMode.js';
 import { isPinned, togglePinned } from '../pagemarks.js';
 import { Editable, PendingBar } from './Editable.js';
 import { RefJump, Value } from './Value.js';
+import { Subtitled } from './SecondLine.js';
 import { headerColumns } from '@mistriwork/engine/shared/recordReads.js';
 import { presentationColumns } from './columnPresentation.js';
 import { useDelete } from './DeleteButton.js';
@@ -527,7 +528,12 @@ function useRecordHeader({
           </span>
         )}
         {before && <span className="page-fact-word">{word} </span>}
-        {filled(path) && said(path)}
+        {/* Its column's second line (`subtitle`) quietly under the value, as a field's is; the record read it. */}
+        {filled(path) && (
+          <Subtitled tableId={base.id} column={path.includes('.') ? undefined : path} row={row}>
+            {said(path)}
+          </Subtitled>
+        )}
         {word !== undefined && !before && <span className="page-fact-word"> {word}</span>}
         {adornments.get(path)}
       </li>

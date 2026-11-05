@@ -236,6 +236,9 @@ const readPosts = new Set([
   '/api/pages/load',
   '/api/count',
   '/api/counts',
+  /* The streamed export (engine http/exportRoute.ts): each batch a read of this facade, the scope ANDed into it as
+     into a list's page, and the file's last write held until the context settles. */
+  '/api/export',
   '/api/references',
   '/api/record-history',
   '/api/record-activity',

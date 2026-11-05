@@ -16,3 +16,8 @@ This package is internal plumbing for `mistri` and `tablewalk`, with no semver
 promise to an App's author: its `exports` name each module those two import,
 and any of them may change or go in any release. An App imports `mistri`'s
 names (or `tablewalk`'s), never these.
+
+`@mistriwork/engine/host` gathers what the database browser opens a database
+through — connect, the catalog, reads, the recorded writes and their Undo
+journal, and what its agent tools need beside them — into one entry. It is
+Preview like the rest, until the browser has moved onto it.

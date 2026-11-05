@@ -589,7 +589,7 @@ export interface AppDisplayRule {
       the database declares (an enum, a `CHECK (stage IN (…))`) sorts in that declared order, in lists, the column
       menu and the API; free text sorts as text. At most 80 characters a word. */
   values?: Readonly<Record<string, string>>;
-  /** Another column of the same record, said as a muted second line under the value in lists, and in a block of fields and a headline's figure. Not drawn in cards, boards, header facts or summary figures. */
+  /** Another column of the same record, said as a muted second line under the value: in lists, a block of fields, a header's facts, a card section, a headline's figure, a card's title, figure and properties, and a board card's title. A card's badge, description, summary and foot, a board card's line and facts, and a summary figure have one line, and do not draw it. */
   subtitle?: string;
   /** A small tinted square before the value in a list's cell: an App icon, in the accent's tint, or with `toneOf`
       another column of the same record whose own `tone` rule tints each row's square —
@@ -742,8 +742,8 @@ export interface AppResource<Column extends string = string, Page extends string
   physical?: string;
   /** The conditions every read of this resource stands on, in the query language: how one table is bound as
       several resources (`orderEvents: { physical: 'audit_event', query: 'kind = order' }`). A filter, never a grant:
-      row policies still apply. Fixed conditions on the table's own columns only; a narrowed resource is read-only
-      for now, and a table is bound again only with one.
+      row policies still apply. Fixed conditions on the table's own columns only; a write through it stays inside
+      them (an insert takes its equalities, an update may not move a row out), and a table is bound again only with one.
       @preview */
   query?: string;
   /** The App's ceiling for this resource. An App serves only the resources

@@ -11,7 +11,7 @@
  */
 import { isPublicVisitor } from './publicVisitor.js';
 import { PUBLIC_READ_GETS, PUBLIC_READ_POSTS } from '../shared/tenantPublicReads.js';
-import { isTenantMutationPath, tenantMutationApi, tenantReadApi } from './tenantTransport.js';
+import { isTenantMutationPath, tenantExport, tenantMutationApi, tenantReadApi } from './tenantTransport.js';
 import { tenantMutationState } from './tenantMutationState.js';
 import { hasUnresolvedAdministration, hasUnresolvedInvitations } from './tenantAccountState.js';
 import { appComponents } from './components/sdk/appComponents.js';
@@ -21,7 +21,7 @@ export const surfaceShell = {
   publicVisitor: isPublicVisitor,
   /** @param {string} path */
   publicRead: (path) => PUBLIC_READ_GETS.has(path) || PUBLIC_READ_POSTS.has(path),
-  tenant: { read: tenantReadApi, mutate: tenantMutationApi, isMutation: isTenantMutationPath },
+  tenant: { read: tenantReadApi, mutate: tenantMutationApi, isMutation: isTenantMutationPath, exportFile: tenantExport },
   mutations: tenantMutationState,
   accountBusy: () => hasUnresolvedAdministration() || hasUnresolvedInvitations(),
   components: appComponents,

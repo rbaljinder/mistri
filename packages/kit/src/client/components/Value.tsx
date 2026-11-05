@@ -11,7 +11,7 @@ import { Fragment, type ReactNode } from 'react';
 import { api, columnDisplay, columnLabel, emptyWord, findTable, humanName, openRecord, refsFrom, state, toast } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
 import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
-import { dressFor, linkFor, maskedText, ruleSays, subtitlePath, wordFor, type DisplayRule } from './valueModel.js';
+import { dressFor, linkFor, maskedText, ruleSays, wordFor, type DisplayRule } from './valueModel.js';
 import { rowCurrency } from '@mistriwork/engine/shared/money.js';
 import { dueOpen } from './dueOpen.js';
 import { JsonValue } from './JsonValue.js';
@@ -22,6 +22,10 @@ import { ValueSlot } from './valueRenderers.js';
 import { Icon } from './Icon.js';
 import { say } from '../copy/record/components/Value.js';
 import { shellBody } from '../shellHost.js';
+import { Subtitled } from './SecondLine.js';
+
+/* The second line is a value's too: the board reads it from here, as it reads every value's words. */
+export { secondLine } from './SecondLine.js';
 
 /* Drawn here and in the grid; the rules that draw them read no global (Dressed.tsx). */
 export { AvatarText, Dressed };
@@ -90,17 +94,14 @@ interface ValueProps {
 
 /** A value as the record and the page show it: dressed when the app says, plain otherwise. */
 export function Value(props: ValueProps) {
-  const { subtitled, row, col } = props;
+  const { subtitled, row, col, tableId } = props;
   const body = <BareValue {...props} />;
-  const rule = subtitled && props.tableId !== undefined ? (columnDisplay(props.tableId, col?.name ?? '') as DisplayRule | null) : null;
-  const path = subtitlePath(rule, col?.name ?? '');
-  const second = path !== undefined && row && Object.hasOwn(row, path) ? row[path] : undefined;
-  if (second === null || second === undefined || second === '') return body;
-  return (
-    <span className="value-subtitled">
+  return subtitled ? (
+    <Subtitled tableId={tableId} column={col?.name} row={row}>
       {body}
-      <span className="value-sub">{String(second)}</span>
-    </span>
+    </Subtitled>
+  ) : (
+    body
   );
 }
 

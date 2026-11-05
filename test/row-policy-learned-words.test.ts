@@ -63,7 +63,7 @@ async function serve(policyApp: boolean) {
       "import { component, defineApp } from '@mistriwork/mistri/app';",
       "const status = component('status', { module: './widgets/Status.jsx', kind: 'value' });",
       "export default defineApp({ id: 'loans', name: 'Loans', connection: 'loans', resources: { loan: { display: { status } } },",
-      policyApp ? "  auth: { rows: 'policy', roles: { reader: { read: ['loan'] } } }," : '',
+      policyApp ? "  auth: { rows: 'policy', roles: { reader: { read: ['loan'], export: ['loan'] } } }," : '',
       "  views: { loans: { kind: 'list', from: 'loan' } }, home: 'loans', nav: ['loans'] });",
     ].join('\n'),
   );
@@ -142,8 +142,7 @@ for (const policyApp of [true, false])
           app: { resources: { loan: { display: { status: { values?: Record<string, string> } } } } };
         };
         assert.equal(app.resources.loan.display.status.values?.APP_PENDING, 'Pending review');
-        // A stream cannot wait for the policy to settle, so a row-policy App refuses the export outright: the CSV is the unpoliced App's.
-        if (s.policy) return;
+        // The CSV says the learned words, read through the policy where the App has one.
         const exported = await fetch(`${s.base}/api/export?app=loans`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
