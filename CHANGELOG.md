@@ -5,6 +5,10 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## Unreleased
+
+- **A writable connection without the `undo-journal` store says so.** Opening one whose database could hold the store and holds none used to keep its Undo history in memory without a word, so a restart forgot writes the docs say last. It now prints one startup notice per connection per run, naming the connection and the step that provisions the store (`provisionStores({ sqlite | postgres }, { only: ['undo-journal'] })` from `@mistriwork/mistri/maintenance`, or `provisionSqliteWriteJournal` / `provisionPostgresWriteJournal`). Nothing is created by opening a connection, and a read-only connection, an HTTP source and a database that holds the store say nothing.
+
 ## 1.0.0-rc.17
 
 - An App with one PostgreSQL source reads its API through the same mapping as an App with several, so the source's engine schema (`sources.<name>.schema`) and a narrowed resource's conditions hold there too; the one-source mapping used to drop the schema.

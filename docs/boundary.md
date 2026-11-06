@@ -203,8 +203,9 @@ A writable connection keeps its write journal in its database when the
 database holds the `undo-journal` store (`provisionSqliteWriteJournal`,
 `provisionPostgresWriteJournal`, or `provisionStores({ only: ['undo-journal'] })`):
 fifty writes a connection, for a week, read back when it opens. Without the
-store the journal is the process's alone, as it always was, and opening a
-connection creates nothing.
+store the journal is the process's alone, as it always was: opening a
+connection creates nothing, and says once, with the step that provisions the
+store, that a restart will forget it.
 
 The proof that the browser builds and serves from the tarballs runs in its
 repository, against the packages this one publishes; the kit's and the

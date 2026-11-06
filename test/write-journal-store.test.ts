@@ -265,18 +265,27 @@ test('the write journal on PostgreSQL: kept across a restart, bounded, redacted'
   }
 });
 
-test('a database without the store keeps the journal in memory and is not touched', async () => {
+test('a database without the store keeps the journal in memory, says so once, and is not touched', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'mistri-journal-memory-'));
   const file = join(dir, 'plain.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL); INSERT INTO item VALUES (1, 'Ada');`);
   db.close();
+  const said: string[] = [];
   const registry = new Registry();
-  registry.onWarning = (message) => assert.fail(`unexpected warning: ${message}`);
+  registry.onWarning = (message) => said.push(message);
   registry.add({ id: 'journal-memory', name: 'Plain', url: file, source: 'config', writable: true });
   try {
-    const { adapter } = await registry.open('journal-memory');
+    await registry.open('journal-memory');
     assert.equal(journalKept('journal-memory'), false);
+    assert.equal(said.length, 1, 'the missing store is said once');
+    assert.match(
+      said[0],
+      /"journal-memory": Undo history is kept in memory.*no undo-journal store.*provisionStores\(\{ sqlite: .*only: \['undo-journal'\]/,
+    );
+    // A dial again (a schema refresh) does not say it again.
+    const { adapter } = await registry.refresh('journal-memory');
+    assert.equal(said.length, 1, 'and not again on the next dial');
     const { undoId } = await recordedUpdate(
       { adapter, connection: 'journal-memory' },
       { table: 'item', key: { id: 1 }, values: { name: 'Ada L' } },
@@ -316,6 +325,25 @@ test('a layout that is not this build’s is said once and the journal stays in 
     assert.equal(journalKept('journal-foreign'), false);
     assert.equal(said.length, 1);
     assert.match(said[0], /kept in memory.*layout version 2, newer than the version 1/);
+  } finally {
+    await registry.closeAll();
+    clearJournal();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a read-only connection without the store says nothing about the journal', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-journal-readonly-'));
+  const file = join(dir, 'readonly.db');
+  const db = new DatabaseSync(file);
+  db.exec(`CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL); INSERT INTO item VALUES (1, 'Ada');`);
+  db.close();
+  const registry = new Registry();
+  registry.onWarning = (message) => assert.fail(`unexpected warning: ${message}`);
+  registry.add({ id: 'journal-readonly', name: 'Read only', url: file, source: 'config' });
+  try {
+    await registry.open('journal-readonly');
+    assert.equal(journalKept('journal-readonly'), false);
   } finally {
     await registry.closeAll();
     clearJournal();
