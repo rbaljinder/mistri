@@ -835,6 +835,11 @@ body.first-run #db-label {
    card's width (Chart.tsx, Sparkline), its stroke and dot keeping their size. */
 .spark-host { display: block; align-self: stretch; margin-top: var(--space-3); height: 28px; width: 100%; min-width: 0; }
 .spark { width: 100%; height: 28px; display: block; }
+/* A run with fewer than four periods above zero is thin bars over a baseline, kept short: stretched across a wide card
+   they read as a chart of nothing (Chart.tsx, Sparkline). */
+.spark-sparse { max-width: 160px; }
+.spark-bar { fill: none; stroke: var(--spark-ink, var(--accent)); stroke-width: 3; stroke-linecap: butt; opacity: 0.75; }
+.spark-base { fill: none; stroke: var(--line); stroke-width: 1; }
 .spark-stroke { fill: none; stroke: var(--spark-ink, var(--accent)); stroke-width: 1.5; opacity: 0.75; }
 /* The last point: a round cap on a zero-length stroke, round however far the spark stretches. */
 .spark-dot { fill: none; stroke: var(--spark-ink, var(--accent)); stroke-width: 5; stroke-linecap: round; }
@@ -856,8 +861,12 @@ body.first-run #db-label {
    class, so the outline could change and the page not: each look still sets
    the type over this. */
 .page-section-title { margin-block: 1em; font-size: 1.17em; font-weight: bold; }
-button.ghost.dash-open { margin-left: auto; padding: var(--space-2) 0; border: 0; background: none; box-shadow: none; color: var(--link); font-size: var(--text-base); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
-button.ghost.dash-open:hover { color: var(--ink); background: none; }
+/* "View all" is a way on, not a thing to read: muted ink with its arrow, and the underline and the ink only under the
+   pointer. A bold underlined link in link ink was the loudest word on a section whose rows were the point. */
+button.ghost.dash-open { margin-left: auto; padding: var(--space-2) 0; border: 0; background: none; box-shadow: none; color: var(--ink-muted); font-size: var(--text-base); font-weight: 500; text-decoration: none; text-underline-offset: 3px; white-space: nowrap; }
+/* The arrow is drawn, not said: the button's name stays "View all" (alt text after the slash). */
+button.ghost.dash-open::after { content: ' →' / ''; }
+button.ghost.dash-open:hover { color: var(--ink); background: none; text-decoration: underline; }
 .dash-count { font-size: var(--text-sm); color: var(--ink-muted); font-family: var(--mono); }
 /* Inside a card the grid's own stat row (count, timing, Export) was a
    second strip of chrome between the title and the rows; the count worth
@@ -1912,7 +1921,10 @@ body.session-locked > :not(#session-lock) { display: none !important; }
 
 /* Totals: one footer row, each sum over everything the list's conditions
    match, set apart from the rows by a rule rather than a colour. */
-.grid-totals td { font-weight: 600; border-top: 1px solid var(--line-strong); border-bottom: 0; background: var(--surface); }
+/* A sum is the one figure that is never cut (docs/design.md): the column is sized by it (gridSizing.ts), and where a
+   font that arrived late or a narrower weight still leaves it short it spills into the cell's padding rather than
+   draw "$102,795....". */
+.grid-totals td { font-weight: 600; border-top: 1px solid var(--line-strong); border-bottom: 0; background: var(--surface); overflow: visible; text-overflow: clip; }
 .grid-totals-label { font-weight: 500; color: var(--ink-muted); }
 .grid-totals-pending { color: var(--ink-subtle); }
 

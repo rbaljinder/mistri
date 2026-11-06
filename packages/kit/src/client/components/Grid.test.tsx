@@ -453,10 +453,105 @@ describe('cells', () => {
     expect(total.title).not.toMatch(/query bar|statement/);
   });
 
+  test('in an App a true flag is a tick and a false one an empty cell named “No”; the Workbench keeps its cross', () => {
+    document.body.classList.add('app-mode');
+    try {
+      draw(<Grid table={invoice} data={data} />);
+      expect(cellsOf(0)('paid').querySelector('.yes')).toHaveTextContent('✓');
+      const no = cellsOf(1)('paid').querySelector('.no')!;
+      // Said to assistive technology, not drawn, so a column of flags is the rows that are.
+      expect(no).toHaveTextContent('No');
+      expect(no).toHaveClass('visually-hidden');
+      expect(cellsOf(1)('paid')).not.toHaveTextContent('✗');
+    } finally {
+      document.body.classList.remove('app-mode');
+    }
+    cleanup();
+    draw(<Grid table={invoice} data={data} />);
+    expect(cellsOf(1)('paid').querySelector('.no')).toHaveTextContent('✗');
+  });
+
   test('in an app the empty word is a dash', () => {
     appMode = true;
     draw(<Grid table={invoice} data={data} />);
     expect(document.querySelector('tbody tr[data-row="1"] td.null')).toHaveTextContent('—');
+  });
+});
+
+describe('a record’s tags in a cell', () => {
+  const tagged = {
+    ...invoice,
+    columns: [...invoice.columns, col('labels', 'tags')] as TableMeta['columns'],
+  };
+  const labelled = {
+    table: 'invoice',
+    columns: ['id', 'labels'],
+    rows: [{ id: 1, labels: JSON.stringify(['accessibility', 'design', 'performance']) }],
+    total: 1,
+    ms: 1,
+  };
+  const widths = { chip: 90, more: 22, cell: 150 };
+  /* The grid and each cell watch their own size: a resize is every one of them told. */
+  const watchers: Array<() => void> = [];
+  const observe = () => watchers.forEach((watcher) => (watcher as (entries?: unknown[]) => void)([]));
+  beforeEach(() => {
+    // happy-dom lays nothing out: the chips are a fixed width, as they are once nothing squeezes them (`flex: none`).
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          watchers.push(callback);
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const width = (element: HTMLElement) =>
+      element.classList.contains('record-tag') ? widths.chip : element.classList.contains('tags-cell-more') ? widths.more : widths.cell;
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return width(this);
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return width(this);
+    });
+    // A cell with no padding and chips four pixels apart.
+    const computed = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element: Element, pseudo?: string | null) =>
+      element.matches('td, .tags-cell-list')
+        ? ({ paddingLeft: '0px', paddingRight: '0px', columnGap: '4px' } as CSSStyleDeclaration)
+        : computed(element, pseudo),
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    widths.cell = 150;
+    watchers.length = 0;
+  });
+
+  test('shows the whole chips that fit beside the count of the rest, and never a cut one', () => {
+    draw(<Grid table={tagged} data={labelled} interactive={false} />);
+    const chips = [...document.querySelectorAll<HTMLElement>('.tags-cell-list > .record-tag')];
+    // Two chips of 90 do not fit in 150 beside "+N"; one does, and the rest are counted.
+    expect(chips.map((chip) => chip.style.display)).toEqual(['', 'none', 'none']);
+    expect(document.querySelector('.tags-cell-more')).toHaveTextContent('+2');
+    expect(document.querySelector('.tags-cell-list')).not.toHaveAttribute('data-lone');
+  });
+
+  test('a wider cell shows more of them, and a cell narrower than its one chip lets that one chip give way', () => {
+    widths.cell = 230;
+    draw(<Grid table={tagged} data={labelled} interactive={false} />);
+    const chips = () => [...document.querySelectorAll<HTMLElement>('.tags-cell-list > .record-tag')].map((chip) => chip.style.display);
+    expect(chips()).toEqual(['', '', 'none']);
+    widths.cell = 60;
+    observe();
+    expect(chips()).toEqual(['', 'none', 'none']);
+    // The one chip kept is wider than the cell: it may shrink (with its ellipsis), the only chip that ever does.
+    expect(document.querySelector('.tags-cell-list')).toHaveAttribute('data-lone');
+    widths.cell = 230;
+    observe();
+    expect(chips()).toEqual(['', '', 'none']);
+    expect(document.querySelector('.tags-cell-list')).not.toHaveAttribute('data-lone');
   });
 });
 

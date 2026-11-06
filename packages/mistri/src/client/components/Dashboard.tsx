@@ -133,6 +133,16 @@ const untitled = (section: { table?: string; by?: string }) => {
   return section.by ? `${table} by ${(columnLabel(section.table ?? '', section.by) as string | null) ?? humanName(section.by)}` : table;
 };
 
+/** What a section with nothing in it says, from its own title: "No leases ending soon" under "Leases ending soon", where
+    the grid's "No rows match." named neither the section nor why. The title's first word is lower-cased unless it is a
+    name or an acronym (a capital past its first letter). */
+function nothingIn(title: string): string {
+  const said = title.trim().replace(/[.!?:]+$/, '');
+  const first = said.split(/\s+/)[0] ?? '';
+  const word = /[A-Z]/.test(first.slice(1)) ? first : first.charAt(0).toLowerCase() + first.slice(1);
+  return sayCopy('noneIn', { title: `${word}${said.slice(first.length)}` });
+}
+
 const CustomDashSection = onDemand(() => import('./sdk/CustomSection.js'), 'CustomDashSection');
 /* A list that works as its room does, and the feed of recent changes: each fetched the first time a dashboard holds one. */
 const InteractiveList = onDemand(() => import('@mistriwork/kit/client/components/DashboardList.js'), 'InteractiveList');
@@ -862,64 +872,108 @@ const StepCards = memo(function StepCards({ section }: { section: Section }) {
   const counted = data.data ? orderGroups(data.data.rows ?? [], keyName, countName, vocabulary) : [];
   const keys = vocabulary ?? counted.map((row) => row[keyName]);
   const countOf = new Map(counted.map((row) => [String(row[keyName]), row[countName]]));
-  const steps = keys.filter((key) => key != null).slice(0, section.limit ?? 8);
+  const all = keys.filter((key) => key != null).slice(0, section.limit ?? 8);
+  /* The states a thing is finished in (a column's `states.final`) are not steps on the road: a card each, at nought, was
+     as loud as the work in hand. They are one quiet line after the road, counted as the steps are; where every value is
+     final there is no road to separate them from, and they stay cards. */
+  const finals = new Set<string>(
+    (findTable(section.table) as TableMeta | undefined)?.columns.find((column) => column.name === section.by)?.states?.final ?? [],
+  );
+  const closed = all.filter((key) => finals.has(String(key)));
+  const steps = closed.length < all.length ? all.filter((key) => !finals.has(String(key))) : all;
+  const ended = steps === all ? [] : closed;
   if (data.data && !steps.length) return section.emptyMode === 'hide' ? <LeaveOut /> : <Nothing text={sayCopy('nothingToCountYet')} />;
   // Rows of four or fewer, as even as the count allows (eight steps are two rows of four, not six and two): the
   // columns are named here so a step that starts a row is known to the looks that part the cells with hairlines.
   const cols = steps.length <= 4 ? Math.max(steps.length, 1) : Math.ceil(steps.length / Math.ceil(steps.length / 4));
   return (
-    <ol
-      className="dash-steps"
-      style={{ ['--steps' as string]: Math.max(steps.length, 1), ['--cols' as string]: cols }}
-      aria-busy={!data.data || undefined}
-    >
-      {steps.map((key, index) => {
-        const text = String(key);
-        const { tone } = ruleSays(rule, text);
-        const icon = rule?.icons && Object.hasOwn(rule.icons, text) ? (rule.icons[text] as AppIconName) : undefined;
-        const note = section.notes?.[text];
-        const figure = data.data ? say(countOf.get(text) ?? 0) : '\u00a0';
-        const body = (
-          <>
-            {icon && (
-              <span className={`dash-step-mark${tone ? ` tone-${tone}` : ''}`} aria-hidden="true">
-                <Icon name={icon} size={16} />
+    <>
+      <ol
+        className="dash-steps"
+        style={{ ['--steps' as string]: Math.max(steps.length, 1), ['--cols' as string]: cols }}
+        aria-busy={!data.data || undefined}
+      >
+        {steps.map((key, index) => {
+          const text = String(key);
+          const { tone } = ruleSays(rule, text);
+          const icon = rule?.icons && Object.hasOwn(rule.icons, text) ? (rule.icons[text] as AppIconName) : undefined;
+          const note = section.notes?.[text];
+          const figure = data.data ? say(countOf.get(text) ?? 0) : '\u00a0';
+          const none = Boolean(data.data) && !Number(countOf.get(text));
+          const body = (
+            <>
+              {icon && (
+                <span className={`dash-step-mark${tone ? ` tone-${tone}` : ''}`} aria-hidden="true">
+                  <Icon name={icon} size={16} />
+                </span>
+              )}
+              <span className="dash-step-words">
+                <span className="dash-step-title">{sayKey(key)}</span>
+                {note && <span className="dash-step-note">{note}</span>}
               </span>
-            )}
-            <span className="dash-step-words">
-              <span className="dash-step-title">{sayKey(key)}</span>
-              {note && <span className="dash-step-note">{note}</span>}
-            </span>
-            <span className="dash-step-figure">{figure}</span>
-          </>
-        );
-        return (
-          <li
-            key={text}
-            className={`dash-step${tone ? ` is-${tone}` : ''}${index % cols === 0 ? ' is-row-start' : ''}${icon ? '' : ' no-mark'}`}
-          >
-            {drill ? (
-              (() => {
-                const link = drill.link(key);
-                const title = sayCopy('openTableWhereBy', { table: section.table ?? '', by: section.by ?? '', key: text });
-                return link ? (
-                  <a className="dash-step-card" href={link.href} title={title} onClick={link.onClick}>
-                    {body}
-                  </a>
-                ) : (
-                  <button type="button" className="dash-step-card" title={title} onClick={() => drill(key)}>
-                    {body}
-                  </button>
-                );
-              })()
+              <span className={`dash-step-figure${none ? ' is-none' : ''}`}>{figure}</span>
+            </>
+          );
+          return (
+            <li
+              key={text}
+              className={`dash-step${tone ? ` is-${tone}` : ''}${index % cols === 0 ? ' is-row-start' : ''}${icon ? '' : ' no-mark'}`}
+            >
+              {drill ? (
+                (() => {
+                  const link = drill.link(key);
+                  const title = sayCopy('openTableWhereBy', { table: section.table ?? '', by: section.by ?? '', key: text });
+                  return link ? (
+                    <a className="dash-step-card" href={link.href} title={title} onClick={link.onClick}>
+                      {body}
+                    </a>
+                  ) : (
+                    <button type="button" className="dash-step-card" title={title} onClick={() => drill(key)}>
+                      {body}
+                    </button>
+                  );
+                })()
+              ) : (
+                <div className="dash-step-card">{body}</div>
+              )}
+              {index < steps.length - 1 && <Icon name="caret-right" size={14} className="dash-step-arrow" />}
+            </li>
+          );
+        })}
+      </ol>
+      {ended.length > 0 && (
+        <p className="dash-steps-ended">
+          <span className="dash-steps-ended-label">{sayCopy('closedSteps')}</span>
+          {ended.map((key) => {
+            const text = String(key);
+            const count = Number(countOf.get(text));
+            const words = (
+              <>
+                {sayKey(key)}{' '}
+                <span className={`dash-steps-ended-figure${data.data && !count ? ' is-none' : ''}`}>
+                  {data.data ? say(countOf.get(text) ?? 0) : '\u00a0'}
+                </span>
+              </>
+            );
+            const link = drill?.link(key);
+            const title = sayCopy('openTableWhereBy', { table: section.table ?? '', by: section.by ?? '', key: text });
+            return link ? (
+              <a key={text} className="dash-steps-ended-item" href={link.href} title={title} onClick={link.onClick}>
+                {words}
+              </a>
+            ) : drill ? (
+              <button key={text} type="button" className="dash-steps-ended-item" title={title} onClick={() => drill(key)}>
+                {words}
+              </button>
             ) : (
-              <div className="dash-step-card">{body}</div>
-            )}
-            {index < steps.length - 1 && <Icon name="caret-right" size={14} className="dash-step-arrow" />}
-          </li>
-        );
-      })}
-    </ol>
+              <span key={text} className="dash-steps-ended-item">
+                {words}
+              </span>
+            );
+          })}
+        </p>
+      )}
+    </>
   );
 });
 
@@ -1008,6 +1062,11 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
             : undefined
         }
         sayLegend={stacked ? (totals) => legendSayer(section, totals) : undefined}
+        timed={
+          stacked &&
+          (/\s/.test(firstKey) ||
+            /date|time/i.test((findTable(section.table) as TableMeta | undefined)?.columns.find((c) => c.name === firstKey)?.type ?? ''))
+        }
         onPick={
           donut || section.shape === 'line'
             ? drillFor(section)
@@ -1377,7 +1436,7 @@ const List = memo(function List({ section, aside = false, period }: { section: S
             present={shell().present ?? undefined}
             listLabel={source?.label}
             order={source?.order}
-            empty={sourceEmpty}
+            empty={sourceEmpty ?? <ListEmpty spec={{ title: nothingIn(section.title ?? untitled(section)) }} />}
             export={exportOffered(app, section.table as string | undefined) ? undefined : false}
             onResult={onRows}
           />

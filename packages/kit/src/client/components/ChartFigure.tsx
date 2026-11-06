@@ -6,7 +6,7 @@
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { viewportBox } from '../core.js';
-import { BarChart, DonutChart, LineChart, StackedBars } from './Chart.js';
+import { BarChart, DonutChart, LineChart, StackedBars, TIMED_HEIGHT } from './Chart.js';
 import { Empty } from './Notes.js';
 import { orderDeclared } from './groupOrder.js';
 import { onDemand } from './onDemand.js';
@@ -66,6 +66,8 @@ interface ChartFigureProps {
   arrange?: 'answer' | 'value' | 'category';
   /** A line with too few filled buckets to draw a line through keeps its shape and stands its points alone. */
   dots?: boolean;
+  /** Stacked bars over periods stand as columns at a fixed height (Chart.tsx), which the room is held at before the answer. */
+  timed?: boolean;
 }
 
 export function ChartFigure({
@@ -92,6 +94,7 @@ export function ChartFigure({
   total,
   dots,
   arrange,
+  timed,
 }: ChartFigureProps) {
   const stacked = shape === 'stacked';
   const donut = shape === 'donut';
@@ -137,7 +140,7 @@ export function ChartFigure({
   if (answer && !rows.length) return <Empty text={empty} detail={emptyDetail} action={emptyAction} />;
   /* Before the answer, the chart's room at about the height it will draw at, ruled as its gridlines will be: an empty
      host was nothing tall, and the chart arriving pushed every section under it down. */
-  if (!answer) return <ChartWait shape={stacked ? 'rows' : donut ? 'donut' : 'plot'} height={height} rows={limit} />;
+  if (!answer) return <ChartWait shape={stacked ? (timed ? 'columns' : 'rows') : donut ? 'donut' : 'plot'} height={height} rows={limit} />;
   return (
     <div className="chart-host" ref={host}>
       {answer &&
@@ -220,19 +223,26 @@ export function ChartShapeFigure({ answer, empty, emptyDetail, emptyAction, heig
   );
 }
 
+/** The legend's line (24px) and the gap under it (10px) over stacked columns, as .chart-stacked-legend draws them:
+    measured, so the room held while the answer is read is the height of the chart that replaces it. */
+const TIMED_LEGEND = 34;
+
 /**
  * A chart's room while it is read: a plot at the line's own measure (a third of its width, 160px to 240px, or the
  * section's `height`), a stack at a row a group, a donut at its disc. Quiet gridlines and no sweep: a chart is a
  * figure, and a moving placeholder in it read as data dancing (docs/design.md, Motion, rule 8).
  */
-function ChartWait({ shape, height, rows }: { shape: 'plot' | 'rows' | 'donut'; height?: number; rows?: number }) {
+function ChartWait({ shape, height, rows }: { shape: 'plot' | 'rows' | 'columns' | 'donut'; height?: number; rows?: number }) {
   const style =
     shape === 'rows'
       ? { height: `${Math.min(Math.max(rows ?? 4, 2), 8) * 30 + 32}px` }
-      : shape === 'donut'
-        ? { height: '200px' }
-        : height
-          ? { height: `${Math.max(120, Math.round(height))}px` }
-          : undefined;
+      : shape === 'columns'
+        ? /* The legend's line over the columns' fixed figure (Chart.tsx, StackedBars). */
+          { height: `${TIMED_HEIGHT + TIMED_LEGEND}px` }
+        : shape === 'donut'
+          ? { height: '200px' }
+          : height
+            ? { height: `${Math.max(120, Math.round(height))}px` }
+            : undefined;
   return <div className={`chart-host chart-wait chart-wait-${shape}`} style={style} role="status" aria-busy="true" />;
 }

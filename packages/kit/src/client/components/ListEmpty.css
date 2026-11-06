@@ -10,4 +10,7 @@
 /* In a section the edge is the section's own: no list inset. */
 .page-section .list-problem > .problem { padding-inline: 0; }
 .page-section .list-empty.empty-note { padding-inline: 0; }
+/* A dashboard section's list stands on the section's edge too, so its "No leases ending soon" starts under its title
+   and not 14px in. */
+.dash-list .list-empty.empty-note { padding-inline: 0; }
 }

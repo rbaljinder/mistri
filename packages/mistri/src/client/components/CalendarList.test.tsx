@@ -497,6 +497,27 @@ test("a phone's agenda says a span on the day it starts, with its days, before t
   expect(said.closest('li')?.querySelector('.calendar-agenda-day')).toBeTruthy();
 });
 
+test('a calendar set in a dashboard with nothing in its month is one line under its head, not a month of empty days', async () => {
+  mocks.api.mockImplementation(async () => ({ rows: [], columns: ['id', 'due_on', 'subject', 'status'] }));
+  draw(false);
+  expect(await screen.findByText(/^Nothing on the calendar/)).toBeVisible();
+  expect(document.querySelector('table')).toBeNull();
+  expect(document.querySelectorAll('.calendar-day')).toHaveLength(0);
+  // The head still turns to another month, where there may be something.
+  expect(screen.getByRole('button', { name: /next month/i })).toBeVisible();
+  cleanup();
+  // The room itself keeps its grid, empty or not: a day is a place to add to or move to.
+  draw(true);
+  expect(await screen.findByText(/^Nothing on the calendar/)).toBeVisible();
+  expect(document.querySelector('table')).not.toBeNull();
+  cleanup();
+  // And a calendar set in a dashboard that has records keeps its month.
+  mocks.api.mockImplementation(async () => ({ rows, columns: ['id', 'due_on', 'subject', 'status'] }));
+  draw(false);
+  await screen.findByRole('button', { name: /Call Stonebridge/ });
+  expect(document.querySelector('table')).not.toBeNull();
+});
+
 test('a calendar with no backdrop asks for nothing more', async () => {
   draw();
   await screen.findByRole('button', { name: /Call Stonebridge/ });

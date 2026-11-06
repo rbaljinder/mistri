@@ -271,6 +271,16 @@ function TotalValue({ value, display }: { value: unknown; display: DisplayRule |
   return <span className="num-value">{formatNumber(value)}</span>;
 }
 
+/** The words the totals row draws for a column's sum, which its column is sized by (TotalValue's words); none while the
+    sum is on its way, absent, or drawn by a meter. */
+function totalWords(display: DisplayRule | null, value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const dress = dressFor(display, value);
+  if (!dress) return formatNumber(value);
+  if (dress.kind === 'meter') return undefined;
+  return String((dress.kind === 'tone' || dress.kind === 'word' || dress.kind === 'mark' ? dress.label : dress.text) ?? value);
+}
+
 /** The words a plain cell draws for a value, which the grid sizes a column by and a folded detail line tests its head
     against: a reference's label, a display rule's own words, a number as formatted, else the raw value. */
 function drawnWords(display: DisplayRule | null, plan: Plan, value: unknown, label?: unknown): unknown {
@@ -522,6 +532,7 @@ function TagsCellList({ chips }: { chips: ReturnType<typeof tagChips> }) {
       more.style.display = count > 0 ? '' : 'none';
     };
     const fit = () => {
+      list.removeAttribute('data-lone');
       tags.forEach((tag) => (tag.style.display = ''));
       sayMore(chips.length - tags.length);
       const box = getComputedStyle(cell);
@@ -535,6 +546,9 @@ function TagsCellList({ chips }: { chips: ReturnType<typeof tagChips> }) {
       });
       sayMore(chips.length - count);
       tags.forEach((tag, index) => (tag.style.display = index < count ? '' : 'none'));
+      /* The one chip that is left is kept even where it is wider than the cell, and is then the one thing that may be
+         cut: a chip is a word, but a cell narrower than its only word cannot show it whole. */
+      if (count === 1 && widths[0]! + (chips.length > 1 ? gap + more.offsetWidth : 0) > room) list.setAttribute('data-lone', '');
     };
     fit();
     const observer = new ResizeObserver(() => fit());
@@ -693,7 +707,15 @@ function PlatformCell({
     const on = value === true || value === 1 || value === '1' || value === 't';
     return (
       <td className={`${classes.join(' ')} bool${pinClass}`} title={raw} {...peek} {...pinAttrs}>
-        <span className={on ? 'yes' : 'no'}>{on ? '✓' : '✗'}</span>
+        {/* An App draws what is: a tick, and for false an empty cell, said as "No" to assistive technology, so a
+            column of flags is the rows that are and not a column of crosses. The Workbench shows the data as it is. */}
+        {on ? (
+          <span className="yes">✓</span>
+        ) : app ? (
+          <span className="no visually-hidden">{say('common.no')}</span>
+        ) : (
+          <span className="no">✗</span>
+        )}
       </td>
     );
   }
@@ -1018,6 +1040,8 @@ export function Grid({
             return drawnWords(display, plan, row[name]);
           }),
           subValues: display?.subtitle ? rows.slice(0, GRID_SIZE_SAMPLE).map((row) => subtitleOf(name, row)) : undefined,
+          /* The totals row is a figure no row is as wide as: sized by its rows alone, a sum was cut to "$102,795....". */
+          total: totals && rows.length > 0 && Object.hasOwn(totals, name) ? totalWords(display, totals[name]) : undefined,
           chip:
             byName.get(name)?.type === TAGS_TYPE ||
             (!labelColumn &&
@@ -1054,6 +1078,7 @@ export function Grid({
       captionLanguage,
       byName,
       rows,
+      totals,
       titleName,
       headFace,
       cellChips,

@@ -691,6 +691,39 @@
     font-family: var(--mono);
   }
 
+  /* ---------- Meaning (recipes.status = dot) ---------- */
+  /* A status in a cell or a field is a dot and its word, the word in the ink at the cell's weight: only the dot
+     carries the tone, so "Collected" and "Waiting on parts" weigh the same down a column until one needs a hand.
+     What asks for attention (warn, bad) says its word in its colour too. This is Lumen's `quiet` (lumenLook.css) for
+     every look that draws a dot, and it is only the cell and the field: a lane's head, a board card and a calendar
+     card colour their own words. The pill recipes colour the word themselves (sageLook.css, lumenLook.css) and keep
+     the base's tone ink, which is why this is a recipe's rule and not the shared layer's. */
+  :root[data-look-status='dot'] :is(td, dd) .tone:not(.record-tag, .tone-neutral) {
+    color: var(--ink);
+    font-weight: 400;
+  }
+  :root[data-look-status='dot'] :is(td, dd) .tone:not(.record-tag, .tone-neutral)::before {
+    background: var(--tone-dot, currentColor);
+  }
+  :root[data-look-status='dot'] :is(td, dd) .tone-good {
+    --tone-dot: var(--status-good);
+  }
+  :root[data-look-status='dot'] :is(td, dd) .tone-info {
+    --tone-dot: var(--status-info);
+  }
+  :root[data-look-status='dot'] :is(td, dd) .tone-warn:not(.record-tag) {
+    --tone-dot: var(--status-warning);
+    color: color-mix(in srgb, var(--status-warning) 82%, var(--ink));
+  }
+  :root[data-look-status='dot'] :is(td, dd) .tone-bad:not(.record-tag) {
+    --tone-dot: var(--status-critical);
+    color: color-mix(in srgb, var(--status-critical) 82%, var(--ink));
+  }
+  /* A marked value's icon is its dot, so it takes the dot's colour and not the word's. */
+  :root[data-look-status='dot'] :is(td, dd) .tone-marked:not(.record-tag, .tone-neutral) > svg {
+    color: var(--tone-dot);
+  }
+
   /* ---------- The header (recipes.header) ---------- */
   /* `band` lays a record's head and a list's on one strip of the raised ground, edge to edge of the pane: the trail with
    the record's verbs, the eyebrow, the name, its status and facts, or a list's title, tabs and filters, as an object

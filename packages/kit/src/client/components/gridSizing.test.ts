@@ -30,6 +30,21 @@ describe('fit table allocation', () => {
     expect(columnSizeHint({ label: 'Assigned to', kind: 'text', controls: true, values: [] }).minimum).toBe(11 * 7 + 34);
   });
 
+  test('the totals row sizes its column: a sum is wider than any row it adds up and is never cut', () => {
+    const rent = { label: 'Rent', kind: 'number', dressed: true, values: ['$2,450', '$1,980', '$3,100'] };
+    // Seven pixels a character, as the cells' font measures here; the total is set a tenth wider, in its heavier weight.
+    const measure = (text: string) => text.length * 7;
+    const rows = columnSizeHint(rent, undefined, measure);
+    const withTotal = columnSizeHint({ ...rent, total: '$102,795.00' }, undefined, measure);
+    expect(withTotal.minimum).toBeGreaterThan(rows.minimum);
+    expect(withTotal.minimum).toBeGreaterThanOrEqual(Math.ceil(measure('$102,795.00') * 1.1) + 24);
+    // Counted, where there is no canvas to measure with: its characters are room too.
+    const counted = { label: 'Rent', kind: 'number', values: ['2,450'] };
+    expect(columnSizeHint({ ...counted, total: '102,795,000.00' }).minimum).toBeGreaterThan(columnSizeHint(counted).minimum);
+    // A column with no total, or one that is shorter than its rows, is as it was.
+    expect(columnSizeHint({ ...rent, total: '$9' }, undefined, measure).minimum).toBe(rows.minimum);
+  });
+
   test('a clipped title fills before short columns grow', () => {
     const issues = [
       { label: 'Name', kind: 'text', values: ['Preserve filters when opening an issue from a list'] },

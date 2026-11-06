@@ -36,10 +36,13 @@ a pointer into it.
 6. **Meaning is a dot and its word.** Tones are earned through the display
    map; a neutral value is a grey dot and its word where the look says
    status with a dot, plain text where it says it with a pill (the refusal
-   list; Sage's and Lumen's exceptions). The dot and its word belong to a
-   vocabulary, never to a figure: a toned amount or count is set in its tone's
-   ink alone (no tint, no dot), and a neutral one is no tone at all, so a
-   column of figures keeps the edge its label stands on.
+   list; Sage's and Lumen's exceptions). In a grid's cell and a record's
+   field the word is the ink at weight 400 and only the dot carries the tone,
+   so a column of statuses reads as words, not as colour; a warning or a
+   critical word keeps its tone, since those are the ones to be seen. The dot
+   and its word belong to a vocabulary, never to a figure: a toned amount or
+   count is set in its tone's ink alone (no tint, no dot), and a neutral one
+   is no tone at all, so a column of figures keeps the edge its label stands on.
 7. **Motion is information or absent.** Enter with ease-out, leave at once,
    hover is 120ms of colour, a navigation swaps finished screens, reduced
    motion silences all of it (Motion).
@@ -490,10 +493,15 @@ end-truncates** with an ellipsis and carries the whole value in a `title`.
 **File names, paths and ids truncate in the middle**, so the extension and
 the distinguishing tail survive. **Numbers, amounts and dates are never
 truncated**: the column or the figure gets the room it needs, or the layout
-changes. **In a form nothing typed or chosen is cut short**: a label, a
-choice, an answer and a review value are the reader's own words, so they wrap
-(`overflow-wrap: anywhere`), and the smoke's `reflow-320` variant (320px, 2x)
-holds every App page to no sideways scroll.
+changes — a grid's total is a figure too, so its column is sized from the
+total's words (set heavier than the rows) as well as from the rows, and its
+footer cell never clips. **A list of chips shows whole chips**: the ones that
+fit, then "+N" for the rest; a chip is never cut, except the one chip that is
+wider than its cell, which is the only thing there to read. **In a form
+nothing typed or chosen is cut short**: a label, a choice, an answer and a
+review value are the reader's own words, so they wrap (`overflow-wrap:
+anywhere`), and the smoke's `reflow-320` variant (320px, 2x) holds every App
+page to no sideways scroll.
 
 ## The refusal list (after impeccable.style, kept where it applies)
 
@@ -1062,7 +1070,11 @@ every look, so the picture it keeps reads on whatever page shows it.
   pill is the Workbench's, where a bare key needs its table said beside it.
   Where the link ink is the text's (Mono), a reference — in a record's
   fields, a grid's reference column, a card's "View dealer" — is underlined,
-  1px and 2px under the letters, since the colour cannot say it.
+  1px and 2px under the letters, since the colour cannot say it. In a grid a
+  reference is the row's ink until it is hovered or focused (a column of link
+  colour out-shouted the row's own name); a record's reference keeps the link
+  ink. A boolean in an App's grid says yes as a tick in the ink and no as an
+  empty cell, named "No" for assistive tech; the Workbench keeps its cross.
 - A `card()` section is the record a reference names, as one box beside
   the offer card: its caption the section's title, its title the named
   record (a link), its facts two across, "View dealer" ruled off at the foot.
@@ -1155,7 +1167,8 @@ every look, so the picture it keeps reads on whatever page shows it.
     arrangement lives only in that grid — a refetch never moves a placed column — and a scrolled grid takes a
     fixed layout only once a width is dragged, so a grid never arranged draws as it did;
   - totals are over everything the list's conditions match, not the page,
-    and sit in one ruled footer row;
+    and sit in one ruled footer row, never cut: the column is sized from the
+    total as well (at its heavier weight) and the footer's cell does not clip;
   - a row's own menu is hidden, not dimmed, until its row is hovered or it
     has focus (always there on touch), and asks nothing until it is opened —
     twenty rows are not twenty ⋯ nor sixty reads;
@@ -1165,8 +1178,10 @@ every look, so the picture it keeps reads on whatever page shows it.
     their words, not their longest possible form. The row's name
     keeps 240px (its avatar's disc counted) before any other text column keeps
     more than 120px, so when a table is tight the secondary columns are cut
-    first; a tone chip is never cut. A grid drawn inside another room (a
-    dashboard's list, a record's related list beside its aside) leaves out,
+    first (a text title gives up the 240px to its own words where they are
+    shorter, and may wrap to a second line in an App, rather than hold a floor
+    wider than what it says); a tone chip is never cut. A grid drawn inside
+    another room (a dashboard's list, a record's related list beside its aside) leaves out,
     from the end, the columns past its width rather than scrolling to them or
     cutting them at its edge — its first column, its name and its status
     always stay — and on a phone says its rows as summaries;
@@ -1299,7 +1314,11 @@ every look, so the picture it keeps reads on whatever page shows it.
 - A stat card is as tall as what it says: the trend's 32px slot is kept only
   when a trend is drawn, and the cards of a strip stand from one top edge
   rather than stretching to the tallest. A trend spans its card and is drawn
-  only from four points. A change names what it is measured against ("↓
+  only from four points, and as a line only where four of them are above zero:
+  a run with fewer is thin bars one to a period over a baseline, no wider than
+  160px (a line that is flat but for a spike read as a fall to nothing and a
+  climb back), and one of nothing draws none; the change beside the figure is
+  its news either way. A change names what it is measured against ("↓
   $785.1K vs prior 90 days"). A metric over a clock (`over`) is compared with
   the equal period before the window unasked, and its trend is the window's
   own — days over a month, weeks over a quarter, months over a year, the
@@ -1336,6 +1355,13 @@ every look, so the picture it keeps reads on whatever page shows it.
   calendar's order with their empty buckets at zero, categories go as a
   breakdown's do, the levels stand on the left as a line's, and every bar is a
   row of a hidden table.
+- Stacked bars over a run of periods (a quarter's weeks, a year's months) are
+  columns, time going left to right, drawn by the bar chart's own SVG and
+  axis at one height (180px) whatever the number of series: a stack of rows
+  over dates reads as a list of bars, not as time. The legend stands above them
+  as it does over rows, each column is a door into the records of its period, and
+  an empty period is a gap, as in bars. Stacks over categories stay rows, one
+  to a group.
 - A dashboard section may carry a mark (`icon`), one of the curated App
   icons, in its heading row: leading the title, in the title's quieter ink.
   Like a menu
@@ -1401,8 +1427,18 @@ every look, so the picture it keeps reads on whatever page shows it.
   section, and a board with no cards says so once, not in every lane; a
   place that could not be shown says why with a warn mark and Try again,
   offline said as offline, and the same failure is said in full once per
-  screen. A list's "View all" is not offered over nothing. A reference that
-  is not set is said as such ("No account is set, so there are no invoices
+  screen. A list's "View all" is not offered over nothing, and is a quiet
+  link — muted, weight 500, no underline, a trailing arrow ("View all →"), the
+  ink and the underline on hover — so a column of sections is not a column of
+  blue underlines. A grid in a dashboard section or a page's card that has no
+  rows says it in the section's words ("No leases ending soon"), not as an
+  empty table or the engine's "No rows match"; a calendar there with no event
+  in its month is its head and one line, not a month of empty cells (the
+  calendar's own room keeps its grid, where the empty days are the place
+  to click). A breakdown's cards stand for the road: the states a thing ends
+  in (a column's `states.final`) are one muted line after them, counted as
+  they are, and a step with nothing in it is a figure in the muted ink. A
+  reference that is not set is said as such ("No account is set, so there are no invoices
   to show"), with no header row over nothing, and a footer that sums more
   rows than it shows says so ("Total · all 12 invoices").
 - Rules are not doubled: a section draws one rule above its heading, so

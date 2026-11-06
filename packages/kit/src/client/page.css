@@ -3291,7 +3291,20 @@
     white-space: nowrap;
     vertical-align: middle;
   }
+  /* A chip keeps its own width: a flex item may shrink, and a `.tone` clips its label, so a chip in a narrow cell was
+     squeezed to "accessib" and the fit below, which measures the chips, read them narrower than they are and kept
+     too many. Only a lone chip wider than the cell (`data-lone`) is allowed to give way, with its ellipsis. */
+  .tags-cell-list > .record-tag {
+    flex: none;
+    max-width: none;
+  }
+  .tags-cell-list[data-lone] > .record-tag {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
   .tags-cell-more {
+    flex: none;
     color: var(--ink-muted);
     font-size: var(--text-sm);
   }
@@ -3753,8 +3766,10 @@
     text-decoration: underline;
     text-underline-offset: 3px;
   }
+  /* "View home →" is a way on, as a section's "View all" is (features.css): muted, its arrow always, the ink and the
+     underline under the pointer. */
   button.ref-jump.page-card-more {
-    color: var(--link);
+    color: var(--ink-muted);
     font: 500 var(--text-base) var(--sans);
   }
   button.ref-jump.page-card-more::after {
@@ -3762,6 +3777,7 @@
   }
   button.ref-jump.page-card-more:hover {
     background: none;
+    color: var(--ink);
     text-decoration: underline;
     text-underline-offset: 3px;
   }

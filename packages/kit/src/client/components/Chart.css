@@ -16,6 +16,11 @@
 /* Stacked columns: each series its token in every column; the current column is named by its tick and its pill, not by a tint. */
 .chart-columns { display: grid; gap: var(--space-3h); min-width: 0; }
 .chart-column-part { rx: 0; }
+/* A column that drills: a door over its whole band (the hit rect is clear), the pointer saying it goes somewhere, and
+   while it holds the keyboard the house ring round the band, as a line's point widens its stroke. */
+.chart-column-door { cursor: pointer; outline: none; }
+.chart-column-hit { fill: transparent; }
+.chart-column-door:focus-visible .chart-column-hit { stroke: var(--focus); stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .chart-columns-legend { display: flex; flex-wrap: wrap; gap: var(--space-2h) 20px; max-width: none; }
 /* A trend is its change's news where the metric says which way is good: the
    green or red its delta is said in, never a colour by position. The wash

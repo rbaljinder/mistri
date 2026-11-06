@@ -381,14 +381,35 @@ describe('the screen', () => {
       },
     });
     await screen.findAllByText('12 in all');
-    const inherited = rooms.find((room) => Boolean(room.empty));
+    const specOf = (room: (typeof rooms)[number]) => (room.empty as { props: { spec: { title: string } } }).props.spec;
+    const inherited = rooms.find((room) => specOf(room) === empty);
     expect(inherited).toBeDefined();
-    expect((inherited!.empty as { props: { spec: unknown } }).props.spec).toEqual(empty);
+    expect(specOf(inherited!)).toEqual(empty);
+    // A narrower question cannot promise the source is empty: it says its own section is, in the section's words.
     expect(
       rooms
         .filter((room) => String((room.entry as { query: string }).query).includes('amount > 1000'))
-        .every((room) => room.empty === undefined),
+        .every((room) => specOf(room).title === 'No large pending'),
     ).toBe(true);
+  });
+
+  test('a rows section with nothing in it says so in its own words, from its title', async () => {
+    app = { ui: {}, nav: [], resources: {}, views: {} };
+    draw({
+      dashboard: {
+        id: 'desk',
+        label: 'Desk',
+        sections: [
+          { kind: 'rows', table: 'deal', title: 'Leases ending soon' },
+          { kind: 'rows', table: 'deal', title: 'SLA breaches' },
+          { kind: 'rows', table: 'deal', title: 'Today’s arrivals.' },
+        ],
+      },
+    });
+    await screen.findAllByText('12 in all');
+    const said = rooms.map((room) => (room.empty as { props: { spec: { title: string } } }).props.spec.title);
+    // The first word is lower-cased unless it is an acronym; a closing full stop is not part of the noun.
+    expect(new Set(said)).toEqual(new Set(['No leases ending soon', 'No SLA breaches', 'No today’s arrivals']));
   });
 
   test('a rows section that asks for row actions hands its table the resource’s verbs; one that does not, none', async () => {
@@ -1338,6 +1359,59 @@ describe('the dashboard blocks', () => {
     expect(document.querySelectorAll('.dash-step-arrow')).toHaveLength(2);
     await user.click(screen.getByTitle('Open deal where stage = lead'));
     expect(gone.at(-1)).toEqual({ table: 'deal', query: 'deal stage = lead', view: 'deals' });
+  });
+
+  describe('steps over a column with final states', () => {
+    const flow = {
+      dashboard: {
+        id: 'flow',
+        label: 'Flow',
+        sections: [{ kind: 'breakdown', shape: 'steps', table: 'deal', by: 'stage', title: 'Flow' }],
+      },
+    };
+    const stage = tables.deal.columns.find((column) => column.name === 'stage')! as { states?: unknown };
+
+    afterEach(() => {
+      delete stage.states;
+    });
+
+    test('a step with nothing in it says its figure quieter', async () => {
+      app = { ui: {}, nav: [], resources: {}, views: { deals: { table: 'deal', label: 'Deals', query: '' } } };
+      draw(flow);
+      await waitFor(() => expect(document.querySelector('.dash-step-figure')?.textContent).toBe('30'));
+      expect([...document.querySelectorAll('.dash-step-figure')].map((figure) => figure.classList.contains('is-none'))).toEqual([
+        false,
+        false,
+        true,
+      ]);
+    });
+
+    test('the states a thing ends in are one muted line after the road, counted as the steps are, and each a doorway', async () => {
+      const user = userEvent.setup();
+      stage.states = { open: ['lead'], final: ['won', 'lost'] };
+      app = { ui: {}, nav: [], resources: {}, views: { deals: { table: 'deal', label: 'Deals', query: '' } } };
+      draw(flow);
+      await waitFor(() => expect(document.querySelector('.dash-step-figure')?.textContent).toBe('30'));
+      // Only the road is cards; the finished states are not steps on it.
+      expect([...document.querySelectorAll('.dash-step-title')].map((title) => title.textContent)).toEqual(['lead']);
+      const line = document.querySelector('.dash-steps-ended')!;
+      expect(line).toHaveTextContent('Endedwon 10lost 0');
+      expect([...line.querySelectorAll('.dash-steps-ended-figure')].map((figure) => figure.classList.contains('is-none'))).toEqual([
+        false,
+        true,
+      ]);
+      await user.click(screen.getByTitle('Open deal where stage = won'));
+      expect(gone.at(-1)).toEqual({ table: 'deal', query: 'deal stage = won', view: 'deals' });
+    });
+
+    test('where every value is final there is no road to separate them from, and they stay cards', async () => {
+      stage.states = { open: [], final: ['lead', 'won', 'lost'] };
+      app = { ui: {}, nav: [], resources: {}, views: { deals: { table: 'deal', label: 'Deals', query: '' } } };
+      draw(flow);
+      await waitFor(() => expect(document.querySelector('.dash-step-figure')?.textContent).toBe('30'));
+      expect(document.querySelectorAll('.dash-step-card')).toHaveLength(3);
+      expect(document.querySelector('.dash-steps-ended')).toBeNull();
+    });
   });
 
   test('a window button replaces the segmented row, and a window picked from it is what the sections ask for', async () => {
