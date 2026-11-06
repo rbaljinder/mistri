@@ -8,7 +8,12 @@ vi.mock('../../../kit/src/client/core.js', () => ({
   /* Lumen starts compact, so wearing it applies a density, which re-reads the zoom (density.js). */
   refreshViewportScale() {},
 }));
-vi.mock('./tenantTransport.js', () => ({ isTenantMutationPath: () => false, tenantMutationApi() {}, tenantReadApi() {} }));
+vi.mock('./tenantTransport.js', () => ({
+  isTenantMutationPath: () => false,
+  tenantMutationApi() {},
+  tenantReadApi() {},
+  tenantExport() {},
+}));
 vi.mock('../../../kit/src/client/messages.js', () => ({ messageLanguage: () => 'en', setMessageScope() {} }));
 vi.mock('../../../kit/src/client/peekpanel.js', () => ({ openPeek() {} }));
 /* The App shell's parts that draw (appnav.js appShell): this file reads none of them. */

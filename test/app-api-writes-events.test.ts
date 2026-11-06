@@ -20,11 +20,11 @@ import { provisionSqliteApiTokenStore } from '../packages/mistri/src/server/auth
 import { issueSqliteApiCommandToken } from '../packages/mistri/src/server/auth/sqliteApiTokenMaintenance.js';
 import { captureAuthStoreExclusion } from '../packages/mistri/src/server/auth/authStoreSeparation.js';
 import { SESSION_SECRET, runCli, serveApi } from './appApiCli.js';
-import { SHOP_TABLES, writeShopApp } from './appApiShop.js';
+import { SHOP_TABLES, shelfThroughApi, writeShopApp } from './appApiShop.js';
 
 const storeId = '6c2e1d63-8d2f-4d66-8f1b-5b4f4f1d3e22';
 
-async function shop(t: TestContext) {
+async function shop(t: TestContext, narrowed = false) {
   const directory = mkdtempSync(join(tmpdir(), 'tw-api-writes-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const business = join(directory, 'business.db'),
@@ -32,12 +32,13 @@ async function shop(t: TestContext) {
   const db = new DatabaseSync(business);
   try {
     db.exec(SHOP_TABLES);
+    if (narrowed) db.exec("INSERT INTO item(id,name,note) VALUES (2,'Crate','shelf')");
   } finally {
     db.close();
   }
   migrateSqliteCommandJournal(business);
   await provisionStores({ sqlite: business }, { app: { id: 'shop', source: 'business' } });
-  const { appDir, config, commands } = writeShopApp(directory, { business, authStore: authPath });
+  const { appDir, config, commands } = writeShopApp(directory, { business, authStore: authPath, narrowed });
   const loaded = await loadApp(appDir);
   writeFileSync(join(appDir, 'authority.lock'), loaded.authority!.report);
   const names = ['BETTER_AUTH_SECRET', 'MISTRI_AUTH_ADMIN_EMAIL', 'MISTRI_AUTH_ADMIN_PASSWORD'] as const;
@@ -112,6 +113,15 @@ async function shop(t: TestContext) {
 
 const json = { 'content-type': 'application/json' };
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
+
+test('a narrowed resource through the API and App MCP: writes stay inside its query', { timeout: 180000 }, async (t) => {
+  const f = await shop(t, true);
+  const s = await serveApi(t, f, 'shop');
+  await s.started;
+  await shelfThroughApi(t, f, s.base, f.tokens.editor, async (sql) => f.row(sql));
+  s.child.kill('SIGTERM');
+  assert.equal(await s.closed, 0);
+});
 
 test("generic writes: create, update and delete run as commands under the role's own editor rules", { timeout: 120000 }, async (t) => {
   const f = await shop(t);

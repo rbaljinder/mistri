@@ -173,17 +173,42 @@ the conditions is no record of the resource, so its address finds nothing.
 The query is fixed conditions on the table's own columns: no `show` or
 `sort`, no dates relative to today and no paths. `mistri check` proves it
 against the table and warns (`narrowed-overlap`) when two queries may both
-hold of one row. A narrowed resource is read-only for now: write through its
-table's own resource. It takes no `access`, `delete`, `actions`, `machine`,
-`import`, `settings`, `file`, `clone`, `consumes` or `restocks`. Nor does it
-take `notify`, `flows`, `triggers` or a `search` pack, which follow every
-write to the table whatever its query says: declare them on the table's own
-resource. A reference points at the table's own resource rather than at a
-narrowed one, and a tenant App does not take one yet. The table keeps one
-record history, as strict as the strictest of its resources' `audit`; an
-activity feed says each change under the resource whose query holds of the
-row, and live sync tells a narrowed list that its table changed, never which
-rows.
+hold of one row.
+
+A write through a narrowed resource stays inside its query, on every door:
+New and Save, Delete, a fixed action, a machine's step, a CSV import, a
+command's `tx`, and the App API's and MCP's writes. So it takes `access:
+'write'`, `delete`, `actions`, `machine` and `import` as any resource does.
+
+- **Insert:** each equality of the query is set on the new row: through
+  `orderEvents`, `kind` is `order` whether or not the request gives it, and a
+  request that gives another value is refused. An import and the API's
+  `create` do not ask for those columns. A query that is not plain
+  equalities (an `in`, a range, an `or`) cannot say what a new row holds, so
+  that resource takes no new rows: add them through the table's own
+  resource.
+- **Update:** a change that would move the row out of the query is refused
+  and nothing is changed: the row is found by its key and the query, locked,
+  and read on the query again after the write, in the same transaction.
+- **Update and delete of a row outside the query** answer as a key nothing
+  holds does.
+
+A machine or an action declared on the narrowed resource guards the writes
+made through it; the table's own resource answers to its own rules.
+
+A `notify` rule on a narrowed resource is held to its query: it tells its
+people about the rows the query reads, whichever resource wrote them, and no
+others. Its query must then be conditions a notice can judge (`=`, `!=` and
+`in`). It does not take `settings`, `file`, `clone`, `consumes` or
+`restocks` yet, which write a row other than through its query. Nor does it
+take `flows`, `triggers` or a `search` pack, which follow every write to the
+table whatever its query says (a search index holds no query to read its
+rows on): declare them on the table's own resource. A reference points at
+the table's own resource rather than at a narrowed one, and a tenant App does
+not take one yet. The table keeps one record history, as strict as the
+strictest of its resources' `audit`; an activity feed says each change under
+the resource whose query holds of the row, and live sync tells a narrowed
+list that its table changed, never which rows.
 
 ## Unions
 

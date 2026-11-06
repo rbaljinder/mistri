@@ -65,6 +65,8 @@ export interface TriageCard {
   /** The row the card stands in, on a board with rows. */
   rowId?: string;
   title: string;
+  /** The title's own second line: the column its display rule names (`subtitle`), said quietly under it. */
+  second?: string;
   subtitle?: string;
   /** The subtitle as its column dresses it; `subtitle` stays its accessible text. */
   line?: ReactNode;
@@ -532,6 +534,7 @@ export function TriageBoard({
       card.laneId,
       card.rowId,
       card.title,
+      card.second,
       card.subtitle,
       card.meta,
       card.pending,
@@ -760,7 +763,7 @@ const BoardCard = memo(
             ref={(element) => acts.current.remember(card.id, element)}
             className="triage-card-open"
             aria-pressed={selected}
-            aria-label={[card.category?.label, card.title, card.subtitle, ...(card.footer ?? []).map((fact) => fact.text)]
+            aria-label={[card.category?.label, card.title, card.second, card.subtitle, ...(card.footer ?? []).map((fact) => fact.text)]
               .filter(Boolean)
               .join(', ')}
             aria-keyshortcuts={keys || undefined}
@@ -769,6 +772,7 @@ const BoardCard = memo(
           >
             {card.category && <span className="triage-card-category">{card.category.label}</span>}
             <span className="triage-card-title">{card.title}</span>
+            {card.second && <span className="triage-card-second">{card.second}</span>}
             {card.subtitle && <span className="triage-card-subtitle">{card.line ?? card.subtitle}</span>}
             {card.meta && <span className="triage-card-meta">{card.meta}</span>}
             {card.footer?.length ? (

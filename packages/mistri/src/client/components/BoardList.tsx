@@ -39,6 +39,7 @@
  * when the last move is done — not every list on the page after every write.
  */
 import { namedCell } from '@mistriwork/kit/client/components/listColumn.js';
+import { secondLine } from '@mistriwork/kit/client/components/Value.js';
 import { ReasonForm } from './Actions.js';
 import { Suspense, lazy, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useOptimisticMoves } from '@mistriwork/kit/client/components/optimisticMoves.js';
@@ -644,6 +645,7 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
     const key = keyOf(table, row) as Record<string, unknown> | null;
     if (!key) return [];
     const line = spec.lines?.[0];
+    const second = spec.primary.includes('.') ? undefined : secondLine(table.id, spec.primary, row);
     // A reference says the record it names, never its key (listReferenceNames reads the name with the row).
     const detail = line ? namedCell(table, line, row, referenceLabels).value : undefined;
     const attempt = updateAttempts.get({ connection, table: table.id, key });
@@ -657,6 +659,8 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
         ...(position === undefined ? {} : { position }),
         ...(spec.swimlanes === undefined ? {} : { rowId: row[spec.swimlanes] == null ? NONE : String(row[spec.swimlanes]) }),
         title: String(namedCell(table, spec.primary, row, referenceLabels).value ?? say('common.untitled')),
+        // The title's column's second line (`subtitle`), read with the row (appListColumns.ts listSecondLineColumns).
+        ...(second === undefined ? {} : { second }),
         // A line from a vocabulary says its word, as the lane heads and tone chips do.
         ...(detail != null && detail !== ''
           ? line === amount && shortAmount(detail, amountIn(row))

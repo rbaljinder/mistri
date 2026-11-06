@@ -35,6 +35,10 @@ export const TENANT_READ_ROUTES: ReadonlySet<string> = new Set([
   '/api/breakdowns',
   FILE_READ_PATH,
 ]);
+/* The streamed export (engine http/exportRoute.ts), on a member's or the platform realm's lease: each batch a read of
+   the lease's own reader, the file's last write held until its context settles (tenantHttp.ts). Not a read of the page
+   boot's batch, which answers JSON, nor on a support lease, whose every read is ledgered as the one read it is. */
+export const TENANT_EXPORT_PATH = '/api/export';
 /* The file travels as JSON text, where a quote or a line break is written with two characters (http/importRoutes.ts). */
 export const IMPORT_BODY = IMPORT_LIMITS.bytes * 2 + 64 * 1024;
 /* Two raster logos at their bound (256 KiB each) as base64, the light and the dark, and the value beside them. */
@@ -107,6 +111,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
      page was refused as a forged context, and the page locked. */
   '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset', ...PAGE_STEP_FIELDS],
   '/api/view/run': ['view', 'text', 'query', 'count', 'limit', 'offset'],
+  [TENANT_EXPORT_PATH]: ['q', 'format', 'columns'],
   '/api/breakdown': ['def', 'text', 'limit', 'offset'],
   '/api/breakdowns': ['items'],
   '/api/update': ['table', 'key', 'values', 'column', 'value', 'expected'],

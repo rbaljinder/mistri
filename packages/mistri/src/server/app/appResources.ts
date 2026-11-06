@@ -31,6 +31,7 @@ import {
   capturePublicPlacementScope,
 } from '../../adapters/commands/publicPlacementTransaction.js';
 import { commandsOf } from '../stores/commandStores.js';
+import { narrowedWrites } from './appNarrowedWrites.js';
 
 export interface AppResourceCatalog {
   schema: DatabaseSchema;
@@ -47,7 +48,8 @@ export interface AppResourceCatalog {
   bounds?: { full: DatabaseSchema; within: DatabaseSchema };
   /**
    * The narrowed resources (appNarrowed.ts), by logical name: the conditions every read of each stands on, over its
-   * table's own columns. ANDed into the read below, never a grant; a write through one is refused.
+   * table's own columns. ANDed into the read below, never a grant; a write through one is kept inside them
+   * (appNarrowedWrites.ts).
    */
   narrowed?: ReadonlyMap<string, Filter>;
 }
@@ -201,12 +203,6 @@ function narrowedComputed<T extends { computed?: Record<string, import('@mistriw
     ...def,
     computed: Object.fromEntries(Object.entries(def.computed).map(([path, rollup]) => [path, narrowedRollup(rollup, catalog)])),
   };
-}
-
-/** A write through a narrowed resource: refused until a write can be held inside its conditions. */
-function refuseNarrowedWrite(table: string, catalog: AppResourceCatalog): void {
-  if (catalog.narrowed?.has(table))
-    throw new Refusal(`"${table}" is a narrowed resource, which is read-only for now: write through its table's own resource.`);
 }
 
 /**
@@ -609,21 +605,41 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
       .map((table) => [toPhysical(table.id), table.id]),
   );
   const viewToPhysical = (view: ViewDef): ViewDef => resourceView(view, catalog);
-  const mapWrite = <T extends { table: string }>(request: T): T => {
-    refuseNarrowedWrite(request.table, catalog);
-    return { ...request, table: toPhysical(request.table) };
-  };
+  const mapWrite = <T extends { table: string }>(request: T): T => ({ ...request, table: toPhysical(request.table) });
   const mapRead = <T extends { table: string; filter?: Filter }>(request: T): T => physicalRead(request, catalog);
-  const transaction = (tx: WriteTransaction): WriteTransaction => ({
-    ...(tx.lockRecord ? { lockRecord: (request: DeleteRequest) => tx.lockRecord!(mapWrite(request)) } : {}),
-    query: (request) => tx.query(mapRead(request)),
-    count: (table, filter) => tx.count(toPhysical(table), narrowedFilter(filter, table, catalog)),
-    ...(tx.aggregate ? { aggregate: (request: AggregateRequest) => tx.aggregate!(mapRead(request)) } : {}),
-    insert: (request) => tx.insert(mapWrite(request)),
-    update: (request) => tx.update(mapWrite(request)),
-    remove: (request) => tx.remove(mapWrite(request)),
-    ...(tx.tell ? { tell: (request: TellRequest) => tx.tell!(mapWrite(request)) } : {}),
-  });
+  /* A write through a narrowed resource is kept inside its query (appNarrowedWrites.ts): in the write's own
+     transaction, whatever door it came through, since every door writes through here. */
+  const narrowedTable = (table: string) => {
+    const filter = catalog.narrowed?.get(table);
+    return filter ? { resource: table, physical: toPhysical(table), filter } : undefined;
+  };
+  const transaction = (tx: WriteTransaction): WriteTransaction => {
+    const through = (table: string) => {
+      const narrowed = narrowedTable(table);
+      return narrowed && narrowedWrites(tx, narrowed);
+    };
+    return {
+      ...(tx.lockRecord ? { lockRecord: (request: DeleteRequest) => tx.lockRecord!(mapWrite(request)) } : {}),
+      query: (request) => tx.query(mapRead(request)),
+      count: (table, filter) => tx.count(toPhysical(table), narrowedFilter(filter, table, catalog)),
+      ...(tx.aggregate ? { aggregate: (request: AggregateRequest) => tx.aggregate!(mapRead(request)) } : {}),
+      insert: (request) => through(request.table)?.insert(request) ?? tx.insert(mapWrite(request)),
+      update: (request) => through(request.table)?.update(request) ?? tx.update(mapWrite(request)),
+      remove: (request) => through(request.table)?.remove(request) ?? tx.remove(mapWrite(request)),
+      ...(tx.tell ? { tell: (request: TellRequest) => through(request.table)?.tell(request) ?? tx.tell!(mapWrite(request)) } : {}),
+    };
+  };
+  /* A single write outside a transaction: one through a narrowed resource is run in one, so its checks and the
+     write are one unit. A source that writes one statement at a time cannot hold it there, and says so. */
+  const alone = <R>(table: string, write: (writes: ReturnType<typeof narrowedWrites>) => Promise<R>): Promise<R> | undefined => {
+    const narrowed = narrowedTable(table);
+    if (!narrowed) return undefined;
+    if (!physicalAdapter.transaction)
+      throw new Refusal(
+        `"${table}" is a narrowed resource, and its source cannot run a write in a transaction to keep it inside its query.`,
+      );
+    return physicalAdapter.transaction((tx) => write(narrowedWrites(tx, narrowed)));
+  };
   const adapter: Adapter = {
     dialect: physicalAdapter.dialect,
     introspect: async () => schema,
@@ -766,9 +782,12 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
   if (physicalAdapter.ddl) adapter.ddl = (table) => physicalAdapter.ddl!(toPhysical(table));
   if (physicalAdapter.runSql) adapter.runSql = (request) => physicalAdapter.runSql!(request);
   if (physicalAdapter.explainSql) adapter.explainSql = (request) => physicalAdapter.explainSql!(request);
-  if (physicalAdapter.update) adapter.update = (request) => physicalAdapter.update!(mapWrite(request));
-  if (physicalAdapter.insert) adapter.insert = (request) => physicalAdapter.insert!(mapWrite(request));
-  if (physicalAdapter.remove) adapter.remove = (request) => physicalAdapter.remove!(mapWrite(request));
+  if (physicalAdapter.update)
+    adapter.update = (request) => alone(request.table, (writes) => writes.update(request)) ?? physicalAdapter.update!(mapWrite(request));
+  if (physicalAdapter.insert)
+    adapter.insert = (request) => alone(request.table, (writes) => writes.insert(request)) ?? physicalAdapter.insert!(mapWrite(request));
+  if (physicalAdapter.remove)
+    adapter.remove = (request) => alone(request.table, (writes) => writes.remove(request)) ?? physicalAdapter.remove!(mapWrite(request));
   if (physicalAdapter.transaction) adapter.transaction = (run) => physicalAdapter.transaction!((tx) => run(transaction(tx)));
   if (commandsOf(physicalAdapter).commandTransaction)
     adapter.commandTransaction = (run, events) =>

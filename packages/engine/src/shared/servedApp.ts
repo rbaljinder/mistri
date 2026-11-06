@@ -311,7 +311,7 @@ export interface AppDisplayRule {
   /** Every value no `values` key names said as words (`IN_REVIEW` → "In review"): the authored `values: true`,
       and implied by `values: { … }`, so a vocabulary never reads half in words and half in codes. */
   humanize?: true;
-  /** Another column of the same record, said as a muted second line under the value in lists. */
+  /** Another column of the same record, said as a muted second line under the value wherever it has room (appListColumns.ts listSecondLineColumns). */
   subtitle?: string;
   /** A value renderer: the author's component draws the value in an App (appComponents.ts); sort, filter,
       totals and export keep the raw value, and the rest of the rule dresses it until the renderer arrives. */

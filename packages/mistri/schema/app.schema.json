@@ -1496,7 +1496,7 @@
         "subtitle": {
           "type": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "description": "Another column of the same record, said as a muted second line under the value in lists."
+          "description": "Another column of the same record, said as a muted second line under the value: in lists, blocks of fields, header facts, card sections, headline figures, a card's title, figure and properties, and a board card's title."
         },
         "component": {
           "$ref": "#/$defs/component",
@@ -1602,7 +1602,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 500,
-          "description": "Preview. The conditions every read of this resource stands on, in the query language (\"kind = order\"): how one table is bound as several resources. A filter, never a grant; read-only for now."
+          "description": "Preview. The conditions every read of this resource stands on, in the query language (\"kind = order\"): how one table is bound as several resources. A filter, never a grant; a write through it stays inside it."
         },
         "access": {
           "enum": [

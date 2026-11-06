@@ -57,6 +57,18 @@ describe('TriageBoard', () => {
     expect(screen.getByRole('button', { name: 'Broken login, Aster' }).querySelector('.tone-bad')).not.toBeNull();
   });
 
+  it("draws a card title's second line quietly under it, before the card's line, and names the card with it", () => {
+    render(<TriageBoard lanes={lanes} cards={[{ ...cards[0], second: 'aster@example.test' }, cards[1]]} />);
+    const card = screen.getByRole('button', { name: 'Broken login, aster@example.test, Aster' });
+    expect([...card.children].map((part) => part.className)).toEqual([
+      'triage-card-title',
+      'triage-card-second',
+      'triage-card-subtitle',
+      'triage-card-meta',
+    ]);
+    expect(screen.getByRole('button', { name: 'Slow export, Compass' }).querySelector('.triage-card-second')).toBeNull();
+  });
+
   it('names the lane in view and steps to the next, for a phone that shows one lane at a time', async () => {
     render(<TriageBoard lanes={lanes} cards={cards} />);
     const picker = screen.getByRole('group', { name: 'Lanes' });

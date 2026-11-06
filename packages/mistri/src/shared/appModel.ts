@@ -888,7 +888,7 @@ export interface ResourceDef {
    * Conditions every read of this resource stands on, in the query language over its table's own columns
    * (`"kind = order"`): one table read as several resources, each its own list, record page and reverse list. A
    * table may be bound again only with a query. A filter, never a grant: the table's row policy still applies, and a
-   * row outside it is no record of this resource. Read-only (appNarrowed.ts).
+   * row outside it is no record of this resource. A write through it stays inside it (appNarrowed.ts).
    * @preview
    */
   query?: string;

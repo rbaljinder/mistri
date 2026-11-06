@@ -12,9 +12,8 @@ import { throwIfCancelled, withCancellation } from '@mistriwork/engine/adapters/
 import type { AppHost, LoadedApp } from '../app/apps.js';
 import { appProblems } from '../app/apps.js';
 import { captureTenantData } from '@mistriwork/engine/server/evidence.js';
-import { declaredDates, declaredReferences, homeSourceOf, narrowedBindings, physicalBindings, resolveAppAccess } from '../../shared/app.js';
+import { homeSourceOf, resolveAppAccess } from '../../shared/app.js';
 import { appSourceConnections, loadAppRuntimeResources } from '../app/appRuntimeResources.js';
-import { mapOpenedAppRuntimeResources } from '../app/appRuntimeResourceMapping.js';
 import { authorizeResources } from '../app/appAccess.js';
 import { acquirePostgresApiTokenObservation, captureAppAuthRuntime, type AppAuthRuntime } from '../auth/auth.js';
 import { assertAppApiContext, readApiApp } from './appApiValidation.js';
@@ -87,7 +86,7 @@ export async function createPostgresApiReadOwner(
     const bindings = app.sources ? appSourceConnections(registry, app) : new Map([['', matches.length === 1 ? matches[0].id : '']]);
     const connection = bindings.get(source);
     if (!connection) return refuse();
-    // One binding is the shape every one-source App had: mapped as it always was.
+    // One binding is the shape every one-source App had: one lane, opened as it always was.
     const single = bindings.size === 1;
     const configs = new Map([...new Set(bindings.values())].map((id) => [id, registry.configOf(id)]));
     if ([...configs.values()].some((config) => !config)) return refuse();
@@ -176,28 +175,12 @@ export async function createPostgresApiReadOwner(
     for (const id of configs.keys()) catalogs.set(id, snapshots.get(id)?.schema ?? (await registry.open(id)).schema);
     current();
     const docs = lanes.includes(connection) ? connection : lanes[0];
+    /* One mapping for one source or several: a one-source App's lane is its
+       only connection, and it keeps what loading gives it — its references,
+       dates, narrowed resources and the engine schema its source names
+       (`sources.<name>.schema`), which the one-source mapping once dropped. */
     const map = (lane: string, read: PinnedPostgresRead) =>
-      single
-        ? mapOpenedAppRuntimeResources(
-            app,
-            connection,
-            new Map([
-              [
-                source,
-                {
-                  adapter: postgresSnapshotReads(read),
-                  schema: read.schema,
-                  resources: physicalBindings(app, source || undefined),
-                  references: declaredReferences(app, source || undefined),
-                  dates: declaredDates(app, source || undefined),
-                  narrowed: narrowedBindings(app, source || undefined),
-                  writable: false,
-                },
-              ],
-            ]),
-            bindings,
-          )
-        : laneResources(app, connection, bindings, catalogs, lane, postgresSnapshotReads(read));
+      laneResources(app, connection, bindings, catalogs, lane, postgresSnapshotReads(read));
     await snapshots.get(docs)!.withSnapshot(async (read) => {
       const resources = map(docs, read);
       if (appProblems(initial.loaded, resources.schema).length) return refuse();

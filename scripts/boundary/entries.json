@@ -104,6 +104,11 @@
       "source": "packages/engine/src/engine.ts",
       "types": "packages/engine/src/engine.ts"
     },
+    "@mistriwork/engine/host": {
+      "layer": "engine",
+      "source": "packages/engine/src/host.ts",
+      "types": "packages/engine/src/host.ts"
+    },
     "@mistriwork/ui": { "layer": "ui", "source": "packages/ui/src/index.ts", "types": "packages/ui/src/index.ts" },
     "@mistriwork/cloudflare": {
       "layer": "cloudflare",
@@ -138,6 +143,7 @@
         "./adapters/telemetry/trace.js",
         "./adapters/writeAttribution.js",
         "./adapters/writeLanes.js",
+        "./host",
         "./server/auth/credentials.js",
         "./server/cacheService.js",
         "./server/cli/args.js",

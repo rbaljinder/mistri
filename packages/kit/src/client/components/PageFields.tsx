@@ -365,7 +365,7 @@ export function FieldsSection({
             {reference ? (
               jump('page-card-name')
             ) : filled(titlePath) ? (
-              <Value col={titleColumn} value={row[titlePath]} tableId={base.id} />
+              <Value col={titleColumn} value={row[titlePath]} tableId={base.id} row={row} subtitled={!titlePath.includes('.')} />
             ) : (
               emptyWord()
             )}

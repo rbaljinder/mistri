@@ -16,6 +16,7 @@ import { checkApiReadCatalog } from './apiReadCatalog.js';
 import { previewApiMcpReadTools } from './apiMcpReadTools.js';
 import { createApiMcpReadArguments } from './apiMcpReadArguments.js';
 import { projectApiMcpCommandTools, type ApiMcpCommandBinding } from './apiMcpCommandTools.js';
+import { withApiWrites } from './apiGenericWrites.js';
 import { createApiReadKeyCodec } from './apiReadKey.js';
 import { ApiReadFailure } from './apiReadFailure.js';
 import { ApiCommandRequestError } from './apiCommandHeaders.js';
@@ -195,15 +196,22 @@ export function createAppMcpSession(options: {
       tenant?.reads,
     ).bindings.map((binding) => [binding.name, binding.operationId]),
   );
+  // A single-source owner lists the App's generic writes beside its commands (withApiWrites), so routing projects
+  // the same served App; a tenant or policy catalog comes from composition with its writes already in it.
+  const served = !commands
+    ? undefined
+    : tenant?.commands
+      ? { app, registry: commands.registry }
+      : withApiWrites(app, schema, commands.registry);
   const runs = new Map(
-    commands
+    commands && served
       ? projectApiMcpCommandTools(
-          app,
+          served.app,
           schema,
-          commands.registry,
+          served.registry!,
           commands.evidence,
           { integers },
-          { operations: api.commands.map((exposure) => `command:${exposure.command.id}`), roles: [...api.roles] },
+          { operations: served.app.api!.commands.map((exposure) => `command:${exposure.command.id}`), roles: [...api.roles] },
           tenant?.commands,
         ).bindings.map((binding) => [binding.name, binding])
       : [],

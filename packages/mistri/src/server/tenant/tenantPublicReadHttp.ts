@@ -44,7 +44,8 @@ import { dispatchResourceReadHttp } from '@mistriwork/engine/server/resourceRead
 import { PAGE_STEP_FIELDS } from '@mistriwork/engine/shared/keysetPage.js';
 import { APP_READS } from '../app/appReads.js';
 import { composeInputValid, composeTenantRecordPage } from './tenantCompose.js';
-import { readAdapter, tenantFileRead } from './tenantHttp.js';
+import { readAdapter } from './tenantHttp.js';
+import { tenantFileRead } from './tenantFiles.js';
 import { projectTenantMetadata } from './tenantMetadata.js';
 import { tenantPagePlan, tenantReferences } from './tenantPageOperations.js';
 import { TenantPublicNotFound, type PublicPlacement, type PublicReadContext } from './tenantPublicReadRuntime.js';

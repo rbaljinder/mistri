@@ -1,7 +1,8 @@
 /**
- * A display rule's `subtitle` is drawn in a list's cell, a block of fields and under a headline figure. Cards, a
- * board's cards, a record's header facts and a card section do not draw it, so `check` says so (`[subtitle-unseen]`)
- * where a column with one is shown there, rather than leaving the second line silently dropped.
+ * A display rule's `subtitle` is drawn wherever a column has room for a second line: a list's cell, a block of
+ * fields, a header's facts, a card section, a headline's figure, a card's title, figure and lines, a board card's
+ * title. Where a card gives the column one line (a badge, a description, a summary, a foot; a board card's line, chip
+ * or facts) `check` says so (`[subtitle-unseen]`), rather than leaving the second line silently dropped.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -24,25 +25,35 @@ const warnings = (views: Record<string, unknown>, sections: unknown[] = []) => {
   );
 };
 
-test('a subtitled column shown in a card, a board, a header or a card section is warned about', () => {
+test("a subtitled column on a card's one-line place is warned about", () => {
   const list = { kind: 'list', from: 'person' };
-  const cards = warnings({ people: { ...list, presentation: { kind: 'cards', primary: 'name' } } });
+  const cards = warnings({ people: { ...list, presentation: { kind: 'cards', primary: 'email', facts: ['name'] } } });
   assert.equal(cards.length, 1, cards.join('\n'));
   assert.match(cards[0], /view "people".*"person\.name".*subtitle \("email"\).*a card/);
-  const board = warnings({ people: { ...list, board: { by: 'status', primary: 'name' } } });
+  const board = warnings({ people: { ...list, board: { by: 'status', primary: 'email', lines: ['name'] } } });
   assert.equal(board.length, 1, board.join('\n'));
   assert.match(board[0], /a board card/);
   const page = warnings({ people: list }, [
-    { kind: 'header', facts: ['name'] },
-    { kind: 'card', show: ['name'] },
+    { kind: 'list', from: 'person', whose: 'manager_id', presentation: { kind: 'cards', primary: 'email', badge: 'name' } },
   ]);
-  assert.equal(page.length, 2, page.join('\n'));
-  assert.match(page.join('\n'), /header facts/);
-  assert.match(page.join('\n'), /a card section/);
+  assert.equal(page.length, 1, page.join('\n'));
+  assert.match(page[0], /page "config-person".*a card/);
 });
 
 test('where the subtitle is drawn, or the column is not the subtitled one, nothing is said', () => {
   const list = { kind: 'list', from: 'person' };
+  assert.deepEqual(
+    warnings({ people: { ...list, presentation: { kind: 'cards', primary: 'name', value: 'name', properties: ['name'] } } }),
+    [],
+  );
+  assert.deepEqual(warnings({ people: { ...list, board: { by: 'status', primary: 'name' } } }), []);
   assert.deepEqual(warnings({ people: { ...list, presentation: { kind: 'cards', primary: 'email' } } }), []);
-  assert.deepEqual(warnings({ people: list }, [{ kind: 'fields', show: ['name'] }]), []);
+  assert.deepEqual(
+    warnings({ people: list }, [
+      { kind: 'header', facts: ['name'] },
+      { kind: 'card', show: ['name'] },
+      { kind: 'fields', show: ['name'] },
+    ]),
+    [],
+  );
 });

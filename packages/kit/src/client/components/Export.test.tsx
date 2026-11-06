@@ -148,7 +148,7 @@ describe('the menu', () => {
     expect(files[0][0]).toMatch(/^invoice-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(files[0][1]).toBe('\ufeffid,memo\r\n1,a\r\n2,b\r\n');
     expect(calls).toEqual([]);
-    // Where the server cannot stream (a row-policy App refuses), one bounded re-run.
+    // Where the server does not stream (a support visit refuses), one bounded re-run.
     await user.click(screen.getByRole('button', { name: 'Export' }));
     await user.click(screen.getAllByRole('menuitem', { name: 'all matching rows (50)' })[1]);
     await vi.waitFor(() => expect(anchors).toHaveLength(2));

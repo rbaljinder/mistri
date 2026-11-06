@@ -501,6 +501,17 @@ export function appNotifyRules(app: AppDef, schema: DatabaseSchema): { rules: Ma
         if (typeof compiledWhen === 'string') said.push(`${at}: "when" ${compiledWhen}`);
         else when = compiledWhen;
       }
+      /* A narrowed resource's rule is bound to its table, whose every write it hears (server/inbox.ts): its query
+         joins its `when`, so it fires for the rows the resource reads and no others (appNarrowed.ts). */
+      if (resource.query !== undefined) {
+        const narrowed = compileNotifyWhen(table, schema, resource.query);
+        if (typeof narrowed === 'string')
+          said.push(
+            `${at}: ${name} has a "query", which its notices are held to, and a notice's conditions ${narrowed.replace(/^can say/, 'say')} ` +
+              'Declare the rule on its table\'s own resource, with a "when".',
+          );
+        else when = when ? when.flatMap((group) => narrowed.map((more) => [...group, ...more])) : narrowed;
+      }
 
       let open: CompiledNotifyRule['open'] = { resource: name };
       if (rule.opens !== undefined) {

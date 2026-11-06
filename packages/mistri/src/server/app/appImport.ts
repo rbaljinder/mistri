@@ -43,6 +43,7 @@ import type { ViewCondition, ViewDef } from '@mistriwork/engine/shared/viewPaths
 import { textToView } from '@mistriwork/engine/shared/viewtext.js';
 import { readView } from '@mistriwork/engine/server/resourceReadOperations.js';
 import { appError } from './appErrors.js';
+import { narrowedFixedColumns } from '../../shared/appNarrowed.js';
 
 /** The request is not an import this reader may run: said as a 403 or 404, never as a row. */
 export class ImportUnavailable extends Error {
@@ -179,7 +180,14 @@ export async function runImport(runtime: ImportRuntime, request: ImportRequest):
     return rule ? (rule.currency ?? (app as { ui?: { currency?: string } }).ui?.currency ?? 'USD') : undefined;
   };
   /* Where each row says its own currency, a row's figure is read in it: "1,500" yen is 1500, not 150000. */
-  const fields = importFields(table, def, labelOf, minorOf, (column) => ruleOf(column)?.currencyColumn);
+  const fields = importFields(
+    table,
+    def,
+    labelOf,
+    minorOf,
+    (column) => ruleOf(column)?.currencyColumn,
+    narrowedFixedColumns(table, app.resources?.[table.id]?.query),
+  );
   const fieldLabel = (name: string) => fields.find((field) => field.name === name)?.label ?? humanName(name);
 
   let parsed: ReturnType<typeof parseCsv>;

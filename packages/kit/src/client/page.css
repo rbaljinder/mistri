@@ -3038,6 +3038,13 @@
     outline: var(--focus-width) solid var(--focus);
     outline-offset: -2px;
   }
+  /* The title's second line (its column's `subtitle`): another column of the record, said quietly and close under it. */
+  .cards-subtitle {
+    margin: calc(var(--space-1) - var(--space-2h)) 0 0;
+    font: 400 var(--text-sm)/1.35 var(--sans);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+  }
   .cards-description {
     margin: 0;
     color: var(--ink-muted);

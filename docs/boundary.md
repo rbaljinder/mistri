@@ -8,19 +8,19 @@ and `scripts/check-boundary.mjs` still holds it on every `npm run test:static`.
 
 ## Five layers
 
-| layer | what it is | becomes |
-|---|---|---|
-| `engine` | the adapters, the server's data paths, the HTTP kit, and the shared rules (filter, schema, query language, view, row scopes, and the looks: the built-in looks, their tokens and which one a page wears, which the server reads to send a first page already in its look, with the looks' published types, `packages/engine/schema/theme.d.ts`). `migrate` and `seed` are engine. No React. | `@mistriwork/engine` |
-| `ui` | the standalone primitives: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, the tokens and the stylesheet they are drawn with, the anchor their popups are placed by and the zoom-aware ruler it measures with (`packages/ui/src`). A primitive reads no walk, address, transport, resource request or copy catalog: its words, icons and answers are props. Each renders under Vitest with no server. | `@mistriwork/ui` |
-| `kit` | the shared React client: the walk, the address, Grid, Value, the record page, lists, filters, the menus that read the walk (OverflowMenu, ThMenu), the date field, charts, the client's UI tokens and stylesheets, and the client that applies a look | `@mistriwork/kit` |
-| `mistri` | the App framework: every App directory under `src/server`, the tenant shell, auth, the API, commands, jobs, workflows, the App stores, the public surface, `@mistriwork/mistri/ui`, `src/embed`, and the rest of `schema/` | `mistri` |
-| `cloudflare` | the Worker glue `mistri deploy init cloudflare` writes against; it imports nothing of the repository | `@mistriwork/cloudflare` |
+| layer        | what it is                                                                                                                                                                                                                                                                                                                                                                                                                                  | becomes                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `engine`     | the adapters, the server's data paths, the HTTP kit, and the shared rules (filter, schema, query language, view, row scopes, and the looks: the built-in looks, their tokens and which one a page wears, which the server reads to send a first page already in its look, with the looks' published types, `packages/engine/schema/theme.d.ts`). `migrate` and `seed` are engine. No React.                                                 | `@mistriwork/engine`     |
+| `ui`         | the standalone primitives: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, the tokens and the stylesheet they are drawn with, the anchor their popups are placed by and the zoom-aware ruler it measures with (`packages/ui/src`). A primitive reads no walk, address, transport, resource request or copy catalog: its words, icons and answers are props. Each renders under Vitest with no server. | `@mistriwork/ui`         |
+| `kit`        | the shared React client: the walk, the address, Grid, Value, the record page, lists, filters, the menus that read the walk (OverflowMenu, ThMenu), the date field, charts, the client's UI tokens and stylesheets, and the client that applies a look                                                                                                                                                                                       | `@mistriwork/kit`        |
+| `mistri`     | the App framework: every App directory under `src/server`, the tenant shell, auth, the API, commands, jobs, workflows, the App stores, the public surface, `@mistriwork/mistri/ui`, `src/embed`, and the rest of `schema/`                                                                                                                                                                                                                  | `mistri`                 |
+| `cloudflare` | the Worker glue `mistri deploy init cloudflare` writes against; it imports nothing of the repository                                                                                                                                                                                                                                                                                                                                        | `@mistriwork/cloudflare` |
 
 The database browser's own rooms (the query and SQL panes, the connection
 manager, the database MCP, lint, diff, impact) are its repository's, built
 over the published engine, kit and ui.
 
-The kit is a layer of its own because the database browser's record view *is*
+The kit is a layer of its own because the database browser's record view _is_
 the App record page: the two products share most of the client, and that client needs
 React, which a server-only consumer of the engine must not have to install.
 
@@ -94,7 +94,8 @@ and the check holds every module to its layer with no exception.
 
 `scripts/boundary/entries.json` names what each package will be imported
 by: every `mistri/*` entry, `@mistriwork/engine` (`packages/engine/src/engine.ts`: connect, the
-catalog, the query language, keyset pages), `@mistriwork/ui`
+catalog, the query language, keyset pages), `@mistriwork/engine/host`
+(`packages/engine/src/host.ts`: what a host opens a database through, below), `@mistriwork/ui`
 (`packages/ui/src/index.ts`: the primitives), `@mistriwork/kit`
 (`packages/kit/src/client/kit.ts`: the shell API and the UI tokens), and
 `@mistriwork/cloudflare`. Each entry gives its layer, its `source` and its
@@ -182,6 +183,29 @@ kit's own faces (Barlow, Barlow Semi Condensed, IBM Plex Mono, Inter, each
 under the SIL Open Font License, its text beside it), with each `.woff2` a
 subpath of its own, so a host's look can name them.
 
+### The host entry
+
+`@mistriwork/engine/host` (`packages/engine/src/host.ts`) is the one entry
+the browser is to open a database through: exactly the names its server
+modules take from the engine to connect (and keep a `Registry` of configured
+connections), read the catalog, answer reads (records, a view, a count, a
+breakdown, the query language and its explainer), make the recorded writes
+with what a delete reaches and why a write failed, keep the write journal
+behind Undo and provision its store, and give the agent tools cancellation
+and the nearest name. It is on the host list as `./host`. It is Preview, as
+the rest of the engine is, and is promoted once the browser has moved onto
+it; a name is added when the browser needs one, never ahead of it.
+`test/engine-host-contract.test.ts` imports this entry alone, holds its
+names to that list, and does with it what the browser does. The serving, the
+CLI and the HTTP plumbing stay on the host list's deeper paths.
+
+A writable connection keeps its write journal in its database when the
+database holds the `undo-journal` store (`provisionSqliteWriteJournal`,
+`provisionPostgresWriteJournal`, or `provisionStores({ only: ['undo-journal'] })`):
+fifty writes a connection, for a week, read back when it opens. Without the
+store the journal is the process's alone, as it always was, and opening a
+connection creates nothing.
+
 The proof that the browser builds and serves from the tarballs runs in its
 repository, against the packages this one publishes; the kit's and the
 engine's exported names it uses that nothing here imports carry an `@public`
@@ -193,18 +217,18 @@ tag in their JSDoc, so `knip` keeps them.
 check was written, as `"from -> to": "fix"`, with the cut that would remove
 it. It shipped in 0.9.6 at 69 crossings; 0.9.8 made the last cuts:
 
-| fix | the cut |
-|---|---|
-| `store-host` | the App stores leave the dialect adapters for a `StoreHost` seam |
-| `config-sections` | the engine reads `connections`; mistri registers its own sections of `mistri.json` |
-| `app-targets` | migrate and seed take an App's databases and stores from a registry |
-| `rules-down` | the page, list and view rules, and the shared rules the kit reads, move into the engine; a section kind is a closed union with a traits table, not a registry |
-| `mode-seam` | the kit asks a shell-mode seam for the visitor, tenant and account state |
-| `slots` | kit components reach App features through a renderer registry or a record-page slot |
-| `dispatcher` | an engine router with gate hooks; each product mounts its own dispatcher |
-| `two-mains` | two binaries, each with its own main, importing only its own layer |
-| `two-shells` | a kit shell, and a shell per product |
-| `move` | a small move: the shared piece moves down, or is read through a seam |
+| fix               | the cut                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `store-host`      | the App stores leave the dialect adapters for a `StoreHost` seam                                                                                              |
+| `config-sections` | the engine reads `connections`; mistri registers its own sections of `mistri.json`                                                                            |
+| `app-targets`     | migrate and seed take an App's databases and stores from a registry                                                                                           |
+| `rules-down`      | the page, list and view rules, and the shared rules the kit reads, move into the engine; a section kind is a closed union with a traits table, not a registry |
+| `mode-seam`       | the kit asks a shell-mode seam for the visitor, tenant and account state                                                                                      |
+| `slots`           | kit components reach App features through a renderer registry or a record-page slot                                                                           |
+| `dispatcher`      | an engine router with gate hooks; each product mounts its own dispatcher                                                                                      |
+| `two-mains`       | two binaries, each with its own main, importing only its own layer                                                                                            |
+| `two-shells`      | a kit shell, and a shell per product                                                                                                                          |
+| `move`            | a small move: the shared piece moves down, or is read through a seam                                                                                          |
 
 It is `{}` now, and `test/check-boundary.test.ts` holds it so. The check
 fails on any crossing, naming the fix its kind takes: a crossing is fixed,

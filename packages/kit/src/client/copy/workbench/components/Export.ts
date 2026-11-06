@@ -5,7 +5,7 @@ export const say = defineMessages({
   none: 'None',
   thatQueryNoLonger: 'That query no longer returns rows.',
   thisPageRows: { one: 'this page ({count} row)', other: 'this page ({count} rows)' },
-  allMatchingRows: 'all matching rows ({capped})',
+  allMatchingRows: 'all matching rows ({count})',
   downloadThisResult: 'Download this result',
   export: 'Export',
   chooseColumns: 'Choose columns…',
@@ -13,7 +13,8 @@ export const say = defineMessages({
   agent: 'Agent',
   theQueryTheShape: 'The query, the shape and how to run it over MCP — not the rows',
   copyThisPosition: 'Copy this position',
-  cappedAtRowsTheSame: 'Capped at {max} rows — the same ceiling every read in this tool has. Narrow the query to export the rest.',
+  streamedPastTheCap: 'Every matching row is written, read in batches as it downloads.',
+  stoppedAtTheCap: 'This file stops at {max} rows: a support visit records each read whole, so its export is one read, not a stream.',
   pickAtLeastOne: 'Pick at least one column to export.',
   columnsToExport: 'Columns to export',
   tickedColumnsAreWritten:

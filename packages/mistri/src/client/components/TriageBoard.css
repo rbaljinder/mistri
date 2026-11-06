@@ -137,7 +137,7 @@
 .triage-card:hover, .triage-card.is-selected { border-color: var(--accent); }
 .triage-card.is-selected { background: var(--accent-soft); }
 .triage-card-title { font-size: var(--text-base); }
-.triage-card-subtitle, .triage-card-meta { color: var(--ink-muted); font-size: var(--text-sm); }
+.triage-card-second, .triage-card-subtitle, .triage-card-meta { color: var(--ink-muted); font-size: var(--text-sm); }
 .triage-card-meta { font-family: var(--mono); font-size: var(--text-xs); }
 /* A card's kind, over its title: a chip in one of the theme's series colors, which a look may also draw as the card's
    stripe (lumenLook.css). The ink is the series deepened by the text's as an avatar's initials are (features.css), 45%

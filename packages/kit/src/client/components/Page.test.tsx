@@ -2230,6 +2230,37 @@ test("a property rail leaves out the values the record lacks, is not drawn when 
   expect(rows('Summary')).toEqual(['beds']);
 });
 
+test("a header's fact draws its column's second line under its value, read with the record", async () => {
+  appMode = true;
+  labelled = 'name';
+  displays = { rent: { subtitle: 'balance' } };
+  viewRows = [{ id: 4, name: 'Maple Court B103', status: 'occupied', beds: 3, rent: 1450, balance: 'due monthly' }];
+  drawUnit([{ kind: 'fields', presentation: 'header', paths: ['beds', 'rent'] }]);
+  const head = document.querySelector('.page-head')!;
+  await waitFor(() => expect(head.querySelector('.page-head-facts:not([aria-hidden])')).not.toBeNull());
+  const read = calls.find((call) => (call.body.view as { id?: string } | undefined)?.id?.endsWith(':header'));
+  expect((read!.body.view as { columns: Array<{ path: string }> }).columns.map((c) => c.path)).toContain('balance');
+  const [beds, rent] = head.querySelectorAll('.page-head-facts .page-fact');
+  expect(rent.querySelector('.value-sub')?.textContent).toBe('due monthly');
+  // A fact whose column names no second line is its value alone.
+  expect(beds.querySelector('.value-sub')).toBeNull();
+});
+
+test("a card section draws its title's and its facts' second lines, read with the record", async () => {
+  appMode = true;
+  labelled = 'name';
+  displays = { name: { subtitle: 'status' }, rent: { subtitle: 'balance' } };
+  viewRows = [{ id: 4, name: 'Maple Court B103', status: 'occupied', beds: 3, rent: 1450, balance: 'due monthly' }];
+  drawUnit([{ kind: 'fields', presentation: 'card', title: 'Unit card', paths: ['name', 'rent'] }]);
+  const card = await waitFor(() => {
+    const found = document.querySelector('.page-reference-card .page-card');
+    expect(found?.querySelector('.page-card-facts')).toBeTruthy();
+    return found!;
+  });
+  expect(card.querySelector('.page-card-title .value-sub')?.textContent).toBe('occupied');
+  expect(card.querySelector('.page-card-facts .value-sub')?.textContent).toBe('due monthly');
+});
+
 test("a fact's word agrees with a count and nothing else, and a unit is said once", async () => {
   appMode = true;
   labelled = 'name';

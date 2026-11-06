@@ -210,6 +210,22 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     },
   },
   {
+    id: 'undo-journal',
+    title: "the Workbench's write journal (Undo, revert), kept across restarts: fifty writes a connection, for a week",
+    tables: { prefix: '__mistri_undo_' },
+    current: both(1),
+    read: marked(everywhere('__mistri_undo_meta')),
+    upgrades: {},
+    provision: {
+      sqlite: async (path) => (await import('@mistriwork/engine/server/journalStore.js')).provisionSqliteWriteJournal(path),
+      postgres: async (url) => (await import('@mistriwork/engine/server/journalStore.js')).provisionPostgresWriteJournal(url),
+    },
+    attest: {
+      sqlite: async (db) => (await import('@mistriwork/engine/server/journalStore.js')).sqliteWriteJournalReady(db),
+      postgres: async (client) => (await import('@mistriwork/engine/server/journalStore.js')).postgresWriteJournalReady(client),
+    },
+  },
+  {
     id: 'inbox',
     title: 'notices, mail and opt-outs',
     tables: { prefix: '__mistri_inbox_' },

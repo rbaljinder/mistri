@@ -12,6 +12,8 @@ import {
   definedThrough,
   drawnSections,
   fieldsColumns,
+  headerColumns,
+  listView,
   recordPageReads,
   type ReadPlan,
   type ReadSection,
@@ -242,4 +244,27 @@ test("a shown column's display `subtitle` is read with the record, through a ref
   assert.ok(fieldsColumns(read, account, { kind: 'fields', paths: ['name'] }).fetched.includes('tier'));
   assert.ok(fieldsColumns(read, deal, { kind: 'fields', paths: ['account_id.name'] }).fetched.includes('account_id.tier'));
   assert.ok(!fieldsColumns(names, account, { kind: 'fields', paths: ['name'] }).fetched.includes('tier'));
+});
+
+test("a header's facts and a related list's cards read their columns' second lines with the row", () => {
+  const display = (table: string, name: string) =>
+    table === 'account' && name === 'name'
+      ? { subtitle: 'tier' }
+      : table === 'deal' && name === 'title'
+        ? { subtitle: 'account_id' }
+        : undefined;
+  const read = { ...names, display };
+  assert.ok(headerColumns(read, account, { kind: 'fields', presentation: 'header', paths: ['name'] }).fetched.includes('tier'));
+  assert.ok(!headerColumns(names, account, { kind: 'fields', presentation: 'header', paths: ['name'] }).fetched.includes('tier'));
+  const plan = {
+    view: { id: 'p', name: 'deal', base: 'deal', columns: [{ path: 'id' }, { path: 'title' }], limit: 10 },
+  } as unknown as ReadPlan;
+  const columns = (presentation: unknown) =>
+    (listView(read, { kind: 'list', from: 'deal', presentation }, plan, 10).view as { columns: Array<{ path: string }> }).columns.map(
+      (c) => c.path,
+    );
+  assert.ok(columns({ kind: 'cards', primary: 'title' }).includes('account_id'));
+  // A grid's cells read theirs through the list's own question; a badge has one line, so it reads none.
+  assert.ok(!columns(undefined).includes('account_id'));
+  assert.ok(!columns({ kind: 'cards', primary: 'id', badge: 'title' }).includes('account_id'));
 });

@@ -50,11 +50,24 @@ vi.mock('../appState.js', () => ({
 /* The kit reads the App through the shell's answers (shellMode.ts), which the mock above gives it. */
 beforeEach(bridgeShell);
 
-const { subtitleColumns } = await import('../../../../kit/src/client/components/appListModel.js');
+const { subtitleColumns, appListQuery } = await import('../../../../kit/src/client/components/appListModel.js');
 
 test('a name read through a reference fetches its second line through the same reference', () => {
   expect(subtitleColumns('timesheet', ['employee_id.name', 'title'])).toEqual(['employee_id.title']);
   expect(subtitleColumns('employee', ['name'])).toEqual(['title']);
   // A path the schema cannot follow asks for nothing.
   expect(subtitleColumns('timesheet', ['manager_id.name'])).toEqual([]);
+});
+
+test("a card's title, figure and properties and a board card's title read their second line with the row; a badge does not", () => {
+  type Spec = Parameters<typeof appListQuery>[0];
+  const shown = (presentation: Record<string, unknown>) =>
+    appListQuery({ table: 'employee', presentation } as unknown as Spec)
+      .match(/show (.*?)(?: limit|$)/)?.[1]
+      .split(', ') ?? [];
+  expect(shown({ kind: 'cards', primary: 'name' })).toContain('title');
+  expect(shown({ kind: 'cards', primary: 'id', value: 'name' })).toContain('title');
+  expect(shown({ kind: 'cards', primary: 'id', lines: ['name'] })).toContain('title');
+  expect(shown({ kind: 'board', by: 'id', primary: 'name' })).toContain('title');
+  expect(shown({ kind: 'cards', primary: 'id', badge: 'name' })).not.toContain('title');
 });

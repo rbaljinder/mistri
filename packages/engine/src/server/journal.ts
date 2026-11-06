@@ -16,11 +16,13 @@
  *
  * Three things it deliberately does not do.
  *
- * It is **not persisted**. The browser's undo stack makes this argument and it
- * is the right one: a stack that outlives the process invites undoing
- * something from an hour ago, by which time the row has very likely moved on
- * and the "undo" is an overwrite wearing a friendly name. In-session is the
- * honest scope.
+ * It is **kept in memory unless the database holds its store**. A stack that
+ * outlives the process invites undoing something from an hour ago, by which
+ * time the row has very likely moved on and the "undo" is an overwrite
+ * wearing a friendly name. Where the store is provisioned (journalStore.ts)
+ * the history survives a restart all the same, bounded by depth and a week,
+ * and the check below is what keeps an old Undo honest; where it is not, the
+ * journal is this process's alone, as it always was.
  *
  * It **checks before it writes**. Putting the old value back over a newer one
  * is not an undo, it is a silent overwrite — so the row is re-read first and
@@ -98,6 +100,84 @@ const entriesFor = (connection: string): JournalEntry[] => {
   return journals.get(connection)!;
 };
 
+/**
+ * Where a connection's journal is kept beside memory (journalStore.ts). The
+ * calls below stay synchronous: memory is what they answer from, and each
+ * change is written behind them, in order, on one chain per connection. A
+ * write the store refused is said through `warn` and stays in memory; the
+ * revert's check-before-write is what an Undo relies on either way.
+ */
+export interface JournalStore {
+  /** The entries kept for `connection`, oldest first, after retention has pruned what is past it. */
+  load(connection: string): Promise<JournalEntry[]>;
+  append(entry: JournalEntry): Promise<void>;
+  /** The entry's state changed (an Undo started or became uncertain, a quarantine). */
+  update(entry: JournalEntry): Promise<void>;
+  remove(connection: string, id: number): Promise<void>;
+}
+interface Kept {
+  store: JournalStore;
+  chain: Promise<void>;
+  warn: (message: string) => void;
+}
+const kept = new Map<string, Kept>();
+
+function persist(connection: string, work: (store: JournalStore) => Promise<void>): void {
+  const at = kept.get(connection);
+  if (!at) return;
+  at.chain = at.chain
+    .then(() => work(at.store))
+    .catch((error: unknown) => at.warn(`"${connection}": the write journal store refused a change: ${(error as Error).message}`));
+}
+
+/**
+ * Keep `connection`'s journal in `store` from now on. The first time, what the
+ * store holds becomes the history: an Undo the last process left in progress
+ * reads as uncertain, since nothing says whether it landed. Again (a
+ * reconnect), the store is swapped and memory, already kept, stays.
+ */
+export async function attachJournalStore(
+  connection: string,
+  store: JournalStore,
+  warn: (message: string) => void = (message) => console.error(message),
+): Promise<void> {
+  const current = kept.get(connection);
+  if (current) {
+    await current.chain;
+    current.store = store;
+    current.warn = warn;
+    return;
+  }
+  const loaded = await store.load(connection);
+  const ids = new Set(loaded.map((entry) => entry.id));
+  const unkept = entriesFor(connection).filter((entry) => !ids.has(entry.id));
+  const list = [...loaded, ...unkept].sort((a, b) => a.id - b.id).slice(-DEPTH);
+  journals.set(connection, list);
+  for (const entry of list) nextId = Math.max(nextId, entry.id + 1);
+  kept.set(connection, { store, chain: Promise.resolve(), warn });
+  for (const entry of loaded) {
+    if (entry.undoState !== 'pending') continue;
+    Object.assign(entry, { undoState: 'unknown', revertible: false, reason: undoUncertain });
+    persist(connection, (each) => each.update(entry));
+  }
+  for (const entry of unkept) persist(connection, (each) => each.append(entry));
+  await flushJournal(connection);
+}
+
+/** Every change written behind so far, landed or refused: before a reply that reports one, and before a close. */
+export async function flushJournal(connection?: string): Promise<void> {
+  const chains = connection === undefined ? [...kept.values()] : kept.has(connection) ? [kept.get(connection)!] : [];
+  for (const at of chains) {
+    let seen: Promise<void> | undefined;
+    while (seen !== at.chain) await (seen = at.chain);
+  }
+}
+
+/** Whether `connection`'s journal is kept in its database. */
+export function journalKept(connection: string): boolean {
+  return kept.has(connection);
+}
+
 /** Record a write that landed. Returns the entry, mostly for tests. */
 export function recordWrite(connection: string, entry: Omit<JournalEntry, 'id' | 'at' | 'connection'>): JournalEntry {
   const full: JournalEntry = {
@@ -109,6 +189,7 @@ export function recordWrite(connection: string, entry: Omit<JournalEntry, 'id' |
   const list = entriesFor(connection);
   list.push(full);
   if (list.length > DEPTH) list.shift();
+  persist(connection, (store) => store.append(full));
   return full;
 }
 
@@ -135,12 +216,19 @@ export function forget(connection: string, id: number): void {
   const list = entriesFor(connection);
   const at = list.findIndex((e) => e.id === id);
   if (at !== -1) list.splice(at, 1);
+  persist(connection, (store) => store.remove(connection, id));
 }
 
-/** Testing seam: a fresh process is the normal state, and tests want it too. */
+/** Testing seam: a fresh process is the normal state, and tests want it too.
+ * What a store keeps is left there, as a process that ended leaves it. */
 export function clearJournal(connection?: string): void {
-  if (connection === undefined) journals.clear();
-  else journals.delete(connection);
+  if (connection === undefined) {
+    journals.clear();
+    kept.clear();
+  } else {
+    journals.delete(connection);
+    kept.delete(connection);
+  }
 }
 
 /** Fail closed without publishing another entry (or consulting a clock). The
@@ -151,6 +239,7 @@ export function quarantineHistory(connection: string, owner?: { principal?: stri
     entry.revertible = false;
     entry.undoState = 'unknown';
     entry.reason = 'Newer write history could not be confirmed. Refresh and reconcile before further editing.';
+    persist(connection, (store) => store.update(entry));
   }
 }
 
@@ -239,6 +328,9 @@ export async function revert(
     return { reverted: false, outcome: 'not_applied', entry, errors: [errorMessage(error)] };
   }
   canonical.undoState = 'pending';
+  // Kept before the inverse runs: a process that stops mid-Undo leaves it uncertain, never offered again as if untried.
+  persist(connection, (store) => store.update(canonical));
+  await flushJournal(connection);
   try {
     const result = await revertOwned(adapter, connection, owned, errorMessage);
     if (result.outcome === 'unknown') {
@@ -254,6 +346,9 @@ export async function revert(
     return { reverted: false, outcome: 'not_applied', entry, errors: [errorMessage(error)] };
   } finally {
     if (canonical.undoState === 'pending') delete canonical.undoState;
+    // An applied Undo was forgotten (revertOwned); anything else says its state again.
+    if (entriesFor(connection).includes(canonical)) persist(connection, (store) => store.update(canonical));
+    await flushJournal(connection);
   }
 }
 

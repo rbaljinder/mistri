@@ -46,7 +46,9 @@ import { resolveValidation, resourceValidation, SHORT_NAME_MAX } from '../../sha
 import { narrowedOverlaps } from '../../shared/appNarrowed.js';
 import { compileAppDefinitionValidation } from './appValidation.js';
 import { compileAppStamps } from './appStamps.js';
-import { cardsColumns, cardsProblem, type AppCardsList } from '@mistriwork/engine/shared/appCards.js';
+import { cardsColumns, cardsProblem } from '@mistriwork/engine/shared/appCards.js';
+import { listSecondLineColumns } from '@mistriwork/engine/shared/appListColumns.js';
+import type { AppListPresentation } from '@mistriwork/engine/shared/listPresentations.js';
 import { missingAppImports, missingImportsMessage } from './appImports.js';
 import { servedApp, type AppPayload, type AppPayloadApp } from '../../shared/appPayload.js';
 import { appAddressBook, naturalKeyProblems, type AddressBook } from '../../shared/appAddress.js';
@@ -1572,49 +1574,51 @@ function narrowedOverlapWarnings(app: LoadedApp['app'], schema: DatabaseSchema):
   );
 }
 
-/** `[subtitle-unseen]`: a column whose display rule has a `subtitle`, shown where nothing draws that second line (a
-    card, a board's card, a record's header facts or a card section). Said, so the rule is not silently ignored: a list's
-    cell, a block of fields and a headline's figure are where it is drawn. */
+/** `[subtitle-unseen]`: a column whose display rule has a `subtitle`, shown where a card has one line for it (a
+    card's badge, description, summary or foot; a board card's line, chip or facts). Said, so the rule is not silently
+    ignored: a list's cell, a block of fields, a header's facts, a card section, a headline's figure, a card's title,
+    figure and lines and a board card's title draw it (appListColumns.ts listSecondLineColumns). */
 function subtitleUnseenWarnings(app: LoadedApp['app'], pages: readonly PageDef[], schema: DatabaseSchema): string[] {
   const resources = (app.resources ?? {}) as Record<string, { display?: Record<string, { subtitle?: string }> }>;
   /* A table id or a page's `base` is a resource's name, or the id the catalog gives it. */
   const resourceOf = (table: string) =>
     Object.hasOwn(resources, table) ? table : Object.keys(resources).find((name) => tableNamed(schema, name)?.id === table);
   const warnings: string[] = [];
-  const say = (where: string, table: string, shown: readonly unknown[], surface: string) => {
+  const say = (where: string, table: string, presentation: AppListPresentation, surface: string) => {
     const resource = resourceOf(table);
     if (!resource) return;
-    for (const entry of new Set(
-      shown.map((each) => (typeof each === 'string' ? each : (each as { column?: string } | undefined)?.column)),
-    )) {
-      if (!entry || entry.includes('.')) continue;
+    const drawn = new Set(listSecondLineColumns(presentation));
+    const shown =
+      presentation.kind === 'cards'
+        ? cardsColumns(presentation)
+        : presentation.kind === 'board'
+          ? [
+              presentation.primary,
+              ...(presentation.lines ?? []),
+              ...(presentation.category === undefined ? [] : [presentation.category]),
+              ...(presentation.footer ?? []).map((fact) => fact.column),
+            ]
+          : [];
+    for (const entry of new Set(shown)) {
+      if (!entry || entry.includes('.') || drawn.has(entry)) continue;
       const subtitle = resources[resource]?.display?.[entry]?.subtitle;
       if (subtitle)
         warnings.push(
-          `${where} [subtitle-unseen]: "${resource}.${entry}" has a display subtitle ("${subtitle}"), which ${surface} does not draw. ` +
-            `Show the column in a list or a block of fields, or drop the subtitle.`,
+          `${where} [subtitle-unseen]: "${resource}.${entry}" has a display subtitle ("${subtitle}"), which ${surface} does not draw there: it has one line for it. ` +
+            `Show the column as the card's title, its figure or one of its properties, or drop the subtitle.`,
         );
     }
   };
   for (const [key, view] of Object.entries(app.views)) {
     if (!('table' in view)) continue;
-    const presentation = (view as { presentation?: { kind?: string } }).presentation;
-    if (presentation?.kind === 'cards') say(`view "${key}"`, view.table, cardsColumns(presentation as AppCardsList), 'a card');
-    if (presentation?.kind === 'board') {
-      const board = presentation as { primary?: string; lines?: string[]; category?: string; footer?: readonly unknown[] };
-      say(`view "${key}"`, view.table, [board.primary, ...(board.lines ?? []), board.category, ...(board.footer ?? [])], 'a board card');
-    }
+    const presentation = (view as { presentation?: AppListPresentation }).presentation;
+    if (presentation?.kind === 'cards') say(`view "${key}"`, view.table, presentation, 'a card');
+    if (presentation?.kind === 'board') say(`view "${key}"`, view.table, presentation, 'a board card');
   }
-  for (const page of pages) {
-    const where = `page "${page.id}"`;
-    for (const section of page.sections) {
+  for (const page of pages)
+    for (const section of page.sections)
       if (section.kind === 'list' && typeof section.presentation === 'object' && section.presentation.kind === 'cards')
-        say(where, section.from, cardsColumns(section.presentation), 'a card');
-      if (section.kind === 'fields' && section.presentation === 'header')
-        say(where, page.base, section.paths ?? [], "a record's header facts");
-      if (section.kind === 'fields' && section.presentation === 'card') say(where, page.base, section.paths ?? [], 'a card section');
-    }
-  }
+        say(`page "${page.id}"`, section.from, section.presentation, 'a card');
   return warnings;
 }
 

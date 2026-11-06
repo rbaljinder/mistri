@@ -12,6 +12,7 @@
  * `update` or `delete`. */
 import { homeSourceOf, logicalResource, resolveAppAccess, resourceCeiling, appDeletable, type AppDef } from '../../shared/app.js';
 import { apiWrites, type ApiWrite } from '../../shared/appApi.js';
+import { narrowedFixedColumns } from '../../shared/appNarrowed.js';
 import {
   columnKind,
   isFlagColumn,
@@ -111,8 +112,11 @@ export function apiWriteProblems(app: AppDef, schema: DatabaseSchema, registry?:
         );
     }
     if (write.verb === 'create') {
+      // A narrowed resource's query sets its equalities on every new row (appNarrowed.ts): no request gives them.
+      const fixed = narrowedFixedColumns(table, app.resources?.[write.resource]?.query);
       const missing = table.columns.filter(
-        (column) => !column.nullable && !assigned(column, schema, table.id) && !write.fields.includes(column.name),
+        (column) =>
+          !column.nullable && !assigned(column, schema, table.id) && !write.fields.includes(column.name) && !fixed.has(column.name),
       );
       if (missing.length) {
         problems.push(

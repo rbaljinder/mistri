@@ -574,9 +574,11 @@ test(
       assert.equal(result.headers.get('cache-control'), 'no-store', path);
       assert.equal(result.headers.get('etag'), null, path);
     }
-    // A stream cannot wait for the policy to settle: the export is refused, not unscoped.
+    /* The streamed export is reached under the policy now (export-stream-scoped.test.ts reads one through it), and its
+       role grants still hold: a reader granted no export is refused before anything is read, never stored. */
     const exported = await call('/api/export', { q: 'ticket' });
     assert.equal(exported.status, 403);
+    assert.equal(exported.body.error, 'Export is not available to this person.');
     assert.equal(exported.headers.get('cache-control'), 'no-store');
     publicData(exported.body);
   },
