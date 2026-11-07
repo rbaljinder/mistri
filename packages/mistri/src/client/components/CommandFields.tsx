@@ -33,7 +33,7 @@ import { DateField } from '@mistriwork/kit/client/components/DateField.js';
 import { defaultCurrency, formatLocale, formatTimezone } from '@mistriwork/kit/client/locale.js';
 import { onDemand, useArrived } from '@mistriwork/kit/client/components/onDemand.js';
 import { Button } from '@mistriwork/ui/Button.js';
-import { Field } from '@mistriwork/ui/Field.js';
+import { Field, type AnswerKind } from '@mistriwork/ui/Field.js';
 import { InputSlot, builtInInputId } from '@mistriwork/kit/client/components/inputRenderers.js';
 import { say } from '../copy/forms/components/CommandFields.js';
 import type { DefinedField } from '@mistriwork/engine/shared/definedFields.js';
@@ -735,6 +735,12 @@ export function CommandFieldControl({
   );
 }
 
+/** The short answers a field can take: a count, an amount, a day, a day and its time, a time of day. */
+const answerKind = (field: AppCommandField): AnswerKind | undefined =>
+  field.type === 'number' || field.type === 'money' || field.type === 'date' || field.type === 'datetime' || field.type === 'time'
+    ? field.type
+    : undefined;
+
 /* A box the valid check stands in: a text or number box, an amount, a text typed through its mask. A sensitive value
    keeps its show button there, and a slider and every chooser say their state their own way. */
 const markable = (field: AppCommandField): boolean =>
@@ -969,6 +975,9 @@ function FieldEntry({
   const pair = field.type === 'boolean' && field.as === 'buttons' && !custom;
   /* A picker narrowed by the record reads the query prepare bound to it (the form opens once prepare answers). */
   const bound = shared.bound && Object.hasOwn(shared.bound, declared) ? shared.bound[declared] : undefined;
+  /* A short answer is only as wide as it is long, and shares a row with the short answers beside it (forms.css, Field's
+     `kind`). A slider, a rating or an App's own input draws its own width. */
+  const answer = custom || ('as' in field && field.as !== undefined) ? undefined : answerKind(field);
   return (
     <Field
       label={label}
@@ -980,6 +989,7 @@ function FieldEntry({
       group={radios || listbox || pair || held}
       check={check}
       labelHidden={stated}
+      kind={answer}
       className="command-field"
     >
       {(control) =>

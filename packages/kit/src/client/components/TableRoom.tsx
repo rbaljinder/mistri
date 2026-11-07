@@ -43,6 +43,7 @@ import { pageStepFor, stepList } from './pageStep.js';
 import { ExportHold } from './ExportHold.js';
 import { batchedRun } from '../breakdownBatch.js';
 import { useListHold } from '../liveState.js';
+import { laneWindow } from '@mistriwork/engine/shared/boardLanes.js';
 import { say } from '../copy/lists/components/TableRoom.js';
 
 /* The diagrams are a chunk of their own, loaded when the Diagram tab is first opened. */
@@ -362,16 +363,25 @@ function Rows({
   const page = (state as { page: number }).page;
   const source = connection();
   /* A page the pager stepped to is read by key, the end with its own length (pageStep.ts). */
-  const step = asked ? undefined : pageStepFor(stepList(source, entry.table, entry.query, size), page);
-  const limit = asked ?? step?.limit ?? size;
-  const offset = asked ? 0 : page * size;
+  /* A board reads its lanes' first pages in this one read, windowed by its lane column (boardLanes.ts), and no total:
+     it counts its lanes in a breakdown of its own (BoardList.tsx). A query with its own limit is laid out as it is. */
+  const board = presentation?.kind === 'board' && !asked ? laneWindow(presentation.by) : undefined;
+  const step = asked || board ? undefined : pageStepFor(stepList(source, entry.table, entry.query, size), page);
+  const limit = board?.limit ?? asked ?? step?.limit ?? size;
+  const offset = asked || board ? 0 : page * size;
   const exact = entry.exactCount === true;
   const run = useQuery<ResourceClientReply<'/api/run'>>({
-    queryKey: ['run', source, entry.table, entry.query, limit, offset, exact, version, step?.body],
+    queryKey: ['run', source, entry.table, entry.query, limit, offset, exact, version, step?.body ?? board?.lanes.by],
     queryFn: async () => {
       const totalKey = JSON.stringify([source, entry.table, entry.query, exact, version]);
       const known = offset > 0 ? listTotals.get(totalKey) : undefined;
-      const asked = { q: entry.query, limit, offset, exactCount: exact, ...(known ? { count: 'none' as const } : {}) };
+      const asked = {
+        q: entry.query,
+        limit,
+        offset,
+        exactCount: exact,
+        ...(board ? { count: board.count, lanes: board.lanes } : known || entry.counted === false ? { count: 'none' as const } : {}),
+      };
       /* A table on a dashboard is asked with the dashboard's other sections,
          in one request (breakdownBatch.ts); a room's own list, and a page
          stepped to by key, are asked alone. */

@@ -192,7 +192,9 @@ export function Crumbs({ onHome }: { onHome: () => void }) {
       {/* A list's title, count and star land here; its verbs, at the end. */}
       <span className="crumb-note" ref={crumbNoteRef} />
       {/* The walk's Back repeats the trail's own last step; a public reader has
-          the trail and the browser's Back, and one more button is chrome. */}
+          the trail and the browser's Back, and one more button is chrome. At a
+          desk an App draws none either (style.css): the trail is its one way
+          back. A phone, whose bar is condensed, keeps it. */}
       {previous && !shell().publicVisitor() && (
         <button
           type="button"

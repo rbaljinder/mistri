@@ -117,6 +117,12 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].from` | string | Stable | Default resource for sections that name none; a section's own from wins. Refused when every section names its own. Used in `examples/apps/lintel/app.ts`. |
 
+## `views.*[kind=dashboard].head`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=dashboard].head` |  | Stable | The head's form. 'compact': the title alone on one line with its verbs, at a list's size, with no intro. false: the dashboard draws its own head; its title is kept for a screen reader (the room's one h1), and the label still names the tab, the crumb and the palette entry. Absent: the full head, title and intro. One of `compact`, `false`. |
+
 ## `views.*[kind=dashboard].heading`
 
 | Key | Type | Status | What it does |

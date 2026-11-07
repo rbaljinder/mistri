@@ -290,6 +290,37 @@ afterEach(() => {
   installShell({ writeScope: () => true });
 });
 
+describe('a list with a board to switch to (listInference.ts inferBoard)', () => {
+  const asBoard = { kind: 'board' as const, by: 'status', primary: 'title', folded: ['done'] };
+  const rows = { ...spec, presentation: undefined, asBoard };
+  afterEach(() => localStorage.removeItem('mistri.listLayout'));
+
+  test('draws rows until the reader picks the board, then lanes, and keeps the choice for the view', async () => {
+    draw('task', { spec: rows });
+    const group = await screen.findByRole('group', { name: 'Show Tasks as' });
+    const [list, board] = within(group).getAllByRole('button');
+    expect(list.getAttribute('aria-pressed')).toBe('true');
+    expect(room.presentation).toBeUndefined();
+    fireEvent.click(board);
+    expect(room.presentation).toEqual(asBoard);
+    expect(board.getAttribute('aria-pressed')).toBe('true');
+    expect(JSON.parse(localStorage.getItem('mistri.listLayout') ?? '{}')).toEqual({ tasks: 'board' });
+    cleanup();
+    draw('task', { spec: rows });
+    await screen.findByRole('group', { name: 'Show Tasks as' });
+    expect(room.presentation).toEqual(asBoard);
+  });
+
+  test('a list without one, or one that is already drawn another way, has no switch', async () => {
+    draw('task', { spec: { ...spec, presentation: undefined } });
+    await screen.findByRole('tab', { name: /All/ });
+    expect(screen.queryByRole('group', { name: 'Show Tasks as' })).toBeNull();
+    cleanup();
+    draw('task', { spec: { ...spec, asBoard } });
+    expect(screen.queryByRole('group', { name: 'Show Tasks as' })).toBeNull();
+  });
+});
+
 describe('the model', () => {
   test("a tab is a query text, with the app's plumbing folded in", () => {
     expect(appListQuery(spec, 0)).toBe(`task ${PLUMBING}`);

@@ -148,6 +148,8 @@ export interface SlotProps {
   onTitleEditor?: (index: number, render: (() => ReactNode) | undefined) => void;
   /** An empty related list said in one line with its neighbours: it draws its Add alone (PageEmptyRun.tsx). */
   collapsed?: boolean;
+  /** A related list alone on an inferred page: it says its count beside its heading, as a tab would. */
+  counted?: boolean;
 }
 
 /**

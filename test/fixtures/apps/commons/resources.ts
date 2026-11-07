@@ -167,6 +167,7 @@ export const resources = {
   // What a moderator removed, and why: the moderators' alone.
   removal: {
     access: 'write',
+    recordLabel: '{post_id.thread_id.title} · {reason}',
     display: { removed_at: { format: 'relative' } },
     labels: { body: 'Removed words' },
     audit: { redact: ['removed_by'] },
@@ -186,6 +187,7 @@ export const resources = {
   report: {
     access: 'write',
     noun: 'report',
+    recordLabel: '{post_id.thread_id.title} · {reason}',
     display: {
       status: { tone: { open: 'warn', actioned: 'good', '*': 'neutral' } },
       // What a moderator triages first: spam and unkindness, then advice that could hurt someone.
@@ -204,6 +206,7 @@ export const resources = {
   warning: {
     access: 'write',
     noun: 'warning',
+    recordLabel: '{member_id.display_name} · {reason}',
     display: { issued_at: { format: 'relative' } },
   },
   // The front page's photo: one row, a workbench seen from above.

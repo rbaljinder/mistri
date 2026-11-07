@@ -10,7 +10,7 @@
  */
 
 import { flushSync } from 'react-dom';
-import { DEFAULT_LIMIT } from '@mistriwork/engine/shared/reads.js';
+import { LIST_PAGE_SIZE } from '@mistriwork/engine/shared/reads.js';
 import { PAGE_HEADER } from '@mistriwork/engine/shared/pageRoutes.js';
 import { quoteValue } from '@mistriwork/engine/shared/query.js';
 import { connectionGeneration } from './connectionTransition.js';
@@ -69,16 +69,15 @@ export const state = { schema: null, stack: [], page: 0, canWrite: false, navMod
 /* A record page's composed answers (composedHook.ts) go to this connection when a request names none. */
 setComposedConnection(() => state.activeConnection ?? null);
 
-/* The server's DEFAULT_LIMIT. Small on purpose: the first page of a
-   browse should be instant, and paging is one click. */
-const PAGE_SIZE = DEFAULT_LIMIT;
+/* The server's first-paint size (LIST_PAGE_SIZE): the list's first page is read before the browser's window is known. */
+const PAGE_SIZE = LIST_PAGE_SIZE;
 
 /**
  * How many rows a page actually holds, which the reader chooses.
  *
- * `PAGE_SIZE` stays the default and stays equal to the server's
- * `DEFAULT_LIMIT` — twenty is right for a first look, and the first look is
- * what most browsing is. It was also the *only* size, which turned a
+ * `PAGE_SIZE` stays the default and stays equal to the size the server reads
+ * a list's first page at (`LIST_PAGE_SIZE`) — enough for a first look without
+ * paging, and the first look is what most browsing is. It was also the *only* size, which turned a
  * sixty-thousand-row table into three thousand clicks: a table you could read
  * the front of and nothing else.
  *

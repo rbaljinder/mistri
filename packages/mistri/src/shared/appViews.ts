@@ -93,6 +93,7 @@ import { landingViews, parseLandingView } from './appLanding.js';
 import { CARDS_MAX_LINES, parseCards } from '@mistriwork/engine/shared/appCards.js';
 import { checkDeclaredResource, checkResourceSlot, type ParsedData } from './appResourceBlocks.js';
 import { parseHome, type HomeView } from './appHome.js';
+import { OVERVIEW } from './appOverview.js';
 import { parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 import { unknownKey } from '@mistriwork/engine/shared/suggest.js';
 import { isAreaName } from '@mistriwork/engine/shared/dashLayout.js';
@@ -236,6 +237,7 @@ export const DASHBOARD_VIEW_KEYS = [
   'label',
   'path',
   'heading',
+  'head',
   'description',
   'icon',
   'from',
@@ -337,6 +339,22 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
      are said in one run, and only the reachability walk, which reads both, waits until they parse. */
   const across: string[] = [];
   const order = entries.map(([key]) => key);
+  /* An App that names no home starts on an overview of its main table (appOverview.ts): a room of its own, which nav
+     may name as `overview` like any view. Its sections wait for the catalog; an App with no list has nothing to show
+     on one, and is still asked where a visitor starts. */
+  const overview = a.home === undefined && order.some((key) => views.get(key)?.kind === 'list') && !views.has(OVERVIEW);
+  if (overview) {
+    views.set(OVERVIEW, {
+      kind: 'dashboard',
+      key: OVERVIEW,
+      at: `${where}: the overview (no "home")`,
+      embeds: [],
+      tables: [],
+      view: { label: 'Overview', icon: 'house', sections: [], overview: true },
+    });
+    /* The menu's first room, as home is the first place a reader lands: a menu drawn from the views lists it first. */
+    order.unshift(OVERVIEW);
+  }
   const apiViews = ctx.api?.views.map((entry) => entry.view) ?? [];
   for (const key of apiViews) {
     if (views.get(key)?.kind !== 'list') across.push(`${where}: api.views.${key} must reference an existing list view.`);
@@ -437,6 +455,8 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
       `${where}: views "${ASSISTANT_ROOM}" takes the word the assistant's page is placed by (assistant placement 'page'). Give the view another key.`,
     );
   const nav = gather(across, () => parseNav(a.nav, where, views, order, parsedKind, assistantPage));
+  /* A menu the App wrote leads with the overview it did not: the room every reader starts on is one they can go back to. */
+  if (overview && nav?.length && !navViewKeys(nav).includes(OVERVIEW)) nav.unshift({ view: OVERVIEW });
   const homeViews = new Map<string, HomeView>(
     order.map((key) => {
       const view = views.get(key)!;
@@ -463,7 +483,9 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
       ];
     }),
   );
-  const rules = gather(across, () => parseHome(a.home, where, homeViews, ctx.auth, resourceCeiling(ctx.data).read, ctx.name));
+  const rules = gather(across, () =>
+    parseHome(overview ? OVERVIEW : a.home, where, homeViews, ctx.auth, resourceCeiling(ctx.data).read, ctx.name),
+  );
   /* What nothing opens is judged only once the menu, the home and the landing are all known: one that did not parse
      would make every room it names look orphaned. */
   if (!nav || !rules || !landingsRead) throw new AppProblems(across);
@@ -1451,6 +1473,7 @@ function parseDashboardView(
       label: v.label.trim(),
       ...(heading === undefined ? {} : { heading }),
       ...(v.heading === false ? { headingHidden: true as const } : {}),
+      ...parseHead(v.head, at),
       ...(description === undefined ? {} : { description }),
       sections,
       ...(aside === undefined ? {} : { aside }),
@@ -1479,6 +1502,7 @@ const PAGE_VIEW_KEYS = [
   'icon',
   'description',
   'heading',
+  'head',
   'favorite',
   'component',
   'reads',
@@ -1489,6 +1513,18 @@ const PAGE_VIEW_KEYS = [
   'roles',
   'public',
 ] as const;
+
+/**
+ * `head`: the form a dashboard's or a page's head takes. `'compact'` is the title alone on one line with its verbs,
+ * with no intro; `false` is a page that draws its own head, its title kept for a screen reader so the room keeps its
+ * one h1, and the label still the document title, the crumb and the palette's word. Absent is the full head.
+ */
+function parseHead(value: unknown, at: string): { head?: 'compact' | 'own'; headingHidden?: true } {
+  if (value === undefined) return {};
+  if (value === false) return { head: 'own', headingHidden: true };
+  if (value === 'compact') return { head: 'compact' };
+  throw new Error(`${at}: "head" is 'compact' (the title on one line with its verbs, no intro) or false (the page draws its own head).`);
+}
 
 /**
  * A free-form page: the whole page drawn by the author's component. It is
@@ -1553,6 +1589,7 @@ function parsePageView(v: Record<string, unknown>, key: string, at: string, ctx:
     tables: page.reads,
     view: {
       ...(v.heading === false ? { headingHidden: true as const } : {}),
+      ...parseHead(v.head, at),
       label: v.label.trim(),
       ...(description === undefined ? {} : { description }),
       sections: [

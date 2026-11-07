@@ -1396,6 +1396,7 @@ export function appRoutes(loaded: RoutedApp, schema: DatabaseSchema, realm?: App
     tables: schema.tables,
     inbox: served.inbox === true,
     assistant: served.assistant?.page === true,
+    directory: served.directory !== undefined,
     ...(roles ? { projected: true } : {}),
   });
 }

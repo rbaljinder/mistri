@@ -13,7 +13,21 @@
  * Pure over the loaded App, its compiled pages and one catalog.
  */
 import type { AppDashSection, AppDef, AppDisplayRule, AppListView, ResourceDef } from '../../shared/appModel.js';
-import { columnKind, tableNamed, type ColumnMeta, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import {
+  columnKind,
+  labelColumn,
+  primaryKey,
+  rowName,
+  stateStampColumn,
+  tableNamed,
+  type ColumnMeta,
+  type DatabaseSchema,
+  type TableMeta,
+} from '@mistriwork/engine/shared/schema.js';
+import { platformWritten } from '@mistriwork/engine/shared/form.js';
+import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
+import { nounTemplate } from '@mistriwork/engine/shared/recordLabel.js';
+import { isLongText } from '@mistriwork/engine/shared/pageAnatomy.js';
 import { declaredDisplayOf, effectiveDisplay, MONEY } from '@mistriwork/engine/shared/displayDefaults.js';
 import type { PageDef, PageFields, PageList, PageSection } from '@mistriwork/engine/shared/pageModel.js';
 import { tryResolvePath } from '@mistriwork/engine/shared/viewPaths.js';
@@ -970,7 +984,99 @@ export function designLint(app: AppDef, pages: readonly PageDef[], schema: Datab
     ...boardFindings(catalog),
     ...addressFindings(catalog),
     ...repeatedQueryFindings(app, schema),
+    ...defaultsFindings(catalog),
   ];
+}
+
+/* A key the database hands out: one integer or uuid primary key, which no reader quotes. */
+const handedOut = (table: TableMeta, column: ColumnMeta) =>
+  column.primaryKey &&
+  table.columns.filter((c) => c.primaryKey).length === 1 &&
+  (/^(id|uuid|guid)$/i.test(column.name) || /int|serial|uuid/i.test(column.type ?? ''));
+
+/**
+ * Rules 24–26: what a bare App leaves to the defaults and the defaults cannot say well. A list that shows the key the
+ * database handed out; records with nothing to be called by, which the platform names from their parent and their
+ * day (appRecordLabels.ts) where it can and by noun and number where it cannot; and a New form that asks for a value
+ * the database or the machine writes (form.ts, platformWritten), which a form the App leaves to the schema no
+ * longer asks.
+ */
+function defaultsFindings(catalog: Catalog): DesignFinding[] {
+  const found: DesignFinding[] = [];
+  const listed = new Set<string>();
+  for (const [key, raw] of Object.entries(catalog.app.views)) {
+    const view = asList(raw);
+    const table = view ? catalog.table(view.table) : undefined;
+    if (!view || !table) continue;
+    listed.add(table.id);
+    const keyColumn = (view.show ?? []).find((path) => {
+      const column = table.columns.find((c) => c.name === path);
+      return column && handedOut(table, column);
+    });
+    const named = catalog.byTable.get(table.id)?.resource.recordLabel;
+    /* A key the App dresses as the record's name ('SO-{id}') is what a reader quotes. */
+    if (keyColumn && !(typeof named === 'string' && named.includes(`{${keyColumn}}`)))
+      found.push({
+        code: 'list-shows-key',
+        at: `view "${key}"`,
+        text: `its columns show "${keyColumn}", the number the database handed out, which no reader quotes → leave it out of show; a record is opened by its name.`,
+      });
+  }
+  for (const [tableId, { name, resource }] of catalog.byTable) {
+    const table = catalog.table(tableId)!;
+    const at = `resource "${name}"`;
+    if (listed.has(tableId) && resource.recordLabel === undefined && !rowName(table)) {
+      const own = labelColumn(table);
+      const column = table.columns.find((c) => c.name === own);
+      const keyed = !column || column.primaryKey;
+      if (keyed || column.nullable || isLongText(column.name)) {
+        const parent = table.columns.find((c) => c.references && c.nullable === false && c.references.table !== table.id);
+        const target = parent ? catalog.table(parent.references!.table) : undefined;
+        const theirs = target ? rowName(target) : undefined;
+        const day = table.columns.find(
+          (c) => !c.primaryKey && !c.references && c.nullable === false && columnKind(c.type ?? '') === 'date',
+        );
+        /* A day tells siblings apart only beside their parent (raw-label); without both, the noun and number. */
+        const suggested =
+          parent && theirs && day
+            ? `{${parent.name}.${theirs}} · {${day.name}}`
+            : nounTemplate(recordNoun(resource.noun, table.name), primaryKey(table)[0] ?? 'id');
+        found.push({
+          code: 'unnamed-records',
+          at,
+          /* Said as the App does it: a prose column every record fills is its title (its first words); with none, or
+             one a record may leave blank, the platform composes one (appRecordLabels.ts). */
+          text:
+            keyed || column.nullable
+              ? `its records have no name column${keyed ? '' : ` ("${column.name}" may be empty)`}, so the App titles them by ` +
+                `their parent and day where they have both, else by noun and number → say what one is called: recordLabel: '${suggested}'.`
+              : `its records are titled by "${column.name}", text written to be read rather than to name one → say what one is called: ` +
+                `recordLabel: '${suggested}', or recordLabel: '${column.name}' where its first words do.`,
+        });
+      }
+    }
+    if (resource.access !== 'write' || !resource.form) continue;
+    const declared = [
+      ...(resource.form.show ?? []),
+      ...(resource.form.steps ?? []).flatMap((step) => step.fields),
+      ...(resource.form.groups ?? []).flatMap((group) => group.fields),
+    ];
+    const machine = resource.machine;
+    const written = platformWritten(
+      table,
+      machine ? { column: machine.column, since: machine.since, states: machine.states.map((state) => state.name) } : undefined,
+    );
+    const asked = [...new Set(declared)].filter((field) => written.has(field) && !Object.hasOwn(resource.form?.defaults ?? {}, field));
+    if (asked.length)
+      found.push({
+        code: 'new-asks-stamp',
+        at,
+        text:
+          `its New form asks ${list(asked)}, which the ${asked.some((field) => machine && machine.states.some((state) => stateStampColumn(state.name, table.columns, machine)?.name === field)) ? 'machine or the database' : 'database'} ` +
+          `writes as the record is made or moves → leave ${asked.length === 1 ? 'it' : 'them'} out of the form; ${asked.length === 1 ? 'it stays' : 'they stay'} on the record.`,
+      });
+  }
+  return found;
 }
 
 /** One finding as `mistri check` prints it: where, the smell → the fix, and the docs topic. */

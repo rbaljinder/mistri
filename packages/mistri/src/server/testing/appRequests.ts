@@ -74,6 +74,7 @@ interface ServedApp {
   pages?: { id: string; base: string; path?: string }[];
   inbox?: boolean;
   assistant?: { page?: boolean };
+  directory?: { icon: string };
   /** The no-record commands a component runs by name, as a form's command is served. */
   formCommands?: Record<string, { id: string; version: number }>;
 }
@@ -304,6 +305,7 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
         tables: schema.tables,
         inbox: payload.inbox === true,
         assistant: payload.assistant?.page === true,
+        directory: payload.directory !== undefined,
         projected: true,
       });
       return { app: payload, schema, book };

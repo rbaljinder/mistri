@@ -235,13 +235,16 @@
   :root[data-parts~="logo:lift"] .app-mode .brand-mark {
     box-shadow: var(--part-logo-lift);
   }
-  :root[data-parts~="logo:face"] .app-mode .brand-mark {
+  :root[data-parts~="logo:face"] .app-mode .brand-mark,
+    :root[data-parts~="logo:face"] .app-mode .brand-name {
     font-family: var(--part-logo-face);
   }
-  :root[data-parts~="logo:weight"] .app-mode .brand-mark {
+  :root[data-parts~="logo:weight"] .app-mode .brand-mark,
+    :root[data-parts~="logo:weight"] .app-mode .brand-name {
     font-weight: var(--part-logo-weight);
   }
-  :root[data-parts~="logo:case"] .app-mode .brand-mark {
+  :root[data-parts~="logo:case"] .app-mode .brand-mark,
+    :root[data-parts~="logo:case"] .app-mode .brand-name {
     text-transform: var(--part-logo-transform);
     font-variant-caps: var(--part-logo-caps);
     letter-spacing: var(--part-logo-tracking);

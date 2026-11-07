@@ -7,6 +7,9 @@ export const say = defineMessages({
   yourAccount: 'Your account',
   signOutCouldNotBeConfirmed: 'Sign-out could not be confirmed',
   account: 'Account: {who}',
+  /* The trigger's name holds what it shows, in its order (WCAG 2.5.3, label in name): the avatar's initials, then
+     the name beside them, or the address an avatar alone stands for. */
+  accountShown: 'Account: {initials} {who}',
   signed: 'Signed in as',
   manageAccounts: 'Manage accounts',
   manageTenants: 'Manage tenants',

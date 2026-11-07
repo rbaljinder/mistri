@@ -53,7 +53,11 @@ for (const [label, entry, message] of [
     { kind: 'search', url: 'https://s.internal:8108', auth: { apiKey: '${TYPESENSE_API_KEY}' } },
     /has "kind": "search"\. Search providers are not part of mistri: they are packs \(Typesense is @mistriwork\/search-typesense, SQLite FTS5 is @mistriwork\/search-sqlite, Postgres tsvector is @mistriwork\/search-postgres\)/,
   ],
-  ['an unknown kind', { kind: 'queue', url: 'x' }, /The kinds are "http", "cache" and "webhook"/],
+  [
+    'an unknown kind',
+    { kind: 'queue', url: 'x' },
+    /The kinds are "http", "cache", "email", "embed", "oauth", "oidc", "saml", "scim" and "webhook"/,
+  ],
   [
     'an HTTP cache that is not whole seconds',
     { kind: 'http', url: 'https://api.example/', description: DESCRIPTION, cache: { ttl: 0.5 } },

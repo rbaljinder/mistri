@@ -1707,7 +1707,8 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
             paged.filter((info) => !main.includes(info)),
           );
   if (mine && !nav.includes(mine.key)) nav.splice(overview ? 1 : 0, 0, mine.key);
-  const home = overview ? 'overview' : flat[0];
+  /* Without an overview of its own, the App names no home and starts on the one inferred from its main table (appOverview.ts). */
+  const home = overview ? 'overview' : undefined;
   /* The brief's commands: a button on the record that runs each by id. The resource is written to, or the verb
      would refuse in front of the person it was drawn for. */
   for (const command of opts.brief?.commands ?? []) {

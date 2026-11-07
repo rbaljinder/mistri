@@ -35,6 +35,20 @@ export function moduleTypeProblem(dir: string, name: (path: string) => string = 
   return `${name(found.path)} ${says}, so Node reads the App's modules as CommonJS; they are ES modules. Set "type": "module" (${MODULE_FIX}).`;
 }
 
+/**
+ * Why Node reads this module as CommonJS, said as the clause after "loaded as CommonJS": its extension, or the
+ * package.json over it. Undefined where it is read as an ES module (`.mts`, `.mjs`, or under `"type": "module"`).
+ */
+export function commonJsReason(file: string, name: (path: string) => string = (path) => path): string | undefined {
+  if (/\.m[jt]s$/.test(file)) return undefined;
+  const extension = /\.c[jt]s$/.exec(file)?.[0];
+  if (extension) return `it is a ${extension} file`;
+  const found = nearestPackage(dirname(resolve(file)));
+  if (!found) return 'no package.json above it says "type": "module"';
+  if (found.type === 'module') return undefined;
+  return `${name(found.path)} ${found.type === undefined ? 'has no "type"' : `says "type": ${JSON.stringify(found.type)}`}`;
+}
+
 /** One sentence when the TypeScript a project resolves is missing or older than 7. */
 export function typescriptProblem(dir: string): string | undefined {
   let version: string;

@@ -57,6 +57,8 @@ import {
   countEachRows,
   countsTogether,
   orderClause,
+  lanesStatement,
+  withoutLaneRow,
   type CountItem,
   type AggregateRequest,
   type AggregateResult,
@@ -588,8 +590,15 @@ export class SqliteAdapter implements Adapter {
     const meta = orderBy?.length ? (await this.schema().catch(() => undefined))?.tables.find((t) => t.id === request.table) : undefined;
     const order = orderClause(orderBy, meta, ANSI_STYLE, 1);
 
-    const text = `SELECT ${cols} FROM ${ANSI_STYLE.quote(table)}${where.text}${order.text} LIMIT ? OFFSET ?`;
-    const params = [...where.params, ...order.params, limit, offset];
+    const lanes = request.lanes;
+    const text = lanes
+      ? lanesStatement(
+          ANSI_STYLE,
+          { columns: cols, source: `${ANSI_STYLE.quote(table)}${where.text}`, lane: ANSI_STYLE.quote(lanes.by), order: order.text },
+          0,
+        )
+      : `SELECT ${cols} FROM ${ANSI_STYLE.quote(table)}${where.text}${order.text} LIMIT ? OFFSET ?`;
+    const params = [...where.params, ...order.params, ...(lanes ? [clampLimit(lanes.limit)] : []), limit, offset];
 
     const started = performance.now();
     /* Integers past 2^53 are read as BigInt rather than throwing; valueSafe
@@ -597,12 +606,13 @@ export class SqliteAdapter implements Adapter {
     const rows = await this.readRows(text, params, false, db);
     const ms = Math.round(performance.now() - started);
 
-    return {
+    const result = {
       columns: rows.length ? Object.keys(rows[0]) : (request.columns ?? []),
       rows: rows.map(request.binary ? withBytes : toJsonSafe),
       ms,
       sql: { text, params },
     };
+    return lanes ? withoutLaneRow(result) : result;
   }
 
   /**

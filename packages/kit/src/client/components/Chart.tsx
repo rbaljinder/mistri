@@ -937,16 +937,33 @@ export function StackedColumns({
   say = String,
   wide = 600,
   high,
+  paint,
+  legend = true,
+  target,
+  onPick,
 }: {
-  rows: Array<{ key: string; values: Record<string, number> }>;
+  /** `raw` is the key a column goes to when it drills; a gap-filled bucket (a period nothing happened in) holds none and is no door. */
+  rows: Array<{ key: string; values: Record<string, number>; raw?: unknown }>;
   series: Array<{ key: string; label: string }>;
   say?: Say;
   wide?: number;
   high?: number;
+  /** A series' own paint where it is not the palette in order (a tone, a ramp step, a lighter share): its parts' style. */
+  paint?: (k: number) => React.CSSProperties;
+  /** The legend and its totals under the figure; off where the caller draws one over it. */
+  legend?: boolean;
+  target?: number;
+  /** A column as a way into its rows, by its raw key. */
+  onPick?: ((value: unknown) => void) | null;
 }) {
   const columns = rows
-    .map((r) => ({ key: r.key, parts: series.map((s) => Math.max(0, Number(r.values[s.key]) || 0)) }))
+    .map((r) => ({ key: r.key, raw: r.raw, parts: series.map((s) => Math.max(0, Number(r.values[s.key]) || 0)) }))
     .map((c) => ({ ...c, total: c.parts.reduce((n, v) => n + v, 0) }));
+  /* Roving tabindex for the columns that drill, as a line's points have: one tab stop for the figure, the arrows
+     between its doors, Home and End to its ends. */
+  const doors = columns.map((c, i) => (onPick && c.raw != null ? i : -1)).filter((i) => i >= 0);
+  const [roved, setRoved] = useState<number | null>(null);
+  const tabbable = roved !== null && doors.includes(roved) ? roved : doors[0];
   const svg = useRef<SVGSVGElement>(null);
   const [near, setNear] = useState<number | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
@@ -965,8 +982,9 @@ export function StackedColumns({
   const named = columns.map((c) => (periods ? periodTick(c.key) : c.key));
   const W = measured > 0 ? measured : wide;
   const H = high ? Math.max(120, Math.round(high)) : Math.max(160, Math.min(Math.round(W / 3.5), 220));
+  const goal = target !== undefined && Number.isFinite(target) && target > 0 ? target : undefined;
   const max = Math.max(...columns.map((c) => c.total), 1);
-  const scale = niceScale(0, max, 2, say.tick?.steps);
+  const scale = niceScale(0, Math.max(max, goal ?? 0), 2, say.tick?.steps);
   const levels = scale.levels;
   const gutter = Math.max(...levels.map((v) => tickWidth(tickSay(say)(v)))) + 6;
   const PAD = { top: 30, right: 6, bottom: 24, left: gutter };
@@ -991,6 +1009,10 @@ export function StackedColumns({
   const top = y(columns[active].total);
   const tipTop = pointer ? Math.min(Math.max(2, pointer.y - 30), H - PAD.bottom - 22) : Math.max(2, top - 26);
   const color = (k: number) => `var(--chart-${k + 1}, var(--accent))`;
+  const moveRoving = (to: number) => {
+    setRoved(to);
+    (svg.current?.querySelectorAll('.chart-column-door')[doors.indexOf(to)] as HTMLElement | undefined)?.focus?.();
+  };
   const at = (e: React.PointerEvent<SVGSVGElement>) => {
     // screen-px: clientX is a screen-pixel ruler too; the ratio maps it into viewBox units.
     const box = svg.current!.getBoundingClientRect();
@@ -1006,13 +1028,14 @@ export function StackedColumns({
         ref={svg}
         className="chart-bars"
         viewBox={`0 0 ${W} ${H}`}
-        role="img"
-        aria-label={sayCopy('barsSummary', {
+        /* A picture must not hold buttons (a line's points say why): where a column drills, the figure is a group. */
+        role={doors.length ? 'group' : 'img'}
+        aria-label={`${sayCopy('barsSummary', {
           count: columns.length,
           highest: say(max),
           last: named[columns.length - 1],
           value: say(columns[columns.length - 1].total),
-        })}
+        })}${goal === undefined ? '' : sayCopy('targetAfter', { goal: say(goal) })}`}
         onPointerMove={at}
         onPointerLeave={() => {
           setNear(null);
@@ -1030,8 +1053,8 @@ export function StackedColumns({
         <line className="chart-bar-guide" x1={PAD.left} x2={W - PAD.right} y1={f1(top)} y2={f1(top)} />
         {columns.map((c, i) => {
           let base = 0;
-          return (
-            <g key={c.key} className={`chart-column${i === active ? ' is-active' : ''}`}>
+          const column = (
+            <>
               <title>{`${named[i]}: ${parts(i)}`}</title>
               {c.parts.map((v, k) => {
                 const from = base;
@@ -1045,13 +1068,71 @@ export function StackedColumns({
                     y={f1(y(base))}
                     width={f1(colWide)}
                     height={f1(Math.max(1, y(from) - y(base)))}
-                    style={{ fill: color(k) }}
+                    style={paint ? paint(k) : { fill: color(k) }}
                   />
                 );
               })}
+            </>
+          );
+          const className = `chart-column${i === active ? ' is-active' : ''}`;
+          if (!(onPick && c.raw != null))
+            return (
+              <g key={c.key} className={className}>
+                {column}
+              </g>
+            );
+          /* A column that goes somewhere is a door over its whole band, so a short column is as easy to find as a tall
+             one; its focus is the house ring round the band. */
+          return (
+            <g
+              key={c.key}
+              className={`${className} chart-column-door`}
+              role="button"
+              tabIndex={i === tabbable ? 0 : -1}
+              aria-label={`${named[i]}: ${parts(i)}`}
+              onClick={() => onPick(c.raw)}
+              onKeyDown={(event: React.KeyboardEvent) => {
+                const key = event.key;
+                if (key === 'Enter' || key === ' ') {
+                  event.preventDefault();
+                  onPick(c.raw);
+                  return;
+                }
+                const to =
+                  key === 'ArrowRight'
+                    ? doors[doors.indexOf(i) + 1]
+                    : key === 'ArrowLeft'
+                      ? doors[doors.indexOf(i) - 1]
+                      : key === 'Home'
+                        ? doors[0]
+                        : key === 'End'
+                          ? doors[doors.length - 1]
+                          : undefined;
+                if (to !== undefined) {
+                  event.preventDefault();
+                  moveRoving(to);
+                }
+              }}
+            >
+              {column}
+              <rect
+                className="chart-column-hit"
+                x={f1(PAD.left + band * i)}
+                y={PAD.top}
+                width={f1(band)}
+                height={f1(H - PAD.top - PAD.bottom)}
+              />
             </g>
           );
         })}
+        {goal !== undefined && (
+          <g className="chart-target">
+            <line className="chart-target-line" x1={PAD.left} x2={W - PAD.right} y1={f1(y(goal))} y2={f1(y(goal))} />
+            <text className="chart-target-label" x={PAD.left + 4} y={f1(y(goal) - 4)}>
+              {sayCopy('target', { goal: say(goal) })}
+            </text>
+          </g>
+        )}
         {marks.map(({ index, text }) => (
           <text
             key={`m${index}`}
@@ -1070,15 +1151,17 @@ export function StackedColumns({
           </text>
         </g>
       </svg>
-      <ul className="chart-legend chart-columns-legend">
-        {series.map((s, k) => (
-          <li key={s.key}>
-            <span className="chart-swatch" style={{ background: color(k) }} />
-            <span className="chart-legend-key">{s.label}</span>
-            <span className="chart-legend-value">{say(totals[k])}</span>
-          </li>
-        ))}
-      </ul>
+      {legend && (
+        <ul className="chart-legend chart-columns-legend">
+          {series.map((s, k) => (
+            <li key={s.key}>
+              <span className="chart-swatch" style={{ background: color(k) }} />
+              <span className="chart-legend-key">{s.label}</span>
+              <span className="chart-legend-value">{say(totals[k])}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="visually-hidden">
         <table className="chart-data">
           <tbody>
@@ -1294,6 +1377,9 @@ interface StackedRow {
   value: unknown;
 }
 
+/** A stacked chart over periods is drawn at this height, as a bar chart's figure is: a fixed figure, so its room is held before its answer. */
+export const TIMED_HEIGHT = 180;
+
 /**
  * Stacked bars: each group of the first key a bar, divided by the second —
  * how each of several wholes divides, where a donut says how one does. The
@@ -1394,42 +1480,69 @@ export function StackedBars({
   const sayTotal = sayLegend
     ? sayLegend([...series.map((s) => s.total), ...shown.map((bar) => bar.total), ...(goal === undefined ? [] : [goal])])
     : say;
+  /* A bar's share of one series, the tail's folded into "others". */
+  const partOf = (bar: (typeof shown)[number], s: { key: string }) =>
+    s.key === ' others'
+      ? [...bar.parts.entries()]
+          .filter(([key]) => slot(key) === series.length - 1 && !kept.some((k) => k.key === key))
+          .reduce((n, [, v]) => n + v, 0)
+      : (bar.parts.get(s.key) ?? 0);
+  const legend = (
+    <ul className="chart-legend chart-stacked-legend">
+      {series.map((s, i) => (
+        <li key={s.key}>
+          <span className="chart-swatch" style={{ ...ramp(i), background: color(i), opacity: opacity(i) }} />
+          <span className="chart-legend-key">{s.label}</span>
+          <span className="chart-legend-value">{sayTotal(s.total)}</span>
+        </li>
+      ))}
+      {goal !== undefined && (
+        <li className="chart-stacked-goal">
+          <span className="chart-target-swatch" aria-hidden="true" />
+          <span className="chart-legend-key">{sayCopy('targetLabel')}</span>
+          <span className="chart-legend-value">{sayTotal(goal)}</span>
+        </li>
+      )}
+    </ul>
+  );
+  /* Time runs across the page, as it does in every other chart of a period: a column a period, at the bars' own height
+     and axis, its empty periods at zero, under the legend the rows have. Rows are for categories, whose order is the
+     reader's to scan down. */
+  if (timed) {
+    const filled = fillGaps(shown.map((bar) => ({ key: String(bar.raw), value: bar.total, bar }))) as Array<{
+      key: string;
+      bar?: (typeof shown)[number];
+    }>;
+    return (
+      <div className="chart-stacked chart-stacked-timed">
+        {legend}
+        <StackedColumns
+          rows={filled.map(({ key, bar }) => ({
+            key,
+            raw: bar?.raw,
+            values: bar ? Object.fromEntries(series.map((s) => [s.key, partOf(bar, s)])) : {},
+          }))}
+          series={series}
+          say={say}
+          high={TIMED_HEIGHT}
+          paint={(i) => ({ ...ramp(i), fill: color(i), opacity: opacity(i) })}
+          legend={false}
+          target={goal}
+          onPick={onPick}
+        />
+      </div>
+    );
+  }
   return (
     <div className="chart-stacked">
-      <ul className="chart-legend chart-stacked-legend">
-        {series.map((s, i) => (
-          <li key={s.key}>
-            <span className="chart-swatch" style={{ ...ramp(i), background: color(i), opacity: opacity(i) }} />
-            <span className="chart-legend-key">{s.label}</span>
-            <span className="chart-legend-value">{sayTotal(s.total)}</span>
-          </li>
-        ))}
-        {goal !== undefined && (
-          <li className="chart-stacked-goal">
-            <span className="chart-target-swatch" aria-hidden="true" />
-            <span className="chart-legend-key">{sayCopy('targetLabel')}</span>
-            <span className="chart-legend-value">{sayTotal(goal)}</span>
-          </li>
-        )}
-      </ul>
+      {legend}
       <ul
         className="chart-stacked-rows"
         aria-label={`${sayCopy('barsBySeries', { count: shown.length, series: series.map((s) => s.label).join(', ') })}${goal === undefined ? '' : sayCopy('targetAfter', { goal: say(goal) })}`}
       >
         {shown.map((bar, at) => {
           /* Each series in legend order, so a colour sits in the same place in every bar. */
-          const parts = series
-            .map((s, i) => ({
-              s,
-              i,
-              value:
-                s.key === ' others'
-                  ? [...bar.parts.entries()]
-                      .filter(([key]) => slot(key) === series.length - 1 && !kept.some((k) => k.key === key))
-                      .reduce((n, [, v]) => n + v, 0)
-                  : (bar.parts.get(s.key) ?? 0),
-            }))
-            .filter((part) => part.value > 0);
+          const parts = series.map((s, i) => ({ s, i, value: partOf(bar, s) })).filter((part) => part.value > 0);
           const words = (
             <>
               <span className="chart-stacked-label">{barLabel(bar, at)}</span>
@@ -1468,6 +1581,9 @@ export function StackedBars({
   );
 }
 
+/** A spark needs this many periods above zero to be a line; fewer are bars (Sparkline). */
+const SPARK_LEAST = 4;
+
 /**
  * A spark: the measure's shape inside a KPI card. No axes; the card's own
  * number is the label. It spans the card's width, stretched rather than
@@ -1475,7 +1591,11 @@ export function StackedBars({
  * corner; the stroke and the last point's dot keep their own size however
  * far it stretches (`non-scaling-stroke`, and the dot is a round cap on a
  * zero-length stroke). Under four points there is no shape to read, so
- * there is no spark.
+ * there is no spark. Four points with fewer than four of them above zero are a
+ * line that is flat but for a spike or two, which reads as a fall to nothing
+ * and a climb back: those are thin bars (one per period, the empty ones left
+ * bare over a baseline), kept to a short width, and an all-zero run draws none.
+ * The card's change, said beside the figure, is the trend's news either way.
  */
 export function Sparkline({ rows, say = String }: { rows: ChartRow[]; say?: Say }) {
   const points = rows
@@ -1489,6 +1609,28 @@ export function Sparkline({ rows, say = String }: { rows: ChartRow[]; say?: Say 
   const span = max - min || 1;
   const x = (i: number) => 1 + (i * (W - 2)) / (points.length - 1);
   const y = (v: number) => 3 + (1 - (v - min) / span) * (H - 6);
+  const filled = points.filter((p) => p.value !== 0).length;
+  if (filled === 0) return null;
+  if (filled < SPARK_LEAST) {
+    const base = y(0);
+    return (
+      <svg
+        className="spark spark-sparse"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`trend: ${points.map((p) => say(p.value)).join(', ')}`}
+      >
+        <title>{`${points[0].key} → ${points[points.length - 1].key}`}</title>
+        <path className="spark-base" d={`M1,${f1(base)} H${W - 1}`} vectorEffect="non-scaling-stroke" />
+        {points.map((p, i) =>
+          p.value ? (
+            <path key={i} className="spark-bar" d={`M${f1(x(i))},${f1(base)} V${f1(y(p.value))}`} vectorEffect="non-scaling-stroke" />
+          ) : null,
+        )}
+      </svg>
+    );
+  }
   const d = points.map((p, i) => `${i ? 'L' : 'M'}${f1(x(i))},${f1(y(p.value))}`).join(' ');
   const last = points[points.length - 1];
   return (

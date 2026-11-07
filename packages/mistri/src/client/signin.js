@@ -24,7 +24,9 @@ import { setTabTitle, shellBody, shellQuery } from '@mistriwork/kit/client/shell
 export function showSignIn(info, site, opening = {}) {
   // WHOAMI/401 publishes only this name, not the authenticated App definition.
   // Keep both entry paths in the same shell without loading private metadata.
-  shellBody().classList.add('app-mode', 'signed-out');
+  // The bar is not drawn (signin-door): the App's mark is over the card (SignIn.tsx). The bar still holds the name
+  // for the places that read it (the tab's mark, a screen reader walking the page's landmarks).
+  shellBody().classList.add('app-mode', 'signed-out', 'signin-door');
   const brand = shellQuery('.brand-name');
   if (brand) brand.textContent = info.app;
   applyBrandLogo(shellQuery('.brand-mark'), headBrandingMark() ?? info.look?.logo, info.app, info.look?.icons);

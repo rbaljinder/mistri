@@ -24,7 +24,7 @@ import { currentEntry, paintVersion, renderCrumbs, roomVersion } from '../core.j
 import { shell } from '../shellMode.js';
 import { syncHash } from '../url.js';
 import { appListFor, type ListSpec } from './appListModel.js';
-import { ASSISTANT_PAGE, INBOX_PAGE, dashPageId, dashViewKey, formViewKey, homeRoom } from './appRooms.js';
+import { ASSISTANT_PAGE, DIRECTORY_PAGE, INBOX_PAGE, dashPageId, dashViewKey, formViewKey, homeRoom } from './appRooms.js';
 import { onDemand } from './onDemand.js';
 import type { BreakdownEntry } from './Breakdown.js';
 import { crumbBarShown, Crumbs } from './Crumbs.js';
@@ -221,6 +221,7 @@ function Room({ entry }: { entry: (TableEntry | BreakdownEntry | PageEntry | Row
     if (shell().inApp() && formViewKey(page.pageId) !== undefined) return rooms.Form ? <rooms.Form entry={page} /> : null;
     if (shell().inApp() && page.pageId === INBOX_PAGE) return rooms.Inbox ? <rooms.Inbox /> : null;
     if (shell().inApp() && page.pageId === ASSISTANT_PAGE) return rooms.Assistant ? <rooms.Assistant conversation={page.tab} /> : null;
+    if (shell().inApp() && page.pageId === DIRECTORY_PAGE) return rooms.Directory ? <rooms.Directory /> : null;
     return <PageRoom entry={page} />;
   }
   return <RowRoom entry={entry as RowEntry} />;

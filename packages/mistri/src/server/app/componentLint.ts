@@ -96,8 +96,10 @@ function tokenFindings(text: string, own: ReadonlySet<string>, warn: (line: numb
   }
 }
 
-function cssFindings(id: string, text: string, warn: (line: number, message: string) => void): void {
-  const prefix = `c-${id}`;
+/** `ids` is every component that sources this stylesheet: a shared one (a receipt.css two components draw) is linted once, and a class is its own if any of them owns it. */
+function cssFindings(ids: readonly string[], text: string, warn: (line: number, message: string) => void): void {
+  const prefixes = ids.map((id) => `c-${id}`);
+  const prefix = prefixes[0];
   /* Each rule's body with the reduced-motion query it sits in, if any: motion is fine only inside one. */
   const guarded: Array<[number, number]> = [];
   for (const match of text.matchAll(/@media[^{]*prefers-reduced-motion\s*:\s*no-preference[^{]*\{/g)) {
@@ -121,8 +123,10 @@ function cssFindings(id: string, text: string, warn: (line: number, message: str
   }
   for (const match of text.matchAll(/border(-[a-z-]+)?-radius\s*:\s*([^;}]+)/g)) {
     /* The two shapes no look changes: a pill (999px, docs/design.md's one exception) and a circle
-       (50%, a portrait or a dot, as the platform's own avatars are drawn). */
+       (50%, a portrait or a dot, as the platform's own avatars are drawn). A value of all zeros
+       (`0`, `0px`, `0 0 0 0`) is a square on purpose, as is a bare `0`. */
     if (/^\s*(999px|50%)\s*$/.test(match[2])) continue;
+    if (/^\s*0+(\.0+)?(px|rem|em|%)?(\s+0+(\.0+)?(px|rem|em|%)?)*\s*$/.test(match[2])) continue;
     if (/\d(px|rem|em|%)/.test(match[2]) && !/var\(/.test(match[2]))
       warn(lineAt(match.index), `"${match[0].trim()}" is a literal radius; each look sets its own — use var(--radius) or var(--radius-lg)`);
   }
@@ -147,7 +151,7 @@ function cssFindings(id: string, text: string, warn: (line: number, message: str
   const selectors = text.replace(/\{[^{}]*\}/g, (body) => body.replace(/[^\n]/g, ' '));
   for (const match of selectors.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
     const name = match[1];
-    if (name === prefix || name.startsWith(`${prefix}-`)) continue;
+    if (prefixes.some((own) => name === own || name.startsWith(`${own}-`))) continue;
     warn(
       lineAt(match.index),
       `the class ".${name}" is not this component's: name its classes "${prefix}-…", so no look or other component meets them`,
@@ -184,22 +188,29 @@ export async function lintComponents(dir: string, compiled: CompiledComponents, 
     }
     own.set(id, names);
   }
+  /* A stylesheet two components both draw is one file with one set of findings, said once under the
+     first that sources it; what counts as its own (classes, tokens) is every sharer's together. */
+  const sharers = new Map<string, string[]>();
+  for (const [id, entry] of Object.entries(compiled.entries))
+    for (const file of entry.sources) if (file.endsWith('.css')) sharers.set(file, [...(sharers.get(file) ?? []), id]);
   const parse = pages.size ? await astParser() : undefined;
   for (const [id, entry] of Object.entries(compiled.entries)) {
     for (const file of entry.sources) {
-      const key = `${id}\0${file}`;
+      const css = file.endsWith('.css');
+      const key = css ? file : `${id}\0${file}`;
       if (seen.has(key)) continue;
       seen.add(key);
       const raw = await readFile(join(dir, file), 'utf8').catch(() => undefined);
       if (raw === undefined) continue;
-      const css = file.endsWith('.css');
       const text = withoutComments(raw, css);
       const warn = (line: number, message: string) => warnings.push({ component: id, file, line, text: message });
-      tokenFindings(text, own.get(id)!, warn);
       if (css) {
-        cssFindings(id, text, warn);
+        const ids = sharers.get(file)!;
+        tokenFindings(text, new Set(ids.flatMap((sharer) => [...own.get(sharer)!])), warn);
+        cssFindings(ids, text, warn);
         continue;
       }
+      tokenFindings(text, own.get(id)!, warn);
       const manifest = pages.get(id);
       const lang = /\.(tsx?|jsx?)$/.exec(file)?.[1] as 'ts' | 'tsx' | 'js' | 'jsx' | undefined;
       if (manifest && parse && lang) {

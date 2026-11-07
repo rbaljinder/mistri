@@ -57,6 +57,13 @@ const ALLOWED: Array<{ rule: string; target: string; why: string }> = [
       'An open menu (Base UI) holds the focus itself and moves it through its items with the arrow keys, ' +
       'which scroll it; axe asks for a Tab stop inside, and a menu has none by design (APG menu pattern).',
   },
+  {
+    rule: 'label-content-name-mismatch',
+    target: 'data-table-index=',
+    why:
+      'A menu row is named by its label and says its count as its description (Sidebar.tsx, TableRow): named with the ' +
+      'number it was "Website 1". The label starts the name and the visible words; the count after it is not label.',
+  },
 ];
 
 interface Finding {
@@ -71,6 +78,21 @@ async function audit(page: Page, where: string, findings: Finding[]) {
   // Motion is off, so a colour mid-transition is not what is measured.
   await page.waitForTimeout(150);
   const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+  /* WCAG 2.5.3 (label in name) is A, but axe-core ships its rule off as experimental. It is on over the shell, the
+     bar and the sidebar (a search named "(⌘K)", initials outside the account's name failed it). The rooms are not
+     gated by it yet: a grid cell's edit button ("Edit Asking rent" over "$1,920.00"), a dropdown named by its field
+     over the value it shows, a metric card and a triage card all name themselves apart from their visible words. */
+  if (await page.locator('header.topbar, .layout > .sidebar').count())
+    violations.push(
+      ...(
+        await new AxeBuilder({ page })
+          .include('header.topbar')
+          .include('.layout > .sidebar')
+          .options({ rules: { 'label-content-name-mismatch': { enabled: true } } })
+          .withRules(['label-content-name-mismatch'])
+          .analyze()
+      ).violations,
+    );
   for (const violation of violations) {
     if (!GATED.has(violation.impact ?? '')) continue;
     const targets = violation.nodes

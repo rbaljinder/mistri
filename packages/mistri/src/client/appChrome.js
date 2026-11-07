@@ -27,6 +27,7 @@ import { railed } from '@mistriwork/kit/client/components/sidebarModel.js';
 import { AppIssues } from '@mistriwork/kit/client/components/AppIssues.js';
 import { MobileNavDrawer } from './components/MobileNavDrawer.js';
 import { applyHeaderShell } from './appHeader.js';
+import { dockBar, headerInSidebar } from './sidebarShell.js';
 import { $, allowMutationExit, el, state } from '@mistriwork/kit/client/core.js';
 import { prepareEditingExit } from '@mistriwork/kit/client/write.js';
 import { RuntimeMetadataError } from '@mistriwork/kit/client/requestIdentity.js';
@@ -387,11 +388,18 @@ export function appMenuShell() {
   shellBody().classList.toggle('app-custom-gutter', appMode && app?.ui.shell?.gutter !== undefined);
   shellBody().classList.toggle('app-topnav', topMode);
   shellBody().classList.toggle('app-mobile-nav', mobileDrawer);
+  /* The bar in the sidebar (`ui.shell.header`, the default): at a desk, where the side menu is drawn. A phone's
+     drawer, the top placement, a signed-out visitor's storefront and `header: 'bar'` keep the bar (sidebarShell.js). */
+  const sidebarHead = Boolean(appMode && rooms && !noMenu && !topMode && !mobileDrawer && headerInSidebar(app?.ui.shell));
+  shellBody().classList.toggle('app-sidebar-shell', sidebarHead);
+  dockBar(sidebarHead);
   /* The icon rail: folding this App's side menu leaves its icons standing
-     rather than hiding it (palette.js reads the class for the fold button). */
-  shellBody().classList.toggle('app-nav-rail', Boolean(appMode && !topMode && !mobileDrawer && railed()));
+     rather than hiding it (palette.js reads the class for the fold button). The sidebar that holds the bar always
+     folds to it: hidden whole, it would take the mark, the search and the account with it. */
+  shellBody().classList.toggle('app-nav-rail', Boolean(appMode && !topMode && !mobileDrawer && (railed() || sidebarHead)));
   const header = shellQuery('.topbar');
-  if (header instanceof HTMLElement) applyHeaderShell(header, $('content'), appMode ? app?.ui.shell : undefined);
+  /* In the sidebar the head is the sidebar's width: the content's ruler (`headerWidth`) is a band's. */
+  if (header instanceof HTMLElement) applyHeaderShell(header, $('content'), appMode && !sidebarHead ? app?.ui.shell : undefined);
   const topnav = $('topnav');
   topnav.hidden = !(topMode || mobileDrawer);
   if (topMode || mobileDrawer) renderTopNav(topnav, app, mobileDrawer);
@@ -530,6 +538,8 @@ export function brandChrome() {
   appIssuesBadge();
   renderNewMenu();
   renderAssistant();
+  /* The New menu's host is made beside the bar's keys, which may stand in the sidebar's foot: dock it again. */
+  if (shellBody().classList.contains('app-sidebar-shell')) dockBar(true);
 }
 
 /** The App's colours ride the same switch as its chrome (appTheme.js). */

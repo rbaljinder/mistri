@@ -274,9 +274,19 @@ test('an App without nav draws no menu: its one room, the home, is in no tree; t
     expect(container.querySelectorAll('.tn-item, .tn-popitem, .tn-folded-group')).toHaveLength(0);
     expect(container.textContent).not.toContain('Tasks');
     expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Search (⌘K)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Search ⌘K' })).toBeInTheDocument();
     unmount();
   }
+});
+
+test('the search is named by the words it shows, its key said as a shortcut (WCAG 2.5.3, label in name)', () => {
+  const { unmount } = draw(false, { views: { tasks: { table: 'task', label: 'Tasks' } }, nav: [], resources: {} });
+  const search = screen.getByRole('button', { name: 'Search ⌘K' });
+  // The visible words, less the ellipsis, start the name; the key is the name's end and a declared shortcut.
+  const shown = (search.textContent ?? '').replace('…', ' ').replace(/\s+/g, ' ').trim();
+  expect(search.getAttribute('aria-label')).toBe(shown);
+  expect(search.getAttribute('aria-keyshortcuts')).toBe('Meta+K Control+K');
+  unmount();
 });
 
 test('desktop caret menus keep their names, keyboard navigation and Escape focus return', async () => {
@@ -326,7 +336,7 @@ test('phone drill-in and Back retain names, destination behavior and parent focu
 test.each([false, true])('search keeps its label, shortcut hint and palette action (phone=%s)', async (phone) => {
   const user = userEvent.setup();
   draw(phone);
-  const search = screen.getByRole('button', { name: 'Search (⌘K)' });
+  const search = screen.getByRole('button', { name: 'Search ⌘K' });
   expect(search).toHaveTextContent('Search…');
   expect(search).toHaveTextContent('⌘K');
   search.focus();
@@ -350,7 +360,7 @@ test('a content-constrained desktop header folds and restores navigation without
   const user = userEvent.setup();
   const { container } = draw();
   Object.defineProperty(container.querySelector('.tn-links'), 'scrollWidth', { value: 500 });
-  const search = screen.getByRole('button', { name: 'Search (⌘K)' });
+  const search = screen.getByRole('button', { name: 'Search ⌘K' });
   screen.getByRole('button', { name: 'Directory' }).focus();
   await act(async () => {
     Object.defineProperty(container, 'clientWidth', { value: 300, configurable: true });
@@ -367,7 +377,7 @@ test('a content-constrained desktop header folds and restores navigation without
     measure();
   });
   await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Directory' })).toHaveFocus());
-  expect(screen.getByRole('button', { name: 'Search (⌘K)' })).toBe(search);
+  expect(screen.getByRole('button', { name: 'Search ⌘K' })).toBe(search);
 });
 
 test('folded, groups one level deep are labelled sections of one menu, every room a tap away', async () => {

@@ -40,6 +40,8 @@ import { IntakeNote } from './IntakeNote.js';
 import { answered, maskedLast4, sensitiveText, stepSaid, type NameOf } from './reviewValues.js';
 import { knownReferenceName } from './referenceNames.js';
 import './FormSurface.css';
+import { CommandOutcome } from './CommandOutcome.js';
+import { refusalNext, unknownNext, type Outcome } from './outcomeModel.js';
 import type { HeldTarget } from './HeldFiles.js';
 import { ReviewValue, type ReviewSource } from './ReviewValue.js';
 import { say } from '../copy/forms/components/FormSurface.js';
@@ -164,7 +166,7 @@ export async function submitPublicForm(
   });
 }
 
-interface Failure {
+export interface Failure {
   message: string;
   code?: string;
   field?: string;
@@ -227,6 +229,16 @@ export function formRefusal(failure: Failure, fields: readonly AppCommandField[]
   }
   const said = fixed ? (REFUSED[code]?.() ?? failure.message) : failure.message;
   return { beside: said, alone: said };
+}
+
+/**
+ * A failed send as the outcome view reads it (outcomeModel.ts): no answer, or a server fault with no refusal code,
+ * is unknown — the submission key makes a second send a read of what was kept, never a second record; anything
+ * else is a refusal in its own words, with the way on by its code.
+ */
+export function formFailureOutcome(failure: Failure, said: string, fieldLabel?: string): Outcome {
+  if (failure.status === undefined || (failure.status >= 500 && !failure.code)) return { state: 'unknown', said, next: unknownNext() };
+  return { state: 'refused', said, next: refusalNext(failure.status === 429 ? 'rate_limited' : failure.code, fieldLabel) };
 }
 
 /** The top-level names a set of fields draws: whether a refusal's field is on screen is whether its root is one. */
@@ -337,6 +349,8 @@ export function FormSurface({
   );
   const [problems, setProblems] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState('');
+  /* How a send ended, when it ended in the form's own line: a check of the form before sending has no outcome. */
+  const [outcome, setOutcome] = useState<Outcome | undefined>(undefined);
   /* A public form's guard (PublicGuard.tsx), held while it is drawn. */
   const guarded = useRef<GuardHandle | undefined>(undefined);
   const [pending, setPending] = useState(false);
@@ -436,6 +450,7 @@ export function FormSurface({
   const complete = async () => {
     if (pending || attempt?.locked) return;
     setFailure('');
+    setOutcome(undefined);
     let input: CommandInputValue;
     try {
       input = commandInput(fields, values, questions, form.rules ? { rules: form.rules } : {});
@@ -463,7 +478,12 @@ export function FormSurface({
         refusal.field,
       );
       if (refusal.field) setProblems((before) => ({ ...before, [refusal.field!]: refusal.beside }));
-      if (!shown) setFailure(refusal.alone);
+      if (!shown) {
+        setFailure(refusal.alone);
+        setOutcome(
+          formFailureOutcome(error as Failure, refusal.alone, refusal.field ? commandPathLabel(fields, refusal.field) : undefined),
+        );
+      }
       requestFocus('invalid');
     } finally {
       // A token is spent once: the widget is asked for a fresh one for the next send.
@@ -478,6 +498,7 @@ export function FormSurface({
     setValues(initial ? startingValues(fields, [], '', initial) : blankCommandValues(fields));
     setProblems({});
     setFailure('');
+    setOutcome(undefined);
     setReceipt(null);
     requestFocus('first');
   };
@@ -703,11 +724,23 @@ export function FormSurface({
   /* The form's own line — what is not about a field on screen — above the
      actions, where the eye is before it presses, never under them. */
   const description = form.description ? <p className="form-page-description">{form.description}</p> : null;
-  const said = (
-    <p className="form-page-failure" tabIndex={-1} role="alert" aria-live="assertive" hidden={!failure}>
-      {failure}
-    </p>
-  );
+  /* After a send, the one outcome view (CommandOutcome.tsx): the refusal's words and the way on, or a lost answer
+     and a check that sends the same submission again, which the server answers from what it kept. */
+  const said =
+    failure && outcome ? (
+      <CommandOutcome
+        className="form-page-failure"
+        tabIndex={-1}
+        role="alert"
+        aria-live="assertive"
+        outcome={outcome}
+        {...(outcome.state === 'unknown' ? { onCheck: () => void complete() } : {})}
+      />
+    ) : (
+      <p className="form-page-failure" tabIndex={-1} role="alert" aria-live="assertive" hidden={!failure}>
+        {failure}
+      </p>
+    );
   return (
     <section
       ref={surface}

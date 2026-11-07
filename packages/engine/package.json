@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.17",
+  "version": "1.0.0-rc.18",
   "description": "The engine both products stand on: the adapters (SQLite, Postgres), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -568,6 +568,10 @@
       "mistri-built": "./dist/shared/autoValues.js",
       "default": "./src/shared/autoValues.ts"
     },
+    "./shared/boardLanes.js": {
+      "mistri-built": "./dist/shared/boardLanes.js",
+      "default": "./src/shared/boardLanes.ts"
+    },
     "./shared/breakdown.js": {
       "mistri-built": "./dist/shared/breakdown.js",
       "default": "./src/shared/breakdown.ts"
@@ -704,6 +708,10 @@
       "mistri-built": "./dist/shared/listFilters.js",
       "default": "./src/shared/listFilters.ts"
     },
+    "./shared/listInference.js": {
+      "mistri-built": "./dist/shared/listInference.js",
+      "default": "./src/shared/listInference.ts"
+    },
     "./shared/listPresentations.js": {
       "mistri-built": "./dist/shared/listPresentations.js",
       "default": "./src/shared/listPresentations.ts"
@@ -819,6 +827,10 @@
     "./shared/referenceModel.js": {
       "mistri-built": "./dist/shared/referenceModel.js",
       "default": "./src/shared/referenceModel.ts"
+    },
+    "./shared/referenceSubline.js": {
+      "mistri-built": "./dist/shared/referenceSubline.js",
+      "default": "./src/shared/referenceSubline.ts"
     },
     "./shared/refusal.js": {
       "mistri-built": "./dist/shared/refusal.js",

@@ -36,10 +36,11 @@ test('the rent roll lists every home with its asking rent', async ({ page, linte
   await expect(page.getByText(first.code).filter({ visible: true }).first()).toBeVisible();
 });
 
-test('the desk’s New work order asks for the kind of problem as cards', async ({ page, lintel, isMobile }) => {
+test('the desk’s New work order asks for the kind of problem as one row of choices', async ({ page, lintel, isMobile }) => {
   await signIn(page, lintel, 'manager');
   await open(page, lintel, '/repairs/new');
-  const cards = page.locator('.choice-cards');
+  // Five words with no description each: a row of inline choices, not a stack of cards (design.md, forms).
+  const cards = page.locator('.choice-row');
   await expect(cards).toBeVisible();
   await expect(cards.getByRole('radio')).toHaveCount(5);
   await cards.getByRole('radio', { name: 'Plumbing' }).check({ force: true });

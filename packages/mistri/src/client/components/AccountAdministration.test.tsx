@@ -40,11 +40,11 @@ afterEach(() => {
 test('the menu offers Manage accounts only where the server said so', async () => {
   const user = userEvent.setup();
   const { unmount } = render(<AccountControl who="Ada" />);
-  await user.click(screen.getByRole('button', { name: 'Account: Ada' }));
+  await user.click(screen.getByRole('button', { name: 'Account: A Ada' }));
   expect(screen.queryByRole('menuitem', { name: 'Manage accounts' })).toBeNull();
   unmount();
   render(<AccountControl who="Ada" accountAdministration />);
-  await user.click(screen.getByRole('button', { name: 'Account: Ada' }));
+  await user.click(screen.getByRole('button', { name: 'Account: A Ada' }));
   await user.click(screen.getByRole('menuitem', { name: 'Manage accounts' }));
   const dialog = await screen.findByRole('dialog', { name: 'Accounts' });
   await within(dialog).findByText('Pat Lee');

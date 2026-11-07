@@ -164,7 +164,7 @@ test.describe('App menu counts', () => {
     ]);
 
     // Folded away, the rows are off screen: a reload and a return to the window ask nothing.
-    await page.getByRole('button', { name: 'Hide the table list' }).click();
+    await page.getByRole('button', { name: 'Collapse menu' }).click();
     await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
     await page.reload();
     await expect(page.locator('.board-card').first()).toBeVisible();
@@ -173,7 +173,7 @@ test.describe('App menu counts', () => {
     await page.waitForLoadState('networkidle');
     expect(asked).toEqual([]);
     // Shown again, they are asked for.
-    await page.getByRole('button', { name: 'Show the table list' }).click();
+    await page.getByRole('button', { name: 'Expand menu' }).click();
     await expect(countOf(page, 'Triage')).toHaveText(String(scalar(sample.db, TRIAGE)));
     expect(asked.length).toBeGreaterThan(0);
   });

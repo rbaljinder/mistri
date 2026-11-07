@@ -1,0 +1,29 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+/* What a first page needs of a JSON document: its one-line preview in a grid
+   cell (JsonPreview.tsx) and in a compact field, and the full width a field
+   holding a document takes. The document itself is drawn by JsonView.tsx,
+   whose sheet (JsonView.css) arrives with it, on demand. */
+
+/* A document is a block: in a record's or a page's field grid it takes the
+   full width, as long text does, rather than being squeezed into a column.
+   Here, not in the viewer's sheet, so the field is full width from the first
+   paint and nothing moves when the viewer arrives. */
+.field:has(.json-view), .page-field:has(.json-view) { grid-column: 1 / -1; }
+
+/* In a grid cell: the shape in one quiet line, the whole cell a button. */
+.json-preview {
+  display: block; width: 100%; padding: 0; border: 0; border-radius: 0; background: none;
+  text-align: left; font: var(--text-sm)/inherit var(--code); color: var(--ink-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .json-preview:hover { color: var(--link); }
+}
+.json-preview:focus-visible { outline-offset: -2px; }
+.json-preview-text { font: var(--text-sm) var(--code); color: var(--ink-muted); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .json-preview { transition: color var(--t-hover) var(--ease-out); }
+}
+}

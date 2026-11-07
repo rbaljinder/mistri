@@ -5,7 +5,7 @@
  * (a crumb corrected once a name is known, the address written when a
  * control moves) and the host the component is drawn into.
  */
-import { FavoriteStar } from './FavoriteStar.js';
+import { DashHead } from './DashHead.js';
 import { useEffect, useRef, useState } from 'react';
 import {
   allowMutationExit,
@@ -174,13 +174,7 @@ function DashboardBody({ entry, dashboard }: { entry: PageEntry; dashboard: Dash
   };
   return (
     <>
-      <div className="applist-head dash-head">
-        <h1 className={`applist-title${dashboard.headingHidden ? ' visually-hidden' : ''}`}>{dashboard.heading ?? dashboard.label}</h1>
-        {dashboard.favorite && (
-          <FavoriteStar favorite={{ kind: 'view', view: dashboard.id, label: dashboard.label }} name={dashboard.label} />
-        )}
-        {dashboard.description && <p className="note dash-description">{dashboard.description}</p>}
-      </div>
+      <DashHead dashboard={dashboard} />
       <div>
         {Dashboard && (
           <Dashboard

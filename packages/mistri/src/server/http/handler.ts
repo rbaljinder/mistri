@@ -654,7 +654,13 @@ async function serveShell(ctx: RequestContext): Promise<void> {
     ...(!placedFormPage && !branding && !ctx.appHosts?.some((host) => recordBrandingSpec(host.app.app))
       ? {
           data: async () => {
-            const page = await firstPaint({ path: ctx.path, search: ctx.url.search, loop: loopback(ctx, pages), rooms: APP_PAINT_ROOMS });
+            const page = await firstPaint({
+              path: ctx.path,
+              search: ctx.url.search,
+              loop: loopback(ctx, pages),
+              rooms: APP_PAINT_ROOMS,
+              cookie: ctx.req.headers.cookie,
+            });
             /* The answers by request, for a pane the server draws from them: exactly what the client will read. */
             return page.json
               ? {

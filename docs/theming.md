@@ -20,7 +20,7 @@ this file is the contract.
 
 | Preset | Character |
 | --- | --- |
-| Workshop | The default. The desk as a workbench, ported from a field report's theme: warm paper, ink-black type and one hue — Safety orange unless a palette says another — kept to the few marks a reader takes for the brand color: the primary verb's fill (the ink's words on it, edged in the ink, as a hazard tag prints them), links and the current tab's rule, a 3px marker beside the menu's ink block, the focus ring, a checked box and a chart's first series. Fills, rules and selection stay the ink, and nothing is tinted. Titles, section heads and labels in Barlow Semi Condensed's bold capitals, the rest in Barlow, shipped with the look; 2px ink rules part the sections; 2px corners; nothing floats; the menu's current entry an ink block with the hue's marker beside it, on a faint grain. |
+| Workshop | The default. The desk as a workbench, ported from a field report's theme, the paper on the frame: a grained paper bar and menu and one paper band behind a page's head (a list's title, tabs and filters, a record's trail, name and facts), the work on white, ink-black type and one hue — Safety orange unless a palette says another — kept to the few marks a reader takes for the brand color: the primary verb's fill (the ink's words on it, edged in the ink, as a hazard tag prints them), links and the current tab's rule, a 3px marker beside the menu's current entry, the focus ring, a checked box and a chart's first series. The current entry is a soft tint of the menu's ink, by day and by night. Titles in Barlow Semi Condensed's bold, in sentence case, with a stat's figures and the App's name (in capitals) in it too; sections, tabs, column heads and labels in Barlow, the labels in the semibold and the muted ink, shipped with the look; hairlines; one divided strip of figures; filters not yet asked for on a solid edge; 2px corners; nothing floats. |
 | Lumen | Flat, calm and modern: a warm, faintly tinted shell around white working surfaces, elevation only on what floats (menus, dialogs, drawers), one confident accent for the primary action, the current room, selection, focus, the main chart series and the current step; a menu whose current room is a soft pill with quiet counts on its lists of work; metrics in a divided strip; record fields in a property rail; tables on hairlines with the record's name as the row's anchor and a head that sticks; statuses as a dot and their word (grey where neutral); a workflow as a track of segments; charts as a 1.5px line in one hue's steps; Inter, shipped with the look. Its blue is the **Cobalt** palette; every other palette changes only the accent's family. |
 | Mono | Black and white: square corners, rules in the ink over grey hairlines, monospace figures and labels, the current tab inverted; colour only for status. |
 | Ledger | A bookkeeper's desk, ported from a field report's theme: green-tinted paper on a faint graph-paper ground, every figure, id, date and label in a monospace (IBM Plex Mono) with titles and prose in Inter, a dark green cover for the menu and the bar with a gilt mark for the current entry, field groups and dashboard sections as square boxes ruled in the strong line, a table's heads closed with a double rule (`rules: 'double'`), and one deep ledger green for the accent. Light and dark. |
@@ -158,7 +158,7 @@ CSS.
 | `bar`      | `plain`, `ruled` (Workshop, Mono), `dark` (own), `airy` (Lumen), `soft` (Sage)                                          |
 | `tabs`     | `pill`, `inverted` (Mono), `underline` (Lumen), `rule` (Workshop), `chosen` (Sage)                                      |
 | `windows`  | `segmented` (Workshop), `lifted` (Lumen), `chosen` (Sage)                                                               |
-| `stat`     | `plain`, `framed` (Mono), `topline` (own), `ruled` (Workshop), `icon` (own), `panel` (Sage), `divided` (Lumen)          |
+| `stat`     | `plain`, `framed` (Mono), `topline` (own), `ruled` (own), `icon` (own), `panel` (Sage), `divided` (Lumen, Workshop)     |
 | `section`  | `open` (Workshop, Lumen), `card` (own), `panel` (Sage)                                                                  |
 | `fields`   | `open` (Workshop), `panel` (Sage), `card` (own), `rail` (Lumen)                                                         |
 | `table`    | `open` (Workshop), `tinted` (own), `hairline` (Sage), `card` (own), `quiet` (Lumen)                                     |
@@ -167,13 +167,14 @@ CSS.
 | `chart`    | `plain` (Workshop), `wash` (Sage), `gradient` (own), `line` (Lumen)                                                     |
 | `buttons`  | `accent`, `raised` (Lumen), `keyed` (Workshop)                                                                          |
 | `links`    | `plain`, `underline` (Mono)                                                                                             |
-| `rules`    | `ink` (Workshop), `hairline` (Lumen, Sage), `double` (Ledger)                                                           |
+| `rules`    | `ink` (Mono), `hairline` (Workshop, Lumen, Sage), `double` (Ledger)                                                     |
 | `avatar`   | `plain`, `large` (Sage), `round` (Lumen)                                                                                |
 | `workflow` | `markers` (Workshop, Lumen), `pills` (own)                                                                              |
 | `banner`   | `tint`, `gradient` (own), `plain` (Workshop, Lumen)                                                                     |
 | `steps`    | `flat`, `tinted` (own), `strip` (Workshop, Lumen)                                                                       |
 | `lanes`    | `tint`, `tag` (Workshop), `plain` (own)                                                                                 |
-| `header`   | `plain`, `band` (Sage), `hero` (own)                                                                                    |
+| `header`   | `plain`, `band` (Workshop, Sage), `hero` (own)                                                                          |
+| `filters`  | `dashed`, `solid` (Workshop), `quiet` (Lumen)                                                                           |
 
 Each value is pictured on the CRM (the former Compass sample) in the site's recipe gallery
 (`site/src/content/docs/docs/theme-recipes.md`, its pictures under
@@ -212,7 +213,7 @@ figures; `reach: 'figures'` keeps the data face to figures, keys and dates, so
 a name is read in the interface face), `figure` (a stat's figure) and
 `nav` (the menu's entries, in the bar and down the side). A role takes a `face` (`ui`, `heading`, `data`, or
 `code`, the theme's monospace: `fonts.code`, else the platform's), a `size` at the 13px base (only the roles
-that have one: body, label, data and nav follow the base), `leading`,
+that have one: body, data and nav follow the base; a label's is 11px to 14px, a step either side of it), `leading`,
 `tracking`, `weight`, `case` (`upper` or `small-caps`, each tracked unless
 the role says a tracking) and OpenType `features` (`tnum`, `lnum`, `zero`,
 `ss01`…); `packages/engine/src/shared/themeType.ts` holds which role takes what, and the
@@ -282,7 +283,11 @@ computed-style snapshot of every look holds this).
   `partsLook.css`, generated from the selector map
   (`packages/mistri/src/server/app/themePartSelectors.ts`). The names are contract 1: a 1.x
   release may publish another part and withdraws none; which elements a part
-  names is the platform's, so it follows its markup.
+  names is the platform's, so it follows its markup. `logo` is the App's mark,
+  and its `face`, `weight` and `case` reach the App's name beside it too, so
+  `logo: { case: 'upper' }` sets the name in capitals, as Workshop's slot
+  menu draws it, and `case: 'none'` takes Workshop's capitals off; the rest
+  stay the mark's.
 - **The icons' weight.** `type.icons` is `regular` (omitted), `light`,
   `bold` or `fill`, Phosphor's. Thin is refused (a 1px stroke fades at the
   16px an icon is drawn at), and so is duotone (a second tone no role says).
@@ -449,7 +454,10 @@ is `var(--chart-1)`. A compiled theme (`ThemePalette`) holds the same names
 flattened (`navGround`, `statusCritical`, `chart1`).
 
 `nav.current` is a filled block behind the current navigation item (with
-`nav.onCurrent` on it). `rules.section` and `rules.head` colour and thicken
+`nav.onCurrent` on it). It replaces a look's own mark for the current entry,
+but the slot's (`nav: 'slot'`): the marker stands beside whichever block, so
+a theme may tint the current entry and keep the accent's slot, as Workshop
+does. `rules.section` and `rules.head` colour and thicken
 borders that already take their space, so nothing shifts. `lineControl` is the
 edge of a form control and must reach 3:1 against `surface`, `ground` and
 `raised`, where a table's head and a raised panel put it (WCAG 1.4.11). `focus` is the keyboard ring; left out, it is the `accent`.

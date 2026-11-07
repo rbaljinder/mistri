@@ -23,6 +23,7 @@ import { openPalette } from '@mistriwork/kit/client/palette.js';
 import { appListQuery, currentNavIndex } from '@mistriwork/kit/client/components/appListModel.js';
 import {
   ASSISTANT_PAGE,
+  DIRECTORY_PAGE,
   appMenu,
   dashPageId,
   dashViewKey,
@@ -152,16 +153,22 @@ export function TopNav({ app, host }: TopNavProps) {
         : home && isListRoom(home)
           ? tables.find((entry) => entry.id === home.id)
           : undefined;
-    return { dashView, formView, currentTable, onAssistant: here?.kind === 'page' && here.pageId === ASSISTANT_PAGE };
+    return {
+      dashView,
+      formView,
+      currentTable,
+      onAssistant: here?.kind === 'page' && here.pageId === ASSISTANT_PAGE,
+      onDirectory: here?.kind === 'page' && here.pageId === DIRECTORY_PAGE,
+    };
   };
   /* The strip is drawn again when the walk changes what it lights, or the schema it reads under it, not on every
      paint: a sort or a filter drew every group's menu again inside its click (test/built-client-vitals.mjs). */
   const litWords = () => {
     const now = lit();
-    return [now.dashView, now.formView, tables.indexOf(now.currentTable!), now.onAssistant, schemaTick()].join('\n');
+    return [now.dashView, now.formView, tables.indexOf(now.currentTable!), now.onAssistant, now.onDirectory, schemaTick()].join('\n');
   };
   useSyncExternalStore(subscribeWalk, litWords, litWords);
-  const { dashView, formView, currentTable, onAssistant } = lit();
+  const { dashView, formView, currentTable, onAssistant, onDirectory } = lit();
   const isCurrent = (entry: MenuEntry) =>
     isAssistantRoom(entry)
       ? onAssistant
@@ -500,6 +507,22 @@ export function TopNav({ app, host }: TopNavProps) {
                 </div>
               );
             })}
+          {/* A menu past a dozen places ends in its Directory: every one of them, found by typing (Directory.tsx). */}
+          {app.directory && (
+            <button
+              type="button"
+              className="tn-item"
+              data-form={DIRECTORY_PAGE}
+              aria-current={onDirectory}
+              onClick={() => {
+                setOpen(null);
+                go(pageView(DIRECTORY_PAGE, undefined, undefined, say('allPages')), 'reset');
+              }}
+            >
+              <NavGlyph icon={app.directory.icon} label={say('allPages')} />
+              <span>{say('allPages')}</span>
+            </button>
+          )}
         </div>
       </div>
       {(tree.length > 0 || starred.length > 0 || pending) && (
@@ -593,10 +616,14 @@ export function TopNav({ app, host }: TopNavProps) {
         type="button"
         className={`tn-search${compactSearch ? ' compact' : ''}`}
         aria-label={say('searchK')}
+        aria-keyshortcuts="Meta+K Control+K"
         onClick={() => openPalette()}
       >
         <Icon name="magnifying-glass" className="tn-search-icon" />
         <span className="tn-search-hint">{say('search')}</span>
+        {/* A space between the word and the key, as the bar's markup has (index.html): run together, the words a
+            voice command or axe reads are "Search…⌘K", which the name "Search ⌘K" does not hold. The flex box draws
+            no space for it. */}{' '}
         <span className="tn-search-key">⌘K</span>
       </button>
     </>

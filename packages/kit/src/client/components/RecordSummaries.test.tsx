@@ -269,3 +269,44 @@ test('the host draws an empty fact in place of its empty mark (a suggestion wait
   expect(screen.getByText('Ada')).toBeInTheDocument();
   expect(screen.queryByText('Empty')).not.toBeInTheDocument();
 });
+
+test("an App's phone row keeps each caption for assistive technology and marks the facts with no value, for the stylesheet to close up", () => {
+  const rows = [
+    { id: 1, name: 'Loading door', status: 'new', owner: null, account: '' },
+    { id: 2, name: 'Window latch', status: 'new', owner: 'Ada', account: 'Harbour' },
+  ];
+  const { container } = render(<RecordSummaries table={table} data={{ rows }} columns={['id', 'name', 'status', 'owner', 'account']} />);
+  const [first, second] = Array.from(container.querySelectorAll('li.record-summary'));
+  // Every fact still has its caption in the document, as the name of its value: the stylesheet hides it from the eye only.
+  expect(Array.from(second.querySelectorAll('dt')).map((dt) => dt.textContent)).toEqual(['Status', 'Owner', 'Account']);
+  expect(Array.from(first.querySelectorAll('dt')).map((dt) => dt.textContent)).toEqual(['Status', 'Owner', 'Account']);
+  // A fact with no value is marked; one with a value is not.
+  expect(Array.from(first.querySelectorAll('dl > div')).map((div) => div.hasAttribute('data-empty'))).toEqual([false, true, true]);
+  expect(Array.from(second.querySelectorAll('dl > div')).map((div) => div.hasAttribute('data-empty'))).toEqual([false, false, false]);
+});
+
+test('a fact the host draws in place of an empty value, and an empty list of tags, are marked by what they show', () => {
+  const tagged: TableMeta = {
+    ...table,
+    columns: [...table.columns, { name: 'labels', type: 'tags', nullable: true, primaryKey: false }],
+  };
+  const rows = [{ id: 1, name: 'Loading door', status: 'new', owner: null, labels: '[]' }];
+  const { container } = render(
+    <RecordSummaries
+      table={tagged}
+      data={{ rows }}
+      columns={['id', 'name', 'status', 'owner', 'labels']}
+      adornFact={(_row, column) => (column === 'owner' ? <span>Suggested</span> : undefined)}
+    />,
+  );
+  const marks = Array.from(container.querySelectorAll('dl > div')).map((div) => [
+    div.querySelector('dt')?.textContent,
+    div.hasAttribute('data-empty'),
+  ]);
+  // The suggestion stands where the empty mark was, so it is not an empty fact; a tag list with no tags is.
+  expect(marks).toEqual([
+    ['Status', false],
+    ['Owner', false],
+    ['Labels', true],
+  ]);
+});

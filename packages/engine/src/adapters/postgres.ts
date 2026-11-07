@@ -52,6 +52,8 @@ import {
   countEachRows,
   countsTogether,
   orderClause,
+  lanesStatement,
+  withoutLaneRow,
   type CountItem,
   type RolePrivileges,
   type SqlStyle,
@@ -896,14 +898,21 @@ export class PostgresAdapter implements Adapter {
     /* LIMIT and OFFSET continue the placeholder numbering the WHERE clause
        started, which is the one thing Postgres needs that SQLite does not. */
     const n = where.params.length + order.params.length;
-    const text = `SELECT ${cols} FROM ${qualified}${where.text}${order.text} LIMIT $${n + 1} OFFSET $${n + 2}`;
-    const params = [...where.params, ...order.params, limit, clampOffset(request.offset)];
+    const lanes = request.lanes;
+    const text = lanes
+      ? lanesStatement(
+          POSTGRES_STYLE,
+          { columns: cols, source: `${qualified}${where.text}`, lane: POSTGRES_STYLE.quote(lanes.by), order: order.text },
+          n,
+        )
+      : `SELECT ${cols} FROM ${qualified}${where.text}${order.text} LIMIT $${n + 1} OFFSET $${n + 2}`;
+    const params = [...where.params, ...order.params, ...(lanes ? [clampLimit(lanes.limit)] : []), limit, clampOffset(request.offset)];
 
     const started = performance.now();
     const result = await db.query(text, params);
     const ms = Math.round(performance.now() - started);
 
-    return {
+    const answer = {
       // Taking columns from `fields` rather than the first row means an empty
       // result still renders its headers instead of collapsing to nothing.
       columns: result.fields.map((f) => f.name),
@@ -911,6 +920,7 @@ export class PostgresAdapter implements Adapter {
       ms,
       sql: { text, params },
     };
+    return lanes ? withoutLaneRow(answer) : answer;
   }
 
   /**

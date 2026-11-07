@@ -21,6 +21,7 @@ import { say as sayField } from '../copy/forms/components/CommandFields.js';
 import { say } from '../copy/forms/components/CommandReference.js';
 import { andQuery, splitClauseTail } from '@mistriwork/engine/shared/query.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { collidingNames, referenceSubline, sublineText, type Subline } from '@mistriwork/engine/shared/referenceSubline.js';
 import { knownReferenceName, rememberReferenceName } from './referenceNames.js';
 import { answered, sayInput } from './reviewValues.js';
 import type { ReviewSource } from './ReviewValue.js';
@@ -70,26 +71,24 @@ export interface ReferenceName {
 }
 
 /**
- * The column that tells two records of one name apart: the `subtitle` the App's display gives the reference's label
- * column on its resource (`display: { name: { subtitle: 'last4' } }`), when this reader's schema holds that column. A
- * visitor's read is the key and the label alone, the columns a public form's picker is checked for
- * (server forms/savedFormChecks.ts, [public-form-picker]).
+ * What tells two records of one name apart (referenceSubline.ts, the rule every reference shares): the `subtitle` the
+ * App's display gives the reference's label column on its resource (`display: { name: { subtitle: 'last4' } }`), else a
+ * code, an email, the parent by name, the day it was made — when this reader's schema holds it. A visitor's read is the
+ * key and the label alone, the columns a public form's picker is checked for (server forms/savedFormChecks.ts,
+ * [public-form-picker]).
  */
-function referenceDetail(field: ReferenceField, source: ChoiceSource): string | undefined {
+function referenceDetail(field: ReferenceField, source: ChoiceSource): Subline | undefined {
   if (typeof source !== 'string' || !state.schema) return undefined;
-  const table = tableNamed(state.schema as DatabaseSchema, field.from);
+  const schema = state.schema as DatabaseSchema;
+  const table = tableNamed(schema, field.from);
   if (!table) return undefined;
-  const subtitle = (columnDisplay(table.id, field.labelColumn) as { subtitle?: unknown } | null)?.subtitle;
-  return typeof subtitle === 'string' &&
-    subtitle !== field.labelColumn &&
-    subtitle !== field.by &&
-    table.columns.some((column) => column.name === subtitle)
-    ? subtitle
-    : undefined;
+  const display = { [field.labelColumn]: columnDisplay(table.id, field.labelColumn) as { subtitle?: unknown } | null };
+  const sub = referenceSubline(schema, table, field.labelColumn, display);
+  return sub && sub.path !== field.by ? sub : undefined;
 }
 
-const shown = (field: ReferenceField, detail: string | undefined) =>
-  `show ${[...new Set([field.by, field.labelColumn, ...(detail ? [detail] : [])])].join(', ')}`;
+const shown = (field: ReferenceField, detail: Subline | undefined) =>
+  `show ${[...new Set([field.by, field.labelColumn, ...(detail ? [detail.path] : [])])].join(', ')}`;
 const said = (value: unknown) => (value === undefined || value === null || value === '' ? undefined : String(value));
 
 /**
@@ -103,7 +102,9 @@ export async function readReferenceName(
   value: string | number,
   source: ChoiceSource,
 ): Promise<ReferenceName | null> {
-  const detail = referenceDetail(field, source);
+  /* Read back alone, with nothing beside it to collide with: only the line the App asked for. */
+  const declared = referenceDetail(field, source);
+  const detail = declared?.declared ? declared : undefined;
   const key = `${field.by} = ${typeof value === 'number' ? value : JSON.stringify(value)}`;
   const q = [field.from, andQuery(splitClauseTail(field.query ?? '').head, key), shown(field, detail)].join(' ');
   const data = await run(source, { q, limit: 1, offset: 0, count: 'none' });
@@ -111,7 +112,7 @@ export async function readReferenceName(
   const row = data.rows[0] as Record<string, unknown> | undefined;
   const label = said(row?.[field.labelColumn]);
   if (!row || label === undefined) return null;
-  const second = detail ? said(row[detail]) : undefined;
+  const second = detail ? sublineText(row[detail.path]) : undefined;
   return { label, ...(second ? { detail: second } : {}) };
 }
 
@@ -329,6 +330,7 @@ function FlatReferenceField({
     rows: choices.data,
     label: (choice) => choice.label,
   });
+  const twice = collidingNames(offered.map((choice) => choice.label));
   return (
     <div className="picker">
       <Typeahead
@@ -347,8 +349,8 @@ function FlatReferenceField({
         renderItem={(choice) => (
           <>
             <span className="picker-option-label">{choice.label}</span>
-            {/* Two records of one name are told apart by the second line the App's display gives them. */}
-            {choice.detail && <span className="picker-option-detail">{choice.detail}</span>}
+            {/* Two records of one name are told apart by their second line; the App's own is drawn under every one. */}
+            {choice.detail && (choice.declared || twice.has(choice.label)) && <span className="picker-option-detail">{choice.detail}</span>}
           </>
         )}
         onPick={(choice) => {
@@ -392,6 +394,8 @@ interface Choice {
   value: string | number;
   label: string;
   detail?: string;
+  /** The App's display asked for the line: drawn under every choice, not only where two names collide. */
+  declared?: boolean;
 }
 export async function commandChoices(field: ReferenceField, text: string, source: ChoiceSource): Promise<Choice[]> {
   // Authored filters constrain eligibility; this picker owns projection, ordering and page size.
@@ -403,7 +407,13 @@ export async function commandChoices(field: ReferenceField, text: string, source
   return data.rows.slice(0, 20).flatMap((row: Record<string, unknown>) => {
     const value = row[field.by];
     return typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value))
-      ? [{ value, label: String(row[field.labelColumn] ?? value), ...(detail && said(row[detail]) ? { detail: said(row[detail])! } : {}) }]
+      ? [
+          {
+            value,
+            label: String(row[field.labelColumn] ?? value),
+            ...(detail && sublineText(row[detail.path]) ? { detail: sublineText(row[detail.path])!, declared: detail.declared } : {}),
+          },
+        ]
       : [];
   });
 }

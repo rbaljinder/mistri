@@ -42,6 +42,7 @@ import { documentsOf } from '../documents.js';
 import type { PageProps } from './Page.js';
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { say } from '../copy/record/components/PageHead.js';
+import { formatSpan } from '../locale.js';
 import { recordNotFound } from './RecordGone.js';
 import { drawnLayout } from '@mistriwork/engine/shared/pageLayouts.js';
 import { useCrumbSlots } from './crumbSlot.js';
@@ -102,6 +103,9 @@ export function PageHead({
      screen (page.css). */
   const { tools: crumbTools } = useCrumbSlots();
   const actionsInBar = Boolean(crumbTools && !host && !phone && shell().inApp());
+  /* A record room of an App under the trail: the bar is drawn in the render that draws the room (crumbSlot.ts), so
+     this is known before the first paint and the head never changes height after it. */
+  const trailed = Boolean(key && crumbTools && !host && shell().inApp());
   const said = useRecordHeader({
     page,
     base,
@@ -221,7 +225,7 @@ export function PageHead({
     ) : null;
   return (
     <div
-      className={`page-head${key ? ' has-record' : ''}${!host && shell().inApp() ? ' is-room' : ''}${avatarDeclared ? ' has-avatar' : ''}`}
+      className={`page-head${key ? ' has-record' : ''}${!host && shell().inApp() ? ' is-room' : ''}${avatarDeclared ? ' has-avatar' : ''}${trailed ? ' has-trail' : ''}`}
       data-layout={drawnLayout(page)}
     >
       <div className="page-head-top">
@@ -242,9 +246,12 @@ export function PageHead({
           </div>
         ) : key ? (
           /* Over a record's name its kind is a label for someone who works
-             across tables; a public reader came for the car, not "VEHICLE". */
+             across tables; a public reader came for the car, not "VEHICLE".
+             Under an App's trail it is heard and not seen: the trail already
+             says "Bookings › Ava Thompson", and a third "BOOKING" over the
+             name was the same place said again (docs/design.md, the record head). */
           shell().publicVisitor() ? null : (
-            <span className="page-title">{sayPage(page)}</span>
+            <span className={trailed ? 'page-title visually-hidden' : 'page-title'}>{sayPage(page)}</span>
           )
         ) : (
           <h1 className="page-title">{sayPage(page)}</h1>
@@ -306,6 +313,7 @@ export function PageHead({
           <RecordTrailNav entry={entry} />
         </div>
       )}
+      {key && said.subtitle}
       {/* The head's second column (page.css), unless the crumb bar holds the verbs. */}
       {toolbar && actionsInBar ? createPortal(toolbar, crumbTools!, 'record-actions') : toolbar}
       {/* A header's facts: under the name, in its column (page.css). */}
@@ -366,6 +374,8 @@ function tonesOf(tableId: string): Tones {
 interface HeaderParts {
   status: ReactNode;
   facts: ReactNode;
+  /** An inferred page's line under the name: its name column's second line (pageAnatomy.ts). */
+  subtitle?: ReactNode;
 }
 
 /**
@@ -468,14 +478,22 @@ function useRecordHeader({
      pushed the whole page down when it came (test/built-client-vitals.mjs). So is it while the host's adornments are
      asked about one of its empty facts: an empty fact is left out, and one the host adorns would join the line late. */
   const waitsOnHost = Boolean(row && adornHeld?.length) && facts.some((path) => adornHeld!.includes(path) && (row![path] ?? '') === '');
-  if (section && ((!row && data.isPending) || waitsOnHost) && facts.length)
+  /* The line under the name is held the same way: the page says whether it has one, the row only what it says. */
+  const subtitlePath = section?.subtitle;
+  const heldSubtitle = subtitlePath ? (
+    <p className="page-head-subtitle" aria-hidden="true" style={{ visibility: 'hidden' }}>
+      &nbsp;
+    </p>
+  ) : null;
+  if (section && ((!row && data.isPending) || waitsOnHost) && (facts.length || subtitlePath))
     return {
       status: null,
-      facts: (
+      facts: facts.length ? (
         <ul className="page-facts page-head-facts" aria-hidden="true" style={{ visibility: 'hidden' }}>
           <li className="page-fact">&nbsp;</li>
         </ul>
-      ),
+      ) : null,
+      subtitle: heldSubtitle,
     };
   if (!section || !row) return { status: null, facts: null };
 
@@ -511,6 +529,21 @@ function useRecordHeader({
   const adornments = new Map(facts.map((path) => [path, adornedAt(path)] as const));
   const shown = facts.filter((path) => filled(path) || adornments.get(path));
   const fact = (path: string) => {
+    /* A span said once, start to end ("Sep 13, 2026, 2:00 – 4:00 PM"), where the page reads the fact as one
+       (pageAnatomy.ts, spanOf); an end it cannot pair is the start alone, as before. */
+    const end = section.spans?.[path];
+    const span = end && filled(end) && typeof row[path] === 'string' ? formatSpan(row[path] as string, String(row[end])) : null;
+    if (span)
+      return (
+        <li key={path} className="page-fact">
+          <span className="page-fact-caption">
+            {say('when')}
+            <span className="visually-hidden">: </span>
+          </span>
+          <span>{span}</span>
+          {adornments.get(path)}
+        </li>
+      );
     const labels = section.factLabels;
     const word =
       labels && Object.hasOwn(labels, path)
@@ -540,6 +573,16 @@ function useRecordHeader({
     );
   };
   return {
+    /* Quiet under the name, as a name's second line is in a list. A record without one keeps the line's room, unseen:
+       the line was held while the row was read, and taking it away then would move everything under it. */
+    subtitle:
+      subtitlePath && filled(subtitlePath) ? (
+        <p className="page-head-subtitle">
+          <Value col={columnAt(subtitlePath)} value={row[subtitlePath]} tableId={base.id} compact />
+        </p>
+      ) : (
+        heldSubtitle
+      ),
     /* Its caption is heard, not seen: beside the name a chip is its own word. */
     status:
       status && filled(status) ? (

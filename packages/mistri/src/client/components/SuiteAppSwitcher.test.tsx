@@ -368,7 +368,7 @@ test('suite metadata alone authors no switcher, navbar, or background discovery'
   expect(container).toBeEmptyDOMElement();
   expect(fetch).not.toHaveBeenCalled();
   render(<AccountControl who="Reader" />);
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Account: Reader' }));
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Account: R Reader' }));
   expect(screen.queryByRole('button', { name: 'Switch App' })).toBeNull();
   expect(fetch).not.toHaveBeenCalled();
 });
@@ -579,7 +579,7 @@ test('account placement draws grouped links directly in the existing account men
   expect(fetch).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: 'Explore your work' })).toBeNull();
   const user = userEvent.setup(),
-    account = screen.getByRole('button', { name: 'Account: Reader' });
+    account = screen.getByRole('button', { name: 'Account: R Reader' });
   await user.click(account);
   await screen.findByRole('menuitem', { name: 'Payroll home' });
   expect(screen.getAllByRole('menu')).toHaveLength(1);
@@ -600,7 +600,7 @@ test('navbar configuration is not duplicated into the account popup', async () =
   start();
   render(<AccountControl who="Reader" appSwitcher={grouped} />);
   await screen.findByRole('button', { name: 'Explore your work' });
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Account: Reader' }));
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Account: R Reader' }));
   expect(screen.queryByRole('menuitem', { name: 'Payroll home' })).toBeNull();
   expect(screen.getAllByRole('button', { name: 'Explore your work' })).toHaveLength(1);
 });

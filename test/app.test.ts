@@ -615,7 +615,7 @@ describe('nothing is silently skipped', () => {
     );
     assert.throws(
       () => dashApp({ sections: [{ kind: 'note', text: 'hi' }], descripton: 'x' }),
-      /views "d" has no "descripton"\. Did you mean "description"\? It takes: kind, label, path, heading, description, icon, from, sections/,
+      /views "d" has no "descripton"\. Did you mean "description"\? It takes: kind, label, path, heading, head, description, icon, from, sections/,
     );
     assert.throws(
       () => listApp({ from: 't', tabs: [{ label: 'A', sorts: 'x' }] }),
@@ -1371,7 +1371,8 @@ describe('resolveNav', () => {
       },
       WHERE,
     );
-    const views = resolvedViews(app, SCHEMA);
+    /* What the lists show, how they sort and filter is inferred where they say nothing (listInference.ts): their names are the point here. */
+    const views = resolvedViews(app, SCHEMA).map((view) => ({ table: (view as { table?: string }).table, label: view.label }));
     assert.deepEqual(views[0], { table: 'work_order', label: 'Work order' });
     assert.deepEqual(views[1], { table: 'customer', label: 'Customers' });
     /* The group is nav's, served as the tree it was written as. */
@@ -1759,8 +1760,8 @@ describe('GET /api/app', () => {
     assert.equal(got.app.name, 'Field Ops');
     const { orders, customers, ghost } = got.app.views;
     // The label the author did not write comes from the schema, server-side.
-    assert.deepEqual(orders, { table: 'work_order', label: 'Work order' });
-    assert.deepEqual(customers, { table: 'customer', label: 'Customers' });
+    assert.deepEqual([orders.table, orders.label], ['work_order', 'Work order']);
+    assert.deepEqual([customers.table, customers.label], ['customer', 'Customers']);
     assert.match(ghost.error, /no table "ghost"/);
     /* The menu is nav as written, each reference carrying its word. */
     assert.deepEqual(got.app.nav, [

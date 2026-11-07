@@ -3,14 +3,16 @@ import { defineMessages } from '../../../messages.js';
 
 export const say = defineMessages(
   {
-    searchK: 'Search (⌘K)',
+    searchK: 'Search ⌘K',
     search: 'Search…',
+    allPages: 'All pages',
   },
   {
     /* The words a visitor sees in the shell; the rest are said in English. */
     es: {
-      searchK: 'Buscar (⌘K)',
+      searchK: 'Buscar ⌘K',
       search: 'Buscar…',
+      allPages: 'Todas las páginas',
     },
   },
 );

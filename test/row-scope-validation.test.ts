@@ -166,6 +166,34 @@ test('scope bounds resources, total conditions, arrays and individual/total stri
   assert.throws(() => snapshotRowScope(wideSchema, Object.fromEntries(wideSchema.tables.map((table) => [table.id, many]))), Refusal);
 });
 
+/* An external assessment capped its own policy's id list at 4,000 to stay under a bound the refusal never named
+   ("Invalid row scope."). The refusal now says which bound, how far past it the scope went, and what to do instead. */
+test('a scope past a size bound is refused naming the bound, how far past it went and the next step', () => {
+  const list = (length: number) => scope({ groups: [[{ column: 'tenant', op: 'in', value: Array.from({ length }, (_, i) => `t${i}`) }]] });
+  assert.doesNotThrow(() => snapshotRowScope(schema, list(4096)));
+  assert.throws(
+    () => snapshotRowScope(schema, list(5000)),
+    (error: Error) =>
+      error instanceof Refusal &&
+      error.message.startsWith('Invalid row scope: a list holds 5,000 values, 904 past the bound of 4,096 per list. ') &&
+      /Narrow the policy, or scope by a relationship instead of a list/.test(error.message),
+  );
+  const many: Filter = { groups: [[{ column: 'tenant', op: 'in', value: Array.from({ length: 4000 }, () => 1) }]] };
+  const wideSchema = { ...schema, tables: Array.from({ length: 5 }, (_, i) => ({ ...schema.tables[0], id: `r${i}` })) };
+  assert.throws(
+    () => snapshotRowScope(wideSchema, Object.fromEntries(wideSchema.tables.map((table) => [table.id, many]))),
+    (error: Error) =>
+      error instanceof Refusal &&
+      error.message.startsWith('Invalid row scope: the scope holds 20,036 values, 3,652 past the bound of 16,384 in one scope. Narrow'),
+  );
+  const condition = { column: 'tenant', op: '=', value: 'north' };
+  assert.throws(() => snapshotRowScope(schema, scope({ groups: [Array.from({ length: 2049 }, () => condition)] })), {
+    message: /^Invalid row scope: the scope holds 2,049 conditions, 1 past the bound of 2,048 in one scope\. Narrow the policy/,
+  });
+  // Malformed rather than too big: still the short sentence, since there is no bound to name.
+  assert.throws(() => snapshotRowScope(schema, scope(new Date())), { message: 'Invalid row scope.' });
+});
+
 test('scope validates unused resource policies and prevents late relation registration', () => {
   const other = { ...schema.tables[0], id: 'other', name: 'other' };
   const full = { ...schema, tables: [...schema.tables, other] };

@@ -167,6 +167,69 @@ describe('the prose agrees with the code it describes', () => {
   });
 });
 
+describe('the install line', () => {
+  /* Until 1.0.0 ships, npm's `latest` tag on @mistriwork/mistri and create-mistri is a placeholder (0.0.0, "coming
+     soon"), and the release candidates are on `next`: an untagged `npm create mistri` installed the placeholder (an
+     external assessment). Once the version is not a prerelease, `latest` is the release and `@next` must go again. */
+  test('a cold install says @next while the version is a release candidate, and only then', () => {
+    const version: string = JSON.parse(read('packages/mistri/package.json')).version;
+    const candidate = version.includes('-');
+    const pages = (readdirSync(new URL('../site/src/content/docs/', import.meta.url), { recursive: true }) as string[])
+      .filter((name) => /\.mdx?$/.test(name))
+      .map((name) => `site/src/content/docs/${name}`);
+    const skills = (readdirSync(new URL('../skills/', import.meta.url), { recursive: true }) as string[])
+      .filter((name) => name.endsWith('.md'))
+      .map((name) => `skills/${name}`);
+    const found: string[] = [];
+    for (const file of ['README.md', 'packages/mistri/README.md', 'packages/create-mistri/README.md', ...pages, ...skills]) {
+      const text = read(file);
+      const untagged =
+        /\bnpm create mistri(?!@next)\b|\bnpm (?:install|i|add)(?: (?:-D|--save-dev|-g|--global))* @mistriwork\/mistri(?![@\w/-])/g;
+      const tagged = /\bmistri@next\b/g;
+      for (const hit of text.matchAll(candidate ? untagged : tagged)) found.push(`${file}: ${hit[0]}`);
+    }
+    assert.deepEqual(
+      found,
+      [],
+      candidate ? `${version} is a release candidate: install it as @next` : `${version} is a release: drop @next`,
+    );
+  });
+});
+
+describe('what each kind of App can do', () => {
+  /* One table, in two places: the site's row-access page and docs/apps.md, which link where the other links to the
+     site. Scattered sentences ("not in a tenant App", "under a row policy … refused") point at it rather than
+     repeating it, so a change to a capability changes this table, and this keeps the two copies one table. */
+  const tableIn = (file: string) => {
+    const text = read(file);
+    const start = text.indexOf('<!-- capability-table:start -->');
+    const end = text.indexOf('<!-- capability-table:end -->');
+    assert.ok(start >= 0 && end > start, `${file} lost its capability table markers`);
+    return text.slice(start, end);
+  };
+  test('docs/apps.md holds the row-access page’s capability table, its links pointed at the same pages', () => {
+    const site = tableIn('site/src/content/docs/docs/row-access.md');
+    const pages = '../site/src/content/docs/docs/';
+    const repo = site
+      .replace(/\]\(#([\w-]+)\)/g, `](${pages}row-access.md#$1)`)
+      .replace(/\]\(\/docs\/([\w-]+)\/#([\w-]+)\)/g, `](${pages}$1.md#$2)`)
+      .replace(/\]\(\/docs\/([\w-]+)\/\)/g, `](${pages}$1.md)`);
+    assert.equal(tableIn('docs/apps.md'), repo);
+    for (const row of [
+      'File fields of a public form',
+      'Forms saved on every step',
+      'Database triggers',
+      'generic writes',
+      'event feed',
+      'check --pending',
+      'exports',
+      'assistant',
+      'Live sync',
+    ])
+      assert.ok(site.includes(row), `the capability table has no "${row}" row`);
+  });
+});
+
 describe('the default look', () => {
   /* An App wears Workshop unless it names another (packages/engine/src/shared/themeLooks.ts). A guide that still called Mono the
      default sent an agent to set a preset it believed was the fallback. */

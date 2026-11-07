@@ -2085,6 +2085,10 @@ export interface AppDashboardView<Table extends string = string, View extends st
       session; where there is none (a public reader, an account with no name) the label is drawn instead. Needs `auth`.
       false draws the dashboard without its title (it stays for a screen reader). */
   heading?: string | AppMessageRef | false;
+  /** The head's form: `'compact'` is the title alone on one line with its verbs, at a list's size, with no intro;
+      `false` is a dashboard that draws its own head, its title kept for a screen reader (the room's one h1) and its
+      label still the tab's, the crumb's and the palette's word. Absent: the full head, title and intro. */
+  head?: 'compact' | false;
   /** Short plain text shown under the dashboard heading. It may greet `{me.name}` too; with no name it is left out. */
   description?: string | AppMessageRef;
   /** The menu's mark for this dashboard. */
@@ -3020,6 +3024,13 @@ export interface AppShell {
   /** With the side placement: folding the sidebar (its « button, ⌘B) leaves a
       rail of the entries' icons by default. Set false to hide it completely. An App with no `nav` has no menu. */
   rail?: boolean;
+  /** With the side placement, where the bar's furniture stands on a signed-in screen at a desk: in the sidebar
+      (`'sidebar'`, the default), full height — its head the App's mark and name, New and the search (⌘K), its foot
+      the bell, the account, `sidebar.footer` and Collapse — so each room's own head row is its first line; or across
+      the top of the window (`'bar'`). The bar's theme recipe (`recipes.bar`) dresses the sidebar's head instead. A
+      phone, the top placement, public pages and sign-in keep the bar. Folding leaves the rail, so `'sidebar'` refuses
+      `rail: false`, and an App that says `rail: false` and no header keeps the bar. */
+  header?: 'bar' | 'sidebar';
   /** Show the sidebar menu filter. Defaults to false in Apps. */
   menuSearch?: boolean;
   /** Show live row counts beside the App menu's lists of work: a list whose condition picks its machine's unfinished states, a date at or before today (said in the danger's ink), or the reader (me). A list's own count: true or false says otherwise. Defaults to false; Workbench estimates remain. */
@@ -3425,8 +3436,9 @@ export interface AppConfig {
   pages?: Record<string, AppPage>;
   /** Ordered slices of content, merged at load after the App's own. */
   features?: readonly AppFeature[];
-  /** Where a visitor starts. Required. */
-  home: AppHome;
+  /** Where a visitor starts. Without it, an overview of the App's main table (`/overview`): its rows by state, the
+      open ones overdue or due today, the reader's own and the newest, each as the table can answer. */
+  home?: AppHome;
   /** Arrangement only: view ids, `{ to, label }`, groups, and `{ feature }` placements of a feature's fragment.
       Optional: without it the App's menu is its features' fragments in order, or none. A list view it leaves
       out is still served at its address and offered by ⌘K; a dashboard it, `home` and every embed leave out is refused. */

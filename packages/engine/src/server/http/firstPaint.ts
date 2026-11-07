@@ -254,6 +254,8 @@ export interface PaintRooms {
     me: Record<string, unknown>;
     runtime: Record<string, unknown>;
     ask: PaintAsk;
+    /** The request's Cookie header: how this browser last chose to read a room (an App's board), where it says. */
+    cookie?: string;
   }): Promise<{ app: string; plan: RoomPlan } | undefined>;
 }
 
@@ -270,6 +272,7 @@ export async function firstPaint({
   most = MOST,
   budget = BUDGET,
   rooms,
+  cookie,
 }: {
   path: string;
   search: string;
@@ -278,6 +281,8 @@ export async function firstPaint({
   budget?: number;
   /** What the product's page asks past who-am-I and the runtime (PaintRooms), or nothing more. */
   rooms?: PaintRooms;
+  /** The request's Cookie header, handed to `rooms`. */
+  cookie?: string;
 }): Promise<FirstPaintPage> {
   const carried = new Carried();
   /* Past the budget every answer still out is none: the client asks it. */
@@ -303,7 +308,7 @@ export async function firstPaint({
     return Promise.race([answer, late]);
   };
   try {
-    return await answered(carried, path, search, loop, most, rooms);
+    return await answered(carried, path, search, loop, most, rooms, cookie);
   } finally {
     clearTimeout(timer);
     controller.abort();
@@ -317,6 +322,7 @@ async function answered(
   loop: Loop,
   most: number,
   rooms: PaintRooms | undefined,
+  cookie: string | undefined,
 ): Promise<FirstPaintPage> {
   const ask: PaintAsk = async (method, target, body) => carried.read(method, target, body, await loop(method, target, body));
   const done = (): FirstPaintPage => ({ json: carried.json(most) });
@@ -340,7 +346,7 @@ async function answered(
     ask('GET', '/api/runtime'),
   ])) as [Record<string, unknown> | undefined, Record<string, unknown> | undefined];
   if (!me || !runtime || !rooms) return done();
-  const room = await rooms.room({ path, search, requested, me, runtime, ask });
+  const room = await rooms.room({ path, search, requested, me, runtime, ask, ...(cookie ? { cookie } : {}) });
   if (!room) return done();
   const { app: selected, plan } = room;
   await Promise.all([

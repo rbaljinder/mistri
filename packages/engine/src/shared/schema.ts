@@ -585,6 +585,8 @@ export function declaredOrder(column: Pick<ColumnMeta, 'type' | 'allowed'> | und
 export interface Order {
   column: string;
   direction: 'asc' | 'desc';
+  /** An empty value after every other, whichever way the column runs (a sort's `nulls last`). */
+  nulls?: 'last';
 }
 
 /* Columns that record when a row was last touched, then when it came into

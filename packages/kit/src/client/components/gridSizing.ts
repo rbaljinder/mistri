@@ -18,6 +18,9 @@ interface GridColumnSize {
   values: unknown[];
   /** The second line a display rule draws under each value, in the smaller type. */
   subValues?: unknown[];
+  /** The words the totals row draws under the column, in its heavier weight: a sum is wider than any row it adds up,
+      and a total cut to "$102,795...." is the one figure that must be read whole. */
+  total?: string;
   /** Values drawn as tone chips: the dot, padding and border are width too. */
   chip?: boolean;
   /** Measured in the first row: what a chip draws beyond its words (the dot, gap and padding of the look wearing it). */
@@ -52,6 +55,8 @@ const READABLE_TEXT = 360;
     and Cycle kept their whole words as their minimum. */
 const TITLE_TEXT = 240;
 const SECONDARY_TEXT = 120;
+/** How much wider a figure sets in the totals row's 600 weight than in a cell's 400 (features.css). */
+const TOTAL_WEIGHT = 1.1;
 /** An avatar's disc (24px) and the gap before its name. */
 const AVATAR_WIDTH = 32;
 /** How wide a head's characters set: a sentence-case label in the interface
@@ -113,9 +118,11 @@ export function columnSizeHint(
      measured, 40px: Lumen's "In progress" chip draws 41px past its words (dot,
      gap, 8px and 10px of padding), and at 22 its cell cut it to "In progress …"
      in Thread's issues and Compass's ratings. */
-  const length = longest(column.values) + (column.chip ? 5 : 0);
+  const length = Math.max(longest(column.values), column.total?.length ?? 0) + (column.chip ? 5 : 0);
+  /* The total is set in the totals row's semibold, a tenth wider than the cell's own weight. */
+  const totalWidth = measure && column.total ? Math.ceil(measure(column.total) * TOTAL_WEIGHT) : 0;
   const textWidth =
-    (measure ? Math.ceil(widest(column.values)) + (column.chip ? (column.chipExtra ?? CHIP_EXTRA) : 0) : length * 8) +
+    (measure ? Math.max(Math.ceil(widest(column.values)), totalWidth) + (column.chip ? (column.chipExtra ?? CHIP_EXTRA) : 0) : length * 8) +
     (column.avatar ? AVATAR_WIDTH : 0);
   /* A second line asks for room, never lowers the floor: an email under a
      name wants its width, but a narrow panel still keeps the name's minimum.

@@ -257,6 +257,8 @@ export class Registry {
      it again: the same paragraph every time an agent re-read the schema. Keyed by what was said, so a
      role that gained a grant since is still news. */
   private readonly rolesSaid = new Set<string>();
+  /* What keepWriteJournal said about a connection's journal, once per run, as above. */
+  private readonly journalSaid = new Set<string>();
 
   /** A service from the config. Names are unique among services; a kind that is a singleton (the cache, the email service) is configured once. */
   addService(service: ServiceConfig): void {
@@ -644,8 +646,16 @@ export class Registry {
       for (const hook of this.dialedHooks) hook(entry.config.id, adapter);
       /* A writable connection keeps its Undo history in its database where the
          store is provisioned (journalStore.ts), read back before the first
-         write; elsewhere it stays in memory, as it always has. */
-      if (entry.config.writable) await keepWriteJournal(entry.config.id, adapter, this.onWarning);
+         write; elsewhere it stays in memory, as it always has, and in the
+         browser a database that could hold the store and does not is told once
+         per run: a dial again (a refresh, a reconnect) would say the same
+         paragraph. */
+      if (entry.config.writable)
+        await keepWriteJournal(entry.config.id, adapter, (message) => {
+          if (this.journalSaid.has(message)) return;
+          this.journalSaid.add(message);
+          this.onWarning(message);
+        });
       /* Wrapped before it is stored, so nothing can reach the unwrapped one:
          the boundary is a property of the connection, not a rule each caller
          remembers. Introspection happens first because the catalog is the
@@ -1018,7 +1028,7 @@ export async function loadConfig(explicit: string | undefined, sections: ConfigS
           `${path}: connection "${c.name}" has "migrations": ${JSON.stringify(migrations)}. It is { "dir": "<directory>" }, and "table" when the history table is not ${product()}'s own.`,
         );
       }
-      const http = httpConnectionOf(c as unknown as Record<string, unknown>, path);
+      const http = httpConnectionOf(c as unknown as Record<string, unknown>, path, Object.keys(sections.kinds));
       const pool = poolOf(c as unknown as Record<string, unknown>, http !== undefined, path);
       const replicas = replicasOf(c as unknown as Record<string, unknown>, http !== undefined, path);
       const listen = listenOf(c as unknown as Record<string, unknown>, http !== undefined, path);

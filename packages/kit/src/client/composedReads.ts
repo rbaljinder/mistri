@@ -150,7 +150,9 @@ function forgetComposed(): void {
   pending.clear();
 }
 
-const COMPOSABLE = new Set(['/api/view/run', '/api/run', '/api/breakdown', '/api/record-history']);
+/* `/api/counts` is an inferred page's related tabs (PageRelated.tsx, useRelatedCounts): asked by the server with the
+   body the client builds, so the strip's counts arrive with the page and add no request of their own. */
+const COMPOSABLE = new Set(['/api/view/run', '/api/run', '/api/breakdown', '/api/record-history', '/api/counts']);
 /** Whether a compose kept, or on its way, could answer this request: asked before waiting on one, so any other request goes out in the same moment it always did. */
 export function mayBeComposed(path: string): boolean {
   return COMPOSABLE.has(path) && (held.length > 0 || pending.size > 0);

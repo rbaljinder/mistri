@@ -132,6 +132,12 @@ export const RECIPE_WORDS = {
     band: 'A record’s head and a list’s are one band of the raised ground from edge to edge: the trail, the title, its status, facts and verbs, a list’s tabs and filters; the contents keep their edge.',
     hero: 'A band, with the record’s avatar large beside its title (above it on a phone); a record without one, and a list, draw the band.',
   },
+  filters: {
+    dashed: 'A list’s filter not yet asked for is its name behind a +, on a dashed hairline: a place for a filter, not a field.',
+    solid: 'A list’s filter not yet asked for is its name behind a + on a solid edge: a key, as the search beside it is, not a place.',
+    quiet:
+      'A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground.',
+  },
   required: {
     star: 'A required field wears a red star after its label; an optional one wears nothing.',
     'optional-word':
@@ -173,7 +179,7 @@ export const TYPE_WORDS: { readonly [Role in ThemeTypeRole]: string } = {
     'A section’s title on a record and a dashboard: its face, case and features; a dashboard’s section title also takes a size (12px to 20px), tracking and weight.',
   body: 'Prose, fields and the interface, at the base size: its leading (1.35 to 1.8) and features.',
   label:
-    'A column’s head, a stat’s label and a record’s tabs, at the base size: their face, tracking, weight (400 to 700), case and features; upper sets them a step smaller.',
+    'A column’s head, a stat’s label and a record’s tabs, at the base size: their face, size (11px to 14px), tracking, weight (400 to 700), case and features; upper sets them a step smaller unless a size is said.',
   data: 'A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates, a record header’s facts too).',
   figure: 'A stat’s figure: its face, size (18px to 40px), tracking, weight and features, tabular figures kept.',
   nav: 'The menu’s entries in the bar, at the base size: their face, tracking, weight (400 to 600) and case; upper sets them a step smaller.',

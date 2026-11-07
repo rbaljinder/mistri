@@ -111,3 +111,21 @@ test('a group names its control by the caption rather than a <label>', () => {
   expect(screen.getByRole('radiogroup', { name: 'Equipment' })).toBeInTheDocument();
   expect(document.querySelector('label.form-field-label')).toBeNull();
 });
+
+test('a short answer says its kind, for the form to size and row it by the data; text says none', () => {
+  const { container } = render(
+    <>
+      <Field label="Seats" kind="number">
+        <input className="field-control" />
+      </Field>
+      <Field label="Starts" kind="datetime">
+        <input className="field-control" />
+      </Field>
+      <Field label="Title">
+        <input className="field-control" />
+      </Field>
+    </>,
+  );
+  const fields = [...container.querySelectorAll('.form-field')];
+  expect(fields.map((field) => field.getAttribute('data-kind'))).toEqual(['number', 'datetime', null]);
+});

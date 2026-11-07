@@ -22,7 +22,7 @@ export const LABEL_SEGMENT = '$label';
    `{token|masked}` draws a placeholder for any value, `{token|masked:ENC:}` for a
    value starting with that prefix — a column's `masked` display rule
    reaching the record's name, which is computed in the statement. */
-export type LabelField = { path: string; mask?: { prefix?: string }; words?: Record<string, string> };
+export type LabelField = { path: string; mask?: { prefix?: string }; words?: Record<string, string>; date?: true };
 /* A field may carry a fallback, `{nickname ?? name ?? company_id.name}`: the first of its paths with a value, an
    empty text counting as none. `path` is the first; `or` the rest, in order. */
 type LabelPart = { text: string } | (LabelField & { or?: LabelField[] });
@@ -35,6 +35,10 @@ const MASK_MARK = '|masked';
    physical". The map is URI-encoded JSON, so no brace or bar in a word
    ends the field early. */
 const WORDS_MARK = '|words:';
+/* Or its day, `{starts_at|date}`: a date or a timestamp said as a person reads a day ("Sep 13, 2026"), never its
+   stored text ("2026-09-13 14:00:00"). Only the server writes it, in the name it composes for a table with no name of
+   its own (appRecordLabels.ts): the parent's name and the day the record is for. */
+const DATE_MARK = '|date';
 
 /** Whether an authored record label is a template rather than a path. */
 export const isLabelTemplate = (text: unknown): text is string => typeof text === 'string' && text.includes('{');
@@ -94,6 +98,8 @@ export function parseLabelTemplate(template: string): { parts: LabelPart[]; path
 function parseField(source: string, template: string): LabelField | { problem: string } {
   let field = source;
   let words: Record<string, string> | undefined;
+  const dated = field.trimEnd().endsWith(DATE_MARK);
+  if (dated) field = field.trimEnd().slice(0, -DATE_MARK.length);
   const worded = field.indexOf(WORDS_MARK);
   if (worded !== -1) {
     words = readWords(field.slice(worded + WORDS_MARK.length));
@@ -106,7 +112,12 @@ function parseField(source: string, template: string): LabelField | { problem: s
   if (!FIELD.test(path) || path.split('.').includes(LABEL_SEGMENT) || (after !== undefined && after !== '' && !after.startsWith(':'))) {
     return { problem: `"{${field}}" in "${template}" is not a column or a reference path, like {id} or {customer_id.name}.` };
   }
-  return { path, ...(after === undefined ? {} : { mask: after ? { prefix: after.slice(1) } : {} }), ...(words ? { words } : {}) };
+  return {
+    path,
+    ...(after === undefined ? {} : { mask: after ? { prefix: after.slice(1) } : {} }),
+    ...(words ? { words } : {}),
+    ...(dated ? { date: true as const } : {}),
+  };
 }
 
 /** A template field's text, written back from its alternatives' own (a masked one marked, a worded one with its words). */
@@ -141,16 +152,27 @@ export const maskedPath = (path: string, prefix?: string): string => `${path}${M
 /** Whether an authored template writes a mask itself: that is the column's display rule's to say. */
 export const writesMask = (template: string): boolean => template.includes(MASK_MARK) || template.includes(WORDS_MARK);
 
+/** Whether an authored template writes the day mark itself: the server's, in a name it composes. */
+export const writesDay = (template: string): boolean => /\|date\s*[}?]/.test(template);
+
+/** A template field for a date path said as its day, as the server writes it into a template it composes. */
+export const datedField = (path: string): string => `{${path}${DATE_MARK}}`;
+
 /**
  * The name a record with no name of its own is given: its noun and its key,
  * "Purchase order #3", rather than the bare key a title and a breadcrumb
  * used to show. One key column only: a composite key is not one number.
  */
 export function nounTemplate(noun: string, key: string): string {
+  return `${nounWord(noun)} #{${key}}`;
+}
+
+/** A noun as a template's literal words: capitalized, and held to what a template's text may hold. */
+function nounWord(noun: string): string {
   const word =
     [...noun]
       .filter((character) => character !== '{' && character !== '}' && !unsafe(character))
       .join('')
       .trim() || 'Record';
-  return `${word.charAt(0).toUpperCase()}${word.slice(1)} #{${key}}`;
+  return `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 }

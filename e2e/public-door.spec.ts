@@ -162,7 +162,7 @@ test.describe('A public door', () => {
     const request = await sent;
     expect(request.headers()['x-mistri-ticket']).toBeTruthy();
     expect(request.headers()['x-mistri-challenge']).toBe('lobby-person');
-    await expect(page.getByRole('form', { name: 'Enrol' }).getByRole('status')).toHaveText(/^Enrolled: ENR-/);
+    await expect(page.getByRole('form', { name: 'Enrol' }).getByRole('status')).toContainText(/Enrolled: ENR-/);
     expect(rows(app, 'SELECT name, make_id FROM enrolment')).toEqual([{ name: 'Mara Quill', make_id: 2 }]);
   });
 });

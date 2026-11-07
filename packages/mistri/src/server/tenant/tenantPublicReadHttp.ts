@@ -61,7 +61,7 @@ const fields: Record<string, readonly string[]> = {
   '/api/query': ['table', 'filter', 'columns', 'orderBy', 'limit', 'offset'],
   '/api/count': ['table', 'filter', 'exactCount', 'countLimit'],
   '/api/counts': ['items', 'countLimit'],
-  '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset', ...PAGE_STEP_FIELDS],
+  '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset', 'lanes', ...PAGE_STEP_FIELDS],
   '/api/view/run': ['view', 'text', 'query', 'count', 'limit', 'offset'],
   '/api/breakdown': ['def', 'text', 'limit', 'offset'],
   '/api/breakdowns': ['items'],

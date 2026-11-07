@@ -60,6 +60,8 @@ import {
 import { boxTail, boxesFor, type Box, type BoxEdit } from './FilterBoxes.js';
 import { onDemand } from './onDemand.js';
 import { useGridGroups } from './useGridGroups.js';
+import { ListSubtitles } from './listSubtitles.js';
+import { LayoutSwitch, useListLayout } from './LayoutSwitch.js';
 
 const DefinedBoxes = onDemand(() => import('./DefinedFields.js'), 'DefinedBoxes', { quiet: true });
 
@@ -209,6 +211,11 @@ function TabCount({ counted }: { counted?: Counted | null }) {
 export function AppList({ entry, spec, navigate, embedded = false, newButton, inDashboard = false, onTotal }: AppListProps) {
   useMessageLanguage();
   const caption = spec.label;
+  /* A list whose machine has a handful of open states may be read as a board too (listInference.ts): the reader's
+     choice, kept in their browser per view, as a board's folds are. */
+  const boardable = Boolean(spec.asBoard && !spec.presentation && !embedded && !inDashboard);
+  const [layout, setLayout] = useListLayout(spec.id, boardable);
+  const presented = boardable && layout === 'board' ? spec.asBoard : spec.presentation;
   const client = useQueryClient();
   const table = findTable(entry.table) as TableMeta | undefined;
   const tabs = shownTabs(spec);
@@ -370,7 +377,8 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   const isDefault = canonicalize(entry.query) === canonicalize(appListQuery(spec, 0));
   const exactTab = litTab >= 0 && canonicalize(refinement) === canonicalize(tabs[litTab].query ?? '');
   const offerSave = savable && !(isDefault || exactTab || yourLit >= 0 || !refinement);
-  const gridTab = tabs.findIndex((_, i) => squeeze(appListQuery(spec, i)) === squeeze(entry.query));
+  /* A board reads no total (TableRoom.tsx): its tab's badge is counted with the others. */
+  const gridTab = presented?.kind === 'board' ? -1 : tabs.findIndex((_, i) => squeeze(appListQuery(spec, i)) === squeeze(entry.query));
   /* The badges not already on screen: the grid's own total answers the tab
      it shows, so that one is never asked twice (and a list whose grid is
      still loading does not ask again once it lands). */
@@ -500,6 +508,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
             ...(recordLabel(table) && labelPath(table) ? [labelPath(table)!] : []),
             ...(spec.order ? [spec.order] : []),
             ...subtitleColumns(entry.table, [...chosen]),
+            ...[...chosen].flatMap((name) => (spec.subtitles && Object.hasOwn(spec.subtitles, name) ? [spec.subtitles[name]!] : [])),
             ...editedReferences(spec),
             ...(spec.opens ? [spec.opens] : []),
             ...(spec.group ? [spec.group] : []),
@@ -545,7 +554,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
       : undefined;
   /* A grouped grid's heads: one breakdown over what the conditions match, never a read per group (useGridGroups.ts). */
   const gridGroup = useGridGroups({
-    column: spec.presentation ? undefined : spec.group,
+    column: presented ? undefined : spec.group,
     table,
     query: entry.query,
     totals: spec.totals,
@@ -769,42 +778,44 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
         )}
         <BoardNewForm.Provider value={offersNew ? (spec.form ?? {}) : null}>
           <RowOpensContext.Provider value={rowOpens}>
-            <TableRoom
-              entry={gridEntry}
-              sizing={spec.sizing}
-              chrome={false}
-              summaries
-              inset={!inDashboard}
-              embedded={inDashboard}
-              hide={keptHide}
-              referenceLabels={referenceLabels}
-              totals={keptTotals}
-              {...(gridGroup ? { group: gridGroup } : {})}
-              density={spec.density}
-              /* A ⋯ with nothing a reader may run is a dead control and a reserved column; the App payload already says what they may run. */
-              rowActions={Boolean(
-                spec.rowActions && !spec.presentation && !embedded && mayRunAny(shell().app(), entry.table, spec.actions ?? []),
-              )}
-              editable={spec.presentation || embedded ? undefined : spec.editable}
-              inCrumbs={inCrumbs}
-              onResult={keptOnGrid}
-              presentation={embedded ? undefined : spec.presentation}
-              present={shell().present ?? undefined}
-              empty={
-                embedded ? undefined : narrowedPast ? (
-                  noMatches
-                ) : authoredEmpty ? (
-                  <ListEmpty spec={authoredEmpty} />
-                ) : (
-                  (nothingYet ?? tabEmpty)
-                )
-              }
-              actions={embedded ? undefined : spec.actions}
-              listLabel={caption}
-              order={embedded ? undefined : spec.order}
-              export={exportOff ? false : undefined}
-              interactive={embedded ? false : undefined}
-            />
+            <ListSubtitles.Provider value={spec.subtitles}>
+              <TableRoom
+                entry={gridEntry}
+                sizing={spec.sizing}
+                chrome={false}
+                summaries
+                inset={!inDashboard}
+                embedded={inDashboard}
+                hide={keptHide}
+                referenceLabels={referenceLabels}
+                totals={keptTotals}
+                {...(gridGroup ? { group: gridGroup } : {})}
+                density={spec.density}
+                /* A ⋯ with nothing a reader may run is a dead control and a reserved column; the App payload already says what they may run. */
+                rowActions={Boolean(
+                  spec.rowActions && !presented && !embedded && mayRunAny(shell().app(), entry.table, spec.actions ?? []),
+                )}
+                editable={presented || embedded ? undefined : spec.editable}
+                inCrumbs={inCrumbs}
+                onResult={keptOnGrid}
+                presentation={embedded ? undefined : presented}
+                present={shell().present ?? undefined}
+                empty={
+                  embedded ? undefined : narrowedPast ? (
+                    noMatches
+                  ) : authoredEmpty ? (
+                    <ListEmpty spec={authoredEmpty} />
+                  ) : (
+                    (nothingYet ?? tabEmpty)
+                  )
+                }
+                actions={embedded ? undefined : spec.actions}
+                listLabel={caption}
+                order={embedded ? undefined : spec.order}
+                export={exportOff ? false : undefined}
+                interactive={embedded ? false : undefined}
+              />
+            </ListSubtitles.Provider>
           </RowOpensContext.Provider>
         </BoardNewForm.Provider>
       </div>
@@ -815,6 +826,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
       embedded,
       inDashboard,
       spec,
+      presented,
       table,
       client,
       connection,
@@ -1018,6 +1030,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
               {/* The view's own verbs — how to ask, keep and forget the question —
               together at the bar's end, not strewn between the filters. */}
               <div className="applist-actions">
+                {boardable && <LayoutSwitch layout={layout} onChange={setLayout} label={say('layout', { caption })} />}
                 {railed && railNarrow && railProps && boxes.length > 0 && (
                   <button type="button" className="applist-toggle" aria-haspopup="dialog" onClick={() => setSheet(true)}>
                     {narrowed ? say('common.filters', { narrowed }) : say('common.filtersButton')}

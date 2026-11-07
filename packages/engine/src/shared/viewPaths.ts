@@ -125,6 +125,12 @@ export interface ViewDef {
   orderBy?: ViewOrder[];
   limit?: number;
   /**
+   * Each value of `by` (a path) its first `limit` rows in the view's order, as one statement: a board's lanes
+   * (adapter.ts lanesStatement, boardLanes.ts). The page then cuts across the lanes, the first of each before any
+   * second. Set by the run route for a board, never by a request's view.
+   */
+  lanes?: { by: string; limit: number };
+  /**
    * The view written down, in the same language.
    *
    * When present it is the definition and the structure above is derived from

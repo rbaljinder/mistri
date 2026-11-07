@@ -740,6 +740,9 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
     );
   };
 
+  /* A calendar set in a dashboard or a page that has nothing in its span is one line under its head, not a month of empty
+     days: the grid is the room's, where a day is a place to add or move to. Its head keeps the way to another month. */
+  const bare = !interactive && !answer.isPending && !answer.isError && !answer.data?.rows.length && !spans.length;
   const body = answer.isError ? (
     <p className="calendar-note" role="alert">
       {(answer.error as Error).message}
@@ -748,7 +751,7 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
     <p className="calendar-note" role="status">
       {sayCopy(span === 'week' ? 'loadingTheWeek' : span === 'day' ? 'loadingTheDay' : 'loadingTheMonth')}
     </p>
-  ) : timed && !phone ? (
+  ) : bare ? null : timed && !phone ? (
     <CalendarTimeGrid
       days={periodDays}
       records={timedRecords}

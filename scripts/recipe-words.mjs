@@ -83,7 +83,7 @@ function typeRolesSchema() {
     type: 'object',
     additionalProperties: false,
     description:
-      'Each kind of text by what it is for, saying only what differs from the look. Body, data, label and nav text has no size of its own: it follows type.base.',
+      'Each kind of text by what it is for, saying only what differs from the look. Body, data and nav text has no size of its own: it follows type.base; a label’s may be set a step either side of it.',
     properties,
   };
 }

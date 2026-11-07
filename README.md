@@ -11,13 +11,14 @@ App from it: the pages, the sign-in, the access rules and the API. It is at the
 1.0 release candidate stage; the [changelog](CHANGELOG.md) has each release.
 
 ```bash
-npm create mistri my-app                     # a starter App with its own SQLite database
+npm create mistri@next my-app                # a starter App with its own SQLite database
 cd my-app && npm install
 npx @mistriwork/mistri dev                   # serve it; a save reloads it
 npx @mistriwork/mistri check --app .         # schema types, typecheck and validation, as CI runs them
 ```
 
-Node 24 or newer.
+Node 24 or newer. Until 1.0.0 ships, npm's `latest` tag is a placeholder: install
+the release candidate as `@next` (`npm create mistri@next`, `npm install @mistriwork/mistri@next`).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/src/assets/home/hero-dark.webp" />
@@ -98,7 +99,7 @@ prompt to hand over and the acceptance rubric, is
 **1. Install** the package, the skill and the browser, in the project folder:
 
 ```bash
-npm init -y && npm install @mistriwork/mistri typescript
+npm init -y && npm install @mistriwork/mistri@next typescript
 npx @mistriwork/mistri agent init        # writes .claude/skills/mistri/, .agents/skills/mistri/ and a block in AGENTS.md
 npm install --save-dev playwright && npx playwright install --only-shell chromium
 ```
@@ -172,10 +173,10 @@ In an empty folder:
 
 ```bash
 npm init -y && npm pkg set type=module
-npm install @mistriwork/mistri typescript @types/node
+npm install @mistriwork/mistri@next typescript @types/node
 ```
 
-and a `tsconfig.json` (the one `npm create mistri` writes):
+and a `tsconfig.json` (the one `npm create mistri@next` writes):
 
 ```json title="tsconfig.json"
 {

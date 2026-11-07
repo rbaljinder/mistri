@@ -89,5 +89,5 @@ export function MaskedField({ mask, value, onChange, ...rest }: MaskedFieldProps
 
 /** Whole money, drawn `$2,500` (or `25,000` with `symbol=""`). The value is the digits. */
 export function MoneyField({ symbol = '$', ...rest }: Omit<MaskedFieldProps, 'mask'> & { symbol?: string }): ReactNode {
-  return <MaskedField {...rest} mask={masks.money(symbol)} />;
+  return <MaskedField kind="money" {...rest} mask={masks.money(symbol)} />;
 }

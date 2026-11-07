@@ -88,7 +88,7 @@ function withPalettes(look: HouseLook): ThemeSpec {
     The title weight (`type.roles.title.weight`) is never past 700: a heavier
     ask resolved a book face to its Black cut, a masthead where a title was
     meant, and broke the record's head. Mono titles at 700; Lumen's and Sage's
-    softer titles at 600; Workshop's condensed capitals at 700.
+    softer titles at 600; Workshop's condensed bold at 700.
 
     Each wears every palette in lookPalettes.ts; its own colors are its
     default palette's (Workshop's Safety orange, Lumen's Cobalt, Mono's and
@@ -96,30 +96,40 @@ function withPalettes(look: HouseLook): ThemeSpec {
     book's own deep green). */
 const HOUSE: readonly HouseLook[] = [
   {
-    // The desk as a workbench, ported from a field report's theme: warm paper,
-    // ink-black type and fills, and one restrained hue — Safety orange unless
-    // a palette says another. The hue reaches only the marks a reader takes
-    // for the brand color: the primary verb (the ink's words on it, as a
-    // hazard tag prints them), links and the current tab's rule, a 3px marker
-    // beside the menu's ink block (like a tool's slot on a pegboard), the
-    // focus ring, a checked box and the first chart series. Fills, rules and
-    // selection stay the ink, and nothing is tinted. Titles, section heads
-    // and labels are Barlow's semi-condensed bold in capitals, the rest
-    // Barlow; heavy 2px ink rules part the sections and stand under a
-    // table's heads, corners are near-square and nothing floats; the menu
-    // sits on a faint grain (workshopLook.css; docs/design.md, Workshop).
+    // The desk as a workbench, ported from a field report's theme, and
+    // refreshed in rc.18 so the work sits on white: the warm paper and its
+    // grain frame it (the top bar, the menu and one band behind a page's
+    // head: a list's title, tabs and filters, a record's trail, name and
+    // facts), as a sheet is clipped to a board, and rows, fields and cards
+    // stay white. Ink-black type and one restrained hue — Safety orange
+    // unless a palette says another. The hue reaches only the marks a reader
+    // takes for the brand color: the primary verb, filled, with the ink's
+    // words on it as a hazard tag prints them (the look's one idea), links
+    // and the current tab's rule, a 3px marker beside the menu's current
+    // entry (like a tool's slot on a pegboard), the focus ring, a checked
+    // box and the first chart series. The current entry is a soft tint of
+    // the menu's ink, by day and by night: the brightest thing on a screen
+    // is the orange verb, never the menu. Barlow's semi-condensed bold sets
+    // the titles, in sentence case, a stat's figures and the App's name, the
+    // one word in capitals (the brand's stamp); sections, tabs, column heads
+    // and labels are Barlow in sentence case, the labels in the muted ink.
+    // Hairlines part the sections and close a table's heads, corners are
+    // near-square and nothing floats (workshopLook.css; docs/design.md,
+    // Workshop).
     id: 'workshop',
     label: 'Workshop',
     defaultPalette: 'safety',
     colors: {
       light: {
-        ground: '#f2ede3',
-        surface: '#faf8f3',
-        raised: '#ece6da',
+        // White to work on; the paper (#f2ede3) is the frame's: the menu, the bar and the band behind a page's head,
+        // which is the raised ground (recipes.header 'band'), so a hovered row is the paper too.
+        ground: '#fbfaf7',
+        surface: '#ffffff',
+        raised: '#f2ede3',
         ink: '#1b1813',
         inkMuted: '#4f483d',
         inkSubtle: '#5f574b',
-        line: '#ddd5c6',
+        line: '#e6e1d8',
         lineStrong: '#8b8274',
         lineControl: '#7d7466',
         accentInk: '#1b1813',
@@ -129,54 +139,65 @@ const HOUSE: readonly HouseLook[] = [
         shadow: '#3a3020',
         status: { good: '#106b38', warning: '#934a06', critical: '#c52a2a', info: '#2f5578' },
         nav: {
-          ground: '#ebe5d9',
+          ground: '#f2ede3',
           ink: '#1b1813',
           muted: '#4f483d',
           line: '#d8cfbe',
           accent: '#1b1813',
+          // The current entry: the ink at 7% over the paper, in the ink, its orange slot kept (workshopLook.css).
+          current: '#e3ded4',
+          onCurrent: '#1b1813',
         },
-        rules: { section: '#1b1813', head: '#1b1813' },
+        // Hairlines, not 2px of ink: a section and a table's heads stand on the rule a row does.
+        rules: { section: '#e6e1d8', head: '#e6e1d8' },
         chart: ['#2b2620', '#9a6cf7', '#0e9a6c', '#d97706', '#e0428a', '#0e8fb0', '#a3510b', '#94a3b8'],
       },
       dark: {
-        ground: '#15130f',
-        surface: '#1d1a15',
-        raised: '#26221c',
+        ground: '#121110',
+        surface: '#1a1917',
+        raised: '#24221f',
         ink: '#efe9de',
         inkMuted: '#c2b9aa',
         inkSubtle: '#a59c8d',
-        line: '#2f2a22',
+        line: '#2c2a26',
         lineStrong: '#6d6555',
         lineControl: '#7a7262',
         accentInk: '#efe9de',
-        accentSoft: '#2c261e',
+        accentSoft: '#2a2723',
         primary: '#efe9de',
         link: '#efe9de',
         status: { good: '#4ade80', warning: '#fbbf24', critical: '#f87171', info: '#91a8ff' },
         nav: {
-          ground: '#110f0c',
+          ground: '#0f0e0d',
           ink: '#efe9de',
           muted: '#b3aa9b',
-          line: '#26221c',
+          line: '#24221f',
           accent: '#efe9de',
+          // The ink at 10% over the menu's ground, not the inverted cream block, which was the brightest thing on a
+          // screen at night.
+          current: '#252422',
+          onCurrent: '#efe9de',
         },
-        rules: { section: '#8a8170', head: '#8a8170' },
+        rules: { section: '#2c2a26', head: '#2c2a26' },
         chart: ['#d9d0c0', '#9a78ec', '#12a678', '#c88317', '#e0559b', '#1597b9', '#d26b3b', '#6b7694'],
       },
     },
     shape: {
       radius: { control: '2px', field: '2px', pill: '2px', panel: '2px' },
       elevation: 'flat',
-      border: { panel: '1px', rule: '2px' },
+      border: { panel: '1px', rule: '1px' },
     },
     type: {
       font: { ui: BARLOW, data: BARLOW, heading: BARLOW_CONDENSED },
       base: '14px',
       roles: {
-        title: { face: 'heading', size: '30px', weight: 700, case: 'upper', tracking: '0.01em', leading: 1.1 },
-        heading: { face: 'heading', size: '22px', weight: 700, case: 'upper', tracking: '0.01em' },
-        section: { face: 'heading', size: '15px', weight: 700, case: 'upper', tracking: '0.04em' },
-        label: { face: 'heading', weight: 700, case: 'upper', tracking: '0.06em' },
+        // A page still names itself in the workshop's voice, the condensed bold, in sentence case.
+        title: { face: 'heading', size: '28px', weight: 700, case: 'none', tracking: '0em', leading: 1.15 },
+        heading: { face: 'heading', size: '23px', weight: 700, case: 'none', tracking: '0em' },
+        section: { face: 'ui', size: '15px', weight: 600, case: 'none', tracking: '0em' },
+        // A step under the base, in the semibold the look already ships: Barlow comes at 400 and 600 only, so a 500
+        // drew at 400, as loud as the values under it. The muted ink (parts below) keeps the 600 quieter than a value.
+        label: { face: 'ui', size: '12px', weight: 600, case: 'none', tracking: '0em' },
         data: { features: ['tnum'] },
         figure: { face: 'heading', size: '38px', weight: 700, features: ['tnum'] },
         nav: { weight: 500 },
@@ -191,7 +212,8 @@ const HOUSE: readonly HouseLook[] = [
       bar: 'ruled',
       tabs: 'rule',
       windows: 'segmented',
-      stat: 'ruled',
+      // One divided strip of figures, not a 2px ink rule over each.
+      stat: 'divided',
       section: 'open',
       fields: 'open',
       table: 'open',
@@ -199,14 +221,17 @@ const HOUSE: readonly HouseLook[] = [
       board: 'ruled',
       chart: 'plain',
       buttons: 'keyed',
+      // A filter not yet asked for is a key on a solid edge, as the search beside it is, not a dashed place.
+      filters: 'solid',
       links: 'plain',
-      rules: 'ink',
+      rules: 'hairline',
       avatar: 'plain',
       workflow: 'markers',
       banner: 'plain',
       steps: 'strip',
       lanes: 'tag',
-      header: 'plain',
+      // The paper under a page's head: the frame reaches the title, tabs and filters, and the rows start on white.
+      header: 'band',
     },
   },
   {
@@ -312,6 +337,7 @@ const HOUSE: readonly HouseLook[] = [
       board: 'strip',
       chart: 'line',
       buttons: 'raised',
+      filters: 'quiet',
       rules: 'hairline',
       avatar: 'round',
       workflow: 'markers',

@@ -192,6 +192,8 @@ describe('mistri check --json', () => {
       'components error component-markup components.loud 2',
       'design warning default-shell ui.shell 0',
     ]);
+    // The Workbench's undo journal is not the App's to provision: its notice is run narration, never a finding.
+    assert.ok(!problems.some((problem) => /undo-journal/.test(problem.message)), 'no finding names the undo-journal store');
     assert.match(problems[0].message, /`complted` is not a column of task/);
     const typo = problems[2];
     assert.equal(typo.file, join(dir, 'app.ts'));

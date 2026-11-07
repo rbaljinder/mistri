@@ -15,9 +15,20 @@ import { buildWhere, type Filter, type SqlStyle } from './filter.js';
    caller that asks for too many gets the ceiling, and a caller that sends
    nonsense gets the default rather than `LIMIT NaN`. */
 
+/** What a lanes read (`lanes: { by, limit }`, adapter.ts lanesStatement, view.ts compileView) numbers each row by
+    within its lane: no column of a result is called it, and it never leaves the server. */
+export const LANE_ROW = 'mistri_lane_row';
+
 /** What a caller gets when it does not say. Small on purpose: the first page
     of a browse should be instant, and paging is one click. */
 export const DEFAULT_LIMIT = 20;
+
+/** The rows a list page holds until the reader chooses another size. Fifty fills a tall desktop's grid (about thirty
+    rows at a comfortable height) so a first look needs no paging, and is still one cheap read. It is a constant, not
+    the viewport's row count, because the server draws a list's first page before it knows the window: a size the
+    browser alone chose would ask a different question than the page carried and read it again. The API's own default
+    stays `DEFAULT_LIMIT`. */
+export const LIST_PAGE_SIZE = 50;
 
 /** The hard ceiling. Nothing may exceed it, including an explicit request. */
 export const MAX_LIMIT = 100_000;

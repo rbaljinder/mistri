@@ -124,8 +124,14 @@ export interface PageFields {
   actions?: PageHeadlineAction[];
   /** A headline's second figure, under the first and smaller: an estimate, a unit price. */
   subfigure?: string;
-  /** A headline's line under its figure, read from a column of the record: an income's frequency. */
+  /** A headline's line under its figure, read from a column of the record: an income's frequency. On an inferred
+      page's header (pageAnatomy.ts), the line under the record's name, its name column's own `subtitle`; an
+      authored `header()` has no such key. */
   subtitle?: string;
+  /** On an inferred page's header (pageAnatomy.ts), a fact path → the path its value runs until: the fact is said as
+      one range ("Sep 13, 2026, 2:00 – 4:00 PM"), the end never repeating the start's day, and the end is no fact of its
+      own. An authored `header()` has no such key. */
+  spans?: Record<string, string>;
   /** A headline's earlier value of its figure — a was-price — struck through beside it when it has one above the figure. */
   was?: string;
   /** A headline's line of small print under its actions: what the figures assume. */
@@ -865,6 +871,17 @@ export interface PageDef {
 
 /** Rows a list section shows before it needs a page of its own. */
 export const DEFAULT_PAGE_LIST_LIMIT = 10;
+
+/**
+ * The page an App draws for a resource it declared none for (pageAnatomy.ts, inferredSections): only it counts its
+ * related tabs, ends them with the history and dresses its fields as a classic form, so a page an author wrote is
+ * drawn exactly as written. The Workbench's suggested pages are the schema's own and keep their dress.
+ */
+export const isInferredPage = (page: { id?: string } | undefined, app: boolean): boolean =>
+  app && Boolean(page?.id?.startsWith('suggested:'));
+
+/** The address word of an inferred page's history tab (PageSections.tsx, recordReads.ts drawnSections). */
+export const HISTORY_TAB = 'history';
 
 /** Sections one screen of a page may draw: in each region, those in no tab and the largest tab's. A page is a
     screen, not a report; a record's tabs are more screens of it, so they are counted one at a time. */

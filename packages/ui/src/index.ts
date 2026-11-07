@@ -6,7 +6,7 @@
  * itself).
  */
 export { Button, buttonClass, type ButtonIntent, type ButtonSize } from './Button.js';
-export { Field, type FieldControlProps } from './Field.js';
+export { Field, type AnswerKind, type FieldControlProps } from './Field.js';
 export { Modal, type ModalHandle } from './Modal.js';
 export { DropMenu, DropGroup, DropItem, DropSeparator } from './DropMenu.js';
 export {

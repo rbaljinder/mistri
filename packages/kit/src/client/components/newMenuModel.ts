@@ -9,7 +9,8 @@ import { findTable, go, pageView, tableView } from '../core.js';
 import { canInsert } from '../insert.js';
 import { newMenuEntries, type NewMenuEntry } from '@mistriwork/engine/shared/servedApp.js';
 import { appListQuery, newRecordNoun, type ListSpec } from './appListModel.js';
-import { formPageId, isListRoom, viewRoom, type ShownApp } from './appRooms.js';
+import { appMenu, appRooms, formPageId, isListRoom, viewRoom, type ShownApp } from './appRooms.js';
+import { navigationPaths } from './navigationTree.js';
 import { say } from '../copy/shell/components/newMenuModel.js';
 
 type NewMenuApp = Pick<ShownApp, 'views' | 'nav' | 'resources' | 'home' | 'ui' | 'grantedCommands'> & Partial<Pick<ShownApp, 'assistant'>>;
@@ -51,21 +52,58 @@ export function openNewEntry(app: NewMenuApp, entry: NewMenuEntry): void {
   go(pageView(formPageId(entry.view), undefined, undefined, room && 'label' in room ? room.label : entry.label), 'reset');
 }
 
-/** The palette's words for a line: "New ticket" — a noun keeps its own case after the verb; a name like "SLA" keeps its capitals. */
+/** The palette's words for a list's line: "New ticket" — a noun keeps its own case after the verb; a name like "SLA" keeps its capitals. */
 const phrase = (entry: NewMenuEntry): string =>
   /^[A-Z][a-z]/.test(entry.label) ? entry.label.charAt(0).toLowerCase() + entry.label.slice(1) : entry.label;
+
+/** One create line as the palette lists it: its words, what a search matches, its mark, and what it opens. */
+interface NewPaletteItem {
+  kind: 'create';
+  label: string;
+  search: string;
+  icon?: string;
+  run: () => void;
+}
 
 /**
  * The same lines as the palette lists them, searchable ("new supplier"). The
  * palette (Palette.tsx) fetches this module when it opens over an App that
  * declares the menu, so none of this is in the first page.
+ *
+ * A list's line is "New ticket", the verb its button says. A form's line is the
+ * command's own words ("Post this month's rent"): putting "New" before a verb
+ * made "New post this month's rent". Both are found by "new …", as the menu's
+ * button is the thing people reach for.
  */
-export function newPaletteItems(
-  app: NewMenuApp | null | undefined,
-): Array<{ kind: 'action'; label: string; search: string; run: () => void }> {
+export function newPaletteItems(app: NewMenuApp | null | undefined): NewPaletteItem[] {
   if (!app) return [];
-  return appNewEntries(app).map((entry) => {
-    const label = say('newThing', { thing: phrase(entry) });
-    return { kind: 'action', label, search: label, run: () => openNewEntry(app, entry) };
+  return (app.ui.shell?.new?.length ? appNewEntries(app) : listedNewEntries(app)).map((entry) => {
+    const made = say('newThing', { thing: phrase(entry) });
+    const label = entry.table === undefined ? entry.label : made;
+    return {
+      kind: 'create',
+      label,
+      search: label === made ? made : `${label} ${made}`,
+      ...(entry.icon === undefined ? {} : { icon: entry.icon }),
+      run: () => openNewEntry(app, entry),
+    };
+  });
+}
+
+/**
+ * Where the App declares no New menu, what its lists offer: one line per table, the first list of it in the menu's
+ * order — the New its list's own button says ("New visit"), where this reader may add to it. A palette over an App
+ * with seven lists and a New button on each offered none of them, so "new visit" found nothing.
+ */
+function listedNewEntries(app: NewMenuApp): NewMenuEntry[] {
+  const menu = navigationPaths(appMenu(app)).map(({ entry }) => entry);
+  const rooms = [...menu, ...appRooms(app).filter((room) => !menu.some((listed) => listed.id === room.id))];
+  const tables = new Set<string>();
+  return rooms.flatMap((room): NewMenuEntry[] => {
+    if (('error' in room && room.error) || !isListRoom(room) || tables.has(room.table)) return [];
+    tables.add(room.table);
+    if (!canInsert(findTable(room.table), true)) return [];
+    const noun = lineCase(newRecordNoun(room as ListSpec, findTable(room.table)?.name ?? room.table));
+    return [{ view: room.id, table: room.table, label: noun, ...(room.icon ? { icon: room.icon as NewMenuEntry['icon'] } : {}) }];
   });
 }

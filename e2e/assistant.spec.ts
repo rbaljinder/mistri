@@ -219,8 +219,9 @@ test('the open record is the context: a summary, then a proposed edit applied on
 
 test('“log a call” is a New form filled in, which the person completes and adds', async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
-  const [deal] = read<{ id: number; name: string }>(
-    "SELECT id, name FROM opportunity WHERE stage NOT IN ('closed_won', 'closed_lost') ORDER BY id LIMIT 1",
+  const [deal] = read<{ id: number; name: string; account: string }>(
+    `SELECT o.id, o.name, a.name AS account FROM opportunity o JOIN account a ON a.id = o.account_id
+     WHERE o.stage NOT IN ('closed_won', 'closed_lost') ORDER BY o.id LIMIT 1`,
   );
   const before = read<{ n: number }>('SELECT count(*) AS n FROM activity WHERE opportunity_id = ?', deal.id)[0].n;
   await page.goto(`${origin}/opportunities/${deal.id}`);
@@ -232,8 +233,10 @@ test('“log a call” is a New form filled in, which the person completes and a
   await card.getByRole('button', { name: 'Review and confirm' }).click();
   const form = page.getByRole('dialog', { name: 'New activity' });
   await expect(form.getByRole('textbox', { name: 'Subject' })).toHaveValue('Call about the deal');
+  /* The deal's own account: the form narrows the deal by the account picked before it, and another account's pick
+     would rightly empty the deal the proposal gave. */
   for (const [field, words] of [
-    ['Account', 'a'],
+    ['Account', deal.account],
     ['Rep', 'a'],
   ]) {
     const box = form.getByRole('combobox', { name: field });

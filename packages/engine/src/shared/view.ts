@@ -45,7 +45,7 @@ import {
   type SqlFragment,
   type SqlStyle,
 } from './filter.js';
-import { clampLimit, clampOffset, countStatement } from './reads.js';
+import { clampLimit, clampOffset, countStatement, LANE_ROW } from './reads.js';
 import {
   aggregateInput,
   declaredOrder,
@@ -472,8 +472,44 @@ export function compileView(
 
   const limit = clampLimit(view.limit);
   const skip = clampOffset(offset);
+  /* A board's lanes: the partition's path is planned with the rest, before the joins are frozen. */
+  const lanes = view.lanes ? { by: qualify(view.lanes.by), most: clampLimit(view.lanes.limit) } : undefined;
   const joins = plan.clauses();
   const prefix = relations.finish();
+  if (lanes) {
+    /* The order is the window's, and so comes first in the statement: its parameters are numbered before the WHERE's. */
+    const within = orderClauseSql(order, style, prefix.params.length + 1);
+    const filtered = buildWhere(
+      conditions,
+      style,
+      prefix.params.length + within.params.length + 1,
+      qualify,
+      qualify,
+      membership,
+      exists,
+      false,
+      typeOf,
+    );
+    const n = prefix.params.length + within.params.length + filtered.params.length;
+    const [outer, number] = [style.quote('lanes'), style.quote(LANE_ROW)];
+    const inner = [
+      `SELECT ${select.join(',\n       ')},\n       ROW_NUMBER() OVER (PARTITION BY ${lanes.by}${within.text}) AS ${number}`,
+      `  FROM ${baseRelation} ${style.quote(plan.baseAlias)}`,
+      ...joins,
+      ...(filtered.text ? [filtered.text] : []),
+    ];
+    return {
+      text:
+        prefix.text +
+        `SELECT ${columns.map((column) => `${outer}.${style.quote(column.name)}`).join(', ')}\n  FROM (\n${inner.join('\n')}\n) AS ${outer}` +
+        ` WHERE ${outer}.${number} <= ${style.placeholder(n + 1)} ORDER BY ${outer}.${number}` +
+        ` LIMIT ${style.placeholder(n + 2)} OFFSET ${style.placeholder(n + 3)}`,
+      params: [...prefix.params, ...within.params, ...filtered.params, lanes.most, limit, skip],
+      columns,
+      joins: plan.joins,
+      limit,
+    };
+  }
   /* The other side of a column comparison is a path like any other: resolved
      against this catalog, so a reader's pruned graph refuses one it may not
      read exactly as it refuses the left. */
@@ -744,7 +780,9 @@ export function parseViewQuery(
     },
     columns: query.columns,
     orderBy: query.orderBy.map((o) =>
-      aliases.has(o.column) ? { path: o.column, direction: o.direction, alias: true } : { path: o.column, direction: o.direction },
+      aliases.has(o.column)
+        ? { path: o.column, direction: o.direction, alias: true }
+        : { path: o.column, direction: o.direction, ...(o.nulls ? { nulls: o.nulls } : {}) },
     ),
     limit: query.limit,
     errors,

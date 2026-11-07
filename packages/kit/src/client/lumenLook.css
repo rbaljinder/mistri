@@ -358,16 +358,9 @@
   :root[data-look-section='card'] .page-section-title .dash-section-icon {
     color: var(--ink-muted);
   }
-  /* "View all" in the accent's link ink, with its arrow. */
+  /* "View all" in the muted ink with its arrow (features.css), a step smaller in a card. */
   :root[data-look-section='card'] .dash-open {
-    color: var(--link);
-    font-weight: 600;
     font-size: var(--text-sm);
-    text-decoration: none;
-  }
-  :root[data-look-section='card'] .dash-open:hover {
-    text-decoration: underline;
-    text-underline-offset: 3px;
   }
 
   /* A stat card: its mark in a tinted circle, the label beside it, the figure
@@ -962,14 +955,16 @@
   :root[data-look-buttons='raised'] .applist-search-input:focus {
     background: var(--surface);
   }
-  :root[data-look-buttons='raised'] .applist-add {
+  /* `filters: 'quiet'`: a filter not yet asked for has no edge until a pointer is over it. Its own recipe, worn by
+     Lumen beside its raised buttons, so a theme may pick either without the other. */
+  :root[data-look-filters='quiet'] .applist-add {
     height: 30px;
     padding: 0 var(--space-3);
     border: 1px solid transparent;
     color: var(--ink-muted);
     font-weight: 500;
   }
-  :root[data-look-buttons='raised'] .applist-add:is(:hover, [aria-expanded='true']) {
+  :root[data-look-filters='quiet'] .applist-add:is(:hover, [aria-expanded='true']) {
     border-color: transparent;
     background: var(--raised);
     color: var(--ink);
@@ -1705,12 +1700,14 @@
   /* ---------- Meaning, quiet ---------- */
   /* A status is a dot and its word, the word in the ink: only the dot is coloured, so "Collected" and "Waiting
      on parts" weigh the same until one needs a hand. What asks for attention (warn, bad) says its word in its
-     colour too; a neutral value's dot is grey and its word keeps the cell's weight, so the column scans. */
+     colour too; a neutral value's dot is grey and its word keeps the cell's weight, so the column scans. Every
+     look that draws a dot now says this in a cell and a field (themeFamilies.css); `quiet` says it everywhere
+     a tone is drawn, with the smaller dot. */
   html:root[data-look-status='quiet'] .tone:not(.record-tag, .tone-neutral) {
     --tone-dot: var(--status-info);
     gap: 7px;
     color: var(--ink);
-    font-weight: 500;
+    font-weight: 400;
   }
   html:root[data-look-status='quiet'] .tone.tone-neutral:not(.record-tag) {
     --tone-dot: color-mix(in srgb, var(--ink-subtle) 50%, var(--surface));

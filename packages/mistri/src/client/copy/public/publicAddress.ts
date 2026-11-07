@@ -4,4 +4,5 @@ import { defineMessages } from '@mistriwork/kit/client/messages.js';
 export const say = defineMessages({
   notifications: 'Notifications',
   assistant: 'Assistant',
+  allPages: 'All pages',
 });

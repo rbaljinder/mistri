@@ -59,6 +59,9 @@ makes the picture sharper without changing the layout.
 | `calendar-address` | Records are addressed under a calendar or board | `view: 'the-grid'` on the resource |
 | `default-shell` | No look, no logo, a flat menu or table icons | `ui.theme`, `ui.logo`, `navGroup`, `icon:` |
 | `repeated-query` | The same query written in two places or more over one resource | `segments: { open: 'status is open' }`, then `'open'` in each place; `--fix` lifts one whose name reads off its condition |
+| `list-shows-key` | A list's columns show the number the database handed out (`id`), which no reader quotes | leave it out of `show`; a record is opened by its name. A key the App dresses as the name (`recordLabel: 'SO-{id}'`) is quoted, and says nothing |
+| `unnamed-records` | A listed resource has no name column, or only one a record may leave blank or a paragraph, so the App titles its records by what it can find: their parent and day, else noun and number | `recordLabel: '{job_id.title} · {starts_at}'`, or the column people call it by |
+| `new-asks-stamp` | A New form names a field the database or the machine writes: a stamp with a default, a sequence's number, a state's own `completed_at` | leave it out of the form; it stays on the record, editable there |
 
 ## Measured in a browser: mistri grade
 

@@ -607,6 +607,30 @@ test("stars, a scanned code and a color are the platform's own inputs, a time it
   });
 });
 
+test("a short answer says its kind so the form sizes it by the data; text, a choice, a rating and an App's own input take the column", () => {
+  const fields: AppCommandField[] = [
+    { name: 'note', label: 'Note', type: 'text' },
+    { name: 'seats', label: 'Seats', type: 'number', integer: true },
+    { name: 'amount', label: 'Amount', type: 'money' },
+    { name: 'day', label: 'Day', type: 'date' },
+    { name: 'starts', label: 'Starts', type: 'datetime' },
+    { name: 'opens', label: 'Opens', type: 'time' },
+    { name: 'score', label: 'Score', type: 'number', as: 'rating', integer: true, min: 1, max: 4, outOf: 4 },
+  ];
+  const { container } = render(
+    <CommandFields
+      fields={fields}
+      values={blankCommandValues(fields)}
+      idPrefix="k"
+      identityEpoch={1}
+      isCurrent={() => true}
+      onChange={() => {}}
+    />,
+  );
+  const kinds = [...container.querySelectorAll('.command-field')].map((field) => field.getAttribute('data-kind'));
+  expect(kinds).toEqual([null, 'number', 'money', 'date', 'datetime', 'time', null]);
+});
+
 test('a lines field starts with one blank line, sends only what a line asks, typed, and names a bad cell by its row and column', async () => {
   // A cell's kind and its words arrive with the grid (CommandLines.tsx), which a form asking lines has drawn.
   await loadLines();

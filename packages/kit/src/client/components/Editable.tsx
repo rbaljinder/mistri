@@ -275,7 +275,7 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
   /* A document is not a line of text: a box would show `[object Object]`
      and stage it back over the value. JSON is read here, never edited. */
   const json = jsonValueOf(column, value);
-  if (json) return <JsonView value={json.value} />;
+  if (json) return <JsonView value={json.value} label={column.name} />;
 
   const onEdit = (next: string) => {
     if (applying || column.writable === false || column.changesBy === 'actions' || !editorCurrent(isCurrent)) return;

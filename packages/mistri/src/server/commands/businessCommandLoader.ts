@@ -45,7 +45,20 @@ export async function loadBusinessCommands(file: string): Promise<BusinessComman
     // A declaration refusal names the command and the rule it broke: said as it is.
     return defineCommands(module.default as Parameters<typeof defineCommands>[0]);
   } catch (error) {
-    if (error instanceof BusinessCommandDefinitionError && /^Command registry |must be created with defineCommand/.test(error.message)) {
+    if (error instanceof BusinessCommandDefinitionError && /must be created with defineCommand/.test(error.message)) {
+      /* Loaded as CommonJS, the module's `import { defineCommand }` became a require of a second copy of mistri, whose
+         commands this copy does not know: "must be created with defineCommand" sent an external assessment to look
+         for a command written without it. Said as the module type, with the fix, where that is the cause. */
+      const { commonJsReason } = await import('../cli/projectSetup.js');
+      const reason = commonJsReason(file) ?? (Object.hasOwn(module, 'module.exports') ? 'Node read it so' : undefined);
+      if (reason) {
+        throw new BusinessCommandDefinitionError(
+          `The commands module "${basename(file)}" was loaded as CommonJS (${reason}), so the defineCommand it imported is a second copy of mistri whose commands this server does not know. Make it an ES module: set "type": "module" in the App's package.json (npm pkg set type=module), or name the file ${basename(file).replace(/\.[^.]+$/, '')}.mts.`,
+        );
+      }
+      throw new BusinessCommandDefinitionError(`${shape}. ${error.message}`);
+    }
+    if (error instanceof BusinessCommandDefinitionError && error.message.startsWith('Command registry ')) {
       throw new BusinessCommandDefinitionError(`${shape}. ${error.message}`);
     }
     throw error;

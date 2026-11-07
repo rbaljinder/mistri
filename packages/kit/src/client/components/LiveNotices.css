@@ -24,6 +24,9 @@
   max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font: var(--text-xs)/16px var(--sans); color: var(--ink-muted);
 }
+/* Under an App's trail that row keeps no height (page.css): the words stand at its end in the room between the
+   trail's rule and the name, still out of flow. */
+.page-head.has-trail .live-updated { top: auto; bottom: var(--space-1); transform: none; }
 
 /* In a draft's bar beside the fields (a dialog, a board's card), a row of its own across it. */
 .live-notice {

@@ -7,7 +7,7 @@
 import { useRef, useState } from 'react';
 import { currentEntry, go, state } from '@mistriwork/kit/client/core.js';
 import { syncHash } from '@mistriwork/kit/client/url.js';
-import { FavoriteStar } from '@mistriwork/kit/client/components/FavoriteStar.js';
+import { DashHead } from '@mistriwork/kit/client/components/DashHead.js';
 import { ErrorBoundary } from '@mistriwork/kit/client/components/ErrorBoundary.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { pagePlace, rootSlot, type DashboardDef } from '@mistriwork/kit/client/components/dashboardModel.js';
@@ -75,13 +75,7 @@ export function FreePage({
   };
   return (
     <>
-      <div className="applist-head dash-head">
-        <h1 className={`applist-title${dashboard.headingHidden ? ' visually-hidden' : ''}`}>{dashboard.heading ?? dashboard.label}</h1>
-        {dashboard.favorite && (
-          <FavoriteStar favorite={{ kind: 'view', view: dashboard.id, label: dashboard.label }} name={dashboard.label} />
-        )}
-        {dashboard.description && <p className="note dash-description">{dashboard.description}</p>}
-      </div>
+      <DashHead dashboard={dashboard} />
       {/* The page's one component, on the page's own body: it is not a dashboard's tile, so no look's tray frames it. */}
       <div className="page-body free-page-body">
         <section className="page-section width-full">

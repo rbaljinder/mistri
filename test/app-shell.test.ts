@@ -8,6 +8,7 @@ import {
   SHELL_GUTTERS,
   SHELL_WIDTHS,
   SHELL_HEADER_WIDTHS,
+  SHELL_HEADERS,
   type AppDef,
   type AppListView,
   type AppShell,
@@ -144,6 +145,23 @@ test('shell accepts exactly the declared object shape and enum strings', () => {
   assert.throws(() => parse({ ui: { shell: { placement: false } } }), /shell\.placement must be one of/);
   // One way to have no menu: an App without nav. The switch that said it again is refused by name.
   assert.throws(() => parse({ ui: { shell: { menu: false } } }), /ui\.shell has "menu", which is gone: an App with no "nav" has no menu/);
+});
+
+test("the bar stands across the window or in the sidebar's head, which needs the side and its rail", () => {
+  assert.deepEqual([...SHELL_HEADERS], ['bar', 'sidebar']);
+  for (const header of SHELL_HEADERS) assert.deepEqual(parse({ ui: { shell: { header } } }).ui.shell, { header });
+  assert.deepEqual(parse({ ui: { shell: { placement: 'side', rail: true, header: 'sidebar' } } }).ui.shell, {
+    placement: 'side',
+    rail: true,
+    header: 'sidebar',
+  });
+  assert.throws(() => parse({ ui: { shell: { header: 'top' } } }), /ui\.shell\.header must be one of: bar, sidebar/);
+  assert.throws(() => parse({ ui: { shell: { header: true } } }), /ui\.shell\.header must be one of/);
+  // Beside a top bar there is no sidebar to hold it; folded away whole, the mark, the search and the account would go too.
+  assert.throws(() => parse({ ui: { shell: { placement: 'top', header: 'sidebar' } } }), /needs the side placement/);
+  assert.throws(() => parse({ ui: { shell: { rail: false, header: 'sidebar' } } }), /remove rail: false/);
+  // The bar where it always was stays possible beside either.
+  assert.deepEqual(parse({ ui: { shell: { placement: 'top', header: 'bar' } } }).ui.shell, { placement: 'top', header: 'bar' });
 });
 
 test('sidebar is optional static presentation with a strict identity footer', () => {
@@ -299,7 +317,7 @@ test('JSON schema pins the exact shell shape, enums, and list-only filterBar', (
   // `placement` is where the nav sits, beside the shell's other settings.
   assert.deepEqual(
     Object.keys(definition.properties).sort(),
-    [...booleans, 'breadcrumbs', 'search', 'placement', 'rail', 'width', 'headerWidth', 'gutter', 'sidebar', 'new'].sort(),
+    [...booleans, 'breadcrumbs', 'search', 'placement', 'rail', 'header', 'width', 'headerWidth', 'gutter', 'sidebar', 'new'].sort(),
   );
   // The trail: true, false, or which of its parts a room reached from the menu keeps.
   const trail = definition.properties.breadcrumbs;
@@ -324,6 +342,9 @@ test('JSON schema pins the exact shell shape, enums, and list-only filterBar', (
   for (const key of booleans) assert.equal(definition.properties[key].type, 'boolean');
   // The header's search is a member's unless the App offers it to a signed-out visitor too.
   assert.deepEqual(definition.properties.search.anyOf, [{ enum: ['members', 'everyone'] }, { const: false }]);
+  // The bar in the sidebar's head, the default, or across the window.
+  assert.deepEqual(definition.properties.header.enum, [...SHELL_HEADERS]);
+  assert.equal(definition.properties.header.default, 'sidebar');
   assert.deepEqual(definition.properties.width.enum, [...SHELL_WIDTHS]);
   assert.deepEqual(definition.properties.headerWidth.enum, [...SHELL_HEADER_WIDTHS]);
   assert.deepEqual(definition.properties.gutter.enum, [...SHELL_GUTTERS]);

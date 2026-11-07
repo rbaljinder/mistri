@@ -124,8 +124,8 @@ for (const width of [1440, 390])
       const generic = await edit(page, 'Name');
       await generic.fill('Generic saved');
       await quiet(page, updates, 1);
-      // The heading holds the name editor now; leave through the page name above it.
-      await page.locator('.page-head .page-title').click();
+      // The heading holds the name editor now; leave through the trail's current step above it, which goes nowhere.
+      await page.getByRole('navigation', { name: 'Trail' }).locator('.current').click();
       await saved(page, updates, 2);
       expected.notes[0].name = 'Generic saved';
       expected.applied.push({ table_name: 'note', record_id: 1 });

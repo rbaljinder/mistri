@@ -22,9 +22,9 @@ test.describe('Payday payroll workflow', () => {
         // The People room, not the People section's fold toggle (a heading's button, with aria-expanded) of the same name.
         await expect(sidebar.locator('li:not(.nav-group)').getByRole('button', { name: 'People', exact: true })).toBeVisible();
         await expect(sidebar.getByRole('button', { name: 'People', exact: true, expanded: true })).toBeVisible();
-        await page.getByRole('button', { name: 'Hide the table list', exact: true }).click();
+        await page.getByRole('button', { name: 'Collapse menu', exact: true }).click();
         await expect(sidebar.getByRole('button', { name: 'Workbench', exact: true })).toHaveCount(0);
-        await page.getByRole('button', { name: 'Show the table list', exact: true }).click();
+        await page.getByRole('button', { name: 'Expand menu', exact: true }).click();
         await expect(sidebar.locator('.sidebar-identity')).toBeVisible();
         await page.getByRole('button', { name: /^Account: / }).click();
         for (const name of [

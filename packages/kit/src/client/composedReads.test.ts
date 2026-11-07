@@ -91,6 +91,21 @@ test("a compose with no write across it answers the record's own read, once", as
   expect(asked('/api/view/run')).toBe(0);
 });
 
+test("an inferred page's related counts come with its compose, once", async () => {
+  const counts = { items: ['comment ticket_id = 7', 'attachment ticket_id = 7'], countLimit: 10000 };
+  const counted = { results: [{ total: 3 }, { total: 0 }] };
+  const plan = composeRecordPage(APP, 'ticket', key);
+  await answer('/api/pages/compose', { ...composed('open'), reads: [{ path: '/api/counts', body: counts, status: 200, reply: counted }] });
+  await plan;
+  expect(await api('/api/counts', { ...counts, app: APP } as never)).toEqual(counted);
+  expect(asked('/api/counts')).toBe(0);
+  /* A second asking (a refetch after a write elsewhere) is a fresh read. */
+  const again = api('/api/counts', { ...counts, app: APP } as never);
+  await vi.waitFor(() => expect(asked('/api/counts')).toBe(1));
+  await answer('/api/counts', counted);
+  await again;
+});
+
 /* Every way a record page writes: a command form, a timeline post and a tag chip run a command (useCommand); a
    tag chip without commands inserts or deletes its link row; a fixed action and an inline edit update the row. */
 const writes: Array<[string, string, Record<string, unknown>]> = [

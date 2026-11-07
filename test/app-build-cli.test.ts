@@ -8,7 +8,7 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -194,6 +194,33 @@ describe('Thread, built against its database and served from the build', () => {
     assert.equal(checked.code, 0, checked.err);
     // Advice (an unindexed reference a page walks) may follow the verdict; it never changes it.
     assert.match(checked.out, /^Thread: ok\n(  warning: .+\n)*$/);
+  });
+
+  /* An external assessment ran mistri check on a build and met "Cannot read properties of undefined (reading
+     'file')": a built App with a page loader has no commands source. A build is refused by name, with what to do. */
+  test('mistri check on a build refuses it by name and says what to do instead; it never crashes', async () => {
+    assert.ok(existsSync(join(out, 'mistri-build.json')), 'the build the test above made');
+    const checked = await run(['check', '--app', out, '--config', `${db}.json`]);
+    assert.equal(checked.code, 1, checked.out + checked.err);
+    assert.doesNotMatch(checked.err, /Cannot read properties|TypeError/);
+    assert.match(checked.err, /is a build output \(it holds mistri-build\.json\); check reads an App's source\./);
+    assert.match(
+      checked.err,
+      /Check the source App it was built from \(mistri check --app <source>\), or serve the build as it is \(mistri --app /,
+    );
+    // Where the build sits where mistri build puts one by default, the source is named.
+    for (const [source, built] of [
+      [join(work, 'guess', 'desk'), join(work, 'guess', 'desk-build')],
+      [join(work, 'guess', 'counter'), join(work, 'guess', 'build', 'counter')],
+    ]) {
+      mkdirSync(source, { recursive: true });
+      writeFileSync(join(source, 'app.ts'), 'export default {};\n');
+      mkdirSync(built, { recursive: true });
+      writeFileSync(join(built, 'mistri-build.json'), '{}\n');
+      const guessed = await run(['check', '--app', built]);
+      assert.equal(guessed.code, 1, guessed.err);
+      assert.ok(guessed.err.includes(`Check the source App at ${source} (mistri check --app ${source})`), guessed.err);
+    }
   });
 
   test('types check just wrote are the ones the build agrees with: no note follows a check', async () => {

@@ -14,7 +14,7 @@ import { relatedRows } from '../prefs.js';
 import { formatBytes, formatNumber, formatRelativeDay } from '../locale.js';
 import { columnKind, linkTarget, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { recordViewKey, recordViewLabel, withoutParent, withoutParentName } from '@mistriwork/engine/shared/referenceModel.js';
-import { groupsBody, listView } from '@mistriwork/engine/shared/recordReads.js';
+import { groupsBody, listView, relatedCountsBody } from '@mistriwork/engine/shared/recordReads.js';
 import { GROUP_ROWS_DEFAULT, GROUPS_DEFAULT } from '@mistriwork/engine/shared/pageModel.js';
 import { groupFactPaths, groupTable } from '@mistriwork/engine/shared/pagePaths.js';
 import { andQuery, quoteValue } from '@mistriwork/engine/shared/query.js';
@@ -69,6 +69,79 @@ function resourceOf(table: TableMeta | undefined): ServedResource | undefined {
 /** The `file` block of the App resource over this table, when its rows are files. */
 function fileOf(table: TableMeta | undefined): ServedResource['file'] {
   return resourceOf(table)?.file;
+}
+
+/** A related list's count: its rows, and whether there are more than the count read up to ("10,000+"). */
+interface Counted {
+  total: number;
+  capped: boolean;
+}
+
+/** The record an inferred page counts its related lists' rows for. */
+export interface Counting {
+  base: TableMeta;
+  recordKey: Record<string, unknown>;
+}
+
+/**
+ * How many rows each of an inferred page's related lists holds, by its question (recordReads.ts,
+ * relatedCountQuestion): one request for a strip of tabs, or for a list alone, built as the server built it for the
+ * page's compose, so a composed page is answered at once. Kept beside the list badges' counts, so a write that
+ * refreshes those refreshes these.
+ */
+export function useRelatedCounts(
+  sections: readonly SlotProps['section'][],
+  counting: Counting | undefined,
+): Map<string, Counted | null> | undefined {
+  const api = usePageApi();
+  const { connection, preview } = useContext(PageRenderContext);
+  const body =
+    counting && !preview && !shell().publicVisitor()
+      ? relatedCountsBody(state.schema as unknown as DatabaseSchema, sections, counting.base, counting.recordKey)
+      : undefined;
+  return useQuery({
+    queryKey: ['count', connection ?? state.activeConnection ?? '', 'related', body?.items ?? []],
+    queryFn: async () => {
+      const data = (await api('/api/counts', body!)) as {
+        results?: Array<{ total?: number; cappedTotal?: boolean; errors?: unknown[] }>;
+      };
+      /* In the shape a list's badges keep theirs (AppList.tsx), under the same key, so either reads the other's. */
+      return new Map(
+        body!.items.map((question, i): [string, Counted | null] => {
+          const result = data.results?.[i];
+          return [
+            question,
+            result && !result.errors?.length && typeof result.total === 'number'
+              ? { total: result.total, capped: result.cappedTotal === true }
+              : null,
+          ];
+        }),
+      );
+    },
+    enabled: Boolean(body),
+    staleTime: 0,
+  }).data;
+}
+
+/**
+ * A related list's count, on its tab or beside its heading. It stands in room kept for it from the first paint
+ * (features.css, `.tab-count`), so its arrival moves no tab, no heading and no fold; a list that is no one hop back
+ * to the record has no count, and keeps no room.
+ */
+export function RelatedCount({
+  section,
+  counting,
+  counts,
+}: {
+  section: SlotProps['section'];
+  counting: Counting;
+  counts: Map<string, Counted | null> | undefined;
+}) {
+  if (section.kind !== 'list') return null;
+  const question = relatedCountsBody(state.schema as unknown as DatabaseSchema, [section], counting.base, counting.recordKey)?.items[0];
+  if (question === undefined) return null;
+  const known = counts?.get(question);
+  return <span className="tab-count">{known && <span>{`${formatNumber(known.total)}${known.capped ? '+' : ''}`}</span>}</span>;
 }
 
 /** Rows related to the root: the real list. */
@@ -150,9 +223,11 @@ export function relatedDoor(
 }
 
 /** Rows related to the root, a page at a time — the real list, not a sample of one. */
-function RelatedList({ section, plan, base, recordKey, onEdit, collapsed }: SlotProps) {
+function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counted }: SlotProps) {
   const api = usePageApi();
   const { preview, isCurrent, openRelated, connection, recordName, onActionDone, actions: recordActions } = useContext(PageRenderContext);
+  const counting = counted ? { base, recordKey } : undefined;
+  const counts = useRelatedCounts(counted ? [section] : [], counting);
   const queries = useQueryClient();
   const [added, setAdded] = useState(false);
   const createButton = useRef<HTMLButtonElement>(null);
@@ -747,6 +822,7 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed }: Slot
       section={section}
       foldable={false}
       tools={tools}
+      count={counting && <RelatedCount section={section} counting={counting} counts={counts} />}
       body={
         <div className="page-list-body">
           {(file ? undefined : authoredEmpty) ??

@@ -211,7 +211,7 @@ export function AccountControl({
           className="account-menu"
           triggerClassName="ghost account"
           triggerTitle={say('account', { who })}
-          triggerLabel={say('account', { who })}
+          triggerLabel={say('accountShown', { initials, who })}
           label={
             <>
               <span className="account-avatar" aria-hidden="true">

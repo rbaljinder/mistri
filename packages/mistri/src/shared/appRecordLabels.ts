@@ -4,11 +4,22 @@
  * (recordLabel.ts says how the name is computed).
  */
 import { stitchedHop } from '@mistriwork/engine/shared/stitchedPaths.js';
-import { labelPath, primaryKey, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import {
+  columnKind,
+  findTable,
+  labelPath,
+  momentColumn,
+  primaryKey,
+  rowName,
+  tableNamed,
+  type DatabaseSchema,
+  type TableMeta,
+} from '@mistriwork/engine/shared/schema.js';
 import { grantsByRole, type AppDef } from './appModel.js';
 import { displayWord, vocabularyWord } from '@mistriwork/engine/shared/model.js';
 import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import {
+  datedField,
   isLabelTemplate,
   fieldText,
   maskedField,
@@ -17,6 +28,7 @@ import {
   parseLabelTemplate,
   wordedField,
   wordedPath,
+  writesDay,
   writesMask,
 } from '@mistriwork/engine/shared/recordLabel.js';
 import { resolvePath } from '@mistriwork/engine/shared/viewPaths.js';
@@ -25,6 +37,7 @@ import { resolvePath } from '@mistriwork/engine/shared/viewPaths.js';
 export function labelTemplateProblem(schema: DatabaseSchema, table: TableMeta, template: string): string | undefined {
   if (writesMask(template))
     return `"${template}" writes a mask or words itself; a column's display rule says them (masked, values), in the record's name too.`;
+  if (writesDay(template)) return `"${template}" writes "|date" itself; name the column and its display rule says its value.`;
   const parsed = parseLabelTemplate(template);
   if ('problem' in parsed) return parsed.problem;
   for (const path of parsed.paths) {
@@ -150,10 +163,73 @@ export function appLabelTemplates(app: AppDef, schema: DatabaseSchema): Map<stri
       continue;
     }
     if (authored !== undefined) continue;
-    if (key.length !== 1 || (own !== undefined && !key.includes(own))) continue;
-    templates.set(table.id, noun()!);
+    /* A name that can be empty is no name: a visit's nullable `summary` titled every visit not yet made "(row)". */
+    if (own !== undefined && !key.includes(own) && !emptyable(table, own)) continue;
+    /* A parent's own name column: the one its resource names, else its schema's. A template (its noun and key, two
+       columns) cannot be said inside another, and a name the reader may not see is none. */
+    const nameOf = (target: TableMeta): string | undefined => {
+      const theirs = byTable.get(target.id)?.resource.recordLabel;
+      if (theirs === false || isLabelTemplate(theirs)) return undefined;
+      return typeof theirs === 'string' ? theirs : labelPath(schema, target);
+    };
+    const composed = composedName(schema, table, nameOf, maskOf, wordsOf);
+    if (composed) templates.set(table.id, composed);
+    else if (key.length === 1) templates.set(table.id, noun()!);
   }
   return templates;
+}
+
+/* Stamps a row keeps of its own upkeep: never the day a record is for. */
+const UPKEEP = /^(sys_)?(updated|modified|changed|deleted|last_\w+)(_at|_on|_date)?$/i;
+/* The day a record is for, where it has several: when it starts or is planned, ahead of when it was entered. */
+const ENTERED = /^(sys_)?(created|inserted|added)(_at|_on|_date)?$/i;
+
+/**
+ * Whether a table's own name column is one a record may leave blank: picked by `labelColumn` only for being its first
+ * text, with no name, title, label, number or code to say instead. A visit's `summary`, written after the visit, was
+ * the name of every visit not yet made, and those were titled "(row)".
+ */
+function emptyable(table: TableMeta, own: string): boolean {
+  if (own.includes('.') || rowName(table)) return false;
+  return table.columns.find((column) => column.name === own)?.nullable === true;
+}
+
+/**
+ * The name of a record with no name of its own, composed from what it always has: the record it belongs to and the
+ * day it is for — "Fix sticking door · Sep 13, 2026" for a visit. The record it belongs to is its first required
+ * reference to a table whose name column is always filled; the day is its first required date, one it is planned
+ * for before one it was entered on, never an upkeep stamp. Without either it is its noun and key (nounTemplate), as
+ * before: a parent alone names forty lines alike, and a day alone a busy day's records.
+ */
+function composedName(
+  schema: DatabaseSchema,
+  table: TableMeta,
+  nameOf: (target: TableMeta) => string | undefined,
+  maskOf: (table: TableMeta, path: string) => { prefix?: string } | undefined,
+  wordsOf: (table: TableMeta, path: string) => Record<string, string> | undefined,
+): string | undefined {
+  const required = table.columns.filter((column) => !column.primaryKey && column.nullable === false);
+  const dates = required.filter(
+    (column) => !column.references && !UPKEEP.test(column.name) && (columnKind(column.type ?? '') === 'date' || momentColumn(column)),
+  );
+  const day = dates.find((column) => !ENTERED.test(column.name)) ?? dates[0];
+  if (!day || maskOf(table, day.name)) return undefined;
+  let parent: string | undefined;
+  for (const column of required) {
+    const ref = column.references;
+    if (!ref || ref.table === table.id) continue;
+    const target = findTable(schema, ref.table);
+    const name = target ? nameOf(target) : undefined;
+    if (!target || !name || name.includes('.') || primaryKey(target).includes(name) || emptyable(target, name)) continue;
+    const path = `${column.name}.${name}`;
+    /* Said on every record, so one the target may leave blank, or this catalog cannot read, names none. */
+    if (target.columns.find((c) => c.name === name)?.nullable !== false || labelTemplateProblem(schema, table, `{${path}}`)) continue;
+    if (maskOf(table, path)) continue;
+    const words = wordsOf(table, path);
+    parent = words ? wordedField(path, words) : `{${path}}`;
+    break;
+  }
+  return parent ? `${parent} · ${datedField(day.name)}` : undefined;
 }
 
 /** The catalog an App serves, each table carrying its record-name template (appLabelTemplates). */

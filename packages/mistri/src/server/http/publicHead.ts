@@ -235,6 +235,7 @@ async function placed(ctx: RequestContext, rest: string[]): Promise<ShellHead | 
     const target = parsed.target;
     if (parsed.kind === 'route' && target.kind === 'inbox') return { ...titled('Notifications'), canonical: ctx.path };
     if (target.kind === 'assistant') return { ...titled('Assistant'), canonical: ctx.path };
+    if (parsed.kind === 'route' && target.kind === 'directory') return { ...titled('All pages'), canonical: ctx.path };
     if (parsed.kind === 'route' && (target.kind === 'list' || target.kind === 'dashboard')) {
       const view = app.views[target.view] as { label?: string; tabs?: Array<{ label: string; slug?: string }> } | undefined;
       if (!view?.label) return undefined;

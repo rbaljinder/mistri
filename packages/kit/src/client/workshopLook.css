@@ -1,11 +1,11 @@
 /* Workshop, the look an App wears when it names none (themeLooks.ts): fetched
-   when a worn theme picks one of its recipes (keyed buttons, the slot menu), as Lumen's sheet
+   when a worn theme picks one of its recipes (keyed buttons, the slot menu, solid filters), as Lumen's sheet
    is, and so not in the first stylesheet the Workbench and every other look
    share. Its other recipes are in Lumen's, the brand sheet and the surfaces'. */
 /* Barlow, a grotesk cut from road and workshop signage (SIL Open Font
    License; its text in fonts/Barlow-OFL.txt and dist/client/fonts/): the
-   regular and semibold for the interface and data, the semi-condensed bold
-   for titles, section heads and labels in capitals. Declared here so only a
+   regular and semibold for the interface, data and labels, the semi-condensed
+   bold for titles, figures and the App's name. Declared here so only a
    page wearing Workshop asks for it; the server preloads the regular and the
    condensed bold beside this sheet (server/clientSurface.ts, lookPreloads).
    `swap`, as Lumen's Inter: the page is held until this sheet is in, and the
@@ -67,8 +67,7 @@
 }
 @layer look {
   /* Keyed buttons: the primary verb is a hazard key, the accent edged in the ink; a secondary key is edged in the
-     ink too, so every key on a page reads as hardware. A table's heads already stand on the ink rule its sections
-     do (themeFamilies.css, rules.head at the look's 2px).
+     ink too, so every key on a page reads as hardware.
      The key is the look's primary-action color and its words (`--primary`, the palette's hue with the ink on it), as
      a list's New and a dashboard's action are, re-pointed as a form's one action is (features.css): a button reads
      `--accent`, which an App's own `ui.theme.accent` is worn over, so a record's first action was the App's blue
@@ -81,19 +80,19 @@
   :root[data-look-buttons='keyed'] .app-mode .btn-secondary {
     border-color: var(--ink);
   }
-  /* The slot menu: the current entry is the ink block `inverted` draws (themeFamilies.css), and beside it a 3px
-     marker of the menu's accent — under it in the top bar, at its leading edge in the side menu — parted from the
-     block by 2px of the menu's ground, so the marker reads on the ground it stands on (3:1, test/contrast.test.ts)
-     and never on the block, which is dark by day and light by night. The palette reaches the menu as a mark,
-     never as a fill. The block is the menu's own ink: a theme that names `nav.current` draws its block instead
-     (structure.css, data-nav-current), and with it no marker. */
+  /* The slot menu: the current entry is a block, and beside it a 3px marker of the menu's accent — under it in the top
+     bar, at its leading edge in the side menu — parted from the block by 2px of the menu's ground, so the marker
+     reads on the ground it stands on (3:1, test/contrast.test.ts) whatever the block is. The palette reaches the menu
+     as a mark, never as a fill. The block is the theme's `nav.current` with `nav.onCurrent` on it where it names them
+     (Workshop's own: a soft tint of the menu's ink, by day and by night), else the ink block `inverted` draws
+     (themeFamilies.css). Naming the block keeps the marker: structure.css draws a named block over every other look's
+     mark, but draws the one a look names as `--nav-current-mark`. */
   :root[data-look-nav='slot'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) {
-    background: var(--nav-ink);
-    color: var(--nav-ground);
+    background: var(--nav-current, var(--nav-ink));
+    color: var(--nav-on-current, var(--nav-ground));
     border-radius: var(--radius);
-    box-shadow:
-      inset 0 -3px 0 var(--nav-accent),
-      inset 0 -5px 0 var(--nav-ground);
+    --nav-current-mark: inset 0 -3px 0 var(--nav-accent), inset 0 -5px 0 var(--nav-ground);
+    box-shadow: var(--nav-current-mark);
   }
   :root[data-look-nav='slot']
     .app-mode
@@ -103,24 +102,48 @@
     color: inherit;
   }
   :root[data-look-nav='slot'] :is(#table-list, .mobile-nav-list) button[aria-current='true'] {
-    background: var(--nav-ink);
-    color: var(--nav-ground);
-    box-shadow:
-      inset 3px 0 0 var(--nav-accent),
-      inset 5px 0 0 var(--nav-ground);
+    background: var(--nav-current, var(--nav-ink));
+    color: var(--nav-on-current, var(--nav-ground));
+    --nav-current-mark: inset 3px 0 0 var(--nav-accent), inset 5px 0 0 var(--nav-ground);
+    box-shadow: var(--nav-current-mark);
   }
   /* Held under a pointer too, over the menu's own hover tint. */
   @media (hover: hover) {
     :root[data-look-nav='slot'] :is(#table-list, .mobile-nav-list) button[aria-current='true']:hover {
-      background: var(--nav-ink);
-      color: var(--nav-ground);
+      background: var(--nav-current, var(--nav-ink));
+      color: var(--nav-on-current, var(--nav-ground));
     }
   }
+  /* Its icon and count in the block's own words, whatever draws them: a fixed ground here left them in the menu's
+     ground on a block a theme's `parts['nav.current']` tinted, where they could not be seen. */
   :root[data-look-nav='slot'] :is(#table-list, .mobile-nav-list) button[aria-current='true'] :is(.rows, svg, .nav-icon) {
-    color: var(--nav-ground);
+    color: inherit;
   }
+  /* The ring in the block's words too: in the menu's ground it vanished on a tint of that ground. */
   :root[data-look-nav='slot'] #table-list button[aria-current='true']:focus-visible {
-    outline: 2px solid var(--nav-ground);
+    outline: 2px solid currentcolor;
     outline-offset: -4px;
+  }
+  /* The App's name over the slot menu, the one word in capitals: the brand's stamp, in the condensed bold the
+     look's titles wear (visualThemes.css). Said here, with the menu it heads, because a built-in look says nothing
+     through the parts (test/theme-parts.test.ts) and this sheet is already in; a theme that wears the slot and wants
+     its name as written says `parts.logo.case: 'none'`, which the parts layer draws over this one. */
+  :root[data-look-nav='slot'] .app-mode .brand-name {
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  /* Capitals are the brand's here (docs/design.md, Workshop's exceptions): the kind over a record's name ("Lease") is
+     a label like a section's or a tab's, in sentence case, not "LEASE". The shared look rule sets it in tracked
+     capitals; this takes that back where the worn theme's label role is in sentence case, as Workshop's is (and a
+     theme on its base inherits). Keyed on the role, not the family's name, which no selector reads
+     (test/theme-recipes.test.ts): a theme that wears a Workshop recipe and no label of its own keeps the capitals. */
+  :root:root[data-type-label]:not([data-type-label~='upper'], [data-type-label~='small-caps']) .page-head.has-record :is(.page-title, .page-title-pick .dd-value) {
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  /* `filters: 'solid'`: a filter not yet asked for is a key on a solid edge, as the search beside it is, not a dashed
+     place; its colors, at rest and under a pointer, stay the filter bar's own (ListFilterBar.css). */
+  :root[data-look-filters='solid'] .app-mode .applist-add {
+    border-style: solid;
   }
 }

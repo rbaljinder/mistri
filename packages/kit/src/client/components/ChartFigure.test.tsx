@@ -11,6 +11,7 @@ vi.mock('../core.js', async (original) => ({
   viewportBox: () => ({ width: 600, height: 240, top: 0, left: 0, right: 600, bottom: 240 }),
 }));
 const { ChartFigure } = await import('./ChartFigure.js');
+const { TIMED_HEIGHT } = await import('./Chart.js');
 
 afterEach(() => cleanup());
 
@@ -147,6 +148,10 @@ test('before its answer a chart holds its room, at its own height where the sect
   expect(wait.style.height).toBe('180px');
   rerender(<ChartFigure answer={undefined} shape="stacked" say={String} label={String} empty="Nothing" limit={3} />);
   expect(container.querySelector<HTMLElement>('.chart-wait-rows')!.style.height).toBe('122px');
+  // Over a run of periods the stack is columns at a fixed figure under a legend line: the room is that height, so the
+  // answer does not move what stands below it.
+  rerender(<ChartFigure answer={undefined} shape="stacked" timed say={String} label={String} empty="Nothing" />);
+  expect(container.querySelector<HTMLElement>('.chart-wait-columns')!.style.height).toBe(`${TIMED_HEIGHT + 34}px`);
 });
 
 /* A sprint's velocity, asked in the order the sprints were made: the figure keeps it, or sorts by value when told. */

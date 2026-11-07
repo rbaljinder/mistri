@@ -122,6 +122,14 @@
 @media (max-width: 22rem) { .form-columns { grid-template-columns: minmax(0, 1fr); } }
 .review-list { display: grid; gap: var(--field-gap); }
 
+/* A short choice (up to five words, none with a description) is a row of buttons that wraps, not a stack of cards:
+   five 48px cards took 270px to say five words. Each is a pick, so it wears the field's own box; the row never
+   scrolls sideways, it wraps whole picks onto the next line. */
+.choice-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.choice-row > .choice-pick { gap: var(--space-3); }
+.choice-pick-icon { display: inline-flex; flex: none; color: var(--accent-ink); }
+.choice-pick-icon > svg { width: 16px; height: 16px; }
+
 /* A theme's recipes for a form (themeRecipes.ts: required, checkbox, formStep, actionBar). Their rules are here, not
    in a first stylesheet: they draw nothing a page without a control has. */
 

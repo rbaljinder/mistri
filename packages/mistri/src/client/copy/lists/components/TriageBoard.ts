@@ -5,7 +5,7 @@ export const say = defineMessages({
   order: 'Order',
   newInLane: 'New in {lane}',
   row: 'Row',
-  noItemsHere: 'No items here.',
+  noItemsHere: 'Nothing here',
   nothingOnThisBoard: 'Nothing on this board yet.',
   triageBoard: 'Triage board',
   showMore: 'Show {count} more',

@@ -25,6 +25,7 @@ import { appListFor, appListQuery, currentNavIndex, type ListSpec } from './appL
 import { menuCount, type CountedMachine } from '@mistriwork/engine/shared/menuCounts.js';
 import {
   ASSISTANT_PAGE,
+  DIRECTORY_PAGE,
   appMenu,
   dashViewKey,
   formViewKey,
@@ -195,6 +196,10 @@ export function sidebarItems(filterText: string): SidebarItem[] {
         false,
       ),
     );
+    /* A menu past a dozen places ends in its Directory (Directory.tsx): every one of them, found by typing. Not
+       while the menu's own filter is in use, which is the same search in a smaller box. */
+    if (app.directory && !needle)
+      items.push({ kind: 'form', view: DIRECTORY_PAGE, label: say('allPages'), icon: app.directory.icon, page: DIRECTORY_PAGE });
     if (footer.length) items.push({ kind: 'gap' }, ...footer);
     if (!matches && needle) items.push({ kind: 'note', text: say('noMatches') });
     return visibleGroups(items, Boolean(needle));
@@ -358,7 +363,7 @@ export function currentDashView(): string | null {
 /** Which form row is lit, by its view key: the one on the walk, or the signed-in form served as this visitor's home. */
 export function currentFormView(): string | null {
   const here = currentEntry() as { kind?: string; pageId?: string } | undefined;
-  if (here?.kind === 'page' && here.pageId === ASSISTANT_PAGE) return ASSISTANT_PAGE;
+  if (here?.kind === 'page' && (here.pageId === ASSISTANT_PAGE || here.pageId === DIRECTORY_PAGE)) return here.pageId;
   const onWalk = here?.kind === 'page' ? formViewKey(here.pageId) : undefined;
   if (onWalk !== undefined) return onWalk;
   const app = shell().inApp() ? shell().app() : null;

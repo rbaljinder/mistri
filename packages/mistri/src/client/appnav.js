@@ -81,6 +81,8 @@ export const appChrome = {
       Inbox: onDemand(() => import('./components/InboxList.js'), 'InboxRoom'),
       /* The assistant's page is the panel's own component, in its own chunk: nothing of it in a first page. */
       Assistant: onDemand(() => import('./components/AssistantPanel.js'), 'AssistantRoom'),
+      /* A long menu's Directory: its own part, fetched when it is first opened, so no first page grows by it. */
+      Directory: onDemand(() => import('./components/Directory.js'), 'DirectoryRoom'),
       Page: FreePage,
       SplitRecord: SplitRecordRoom,
       /* A record put on paper: its own part, so no first page carries the sheet. */

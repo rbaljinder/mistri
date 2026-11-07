@@ -78,7 +78,7 @@ export type {
   LandingSection,
   SeriesColor,
 } from '@mistriwork/engine/shared/servedApp.js';
-export { navViewKeys, PLACEMENTS, viewOrder } from '@mistriwork/engine/shared/servedApp.js';
+export { navViewKeys, PLACEMENTS, SHELL_HEADERS, viewOrder } from '@mistriwork/engine/shared/servedApp.js';
 
 /**
  * A list view: the rows of one resource — how they read (`show`, `tabs`,
@@ -188,10 +188,22 @@ export interface AppListView {
    * presentation.
    */
   order?: string;
+  /** Served, never authored: the parts of the list the view did not declare and the platform inferred
+      (shared/listInference.ts), each from the catalog and the resource. */
+  inferred?: InferredListPart[];
+  /** Served, never authored: a second line under a shown column, by column, where the list's columns are inferred
+      and the column's display rule names none (listInference.ts inferListSubtitles). */
+  subtitles?: Record<string, string>;
+  /** Served, never authored: the board a grid with no presentation may be switched to, its lanes the states of a
+      machine with three to seven open ones (listInference.ts inferBoard). */
+  asBoard?: import('@mistriwork/engine/shared/listPresentations.js').AppBoardList;
 }
 
+/** A part of a list the platform infers where the view says none. */
+export type InferredListPart = 'show' | 'sort' | 'tabs' | 'filters';
+
 /**
- * One node of nav, as authored: a reference to a view — with the menu's own
+ * One node of nav, as authored:a reference to a view — with the menu's own
  * word for it when it has one — or a group of nodes. Nav only arranges; the
  * views it names are `AppDef.views`.
  */
@@ -554,6 +566,8 @@ export interface AppDashSection {
   empty?: AppListEmpty;
   /** Authored `empty: 'hide'` (a metric takes none): the section is left out of the dashboard while it has nothing. */
   emptyMode?: 'hide';
+  /** Served only, never authored: a rows section that reads its rows and no total (the overview's, appOverview.ts). */
+  counted?: false;
   kind:
     | 'metric'
     | 'breakdown'
@@ -723,6 +737,9 @@ export interface AppDashboardView extends ServedDashboardView {
   heading?: string;
   /** `heading: false`: the title is not drawn, and stays for a screen reader. */
   headingHidden?: true;
+  /** `head: 'compact'`: the title alone on one line with its verbs, no intro; `head: false` is served as `own`, a page
+      that draws its own head (appViews.ts parseHead). */
+  head?: 'compact' | 'own';
   /** A short plain-text introduction shown under the dashboard heading; it may greet `{me.name}` too. */
   description?: string;
   /** The menu's mark for it, one of the App icons (appIcons.ts). */
@@ -765,6 +782,9 @@ export interface AppDashboardView extends ServedDashboardView {
    * it on the server.
    */
   page?: AppPageManifest;
+  /** Never authored: the overview an App that names no `home` starts on (appOverview.ts). Its sections are drawn from
+      each reader's own catalog when the App is served; parsed, it has none. */
+  overview?: true;
   /** Served, never authored: the first problem, for the screen; `errors` has all of them. */
   error?: string;
   errors?: string[];

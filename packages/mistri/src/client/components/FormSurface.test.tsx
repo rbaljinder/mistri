@@ -95,7 +95,13 @@ test("a refusal of a field on screen is said beside it alone, in a person's word
   expect(screen.queryByRole('heading', { name: 'Application received' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Send application' }));
   await waitFor(() => expect(screen.getByText('Too many submissions from this address. Try again in 42 seconds.')).toBeInTheDocument());
-  await waitFor(() => expect(screen.getByText('Too many submissions from this address. Try again in 42 seconds.')).toHaveFocus());
+  // The outcome view takes focus, whole: the refusal's own words, then the next step.
+  await waitFor(() =>
+    expect(
+      screen.getByText('Too many submissions from this address. Try again in 42 seconds.').closest('.form-page-failure'),
+    ).toHaveFocus(),
+  );
+  expect(screen.getByText('Wait a moment and send again.')).toBeVisible();
   // The form's own line stands above the actions, where the eye is before it presses.
   const line = screen.getByText('Too many submissions from this address. Try again in 42 seconds.');
   expect(

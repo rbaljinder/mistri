@@ -369,6 +369,8 @@ interface OrderTerm {
   direction: 'asc' | 'desc';
   /** The values in their declared order (schema.ts `declaredOrder`). */
   declared?: readonly string[];
+  /** An empty value after every other, in either direction: said as `IS NULL` first, which every dialect reads (view.ts). */
+  nulls?: 'last';
 }
 
 /**
@@ -387,14 +389,15 @@ export function orderClauseSql(terms: readonly (OrderTerm | string)[], style: Sq
     .map((term) => {
       if (typeof term === 'string') return term;
       const dir = term.direction === 'desc' ? 'DESC' : 'ASC';
-      if (!term.declared?.length) return `${term.expression} ${dir}`;
+      const last = term.nulls === 'last' ? `${term.expression} IS NULL ASC, ` : '';
+      if (!term.declared?.length) return `${last}${term.expression} ${dir}`;
       const rank = term.declared
         .map((value, at) => {
           params.push(value);
           return `WHEN ${style.placeholder(startIndex + params.length - 1)} THEN ${at}`;
         })
         .join(' ');
-      return `CASE ${term.expression} ${rank} ELSE ${term.declared.length} END ${dir}, ${term.expression} ${dir}`;
+      return `${last}CASE ${term.expression} ${rank} ELSE ${term.declared.length} END ${dir}, ${term.expression} ${dir}`;
     })
     .join(', ');
   return { text: ` ORDER BY ${text}`, params };

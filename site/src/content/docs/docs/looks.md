@@ -33,7 +33,7 @@ Lintel's leases in each look. Every component in every look is in the [component
 <div class="tw-looks">
 <figure>
 
-<figcaption><strong>Workshop</strong> — the default. A shop floor's paper and ink: warm paper grounds, an ink menu with grain, Barlow with titles, section heads and labels in condensed capitals, square 2px corners, ink rules, and one restrained accent — the primary key, links, the current tab's rule, the menu's marker, the focus ring and the first chart series, never a tint; Safety orange unless a palette is named.</figcaption>
+<figcaption><strong>Workshop</strong> — the default. A shop floor's paper and ink, the paper on the frame: a grained paper bar and menu and a paper band behind each page's head, the work on white, Barlow with titles in its condensed bold in sentence case and the App's name in condensed capitals, square 2px corners, hairlines, and one restrained accent — the filled primary key, links, the current tab's rule, the menu's marker beside a soft tint, the focus ring and the first chart series; Safety orange unless a palette is named.</figcaption>
 </figure>
 <figure>
 
@@ -71,7 +71,7 @@ Each part's treatment in each look, as `mistri theme show <look>` prints it. A t
 | `bar` | `ruled` | `airy` | `ruled` | `soft` | `dark` |
 | `tabs` | `rule` | `underline` | `inverted` | `chosen` | `rule` |
 | `windows` | `segmented` | `lifted` | `segmented` | `chosen` | `segmented` |
-| `stat` | `ruled` | `divided` | `framed` | `panel` | `divided` |
+| `stat` | `divided` | `divided` | `framed` | `panel` | `divided` |
 | `section` | `open` | `open` | `open` | `panel` | `panel` |
 | `fields` | `open` | `rail` | `open` | `panel` | `panel` |
 | `table` | `open` | `quiet` | `open` | `hairline` | `hairline` |
@@ -80,13 +80,14 @@ Each part's treatment in each look, as `mistri theme show <look>` prints it. A t
 | `chart` | `plain` | `line` | `plain` | `wash` | `plain` |
 | `buttons` | `keyed` | `raised` | `accent` | `accent` | `accent` |
 | `links` | `plain` | `plain` | `underline` | `plain` | `plain` |
-| `rules` | `ink` | `hairline` | `ink` | `hairline` | `double` |
+| `rules` | `hairline` | `hairline` | `ink` | `hairline` | `double` |
 | `avatar` | `plain` | `round` | `plain` | `large` | `plain` |
 | `workflow` | `markers` | `markers` | `markers` | `markers` | `markers` |
 | `banner` | `plain` | `plain` | `tint` | `tint` | `plain` |
 | `steps` | `strip` | `strip` | `flat` | `flat` | `strip` |
 | `lanes` | `tag` | `tint` | `tint` | `tint` | `plain` |
-| `header` | `plain` | `plain` | `plain` | `band` | `plain` |
+| `header` | `band` | `plain` | `plain` | `band` | `plain` |
+| `filters` | `solid` | `quiet` | `dashed` | `dashed` | `dashed` |
 | `required` | `star` | `star` | `star` | `star` | `star` |
 | `checkbox` | `native` | `native` | `native` | `native` | `native` |
 | `formStep` | `plain` | `plain` | `plain` | `plain` | `plain` |
@@ -98,10 +99,10 @@ The type roles each look says (`type.roles`, [Theme recipes](/docs/theme-recipes
 
 | Role | Workshop | Lumen | Mono | Sage | Ledger |
 | --- | --- | --- | --- | --- | --- |
-| `title` | condensed, 30px, 700, `upper` | 28px, 600, -0.02em | 30px, 700 | 600 | 26px, 600, -0.01em |
-| `heading` | condensed, 22px, 700, `upper` | 24px, -0.018em | | | 20px, 600, -0.018em |
-| `section` | condensed, 15px, 700, `upper` | 16px, 600, -0.01em | | | `data`, 12px, 500, `upper` |
-| `label` | condensed, 700, `upper` | | `mono`, `upper` | | `data`, 500, `upper` |
+| `title` | condensed, 28px, 700 | 28px, 600, -0.02em | 30px, 700 | 600 | 26px, 600, -0.01em |
+| `heading` | condensed, 23px, 700 | 24px, -0.018em | | | 20px, 600, -0.018em |
+| `section` | 15px, 600 | 16px, 600, -0.01em | | | `data`, 12px, 500, `upper` |
+| `label` | 12px, 600 | | `mono`, `upper` | | `data`, 500, `upper` |
 | `figure` | condensed, 38px, 700, `tnum` | | `mono`, 700 | | `data`, 30px, 500, `tnum` |
 | `nav` | 500 | | `mono`, `upper` | | 400 |
 

@@ -28,7 +28,9 @@ const said = (value: string) =>
 
 /* Words that call the work off: the exits. */
 const EXIT =
-  /^(cancell?ed|rejected|declined|denied|lost|closed_lost|void|voided|withdrawn|abandoned|failed|expired|refunded|no_show|dismissed|discarded|dropped|disqualified|unqualified|churned|terminated|aborted|wont_fix|duplicate|spam)$/;
+  /^(cancell?ed|rejected|declined|denied|lost|closed_lost|void|voided|withdrawn|abandoned|failed|expired|refunded|no_show|noshow|missed|skipped|dismissed|discarded|dropped|disqualified|unqualified|churned|terminated|aborted|wont_fix|duplicate|spam)$/;
+/* Words that say the work is done: the path's end. */
+const DONE = /^(done|complete|completed|finished|resolved|closed|fulfilled|delivered|collected)$/;
 /* Words that park the work: a side state, left the way it was entered. */
 const HOLD = /^(on_hold|hold|paused|blocked|stalled|deferred|snoozed|backordered|waiting|waiting_\w+)$/;
 
@@ -137,6 +139,14 @@ export function draftMachine(table: TableMeta, column: ColumnMeta): DraftedMachi
   if (states.length < 3 || states.length > 10 || column.flag || !states.every((state) => /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(state)))
     return undefined;
   const exits = states.filter((state, i) => i > 0 && EXIT.test(said(state)));
+  /* The work ends where it is done. Past `completed`, only a step this file knows a verb for (invoiced, archived)
+     goes on; a word it does not know there is another way the work ended — read as a step, a visit's `missed`
+     listed after `completed` became `completed → markMissed`, a way out of a finished visit. */
+  const done = states.findIndex((state) => DONE.test(said(state)));
+  if (done !== -1)
+    for (const state of states.slice(done + 1))
+      if (!exits.includes(state) && !HOLD.test(said(state)) && !INTO[said(state)]) exits.push(state);
+  exits.sort((a, b) => states.indexOf(a) - states.indexOf(b));
   const holdStates = states.filter((state, i) => i > 0 && !exits.includes(state) && HOLD.test(said(state)));
   const path = states.filter((state) => !exits.includes(state) && !holdStates.includes(state));
   if (path.length < 2) return undefined;

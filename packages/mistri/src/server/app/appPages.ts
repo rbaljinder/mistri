@@ -33,7 +33,7 @@ import { exportNames } from './componentSdk.js';
 /** A page's file name: its path, then the suffix. */
 const PAGE_FILE = /^(.+)\.page\.(tsx|jsx)$/;
 /** The keys `definePage` takes, beside `component`. */
-const PAGE_KEYS = ['label', 'icon', 'nav', 'roles', 'reads', 'commands', 'params', 'loader', 'public', 'description', 'favorite'];
+const PAGE_KEYS = ['label', 'icon', 'nav', 'roles', 'reads', 'commands', 'params', 'loader', 'public', 'description', 'favorite', 'head'];
 const NAV_KEYS = ['group', 'position'];
 /* Spellings renamed before 1.0, refused with the word that replaced them. */
 const RENAMED: Readonly<Record<string, string>> = {
@@ -154,7 +154,7 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
       kind: 'page',
       label: fields.label,
       component: { id: pageComponentId(page.key), module: page.module, kind: 'page' },
-      ...pick(fields, ['icon', 'description', 'favorite', 'reads', 'commands', 'params', 'loader', 'roles', 'public']),
+      ...pick(fields, ['icon', 'description', 'favorite', 'head', 'reads', 'commands', 'params', 'loader', 'roles', 'public']),
     };
     if (!placing) continue;
     if (!nav) throw new Error(`[page-nav] ${at} asks for a place in nav, and the App has no nav. Say nav: false, or give the App a nav.`);

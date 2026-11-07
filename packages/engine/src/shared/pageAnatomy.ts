@@ -9,7 +9,10 @@
  * them a rail of the rest of its properties over its history. This says, for
  * one table, which columns go where — name-like, status, money, date and
  * count columns, and the rollups the catalog serves — so the default page and
- * the scaffold's are one rule.
+ * the scaffold's are one rule. Two arrangements read it: the scaffold's page
+ * (`anatomySections`, what an author's `page()` can say) and the inferred page
+ * an App serves (`inferredSections`: a classic form, every related table as a
+ * counted tab, the references as cards).
  *
  * Pure: the caller says what only it knows (which columns are money in the
  * App's words, whether the resource keeps a history, what a list is called).
@@ -27,9 +30,10 @@ import {
   type TableMeta,
 } from './schema.js';
 import { pageHop } from './pagePaths.js';
+import { referenceSubline } from './referenceSubline.js';
 import { humanName } from './model.js';
 import { headingOf, recordNoun } from './appNoun.js';
-import { DEFAULT_PAGE_LIST_LIMIT, type PageDef, type PageSection } from './pageModel.js';
+import { DEFAULT_PAGE_LIST_LIMIT, MAX_SECTIONS, type PageDef, type PageSection } from './pageModel.js';
 
 /** What the caller knows that the catalog does not. */
 export interface AnatomyHints {
@@ -48,6 +52,16 @@ export interface AnatomyHints {
   title?: (fk: ForeignKey, child: TableMeta, ambiguous: boolean) => string | undefined;
   /** What one record of a table is called, mid-sentence ("work order"), where the caller has the word (its `noun`). */
   noun?: (table: TableMeta) => string | undefined;
+  /** The column a shown column's second line reads (its display rule's `subtitle`), where the caller has the rule. */
+  subtitle?: (table: TableMeta, column: string) => string | undefined;
+  /** The record's fields as the App groups its form (`form.groups`, else `form.steps`, else `form.show` alone, one
+      untitled group): the inferred page's form follows them. */
+  groups?: (table: TableMeta) => ReadonlyArray<{ label?: string; fields: readonly string[] }> | undefined;
+  /** Whether a column is the one a state machine moves: its verbs set it, so the inferred form leaves it to the head. */
+  moved?: (table: TableMeta, column: string) => boolean;
+  /** What the caller calls a column (its `labels`): a reference's card is titled as its field is ("Class", not
+      "Class session"). */
+  caption?: (table: TableMeta, column: string) => string | undefined;
 }
 
 interface RelatedPick {
@@ -73,6 +87,8 @@ interface Anatomy {
   status?: string;
   /** The header's facts line: the parent, a figure, a date — at most four. */
   facts: string[];
+  /** A fact said as a range, start → end (spanOf): the end is no fact of its own. */
+  spans?: Record<string, string>;
   /** A summary of the record's figures: its rollups, then money the facts did not say — at most four. */
   summary: string[];
   /** The children, drawn as tabs: at most four lists of at most four columns. */
@@ -161,6 +177,23 @@ function dateColumns(table: TableMeta, taken: Set<string>): ColumnMeta[] {
   return [...new Set(ranked)];
 }
 
+/* A span's two ends, by their names: `starts_at` and `ends_at`, `start_date` and `end_date`, `shift_start` and
+   `shift_end`. */
+const SPAN_START = /(^|_)(starts?|begins?)(_|$)/i;
+
+/** The record's span: two dates named for its start and its end, read as one range ("Sep 13, 2:00 – 4:00 PM"). */
+export function spanOf(table: TableMeta): { start: string; end: string } | undefined {
+  const dated = table.columns.filter((column) => columnKind(column.type ?? '') === 'date' && !column.primaryKey);
+  for (const start of dated) {
+    if (!SPAN_START.test(start.name)) continue;
+    for (const word of ['ends', 'end']) {
+      const name = start.name.replace(SPAN_START, (_, before: string, _word: string, after: string) => `${before}${word}${after}`);
+      if (name !== start.name && dated.some((column) => column.name === name)) return { start: start.name, end: name };
+    }
+  }
+  return undefined;
+}
+
 /** A related list's columns: the row's name, its state, then what it says, never the reference it is found by. */
 function listColumns(child: TableMeta, fk: ForeignKey, hints: AnatomyHints): string[] {
   const name = hints.label?.(child) ?? labelColumn(child);
@@ -196,8 +229,62 @@ function railOf(rest: ColumnMeta[]): string[] {
     .slice(0, MAX_PROPERTIES);
 }
 
-/** Which of a table's columns go where on its record's page, or nothing where a record has no key to open it by. */
-export function recordAnatomy(schema: DatabaseSchema, baseId: string, hints: AnatomyHints = {}): Anatomy | null {
+/**
+ * A reference as a card in the aside: the reference and two of its record's own fields, its state first, or nothing
+ * where its record has fewer than two things to say (a patient's insurer is a name alone; their provider has a
+ * specialty and a phone).
+ */
+function referenceCard(
+  schema: DatabaseSchema,
+  up: ForeignKey,
+  hints: AnatomyHints,
+  noun: (table: TableMeta) => string,
+): { title: string; paths: string[] } | undefined {
+  const column = up.from.columns[0];
+  const upTable = findTable(schema, up.to.table);
+  const base = findTable(schema, up.from.table);
+  if (!upTable) return undefined;
+  const upName = hints.label?.(upTable) ?? labelColumn(upTable);
+  const upState = statusColumn(upTable, hints);
+  /* What tells this record from another of its name (referenceSubline.ts): its code, its email, the day it was made —
+     read on the card beside the name, after its state, where two Ana Silvas would otherwise be one card twice. */
+  const told = referenceSubline(
+    schema,
+    upTable,
+    upName,
+    upName ? { [upName]: { subtitle: hints.subtitle?.(upTable, upName) } } : undefined,
+  );
+  const telling = told && !told.path.includes('.') ? upTable.columns.find((c) => c.name === told.path) : undefined;
+  const tells = telling && telling !== upState && readable(upTable, telling) && !LONG_OR_KEY(telling) ? telling : undefined;
+  const glance = [
+    ...(upState ? [upState] : []),
+    ...(tells ? [tells] : []),
+    ...upTable.columns.filter(
+      (c) =>
+        c !== upState &&
+        c !== tells &&
+        readable(upTable, c) &&
+        c.name !== upName &&
+        !LONG_OR_KEY(c) &&
+        !HOUSEKEEPING.test(c.name) &&
+        !c.flag,
+    ),
+  ].slice(0, 2);
+  if (glance.length < 2) return undefined;
+  return {
+    title: headingOf((base && hints.caption?.(base, column)) || humanName(column.replace(/_id$/i, '')) || noun(upTable)),
+    paths: [column, ...glance.map((c) => `${column}.${c.name}`)],
+  };
+}
+
+/** Which of a table's columns go where on its record's page, or nothing where a record has no key to open it by. At
+    most `lists` related lists: four on a scaffold's page, every one on the inferred page's tab strip. */
+export function recordAnatomy(
+  schema: DatabaseSchema,
+  baseId: string,
+  hints: AnatomyHints = {},
+  lists: number = MAX_RELATED,
+): Anatomy | null {
   const base = findTable(schema, baseId);
   if (!base || !primaryKey(base).length) return null;
   const money = moneyBy(hints);
@@ -220,11 +307,14 @@ export function recordAnatomy(schema: DatabaseSchema, baseId: string, hints: Ana
   );
   const moneyColumns = figures.filter((column) => money(base, column)).map((column) => column.name);
   const counted = figures.filter((column) => COUNTED.test(column.name)).map((column) => column.name);
-  /* The header says what the record belongs to, what it is worth and when. */
+  /* The header says what the record belongs to, what it is worth and when: a span from its start to its end, said
+     once, where it has both (a visit's 2:00 – 4:00 PM), never its end alone. */
+  const span = spanOf(base);
+  const shownSpan = span && own.some((column) => column.name === span.start) && own.some((column) => column.name === span.end);
   const facts = [
     ...take(refColumns[0]),
     ...take(moneyColumns[0]),
-    ...take(dateColumns(base, taken).map((column) => column.name)[0]),
+    ...take(shownSpan ? span.start : dateColumns(base, taken).map((column) => column.name)[0]),
     ...take(counted[0]),
     ...take(refColumns[1]),
   ].slice(0, MAX_FACTS);
@@ -254,7 +344,7 @@ export function recordAnatomy(schema: DatabaseSchema, baseId: string, hints: Ana
       findTable(schema, fk.from.table) &&
       (hints.includes?.(findTable(schema, fk.from.table)!) ?? true),
   );
-  const related = incoming.slice(0, MAX_RELATED).map((fk): RelatedPick => {
+  const related = incoming.slice(0, lists).map((fk): RelatedPick => {
     const child = findTable(schema, fk.from.table)!;
     const ambiguous = incoming.filter((other) => other.from.table === fk.from.table).length > 1 || child.id === base.id;
     const title = hints.title?.(fk, child, ambiguous) ?? (ambiguous ? `${child.name} via ${fk.from.columns.join(', ')}` : undefined);
@@ -274,22 +364,14 @@ export function recordAnatomy(schema: DatabaseSchema, baseId: string, hints: Ana
   let parent: Anatomy['parent'];
   const required = (column: string) => base.columns.find((c) => c.name === column)?.nullable === false;
   for (const column of related.length ? [...refColumns].sort((a, b) => Number(required(b)) - Number(required(a))) : []) {
-    const up = refs.find((fk) => fk.from.columns[0] === column)!;
-    const upTable = findTable(schema, up.to.table);
-    if (!upTable) continue;
-    const upName = hints.label?.(upTable) ?? labelColumn(upTable);
-    const upState = statusColumn(upTable, hints);
-    const glance = [
-      ...(upState ? [upState] : []),
-      ...upTable.columns.filter(
-        (c) => c !== upState && readable(upTable, c) && c.name !== upName && !LONG_OR_KEY(c) && !HOUSEKEEPING.test(c.name) && !c.flag,
-      ),
-    ].slice(0, 2);
-    if (glance.length < 2) continue;
-    parent = {
-      title: headingOf(humanName(column.replace(/_id$/i, '')) || noun(upTable)),
-      paths: [column, ...glance.map((c) => `${column}.${c.name}`)],
-    };
+    const card = referenceCard(
+      schema,
+      refs.find((fk) => fk.from.columns[0] === column)!,
+      hints,
+      noun,
+    );
+    if (!card) continue;
+    parent = card;
     // Said on its card, the reference is not said again in the rail.
     taken.add(column);
     break;
@@ -336,6 +418,7 @@ export function recordAnatomy(schema: DatabaseSchema, baseId: string, hints: Ana
   return {
     ...(status ? { status } : {}),
     facts,
+    ...(shownSpan && facts.includes(span.start) ? { spans: { [span.start]: span.end } } : {}),
     summary,
     related,
     ...(parent ? { parent } : {}),
@@ -353,17 +436,7 @@ export function anatomySections(anatomy: Anatomy): PageSection[] {
     sections.push({ kind: 'fields', presentation: 'header', paths: anatomy.facts, ...(anatomy.status ? { status: anatomy.status } : {}) });
   }
   if (anatomy.summary.length) sections.push({ kind: 'fields', presentation: 'summary', paths: anatomy.summary });
-  for (const list of anatomy.related) {
-    sections.push({
-      kind: 'list',
-      ...(list.title ? { title: list.title } : {}),
-      from: list.from,
-      path: list.whose,
-      columns: list.show,
-      limit: DEFAULT_PAGE_LIST_LIMIT,
-      ...(list.sort ? { orderBy: [{ column: list.sort.split(' ')[0], direction: 'desc' as const }] } : {}),
-    });
-  }
+  sections.push(...anatomy.related.map(listSection));
   /* With no children to list, the fields are the page, not a rail beside nothing. */
   const aside = anatomy.related.length > 0;
   if (anatomy.parent)
@@ -402,16 +475,160 @@ export function anatomySections(anatomy: Anatomy): PageSection[] {
   return sections;
 }
 
+/** A related list as a page section: its first page, newest first where it has a date to sort by. */
+function listSection(list: RelatedPick): PageSection {
+  return {
+    kind: 'list',
+    ...(list.title ? { title: list.title } : {}),
+    from: list.from,
+    path: list.whose,
+    columns: list.show,
+    limit: DEFAULT_PAGE_LIST_LIMIT,
+    ...(list.sort ? { orderBy: [{ column: list.sort.split(' ')[0], direction: 'desc' as const }] } : {}),
+  };
+}
+
+/** Text a reader reads rather than scans, and the stamps a database keeps, go last in a group of fields. */
+const lateness = (path: string) => (LONG_TEXT.test(path) ? 2 : HOUSEKEEPING.test(path) ? 1 : 0);
+
+/**
+ * The page an App draws for a record it declared none for: the head, a classic form, the related tables as tabs and
+ * the references beside them (docs/design.md, "The inferred record"). Coding agents leave a record page undeclared
+ * or thin, so this is the page most records are read on, and it must not read as a dump of columns.
+ *
+ * - The head: the name, its column's second line, the status, and at most four facts — the anatomy's (what it belongs
+ *   to, what it is worth, when, how many, its second reference), then the record's rollups while under four, then its
+ *   figures and short words while under three. A fact may be a field too: the head is the glance, the form is where
+ *   a value is read whole and set.
+ * - The form: a fields section per group the App's form declares, after an untitled one of what no group holds; one
+ *   untitled section where it declares none, so no heading repeats the record's kind. In the form's order, then the
+ *   schema's; stamps, then long text, last. Not the name, not a status a machine moves (its verbs move it, the head
+ *   says it), not a reference its card already says.
+ * - Every table that points here and that the reader's catalog holds, one tab each in foreign-key order, then the
+ *   history where the App keeps one; one strip, counted (recordReads.ts, relatedCountsBody).
+ * - Beside them, a card for each reference whose record has two things to say (three at most), then the current child.
+ *
+ * Every choice is made from the catalog and the App's declarations, never from a row: a page that changed shape when
+ * its row arrived would move under the reader.
+ */
+function inferredSections(schema: DatabaseSchema, base: TableMeta, hints: AnatomyHints = {}): PageSection[] | null {
+  const anatomy = recordAnatomy(schema, base.id, hints, Number.POSITIVE_INFINITY);
+  if (!anatomy) return null;
+  const name = hints.label?.(base) ?? labelColumn(base);
+  const own = base.columns.filter((column) => readable(base, column) && column.name !== name);
+  const noun = (table: TableMeta) => hints.noun?.(table) ?? recordNoun(undefined, table.name);
+  const refs = referencesFrom(schema, base.id).filter(
+    (fk) => fk.from.columns.length === 1 && !fk.stitched && own.some((column) => column.name === fk.from.columns[0]),
+  );
+  const refColumns = new Set(refs.map((fk) => fk.from.columns[0]));
+  const required = (fk: ForeignKey) => base.columns.find((column) => column.name === fk.from.columns[0])?.nullable === false;
+  const cards = [...refs]
+    .sort((a, b) => Number(required(b)) - Number(required(a)))
+    .flatMap((fk) => referenceCard(schema, fk, hints, noun) ?? [])
+    .slice(0, 3);
+
+  const status = anatomy.status;
+  const facts = [...anatomy.facts];
+  const said = new Set([...facts, ...(status ? [status] : [])]);
+  const say = (column: string) => {
+    if (said.has(column)) return;
+    said.add(column);
+    facts.push(column);
+  };
+  const rollups = Object.keys(base.rollups ?? {});
+  for (const rollup of rollups) if (facts.length < MAX_FACTS) say(rollup);
+  const plain = own.filter(
+    (column) =>
+      !column.primaryKey && !refColumns.has(column.name) && !LONG_OR_KEY(column) && !HOUSEKEEPING.test(column.name) && !column.flag,
+  );
+  for (const kind of ['number', 'text'])
+    for (const column of plain) if (facts.length < 3 && columnKind(column.type ?? '') === kind) say(column.name);
+
+  /* The form: what the record holds that the head and the cards do not already say whole. */
+  const left = new Set<string>([...(status && hints.moved?.(base, status) ? [status] : []), ...cards.map((card) => card.paths[0])]);
+  const held = new Set([...own.map((column) => column.name).filter((column) => !left.has(column)), ...rollups.filter((r) => !said.has(r))]);
+  const declared = hints.groups?.(base) ?? [];
+  const inTitled = new Set(declared.flatMap((group) => (group.label ? group.fields : [])));
+  const placed = new Set<string>();
+  const group = (paths: readonly string[]) => {
+    const mine: string[] = [];
+    for (const path of paths) {
+      if (!held.has(path) || placed.has(path)) continue;
+      placed.add(path);
+      mine.push(path);
+    }
+    return mine.sort((a, b) => lateness(a) - lateness(b));
+  };
+  const untitled = group([
+    ...declared.flatMap((each) => (each.label ? [] : each.fields)),
+    ...[...held].filter((path) => !inTitled.has(path)),
+  ]);
+  const groups = [
+    { paths: untitled },
+    ...declared.flatMap((each) => (each.label ? [{ title: each.label, paths: group(each.fields) }] : [])),
+  ].filter((each) => each.paths.length);
+
+  const subtitle = name ? hints.subtitle?.(base, name) : undefined;
+  const sections: PageSection[] = [
+    {
+      kind: 'fields',
+      presentation: 'header',
+      paths: facts,
+      ...(status ? { status } : {}),
+      ...(subtitle ? { subtitle } : {}),
+      ...(anatomy.spans ? { spans: anatomy.spans } : {}),
+    },
+    ...groups.map((each): PageSection => ({
+      kind: 'fields',
+      ...('title' in each && each.title ? { title: each.title } : {}),
+      presentation: 'properties',
+      columns: 2,
+      emptyMode: 'show',
+      paths: each.paths,
+    })),
+  ];
+  const beside: PageSection[] = cards.map((card) => ({
+    kind: 'fields',
+    title: card.title,
+    presentation: 'card',
+    region: 'aside',
+    paths: card.paths,
+  }));
+  const now = anatomy.current;
+  if (now) {
+    beside.push({
+      kind: 'list',
+      title: now.title,
+      from: now.from,
+      path: now.whose,
+      columns: now.show,
+      limit: 1,
+      presentation: 'card',
+      region: 'aside',
+      ...(now.query ? { filter: now.query } : {}),
+      ...(now.sort
+        ? { orderBy: [{ column: now.sort.split(' ')[0], direction: now.sort.endsWith(' asc') ? ('asc' as const) : ('desc' as const) }] }
+        : {}),
+    });
+  }
+  /* Every list fits on the page's one screen with the rest (MAX_SECTIONS): a table pointed at by more than that
+     keeps its first ones, in the order the schema declares them. */
+  const room = MAX_SECTIONS - sections.length - (anatomy.history ? 1 : 0) - beside.length;
+  sections.push(...anatomy.related.slice(0, Math.max(0, room)).map(listSection));
+  if (anatomy.history) sections.push({ kind: 'history' });
+  return [...sections, ...beside];
+}
+
 /** The page an App draws for a resource it declared none for (appProjection.ts, /api/pages/suggested). */
 export function anatomyPage(schema: DatabaseSchema, baseId: string, hints: AnatomyHints = {}): PageDef | null {
-  const anatomy = recordAnatomy(schema, baseId, hints);
   const base = findTable(schema, baseId);
-  if (!anatomy || !base) return null;
+  const sections = base ? inferredSections(schema, base, hints) : null;
+  if (!base || !sections) return null;
   return {
     id: `suggested:${base.id}`,
     name: base.name,
     base: base.id,
-    sections: anatomySections(anatomy),
+    sections,
     listTabs: true,
     source: 'suggested',
   };

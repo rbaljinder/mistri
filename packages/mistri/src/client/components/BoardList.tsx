@@ -35,8 +35,13 @@
  * confirmation, a reason, a command's inputs) holds the card faded in its new
  * place until the form is answered, and back where it was if it is
  * cancelled. A move made while another saves waits its turn. A saved move is
- * written into the lanes' cache, and the lanes it touched are read once more
- * when the last move is done — not every list on the page after every write.
+ * drawn over the lanes as read, and the counts and the list's one windowed
+ * read are read once more when the last move is done — not every list on the
+ * page after every write.
+ *
+ * A board a list infers (`done`) gathers its machine's final states in one
+ * folded Done lane, present where the list can hold a finished record; a drop
+ * on it writes the one final state the card's moves lead to.
  */
 import { namedCell } from '@mistriwork/kit/client/components/listColumn.js';
 import { secondLine } from '@mistriwork/kit/client/components/Value.js';
@@ -61,7 +66,8 @@ import {
 } from '@mistriwork/kit/client/core.js';
 import { joinQuery, splitQuery } from '@mistriwork/kit/client/clauses.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
-import { currencyPath, rowCurrency } from '@mistriwork/engine/shared/money.js';
+import { rowCurrency } from '@mistriwork/engine/shared/money.js';
+import { boardAmount, LANE_COUNT, LANE_CURRENCY, LANE_PAGE, LANE_SUM, laneCountsText } from '@mistriwork/engine/shared/boardLanes.js';
 import { defaultCurrency } from '@mistriwork/kit/client/locale.js';
 import { amountRule, cardCategory, cardFact, dressedValue, laneMark, laneWord, namesPerson, shortAmount } from './boardFace.js';
 import { activeApp } from '../appState.js';
@@ -96,19 +102,19 @@ interface BoardListProps {
   /** A reference's record name, read beside it (listReferenceNames): a title that is a reference says the name, not the key. */
   referenceLabels?: Record<string, string>;
   /**
-   * The list's whole question. Given, the board reads it lane by lane — each
-   * lane's own cards a page at a time, and every lane's count in one
-   * breakdown — rather than laying out the one page of `rows` the list read.
+   * The list's whole question. Given, `rows` are its lanes' first pages, read in one window by the lane column
+   * (TableRoom.tsx, boardLanes.ts): every lane's count comes in one breakdown, and a lane's "Show more" reads that
+   * lane alone, a page more at a time. Not given, the board lays out the one page of `rows` the list read.
    */
   query?: string;
 }
 
 /** The lanes when none are authored: the column's vocabulary, the referenced rows, else what is seen, in order. */
 const LANE_CAP = 8;
-/** A lane's cards are read this many at a time; "Show more" reads the next. */
-const LANE_PAGE = 20;
 /** The lane, or row, of the cards whose value is empty: never a value a column can hold as text here. */
 export const NONE = '\u0000none';
+/** The one lane a machine's final states are drawn in, where the board gathers them (AppBoardList `done`). */
+export const DONE = '\u0000done';
 
 /** `position` is the order column's number, absent where the card has no place yet. */
 interface BoardCard extends TriageCard {
@@ -120,6 +126,8 @@ interface Move {
   card: BoardCard;
   to: TriageTarget;
   action?: LaneMove;
+  /** The state a drop on the Done lane writes: the one final state the card's moves lead to. */
+  end?: string;
 }
 /** A move waiting on its confirmation or reason: drawn already (`token`), with what it will write. */
 interface AskedMove extends Move {
@@ -253,14 +261,6 @@ interface LaneCounts {
   counts: Map<string, number>;
   sums: Map<string, Array<[string | undefined, unknown]>>;
 }
-/** The lane breakdown's question: the list's conditions, counted (and summed) by the lane column. */
-function laneCountsText(query: string | undefined, by: string, amount?: string, currencyBy?: string): string | null {
-  const parts = query ? splitQuery(query) : undefined;
-  /* With an amount, the same breakdown sums it beside each count, named so neither is read for the other. */
-  const measures = amount ? `count as ${LANE_COUNT}, sum ${amount} as ${LANE_SUM}` : 'count';
-  const keys = amount && currencyBy ? `${by}, ${currencyBy} as ${LANE_CURRENCY}` : by;
-  return parts ? `${parts.table} ${parts.filter ?? ''} ${measures} by ${keys}`.replace(/\s+/g, ' ') : null;
-}
 
 /** A list's sort as columns a card's row holds, for placing a moved card among a lane that keeps no order of its own. */
 function sortOf(query: string | undefined): Array<{ column: string; desc: boolean }> {
@@ -282,11 +282,6 @@ const compareValues = (a: unknown, b: unknown) => {
     : String(a).localeCompare(String(b), undefined, { numeric: true });
 };
 
-/* The lane breakdown's two measures, by names no column is read by. */
-const LANE_COUNT = 'lane_cards';
-const LANE_SUM = 'lane_amount';
-const LANE_CURRENCY = 'lane_currency';
-
 /** The lanes a reader has opened or folded on this board, kept in this browser: a convenience, so a storage that
     throws (a private window, blocked site data) leaves every foldable lane folded, as the App declared. */
 function readFolds(key: string): Record<string, boolean> {
@@ -305,30 +300,41 @@ function keepFolds(key: string, folds: Record<string, boolean>): void {
   }
 }
 
-/** The final lanes this browser last saw empty on this board. A first paint folds by them, never by counts that land
-    after it: folding when the counts arrived moved every lane after the first paint. */
-function readEmptyFinals(key: string): readonly string[] {
-  try {
-    const kept = JSON.parse(window.localStorage.getItem(`${key}:empty`) ?? '[]') as unknown;
-    return Array.isArray(kept) ? kept.filter((id): id is string => typeof id === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-function keepEmptyFinals(key: string, lanes: readonly string[]): void {
-  try {
-    window.localStorage.setItem(`${key}:empty`, JSON.stringify(lanes));
-  } catch {
-    /* Read again from the counts on the next visit. */
-  }
-}
-
 /** One lane's question: the list's, narrowed to the lane, keeping its show and sort and dropping its page. */
-function laneQuery(query: string, by: string, lane: string): string {
+function laneQuery(query: string, by: string, lane: string, done?: readonly string[]): string {
   const parts = splitQuery(query);
-  const condition = lane === NONE ? `${by} is empty` : `${by} = ${quote(lane)}`;
+  const condition =
+    lane === NONE
+      ? `${by} is empty`
+      : lane === DONE && done
+        ? `${by} in (${done.map((value) => quote(value)).join(', ')})`
+        : `${by} = ${quote(lane)}`;
   return joinQuery({ ...parts, filter: andQuery(parts.filter, condition), limit: undefined });
 }
+
+/* A move's `when` that says only which states it moves from (appMachine.ts inStates), `status = new` or
+   `status in (new, scheduled)`, is answered from the card's own row: asking the server which of the cards on a board
+   are in the state their lane already says was a read per condition each time a card moved. Anything else is asked. */
+const WORD = String.raw`'(?:[^']|'')*'|"(?:[^"]|"")*"|[A-Za-z0-9_.-]+`;
+const IS_STATE = new RegExp(String.raw`^\s*([A-Za-z_]\w*)\s*=\s*(${WORD})\s*$`);
+const IN_STATES = new RegExp(String.raw`^\s*([A-Za-z_]\w*)\s+in\s*\(\s*((?:${WORD})(?:\s*,\s*(?:${WORD}))*)\s*\)\s*$`, 'i');
+const unquoted = (word: string) =>
+  /^'.*'$/s.test(word) ? word.slice(1, -1).replace(/''/g, "'") : /^".*"$/s.test(word) ? word.slice(1, -1).replace(/""/g, '"') : word;
+/** The states a `when` admits, where it says nothing else about the lane column; undefined where it must be asked. */
+function statesOfWhen(when: string, by: string, vocabulary: readonly string[]): ReadonlySet<string> | undefined {
+  const one = IS_STATE.exec(when);
+  const many = one ? undefined : IN_STATES.exec(when);
+  const column = one?.[1] ?? many?.[1];
+  if (column !== by) return undefined;
+  const words = one ? [one[2]] : [...many![2].matchAll(new RegExp(WORD, 'g'))].map((match) => match[0]);
+  const states = words.map(unquoted);
+  /* Only a word of the column's own vocabulary is that state's text on every engine; anything else is asked. */
+  return states.every((state) => vocabulary.includes(state)) ? new Set(states) : undefined;
+}
+
+/** Whether the list's own conditions name the lane column: a tab of open work does, All does not. */
+const statedIn = (query: string | undefined, by: string) =>
+  Boolean(query && new RegExp(String.raw`(^|[^\w.])${by}([^\w]|$)`).test(splitQuery(query).filter ?? ''));
 
 export function BoardList({ table, rows: page, spec, actions = [], interactive = true, label, query, referenceLabels }: BoardListProps) {
   const client = useQueryClient();
@@ -382,14 +388,12 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
   const vocabulary = table.columns.find((c) => c.name === spec.by)?.allowed ?? byColumn?.allowed;
   /* What a card is worth: the board's `sum`, else the first money its card shows (a line, a fact on its foot). Each
      lane's head says its sum, and a card says its money short, $240K, with the whole figure in its title. */
-  const amount =
-    spec.sum ??
-    [...(spec.lines ?? []), ...(spec.footer ?? []).map((fact) => fact.column)].find(
-      (name) => amountRule(table.id, name)?.format === 'money',
-    );
-  const amountSaid = amount ? (amountRule(table.id, amount) ?? { format: 'number' }) : null;
-  /* Money each card says its own currency for: a card says its amount in it, and a lane sums each currency apart. */
-  const currencyBy = amountSaid?.format === 'money' && amount ? currencyPath(amountSaid, amount) : undefined;
+  /* Money each card says its own currency for (`currencyBy`): a card says its amount in it, and a lane sums each
+     currency apart. Worked out as the first page works it out (firstPaintRooms.ts), so the counts it carries are found. */
+  const worth = boardAmount(spec, (name) => amountRule(table.id, name));
+  const amount = worth.amount;
+  const amountSaid = amount ? (amountRule(table.id, amount) ?? { format: 'number' as const }) : null;
+  const currencyBy = worth.currencyBy;
   const amountIn = (row: Record<string, unknown>) =>
     currencyBy && amountSaid
       ? { ...amountSaid, currency: rowCurrency(amountSaid, row, amountSaid.currency || defaultCurrency(), amount) }
@@ -397,28 +401,20 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
   const counts = useLaneCounts(query, spec.by, connection, identity.epoch, amount, currencyBy);
   const counted = counts.data?.counts;
   const sums = counts.data?.sums;
+  /* A machine's final states, gathered in one Done lane where the board was inferred (listInference.ts inferBoard). */
+  const done = spec.done?.length ? spec.done : undefined;
+  const laneOfValue = (value: string) => (done?.includes(value) ? DONE : value);
+  const countIn = (lane: string) =>
+    lane === DONE ? (done ?? []).reduce((sum, value) => sum + (counted?.get(value) ?? 0), 0) : (counted?.get(lane) ?? 0);
   const finals: readonly string[] = byColumn?.states?.final ?? table.columns.find((c) => c.name === spec.by)?.states?.final ?? [];
-  /* A closed stage folds to a strip until the reader opens it, which this browser remembers for this board. */
+  /* A closed stage folds to a strip until the reader opens it, which this browser remembers for this board. It is known
+     from the machine, not from the counts, so the first paint is the last: nothing moves when the counts land. */
   const foldKey = `mistri.board-folds:${activeApp()?.id ?? ''}:${table.id}:${spec.by}:${label ?? ''}`;
   const [folds, setFolds] = useState<Record<string, boolean>>(() => readFolds(foldKey));
-  /* Which empty final lanes fold is decided before the first paint, from what this browser saw last time: the counts
-     land after the cards, and a lane that folded then moved every lane to its right. What they find is kept for the
-     next visit and changes nothing on this one, so a first visit draws every lane open and a later one draws the
-     strips from the start; a strip that has since filled says its count and opens on a click. */
-  const [emptyFinals] = useState(() => readEmptyFinals(foldKey));
-  const foundEmpty = counted
-    ? finals
-        .filter((id) => (counted.get(id) ?? 0) === 0)
-        .sort()
-        .join('\n')
-    : undefined;
-  useEffect(() => {
-    if (foundEmpty !== undefined) keepEmptyFinals(foldKey, foundEmpty ? foundEmpty.split('\n') : []);
-  }, [foldKey, foundEmpty]);
   /* Values seen, most first: over the whole list once the counts are in, over the page until then. */
   const observed = counted
     ? [...counted]
-        .filter(([id]) => id !== NONE)
+        .filter(([id]) => id !== NONE && !done?.includes(id))
         .sort((x, y) => y[1] - x[1])
         .map(([id]) => id)
     : [...new Set(page.flatMap((row) => (row[spec.by] == null ? [] : [String(row[spec.by])])))];
@@ -441,19 +437,22 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
           ...(laneWord(table.id, spec.by, value) !== value ? { title: value } : {}),
         })),
         ...(noneLane ? [{ id: NONE, label: none(caption(spec.by)) }] : []),
+        /* Done comes last, folded, and is there only where the list can hold a finished record: on a tab of open work
+           it would say 0 of something the tab left out. A tab that names no state shows it from the first paint. */
+        ...(done && (countIn(DONE) > 0 || !statedIn(query, spec.by)) ? [{ id: DONE, label: say('doneLane') }] : []),
       ];
   for (const lane of lanes) {
     if (spec.limits?.[lane.id] !== undefined) lane.limit = spec.limits[lane.id];
-    const each = (sums?.get(lane.id) ?? []).flatMap(([currency, sum]) => {
+    const each = (lane.id === DONE ? [] : (sums?.get(lane.id) ?? [])).flatMap(([currency, sum]) => {
       const short = shortAmount(sum, currency && amountSaid ? { ...amountSaid, currency } : amountSaid);
       return short ? [short] : [];
     });
     if (each.length) lane.sum = { text: each.map((one) => one.text).join(' · '), title: each.map((one) => one.title).join(' · ') };
     /* A board of rows keeps every lane open: a strip cannot stand in each row's run of cells. A lane the App folds, or
-       a final state of the column's machine with nothing in it (Closed, Cancelled on a board of what is outstanding),
-       is a strip a reader opens: an empty lane the width of a full one spent the room on nothing. */
-    const emptyFinal = finals.includes(lane.id) && emptyFinals.includes(lane.id);
-    if ((spec.folded?.includes(lane.id) || emptyFinal) && spec.swimlanes === undefined) {
+       a final state of the column's machine (Won, Closed, Cancelled on a board of what is outstanding), is a strip with
+       its name, count and sum that a reader opens: a finished lane the width of a live one spent the room on what is done.
+       An inferred board gathers its final states into the one Done lane, folded the same way. */
+    if ((spec.folded?.includes(lane.id) || finals.includes(lane.id) || lane.id === DONE) && spec.swimlanes === undefined) {
       const folded = folds[lane.id] ?? true;
       lane.folded = folded;
       lane.onFold = () => {
@@ -477,24 +476,38 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
   }
   const laneIds = lanes.map((lane) => lane.id);
 
-  /* Each lane's cards, read a page at a time: the list's one page left a
-     900-card lane saying "3 / 5". Until a lane's own read lands, the list's
-     page stands in for it, so nothing blinks. */
+  /* Each lane's first page came in the list's own read, one window by the lane column (TableRoom.tsx): five lanes
+     were five reads of one shape, read again lane by lane after every move. "Show more" reads that lane alone, the
+     window standing in for it until it lands, so nothing blinks. */
   const [pages, setPages] = useState<Record<string, number>>({});
-  const laneOf = (row: Record<string, unknown>) => (row[spec.by] == null ? NONE : String(row[spec.by]));
-  const reads = useQueries({
+  const laneOf = (row: Record<string, unknown>) => (row[spec.by] == null ? NONE : laneOfValue(String(row[spec.by])));
+  const rowId = (row: Record<string, unknown>) => {
+    const key = keyOf(table, row) as Record<string, unknown> | null;
+    return key ? bulkKey(table, key) : null;
+  };
+  const laneText = (lane: string) => (query ? laneQuery(query, spec.by, lane, done) : '');
+  const paged = (lane: string) => (pages[lane] ?? 1) > 1;
+  const moreKey = (lane: string) => [
+    'run',
+    connection,
+    table.id,
+    'board-lane',
+    identity.epoch,
+    laneText(lane),
+    LANE_PAGE * (pages[lane] ?? 1),
+  ];
+  const more = useQueries({
     queries: lanes.map((lane) => {
+      const q = laneText(lane.id);
       const limit = LANE_PAGE * (pages[lane.id] ?? 1);
-      const q = query ? laneQuery(query, spec.by, lane.id) : '';
       return {
-        queryKey: ['run', connection, table.id, 'board-lane', identity.epoch, q, limit],
-        // A folded lane's cards are not drawn, so not read until it is opened.
-        enabled: Boolean(query) && !lane.folded && (counted ? (counted.get(lane.id) ?? 0) > 0 : true),
+        queryKey: moreKey(lane.id),
+        enabled: Boolean(query) && paged(lane.id) && !lane.folded,
         // "Show more" keeps the cards drawn while the longer page is read; another question does not.
         placeholderData: (previous: unknown, before?: { queryKey: readonly unknown[] }) =>
           before?.queryKey[5] === q ? previous : undefined,
         queryFn: async () => {
-          const data = (await api('/api/run', { q, limit, offset: 0 })) as {
+          const data = (await api('/api/run', { q, limit, offset: 0, count: 'none' })) as {
             rows?: Array<Record<string, unknown>>;
             errors?: Array<{ message: string }>;
           };
@@ -504,16 +517,37 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
       };
     }),
   });
+  /* A saved move, drawn over the window until the list is read again: the window is the list's read, not this board's. */
+  const [kept, setKept] = useState<{ base: unknown; rows: Map<string, Record<string, unknown>> }>();
+  const windowRows =
+    kept && kept.base === page
+      ? page.map((row) => {
+          const id = rowId(row);
+          return (id !== null && kept.rows.get(id)) || row;
+        })
+      : page;
+  const sort = sortOf(query);
+  const bySort = (rows: Array<Record<string, unknown>>) =>
+    sort.length
+      ? rows
+          .map((row, index) => ({ row, index }))
+          .sort(
+            (x, y) =>
+              sort.reduce((found, { column, desc }) => found || (desc ? -1 : 1) * compareValues(x.row[column], y.row[column]), 0) ||
+              x.index - y.index,
+          )
+          .map((each) => each.row)
+      : rows;
   const laneRows = (index: number): Array<Record<string, unknown>> => {
     const id = lanes[index].id;
-    if (counted && !(counted.get(id) ?? 0)) return [];
-    return (reads[index]?.data as Array<Record<string, unknown>> | undefined) ?? page.filter((row) => laneOf(row) === id);
+    if (counted && !countIn(id)) return [];
+    const own = paged(id) ? (more[index]?.data as Array<Record<string, unknown>> | undefined) : undefined;
+    if (own) return own;
+    const drawn = windowRows.filter((row) => laneOf(row) === id);
+    // The Done lane gathers several states' windows: in the list's order, as one lane read alone would be.
+    return id === DONE ? bySort(drawn) : drawn;
   };
   const read = query ? lanes.flatMap((_, index) => laneRows(index)) : page;
-  const rowId = (row: Record<string, unknown>) => {
-    const key = keyOf(table, row) as Record<string, unknown> | null;
-    return key ? bulkKey(table, key) : null;
-  };
   /* The rows as the moves still out draw them: a card stands where it was moved from the moment it is let go. */
   const optimistic = useOptimisticMoves(read, rowId, () => settle());
   const rows = optimistic.rows;
@@ -525,21 +559,13 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
     drift.set(was, (drift.get(was) ?? 0) - 1);
     drift.set(is, (drift.get(is) ?? 0) + 1);
   });
-  const laneKeys = lanes.map((lane) => [
-    'run',
-    connection,
-    table.id,
-    'board-lane',
-    identity.epoch,
-    query ? laneQuery(query, spec.by, lane.id) : '',
-    LANE_PAGE * (pages[lane.id] ?? 1),
-  ]);
+  const laneKeys = lanes.map((lane) => (paged(lane.id) ? moreKey(lane.id) : null));
   const countsKey = ['count', connection, 'board', identity.epoch, laneCountsText(query, spec.by, amount, currencyBy)];
   // A card another person just changed wears the grid's fading tint; the lanes are gathered anew each render.
   const changedRows = useChangedRows(table.id, rows, (row) => keyOf(table, row) as Record<string, unknown> | null);
   if (query && counted) {
     lanes.forEach((lane, index) => {
-      const total = Math.max(0, (counted.get(lane.id) ?? 0) + (drift.get(lane.id) ?? 0));
+      const total = Math.max(0, countIn(lane.id) + (drift.get(lane.id) ?? 0));
       lane.total = total;
       const drawn = laneRows(index).length;
       if (total > drawn && !lane.folded)
@@ -603,7 +629,6 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
   /* Without an order a lane reads in the list's sort, and a card moved into it is placed by that sort until the lane
      is read again — or, where the sort is not one a row can say, after the cards already there — so the read that
      settles it finds it where it was drawn. */
-  const sort = sortOf(query);
   const unordered = () =>
     optimistic.busy() || rows !== read
       ? rows
@@ -637,7 +662,7 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
   const lineWords = Boolean((table.columns.find((c) => c.name === spec.lines?.[0]) ?? columnNamed(spec.lines?.[0]))?.allowed?.length);
   let unplaced = 0;
   const cards: BoardCard[] = ordered.flatMap((row) => {
-    const laneId = row[spec.by] == null ? (reference || noneLane ? NONE : undefined) : String(row[spec.by]);
+    const laneId = row[spec.by] == null ? (reference || noneLane ? NONE : undefined) : laneOfValue(String(row[spec.by]));
     if (laneId === undefined || !laneIds.includes(laneId)) {
       unplaced++;
       return [];
@@ -716,7 +741,9 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
   /* What the lanes leave out, over the whole list once the counts are in:
      values past the lanes an App named, or past the cap on lanes a board
      draws by itself — which is said, since the reader cannot see it. */
-  const outside = counted ? [...counted].filter(([id]) => !laneIds.includes(id) && (id !== NONE || !reference)) : undefined;
+  const outside = counted
+    ? [...counted].filter(([id, n]) => n > 0 && !laneIds.includes(laneOfValue(id)) && (id !== NONE || !reference))
+    : undefined;
   const elsewhere = outside ? outside.reduce((sum, [, n]) => sum + n, 0) : unplaced;
   const capped = Boolean(!spec.lanes && outside?.some(([id]) => id !== NONE));
   const records: ModalRecord[] = cards.map((card) => ({ key: card.key, label: card.title }));
@@ -727,17 +754,29 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
   const direct = Boolean(reference && laneWritable && byColumn!.changesBy !== 'actions');
   /* A lane is entered through a fixed edit where the reader may write the column, or through a machine's command verb
      (G62) where the reader is granted the command: the drop is the verb, judged and recorded as its button would be. */
+  /* A move into a final state is a move into Done, where the board gathers them. */
+  const reachable = [...laneIds.filter((id) => id !== DONE), ...(done && laneIds.includes(DONE) ? done : [])];
   const moves: LaneMove[] = direct
     ? []
     : [
-        ...(laneWritable ? actions.filter((action) => isMove(action, spec.by, laneIds)) : []),
-        ...actions.filter((action) => isCommandMove(action, spec.by, laneIds)),
+        ...(laneWritable ? actions.filter((action) => isMove(action, spec.by, reachable)) : []),
+        ...actions.filter((action) => isCommandMove(action, spec.by, reachable)),
       ];
+  /* The state a card is in, which a machine's steps start from: its lane, unless that lane gathers several. */
+  const stateOf = (card: BoardCard) => (card.row[spec.by] == null ? NONE : String(card.row[spec.by]));
   // The place is the reader's to change on the same terms as a calendar's date: an ordinary edit of an ordinary column.
   const orderColumn = columnNamed(spec.order);
   const orderable = Boolean(spec.order !== undefined && mayEdit(orderColumn));
   const whole = wholeColumn(orderColumn?.type);
-  const conditions = [...new Set(moves.flatMap((action) => (action.when ? [action.when] : [])))];
+  const states = byColumn?.states ?? table.columns.find((c) => c.name === spec.by)?.states;
+  const words = [...(states?.open ?? []), ...(states?.final ?? []), ...(vocabulary ?? [])];
+  const local = new Map<string, ReadonlySet<string>>();
+  for (const action of moves)
+    if (action.when && !local.has(action.when)) {
+      const from = statesOfWhen(action.when, spec.by, words);
+      if (from) local.set(action.when, from);
+    }
+  const conditions = [...new Set(moves.flatMap((action) => (action.when && !local.has(action.when) ? [action.when] : [])))];
   const keysText = cards.map((card) => card.id).join('\n');
   const answers = useQueries({
     queries: conditions.map((when) => ({
@@ -753,16 +792,28 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
       enabled: cards.length > 0,
     })),
   });
-  const matched = new Map(conditions.map((when, index) => [when, answers[index].data]));
+  const matched = new Map<string, ReadonlySet<string> | undefined>(conditions.map((when, index) => [when, answers[index].data]));
+  for (const [when, states] of local) matched.set(when, new Set(cards.filter((card) => states.has(stateOf(card))).map((card) => card.id)));
+  /* The states a card's moves lead to from its own; Done is a target only where they lead to one final state. */
+  const endsOf = (card: BoardCard) => [
+    ...new Set(
+      moves
+        .filter((action) => !action.when || matched.get(action.when)?.has(card.id))
+        .flatMap((action) => lanesOfMove(action, spec.by, stateOf(card))),
+    ),
+  ];
+  const finalEnd = (card: BoardCard) => {
+    const finals = endsOf(card).filter((end) => done?.includes(end));
+    return finals.length === 1 ? finals[0] : undefined;
+  };
   const targets = (card: BoardCard) =>
     direct
-      ? laneIds.filter((lane) => lane !== card.laneId && (lane !== NONE || byColumn!.nullable))
+      ? laneIds.filter((lane) => lane !== card.laneId && lane !== DONE && (lane !== NONE || byColumn!.nullable))
       : [
           ...new Set(
-            moves
-              .filter((action) => !action.when || matched.get(action.when)?.has(card.id))
-              .flatMap((action) => lanesOfMove(action, spec.by, card.laneId))
-              .filter((lane) => lane !== card.laneId),
+            endsOf(card)
+              .map(laneOfValue)
+              .filter((lane) => lane !== card.laneId && (lane !== DONE || finalEnd(card) !== undefined)),
           ),
         ];
   const laneMoves = direct || moves.length > 0;
@@ -776,66 +827,64 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
     // Awaited: the card is redrawn in its new lane before the focus goes after it.
     await client.invalidateQueries({ queryKey: ['run', connection] });
   };
-  /* What the cache is to say once a move is saved, and which lanes to read again when the last is done: read through
-     a ref, as the queue runs after the render that made the move. */
-  const touched = useRef(new Set<string>());
-  const cache = useRef({ laneKeys, countsKey, laneIds, laneOf });
-  cache.current = { laneKeys, countsKey, laneIds, laneOf };
-  /* A saved move, written where the lanes are read from: the card leaves its lane's page and joins the other's, and
-     each lane's count follows, so the drawing has nothing to give back when it lets the move go. */
+  /* What the cache is to say once a move is saved: read through a ref, as the queue runs after the render that made
+     the move. */
+  const rawOf = (row: Record<string, unknown>) => (row[spec.by] == null ? NONE : String(row[spec.by]));
+  const cache = useRef({ laneKeys, countsKey, laneIds, laneOf, page, read });
+  cache.current = { laneKeys, countsKey, laneIds, laneOf, page, read };
+  /* A saved move, written where the lanes are read from: the card leaves its lane and joins the other's — over the
+     window, and in a lane read further by "Show more" — and each lane's count follows, so the drawing has nothing to
+     give back when it lets the move go. */
   const dirty = useRef(false);
   const keep = (saved: ReadonlyArray<readonly [BoardCard, Values]>) => {
     dirty.current = true;
     if (!query) return;
-    const { laneKeys: keys, countsKey: counting, laneIds: ids, laneOf: laneFor } = cache.current;
+    const { laneKeys: keys, countsKey: counting, laneIds: ids, laneOf: laneFor, page: base, read: was } = cache.current;
     const moved = new Map(saved.map(([card, values]) => [card.id, { ...card.row, ...values }]));
-    const moves: Array<[string, string]> = [];
+    /* Counted by the state each was in as read, and is in now: the lane breakdown counts states, not lanes. */
+    const before = new Map(was.flatMap((row) => (rowId(row) === null ? [] : [[rowId(row)!, row] as const])));
+    const shifts = [...moved].flatMap(([id, row]) => {
+      const from = before.get(id);
+      return from && rawOf(from) !== rawOf(row) ? [[rawOf(from), rawOf(row)] as const] : [];
+    });
+    setKept((current) => ({ base, rows: new Map([...(current?.base === base ? current.rows : []), ...moved]) }));
     keys.forEach((key, index) => {
+      if (!key) return;
       const lane = ids[index];
       client.setQueryData<Array<Record<string, unknown>>>(key, (data) => {
-        if (!data && ![...moved.values()].some((row) => laneFor(row) === lane)) return data;
-        const kept = (data ?? []).flatMap((row) => {
+        if (!data) return data;
+        const kept = data.flatMap((row) => {
           const id = rowId(row);
           const now = id === null ? undefined : moved.get(id);
-          if (!now) return [row];
-          if (laneFor(row) !== laneFor(now)) moves.push([laneFor(row), laneFor(now)]);
-          return laneFor(now) === lane ? [now] : [];
+          return !now ? [row] : laneFor(now) === lane ? [now] : [];
         });
         const present = new Set(kept.map(rowId));
         return [...kept, ...[...moved].filter(([id, row]) => laneFor(row) === lane && !present.has(id)).map(([, row]) => row)];
       });
     });
-    if (moves.length)
+    if (shifts.length)
       client.setQueryData<LaneCounts>(counting, (data) => {
         if (!data) return data;
         const counts = new Map(data.counts);
-        for (const [from, to] of moves) {
+        for (const [from, to] of shifts) {
           counts.set(from, Math.max(0, (counts.get(from) ?? 0) - 1));
           counts.set(to, (counts.get(to) ?? 0) + 1);
         }
         return { ...data, counts };
       });
-    for (const [card, values] of saved) {
-      touched.current.add(card.laneId);
-      touched.current.add(laneFor({ ...card.row, ...values }));
-    }
   };
-  /* Once the last move is done: the lanes it touched, their counts and every card's `when` read again, once. */
+  /* Once the last move is done: the counts, the list's window and any lane read further, and every card's `when`, read again, once. */
   const settle = async () => {
     // Nothing saved (refused, cancelled, or a session since retired): nothing to read again.
     if (!dirty.current || !isCurrentFrom(identity.epoch)()) return;
     dirty.current = false;
-    const lanesTouched = [...touched.current];
-    touched.current.clear();
     void client.invalidateQueries({ queryKey: ['when', table.id] });
     void client.invalidateQueries({ queryKey: ['when-lanes', table.id] });
     if (!query) return invalidate();
-    const { laneKeys: keys, countsKey: counting, laneIds: ids } = cache.current;
     await Promise.all([
-      client.invalidateQueries({ queryKey: counting, exact: true }),
-      ...keys
-        .filter((_, index) => lanesTouched.includes(ids[index]))
-        .map((key) => client.invalidateQueries({ queryKey: key, exact: true })),
+      client.invalidateQueries({ queryKey: cache.current.countsKey, exact: true }),
+      // The list's read (TableRoom.tsx) and the lanes read by "Show more": every read of this table's rows.
+      client.invalidateQueries({ predicate: (each) => each.queryKey[0] === 'run' && each.queryKey[2] === table.id }),
     ]);
   };
   /** One write of one record; the outcome's message when it did not apply, and whether that was a refusal. */
@@ -857,11 +906,11 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
   /* What a move will write, worked out when it is made, so it is drawn at once and written as drawn: the lane where
      the reader writes it, the row, and the card's place with any neighbors renumbered around it. A lane an action
      moves to is drawn too, though the action writes it. */
-  const planOf = ({ card, to, action }: Move) => {
+  const planOf = ({ card, to, action, end }: Move) => {
     const laneChange = to.lane !== card.laneId;
     const rowChange = to.row !== undefined && to.row !== card.rowId && spec.swimlanes !== undefined;
     const own: Values = {};
-    if (laneChange && !action) own[spec.by] = valueOf(to.lane, byColumn);
+    if (laneChange && !action) own[spec.by] = valueOf(end ?? to.lane, byColumn);
     if (rowChange) own[spec.swimlanes!] = valueOf(to.row!, rowColumn);
     let writes: Array<[BoardCard, number]> = [];
     if (to.index !== undefined && orderable) {
@@ -873,7 +922,7 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
     }
     const mine = writes.find(([each]) => each.id === card.id);
     if (mine) own[spec.order!] = mine[1];
-    const drawn: Values = { ...own, ...(laneChange && action ? { [spec.by]: valueOf(to.lane, byColumn) } : {}) };
+    const drawn: Values = { ...own, ...(laneChange && action ? { [spec.by]: valueOf(end ?? to.lane, byColumn) } : {}) };
     const neighbors = writes.filter(([each]) => each.id !== card.id);
     return { laneChange, rowChange, own, drawn, neighbors };
   };
@@ -891,7 +940,7 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
      first that does not apply stops the rest, and what did apply is said. The
      move is already drawn (`token`): a refusal takes it back. */
   const run = async (
-    { card, to, action }: Move,
+    { card, to, action, end }: Move,
     plan: ReturnType<typeof planOf>,
     token: number,
     values: Values | undefined = action?.set,
@@ -903,7 +952,7 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
     if (laneChange && action?.command) {
       // The verb's own pipeline: a refusal is said in the server's words, and a command that asks more opens its form.
       // A verb told its lane hears the drop's: `moveDeal` with `{ stage: 'negotiation' }`.
-      const told = asksLane(action as AppCommandAction) ? { [spec.by]: valueOf(to.lane, byColumn) } : {};
+      const told = asksLane(action as AppCommandAction) ? { [spec.by]: valueOf(end ?? to.lane, byColumn) } : {};
       const outcome = await recordCommand(action.command, action.label)?.(card.key as Record<string, string | number>, told);
       if (!isCurrent()) return optimistic.undo(token);
       if (outcome?.status !== 'applied') {
@@ -1015,14 +1064,17 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
     if (!card) return;
     const laneChange = to.lane !== card.laneId;
     // The move this card may make into that lane: one whose `when` it answered, where several lead there.
-    const into = moves.filter((candidate) => lanesOfMove(candidate, spec.by, card.laneId).includes(to.lane));
+    /* A drop on Done is a move into the one final state the card's moves lead to. */
+    const end = to.lane === DONE ? finalEnd(card) : undefined;
+    if (to.lane === DONE && end === undefined && to.lane !== card.laneId) return;
+    const into = moves.filter((candidate) => lanesOfMove(candidate, spec.by, stateOf(card)).includes(end ?? to.lane));
     const action =
       laneChange && !direct
         ? (into.find((candidate) => !candidate.when || matched.get(candidate.when)?.has(card.id)) ?? into[0])
         : undefined;
     if (laneChange && !direct && !action) return;
     if (to.row !== undefined && to.row !== card.rowId && !rowsMovable) return;
-    const move = { card, to, action };
+    const move = { card, to, action, ...(end === undefined ? {} : { end }) };
     const plan = planOf(move);
     const asks =
       Boolean(action && !action.command && (action.reason || action.confirm)) ||

@@ -915,6 +915,8 @@ export const RECIPE_REGIONS: Readonly<Record<RecipePart, readonly string[]>> = {
   lanes: ['.board-list', '.dash-board', '.triage-board'],
   /* The header is the pane's top, from the trail to the facts or the tabs: the band runs edge to edge. */
   header: ['.content:has(.page-head.is-room, .applist-controls)', '.content'],
+  /* The filters not yet asked for, beside the ones that are and the search. */
+  filters: ['.applist-bar-chips:has(.applist-add)', '.applist-controls'],
   'radius.pill': ['.table-wrap:has(.tone)', '.board-list', '.page-head:has(.tone)'],
   'radius.control': ['.page-head', '.applist-head'],
   'border.control': ['.insert-group-fields', ':has(> .insert-field)'],

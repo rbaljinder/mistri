@@ -734,6 +734,29 @@ describe('the App, checked against the schema the migrations make', () => {
     assert.match(status.out, /warning: mistri-schema\.d\.ts is older than the database — task \(columns changed\)/);
     assert.match(status.out, /\+ column task\.by_hand {2}TEXT {2}\(added outside migrations\)/);
   });
+
+  /* An external assessment: check and serve accepted a config with an email connection, and check --pending refused
+     it ("The kinds are "http", "cache" and "webhook""), because the copy read the file with the engine's sections. */
+  test('check --pending reads the config as check and serve do: an email connection is accepted', async () => {
+    setUp();
+    const withMail = join(root, 'mistri-mail.json');
+    writeFileSync(
+      withMail,
+      `${JSON.stringify({
+        connections: [
+          { name: 'tiny', url: db },
+          { name: 'mail', kind: 'email', url: 'log:', from: 'Tiny <no-reply@example.test>' },
+        ],
+      })}\n`,
+    );
+    try {
+      const pending = await cli(['check', '--app', appDir, '--config', withMail, '--pending']);
+      assert.doesNotMatch(pending.err, /could not make its copy|Config error|The kinds are/, pending.err);
+      assert.match(pending.out, /pending\s+passed/, `${pending.out}\n${pending.err}`);
+    } finally {
+      rmSync(withMail, { force: true });
+    }
+  });
 });
 
 /* Against a real Flyway, where one is installed: TABLEWALK_TEST_FLYWAY names

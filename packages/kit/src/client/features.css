@@ -7,7 +7,7 @@
 @import './components/FilterRail.css';
 @import './components/DateField.css';
 @import './components/ListFilterBar.css';
-@import './components/JsonView.css';
+@import './components/JsonPreview.css';
 @import './components/ListEmpty.css';
 @import './components/Notes.css';
 /* The tool's own rules: the first layer (style.css names the order). */
@@ -445,6 +445,12 @@ body.app-mode .page-edit { font-family: var(--sans); }
 .tab .tab-count { display: inline-grid; margin-left: var(--space-2h); color: var(--ink-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .tab .tab-count::before, .tab .tab-count > span { grid-area: 1 / 1; }
 .tab .tab-count::before { content: '00' / ''; visibility: hidden; }
+/* A record's related tabs count the same way (an inferred page, PageRelated.tsx), in the tab's own small type, and
+   so does a related list alone, beside its heading. */
+:is(.page-tab, .page-section-head) .tab-count { display: inline-grid; margin-left: var(--space-2h); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+:is(.page-tab, .page-section-head) .tab-count::before, :is(.page-tab, .page-section-head) .tab-count > span { grid-area: 1 / 1; }
+:is(.page-tab, .page-section-head) .tab-count::before { content: '00' / ''; visibility: hidden; }
+.page-tab[aria-selected="true"] .tab-count { color: inherit; }
 /* The count takes the tab's ink whole: faded, it was 3.3:1 on a filled tab. */
 .tab[aria-selected="true"] .tab-count { color: inherit; }
 /* Quick filters: the list's key vocabularies as one-click conditions. */
@@ -799,6 +805,10 @@ body.first-run #db-label {
 .dash-head .dash-description { padding: 0; margin: var(--space-2h) 0 0; max-width: 70ch; font-size: var(--text-md); line-height: 1.5; }
 /* Filter controls already separate the heading from the dashboard body. */
 .dash-head:has(+ div .dash-controls) { margin-bottom: 0; }
+/* `head: 'compact'`: the title at a list's size on one line with its star, and the body close under it — a working
+   page whose own controls are its intro. Same gutters as the full head, so switching the form moves nothing sideways. */
+.dash-head-compact { align-items: center; gap: var(--space-2h); width: 100%; margin-bottom: var(--space-3); }
+.dash-head-compact .applist-title { margin: 0; }
 .dash-strip { border: none; padding: 0; }
 /* The refresh staging ground: rendered for real (fetches and chart
    measurement need layout) but out of sight and out of the page's flow. */
@@ -835,6 +845,11 @@ body.first-run #db-label {
    card's width (Chart.tsx, Sparkline), its stroke and dot keeping their size. */
 .spark-host { display: block; align-self: stretch; margin-top: var(--space-3); height: 28px; width: 100%; min-width: 0; }
 .spark { width: 100%; height: 28px; display: block; }
+/* A run with fewer than four periods above zero is thin bars over a baseline, kept short: stretched across a wide card
+   they read as a chart of nothing (Chart.tsx, Sparkline). */
+.spark-sparse { max-width: 160px; }
+.spark-bar { fill: none; stroke: var(--spark-ink, var(--accent)); stroke-width: 3; stroke-linecap: butt; opacity: 0.75; }
+.spark-base { fill: none; stroke: var(--line); stroke-width: 1; }
 .spark-stroke { fill: none; stroke: var(--spark-ink, var(--accent)); stroke-width: 1.5; opacity: 0.75; }
 /* The last point: a round cap on a zero-length stroke, round however far the spark stretches. */
 .spark-dot { fill: none; stroke: var(--spark-ink, var(--accent)); stroke-width: 5; stroke-linecap: round; }
@@ -856,8 +871,12 @@ body.first-run #db-label {
    class, so the outline could change and the page not: each look still sets
    the type over this. */
 .page-section-title { margin-block: 1em; font-size: 1.17em; font-weight: bold; }
-button.ghost.dash-open { margin-left: auto; padding: var(--space-2) 0; border: 0; background: none; box-shadow: none; color: var(--link); font-size: var(--text-base); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
-button.ghost.dash-open:hover { color: var(--ink); background: none; }
+/* "View all" is a way on, not a thing to read: muted ink with its arrow, and the underline and the ink only under the
+   pointer. A bold underlined link in link ink was the loudest word on a section whose rows were the point. */
+button.ghost.dash-open { margin-left: auto; padding: var(--space-2) 0; border: 0; background: none; box-shadow: none; color: var(--ink-muted); font-size: var(--text-base); font-weight: 500; text-decoration: none; text-underline-offset: 3px; white-space: nowrap; }
+/* The arrow is drawn, not said: the button's name stays "View all" (alt text after the slash). */
+button.ghost.dash-open::after { content: ' →' / ''; }
+button.ghost.dash-open:hover { color: var(--ink); background: none; text-decoration: underline; }
 .dash-count { font-size: var(--text-sm); color: var(--ink-muted); font-family: var(--mono); }
 /* Inside a card the grid's own stat row (count, timing, Export) was a
    second strip of chrome between the title and the rows; the count worth
@@ -1217,6 +1236,8 @@ body.app-mode .sidebar[data-density="comfortable"] #table-list button { min-heig
 body.app-mode .sidebar[data-density="comfortable"] #table-list .nav-icon { width: var(--icon-ui); height: var(--icon-ui); }
 body.app-mode .sidebar[data-density="comfortable"] #table-list .nav-label { text-align: start; }
 body.app-mode .sidebar[data-density="comfortable"] #table-list li.nav-group { margin-top: var(--space-5); }
+/* All pages closes the menu (sidebarModel.ts) after the last group: a heading's gap above it, so it does not read as that group's last room. */
+#table-list li:has(> [data-form="app:directory"]) { margin-top: var(--space-3h); }
 /* A group's fold is its heading, not a room: the comfortable row above reached
    it too, and a nested group was a 13px, 46px row beside 10px headings. */
 body.app-mode .sidebar[data-density="comfortable"] #table-list li.nav-group .nav-group-fold { font: inherit; }
@@ -1400,9 +1421,6 @@ body.app-mode .sidebar[data-density="comfortable"] #table-list .nav-dot { width:
 .tn-all { margin-left: var(--space-2h); color: var(--ink-subtle); font-size: var(--text-sm); }
 .tn-all:hover { color: var(--ink-muted); }
 
-/* A record hit in the palette: the row the words found. */
-.palette-kind.kind-record { color: var(--accent-ink); }
-
 /* Motion, by the doctrine in docs/design.md: popovers enter with a
    160ms ease-out settle from their origin; leaving is instant; reduced
    motion silences it (the peek card's @starting-style pattern). */
@@ -1452,6 +1470,16 @@ body.app-mode .sidebar[data-density="comfortable"] #table-list .nav-dot { width:
 .peekpanel-title {
   margin: 0; font: 600 var(--text-md) var(--mono); letter-spacing: -0.01em;
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The title of a form is the list's title step, not the 13px of a label under it (docs/design.md, Forms): the New
+   drawer's and the dialogs that ask for fields (a record's New, a command, a field set over many) in an App; the
+   Workbench's dialog keeps its own. It names what the form makes, so it wraps rather than being cut. */
+.newpanel .peekpanel-title {
+  font: var(--heading-weight, 600) var(--type-list-title) / 1.2 var(--heading-font, var(--sans)); letter-spacing: var(--track-title);
+  white-space: normal; overflow-wrap: anywhere;
+}
+body.app-mode .confirm:is(.insert-dialog, .command-form, .set-field-dialog) > h2 {
+  font: var(--heading-weight, 600) var(--type-list-title) / 1.2 var(--heading-font, var(--sans)); letter-spacing: var(--track-title);
 }
 .peekpanel-open { flex: none; font-size: var(--text-sm); color: var(--ink-muted); }
 .peekpanel-open:hover { color: var(--ink); }
@@ -1671,6 +1699,11 @@ body.app-mode .sidebar[data-density="comfortable"] #table-list .nav-dot { width:
 .picker-option.chosen .picker-option-label::before { content: '✓ '; }
 .picker-option-detail { color: var(--ink-muted); font-size: var(--text-xs); }
 .picker-option-label, .picker-option-detail { min-width: 0; overflow-wrap: anywhere; }
+/* A choice's second line (referenceSubline.ts): under its name, in the muted ink, where it tells two of one name apart. */
+.picker-option-name { display: grid; min-width: 0; }
+.picker-option-sub { min-width: 0; overflow-wrap: anywhere; color: var(--ink-muted); font-size: var(--text-sm); }
+/* motion-ok: the second line takes its option's tint, which the option's own :hover above sets wherever it is drawn */
+.picker-option.active .picker-option-sub, .picker-option:hover .picker-option-sub { color: inherit; }
 .picker-empty { padding: var(--space-2h) var(--space-3); color: var(--ink-muted); font-size: var(--text-sm); }
 .picker-chips { display: contents; }
 .picker-chip { display: inline-flex; align-items: center; gap: var(--space-2); padding: 1px var(--space-2) 1px var(--space-3); border-radius: 999px;
@@ -1714,6 +1747,15 @@ body.app-mode .insert-field .req { color: var(--status-critical); font-size: var
    dialog keeps the schema's label-beside-value. */
 .insert-form-app .insert-fields { gap: var(--field-gap); padding-right: 0; }
 .insert-form-app .insert-group-fields { gap: calc(var(--space-6) - var(--space-2)); }
+/* Fields are laid on a grid of 200px-or-wider cells: a field takes the whole row, and a short answer (a count, an
+   amount, a day, a time — `data-kind`, which Field and the New form's field set from the data) takes one cell, so
+   consecutive short answers share a row and wrap at narrow widths, one to a row where two cells do not fit (the
+   `min(…, 100%)` keeps a 320px page at one column and no sideways scroll). Decided from the data kinds in order,
+   never measured, so no answer moves another (docs/design.md, Forms). An author's own row (`.form-columns`) is one
+   whole-row item and keeps its own columns. */
+:is(.insert-form-app .insert-group-fields, .command-fields) { grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); column-gap: var(--space-5); align-items: start; }
+:is(.insert-form-app .insert-group-fields, .command-fields) > * { grid-column: 1 / -1; min-width: 0; }
+:is(.insert-form-app .insert-group-fields, .command-fields) > [data-kind] { grid-column: auto; }
 .insert-form-app .insert-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-2h); align-items: stretch; }
 /* The label sits in a row with its optional word, so the row's label is named as well as a bare one: `> :is(label,
    .form-field-label-row > label)` matched only the bare one, and the muted 12px Workbench rule drew the rest. */
@@ -1811,6 +1853,10 @@ body.signed-out .brand-db,
 body.signed-out .conn-picker,
 body.signed-out .topbar-actions,
 body.signed-out #explain-pane { display: none; }
+/* The sign-in door draws no bar at all: the App's mark stands over its card (SignIn.tsx, appBrand.css), so the first
+   thing on the screen is the card, centered, and not a header with nothing else in it. An OAuth consent screen keeps
+   its bar. `!important` so a shell layout's own display for the bar (topnav, rail) cannot bring it back. */
+body.signin-door .topbar { display: none !important; }
 body.signed-out .brand { min-width: 0; max-width: 100%; pointer-events: none; }
 body.signed-out .brand-mark { flex-shrink: 0; }
 body.signed-out .brand-name { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
@@ -1912,7 +1958,10 @@ body.session-locked > :not(#session-lock) { display: none !important; }
 
 /* Totals: one footer row, each sum over everything the list's conditions
    match, set apart from the rows by a rule rather than a colour. */
-.grid-totals td { font-weight: 600; border-top: 1px solid var(--line-strong); border-bottom: 0; background: var(--surface); }
+/* A sum is the one figure that is never cut (docs/design.md): the column is sized by it (gridSizing.ts), and where a
+   font that arrived late or a narrower weight still leaves it short it spills into the cell's padding rather than
+   draw "$102,795....". */
+.grid-totals td { font-weight: 600; border-top: 1px solid var(--line-strong); border-bottom: 0; background: var(--surface); overflow: visible; text-overflow: clip; }
 .grid-totals-label { font-weight: 500; color: var(--ink-muted); }
 .grid-totals-pending { color: var(--ink-subtle); }
 
@@ -2006,6 +2055,17 @@ body.app-mode th .pk { display: none; }
 /* The view's verbs remain one group at the end of the same scrolling row. */
 .applist-actions { display: flex; align-items: center; gap: var(--space-1); margin-left: var(--space-2); flex: none; }
 .applist-actions:empty { display: none; }
+/* Rows or a board (LayoutSwitch.tsx): a segmented pair of marks, the phone's Records/Table switch drawn at every width. */
+.list-layout { display: inline-flex; }
+.list-layout-seg {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 34px; min-height: 30px; padding: 0 var(--space-2);
+  border: 1px solid var(--line-control); background: transparent; color: var(--ink-muted);
+}
+.list-layout-seg:first-child { border-radius: var(--radius-item) 0 0 var(--radius-item); }
+.list-layout-seg:last-child { border-radius: 0 var(--radius-item) var(--radius-item) 0; margin-inline-start: -1px; }
+.list-layout-seg[aria-pressed="true"] { background: var(--raised); color: var(--accent-ink); border-color: var(--accent); position: relative; }
+.list-layout-seg:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
 /* Where the rail folds into its sheet, the strip's one row scrolls and the
    verbs sit at its end — so Filters, which is now the only way to reach the
    facets at all, was off the right edge behind a horizontal scroll nobody

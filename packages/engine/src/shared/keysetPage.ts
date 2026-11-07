@@ -47,6 +47,8 @@ export function keysetOrder(table: TableMeta, order: readonly Order[], dialect: 
   if (dialect !== 'postgres' && dialect !== 'sqlite') return false;
   const key = primaryKey(table);
   if (!key.length || !key.every((column) => order.some((o) => o.column === column))) return false;
+  /* A sort that moves its empty values says where they go on its own terms; a step is asked by offset there. */
+  if (order.some((o) => o.nulls)) return false;
   return order.every((o) => {
     const column = table.columns.find((c) => c.name === o.column);
     if (!column || UNFAITHFUL.test(column.type)) return false;

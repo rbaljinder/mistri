@@ -77,11 +77,26 @@ export const ROOM_BUDGETS = {
   /* The same list opened from the menu: its rows and its tabs' counts. */
   'payday list, from the menu': { requests: 3, statements: 7 },
   /* Thread's home: the dashboard's numbers and lists together. Was 17
-     requests, 8 of them a list apiece. Its board reads a page per lane,
-     five of one shape in one request, which the observer flags: one
-     pattern, allowed until a board is read in one statement. */
+     requests, 8 of them a list apiece. Its board section reads a page per
+     lane, five of one shape in one request, which the observer flags: one
+     pattern, allowed until the section reads its lanes in one window as a
+     list's board does (the bare board below). */
   'thread home': { requests: 10, statements: 20, nPlusOne: 1 },
   /* Issues: the shell's seven, the rows, the tabs' counts in one statement.
      Was 10 requests and 5 statements (a count per tab, read as a view). */
   'thread list': { requests: 10, statements: 4 },
+  /* The App nobody arranged, its home inferred (appOverview.ts): the
+     document and the live stream. The document carries the state strip
+     (one GROUP BY), the open work, the reader's own (one statement each,
+     neither with a total) and the latest: four statements. Was 8: a total
+     per section, and the person behind `me` looked up by email. */
+  'bare home': { requests: 2, statements: 4 },
+  /* Its jobs, read as a board from the address: the lanes' first cards in
+     one windowed statement, their counts in one breakdown, the tabs' counts
+     in one, all in the document. Was 27 requests and 32 statements: a read
+     per lane, then each lane read again when the list's own page landed. */
+  'bare board': { requests: 2, statements: 3 },
+  /* The same board opened from the menu: the window, the lane counts and
+     the tabs' counts, a request each. */
+  'bare board, from the menu': { requests: 3, statements: 3 },
 };

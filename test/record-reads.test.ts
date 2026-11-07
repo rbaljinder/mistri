@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { DatabaseSchema, TableMeta } from '../packages/engine/src/shared/schema.js';
+import { HISTORY_TAB } from '../packages/engine/src/shared/pageModel.js';
 import {
   definedThrough,
   drawnSections,
@@ -15,6 +16,9 @@ import {
   headerColumns,
   listView,
   recordPageReads,
+  relatedCountQuestion,
+  relatedCountsBody,
+  RELATED_COUNT_LIMIT,
   type ReadPlan,
   type ReadSection,
 } from '../packages/engine/src/shared/recordReads.js';
@@ -133,6 +137,46 @@ test('a run of lists made into tabs draws the one the address names, or the firs
   sections.push({ kind: 'list', from: 'account', emptyMode: 'hide' });
   assert.deepEqual([...drawnSections(schema, { sections, listTabs: true }, undefined, true)].sort(), [0, 1]);
   assert.deepEqual([...drawnSections(schema, { sections, listTabs: true }, 'account', true)].sort(), [0, 3]);
+});
+
+test("an inferred page's strip counts every tab in one read, and its history is a tab read only when opened", () => {
+  const sections: ReadSection[] = [
+    { kind: 'fields', presentation: 'header', paths: ['tier'] },
+    { kind: 'fields', presentation: 'properties', paths: ['name'] },
+    { kind: 'list', from: 'deal', path: 'account_id' },
+    { kind: 'list', from: 'note', path: 'account_id', filter: 'body != ""' },
+    { kind: 'history' },
+  ];
+  const page = { id: 'suggested:account', sections, listTabs: true };
+  const plans: ReadPlan[] = [
+    { index: 0 },
+    { index: 1 },
+    { index: 2, view: view('deal', ['title']) },
+    { index: 3, view: view('note', ['body']) },
+    { index: 4 },
+  ];
+  const opened = (tab?: string) => recordPageReads(names, page, account, plans, { id: 1 }, { rows: 10, history: true, tab }).reads;
+  const counts = { items: ['deal account_id = 1', 'note account_id = 1 and body != ""'], countLimit: RELATED_COUNT_LIMIT };
+  assert.deepEqual(relatedCountsBody(schema, sections, account, { id: 1 }), counts);
+  assert.deepEqual(
+    opened().map((read) => read.path),
+    ['/api/view/run', '/api/counts'],
+    'the first tab, and every count; the closed history reads nothing',
+  );
+  assert.deepEqual(opened().at(-1)?.body, counts, 'the very body the strip asks, so the compose answers it');
+  assert.deepEqual(
+    opened(HISTORY_TAB).map((read) => read.path),
+    ['/api/record-history', '/api/counts'],
+  );
+  // A declared page's history is a section of its own and its tabs are not counted: nothing changes there.
+  const declared = recordPageReads(names, { ...page, id: 'account' }, account, plans, { id: 1 }, { rows: 10, history: true }).reads;
+  assert.deepEqual(
+    declared.map((read) => read.path),
+    ['/api/view/run', '/api/record-history'],
+  );
+  // A list that is not one hop back to this record has no question to ask.
+  assert.equal(relatedCountQuestion(schema, { kind: 'list', from: 'deal' }, account, { id: 1 }), undefined);
+  assert.equal(relatedCountQuestion(schema, { kind: 'list', from: 'deal', path: 'account_id' }, deal, { id: 1 }), undefined);
 });
 
 test("the record's row is read once for every section that reads it, and each other read as its section builds it", () => {

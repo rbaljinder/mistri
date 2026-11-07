@@ -37,6 +37,38 @@ const invalid = (): never => {
   throw new Refusal('Invalid row scope.');
 };
 
+/* Past a size bound the scope is refused, never cut short, and the refusal says which bound, by how much and what to
+   do instead: "Invalid row scope." alone sent a policy author to guess, and one capped its own list to fit — a silent
+   truncation of who may see what, which is the thing the bound exists to refuse. */
+const NEXT_STEP =
+  'Narrow the policy, or scope by a relationship instead of a list: give each scoped table a single-value column (its owner or tenant) and compare it with "=" (docs: Row access, "Bounds").';
+const counted = (n: number) => n.toLocaleString('en-US');
+const pastBound = (what: string, size: number, bound: number, unit: string, per: string, more = false): never => {
+  const over = more ? 'more than ' : '';
+  throw new Refusal(
+    `Invalid row scope: ${what} ${over}${counted(size)} ${unit}, ${over}${counted(size - bound)} past the bound of ${counted(bound)} ${per}. ${NEXT_STEP}`,
+  );
+};
+
+/** How many values a scope holds, as the copy counts them (a value met twice counts twice), for a refusal to say how
+ * far past the bound it went. Reads only data properties (never an accessor), as deep as the copy goes, and stops
+ * counting at `cap`, so a cycle ends. */
+function valuesIn(input: unknown, cap: number): number {
+  const pending: Array<[unknown, number]> = [[input, 0]];
+  let count = 0;
+  while (pending.length && count < cap) {
+    const [value, depth] = pending.pop()!;
+    count += 1;
+    if (!value || typeof value !== 'object' || depth >= 8) continue;
+    for (const key of Reflect.ownKeys(value)) {
+      if (Array.isArray(value) && key === 'length') continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor && 'value' in descriptor && descriptor.enumerable) pending.push([descriptor.value, depth + 1]);
+    }
+  }
+  return count;
+}
+
 /** Copy before validation so accessors, prototypes and later mutation cannot
  * change what was checked. Bounds apply to the entire scope, not each table.
  * Frozen nested values stay private; Readonly<Record> alone is not a snapshot.
@@ -45,7 +77,12 @@ export function captureRowScope(input: RowScope): RowScope {
   let nodes = 0;
   let characters = 0;
   const copy = (value: unknown, depth = 0): unknown => {
-    if (++nodes > ROW_SCOPE_LIMITS.nodes || depth > 8) return invalid();
+    if (++nodes > ROW_SCOPE_LIMITS.nodes) {
+      const cap = ROW_SCOPE_LIMITS.nodes * 64;
+      const all = valuesIn(input, cap);
+      return pastBound('the scope holds', all, ROW_SCOPE_LIMITS.nodes, 'values', 'in one scope', all >= cap);
+    }
+    if (depth > 8) return invalid();
     if (typeof value === 'string') {
       characters += value.length;
       if (value.length > ROW_SCOPE_LIMITS.string || characters > ROW_SCOPE_LIMITS.characters) return invalid();
@@ -57,10 +94,11 @@ export function captureRowScope(input: RowScope): RowScope {
     const proto = Object.getPrototypeOf(value);
     if (array ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) return invalid();
     const keys = Reflect.ownKeys(value);
-    if (keys.length > ROW_SCOPE_LIMITS.array + 1) return invalid();
     if (array) {
       const length = Object.getOwnPropertyDescriptor(value, 'length')?.value;
-      if (!Number.isInteger(length) || length > ROW_SCOPE_LIMITS.array || keys.length !== length + 1) return invalid();
+      if (Number.isInteger(length) && length > ROW_SCOPE_LIMITS.array)
+        return pastBound('a list holds', length, ROW_SCOPE_LIMITS.array, 'values', 'per list');
+      if (!Number.isInteger(length) || keys.length !== length + 1) return invalid();
       const result: unknown[] = [];
       for (let i = 0; i < length; i++) {
         const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
@@ -69,6 +107,7 @@ export function captureRowScope(input: RowScope): RowScope {
       }
       return Object.freeze(result);
     }
+    if (keys.length > ROW_SCOPE_LIMITS.array) return pastBound('a record holds', keys.length, ROW_SCOPE_LIMITS.array, 'keys', 'per record');
     const result: Record<string, unknown> = Object.create(null);
     for (const key of keys) {
       if (typeof key !== 'string') return invalid();
@@ -81,8 +120,10 @@ export function captureRowScope(input: RowScope): RowScope {
     return Object.freeze(result);
   };
   const scope = copy(input);
-  if (!scope || typeof scope !== 'object' || Array.isArray(scope) || Object.keys(scope).length > ROW_SCOPE_LIMITS.resources)
-    return invalid();
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope)) return invalid();
+  const resources = Object.keys(scope).length;
+  if (resources > ROW_SCOPE_LIMITS.resources)
+    return pastBound('the scope names', resources, ROW_SCOPE_LIMITS.resources, 'resources', 'in one scope');
   return scope as RowScope;
 }
 
@@ -177,7 +218,17 @@ export function snapshotRowScope(schema: DatabaseSchema, input: RowScope): RowSc
     for (const group of policy.groups) {
       if (!Array.isArray(group) || !group.length) return invalid();
       for (const condition of group) {
-        if (++conditions > ROW_SCOPE_LIMITS.conditions || !record(condition)) return invalid();
+        if (++conditions > ROW_SCOPE_LIMITS.conditions) {
+          // The copy is plain frozen data, so counting every group is safe; it says how far past the bound it went.
+          const all = Object.values(scope).reduce(
+            (sum, entry) =>
+              sum +
+              (record(entry) && Array.isArray(entry.groups) ? entry.groups.reduce((n, g) => n + (Array.isArray(g) ? g.length : 0), 0) : 0),
+            0,
+          );
+          return pastBound('the scope holds', all, ROW_SCOPE_LIMITS.conditions, 'conditions', 'in one scope');
+        }
+        if (!record(condition)) return invalid();
         if (Object.keys(condition).some((key) => !['column', 'op', 'value'].includes(key))) return invalid();
         if (typeof condition.column !== 'string' || !table.columns.some((column) => column.name === condition.column)) return invalid();
         if (typeof condition.op !== 'string' || !OPS.has(condition.op)) return invalid();

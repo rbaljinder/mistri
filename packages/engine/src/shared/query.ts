@@ -44,7 +44,8 @@ interface ParsedQuery {
   filter: Filter;
   /** Explicit column list from `show`, empty for all columns. */
   columns: string[];
-  orderBy: { column: string; direction: 'asc' | 'desc' }[];
+  /** `nulls: 'last'` where the sort says `nulls last`: an empty value after every other, in either direction, on every engine. */
+  orderBy: { column: string; direction: 'asc' | 'desc'; nulls?: 'last' }[];
   limit?: number;
 }
 
@@ -1300,11 +1301,20 @@ function parseUncached(input: string, options: ParseOptions): ParseResult {
   const orderBy: ParsedQuery['orderBy'] = [];
   if (clauses.sort) {
     for (const part of clauses.sort.split(/\s*,\s*|\s+and\s+/i)) {
-      const [field, dir] = part.trim().split(/\s+/);
+      /* `due_on`, `due_on desc`, `due_on nulls last`, `due_on asc nulls last`: where an empty value goes is said
+         once, the same on every engine (SQLite and MySQL put it first going up, PostgreSQL last). */
+      const words = part.trim().split(/\s+/);
+      const nullsLast = words.length >= 3 && /^nulls$/i.test(words[words.length - 2]) && /^last$/i.test(words[words.length - 1]);
+      const [field, dir] = nullsLast ? words.slice(0, -2) : words;
       if (!field) continue;
       const { column, error } = resolveColumn(table, field);
       if (error) errors.push({ message: error, at: clauseAt.sort });
-      else orderBy.push({ column: column?.name ?? field, direction: (dir ?? '').toLowerCase() === 'desc' ? 'desc' : 'asc' });
+      else
+        orderBy.push({
+          column: column?.name ?? field,
+          direction: (dir ?? '').toLowerCase() === 'desc' ? 'desc' : 'asc',
+          ...(nullsLast ? { nulls: 'last' as const } : {}),
+        });
     }
   }
 
@@ -1385,7 +1395,9 @@ export function explain(query: ParsedQuery): string {
     lines.push(` WHERE ${groups.length === 1 ? groups[0] : groups.map((g) => `(${g})`).join('\n    OR ')}`);
   }
   if (query.orderBy.length) {
-    lines.push(` ORDER BY ${query.orderBy.map((o) => `${o.column} ${o.direction.toUpperCase()}`).join(', ')}`);
+    lines.push(
+      ` ORDER BY ${query.orderBy.map((o) => `${o.column} ${o.direction.toUpperCase()}${o.nulls ? ' NULLS LAST' : ''}`).join(', ')}`,
+    );
   }
   if (query.limit !== undefined) lines.push(` LIMIT ${query.limit}`);
   return lines.join('\n');

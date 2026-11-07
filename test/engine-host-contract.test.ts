@@ -100,6 +100,8 @@ function fixture(name: string): string {
 
 /** A configured, writable connection the way the browser opens one: hidden columns cut from the catalog and every answer. */
 async function opened(file: string, id: string) {
+  // A writable connection says so, once, when its database holds no journal store; the browser provisions it first (idempotent).
+  provisionSqliteWriteJournal(file);
   const registry = new Registry();
   registry.onWarning = (message) => assert.fail(`unexpected warning: ${message}`);
   registry.add({ id, name: 'Contract', url: file, source: 'config', writable: true, hidden: { customer: ['secret'] } });

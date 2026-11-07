@@ -10,6 +10,7 @@ import { servedDecisions } from '../decide/decisionServing.js';
 import { anatomyPage, type AnatomyHints } from '@mistriwork/engine/shared/pageAnatomy.js';
 import { headingOf, pluralOf, recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
+import { subtitlePath } from '@mistriwork/engine/shared/subtitlePath.js';
 import { historyRules } from '../recordHistory.js';
 import type { PageDef } from '@mistriwork/engine/shared/page.js';
 import { appAllowsWrite, grantsByRole, type AppDef } from '../../shared/app.js';
@@ -376,7 +377,9 @@ export function defaultPage(host: AppHost | undefined, schema: DatabaseSchema, t
   return host ? anatomyPage(schema, table, anatomyHints(host.app.app, host.pages, table)) : suggestPage(schema, table);
 }
 
-/** What an App says that the anatomy reads: which columns are money, and whether this resource keeps a history. */
+/** What an App says that the anatomy reads: which columns are money, whether this resource keeps a history, what
+    names its records, the second line under a name, how its form groups its fields, what its machine moves and what it
+    calls a column. */
 function anatomyHints(app: AppDef, pages: readonly PageDef[], table: string): AnatomyHints {
   const display = (id: string) => app.resources?.[id]?.display as Record<string, { format?: string } | undefined> | undefined;
   const history = historyRules(app, pages);
@@ -398,5 +401,21 @@ function anatomyHints(app: AppDef, pages: readonly PageDef[], table: string): An
       return rule?.format === undefined ? undefined : rule.format === 'money';
     },
     history: history.has(table),
+    /* The column the App names its records by, where that is one column: a template's name is no one field. */
+    label: (of) => {
+      const said = resource(of.id)?.recordLabel;
+      return typeof said === 'string' && of.columns.some((column) => column.name === said) ? said : undefined;
+    },
+    subtitle: (of, column) =>
+      subtitlePath((display(of.id)?.[column] ?? display(of.name)?.[column]) as { subtitle?: string } | undefined, column),
+    /* The form's own arrangement: its groups, else its steps, else its order alone. */
+    groups: (of) => {
+      const form = resource(of.id)?.form;
+      if (form?.groups?.length) return form.groups.map((group) => ({ label: group.label, fields: group.fields }));
+      if (form?.steps?.length) return form.steps.map((step) => ({ label: step.label, fields: step.fields }));
+      return form?.show?.length ? [{ fields: form.show }] : undefined;
+    },
+    moved: (of, column) => resource(of.id)?.machine?.column === column,
+    caption: (of, column) => resource(of.id)?.labels?.[column],
   };
 }

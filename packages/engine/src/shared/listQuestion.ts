@@ -53,6 +53,8 @@ export interface ListQuestionSpec {
   opens?: string;
   /** The column a grid's rows are grouped by (a view's `group`): fetched, shown or not, as each row's head is read from it. */
   group?: string;
+  /** An inferred second line under a shown column, by column (listInference.ts): fetched with the row, drawn under it. */
+  subtitles?: Readonly<Record<string, string>>;
 }
 
 const squeeze = (text: unknown): string =>
@@ -157,6 +159,7 @@ export function showClause(rules: ListRules, spec: ListQuestionSpec): string {
       ...named,
       ...(spec.order ? [spec.order] : []),
       ...subtitleColumns(rules, spec.table, [...names, ...(spec.presentation ? listSecondLineColumns(spec.presentation) : [])]),
+      ...names.flatMap((name) => (spec.subtitles && Object.hasOwn(spec.subtitles, name) ? [spec.subtitles[name]!] : [])),
       ...editedReferences(rules, spec),
       ...(spec.opens ? [spec.opens] : []),
       ...(spec.group ? [spec.group] : []),

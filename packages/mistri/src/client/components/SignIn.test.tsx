@@ -91,7 +91,7 @@ describe('pre-selection tenant administration entry', () => {
     vi.stubGlobal('fetch', fetcher);
     const user = userEvent.setup();
     render(<AccountControl who="Ordinary user" tenantAdministration />);
-    await user.click(screen.getByRole('button', { name: 'Account: Ordinary user' }));
+    await user.click(screen.getByRole('button', { name: 'Account: OU Ordinary user' }));
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menuitem', { name: 'Manage tenants' })).toBeNull();
   });
@@ -114,7 +114,7 @@ describe('pre-selection tenant administration entry', () => {
         <AccountControl who="Operator" tenantAdministration />
       </StrictMode>,
     );
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Manage tenants' }));
     expect(await screen.findByRole('dialog', { name: 'Manage tenants' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Close' }));
@@ -123,7 +123,7 @@ describe('pre-selection tenant administration entry', () => {
         <AccountControl who="Operator" tenantAdministration />
       </StrictMode>,
     );
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     await user.click(screen.getByRole('menuitem', { name: 'Manage tenants' }));
     expect(screen.getByRole('dialog', { name: 'Manage tenants' })).toBeVisible();
     expect(fetcher.mock.calls.filter(([url]) => url.includes('/open?'))).toHaveLength(1);
@@ -144,7 +144,7 @@ describe('pre-selection tenant administration entry', () => {
     const tree = render(<AccountControl who="Operator" tenantAdministration />);
     // Reaching for the menu is what opens administration (AccountControl.tsx).
     act(() => {
-      screen.getByRole('button', { name: 'Account: Operator' }).focus();
+      screen.getByRole('button', { name: 'Account: O Operator' }).focus();
     });
     await act(async () => {
       lockSessionIdentity();
@@ -152,7 +152,7 @@ describe('pre-selection tenant administration entry', () => {
       resolve(administrationReply(true));
     });
     tree.rerender(<AccountControl who="Operator" tenantAdministration />);
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(screen.queryByRole('menuitem', { name: 'Manage tenants' })).toBeNull();
   });
   test('administration is not opened until the reader reaches for the account menu', async () => {
@@ -165,7 +165,7 @@ describe('pre-selection tenant administration entry', () => {
     });
     // Drawing the shell asks nothing: the open is a writer transaction (AccountControl.tsx).
     expect(fetcher).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(await screen.findByRole('menuitem', { name: 'Manage tenants' })).toBeVisible();
     expect(fetcher).toHaveBeenCalledOnce();
   });
@@ -174,7 +174,7 @@ describe('pre-selection tenant administration entry', () => {
     vi.stubGlobal('fetch', fetcher);
     const user = userEvent.setup();
     render(<AccountControl who="Operator" />);
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(fetcher).not.toHaveBeenCalled();
     expect(screen.queryByRole('menuitem', { name: 'Manage tenants' })).toBeNull();
   });
@@ -183,7 +183,7 @@ describe('pre-selection tenant administration entry', () => {
     vi.stubGlobal('fetch', fetcher);
     const user = userEvent.setup();
     const tree = render(<AccountControl key={captureAccountIdentity().epoch} who="Operator" tenantAdministration />);
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(await screen.findByRole('menuitem', { name: 'Manage tenants' })).toBeVisible();
     await user.keyboard('{Escape}');
     for (let i = 0; i < 20; i++) {
@@ -201,7 +201,7 @@ describe('pre-selection tenant administration entry', () => {
       });
       tree.rerender(<AccountControl key={captureAccountIdentity().epoch} who="Operator" tenantAdministration />);
     }
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(screen.getByRole('menuitem', { name: 'Manage tenants' })).toBeVisible();
     expect(fetcher.mock.calls.filter(([url]) => url.includes('/open?'))).toHaveLength(1);
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
@@ -214,9 +214,9 @@ describe('pre-selection tenant administration entry', () => {
     vi.stubGlobal('fetch', fetcher);
     const user = userEvent.setup();
     render(<AccountControl who="Operator" tenantAdministration />);
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Retry tenant administration' }));
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(await screen.findByRole('menuitem', { name: 'Manage tenants' })).toBeVisible();
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
@@ -239,14 +239,14 @@ describe('pre-selection tenant administration entry', () => {
     vi.stubGlobal('fetch', fetcher);
     const user = userEvent.setup();
     render(<AccountControl who="Operator" accountProfile />);
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     await user.click(screen.getByRole('menuitem', { name: 'Your profile' }));
     expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveValue('Operator');
     await act(async () => {
       requireTenantSelection();
     });
     expect(screen.queryByRole('dialog', { name: 'Your profile' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     await user.click(screen.getByRole('menuitem', { name: 'Your profile' }));
     expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveValue('Operator');
     expect(fetcher).toHaveBeenCalledTimes(2);
@@ -354,7 +354,7 @@ describe('pre-selection invitation entry', () => {
   test('without invitation capability the account menu does not request admission or offer invitation actions', async () => {
     const user = userEvent.setup();
     render(<AccountControl who="Operator" />);
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(fetcher).not.toHaveBeenCalled();
     expect(screen.queryByRole('menuitem', { name: 'Manage invitations' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Accept invitation' })).toBeNull();
@@ -366,7 +366,7 @@ describe('pre-selection invitation entry', () => {
       authorized = permitted;
       const user = userEvent.setup();
       render(<AccountControl who="Operator" tenantInvitations />);
-      await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+      await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
       expect(screen.getByRole('menuitem', { name: 'Accept invitation' })).toBeVisible();
       if (permitted) expect(await screen.findByRole('menuitem', { name: 'Manage invitations' })).toBeVisible();
       else expect(screen.queryByRole('menuitem', { name: 'Manage invitations' })).toBeNull();
@@ -385,11 +385,11 @@ describe('pre-selection invitation entry', () => {
           <AccountControl who="Operator" tenantInvitations />
         </StrictMode>,
       );
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Manage invitations' }));
     expect(await screen.findByText('No authorized invitation targets are available.')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Close' }));
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Account: Operator' })).toHaveFocus());
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Account: O Operator' })).toHaveFocus());
     const owner = captureAccountIdentity();
     await act(async () => {
       establishTenantSelection({
@@ -408,7 +408,7 @@ describe('pre-selection invitation entry', () => {
         <AccountControl who="Operator" tenantInvitations />
       </StrictMode>,
     );
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     await user.click(screen.getByRole('menuitem', { name: 'Manage invitations' }));
     expect(screen.getByRole('dialog', { name: 'Manage invitations' })).toBeVisible();
     expect(captureAccountIdentity()).toBe(owner);
@@ -420,10 +420,10 @@ describe('pre-selection invitation entry', () => {
     fetcher.mockRejectedValueOnce(new Error('Offline'));
     const user = userEvent.setup();
     render(<AccountControl who="Operator" tenantInvitations />);
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(screen.getByRole('menuitem', { name: 'Accept invitation' })).toBeVisible();
     await user.click(await screen.findByRole('menuitem', { name: 'Check invitation permissions' }));
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(await screen.findByRole('menuitem', { name: 'Manage invitations' })).toBeVisible();
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
@@ -439,7 +439,7 @@ describe('pre-selection invitation entry', () => {
     const user = userEvent.setup(),
       tree = render(<AccountControl who="Operator" tenantInvitations />);
     act(() => {
-      screen.getByRole('button', { name: 'Account: Operator' }).focus();
+      screen.getByRole('button', { name: 'Account: O Operator' }).focus();
     });
     await act(async () => {
       lockSessionIdentity();
@@ -447,7 +447,7 @@ describe('pre-selection invitation entry', () => {
       resolve(admission());
     });
     tree.rerender(<AccountControl who="Operator" tenantInvitations />);
-    await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+    await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
     expect(screen.queryByRole('menuitem', { name: 'Manage invitations' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Accept invitation' })).toBeNull();
     expect(hasInvitationSession()).toBe(false);
@@ -465,7 +465,7 @@ describe('pre-selection invitation entry', () => {
           <AccountControl who="Operator" tenantInvitations onInvitationAccepted={refresh} />
         </StrictMode>,
       );
-      await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+      await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
       await user.click(screen.getByRole('menuitem', { name: 'Accept invitation' }));
       await user.type(screen.getByLabelText('Invitation token'), token);
       await user.click(screen.getByRole('button', { name: 'Review invitation' }));
@@ -489,7 +489,7 @@ describe('pre-selection invitation entry', () => {
       );
       expect(refresh).toHaveBeenCalledTimes(1);
       await user.click(screen.getByRole('button', { name: 'Close' }));
-      await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+      await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
       await user.click(screen.getByRole('menuitem', { name: 'Accept invitation' }));
       expect(screen.getByLabelText('Invitation token')).toHaveValue('');
       expect(refresh).toHaveBeenCalledTimes(1);
@@ -501,7 +501,7 @@ describe('pre-selection invitation entry', () => {
     async (phase) => {
       const user = userEvent.setup();
       render(<AccountControl who="Operator" tenantInvitations />);
-      await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+      await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
       // A separate account-owned operation exercises the global shell guard even
       // when no modal is mounted to intercept the menu interaction.
       const operation = new TenantInvitationsController();
@@ -545,7 +545,7 @@ describe('pre-selection invitation entry', () => {
         await pending;
       } else await operation.check();
       expect(hasUnresolvedInvitations()).toBe(false);
-      await user.click(screen.getByRole('button', { name: 'Account: Operator' }));
+      await user.click(screen.getByRole('button', { name: 'Account: O Operator' }));
       await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
       expect(fetcher.mock.calls.filter(([url]) => url === '/api/auth/sign-out')).toHaveLength(1);
       expect(sessionIdentity().mode).toBe('locked');
@@ -561,6 +561,17 @@ describe('the sign-in screen', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New here? Create an account' })).toBeInTheDocument();
+  });
+
+  test("draws the App's mark over the card, its initial where it names no logo", () => {
+    const { container } = draw(<SignIn info={info} />);
+    const mark = container.querySelector('.signin > .signin-logo');
+    expect(mark).not.toBeNull();
+    expect(mark).toHaveAttribute('aria-hidden', 'true');
+    expect(mark?.classList.contains('brand-mark--initial')).toBe(true);
+    expect(mark?.textContent).toBe('C');
+    // Above the card, not inside it.
+    expect(mark!.compareDocumentPosition(container.querySelector('.signin-card')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   test('signs in with email and password, then starts over', async () => {
@@ -866,12 +877,14 @@ describe('the account control', () => {
 
   test('an account known only by its email is its avatar in the bar; a named one shows its name', () => {
     const tree = draw(<AccountControl who="ada@example.org" />);
-    const trigger = screen.getByRole('button', { name: 'Account: ada@example.org' });
+    const trigger = screen.getByRole('button', { name: 'Account: A ada@example.org' });
     expect(trigger.querySelector('.account-name')).toBeNull();
     expect(trigger.querySelector('.account-avatar')).toHaveTextContent('A');
     tree.unmount();
     draw(<AccountControl who="Ada Lovelace" />);
-    expect(screen.getByRole('button', { name: 'Account: Ada Lovelace' }).querySelector('.account-name')).toHaveTextContent('Ada Lovelace');
+    expect(screen.getByRole('button', { name: 'Account: AL Ada Lovelace' }).querySelector('.account-name')).toHaveTextContent(
+      'Ada Lovelace',
+    );
   });
 
   test('opening the identity menu only shows identity and an explicit Sign out', async () => {
@@ -879,7 +892,7 @@ describe('the account control', () => {
     configureSessionLifecycle({ onLock: lock });
     const user = userEvent.setup();
     draw(<AccountControl who="ada@example.org" />);
-    const trigger = screen.getByRole('button', { name: 'Account: ada@example.org' });
+    const trigger = screen.getByRole('button', { name: 'Account: A ada@example.org' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     await user.click(trigger);
@@ -897,7 +910,7 @@ describe('the account control', () => {
   test.each(['{Enter}', ' ', '{ArrowDown}'])('%s opens by keyboard; Escape restores trigger focus without signing out', async (key) => {
     const user = userEvent.setup();
     draw(<AccountControl who="Ada" />);
-    const trigger = screen.getByRole('button', { name: 'Account: Ada' });
+    const trigger = screen.getByRole('button', { name: 'Account: A Ada' });
     trigger.focus();
     await user.keyboard(key);
     await vi.waitFor(() => expect(screen.getByRole('menuitem', { name: 'Sign out' })).toHaveFocus());
@@ -917,7 +930,7 @@ describe('the account control', () => {
         <button type="button">Outside</button>
       </>,
     );
-    await user.click(screen.getByRole('button', { name: 'Account: Ada' }));
+    await user.click(screen.getByRole('button', { name: 'Account: A Ada' }));
     await user.click(screen.getByRole('button', { name: 'Outside' }));
     await vi.waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     expect(calls).toEqual([]);
@@ -927,7 +940,7 @@ describe('the account control', () => {
   test('the explicit action signs out the captured account and reloads only after success', async () => {
     const user = userEvent.setup();
     draw(<AccountControl who="ada@example.org" />);
-    screen.getByRole('button', { name: 'Account: ada@example.org' }).focus();
+    screen.getByRole('button', { name: 'Account: A ada@example.org' }).focus();
     await user.keyboard('{ArrowDown}');
     await vi.waitFor(() => expect(screen.getByRole('menuitem', { name: 'Sign out' })).toHaveFocus());
     await user.keyboard('{Enter}');
@@ -952,7 +965,7 @@ describe('the account control', () => {
     vi.stubGlobal('fetch', fetcher);
     const user = userEvent.setup();
     draw(<AccountControl who="Ada" />);
-    await user.click(screen.getByRole('button', { name: 'Account: Ada' }));
+    await user.click(screen.getByRole('button', { name: 'Account: A Ada' }));
     const item = screen.getByRole('menuitem', { name: 'Sign out' });
     const lock = vi.fn(() => {
       lockSurface();
@@ -983,7 +996,7 @@ describe('the account control', () => {
     vi.stubGlobal('fetch', fetcher);
     const user = userEvent.setup();
     draw(<AccountControl who="Ada" />);
-    const trigger = screen.getByRole('button', { name: 'Account: Ada' });
+    const trigger = screen.getByRole('button', { name: 'Account: A Ada' });
     await user.click(trigger);
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
     expect(screen.getByRole('heading')).toHaveTextContent('Sign-out could not be confirmed');
@@ -999,7 +1012,7 @@ describe('the account control', () => {
   test('an old menu cannot sign out a newly established account', async () => {
     const user = userEvent.setup();
     draw(<AccountControl who="Ada" />);
-    await user.click(screen.getByRole('button', { name: 'Account: Ada' }));
+    await user.click(screen.getByRole('button', { name: 'Account: A Ada' }));
     establishSessionIdentity({ signedIn: true, accountId: 'account-bob', appId: 'crm' });
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
     expect(calls).toEqual([]);
@@ -1011,7 +1024,7 @@ describe('the account control', () => {
     const tree = render(<AccountControl who="Ada" />);
     establishSessionIdentity({ signedIn: true, accountId: 'account-bob', appId: 'crm' });
     tree.rerender(<AccountControl who="Ada" />);
-    await user.click(screen.getByRole('button', { name: 'Account: Ada' }));
+    await user.click(screen.getByRole('button', { name: 'Account: A Ada' }));
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
     expect(calls).toEqual([]);
     expect(sessionIdentity().accountId).toBe('account-bob');
@@ -1038,7 +1051,7 @@ describe('the account control', () => {
     });
     const user = userEvent.setup();
     const tree = draw(<AccountControl who="Ada" />);
-    await user.click(screen.getByRole('button', { name: 'Account: Ada' }));
+    await user.click(screen.getByRole('button', { name: 'Account: A Ada' }));
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
     tree.unmount();
     const originalLock = screen.getByRole('heading');
@@ -1089,7 +1102,7 @@ describe('the account control', () => {
         lockSurface();
       },
     });
-    await user.click(screen.getByRole('button', { name: 'Account: Ada' }));
+    await user.click(screen.getByRole('button', { name: 'Account: A Ada' }));
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
     tree.unmount();
     expect(screen.queryByRole('menu')).toBeNull();

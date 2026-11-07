@@ -78,7 +78,7 @@ export interface PageProps<D = unknown> {
   props: Readonly<Record<string, unknown>>;
 }
 
-const FIELDS = ['label', 'icon', 'nav', 'roles', 'reads', 'commands', 'params', 'loader', 'public', 'description', 'favorite'];
+const FIELDS = ['label', 'icon', 'nav', 'roles', 'reads', 'commands', 'params', 'loader', 'public', 'description', 'favorite', 'head'];
 
 /** A page as `definePage` makes it: the component that draws it, its definition and its hooks. */
 export interface PageDefinition<D = unknown> {

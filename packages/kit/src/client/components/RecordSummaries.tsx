@@ -4,6 +4,7 @@ import { columnLabel, keyOf, labelPath, openRecord, recordLabel, rowLabel, state
 import { opensRecord } from '../recordIntent.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { TAGS_TYPE, tagChips } from '@mistriwork/engine/shared/tagLists.js';
 import type { TrailList } from '../recordTrail.js';
 import { Value } from './Value.js';
 import { rowOpensTarget, useRowOpens } from './rowOpens.js';
@@ -242,8 +243,13 @@ export function RecordSummaries({
                 };
                 const value = label ?? row[name];
                 const adorned = adornFact && (value === null || value === undefined || value === '') ? adornFact(row, name) : undefined;
+                /* An App's phone row leaves a fact with no value out (style.css): its caption is not drawn, so the mark
+                   alone would say nothing. What the host draws in its place (`adornFact`) is something, and stays. */
+                const empty =
+                  adorned === undefined &&
+                  (value === null || value === undefined || value === '' || (col.type === TAGS_TYPE && !tagChips(value).length));
                 return (
-                  <div key={name}>
+                  <div key={name} data-empty={empty ? '' : undefined}>
                     <dt>{labels?.[name] ?? columnLabel(table.id, name) ?? humanName(name)}</dt>
                     <dd>
                       {adorned ?? <Value tableId={table.id} col={label == null ? col : { ...col, type: 'TEXT' }} value={value} compact />}

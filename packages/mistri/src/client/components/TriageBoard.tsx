@@ -578,7 +578,7 @@ export function TriageBoard({
   const picker = <LanePicker lanes={lanes.filter((lane) => !(lane.folded && lane.onFold))} board={board} />;
 
   /* A board with nothing on it says so once, above its lanes, rather than
-     once in every lane: three "No items here." read as three problems. */
+     once in every lane: three "Nothing here" read as three problems. */
   const boardEmpty = cards.length === 0;
   if (!rows) {
     /* A group of lanes, each a region whose cards are a list: the cards are

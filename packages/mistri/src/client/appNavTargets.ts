@@ -20,7 +20,7 @@ import type { ShownApp } from '@mistriwork/kit/client/components/appRooms.js';
 /** The App a nav target is read against: the kit's reading of it (the sidebar passes the App on screen), with
     the pages and inbox the App framework serves where it has them. */
 export type NavTargetApp = Pick<ShownApp, 'nav' | 'views' | 'resources' | 'home'> &
-  Partial<Pick<ShownApp, 'id' | 'assistant'>> &
+  Partial<Pick<ShownApp, 'id' | 'assistant' | 'directory'>> &
   Partial<Pick<AppPayloadApp, 'pages' | 'inbox'>>;
 export const appNavTargetKey = (target: BoundAppTarget): string => {
   try {

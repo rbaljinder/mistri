@@ -27,13 +27,13 @@ describe('TriageBoard', () => {
     render(<TriageBoard lanes={lanes} cards={cards} />);
     expect([...screen.getAllByRole('heading', { level: 2 })].map((node) => node.textContent)).toEqual(['New', 'Triage', 'Done']);
     expect(screen.getAllByRole('status')).toHaveLength(1);
-    expect(screen.getByRole('status')).toHaveTextContent('No items here.');
+    expect(screen.getByRole('status')).toHaveTextContent('Nothing here');
   });
 
   it('says once, above its lanes, that a board with no cards is empty', () => {
     render(<TriageBoard lanes={lanes} cards={[]} />);
     expect(screen.getByText('Nothing on this board yet.').closest('.empty-note')).toHaveClass('triage-board-empty');
-    expect(screen.queryByText('No items here.')).toBeNull();
+    expect(screen.queryByText('Nothing here')).toBeNull();
     expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(3);
   });
 

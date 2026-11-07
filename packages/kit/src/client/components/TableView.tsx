@@ -79,6 +79,8 @@ export interface TableEntry {
   query: string;
   tab?: string;
   exactCount?: boolean;
+  /** Rows only, no total: a list whose room says none (an overview's, appOverview.ts). */
+  counted?: false;
 }
 
 /** What a list's presentation is drawn from (`present`): the list's own props, and the page of rows it holds. */

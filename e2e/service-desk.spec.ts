@@ -265,7 +265,7 @@ test.describe('Service Atlas ITSM', () => {
       await expect(page.getByRole('menuitem', { name: /^Connections/ })).toHaveCount(0);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('menu')).toHaveCount(0);
-      await page.getByRole('button', { name: 'Search (⌘K)' }).click();
+      await page.getByRole('button', { name: 'Search ⌘K' }).click();
       await page.getByRole('combobox', { name: 'Search', exact: true }).fill('Connections');
       await expect(page.getByRole('option', { name: /^action Connections/ })).toHaveCount(0);
       await page.keyboard.press('Escape');

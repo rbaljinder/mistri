@@ -358,7 +358,7 @@ test('a bulk command opens its form once for the selection, sends one request na
   expect(mocks.api.mock.calls[0]).toEqual(['/api/commands/prepare', { conn: 'desk', command: 'assign', commandVersion: 1, keys: both }]);
   await userEvent.type(within(dialog).getByLabelText('Reason (required)'), 'Batch');
   await userEvent.click(within(dialog).getByRole('button', { name: 'Assign' }));
-  await waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Completed.'));
+  await waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('The change is saved.'));
   const executes = mocks.api.mock.calls.filter(([route]) => route === '/api/commands/execute');
   expect(executes).toHaveLength(1);
   expect(executes[0][1]).toMatchObject({
@@ -416,7 +416,7 @@ test('an ineligible record is listed and blocks submit until one click deselects
   expect(screen.getByRole('toolbar', { name: 'Selected records', hidden: true })).toHaveTextContent('1 selected');
   expect(screen.getByRole('row', { name: /VPN drops/, hidden: true })).toHaveAttribute('aria-selected', 'false');
   await userEvent.click(within(dialog).getByRole('button', { name: 'Assign' }));
-  await waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Completed.'));
+  await waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('The change is saved.'));
   expect(mocks.api.mock.calls.filter(([route]) => route === '/api/commands/prepare')).toHaveLength(1);
   expect(mocks.api.mock.calls.find(([route]) => route === '/api/commands/execute')![1]).toMatchObject({
     keys: [both[0]],

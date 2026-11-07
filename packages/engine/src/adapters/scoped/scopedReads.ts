@@ -4,6 +4,8 @@ import {
   orderClause,
   clampOffset,
   countStatement,
+  lanesStatement,
+  withoutLaneRow,
   Refusal,
   type Filter,
   type QueryRequest,
@@ -136,14 +138,35 @@ export function createScopedReads(
       if (texts) columns.push(`${storedTextSelect(texts.columns, (name) => style.quote(name))} AS ${style.quote(texts.alias)}`);
       const order = orderClause(request.orderBy, plan.table, style, plan.params.length + 1, plan.column);
       const n = plan.params.length + order.params.length;
-      const text =
-        `${plan.prefix.text}SELECT ${columns.join(', ')} FROM ${plan.relation}${plan.where.text}${order.text}` +
-        ` LIMIT ${style.placeholder(n + 1)} OFFSET ${style.placeholder(n + 2)}`;
+      const lanes = request.lanes;
+      const text = lanes
+        ? lanesStatement(
+            style,
+            {
+              prefix: plan.prefix.text,
+              columns: columns.join(', '),
+              source: `${plan.relation}${plan.where.text}`,
+              lane: plan.column(lanes.by),
+              order: order.text,
+            },
+            n,
+          )
+        : `${plan.prefix.text}SELECT ${columns.join(', ')} FROM ${plan.relation}${plan.where.text}${order.text}` +
+          ` LIMIT ${style.placeholder(n + 1)} OFFSET ${style.placeholder(n + 2)}`;
       const result = await execute(
-        { text, params: [...plan.params, ...order.params, clampLimit(request.limit), clampOffset(request.offset)] },
+        {
+          text,
+          params: [
+            ...plan.params,
+            ...order.params,
+            ...(lanes ? [clampLimit(lanes.limit)] : []),
+            clampLimit(request.limit),
+            clampOffset(request.offset),
+          ],
+        },
         request.binary ? { binary: true } : undefined,
       );
-      return { ...result, columns: [...names] };
+      return { ...(lanes ? withoutLaneRow(result) : result), columns: [...names] };
     },
     async count(table: string, filter?: Filter, limit?: number) {
       const plan = from(table, snapshotScopedData(filter));

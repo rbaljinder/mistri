@@ -363,7 +363,7 @@ refusal quoted is the one the server gives; the file is where it lives.
 | Mail in and out (`mail: { receive, send, links }`) | Served through the jobs module; each message in the tenant its address names ([tenant mail](/docs/tenant-mail/)) | `tenant/tenantJobs.ts` | `mistri check --app . --jobs jobs.mjs` |
 | Jobs at times, timers, workflows, flows from rows | Per tenant: `realm: 'tenant'` runs once per active tenant, `'platform'` once | `tenant/tenantJobs.ts` | `mistri check --app . --jobs jobs.mjs` |
 | The [App API](/docs/app-api/)'s event feed (`GET /$events`) | Refused, [`api-event-unsupported`](/docs/check-codes/#api-event-unsupported): "A tenant App delivers its events through webhooks." | `api/apiEventFeed.ts` | `mistri check --app .` |
-| The App API's generic writes | Not served by any App; commands only | `api/` | `mistri check --app .` |
+| The App API's generic writes | Not served in a tenant App; commands only ([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do)) | `api/apiGenericWrites.ts` | `mistri check --app .` |
 | The App's MCP (`--app-mcp`) | Served; each token binds one membership | `tenant/tenantAuthenticatedHttp.ts` | `mistri --app . --policy policy.mjs --app-mcp` |
 
 CSV import (the owner injected; a file cannot name a tenant), custom

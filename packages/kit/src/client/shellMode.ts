@@ -188,6 +188,8 @@ interface AppRoomSlots {
   Inbox: ComponentType<Record<string, never>> | null;
   /** The assistant's own page (AssistantPanel.tsx). */
   Assistant: ComponentType<{ conversation?: string }> | null;
+  /** Every list, page and New of a long menu, with a filter box (Directory.tsx). */
+  Directory: ComponentType<Record<string, never>> | null;
   /** A free-form page (FreePage.tsx), where a dashboard entry names one. */
   Page: ComponentType<{ entry?: PageEntry; dashboard: DashboardDef; page: NonNullable<DashboardDef['page']> }> | null;
   /** A split's pick: its list kept beside the record (SplitRecordRoom.tsx). */
@@ -441,6 +443,7 @@ const WORKBENCH: ShellMode = Object.freeze({
     Form: null,
     Inbox: null,
     Assistant: null,
+    Directory: null,
     Page: null,
     SplitRecord: null,
     Document: null,

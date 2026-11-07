@@ -141,6 +141,61 @@ test('a command that writes a table an accepted trigger it fires also writes is 
   assert.ok(!warnings.some((line) => line.includes('"only"')), 'a command that leaves the account to the trigger is clean');
 });
 
+test('[trigger-double-write] reads the handler: an update of other columns is fine, the same column is named, and what it cannot read stays a warning', () => {
+  const post = trigger(
+    'CREATE TRIGGER post_balance AFTER INSERT ON ledger_entry BEGIN UPDATE account SET posted_minor = posted_minor + NEW.amount WHERE id = NEW.account_id; END',
+  );
+  const app = {
+    sources: { main: { connection: 'ops', default: true } },
+    auth: { rows: 'policy' },
+    resources: { ledger_entry: { access: 'write', triggers: ['post_balance'] } },
+  } as unknown as AppDef;
+  const found = (handle: unknown) =>
+    commandTriggerFindings(
+      app,
+      { post: { source: 'main', target: 'account', write: ['ledger_entry', 'account'], handle } } as unknown as BusinessCommandRegistry,
+      (logical) => (logical.endsWith('ledger_entry') ? [post] : []),
+    );
+  const status = 'notice';
+  // Another column of the same table: the trigger's update and the handler's are different changes.
+  assert.deepEqual(
+    found(async ({ db, record }: { db: any; record: unknown }) => {
+      // db.account.update(record, { posted_minor: 0 }) said in a comment is not a write
+      await db.ledger_entry.insert({ account_id: 1, amount: 5 });
+      await db.account.update(record, { status: 'closed', closed_on: status });
+    }).warnings,
+    [],
+  );
+  // The shorthand key counts, and the finding names the column both write.
+  const posted_minor = 0;
+  const same = found(async ({ db, record }: { db: any; record: unknown }) => {
+    await db.account.update(record, { status: 'open', posted_minor });
+  }).warnings;
+  assert.equal(same.length, 1);
+  assert.match(
+    same[0],
+    /also writes \(posted_minor\) \[trigger-double-write\]: a change both make is applied twice \(the handler writes posted_minor too\)\. Leave account\.posted_minor/,
+  );
+  assert.doesNotMatch(same[0], /status/);
+  // Not readable, so as it was: a spread, a variable for the changes, a db handed on, and a handler that is not a function.
+  const changes = { status: 'open' };
+  for (const handle of [
+    async ({ db, record }: { db: any; record: unknown }) => db.account.update(record, { ...changes }),
+    async ({ db, record }: { db: any; record: unknown }) => db.account.update(record, changes),
+    async ({ db, record }: { db: any; record: unknown }) => db.account.update(record, { [status]: 1 }),
+    async ({ db }: { db: any }) => helper(db),
+    async ({ db }: { db: any }) => db['account'].update(1, { status: 'open' }),
+    undefined,
+  ]) {
+    const { warnings } = found(handle);
+    assert.equal(warnings.length, 1, String(handle));
+    assert.match(warnings[0], /also writes \(posted_minor\) \[trigger-double-write\]: a change both make is applied twice\. Leave/);
+  }
+  // A plain context parameter is read the same way.
+  assert.deepEqual(found(async (ctx: any) => ctx.db.account.update(ctx.record, { status: 'open' })).warnings, []);
+});
+declare function helper(db: unknown): Promise<unknown>;
+
 const SQLITE = `CREATE TABLE account(id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
     posted_minor INTEGER NOT NULL DEFAULT 0);
   CREATE TABLE account_note(id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES account(id), body TEXT NOT NULL);

@@ -3,6 +3,8 @@ import { defineMessages } from '@mistriwork/kit/client/messages.js';
 
 export const say = defineMessages({
   triageBoard: 'Triage board',
+  /* The one lane a board gathers its machine's final states in. */
+  doneLane: 'Done',
   noCaption: 'No {caption}',
   changesOnlyThroughTheRecords: "{caption} changes only through the record's actions, so a card keeps its row.",
   isNotYoursToChange: '{caption} is not yours to change here, so a card keeps its row.',
@@ -16,7 +18,7 @@ export const say = defineMessages({
   savedTitle: 'Saved “{title}”',
   wentBack: '“{title}” went back to {where}: {reason}',
   readingTheLanes: 'Reading the lanes…',
-  noRecordsHere: 'No records here.',
+  noRecordsHere: 'Nothing here',
   moveTitleToLane: 'Move "{title}" to {lane}',
   recordsAre: { one: '{count} record is', other: '{count} records are' },
   inMoreLanes: {

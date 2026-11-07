@@ -59,6 +59,7 @@ import {
 } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
 import { labelColumn as namingColumn } from '@mistriwork/engine/shared/schema.js';
+import { ListSubtitles } from './listSubtitles.js';
 import { datesAmong, dressFor, leadTonePath, maskedText, ruleSays, subtitlePath, type DisplayRule } from './valueModel.js';
 import { currencyPath } from '@mistriwork/engine/shared/money.js';
 import { dueOpen } from './dueOpen.js';
@@ -269,6 +270,16 @@ function TotalValue({ value, display }: { value: unknown; display: DisplayRule |
   const dress = dressFor(display, value);
   if (dress && dress.kind !== 'meter') return <Dressed dress={dress} compact={dress.kind === 'richText'} />;
   return <span className="num-value">{formatNumber(value)}</span>;
+}
+
+/** The words the totals row draws for a column's sum, which its column is sized by (TotalValue's words); none while the
+    sum is on its way, absent, or drawn by a meter. */
+function totalWords(display: DisplayRule | null, value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const dress = dressFor(display, value);
+  if (!dress) return formatNumber(value);
+  if (dress.kind === 'meter') return undefined;
+  return String((dress.kind === 'tone' || dress.kind === 'word' || dress.kind === 'mark' ? dress.label : dress.text) ?? value);
 }
 
 /** The words a plain cell draws for a value, which the grid sizes a column by and a folded detail line tests its head
@@ -522,6 +533,7 @@ function TagsCellList({ chips }: { chips: ReturnType<typeof tagChips> }) {
       more.style.display = count > 0 ? '' : 'none';
     };
     const fit = () => {
+      list.removeAttribute('data-lone');
       tags.forEach((tag) => (tag.style.display = ''));
       sayMore(chips.length - tags.length);
       const box = getComputedStyle(cell);
@@ -535,6 +547,9 @@ function TagsCellList({ chips }: { chips: ReturnType<typeof tagChips> }) {
       });
       sayMore(chips.length - count);
       tags.forEach((tag, index) => (tag.style.display = index < count ? '' : 'none'));
+      /* The one chip that is left is kept even where it is wider than the cell, and is then the one thing that may be
+         cut: a chip is a word, but a cell narrower than its only word cannot show it whole. */
+      if (count === 1 && widths[0]! + (chips.length > 1 ? gap + more.offsetWidth : 0) > room) list.setAttribute('data-lone', '');
     };
     fit();
     const observer = new ResizeObserver(() => fit());
@@ -693,7 +708,15 @@ function PlatformCell({
     const on = value === true || value === 1 || value === '1' || value === 't';
     return (
       <td className={`${classes.join(' ')} bool${pinClass}`} title={raw} {...peek} {...pinAttrs}>
-        <span className={on ? 'yes' : 'no'}>{on ? '✓' : '✗'}</span>
+        {/* An App draws what is: a tick, and for false an empty cell, said as "No" to assistive technology, so a
+            column of flags is the rows that are and not a column of crosses. The Workbench shows the data as it is. */}
+        {on ? (
+          <span className="yes">✓</span>
+        ) : app ? (
+          <span className="no visually-hidden">{say('common.no')}</span>
+        ) : (
+          <span className="no">✗</span>
+        )}
       </td>
     );
   }
@@ -785,8 +808,15 @@ export function Grid({
   /* A second line is read from the row only where the row carries it: a
      subtitle the list did not fetch is left out rather than read from a
      column of the same name on another table. */
+  /* A list whose columns were inferred says a second line of its own where the column's rule names none. */
+  const ownLines = useContext(ListSubtitles);
+  const displayOf = (name: string): DisplayRule | null => {
+    const rule = columnDisplay(table?.id, name) as DisplayRule | null;
+    const line = ownLines && Object.hasOwn(ownLines, name) ? ownLines[name] : undefined;
+    return line && !rule?.subtitle ? { ...rule, subtitle: line } : rule;
+  };
   const subtitleOf = (name: string, row: Row) => {
-    const path = subtitlePath(columnDisplay(table?.id, name) as DisplayRule | null, name);
+    const path = subtitlePath(displayOf(name), name);
     return path && Object.hasOwn(row, path) ? row[path] : undefined;
   };
   const plans = useMemo(
@@ -970,7 +1000,7 @@ export function Grid({
         const plan = plans.get(name)!;
         const labelColumn = referenceLabels?.[name];
         const display = datesAmong(
-          columnDisplay(table?.id, name) as DisplayRule | null,
+          displayOf(name),
           rows.map((row) => row[name]),
         );
         const label = String(labels?.[name] ?? columnLabel(table?.id, name) ?? name);
@@ -1018,6 +1048,8 @@ export function Grid({
             return drawnWords(display, plan, row[name]);
           }),
           subValues: display?.subtitle ? rows.slice(0, GRID_SIZE_SAMPLE).map((row) => subtitleOf(name, row)) : undefined,
+          /* The totals row is a figure no row is as wide as: sized by its rows alone, a sum was cut to "$102,795....". */
+          total: totals && rows.length > 0 && Object.hasOwn(totals, name) ? totalWords(display, totals[name]) : undefined,
           chip:
             byName.get(name)?.type === TAGS_TYPE ||
             (!labelColumn &&
@@ -1054,11 +1086,13 @@ export function Grid({
       captionLanguage,
       byName,
       rows,
+      totals,
       titleName,
       headFace,
       cellChips,
       shift,
       faceEpoch,
+      ownLines,
     ],
   );
   /* Column i's cell follows the expander's when there is one. */
@@ -1346,7 +1380,7 @@ export function Grid({
     ordered.map((name) => {
       /* A column of relative dates is said one way down its length (datesAmong). */
       const display = datesAmong(
-        columnDisplay(table?.id, name) as DisplayRule | null,
+        displayOf(name),
         rows.map((row) => row[name]),
       );
       return {

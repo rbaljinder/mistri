@@ -122,6 +122,9 @@ export interface AppBoardList {
   /** Lane values drawn folded until a reader opens one — a closed stage, won or lost: a narrow strip with its name,
       count and sum. The reader's choice is remembered in their browser, per board. */
   folded?: readonly string[];
+  /** A machine's final states, drawn as one folded "Done" lane after the open ones, present only while it holds a
+      card. Set by the board a list infers (listInference.ts inferBoard), never authored (appViews.ts keys). */
+  done?: readonly string[];
 }
 
 /** One fact on a board card's foot. */
