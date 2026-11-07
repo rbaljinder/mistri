@@ -27,9 +27,7 @@ for (const width of [1024, 390])
     if (popover) await box.click();
     else
       await (
-        width > 600
-          ? controls.getByRole('button', { name: /^More filters:/ })
-          : controls.getByRole('button', { name: 'Filters', exact: true })
+        width > 600 ? controls.getByRole('button', { name: /^Filter:/ }) : controls.getByRole('button', { name: 'Filters', exact: true })
       ).click();
     const picker = popover ? page.locator('.filter-pop-form') : page.locator('.filter-sheet');
     await picker.getByRole('textbox', { name: 'From', exact: true }).fill('2026-09-01');

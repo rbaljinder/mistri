@@ -102,6 +102,13 @@ export const VALIDATION_CODES: ReadonlyArray<{ code: string; pattern: RegExp }> 
   { code: 'theme-band', pattern: /\) parts\.(?:status|tag)\.ground \S+ is opaque \(/ },
   { code: 'theme-shadow', pattern: /\) colors\.(?:light|dark)\.shadow \S+ is lighter than its ground / },
   { code: 'theme-type', pattern: /\) type\.roles\.\w+\.weight \d+ is past 700 in a face / },
+  /* A type role's size, leading, tracking, weight or features past the range the contract allows (themeType.ts): the
+     definition is refused as it is read, so the App cannot load until it is in range. */
+  {
+    code: 'theme-range',
+    pattern:
+      /\.type\.roles\.\w+\.(?:size|leading|tracking) must be a (?:length|number) from|\.type\.roles\.\w+\.(?:weight must be one of|features must be at most)/,
+  },
   /* The App's own logo picture (server/app/appBrand.ts): one with no dark answer breaks C10; one that cannot be read. */
   { code: 'theme-dark', pattern: /ui\.logo\.src "[^"]*" has no dark: / },
   { code: 'app-logo', pattern: /ui\.logo(?:\.(?:src|dark|mark)\b| has no ")/ },
@@ -163,6 +170,7 @@ export function componentCode(message: string): string {
   if (/motion|transition|animation/.test(message)) return 'component-motion';
   if (/shadow/.test(message)) return 'component-shadow';
   if (/is not this component's/.test(message)) return 'component-class';
+  if (/is not one of the App icons/.test(message)) return 'component-icon';
   if (/ruler/.test(message)) return 'component-ruler';
   return 'component';
 }

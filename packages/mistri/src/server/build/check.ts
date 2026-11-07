@@ -30,6 +30,8 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { Registry, redact } from '@mistriwork/engine/server/connections.js';
 import { appRoutes, appThemeProblems, loadApp, saidByMessage, type LoadedApp } from '../app/apps.js';
 import { BUILD_MANIFEST } from '../app/appBuild.js';
+import { authorityLockProblem } from '../app/authorityLock.js';
+import { staleSkillWarning } from '../cli/agentInit.js';
 import { placementIn } from '../../shared/appUi.js';
 import { fontBudgetProblem, fontSummary } from '../app/appFonts.js';
 import { writtenAt, type FixedThemeProblem } from '../../shared/themeFix.js';
@@ -1358,6 +1360,46 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           'info',
         )
       : undefined;
+    /* A theme's value past its range refuses the load as the definition is read, so the App did not load and the
+       sentence arrives as the load's: it is the themes step's finding, in its own words and place, not an `invalid-app`. */
+    const refused = checked.code !== 0 && !tenantWaits;
+    const failure = refused
+      ? [...verdict.filter((_, i) => i !== Math.max(head, 0)), ...stderr].flatMap((line) => found(line, true) ?? [])
+      : [];
+    const ranged = failure.filter((found) => found.code === 'theme-range');
+    const rangeProblems = ranged.map((found) => {
+      const said = found.message.replace(/^App error: (?:\S+\.(?:m?ts|mjs|js|json): )?/, '');
+      const path = /(ui\.customThemes\[\d+\]\S*?)(?: \(|\s+must)/.exec(said)?.[1];
+      return problem(
+        'themes',
+        'theme-range',
+        said,
+        {
+          ...(found.file ? { file: found.file, ...(found.line ? { line: found.line } : {}) } : manifest ? { file: near(manifest) } : {}),
+          ...(path ? { path } : {}),
+          fix: 'Write a value inside the range the message gives.',
+        },
+        'error',
+      );
+    });
+    /* The authority lock's difference, when the App loaded here and the check's own load did not: the lock is judged
+       after a load, so a second, unrelated refusal would otherwise hide the change and the one command that accepts it. */
+    const lockSaid = loaded?.authority && head < 0 && refused ? authorityLockProblem(loaded.authority, 'lines') : undefined;
+    const lockFinding = lockSaid
+      ? problem('validation', 'authority-lock', lockSaid.replace(/\n\s+/g, '; '), {
+          file: near(loaded!.authority!.lockPath),
+        })
+      : undefined;
+    if (rangeProblems.length) {
+      const index = steps.findIndex((step) => step.name === 'schema types');
+      steps.splice(index < 0 ? steps.length : index, 0, {
+        name: 'themes',
+        status: 'failed',
+        detail: `${rangeProblems.length} theme value${rangeProblems.length === 1 ? '' : 's'} out of range`,
+        lines: rangeProblems.map((found) => found.message),
+        problems: rangeProblems,
+      });
+    }
     steps.push(
       tenantWaits
         ? {
@@ -1377,14 +1419,35 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
                 ...(previewFinding ? [previewFinding] : []),
               ],
             }
-          : {
-              name: 'validation',
-              status: 'failed',
-              detail: verdict[Math.max(head, 0)] ?? 'the App did not load',
-              lines: [...verdict.filter((_, i) => i !== Math.max(head, 0)).map(located), ...notes],
-              problems: [...verdict.filter((_, i) => i !== Math.max(head, 0)), ...stderr].flatMap((line) => found(line, true) ?? []),
-            },
+          : rangeProblems.length && rangeProblems.length === failure.length
+            ? {
+                name: 'validation',
+                status: 'skipped',
+                detail: 'not judged: a theme value is out of range, so the App did not load; the themes step says which',
+                lines: [],
+              }
+            : {
+                name: 'validation',
+                status: 'failed',
+                detail: verdict[Math.max(head, 0)] ?? 'the App did not load',
+                lines: [
+                  ...verdict.filter((_, i) => i !== Math.max(head, 0)).map(located),
+                  ...notes.filter((line) => !ranged.some((found) => line.includes(found.message))),
+                  ...(lockFinding ? [lockFinding.message] : []),
+                ],
+                problems: [...failure.filter((found) => found.code !== 'theme-range'), ...(lockFinding ? [lockFinding] : [])],
+              },
     );
+
+    /* The agent skill a project copied in (`mistri agent init`) stamped by an older mistri: said, never failed. */
+    const staleSkill = staleSkillWarning(appDir);
+    if (staleSkill) {
+      const judged = steps.findLast((step) => step.name === 'validation');
+      if (judged) {
+        judged.lines = [...judged.lines, `warning: ${staleSkill}`];
+        judged.problems = [...(judged.problems ?? []), problem('validation', 'skill-stale', staleSkill, {}, 'warning')];
+      }
+    }
 
     if (storesStep) steps.push(storesStep);
     if (indexed) steps.push(indexed);

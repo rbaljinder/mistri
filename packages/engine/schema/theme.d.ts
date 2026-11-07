@@ -172,6 +172,7 @@ export type ThemePart =
   | 'banner'
   | 'steps.step'
   | 'avatar'
+  | 'identityMark'
   | 'menu'
   | 'dialog'
   | 'chart';

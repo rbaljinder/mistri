@@ -1,6 +1,6 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.18 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.19 scope, stable and preview features, current limitations and planned work.
 ---
 
 The scope of this release, stable and preview features, current limitations and planned work.
@@ -10,7 +10,7 @@ npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.18**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.19**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -122,6 +122,78 @@ stable.
 | `@mistriwork/ui` | The React primitives both are drawn with, usable [on their own](/docs/mistri-ui/) | Preview |
 | `@mistriwork/cloudflare` and `mistri deploy` | The [Cloudflare Containers roll](/docs/build-and-deploy/#deploy-to-cloudflare): one target, proven on one deployment so far | Preview |
 | `@mistriwork/engine`, `@mistriwork/kit` | The engine and the shared client both install; internal, with no promise to an App's author | Internal |
+
+### Entry points
+
+Every public import path of the published packages, with the status its
+documentation gives it. An entry point marked Stable is under the
+[compatibility promise](/docs/compatibility/) except for the Preview names it
+exports, which the tables above mark one by one. The `schema/*` pattern export
+and `package.json` are files, not entry points.
+
+| Entry point | What it is | Status |
+| --- | --- | --- |
+| `mistri` (the command, `node_modules/.bin/mistri`) | The [command line](/docs/cli/) | Stable |
+| `@mistriwork/mistri/app` | Types for an App's `app.ts` | Stable |
+| `@mistriwork/mistri/page` | `definePage` and the free-form page API (`Loaded` is Preview) | Stable |
+| `@mistriwork/mistri/ui` | Custom components, `useCommand`, the kit (`Loaded` is Preview) | Stable |
+| `@mistriwork/mistri/ui/testing` | Rendering a component against a served App in a test | Stable |
+| `@mistriwork/mistri/commands` | `defineCommand`, `defineEvent`, `defineChallenges`, effects (the aggregates are Preview) | Stable |
+| `@mistriwork/mistri/policy` | `defineAppRowPolicy` and `defineAppTenantPolicy` | Stable |
+| `@mistriwork/mistri/jobs` | `defineJobs`, `defineJob`, `defineInbound` | Stable |
+| `@mistriwork/mistri/workflows` | `defineWorkflow`, `defineWorkflows`, `flowRunner` | Stable |
+| `@mistriwork/mistri/integration` | `defineIntegration`, for a vendor package | Stable |
+| `@mistriwork/mistri/handler` | [Mount an App in your server](/docs/mount-in-your-server/), `mintEmbedAssertion` | Stable |
+| `@mistriwork/mistri/testing` | Test helpers for Apps (`roundTrips` is Preview) | Stable |
+| `@mistriwork/mistri/maintenance` | Operator steps: `provisionStores`, `applyMigrations`, inspect, redrive and prune | Stable |
+| `@mistriwork/mistri/react` | [Embed in a React app](/docs/embed-in-a-react-app/) | Stable |
+| `@mistriwork/mistri/react/next`, `/react/react-router`, `/react/tanstack-router` | The embed router adapters | Preview |
+| `@mistriwork/mistri/openfeature` | An OpenFeature provider over the App's flags | Preview |
+| `@mistriwork/ui` (the root and each component path, `style.css`) | The [primitives](/docs/mistri-ui/) | Preview |
+| `@mistriwork/cloudflare` | The target `mistri deploy` rolls | Preview |
+| `create-mistri` (a command, no import path) | The project scaffold | Preview |
+| `@mistriwork/engine/*`, `@mistriwork/kit/*` | What the Apps and the database browser share | Internal: no promise |
+
+Where a status here is not stated by a table above, it follows the rule in
+[compatibility](/docs/compatibility/): an export of `@mistriwork/mistri` is
+Stable unless listed as Preview.
+
+### An extension package
+
+A package that adds to mistri, such as a vendor integration or a shared
+component library, depends on `@mistriwork/mistri` and imports only the Stable
+entry points above:
+
+```json title="package.json"
+{
+  "name": "mistri-integration-fakepay",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "peerDependencies": { "@mistriwork/mistri": "^1.0.0" }
+}
+```
+
+```ts title="src/index.ts"
+import { defineIntegration, int, shape, text } from '@mistriwork/mistri/integration';
+
+export const fakepay = () =>
+  defineIntegration({
+    name: 'fakepay',
+    secrets: ['apiKey'],
+    client: ({ secrets }) => ({ apiKey: secrets.apiKey }),
+    actions: {
+      ping: { input: shape({ note: text() }), output: shape({ ok: int() }), run: async () => ({ ok: 1 }) },
+    },
+  });
+```
+
+The upgrade guarantee: every 1.x release of `@mistriwork/mistri` keeps these
+imports and their documented shapes working until 2.0, and a change to one is
+named in the changelog ([compatibility](/docs/compatibility/#stable)). The same
+package importing a Preview entry (`@mistriwork/mistri/openfeature`,
+`@mistriwork/ui`) or an Internal one (`@mistriwork/engine/*`) has no such
+promise, and may break in any 1.x release.
 
 The database browser (SQLite, PostgreSQL) is read-only by
 default, held by the adapter; writes are opt-in per connection with

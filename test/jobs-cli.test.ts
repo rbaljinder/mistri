@@ -25,6 +25,7 @@ import { defineEvent, defineEventProjection } from '../packages/mistri/src/serve
 import { int, shape } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { createJobAuthorizer } from '../packages/mistri/src/server/jobs/jobAuthorization.js';
 import { describeJobs, jobDeployment, jobGrantProblems } from '../packages/mistri/src/server/jobs/jobLoader.js';
+import { deliveryBackoff } from '../packages/mistri/src/adapters/events/eventDeliveryRules.js';
 import {
   capturedJobModule,
   defineJob,
@@ -254,6 +255,18 @@ const deploy = (jobs: Record<string, ReturnType<typeof job>>, extra: Partial<Job
 const refused = (pattern: RegExp) => (error: unknown) => error instanceof JobDeclarationError && pattern.test(error.message);
 
 describe('the load-time checks', () => {
+  test('a job on an event is attempted 8 times, backing off from 1 s and doubling to a 60 s ceiling', () => {
+    /* docs/operational-guarantees: the numbers are pinned where the destination
+       derives them, so a changed default fails here, not in a reader's plan. */
+    const { policy } = deploy({ reminder: job('start', 'follow') }).destinations[0];
+    assert.equal(policy.limits.maxAttempts, 8);
+    const after = (attempt: number) => deliveryBackoff(policy, { attempts: attempt, attempt_limit: policy.limits.maxAttempts });
+    assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map(after), [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000]);
+    assert.equal(after(8), 60_000, 'never past the ceiling');
+    // The job store's own defaults, which a module's `store` overrides, say the same.
+    const { store } = deploy({ reminder: job('start', 'follow') });
+    assert.deepEqual([store.maxAttempts, store.backoffMs], [8, { base: 1_000, cap: 60_000 }]);
+  });
   test('a valid module derives one destination a job, on the one source, with the job store beside it', () => {
     const deployment = deploy({ reminder: job('start', 'follow') });
     assert.equal(deployment.sourceId, 'main');

@@ -3,9 +3,9 @@
  * session reads exactly that account's rows under the App's row policy; the store it came from is byte-for-byte
  * what it was; a role no account holds is the caller's fallback to a fresh account. */
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import { hashPassword } from 'better-auth/crypto';
@@ -174,4 +174,25 @@ test('--as <role> prefers the account the people table names, then the earliest,
   );
   const broken = { query: () => Promise.reject(new Error('no such table')) };
   assert.equal((await personEmails(app, broken as never)).size, 0);
+});
+
+test('--store <dir> signs in to the accounts of another folder shaped as .mistri/, and to no other', { timeout: 120_000 }, async (t) => {
+  const f = await desk(t);
+  // A copy of the accounts kept elsewhere (another checkout's dev folder), where the App's own store is gone.
+  const elsewhere = join(f.directory, 'elsewhere');
+  const kept = join(elsewhere, 'config', relative(f.env.XDG_CONFIG_HOME!, f.store));
+  mkdirSync(dirname(kept), { recursive: true });
+  copyFileSync(f.store, kept);
+  renameSync(f.store, `${f.store}.away`);
+  const before = readFileSync(kept);
+  assert.equal(await shotRoleAccount(f.loaded, 'agent', join(f.directory, 'none'), f.env), undefined, "the App's own stores hold nobody");
+  const account = await shotRoleAccount(f.loaded, 'agent', join(f.directory, 'run'), f.env, new Set(), elsewhere);
+  assert.equal(account?.email, 'ann@example.test');
+  assert.deepEqual(readFileSync(kept), before, 'the named store is read, never written');
+  // Only the store it names is read: pointed at a folder with none, a role the App's own store holds is not found.
+  renameSync(`${f.store}.away`, f.store);
+  assert.equal(
+    await shotRoleAccount(f.loaded, 'agent', join(f.directory, 'run2'), f.env, new Set(), join(f.directory, 'empty')),
+    undefined,
+  );
 });

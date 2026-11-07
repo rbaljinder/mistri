@@ -34,11 +34,13 @@ import {
 import { captureIntegrations, type CapturedIntegrations } from '../packages/mistri/src/server/integrations/integrationDeclaration.js';
 import {
   createIntegrationRuntime,
+  integrationCalls,
   registerIntegrationRuntime,
   saveIntegrationSettings,
 } from '../packages/mistri/src/server/integrations/integrationRuntime.js';
 import { integrationRoutes } from '../packages/mistri/src/server/http/integrationRoutes.js';
 import { HttpError } from '../packages/engine/src/server/http/reply.js';
+import { BusinessCommandExecutionError } from '../packages/mistri/src/server/commands/commandErrors.js';
 import type { PostContext } from '../packages/engine/src/server/http/context.js';
 import { integrationEndpoints } from '../packages/mistri/src/server/integrations/integrationInbound.js';
 import { createInboundHost } from '../packages/mistri/src/server/jobs/inboundHost.js';
@@ -326,6 +328,35 @@ test('a held message the provider never takes is tried eight times, a minute apa
   assert.equal(await sender.sendDue(), false, 'a failed message is not due again');
   assert.equal(provider.calls, 8);
   assert.equal((await runtime.store.message('shop', key))?.reason, 'fakepay did not accept it');
+});
+
+test("a command's integration call is tried 3 times, then refuses temporarily_unavailable, and the provider saw only those", async (t) => {
+  /* docs/operational-guarantees: CALL_LIMITS is three tries, 250 ms then 500 ms apart (about 0.75 s of real waiting here). */
+  resetProvider();
+  const runtime = await openRuntime(t, capture({ use: [fakepay()] }), { now: Date.now() });
+  t.after(registerIntegrationRuntime(runtime));
+  await saveIntegrationSettings(runtime, 't1', 'owner', {
+    integration: 'fakepay',
+    secrets: { apiKey: 'sk_t1', webhookSecret: 'whsec_t1' },
+  });
+  const { fakepay: pay } = integrationCalls({
+    appId: 'shop',
+    tenant: 't1',
+    commandId: 'charge-card',
+    actorId: 'clerk',
+    idempotencyKey: 'attempt-key-1',
+    signal: AbortSignal.timeout(10_000),
+    declared: { fakepay: ['charge'] },
+  });
+  provider.failNext = 1_000;
+  const started = Date.now();
+  await assert.rejects(
+    pay.charge({ amount: 1200, customer: 'ann' }),
+    (error: unknown) => error instanceof BusinessCommandExecutionError && error.code === 'temporarily_unavailable',
+  );
+  assert.equal(provider.calls, 3, 'three tries, no fourth');
+  assert.ok(Date.now() - started >= 700, 'the second and third waited 250 ms and 500 ms');
+  assert.equal(provider.charges.length, 0);
 });
 
 test("an integration's webhooks lower onto an inbound endpoint named after it: the package verifies, the mapping decides what runs", async (t) => {

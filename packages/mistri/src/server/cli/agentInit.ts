@@ -44,6 +44,21 @@ const BLOCK_END = '<!-- mistri:skill:end -->';
    the refusal below says where it looked. */
 const SKILL_SOURCE = shippedPath('skills/mistri') ?? fileURLToPath(new URL('../../../../../skills/mistri', import.meta.url));
 
+/** This package's own package.json, from src/server/cli or dist/server/cli: its `exports` are the entry points an App imports. */
+const PACKAGE_JSON = fileURLToPath(new URL('../../../package.json', import.meta.url));
+
+/**
+ * Every entry point the package publishes (`@mistriwork/mistri/app`, `…/page`, `…/ui`, …), read from its `exports`
+ * map, so the block an agent reads at every start cannot drift from what an App can import. The pattern entries
+ * (`./schema/*`) and the manifest are files, not modules to import.
+ */
+export function entryPoints(): string[] {
+  const exported = (JSON.parse(readFileSync(PACKAGE_JSON, 'utf8')) as { exports?: Record<string, unknown> }).exports ?? {};
+  return Object.keys(exported)
+    .filter((key) => key.startsWith('./') && !key.includes('*') && key !== './package.json')
+    .map((key) => `@mistriwork/mistri/${key.slice(2)}`);
+}
+
 class Refusal extends Error {}
 
 interface AgentOptions {
@@ -171,6 +186,51 @@ function place(target: string, files: Map<string, Buffer | string>, force: boole
   };
 }
 
+/** `1.0.0-rc.9` before `1.0.0-rc.18` before `1.0.0`: numbers by value, a pre-release before its release. */
+function olderThan(a: string, b: string): boolean {
+  const parts = (version: string) => {
+    const [core = '', pre] = version.split('-', 2) as [string, string | undefined];
+    return { core: core.split('.').map(Number), pre: pre?.split('.') };
+  };
+  const [x, y] = [parts(a), parts(b)];
+  for (let i = 0; i < Math.max(x.core.length, y.core.length); i++) {
+    const [m, n] = [x.core[i] ?? 0, y.core[i] ?? 0];
+    if (m !== n) return m < n;
+  }
+  if (!x.pre || !y.pre) return x.pre !== undefined && y.pre === undefined;
+  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
+    const [m, n] = [x.pre[i], y.pre[i]];
+    if (m === n) continue;
+    if (m === undefined || n === undefined) return m === undefined;
+    const [p, q] = [Number(m), Number(n)];
+    return Number.isNaN(p) || Number.isNaN(q) ? m < n : p < q;
+  }
+  return false;
+}
+
+/**
+ * Said by `mistri check`: the agent skill a project installed (`mistri agent init`) was stamped by an older mistri than
+ * the one running, so its guidance may name keys, commands or rules that have since moved. Looked for in the App's
+ * directory and the few above it, where a project keeps its skills. Undefined when there is none, or it is current.
+ */
+export function staleSkillWarning(from: string, version: string = runtimeVersion()): string | undefined {
+  for (let dir = resolve(from), up = 0; up < 4; up++, dir = dirname(dir)) {
+    for (const home of new Set(Object.values(SKILL_HOMES))) {
+      const copy = join(dir, home, 'mistri');
+      let stamped: unknown;
+      try {
+        stamped = (JSON.parse(readFileSync(join(copy, MANIFEST), 'utf8')) as { mistri?: unknown }).mistri;
+      } catch {
+        continue;
+      }
+      if (typeof stamped === 'string' && olderThan(stamped, version))
+        return `The agent skill in ${relative(resolve(from), copy) || copy} was installed by mistri ${stamped}, and this is ${version}: run mistri agent init to update it.`;
+    }
+    if (dirname(dir) === dir) break;
+  }
+  return undefined;
+}
+
 /**
  * The AGENTS.md block, naming each copy the project now has. An agent reads
  * this file at every start, so it is a map, not a manual: where things live,
@@ -207,7 +267,9 @@ function agentsBlock(copies: string[]): string {
     '- `npx @mistriwork/mistri migrate stores up --app .`: once commands exist, server stopped; creates their journal and event store.',
     '',
     'Rules:',
-    "- Import only `@mistriwork/mistri/app`, `@mistriwork/mistri/commands`, `@mistriwork/mistri/policy`; never mistri's `src/`.",
+    `- Import only the package's entry points, ${entryPoints()
+      .map((entry) => `\`${entry}\``)
+      .join(', ')}; never mistri's \`src/\`.`,
     '- Change the schema by migration (`npx @mistriwork/mistri migrate new <name> --app .`), never by hand.',
     '- Hiding is not protecting: `hidden`, `fields`, grants and row policies are; `show` and `when` are not.',
     '- Writes need `"writable": true` on the connection and `access: \'write\'` on the resource.',

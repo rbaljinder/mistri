@@ -23,6 +23,8 @@ import {
   type BusinessCommandAvailabilityContext,
 } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
+import { prunes, pruneAll, sqlitePruneDb } from '../packages/mistri/src/adapters/retention/pruner.js';
+import { retentionMs } from '../packages/mistri/src/shared/appRetention.js';
 import { refusalReasons } from '../packages/engine/src/shared/refusal.js';
 
 const actor: BusinessCommandActor = { id: 'account-a', appId: 'loan-workspace', roles: ['reviewer'] };
@@ -833,4 +835,32 @@ test('later mutations of write results and request keys cannot rewrite committed
       return { version: 1 };
     },
   );
+});
+
+test('a retry under the same key after its receipt was pruned is a new request, as the retention contract says', async () => {
+  /* docs/commands: "once a receipt is gone nothing remembers its key". The
+     receipt is the only memory of a key, so the pruner is what ends a replay. */
+  await fixture(async (f) => {
+    assert.equal((await executeBusinessCommand(f.binding, actor, request())).status, 'applied');
+    assert.equal(f.control.calls, 1);
+    assert.equal((await executeBusinessCommand(f.binding, actor, request())).replayed, true, 'kept: answered from the receipt');
+    assert.equal(f.control.calls, 1);
+
+    const rules = prunes().filter((each) => each.id === 'command-receipts');
+    const later = () => Date.now() + 3 * 86_400_000;
+    assert.deepEqual(
+      await pruneAll(sqlitePruneDb(f.db), rules, retentionMs({ commands: '1 day' }), { now: later, sleep: async () => {} }),
+      [{ id: 'command-receipts', deleted: 1 }],
+    );
+    assert.equal(rows(f.db, COMMAND_JOURNAL_TABLES.receipt).length, 0);
+
+    /* The loan moved to version 1, so the forgotten key meets the version check
+       like any first request: it is not answered as a replay and it ran the check. */
+    const forgotten = await executeBusinessCommand(f.binding, actor, request()).then(
+      (result) => result,
+      (error: unknown) => error,
+    );
+    assert.notEqual((forgotten as { replayed?: boolean }).replayed, true);
+    assert.ok(forgotten instanceof BusinessCommandExecutionError, 'a stale expectedVersion is refused, which a replay could not be');
+  });
 });

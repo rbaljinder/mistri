@@ -23,6 +23,10 @@ import { FormSurface, type FormPresentation, type FormReceipt } from './FormSurf
 import type { CommandQuestions } from './CommandFields.js';
 import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
 import { say } from '../copy/forms/components/FormRoom.js';
+import type { UiCommandOutcome } from './sdk/context.js';
+
+/** How a submission this form sent ended, for the component that opened it: never `closed`, which is the caller's word for nothing sent. */
+export type FormOutcome = Exclude<UiCommandOutcome, { status: 'closed' }>;
 
 /** The signed-in submission: the ordinary command envelope, naming no record. */
 async function submitSignedInForm(
@@ -30,7 +34,7 @@ async function submitSignedInForm(
   form: Pick<ServedForm, 'command'>,
   submission: string,
   input: CommandInputValue,
-): Promise<FormReceipt> {
+): Promise<{ receipt: FormReceipt; result: unknown }> {
   const answer = (await api('/api/commands/execute', {
     command: form.command.id,
     commandVersion: form.command.version,
@@ -45,9 +49,12 @@ async function submitSignedInForm(
      ran it learns whether it did anything, and "Received" alone cannot tell a run that posted from one that found nothing to. */
   const said = answer.result && typeof answer.result === 'object' ? (answer.result as { message?: unknown }).message : undefined;
   return {
-    ...(typeof reference === 'string' && reference.trim() ? { reference } : {}),
-    ...(typeof said === 'string' && said.trim() ? { message: said.trim() } : {}),
-    receipt: { id: answer.receiptId, status: answer.status },
+    result: answer.result,
+    receipt: {
+      ...(typeof reference === 'string' && reference.trim() ? { reference } : {}),
+      ...(typeof said === 'string' && said.trim() ? { message: said.trim() } : {}),
+      receipt: { id: answer.receiptId, status: answer.status },
+    },
   };
 }
 
@@ -92,6 +99,7 @@ export function FormBody({
   prefill,
   initial,
   onDismiss,
+  onOutcome,
 }: {
   form: ServedForm;
   appName: string;
@@ -101,6 +109,8 @@ export function FormBody({
   initial?: Readonly<Record<string, unknown>>;
   /** Drawn over a page: back to it, from Cancel or from Done once received. */
   onDismiss?: () => void;
+  /** Told how each submission ended, so a component that opened the form can resolve with it once the form closes. */
+  onOutcome?: (outcome: FormOutcome) => void;
 }) {
   const identity = useSyncExternalStore(subscribeSessionIdentity, sessionIdentity, sessionIdentity);
   const client = useQueryClient();
@@ -147,10 +157,28 @@ export function FormBody({
       {...(onDismiss ? { onDismiss } : {})}
       checkStep={(_step, input, names) => checkSignedInStep(connection, form, names, input)}
       submit={async (submission, input) => {
-        const receipt = await submitSignedInForm(connection, form, submission, input);
-        // What the form created shows in every list that reads it.
-        void client.invalidateQueries();
-        return receipt;
+        /* Said once per send. An answer that never said whether it ran is `unknown`, and its `check` sends the same
+           submission again: the server answers a run it already has with its receipt, so it never runs twice. */
+        const attempt = async (): Promise<{ outcome: FormOutcome; receipt?: FormReceipt; error?: unknown }> => {
+          try {
+            const sent = await submitSignedInForm(connection, form, submission, input);
+            // What the form created shows in every list that reads it.
+            void client.invalidateQueries();
+            return {
+              receipt: sent.receipt,
+              outcome: { status: 'applied', ...(sent.result !== undefined ? { output: sent.result } : {}) },
+            };
+          } catch (error) {
+            const failure = error as Error & { outcome?: unknown };
+            if (failure.outcome === 'not_applied') return { error, outcome: { status: 'refused', message: failure.message } };
+            const check = async () => (await attempt()).outcome;
+            return { error, outcome: { status: 'unknown', message: say('notConfirmed', { label: form.label }), check } };
+          }
+        };
+        const sent = await attempt();
+        onOutcome?.(sent.outcome);
+        if (sent.receipt) return sent.receipt;
+        throw sent.error;
       }}
     />
   );

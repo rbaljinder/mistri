@@ -102,7 +102,7 @@ test("a pattern is drawn at the strength check measures it at; paper's low end i
 });
 
 test('parts: published names, role colors only, the menus the rest of the theme speaks', () => {
-  assert.equal(THEME_PARTS.length, 35);
+  assert.equal(THEME_PARTS.length, 36);
   assert.deepEqual(Object.keys(PART_SELECTORS).sort(), [...THEME_PARTS].sort());
   const styled = theme({
     parts: {

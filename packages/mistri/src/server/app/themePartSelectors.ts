@@ -44,6 +44,7 @@ export const PART_SELECTORS: Record<ThemePart, string> = {
   banner: app('.dashboard-note'),
   'steps.step': app('.dash-step'),
   avatar: app('.page-record-avatar', '.account-avatar'),
+  identityMark: app('.sidebar-identity-mark'),
   menu: app('.tn-pop', '.th-menu', '.page-actions-menu'),
   dialog: app('.modal'),
   chart: app('.chart-host'),

@@ -194,7 +194,7 @@ export function ListFilterBar(props: ListFilterBarProps) {
             type="button"
             className="applist-add"
             aria-haspopup="dialog"
-            aria-label={say('moreFilters', { map: rest.map((box) => box.label).join(', ') })}
+            aria-label={say('moreFilters', { filter: say('common.filter'), map: rest.map((box) => box.label).join(', ') })}
             onClick={onSheet}
           >
             <span className="applist-add-mark" aria-hidden="true">

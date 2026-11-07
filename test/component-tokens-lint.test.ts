@@ -74,3 +74,53 @@ test('a radius of all zeros is a square on purpose; any other literal radius sti
     [7, 8],
   );
 });
+
+/* An icon a component names is held to the App's icons: the declared ones are checked at load, and a name chosen
+   at run time (either branch of a conditional) used to escape until a browser drew an empty box. */
+test('an icon name a component writes, plain or in either branch of a conditional, must be an App icon', async () => {
+  const { problems, warnings } = await lint({
+    'tile.tsx': [
+      'export const a = <Icon name="hosue" />;',
+      "export const b = <Icon name={done ? 'check-circle' : 'circle-dahsed'} size={12} />;",
+      "export const c = <Icon name={done ? 'chekc-circle' : 'x-circle'} />;",
+      "export const d = { icon: ready ? 'bel' : 'bell' };",
+      "export const e = <Badge icon={'staar'} />;",
+      "export const ok = <Icon name={done ? 'check-circle' : 'circle-dashed'} />;",
+      'export const dynamic = <Icon name={row.icon} />;',
+      "export const compared = <Icon name={kind === 'hosue' ? 'house' : name} />;",
+      "export const mark = { icon: '', title: 'icon' };",
+    ].join('\n'),
+  });
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(
+    problems.map((p) => [p.line, /^"([^"]+)"/.exec(p.text)![1]]),
+    [
+      [1, 'hosue'],
+      [2, 'circle-dahsed'],
+      [3, 'chekc-circle'],
+      [4, 'bel'],
+      [5, 'staar'],
+    ],
+  );
+  assert.match(problems[0]!.text, /Did you mean "house"/);
+  assert.equal(componentCode(problems[0]!.text), 'component-icon');
+});
+
+test("a shared package's declared cssPrefix owns its classes; the App's own package.json and other classes do not excuse", async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'tw-pkg-'));
+  made.push(dir);
+  await mkdir(join(dir, 'packages', 'ui', 'dist'), { recursive: true });
+  await mkdir(join(dir, 'c'), { recursive: true });
+  await writeFile(join(dir, 'package.json'), JSON.stringify({ mistri: { cssPrefix: 'app' } }));
+  await writeFile(join(dir, 'packages', 'ui', 'package.json'), JSON.stringify({ mistri: { cssPrefix: ['acme-', 'ac'] } }));
+  await writeFile(
+    join(dir, 'packages', 'ui', 'dist', 'ui.css'),
+    '.acme { gap: 0; }\n.acme-button { gap: 0; }\n.ac-row { gap: 0; }\n.acmes { gap: 0; }',
+  );
+  await writeFile(join(dir, 'c', 'tile.css'), '.c-tile { gap: 0; }\n.app-card { gap: 0; }');
+  const { warnings } = await lintComponents(dir, {
+    entries: { tile: { sources: ['c/tile.css', 'packages/ui/dist/ui.css'] } },
+  } as never);
+  const classes = warnings.map((w) => /"\.([\w-]+)"/.exec(w.text)?.[1]).sort();
+  assert.deepEqual(classes, ['acmes', 'app-card'], 'only a class outside every declared name-space warns');
+});

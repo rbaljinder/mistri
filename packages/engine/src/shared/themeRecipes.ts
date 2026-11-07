@@ -244,6 +244,7 @@ export const THEME_PARTS = [
   'banner',
   'steps.step',
   'avatar',
+  'identityMark',
   'menu',
   'dialog',
   'chart',

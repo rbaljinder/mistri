@@ -91,7 +91,12 @@ const labelled = (served: { form: ServedForm; appName: string }, options?: UiCom
    first paint does not carry it. */
 const formRun = () => import('./formCommandRun.js');
 
-/** The form itself over the page, filled with what was given; it settles as closed, its own Done saying what it sent. */
+/**
+ * The form itself over the page, filled with what was given. It settles when the form closes, with how the last
+ * submission ended (applied with the command's output, refused in the server's words, or not known, whose `check`
+ * asks again under the same key); `closed` only when nothing was sent. A form the session is taken from lets go as
+ * `openForm` does: it could never close, and the run would wait on it for good.
+ */
 async function openFormCommand(
   served: { form: ServedForm; appName: string },
   input: Readonly<Record<string, unknown>> | undefined,
@@ -100,18 +105,32 @@ async function openFormCommand(
   return new Promise((resolve) => {
     const host = document.createElement('div');
     portalRoot().append(host);
-    const take = mount(
+    let take = () => {};
+    let leave = () => {};
+    let last: UiCommandOutcome = { status: 'closed' };
+    const close = () => {
+      leave();
+      take();
+      host.remove();
+      resolve(last);
+    };
+    const opened = sessionIdentity();
+    leave = subscribeSessionIdentity(() => {
+      if (sessionIdentity() === opened) return;
+      if (last.status === 'unknown') toast(say('notConfirmed', { label: served.form.label }), 'error');
+      close();
+    });
+    take = mount(
       host,
       createElement(SignedInFormDialog, {
         form: served.form,
         appName: served.appName,
         // Every field the component gave, as typed values: not an address, which only a `prefillable` field reads.
         ...(input ? { initial: input } : {}),
-        onClose: () => {
-          take();
-          host.remove();
-          resolve({ status: 'closed' });
+        onOutcome: (outcome) => {
+          last = outcome;
         },
+        onClose: close,
       }),
     );
   });

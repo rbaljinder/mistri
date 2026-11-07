@@ -141,6 +141,7 @@ const installDesk = () =>
       }) as never,
     inApp: () => true,
   });
+type UiCommandOutcome = import('./context.js').UiCommandOutcome;
 const handle = (ref: string) => pageBridge.commands!.command(ref);
 
 beforeEach(() => {
@@ -222,6 +223,68 @@ test("a run on a cold page judges the form's conditions first: a hidden required
   expect(await settles(handle('schedule').run({}, { timing: 'now' }))).toEqual({ status: 'applied' });
   expect(calls).toHaveLength(1);
   expect(calls[0].body).toMatchObject({ command: 'schedule', commandVersion: 2, input: { timing: 'now' } });
+});
+
+/* A form a component opens ends in how it was sent, not only in that it closed: the docs promise the outcomes. */
+const submitOpened = async () => {
+  const button = await vi.waitFor(() => {
+    const found = document.querySelector<HTMLButtonElement>('.form-dialog button[type="submit"]');
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  button.click();
+};
+const cancelOpened = () => document.querySelector<HTMLButtonElement>('.form-dialog .form-actions button:not([type="submit"])')?.click();
+
+test('a form a component opens settles applied, with the output, once its submit is received', async () => {
+  answer = async () => ({ status: 'applied', receiptId: 'r-5', result: { ticketId: 41 } });
+  const opened = handle('raise').open({}, { title: 'Mouse missing' });
+  await submitOpened();
+  await vi.waitFor(() => expect(document.querySelector('.form-page-done')).not.toBeNull());
+  document.querySelector<HTMLButtonElement>('.form-page-done .form-actions button')?.click();
+  expect(await settles(opened)).toEqual({ status: 'applied', output: { ticketId: 41 } });
+  expect(document.querySelector('.form-dialog')).toBeNull();
+});
+
+test("a form closed after a refusal settles refused, in the server's words; one closed with nothing sent settles closed", async () => {
+  answer = async () => {
+    throw Object.assign(new Error('The desk is closed.'), { status: 409, code: 'ineligible_state', outcome: 'not_applied' });
+  };
+  const refused = handle('raise').open({}, { title: 'Late' });
+  await submitOpened();
+  await vi.waitFor(() => expect(document.body.textContent).toMatch(/The desk is closed\./));
+  cancelOpened();
+  expect(await settles(refused)).toEqual({ status: 'refused', message: 'The desk is closed.' });
+
+  const closed = handle('raise').open({}, { title: 'Never sent' });
+  await vi.waitFor(() => expect(document.querySelector('.form-dialog')).not.toBeNull());
+  cancelOpened();
+  expect(await settles(closed)).toEqual({ status: 'closed' });
+});
+
+test('a form whose answer never came settles unknown, and check asks again under the same key', async () => {
+  answer = async () => {
+    throw new Error('The server is not answering.');
+  };
+  const opened = handle('raise').open({}, { title: 'Mouse missing' });
+  await submitOpened();
+  await vi.waitFor(() => expect(calls).toHaveLength(1));
+  await vi.waitFor(() => expect(document.querySelector('.form-dialog .form-page-failure:not([hidden])')).not.toBeNull());
+  cancelOpened();
+  const outcome = (await settles(opened)) as Extract<UiCommandOutcome, { status: 'unknown' }>;
+  expect(outcome.status).toBe('unknown');
+  answer = async () => ({ status: 'applied', receiptId: 'r-1', result: { ticketId: 41 } });
+  expect(await outcome.check()).toEqual({ status: 'applied', output: { ticketId: 41 } });
+  expect(calls[1].body.idempotencyKey).toBe(calls[0].body.idempotencyKey);
+});
+
+test('a form the session leaves behind lets go instead of waiting on a dialog that cannot close', async () => {
+  const opened = handle('raise').open({}, { title: 'Mouse missing' });
+  await vi.waitFor(() => expect(document.querySelector('.form-dialog')).not.toBeNull());
+  session.now = { ...eve, epoch: 2 };
+  for (const listener of [...session.listeners]) listener();
+  expect(await settles(opened)).toEqual({ status: 'closed' });
+  expect(document.querySelector('.form-dialog')).toBeNull();
 });
 
 test('the form a component opens keeps every value it was given, not only the prefillable ones', async () => {

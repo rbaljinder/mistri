@@ -204,7 +204,7 @@ mistri shot [--app <dir>] [<route>…] [<db> | --db <target> | --config <path>]
                [--theme <id|all>] [--palette <id>]
                [--compare <look>] [--recipes <part>] [--dark | --light] [--phone | --desk | --both]
                [--click <name>] [--type <field> <text>] [--press <key>] [--wait-for <text>] [--matrix]
-               [--width <px>] [--full] [--scale <1-3>] [--as <role|email> [--tenant <id>]]
+               [--width <px>] [--full] [--scale <1-3>] [--as <role|email> [--tenant <id>] [--store <dir>]]
                [--out <dir>] [--text] [--browser <path>]
 
 Serves the App on a free port with a temporary config directory (none of
@@ -274,6 +274,11 @@ A record under any list over its table opens at the table's canonical address
                     a temporary membership in the App's tenant store,
                     journaled as maintenance:mistri-shot and revoked when
                     the shot ends; each page opens in that context
+    --store <dir>   with --as: read the accounts from this folder instead of
+                    <app>/.mistri/ and a plain start's. It is shaped as an
+                    App's .mistri/ (its config/ holds the auth store): a
+                    copy of one, or another checkout's. The only store read;
+                    never written
     --out <dir>     with shot: where every file goes, from the current
                     directory (default mistri-shots/<app> in the system's
                     temporary directory, where --compare, --recipes and
@@ -326,7 +331,7 @@ The rubric measured in a browser, not looked at.
 ```text
 mistri grade [--app <dir>] [<db> | --db <target> | --config <path>]
                 [--commands <file>] [--jobs <file>] [--policy <file>] [<route>…]
-                [--as <role|email|all> [--tenant <id>]] [--theme <id|all> [--palette <id|all>]]
+                [--as <role|email|all> [--tenant <id>] [--store <dir>]] [--theme <id|all> [--palette <id|all>]]
                 [--json] [--browser <path>]
 
 Serves the App as shot does and opens every view, a record of each page and
@@ -342,7 +347,8 @@ covered and what it skipped, and why; then the verdict, which an error
 fails whatever the score, and the score out of 100.
 The App is --app <dir>, else the current directory. An App with sign-in is
 graded as the role that reads the most, unless --as names one (or an
-account, as shot's --as <email> does).
+account, as shot's --as <email> does). --store <dir> reads those accounts
+from another folder shaped as .mistri/, as shot's --store does.
     --json          with grade: one JSON document of the findings and score
     --theme <id>    with grade: grade in a built-in look or one of the App's
                     own themes instead of the one it wears; a finding
@@ -924,6 +930,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--seed` | [Rows to look at](#rows-to-look-at) |
 | `--shutdown-grace` | [Options](#options) |
 | `--smoke` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
+| `--store` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--strict-migrations` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--suite` | [Changing the schema](#changing-the-schema) |
 | `--template` | [Commands](#commands) |
