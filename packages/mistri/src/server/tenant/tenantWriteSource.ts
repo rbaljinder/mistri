@@ -70,6 +70,7 @@ import { bindTenantLive, unbindTenantLive } from './tenantLive.js';
 import { appStoresOf } from '../stores/appStores.js';
 import { assertInboxMark, type InboxMark, type NoticeBinding } from '../../adapters/inbox/inbox.js';
 import type { InboxMailStore } from '../../adapters/inbox/inboxMail.js';
+import { physicalRowScope } from './tenantReadScope.js';
 import { bindTenantInboxStore } from './tenantInbox.js';
 import { bindTenantBrandingStore } from './tenantBrandingStore.js';
 import { assertBrandingWrite, type BrandingWrite } from '../../adapters/branding/branding.js';
@@ -480,11 +481,9 @@ export async function openSqliteTenantWriteSource(
         };
         try {
           live();
-          const physicalScope = Object.fromEntries(
-            Object.entries(kind.scope(owned, input.evidence, input.rows, allTrue)).map(([id, rule]) => [toPhysical(id), rule]),
-          );
+          const physicalScope = physicalRowScope(kind.scope(owned, input.evidence, input.rows, allTrue), toPhysical);
           const bound = command ? kind.bound?.(owned, input.evidence, input.rows, tables, allTrue) : undefined;
-          const physicalBound = bound && Object.fromEntries(Object.entries(bound).map(([id, rule]) => [toPhysical(id), rule]));
+          const physicalBound = bound && physicalRowScope(bound, toPhysical);
           attempted = true;
           const fence = Object.freeze({ owner, owned, live });
           const wrote: TenantCommittedWrite[] = [];
@@ -835,11 +834,9 @@ export async function openPostgresTenantWriteSource(
         };
         try {
           live();
-          const physicalScope = Object.fromEntries(
-            Object.entries(kind.scope(owned, input.evidence, input.rows, allTrue)).map(([id, rule]) => [toPhysical(id), rule]),
-          );
+          const physicalScope = physicalRowScope(kind.scope(owned, input.evidence, input.rows, allTrue), toPhysical);
           const bound = command ? kind.bound?.(owned, input.evidence, input.rows, tables, allTrue) : undefined;
-          const physicalBound = bound && Object.fromEntries(Object.entries(bound).map(([id, rule]) => [toPhysical(id), rule]));
+          const physicalBound = bound && physicalRowScope(bound, toPhysical);
           attempted = true;
           const fence = Object.freeze({ owner, owned, live });
           const wrote: TenantCommittedWrite[] = [];
@@ -946,6 +943,23 @@ export async function openPostgresTenantWriteSource(
                       nextNumber: (...args: Parameters<NonNullable<CommandJournal['nextNumber']>>) => {
                         live();
                         return journal.nextNumber!(...args);
+                      },
+                    }
+                  : {}),
+                // Held files live in this place's own store: the fence that guards a commit guards them.
+                ...(journal.stage
+                  ? {
+                      stage: (...args: Parameters<NonNullable<CommandJournal['stage']>>) => {
+                        live();
+                        return journal.stage!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.takeStaged
+                  ? {
+                      takeStaged: (...args: Parameters<NonNullable<CommandJournal['takeStaged']>>) => {
+                        live();
+                        return journal.takeStaged!(...args);
                       },
                     }
                   : {}),

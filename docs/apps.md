@@ -206,10 +206,12 @@ kept equal to it by `test/prose.test.ts`; change both together.
 | Capability | Unscoped App | Row policy | Tenant App |
 | --- | --- | --- | --- |
 | File fields of a signed-in command | Yes | Yes | Yes, 10 MB a file at most |
-| File fields of a public form ([files](../site/src/content/docs/docs/commands.md#files-and-a-signature)) | Yes | No | No |
+| File fields of a public form ([files](../site/src/content/docs/docs/commands.md#files-and-a-signature)) | Yes | Yes, into the fixed destination of a `publicForms` form (not a placed one) | Yes, held in the place its address names |
 | Tables of files (`resources.*.file`) | Yes | Yes: an upload is an insert the policy judges | Yes, 10 MB a file at most |
+| Stamps (`me`, `now`) on actions, New forms and uploads | Yes | Yes | Yes: `me` is the member's row in its tenant |
 | Public forms ([command forms](../site/src/content/docs/docs/command-forms.md)) | Yes | Only those `publicForms` enrolls, fixed or placed | Yes, placed with one tenant by its link |
-| Forms saved on every step (`resume`) | Yes | No: `mistri check` refuses one | Yes, without `statusCheck` or `link` |
+| Forms saved on every step (`resume`), public | Yes | No: `mistri check` refuses one | Yes, without `statusCheck` or `link` |
+| Forms saved on every step, signed in (`owner`) | Yes | Yes: every step runs under the person's grant and policy | Yes: the member's own draft, in its tenant |
 | Database triggers a command's write fires | Run as written | Validation-only ones run; any other refuses the write (`[command-trigger]`) unless [named](../site/src/content/docs/docs/row-access.md#triggers-the-app-names) (Preview) | Validation-only ones run; any other refuses the write; none can be named yet |
 | Commands over the [App API](../site/src/content/docs/docs/app-api.md) and its MCP | Yes | Yes, each token as its own account | Yes, each token bound to one membership |
 | The App API's generic writes | Yes, where every role reads all rows | No | No |

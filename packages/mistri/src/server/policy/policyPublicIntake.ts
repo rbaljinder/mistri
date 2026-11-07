@@ -21,6 +21,7 @@ import type { CommandResultReference } from '../commands/scopedBusinessCommandAc
 import type { CaptureCommandFlags } from '../commands/commandFlags.js';
 import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
 import { commandsOf } from '../stores/commandStores.js';
+import { stageCommandFile } from '../commands/stagedFiles.js';
 
 /** Private binding for a fixed intake destination. These are deployment
  * declarations, never request fields or an extension of auth.public.
@@ -187,6 +188,23 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
                       accept({ appId, name, per, start }, (value) => journal.nextNumber!(value.appId, value.name, value.per, value.start)),
                   }
                 : {}),
+              // A held file is the visitor's own, in this journal's store: the same fixed destination's transaction.
+              ...(journal.stage
+                ? {
+                    stage: (
+                      appId: string,
+                      row: Parameters<NonNullable<CommandJournal['stage']>>[1],
+                      most: Parameters<NonNullable<CommandJournal['stage']>>[2],
+                      now: number,
+                    ) => accept({ appId, row, most, now }, (value) => journal.stage!(value.appId, value.row, value.most, value.now)),
+                  }
+                : {}),
+              ...(journal.takeStaged
+                ? {
+                    takeStaged: (appId: string, take: Parameters<NonNullable<CommandJournal['takeStaged']>>[1]) =>
+                      accept({ appId, take }, (value) => journal.takeStaged!(value.appId, value.take)),
+                  }
+                : {}),
             });
             const emptyKey = (key: Readonly<Record<string, string | number>>) => {
               if (Object.keys(key).length) deny();
@@ -229,7 +247,7 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
     },
   });
   return Object.freeze({
-    submit(body: unknown, execution: { signal?: AbortSignal; requestId?: string } = {}) {
+    submit(body: unknown, execution: { signal?: AbortSignal; requestId?: string; visitor?: string } = {}) {
       if (retired) return Promise.reject(new BusinessCommandExecutionError('temporarily_unavailable'));
       let submission: ReturnType<typeof parseSubmission>;
       try {
@@ -239,7 +257,8 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
           new BusinessCommandExecutionError('invalid_input', 'not_applied', error instanceof CommandInputError ? error.field : undefined),
         );
       }
-      const context = { signal: execution.signal, requestId: execution.requestId };
+      // The visitor token only names whose held files the run may take; where they land is the captured scope's.
+      const context = { signal: execution.signal, requestId: execution.requestId, visitor: execution.visitor };
       // Register before running trusted code so retirement cannot release the
       // source while an accepted submission still owns a transaction.
       const operation = Promise.resolve().then(async () => {
@@ -259,6 +278,22 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
           },
           { ...context, flags },
         );
+      });
+      pending.add(operation);
+      void operation.then(
+        () => pending.delete(operation),
+        () => pending.delete(operation),
+      );
+      return operation;
+    },
+    /** Holds a file for this form's command, for the visitor by their cookie: the body names a field, never a destination. */
+    hold(body: unknown, visitor: string) {
+      if (retired) return Promise.reject(new BusinessCommandExecutionError('temporarily_unavailable'));
+      const operation = Promise.resolve().then(() => {
+        active();
+        // Not snapshotted: a file's base64 is past a scoped value's string bound, and the route built this body from the
+        // request's JSON alone (stagedFileHttp.ts); stageCommandFile reads each member once and keeps none.
+        return stageCommandFile(binding, actor, body, { visitor });
       });
       pending.add(operation);
       void operation.then(

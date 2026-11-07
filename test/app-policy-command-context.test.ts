@@ -240,7 +240,7 @@ test('commands expose frozen availability/prepare/execute/status bound to verifi
         'trial',
         'writeFields',
       ]);
-      assert.deepEqual(Reflect.ownKeys(context.commands!).sort(), ['availability', 'execute', 'prepare', 'status']);
+      assert.deepEqual(Reflect.ownKeys(context.commands!).sort(), ['availability', 'draft', 'execute', 'prepare', 'status']);
       assert.ok(Object.isFrozen(context.commands));
       const { execute, status } = context.commands!;
       assert.deepEqual(await status(request()), { status: 'not_found', outcome: 'unknown' });

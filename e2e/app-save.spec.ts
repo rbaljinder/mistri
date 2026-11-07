@@ -23,10 +23,10 @@ for (const [width, theme] of [
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('menuitem', { name: /^Preferences/ }).click();
     const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
-    await prefs.getByRole('button', { name: 'Visual theme', exact: true }).click();
+    await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
     await page.getByRole('option', { name: theme, exact: true }).click();
     await prefs.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByRole('button', { name: 'Edit Opportunity', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ }).click();
     const input = page.getByRole('textbox', { name: 'Opportunity', exact: true });
     const geometry = () =>
       page

@@ -27,7 +27,7 @@ for (const mode of ['light', 'dark'] as const) {
       ['Color mode', mode === 'light' ? 'Light' : 'Dark'],
       ['Density', 'Compact'],
     ]) {
-      await prefs.getByRole('button', { name: control, exact: true }).click();
+      await prefs.getByRole('button', { name: new RegExp(`^${control}(?: |$)`) }).click();
       await page.getByRole('option', { name: option, exact: control !== 'Density' }).click();
     }
     await prefs.getByRole('button', { name: 'Close', exact: true }).click();

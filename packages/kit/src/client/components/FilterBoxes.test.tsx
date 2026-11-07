@@ -237,12 +237,12 @@ describe('the workbench bar', () => {
     const user = userEvent.setup();
     const { navigate } = draw('task due_on = last 30 days');
     // The untouched date box reads its phrase back and leaves it alone.
-    expect(screen.getByRole('button', { name: 'Filter by due_on' })).toHaveTextContent('last 30 days');
+    expect(screen.getByRole('button', { name: /^Filter by due_on\b/ })).toHaveTextContent('last 30 days');
     await user.type(screen.getByRole('textbox', { name: 'Filter by priority' }), '2');
     expect(navigate).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Filter' }));
     expect(navigate).toHaveBeenCalledWith('task due_on = last 30 days and priority = 2');
-    await user.click(screen.getByRole('button', { name: 'Filter by status' }));
+    await user.click(screen.getByRole('button', { name: /^Filter by status\b/ }));
     await user.click(screen.getByRole('option', { name: 'done' }));
     await vi.waitFor(() => expect(navigate).toHaveBeenLastCalledWith('task due_on = last 30 days and priority = 2 and status = done'));
   });

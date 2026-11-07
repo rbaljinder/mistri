@@ -22,7 +22,7 @@ import {
   publicFormComponents,
   publicPrincipal,
 } from '../commands/formHttp.js';
-import { stagePublicFileHttp } from '../commands/stagedFileHttp.js';
+import { holdPolicyFileHttp, stagePublicFileHttp } from '../commands/stagedFileHttp.js';
 import { readVisitorToken } from '../commands/stagedFiles.js';
 import { clientAddress, publicFormLimiter, type RatePart } from '@mistriwork/engine/server/http/rateLimit.js';
 import { send, sendRevalidated } from '@mistriwork/engine/server/http/reply.js';
@@ -355,7 +355,11 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
       const result = await dispatchPublicFormSubmissionHttp({
         req,
         res,
-        submit: (body, execution) => policy.submitPublicForm!(key, body, execution),
+        // The visitor's own cookie names whose held files the run may take; where they land is the intake's captured scope.
+        submit: (body, execution) => {
+          const visitor = readVisitorToken(req, key);
+          return policy.submitPublicForm!(key, body, visitor ? { ...execution, visitor } : execution);
+        },
       });
       send(res, 200, result);
     } catch (error) {
@@ -430,7 +434,17 @@ async function publicFileHold(ctx: RequestContext, named: [string, AppFormView] 
   const app = signedIn.app.app;
   const [key, form] = named;
   if (policyUnavailable || (policy && !policy.matches(app))) return unavailable(res);
-  if (policy || isRowPolicyApp(app) || isTenantApp(app) || isSavedForm(form) || !commands || commands.appId !== app.id) return closed(res);
+  // A row-policy App's fixed intake holds them in its own captured destination (policyPublicIntake.ts `hold`); an
+  // ordinary App through its entry connection. A saved or placed form, and a tenant App's, are closed for now.
+  const held = policy?.holdPublicFile;
+  if (isSavedForm(form) || isTenantApp(app)) return closed(res);
+  if (policy || isRowPolicyApp(app)) {
+    if (!held || !isRowPolicyApp(app) || policy?.publicPlacement?.isPlacedForm(key)) return closed(res);
+    if (await rateLimited(res, ['file'], address, 'all')) return true;
+    await holdPolicyFileHttp(ctx, key, held, secureRequest(req, bound.trustedProxies));
+    return true;
+  }
+  if (!commands || commands.appId !== app.id) return closed(res);
   const connection = appEntrypoint(signedIn, registry);
   if (!connection) return closed(res);
   if (await rateLimited(res, ['file'], address, 'all')) return true;

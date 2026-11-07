@@ -67,9 +67,9 @@ a timestamp with a zone (`timestamptz`) gets the UTC instant. A machine's
 sign up, an action that stamps `me` is refused until the address is confirmed.
 A reference stamped with `me` needs the account's row of the `auth.me` table.
 A stamp a column cannot hold, or an expression that does not parse, stops the
-App at startup and `mistri check` names it. Stamps are not written in tenant
-Apps yet; use a command's `now()` and `actor` there. Keep stamped columns out
-of every role's `fields` write list.
+App at startup and `mistri check` names it. A tenant App writes stamps too,
+finding `me` among the people of the member's own tenant. Keep stamped columns
+out of every role's `fields` write list.
 
 ### Who may click it
 

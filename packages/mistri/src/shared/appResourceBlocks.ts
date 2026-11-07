@@ -495,11 +495,11 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
         const declared = plainRecord(
           raw.file,
           `${at}, "file"`,
-          'an object { content, name, type?, size?, thumbnail?, maxBytes?, object?, hash?, storage?, bucket? }',
+          'an object { content, name, type?, size?, thumbnail?, maxBytes?, object?, hash?, stamps?, storage?, bucket? }',
         );
         allowKeys(
           declared,
-          ['content', 'name', 'type', 'size', 'thumbnail', 'maxBytes', 'object', 'hash', 'storage', 'bucket'],
+          ['content', 'name', 'type', 'size', 'thumbnail', 'maxBytes', 'object', 'hash', 'stamps', 'storage', 'bucket'],
           `${at}, "file"`,
         );
         const column = (key: 'content' | 'name' | 'type' | 'size' | 'thumbnail' | 'object' | 'hash', required: boolean) => {
@@ -531,12 +531,27 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
         if (object) file.object = object;
         const hash = column('hash', false);
         if (hash) file.hash = hash;
+        /* The columns the server writes on every upload (`uploaded_by: 'me', uploaded_at: 'now'`): judged against the
+           catalog with the rest of the rule (appResourceRules.ts), where a column's type is known. */
+        if (declared.stamps !== undefined) {
+          const stamps = plainRecord(declared.stamps, `${at}, "file" "stamps"`, "an object of column → 'me' | 'now'");
+          const entries = Object.entries(stamps);
+          for (const [name, word] of entries) {
+            if (!name.trim() || name.includes('.'))
+              throw new Error(`${at}, "file" "stamps" names "${name}", which is not a column of the resource.`);
+            if (word !== 'me' && word !== 'now')
+              throw new Error(`${at}, "file" "stamps" sets "${name}" to ${JSON.stringify(word)}; a file's stamp is 'me' or 'now'.`);
+          }
+          if (entries.length) file.stamps = Object.freeze(Object.fromEntries(entries) as Record<string, 'me' | 'now'>);
+        }
         Object.assign(file, parseFileStorage(declared, at));
         const named = [file.content, file.name, file.type, file.size, file.thumbnail, file.object, file.hash].filter(Boolean);
         if (new Set(named).size !== named.length)
           throw new Error(
             `${at}, "file" names one column for two things; the bytes, the name, the type, the size, the thumbnail, the object and the hash are separate columns.`,
           );
+        const stamped = Object.keys(file.stamps ?? {}).find((name) => named.includes(name));
+        if (stamped) throw new Error(`${at}, "file" "stamps" names "${stamped}", a column the upload itself fills.`);
         resource.file = file;
       }
       if (raw.tags !== undefined) {

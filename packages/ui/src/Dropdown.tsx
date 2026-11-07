@@ -14,7 +14,7 @@
  * run rather than become the value: the value stays what the caller says
  * it is, so choosing "re-read the schema" cannot select it.
  */
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { useEffect, useId, useRef, useState, type Ref } from 'react';
 import { Select } from '@base-ui/react/select';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { popupContainer } from './internal/popups.js';
@@ -107,6 +107,11 @@ function DropdownList(props: DropdownInput) {
     placeholder,
   } = props;
   const many = props.multiple === true;
+  /* A button named only by `ariaLabel` is named by it and then by the value it shows (WCAG 2.5.3, label in name): its
+     own label first, the shown value after, as a field's `labelledby` names it with `valueId`. */
+  const own = useId();
+  const shownId = useId();
+  const buttonId = id ?? own;
   const chosen: string[] = props.multiple === true ? props.value : [props.value];
   const selected = items.find((i) => i.value === chosen[0]);
   /* Nothing chosen: a value no item carries (a form's empty answer) reads as no selection, not as a stray one. */
@@ -168,11 +173,11 @@ function DropdownList(props: DropdownInput) {
             <button
               type="button"
               role="button"
-              id={id}
+              id={buttonId}
               className={buttonClassName ? `dd-button ${buttonClassName}` : 'dd-button'}
               ref={setTrigger}
               aria-label={ariaLabelledBy ? undefined : ariaLabel}
-              aria-labelledby={ariaLabelledBy}
+              aria-labelledby={ariaLabelledBy ?? (ariaLabel ? `${buttonId} ${valueId ?? shownId}` : undefined)}
               aria-invalid={ariaInvalid || undefined}
               aria-describedby={ariaDescribedBy}
               title={selected?.detail ?? ''}
@@ -186,7 +191,7 @@ function DropdownList(props: DropdownInput) {
               ))}
             </span>
           )}
-          <span id={valueId} className={`dd-value${valueClassName ? ` ${valueClassName}` : ''}${said ? '' : ' is-empty'}`}>
+          <span id={valueId ?? shownId} className={`dd-value${valueClassName ? ` ${valueClassName}` : ''}${said ? '' : ' is-empty'}`}>
             {said || placeholder || '—'}
           </span>
           <span className="dd-caret" aria-hidden="true">

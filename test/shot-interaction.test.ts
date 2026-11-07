@@ -62,7 +62,11 @@ async function shootWith(t: TestContext, ui: object | undefined, ...flags: strin
   return { code, said, warned, out };
 }
 
-test('a click on a row is performed before the page is read', async (t) => {
+/* Each of these drives a browser through steps, beside a bare picture or waiting out a step that finds nothing: about
+   20 s here and several times that on a cold CI runner, so they get half as long again as the suite's 120 s. */
+const SHOTS = { timeout: 180_000 };
+
+test('a click on a row is performed before the page is read', SHOTS, async (t) => {
   const bare = await shoot(t, '--text', '/tickets');
   const clicked = await shoot(t, '--text', '/tickets', '--click', 'Printer');
   assert.equal(bare.code, 0, bare.warned.join('\n'));
@@ -72,7 +76,7 @@ test('a click on a row is performed before the page is read', async (t) => {
   assert.doesNotMatch(clicked.said.join('\n'), /table:/);
 });
 
-test('typed text and a key reach the page before the picture, which waits for what it was told to', async (t) => {
+test('typed text and a key reach the page before the picture, which waits for what it was told to', SHOTS, async (t) => {
   const bare = await shoot(t, '/tickets');
   const typed = await shoot(
     t,
@@ -87,13 +91,14 @@ test('typed text and a key reach the page before the picture, which waits for wh
     '--press',
     'ArrowDown',
   );
+  assert.equal(bare.code, 0, bare.warned.join('\n'));
   assert.equal(typed.code, 0, typed.warned.join('\n'));
   const [before] = bare.said;
   const [after] = typed.said;
   assert.ok(!readFileSync(before!).equals(readFileSync(after!)), 'the picture after the steps is the picture without them');
 });
 
-test('a step that finds nothing is refused with the step and the address, and nothing is written', async (t) => {
+test('a step that finds nothing is refused with the step and the address, and nothing is written', SHOTS, async (t) => {
   const { code, warned, said } = await shoot(t, '/tickets', '--click', 'Nonesuch');
   assert.equal(code, 1);
   assert.match(warned.join('\n'), /--click "Nonesuch": nothing on \/tickets matched/);

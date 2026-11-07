@@ -36,7 +36,7 @@ function deferred() {
 }
 const choose = async (name: string) => {
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: 'Default App' }));
+  await user.click(screen.getByRole('button', { name: /^Default App\b/ }));
   await user.click(screen.getByRole('option', { name }));
 };
 afterEach(() => {
@@ -57,10 +57,10 @@ test('reads the account preference, offers only authorized Apps and Ask each tim
   const fetch = server(preference('payday', 3));
   start();
   render(<SuiteAppPreference />);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toHaveTextContent('Payroll'));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toHaveTextContent('Payroll'));
   expect(screen.getByText(/Saved to your account/)).toBeVisible();
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: 'Default App' }));
+  await user.click(screen.getByRole('button', { name: /^Default App\b/ }));
   expect(screen.getAllByRole('option').map((option) => option.textContent?.replace('✓', ''))).toEqual([
     'Ask each time',
     'Payroll',
@@ -86,7 +86,7 @@ test.each([
   const fetch = server(preference('payday', 3));
   start();
   render(<SuiteAppPreference />);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toBeEnabled());
   await choose(choice.label);
   expect(fetch.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(0);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Save default App' }));
@@ -122,17 +122,17 @@ test('CAS conflict retains the selection and requires refresh plus a new explici
   vi.stubGlobal('fetch', fetch);
   start();
   render(<SuiteAppPreference />);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toBeEnabled());
   await choose('Benefits');
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Save default App' }));
   expect(await screen.findByText('Your preference changed elsewhere. Refresh before saving again.')).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Default App' })).toHaveTextContent('Benefits');
+  expect(screen.getByRole('button', { name: /^Default App\b/ })).toHaveTextContent('Benefits');
   expect(screen.getByRole('button', { name: 'Save default App' })).toBeDisabled();
   expect(posts).toBe(1);
   await user.click(screen.getByRole('button', { name: 'Refresh preference' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toBeEnabled());
-  expect(screen.getByRole('button', { name: 'Default App' })).toHaveTextContent('Benefits');
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toBeEnabled());
+  expect(screen.getByRole('button', { name: /^Default App\b/ })).toHaveTextContent('Benefits');
   expect(posts).toBe(1);
   await user.click(screen.getByRole('button', { name: 'Save default App' }));
   expect(await screen.findByText('Default App saved to your account.')).toBeVisible();
@@ -145,11 +145,11 @@ test('an uncertain write retains the selection and cannot be replayed before a r
   });
   start();
   render(<SuiteAppPreference />);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toBeEnabled());
   await choose('Benefits');
   await userEvent.setup().click(screen.getByRole('button', { name: 'Save default App' }));
   expect(await screen.findByText('Your change could not be confirmed. Refresh before saving again.')).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Default App' })).toHaveTextContent('Benefits');
+  expect(screen.getByRole('button', { name: /^Default App\b/ })).toHaveTextContent('Benefits');
   expect(screen.getByRole('button', { name: 'Save default App' })).toBeDisabled();
   expect(fetch.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1);
   expect(screen.queryByText(/private network/)).toBeNull();
@@ -161,7 +161,7 @@ test('a revoked stored default is not an authorized option and is not silently r
   render(<SuiteAppPreference />);
   expect(await screen.findByText('Your selected App is no longer available. Choose another App.')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Save default App' })).toBeDisabled();
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Default App' }));
+  await userEvent.setup().click(screen.getByRole('button', { name: /^Default App\b/ }));
   expect(screen.queryByRole('option', { name: /revoked/ })).toBeNull();
   expect(fetch.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
 });
@@ -179,14 +179,14 @@ test('refresh after a refused write retains a newly revoked choice without offer
   vi.stubGlobal('fetch', fetch);
   start();
   render(<SuiteAppPreference />);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toBeEnabled());
   await choose('Benefits');
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Save default App' }));
   await user.click(screen.getByRole('button', { name: 'Refresh preference' }));
   expect(await screen.findByText('Your selected App is no longer available. Choose another App.')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Save default App' })).toBeDisabled();
-  await user.click(screen.getByRole('button', { name: 'Default App' }));
+  await user.click(screen.getByRole('button', { name: /^Default App\b/ }));
   expect(screen.queryByRole('option', { name: 'Benefits' })).toBeNull();
   expect(fetch.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1);
 });
@@ -199,10 +199,10 @@ test('refresh with no local edit adopts the account preference changed elsewhere
   );
   start();
   render(<SuiteAppPreference />);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toHaveTextContent('Payroll'));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toHaveTextContent('Payroll'));
   stored = preference('benefits', 2);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh preference' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toHaveTextContent('Benefits'));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toHaveTextContent('Benefits'));
   expect(screen.getByRole('button', { name: 'Save default App' })).toBeDisabled();
 });
 
@@ -211,7 +211,7 @@ test.each(['account', 'suite', 'sign-out', 'unmount'] as const)('%s change abort
   const fetch = server(preference(), () => pending.promise);
   start();
   const { unmount } = render(<SuiteAppPreference />);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toBeEnabled());
   await choose('Benefits');
   await userEvent.setup().click(screen.getByRole('button', { name: 'Save default App' }));
   const [, writing] = fetch.mock.calls.find(([, init]) => init.method === 'POST')!;
@@ -245,11 +245,11 @@ test('same-account sign-out and sign-in creates a new generation, ignoring old r
     lockSessionIdentity();
     start();
   });
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Default App' })).toHaveTextContent('Payroll'));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Default App\b/ })).toHaveTextContent('Payroll'));
   await act(async () => {
     old.resolve(reply(preference('benefits', 2)));
   });
-  expect(screen.getByRole('button', { name: 'Default App' })).toHaveTextContent('Payroll');
+  expect(screen.getByRole('button', { name: /^Default App\b/ })).toHaveTextContent('Payroll');
 });
 
 test.each([preference(null, 0, 'other-account'), { accountId: 'account-a', defaultApp: null, revision: -1 }])(
@@ -259,7 +259,7 @@ test.each([preference(null, 0, 'other-account'), { accountId: 'account-a', defau
     start();
     render(<SuiteAppPreference />);
     expect(await screen.findByText('Your App preference could not be loaded.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Default App' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Default App\b/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Refresh preference' })).toBeEnabled();
   },
 );

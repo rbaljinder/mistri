@@ -115,7 +115,8 @@ function iconFindings(text: string, warn: (line: number, message: string) => voi
   };
   const literal = /^(['"`])([^'"`\\\n$]*)\1$/;
   const branch = /(?:^|[?:])\s*(['"`])([^'"`\\\n$]*)\1(?=\s*(?:$|[:,)]))/g;
-  for (const match of text.matchAll(/(?:<Icon\b(?:[^>{}]|\{[^{}]*\})*?\bname|\bicon)\s*[=:]\s*/g)) {
+  // `icon` on its own: not a property of something else (`el.dataset.icon`) or the end of a `$icon` name.
+  for (const match of text.matchAll(/(?:<Icon\b(?:[^>{}]|\{[^{}]*\})*?\bname|(?<![.\w$])icon)\s*[=:]\s*/g)) {
     let from = match.index + match[0].length;
     const braced = text[from] === '{';
     if (braced) from++;

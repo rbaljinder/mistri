@@ -60,11 +60,14 @@ export function BrandingForm() {
   const [upload, setUpload] = useState<{ base64: string; url: string } | null | undefined>(undefined);
   /* The same for the dark logo, which belongs to a logo: removing the logo takes it too. */
   const [darkUpload, setDarkUpload] = useState<{ base64: string; url: string } | null | undefined>(undefined);
+  /* The tab icon, the same way; unlike the dark logo it stands without a logo. */
+  const [iconUpload, setIconUpload] = useState<{ base64: string; url: string } | null | undefined>(undefined);
   const [phase, setPhase] = useState<'idle' | 'saving'>('idle');
   const [message, setMessage] = useState('');
   const [refused, setRefused] = useState<BrandingRefusal[]>([]);
   const file = useRef<HTMLInputElement>(null);
   const darkFile = useRef<HTMLInputElement>(null);
+  const iconFile = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -87,6 +90,7 @@ export function BrandingForm() {
   }, []);
   useEffect(() => () => (upload ? URL.revokeObjectURL(upload.url) : undefined), [upload]);
   useEffect(() => () => (darkUpload ? URL.revokeObjectURL(darkUpload.url) : undefined), [darkUpload]);
+  useEffect(() => () => (iconUpload ? URL.revokeObjectURL(iconUpload.url) : undefined), [iconUpload]);
 
   const declaration = useMemo(() => (reply ? { themes: reply.themes, allow: reply.allow, editors: [] } : undefined), [reply]);
   /* What the save would judge: the draft without the color a reader is still typing. */
@@ -121,6 +125,9 @@ export function BrandingForm() {
     !logo || darkUpload === null
       ? undefined
       : (darkUpload?.url ?? (savedDark && LOGO_ADDRESS.test(savedDark) ? served(savedDark) : undefined));
+  const savedIcon = reply.branding.favicon ? `/api/branding/logo/${reply.branding.favicon.hash}` : undefined;
+  const tabIcon =
+    iconUpload === null ? undefined : (iconUpload?.url ?? (savedIcon && LOGO_ADDRESS.test(savedIcon) ? served(savedIcon) : undefined));
   const chosen = reply.themes.find((item) => item.id === draft.preset) ?? reply.themes[0]!;
   const palette = theme[dark() ? 'dark' : 'light'];
   const problemFor = (field: BrandingKey) =>
@@ -164,12 +171,13 @@ export function BrandingForm() {
     setPhase('saving');
     setMessage('');
     try {
-      const { logo: _logo, logoDark: _logoDark, ...value } = draft;
+      const { logo: _logo, logoDark: _logoDark, favicon: _favicon, ...value } = draft;
       const got = (await api('/api/branding/save', {
         branding:
           value.accent && !(HEX.test(value.accent.light) && HEX.test(value.accent.dark)) ? { ...value, accent: value.accent.light } : value,
         ...(upload === undefined ? {} : { logo: upload === null ? null : upload.base64 }),
         ...(darkUpload === undefined ? {} : { darkLogo: darkUpload === null ? null : darkUpload.base64 }),
+        ...(iconUpload === undefined ? {} : { favicon: iconUpload === null ? null : iconUpload.base64 }),
       })) as BrandingReply;
       if (got.error) {
         setRefused(got.errors ?? [{ field: 'name', message: got.error }]);
@@ -179,6 +187,7 @@ export function BrandingForm() {
         setDraft({ ...got.branding });
         setUpload(undefined);
         setDarkUpload(undefined);
+        setIconUpload(undefined);
         setMessage(say('saved'));
       }
     } catch (error) {
@@ -265,6 +274,37 @@ export function BrandingForm() {
                     size="compact"
                     disabled={disabled}
                     onClick={() => setDarkUpload(reply.branding.logoDark ? null : undefined)}
+                  >
+                    {say('removeLogo')}
+                  </Button>
+                )}
+              </div>
+            )}
+          </Field>
+        )}
+        {allowed('logo') && (
+          <Field label={say('favicon')} hint={say('faviconHint')} problem={problemFor('logo')} size="compact" group>
+            {(control) => (
+              <div className="branding-form-logo" {...control} role="group">
+                <span className="branding-form-logo-box">
+                  {tabIcon ? <img src={tabIcon} alt="" width={32} height={32} /> : say('noFavicon')}
+                </span>
+                <input
+                  ref={iconFile}
+                  type="file"
+                  hidden
+                  accept="image/png,image/svg+xml,image/x-icon,.ico"
+                  onChange={(event) => void pick(event, setIconUpload)}
+                />
+                <Button intent="secondary" size="compact" disabled={disabled} onClick={() => iconFile.current?.click()}>
+                  {say('chooseLogo')}
+                </Button>
+                {tabIcon && (
+                  <Button
+                    intent="quiet"
+                    size="compact"
+                    disabled={disabled}
+                    onClick={() => setIconUpload(reply.branding.favicon ? null : undefined)}
                   >
                     {say('removeLogo')}
                   </Button>

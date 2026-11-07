@@ -76,7 +76,7 @@ test.describe('tenant renewal preserves mounted work', () => {
       .getByRole('gridcell', { name: 'North item', exact: true })
       .or(page.getByRole('button', { name: 'North item', exact: true }))
       .click();
-    await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     const field = page.getByRole('textbox', { name: 'Name', exact: true });
     await field.fill('Draft kept through renewal');
     return field;

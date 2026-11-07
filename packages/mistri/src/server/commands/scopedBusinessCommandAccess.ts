@@ -216,6 +216,7 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
             ...(authorized.machine ? { machine: authorized.machine } : {}),
             ...(authorized.timezone ? { timezone: authorized.timezone } : {}),
             ...(authorized.currency ? { currency: authorized.currency } : {}),
+            ...(authorized.people ? { people: authorized.people } : {}),
             ...(authorized.files ? { files: authorized.files } : {}),
             transaction: deny,
             readsInCommand: true,

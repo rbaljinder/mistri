@@ -34,7 +34,7 @@ import {
 } from './businessCommands.js';
 import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow } from './commandDb.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
-import { compileWhen, failingCondition, inputsWithheld, whenHolds, whenPerson } from './commandWhen.js';
+import { compileWhen, failingCondition, inputsWithheld, personMatch, whenHolds, whenPerson, type CommandPeople } from './commandWhen.js';
 import { whenRefusalSentence } from './commandSaying.js';
 import { bindRecord, readsRecord, type BoundCondition } from '../../shared/commandDraft.js';
 import { mayReadTargetColumn } from './commandActorColumns.js';
@@ -106,7 +106,7 @@ interface ExecutionOptions {
   now?: () => Date;
   /** Exact authorized receipt lookup; it never invokes the handler. */
   statusOnly?: boolean;
-  /** A saved public form's step, from its route: the application it runs in is found here, in its transaction (savedForms.ts). */
+  /** A saved form's step, from its route: the application it runs in is found here, in its transaction (savedForms.ts). */
   draft?: SavedDraftRun;
   /**
    * Which door the request came through, which decides what the command
@@ -674,7 +674,14 @@ async function executeUntraced(
          root is found by the cookie's hash here, in this transaction, and
          every read and write below is fenced to it. Only a public submission
          carries one. */
-          if (options.draft && !publicActor) throw new AppAccessDenied();
+          /* A public form's draft is a visitor's, a signed-in form's a person's (savedForms.ts): the other
+             kind of principal never opens either. */
+          if (options.draft && (options.draft.owner !== undefined) === publicActor) throw new AppAccessDenied();
+          /* A person's draft is owned by `me`, found in this transaction through the command's reading of the
+             people table: the request names nobody. */
+          const owner = options.draft?.owner
+            ? (await whenPerson(records, authorized.actor, authorized.people, ['owner = me']))?.person?.key
+            : undefined;
           const draft = options.draft
             ? await openSavedDraft(
                 options.draft,
@@ -684,6 +691,8 @@ async function executeUntraced(
                     throw new AppAccessDenied();
                   })(),
                 now(),
+                options.draft.owner ? (owner ?? null) : undefined,
+                authorized.files,
               )
             : undefined;
           const store = draft?.records ?? records;
@@ -1626,9 +1635,9 @@ function bindMoments<T extends { table: string; values: Record<string, unknown> 
  */
 async function commandConstant(
   authorized: {
-    readonly actor: { readonly email?: string };
+    readonly actor: { readonly email?: string; readonly id?: string };
     readonly timezone?: string;
-    readonly people?: { table: string; column: string; key: string; id: string };
+    readonly people?: CommandPeople;
   },
   tx: Pick<WriteTransaction, 'query'>,
   table: import('@mistriwork/engine/shared/schema.js').TableMeta,
@@ -1655,12 +1664,15 @@ async function commandConstant(
       now,
       ...(who ? { who } : {}),
       person: async () => {
+        // The actor's account where the people table holds accounts (a tenant App's), else its email.
+        const match = personMatch(authorized.actor, people!);
+        if (match === null) return null;
         const found = await tx.query({
           table: people!.table,
           columns: [people!.key],
           limit: 2,
           offset: 0,
-          filter: { groups: [[{ column: people!.column, op: '=', value: who! }]] },
+          filter: { groups: [[{ column: people!.column, op: '=', value: match }]] },
         });
         const key = found.rows.length === 1 ? found.rows[0][people!.key] : null;
         return typeof key === 'string' || typeof key === 'number' ? key : null;

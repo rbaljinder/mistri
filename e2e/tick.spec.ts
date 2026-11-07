@@ -138,7 +138,7 @@ test.describe('Tick checklist', () => {
       await expect(page.getByRole('button', { name: 'Copy layout', exact: true })).toHaveCount(0);
       const id = scalar(sample.db, 'SELECT id FROM task WHERE name=?', name);
       expect(scalar(sample.db, 'SELECT due_on FROM task WHERE id=?', id)).toBe(null);
-      await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+      await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
       await page.getByRole('textbox', { name: 'Name', exact: true }).fill(`${name} edited`);
       await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect.poll(() => scalar(sample.db, 'SELECT name FROM task WHERE id=?', id)).toBe(`${name} edited`);
@@ -238,7 +238,7 @@ test.describe('Tick checklist', () => {
     await draft.fill('');
     await page.locator('.quick-add form').getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.goto(`${sample.origin}/@task~2`);
-    await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     const name = page.getByRole('textbox', { name: 'Name', exact: true });
     await name.fill('Unsaved name');
     const field = await name.elementHandle();
@@ -353,7 +353,7 @@ test.describe('Tick checklist', () => {
     const original = await list.elementHandle();
     await page.getByRole('button', { name: 'Water the plants', exact: true }).click();
     const modal = page.locator('.record-modal');
-    await modal.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await modal.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     const name = modal.getByRole('textbox', { name: 'Name', exact: true });
     await name.fill('Water the garden');
     expect(scalar(sample.db, 'SELECT name FROM task WHERE id=2')).toBe('Water the plants');
@@ -388,7 +388,7 @@ test.describe('Tick checklist', () => {
     await page.goto(`${sample.origin}/`);
     await page.getByRole('button', { name: 'Water the plants', exact: true }).click();
     const modal = page.locator('.record-modal');
-    await modal.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await modal.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     await modal.getByRole('textbox', { name: 'Name', exact: true }).fill('Retained modal draft');
     await modal.getByRole('button', { name: 'Next record', exact: true }).click();
     // The dialog's head says the kind; the record's name is the page's heading.
@@ -424,7 +424,7 @@ test.describe('Tick checklist', () => {
       await route.fetch();
       await route.abort('failed');
     });
-    await modal.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await modal.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     await modal.getByRole('textbox', { name: 'Name', exact: true }).fill('Applied but unconfirmed');
     await modal.getByRole('button', { name: 'Save changes', exact: true }).click();
     await expect(modal.locator('.pending-uncertain')).toBeVisible();
@@ -443,7 +443,7 @@ test.describe('Tick checklist', () => {
     await page.goto(`${sample.origin}/`);
     await page.getByRole('button', { name: 'Water the plants', exact: true }).click();
     const modal = page.locator('.record-modal');
-    await modal.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await modal.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     const name = modal.getByRole('textbox', { name: 'Name', exact: true });
     await name.fill('Phone modal autosave');
     const original = await name.elementHandle();

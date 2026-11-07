@@ -80,6 +80,35 @@ column that is not there. The App API refuses to expose either.
 `maxBytes` caps one upload: 10 MB when unsaid, at most 25 MB (10 MB in a tenant
 App). An upload is one request, and mistri does no S3 multipart upload.
 
+## Where an upload hangs, and who sent it
+
+A related list of files names its record once. The upload carries that record
+as `parent: { table, key }`, the server reads it as the person who is
+uploading (their grants, and under a row policy their rows, a `via` scope
+included) and writes the link column itself. A body that names another record
+than the one the list is drawn on is refused, and one that leaves the link out
+is fine. A record the person cannot read is one they cannot attach a file to.
+A list whose reference to its record cannot be told offers no upload.
+
+`stamps` on the file rule names the columns the server writes on every upload,
+by the words an action's `set` uses: `me` is the signed-in person and `now` the
+server's clock. A stamped column is never taken from the request, so "uploaded
+by" can be relied on.
+
+```ts
+file: { content: 'data', name: 'file_name', stamps: { uploaded_by: 'me', uploaded_at: 'now' } },
+```
+
+A tenant App writes them too: `me` is the member's row of the `auth.me` table
+in its own tenant, and the parent is read in that tenant, so a record of
+another tenant is not found.
+
+A file a signed-in form saves with a step of a [form saved on every step](/docs/command-forms/#forms-saved-on-every-step)
+belongs to that draft until the form is submitted: only the person whose draft
+it is can read it, and when an expired draft is purged its objects leave the
+bucket first and its rows after, retried while the bucket does not answer. A
+submitted application's files follow the record's own scope.
+
 ## The sweep
 
 A deleted record's object stays in the bucket until the sweep deletes what no

@@ -13,7 +13,7 @@ import { isRuntimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { compileView, resolveAggregate, type ViewDef, type ViewFilter } from '@mistriwork/engine/shared/view.js';
 import { compileBreakdown, type BreakdownDef } from '@mistriwork/engine/shared/breakdown.js';
-import { ANSI_STYLE, type Condition, type Filter } from '@mistriwork/engine/shared/filter.js';
+import { ANSI_STYLE, type AnyRows, type Condition, type Filter } from '@mistriwork/engine/shared/filter.js';
 import { parseQuery, readsOf, saidAt } from '@mistriwork/engine/shared/query.js';
 import type { ViewCondition } from '@mistriwork/engine/shared/viewPaths.js';
 import type { Rollup } from '@mistriwork/engine/shared/rollups.js';
@@ -22,7 +22,7 @@ import { declaredEdge, impliedEdges, withDeclaredEdges, type DeclaredReference }
 import { withDeclaredDates } from '../../shared/declaredDates.js';
 import type { DeclaredDate } from '../../shared/appModel.js';
 import { renamedComputed } from '@mistriwork/engine/shared/rollups.js';
-import { snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import { renameViaTargets, snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { captureScopeCatalog, mapScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import { runScopedTransactionFacade } from '../policy/scopedTransactionFacade.js';
 import {
@@ -169,6 +169,13 @@ function andGroups<C>(groups: readonly (readonly C[])[] | undefined, more: reado
   return groups.flatMap((group) => more.map((extra) => [...group, ...extra]));
 }
 
+/** A request's filter in the database's names: the narrowed resource's conditions ANDed in, and the child an `any`/`no`
+    asks about renamed, as a view's is (physicalAny). The filter as it was for any other table. */
+function physicalFilter(filter: Filter | undefined, table: string, catalog: AppResourceCatalog): Filter | undefined {
+  const narrowed = narrowedFilter(filter, table, catalog);
+  return narrowed && physicalAny(narrowed, catalog);
+}
+
 /** A request's filter with the narrowed resource's conditions ANDed in; the filter as it was for any other table. */
 function narrowedFilter(filter: Filter | undefined, table: string, catalog: AppResourceCatalog): Filter | undefined {
   const fixed = catalog.narrowed?.get(table);
@@ -214,11 +221,11 @@ function physicalScope(scope: RowScope, toPhysical: (table: string) => string): 
   const mapped: Record<string, RowScope[string]> = Object.create(null);
   for (const [table, rule] of Object.entries(scope)) {
     const physical = toPhysical(table);
-    if (Object.hasOwn(mapped, physical) && JSON.stringify(mapped[physical]) !== JSON.stringify(rule))
+    if (Object.hasOwn(mapped, physical) && JSON.stringify(mapped[physical]) !== JSON.stringify(renameViaTargets(rule, toPhysical)))
       throw new Refusal(
         `The row policy gives "${table}" a rule of its own, and another resource of its table another: a narrowed resource reads its table's rows under the table's one rule.`,
       );
-    mapped[physical] = rule;
+    mapped[physical] = renameViaTargets(rule, toPhysical);
   }
   return mapped;
 }
@@ -332,9 +339,10 @@ function physicalView(view: ViewDef, catalog: AppResourceCatalog): ViewDef {
 /* An `any` condition names its child rows by endpoints, as a rollup does (`opportunity.account_id`): renaming the
    table is the whole translation. The child's own conditions are its columns and references, which keep their names;
    a narrowed child's conditions join them, so `any` asks only of the rows that resource reads. */
-function physicalAny(filter: ViewFilter, catalog: AppResourceCatalog): ViewFilter {
+function physicalAny<F extends { groups: Array<Array<{ any?: AnyRows }>> }>(filter: F, catalog: AppResourceCatalog): F {
   if (!filter.groups.some((group) => group.some((condition) => condition.any))) return filter;
   return {
+    ...filter,
     groups: filter.groups.map((group) =>
       group.map((condition) => {
         if (!condition.any) return condition;
@@ -351,7 +359,7 @@ function physicalAny(filter: ViewFilter, catalog: AppResourceCatalog): ViewFilte
         };
       }),
     ),
-  };
+  } as F;
 }
 
 /** A record's tags name their link and tag tables by id: renamed, as a rollup's child is. */
@@ -366,7 +374,7 @@ export function mapAppScopedReads(reads: ScopedReads, catalog: AppResourceCatalo
   const { toPhysical } = catalog;
   const scoped: ScopedReads = {
     query: (request) => reads.query(physicalRead(request, catalog)),
-    count: (table, filter, limit) => reads.count(toPhysical(table), narrowedFilter(filter, table, catalog), limit),
+    count: (table, filter, limit) => reads.count(toPhysical(table), physicalFilter(filter, table, catalog), limit),
     runView: async (view, offset) => logicalResult(view, await reads.runView(resourceView(view, catalog), offset), catalog),
     countView: (view, limit) => reads.countView(resourceView(view, catalog), limit),
     runBreakdown: (breakdown, offset) => reads.runBreakdown(resourceBreakdown(breakdown, catalog), offset),
@@ -387,7 +395,7 @@ export function mapAppScopedReads(reads: ScopedReads, catalog: AppResourceCatalo
 
 /** A single-table read in the database's names, a narrowed resource's conditions ANDed into its filter. */
 function physicalRead<T extends { table: string; filter?: Filter }>(request: T, catalog: AppResourceCatalog): T {
-  const filter = narrowedFilter(request.filter, request.table, catalog);
+  const filter = physicalFilter(request.filter, request.table, catalog);
   return { ...request, table: catalog.toPhysical(request.table), ...(filter ? { filter } : {}) };
 }
 
@@ -621,7 +629,7 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
     return {
       ...(tx.lockRecord ? { lockRecord: (request: DeleteRequest) => tx.lockRecord!(mapWrite(request)) } : {}),
       query: (request) => tx.query(mapRead(request)),
-      count: (table, filter) => tx.count(toPhysical(table), narrowedFilter(filter, table, catalog)),
+      count: (table, filter) => tx.count(toPhysical(table), physicalFilter(filter, table, catalog)),
       ...(tx.aggregate ? { aggregate: (request: AggregateRequest) => tx.aggregate!(mapRead(request)) } : {}),
       insert: (request) => through(request.table)?.insert(request) ?? tx.insert(mapWrite(request)),
       update: (request) => through(request.table)?.update(request) ?? tx.update(mapWrite(request)),
@@ -644,7 +652,7 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
     dialect: physicalAdapter.dialect,
     introspect: async () => schema,
     query: (request) => physicalAdapter.query(mapRead(request)),
-    count: (table, filter, limit) => physicalAdapter.count(toPhysical(table), narrowedFilter(filter, table, catalog), limit),
+    count: (table, filter, limit) => physicalAdapter.count(toPhysical(table), physicalFilter(filter, table, catalog), limit),
     close: () => physicalAdapter.close(),
   };
   if (physicalAdapter.scopeReads)

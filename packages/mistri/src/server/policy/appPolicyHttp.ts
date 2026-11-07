@@ -1,3 +1,4 @@
+import { COMMAND_ROUTES } from '../../shared/commandRoutes.js';
 import type { IncomingMessage } from 'node:http';
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
 import { compileAppTransitions, type AppTransitionRules } from '../app/appTransitions.js';
@@ -51,6 +52,7 @@ export interface HttpAppPolicy {
   /** A notice's recipient, read for in the rows the policy gives their account (email/outbox.ts). */
   withAccount: AppPolicyDeployment<IncomingMessage>['withAccount'];
   submitPublicForm?: AppPolicyDeployment<IncomingMessage>['submitPublicForm'];
+  holdPublicFile?: AppPolicyDeployment<IncomingMessage>['holdPublicFile'];
   /** After a committed scoped write, the record's search document follows it,
    * as it does after any other write (dataWriteRoutes.ts `recordedWrites`). */
   indexed(table: string, key: Record<string, unknown>): void;
@@ -217,6 +219,7 @@ export async function loadHttpAppPolicy(options: {
     withService: deployed.withService,
     withAccount: deployed.withAccount,
     ...(deployed.submitPublicForm ? { submitPublicForm: deployed.submitPublicForm } : {}),
+    ...(deployed.holdPublicFile ? { holdPublicFile: deployed.holdPublicFile } : {}),
     ...(publicPlacement ? { publicPlacement } : {}),
     retire: () => {
       retired = true;
@@ -276,7 +279,13 @@ export function httpRowPolicyAllows(method: string | undefined, path: string, co
     ? readPosts.has(path) ||
         ['/api/update', '/api/insert', '/api/file/upload', '/api/delete', '/api/revert', '/api/import'].includes(path) ||
         (commands &&
-          ['/api/commands/prepare', '/api/commands/execute', '/api/commands/status', '/api/commands/availability'].includes(path))
+          [
+            '/api/commands/prepare',
+            '/api/commands/execute',
+            '/api/commands/status',
+            '/api/commands/availability',
+            COMMAND_ROUTES.draft,
+          ].includes(path))
     : (method === 'GET' || method === 'HEAD') && readGets.has(path);
 }
 

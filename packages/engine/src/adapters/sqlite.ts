@@ -10,6 +10,10 @@
 import { statSync } from 'node:fs';
 import { waitForLocks, assertIndependentWrite, writeToFile, prepareGuarded, transactionEpoch, storeEpoch } from './sqliteHandles.js';
 import { captureScopeCatalog, mapScopeCatalog } from '../shared/scopeCatalog.js';
+import { inlineRows } from '../shared/anyRows.js';
+import { asksAboutRows } from '../shared/filter.js';
+import { qualifiedTable } from '../shared/sqlRelation.js';
+import type { SqlFragment } from '../shared/filter.js';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { isPromise, isProxy } from 'node:util/types';
 import {
@@ -572,9 +576,20 @@ export class SqliteAdapter implements Adapter {
     });
   }
 
+  /* A read's filter. Rows that point at the one read (`any`/`no`) are asked as an EXISTS over the child's own table, read
+     as the parent is: no scope sits between, so the caller's declaration of what it may read is the only bound
+     (commandDb.ts). The catalog is read only when the filter asks, and a filter that asks of a catalog this handle
+     cannot read is refused, as one nothing resolves is. */
+  private async whereOf(id: string, relation: string, filter: Filter | undefined): Promise<SqlFragment> {
+    if (!asksAboutRows(filter)) return buildWhere(filter, ANSI_STYLE);
+    const schema = await this.schema().catch(() => undefined);
+    const inline =
+      schema && inlineRows(schema, id, ANSI_STYLE.quote(relation), ANSI_STYLE, (child) => qualifiedTable(schema, child.id, ANSI_STYLE));
+    return buildWhere(filter, ANSI_STYLE, 1, undefined, undefined, undefined, undefined, false, undefined, false, inline);
+  }
+
   private async queryOn(request: QueryRequest, db: DatabaseSync, read = false): Promise<QueryResult> {
     const table = read ? this.readTable(request.table) : this.assertTable(request.table, db);
-    const where = buildWhere(request.filter, ANSI_STYLE);
     const cols = request.columns?.length ? request.columns.map((c) => ANSI_STYLE.quote(c)).join(', ') : '*';
     /* Every read is bounded. There is no code path that reaches the database
        without a LIMIT, including one that forgot to ask for one. Limit and
@@ -582,6 +597,9 @@ export class SqliteAdapter implements Adapter {
        its operation input, and the schema wait below must not outlive it. */
     const limit = clampLimit(request.limit);
     const offset = clampOffset(request.offset);
+    const where = asksAboutRows(request.filter)
+      ? await this.whereOf(request.table, table, request.filter)
+      : buildWhere(request.filter, ANSI_STYLE);
     /* A sort by declared vocabulary needs the catalog, but an ordinary read must
        not depend on the whole catalog introspecting on this handle (a view over
        a function only the writer registered cannot be prepared here). Without
@@ -852,7 +870,7 @@ export class SqliteAdapter implements Adapter {
 
   private async countOn(table: string, filter: Filter | undefined, db: DatabaseSync, limit?: number, read = false): Promise<number> {
     const name = read ? this.readTable(table) : this.assertTable(table, db);
-    const where = buildWhere(filter, ANSI_STYLE);
+    const where = asksAboutRows(filter) ? await this.whereOf(table, name, filter) : buildWhere(filter, ANSI_STYLE);
     const text = countStatement(`${ANSI_STYLE.quote(name)}${where.text}`, limit);
     const [row] = await this.readRows(text, where.params, true, db);
     return Number(row?.n ?? 0);
@@ -1631,6 +1649,7 @@ export class SqliteAdapter implements Adapter {
             journal?.fixedRecords ? undefined : { scope, reads: (within, guard) => scopedReads(guard, within) },
             // Triggers the App names, on a principal's own transaction: their effects proven per write (triggerProof.ts).
             accepted,
+            scope,
           );
           /* Each row the transaction's own statements write, told to the session after the statement and after the
              proof has said what its triggers reached: a trigger the proof did not reach that writes it again later is

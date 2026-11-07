@@ -13,6 +13,7 @@ import { attributeAction } from '@mistriwork/engine/adapters/writeAttribution.js
 import { updateActionLabel } from '../recordHistory.js';
 import { FILE_UPLOAD_BODY, FILE_UPLOAD_PATH, readJson, send, sendResource } from '@mistriwork/engine/server/http/reply.js';
 import { uploadValues } from './fileRows.js';
+import { readUploadParent } from '../files/uploadParent.js';
 import { fileStoreTrouble, placeFile, writePlaced } from '../files/fileStorage.js';
 import { appFileRules } from '../../shared/appResourceRules.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
@@ -87,7 +88,7 @@ export async function scopedWriteRoutes(ctx: RequestContext): Promise<boolean> {
            whose columns it cannot see is not a file it can upload. */
         const table = body.table;
         if (
-          Object.keys(body).some((key) => !['app', 'table', 'values', 'file'].includes(key)) ||
+          Object.keys(body).some((key) => !['app', 'table', 'values', 'file', 'parent'].includes(key)) ||
           typeof table !== 'string' ||
           !policy!.updates.canInsert(policyContext, table)
         )
@@ -98,6 +99,13 @@ export async function scopedWriteRoutes(ctx: RequestContext): Promise<boolean> {
         const upload = uploadValues(rule, body);
         if ('error' in upload) {
           send(res, upload.status, { error: upload.error });
+          return true;
+        }
+        /* The record the list hangs off is the list's to say, once, and is read as this principal in the write's own
+           transaction (appPolicyUpdates.ts): the link is written from it (files/uploadParent.ts). */
+        const named = readUploadParent(body);
+        if ('error' in named) {
+          send(res, named.status, { error: named.error });
           return true;
         }
         /* Into the bucket before the row is written, when the resource keeps its bytes there (files/fileStorage.ts). */
@@ -111,7 +119,9 @@ export async function scopedWriteRoutes(ctx: RequestContext): Promise<boolean> {
           return true;
         }
         const added = await writePlaced(placed, (values) =>
-          policy!.updates.insert(policyContext, { table, values: values as typeof upload.values }, controller.signal),
+          policy!.updates.insert(policyContext, { table, values: values as typeof upload.values }, controller.signal, undefined, moment, {
+            ...(named.parent ? { parent: named.parent } : {}),
+          }),
         );
         indexed(table, added.key);
         /* The bytes just sent are not sent back: the reply names the row, and

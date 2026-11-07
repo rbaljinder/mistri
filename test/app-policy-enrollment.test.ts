@@ -119,7 +119,7 @@ test('JSON schema exposes enrollment as a closed auth.rows vocabulary', () => {
 });
 
 test('server-only policy runtime exports definition helpers without loaders or deployments', () => {
-  assert.deepEqual(Object.keys(policy).sort(), ['defineAppRowPolicy', 'defineAppTenantPolicy']);
+  assert.deepEqual(Object.keys(policy).sort(), ['defineAppRowPolicy', 'defineAppTenantPolicy', 'via']);
   assert.equal(policy.defineAppRowPolicy, defineAppRowPolicy);
   let calls = 0;
   const defined = policy.defineAppRowPolicy({
@@ -199,11 +199,14 @@ test('published policy declaration graph supports consumer types without exposin
     'PublicFormAdmission',
     'PublicPlacementIntent',
     'RowScope',
+    'RowScopeVia',
     'TenantDeletedRecordPolicy',
     'TenantHistoryImage',
     'TenantMembershipEvidence',
     'TenantPolicyOwnership',
+    'ViaCondition',
     'defineAppRowPolicy',
     'defineAppTenantPolicy',
+    'via',
   ]);
 });

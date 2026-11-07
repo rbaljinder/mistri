@@ -149,9 +149,14 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
     const app = shell().inApp() ? shell().app() : null;
     if (!app) return;
     let live = true;
-    void import('./newMenuModel.js').then((model) => {
-      if (live) setMade(model.newPaletteItems(app) as PaletteItem[]);
-    });
+    /* The New items are extra: a palette closed (or a page left) before the chunk arrives, or a chunk a redeploy took
+       away, leaves them out rather than raising an uncaught rejection. */
+    import('./newMenuModel.js').then(
+      (model) => {
+        if (live) setMade(model.newPaletteItems(app) as PaletteItem[]);
+      },
+      () => {},
+    );
     return () => {
       live = false;
     };

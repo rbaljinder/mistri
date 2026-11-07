@@ -201,8 +201,8 @@ test.describe('Atelier back office', () => {
       // Today, the home: its counts and the fulfillment pipeline.
       await page.goto(`${sample.origin}/`);
       await expect(page.getByRole('heading', { name: 'Good to see you, Mara Quinn' })).toBeVisible();
-      await expect(page.getByRole('button', { name: /^To confirm: \d+$/ })).toBeVisible();
-      await expect(page.getByRole('button', { name: /^To pack: \d+$/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^\d+ To confirm/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^\d+ To pack/ })).toBeVisible();
       // A pipeline step opens its rows in the App's own list, so it is a link there (Dashboard.tsx, viewLink.ts).
       const pending = page.getByRole('link', { name: /^Pending Waiting to be picked and packed \d+$/ });
       await expect(pending).toBeVisible();

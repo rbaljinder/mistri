@@ -60,3 +60,13 @@ A fields section once took more forms. They are refused, and the refusal prints 
 
 Every section takes `title`, `region` (`'aside'` for the side panel), `tab`,
 `width`, `hidden` and `when` (`'status = converted'`).
+
+A free-form page (`pages/<path>.page.tsx`) draws a read through `Loaded`, which says its loading, empty and failed states as the platform does ([`Loaded`](/docs/custom-components/), Preview):
+
+```tsx
+const guests = page.useRows('booking', { query: 'status = booked', show: ['id', 'guest_name'] });
+
+<Loaded query={guests} empty={<Empty title="Everyone is in" />}>
+  {(rows) => <ul>{rows.map((row) => <li key={String(row.id)}>{String(row.guest_name)}</li>)}</ul>}
+</Loaded>
+```

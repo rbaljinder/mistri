@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 /** A logo is a mark, not a photograph: 256 KiB holds a crisp 2x raster; an SVG mark is a few KiB. */
 const LOGO_MOST = { raster: 256 * 1024, svg: 64 * 1024 } as const;
 
-type LogoType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' | 'image/svg+xml';
+type LogoType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' | 'image/svg+xml' | 'image/x-icon';
 
 export interface AdmittedLogo {
   readonly type: LogoType;
@@ -36,6 +36,29 @@ function sniff(bytes: Buffer): Exclude<LogoType, 'image/svg+xml'> | undefined {
   if (bytes.length >= 12 && bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WEBP') return 'image/webp';
   if (bytes.length >= 6 && /^GIF8[79]a$/.test(bytes.toString('latin1', 0, 6))) return 'image/gif';
   return undefined;
+}
+
+/** A tab icon is smaller still: browsers draw it at 16 to 64 pixels. */
+const FAVICON_MOST = 64 * 1024;
+
+/**
+ * A tenant's tab icon (tenantBranding.ts `favicon`): a PNG, an ICO or an SVG, by the same rule as a logo: the bytes decide,
+ * an SVG is rebuilt from the allowlist, and it is served from the App's own origin by content hash.
+ */
+export function admitFavicon(bytes: Buffer): AdmittedLogo {
+  if (!bytes.length) throw new LogoRefused('This file is empty.');
+  const kind = bytes.length >= 4 && bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 1 && bytes[3] === 0 ? 'image/x-icon' : sniff(bytes);
+  if (kind && kind !== 'image/png' && kind !== 'image/x-icon') throw new LogoRefused('A tab icon is a PNG, an ICO or an SVG.');
+  if (kind) {
+    if (bytes.length > FAVICON_MOST) throw new LogoRefused('This icon is larger than 64 KB. A 64-pixel PNG is plenty.');
+    return { type: kind, bytes, hash: digest(bytes) };
+  }
+  try {
+    return admitLogo(bytes);
+  } catch (error) {
+    if (error instanceof LogoRefused) throw new LogoRefused('A tab icon is a PNG, an ICO or an SVG (up to 64 KB).');
+    throw error;
+  }
 }
 
 /** The logo as it will be served, or a refusal that says why. */

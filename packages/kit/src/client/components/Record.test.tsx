@@ -248,7 +248,7 @@ test.each([false, true])('record controls honor column writability with resource
   expect(screen.queryByRole('button', { name: 'Edit Name' })).toBeNull();
   const field = screen.getByText('Harbour Freight').closest('.field') as HTMLElement;
   expect(within(field).queryByTitle('NOT NULL')).toBeNull();
-  if (app) expect(screen.getByRole('button', { name: 'Edit Active' })).toBeVisible();
+  if (app) expect(screen.getByRole('button', { name: /^Edit Active\b/ })).toBeVisible();
   else expect(screen.getByRole('textbox', { name: 'active (INTEGER)' })).toHaveValue('1');
 });
 

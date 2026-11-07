@@ -33,7 +33,7 @@ import {
 } from '../../shared/tenantBranding.js';
 import type { BrandingPresentation } from '../http/recordBranding.js';
 import type { MailBrand } from '../email/mailLinkPage.js';
-import { admitLogo, imageHeaders, LogoRefused, type AdmittedLogo } from '../app/brandImage.js';
+import { admitFavicon, admitLogo, imageHeaders, LogoRefused, type AdmittedLogo } from '../app/brandImage.js';
 
 /** The deployment's store, as its facade lends it (tenantDeployment.ts). */
 interface TenantBrandingStore {
@@ -75,7 +75,11 @@ export interface TenantBrandingService {
   /** The saved value and its revision (0: never saved), for the Branding block. */
   state(tenant: string): Promise<TenantBrandingState>;
   /** Check everything, then write. Throws BrandingRefused or LogoRefused with the sentence to show. */
-  save(tenant: string, input: { value: unknown; logo?: unknown; darkLogo?: unknown }, by: string): Promise<TenantBrandingState>;
+  save(
+    tenant: string,
+    input: { value: unknown; logo?: unknown; darkLogo?: unknown; favicon?: unknown },
+    by: string,
+  ): Promise<TenantBrandingState>;
   logo(hash: string): Promise<StoredBrandingLogo | null>;
   /** The tenant's name, logo and accent as mail wears them (the App's own where it saved none). Never throws. */
   mail(tenant: string): Promise<MailBrand>;
@@ -140,6 +144,7 @@ export function createTenantBrandingService(options: {
             ...(value.name ? { name: value.name } : {}),
             ...(value.logo ? { mark: brandingLogoAddress(value.logo.hash) } : {}),
             ...(value.logo && value.logoDark ? { darkMark: brandingLogoAddress(value.logoDark.hash) } : {}),
+            ...(value.favicon ? { icon: brandingLogoAddress(value.favicon.hash) } : {}),
           }),
           private: privately,
           readerPicker: privately,
@@ -149,19 +154,20 @@ export function createTenantBrandingService(options: {
       }
     },
     state: load,
-    async save(tenant: string, input: { value: unknown; logo?: unknown; darkLogo?: unknown }, by: string) {
+    async save(tenant: string, input: { value: unknown; logo?: unknown; darkLogo?: unknown; favicon?: unknown }, by: string) {
       /* The dark logo is admitted as the light one is; `null` removes it, absent keeps the stored one. */
-      const admit = (upload: unknown): AdmittedLogo | undefined => {
+      const admit = (upload: unknown, admitting: (bytes: Buffer) => AdmittedLogo = admitLogo): AdmittedLogo | undefined => {
         if (typeof upload === 'string') {
           if (upload.length > 360_000 || !LOGO_BASE64.test(upload))
             throw new LogoRefused('This logo could not be read. Choose the file again.');
-          return admitLogo(Buffer.from(upload, 'base64'));
+          return admitting(Buffer.from(upload, 'base64'));
         }
         if (upload !== undefined && upload !== null) throw new LogoRefused('This logo could not be read. Choose the file again.');
         return undefined;
       };
       const admitted = admit(input.logo);
       const admittedDark = admit(input.darkLogo);
+      const admittedIcon = admit(input.favicon, admitFavicon);
       const raw =
         input.value && typeof input.value === 'object' && !Array.isArray(input.value) ? { ...(input.value as object) } : input.value;
       if (raw && typeof raw === 'object') {
@@ -169,7 +175,8 @@ export function createTenantBrandingService(options: {
         // The logo is the upload's or the stored one, never a hash the body names.
         delete fields.logo;
         delete fields.logoDark;
-        const current = input.logo === null && input.darkLogo === null ? undefined : (await load(tenant)).value;
+        delete fields.favicon;
+        const current = input.logo === null && input.darkLogo === null && input.favicon === null ? undefined : (await load(tenant)).value;
         if (admitted) fields.logo = { hash: admitted.hash, type: admitted.type };
         else if (input.logo !== null && current?.logo) fields.logo = current.logo;
         // A dark logo belongs to a logo: with none, there is nothing for it to stand in for.
@@ -177,6 +184,9 @@ export function createTenantBrandingService(options: {
           if (admittedDark) fields.logoDark = { hash: admittedDark.hash, type: admittedDark.type };
           else if (input.darkLogo !== null && current?.logoDark) fields.logoDark = current.logoDark;
         }
+        // The tab icon stands alone: a tenant may set one without a logo. `null` removes it, absent keeps the stored one.
+        if (admittedIcon) fields.favicon = { hash: admittedIcon.hash, type: admittedIcon.type };
+        else if (input.favicon !== null && current?.favicon) fields.favicon = current.favicon;
       }
       let value: TenantBrandingValue;
       try {
@@ -193,6 +203,9 @@ export function createTenantBrandingService(options: {
         ...(admitted ? { logo: { hash: admitted.hash, type: admitted.type, bytes: admitted.bytes } } : {}),
         ...(admittedDark && value.logoDark
           ? { darkLogo: { hash: admittedDark.hash, type: admittedDark.type, bytes: admittedDark.bytes } }
+          : {}),
+        ...(admittedIcon && value.favicon
+          ? { favicon: { hash: admittedIcon.hash, type: admittedIcon.type, bytes: admittedIcon.bytes } }
           : {}),
         by,
         at: new Date(now()).toISOString(),

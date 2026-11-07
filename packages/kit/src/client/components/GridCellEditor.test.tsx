@@ -129,7 +129,7 @@ test('a click edits the cell without opening the row; Enter saves the record for
       }),
   );
   draw();
-  await userEvent.click(screen.getByRole('button', { name: 'Edit Title' }));
+  await userEvent.click(screen.getByRole('button', { name: /^Edit Title\b/ }));
   expect(mocks.open).not.toHaveBeenCalled();
   const box = screen.getByRole('textbox', { name: 'Title' });
   await userEvent.clear(box);
@@ -142,7 +142,7 @@ test('a click edits the cell without opening the row; Enter saves the record for
     conn: 'desk',
   });
   // Optimistic: drawn before the server answers.
-  expect(screen.getByRole('button', { name: 'Edit Title' })).toHaveTextContent('Final plan');
+  expect(screen.getByRole('button', { name: /^Edit Title\b/ })).toHaveTextContent('Final plan');
   answer({ affected: 1, applied: { title: 'Final plan' } });
   await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith('Saved Title.', 'ok', undefined));
 });
@@ -150,24 +150,24 @@ test('a click edits the cell without opening the row; Enter saves the record for
 test('a refusal puts the stored value back and says why', async () => {
   mocks.api.mockResolvedValue({ outcome: 'rejected', errors: [{ message: 'A task keeps a title.', field: 'title' }] });
   draw();
-  await userEvent.click(screen.getByRole('button', { name: 'Edit Title' }));
+  await userEvent.click(screen.getByRole('button', { name: /^Edit Title\b/ }));
   await userEvent.clear(screen.getByRole('textbox', { name: 'Title' }));
   await userEvent.type(screen.getByRole('textbox', { name: 'Title' }), 'X{Enter}');
   await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith('A task keeps a title.', 'error'));
-  expect(screen.getByRole('button', { name: 'Edit Title' })).toHaveTextContent('Draft plan');
+  expect(screen.getByRole('button', { name: /^Edit Title\b/ })).toHaveTextContent('Draft plan');
 });
 
 test('Esc puts the value back and writes nothing', async () => {
   draw();
-  await userEvent.click(screen.getByRole('button', { name: 'Edit Note' }));
+  await userEvent.click(screen.getByRole('button', { name: /^Edit Note\b/ }));
   await userEvent.type(screen.getByRole('textbox', { name: 'Note' }), ' more{Escape}');
   expect(mocks.api).not.toHaveBeenCalled();
-  expect(screen.getByRole('button', { name: 'Edit Note' })).toHaveTextContent('first');
+  expect(screen.getByRole('button', { name: /^Edit Note\b/ })).toHaveTextContent('first');
 });
 
 test('a value the record form would refuse keeps the editor open, saying why, and sends nothing', async () => {
   draw();
-  await userEvent.click(screen.getByRole('button', { name: 'Edit Title' }));
+  await userEvent.click(screen.getByRole('button', { name: /^Edit Title\b/ }));
   await userEvent.clear(screen.getByRole('textbox', { name: 'Title' }));
   await userEvent.keyboard('{Enter}');
   expect(screen.getByRole('alert')).toHaveTextContent('Required');
@@ -177,7 +177,7 @@ test('a value the record form would refuse keeps the editor open, saying why, an
 test('Tab saves and opens the row’s next editable cell', async () => {
   mocks.api.mockResolvedValue({ affected: 1, applied: { title: 'Renamed' } });
   draw();
-  await userEvent.click(screen.getByRole('button', { name: 'Edit Title' }));
+  await userEvent.click(screen.getByRole('button', { name: /^Edit Title\b/ }));
   await userEvent.clear(screen.getByRole('textbox', { name: 'Title' }));
   await userEvent.type(screen.getByRole('textbox', { name: 'Title' }), 'Renamed');
   await userEvent.keyboard('{Tab}');
@@ -188,7 +188,7 @@ test('Tab saves and opens the row’s next editable cell', async () => {
 test('a row the reader may not edit opens no editor', async () => {
   mocks.editable = false;
   draw();
-  await userEvent.click(screen.getByRole('button', { name: 'Edit Title' }));
+  await userEvent.click(screen.getByRole('button', { name: /^Edit Title\b/ }));
   expect(screen.queryByRole('textbox')).toBeNull();
 });
 
@@ -228,7 +228,7 @@ test("a form's true/false control says the column's display words", async () => 
     const user = userEvent.setup();
     const done = { name: 'done', type: 'boolean', nullable: false, primaryKey: false };
     render(<ValueControl table={table} column={done} value="false" onChange={() => {}} label="Done" />);
-    const control = screen.getByRole('button', { name: 'Done' });
+    const control = screen.getByRole('button', { name: /^Done\b/ });
     expect(control).toHaveTextContent('Off');
     await user.click(control);
     expect(screen.getByRole('option', { name: 'On' })).toBeVisible();

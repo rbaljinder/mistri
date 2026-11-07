@@ -16,13 +16,13 @@ test('app fields open individually and keep formatting and reference navigation'
   });
   await page.addInitScript(() => localStorage.setItem('mistri.visual-theme', 'lumen'));
   await page.goto(record);
-  const launch = page.getByRole('button', { name: 'Edit Opportunity', exact: true });
+  const launch = page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ });
   await expect(launch).toBeVisible();
   await expect(page.locator('.page-field .cell-edit')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Edit Amount', exact: true })).toContainText('$');
+  await expect(page.getByRole('button', { name: /^Edit Amount(?: |$)/ })).toContainText('$');
   const account = page.locator('.page-field').filter({ has: page.locator('dt[title="account_id"]') });
   await expect(account.locator('.ref-jump')).toBeVisible();
-  await expect(account.getByRole('button', { name: 'Edit Account', exact: true })).toBeVisible();
+  await expect(account.getByRole('button', { name: /^Edit Account(?: |$)/ })).toBeVisible();
   for (const width of [1440, 412, 320]) {
     await page.setViewportSize({ width, height: 924 });
     await launch.click();
@@ -49,7 +49,7 @@ test('an App keeps editing contextual: no write-mode toggle and no Workbench', a
   await expect(page.getByRole('menuitem', { name: /^Workbench/ })).toHaveCount(0);
   await expect(page.getByRole('menuitemcheckbox', { name: /^Editing enabled/ })).toHaveCount(0);
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Edit Opportunity', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ })).toBeVisible();
   await expect(page.locator('body')).not.toHaveClass(/write-mode/);
 });
 
@@ -62,7 +62,7 @@ test('a read-only App withholds editing', async ({ page }) => {
   });
   await page.goto(record);
   await expect(page.locator('.page-field-grid').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Edit Opportunity', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: /^Workbench/ })).toHaveCount(0);
   await expect(page.getByRole('menuitemcheckbox', { name: /^Editing enabled/ })).toHaveCount(0);

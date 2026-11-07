@@ -324,7 +324,7 @@ test('real Preferences saves by keyboard, survives fresh login and suite restart
   await page.goto(suite.appURL('lender'));
   await expectHome(page, 'lender');
   const dialog = await openPreferences(page);
-  const choice = dialog.getByRole('button', { name: 'Default App', exact: true });
+  const choice = dialog.getByRole('button', { name: /^Default App(?: |$)/ });
   await expect(choice).toBeEnabled();
   await expect(choice).toContainText('Ask each time');
   await expect(dialog.getByText(/Saved to your account/)).toBeVisible();
@@ -359,7 +359,7 @@ test('real Preferences saves by keyboard, survives fresh login and suite restart
     await another.goto(`${suite.origin}${BASE}/`);
     await expectHome(another, 'benefits');
     const preferences = await openPreferences(another);
-    await expect(preferences.getByRole('button', { name: 'Default App', exact: true })).toContainText('Benefits');
+    await expect(preferences.getByRole('button', { name: /^Default App(?: |$)/ })).toContainText('Benefits');
   } finally {
     await fresh.close();
   }
@@ -388,7 +388,7 @@ test('real Preferences saves by keyboard, survives fresh login and suite restart
     await another.getByRole('link', { name: 'Benefits', exact: true }).click();
     await expectHome(another, 'benefits');
     const preferences = await openPreferences(another);
-    await expect(preferences.getByRole('button', { name: 'Default App', exact: true })).toContainText('Ask each time');
+    await expect(preferences.getByRole('button', { name: /^Default App(?: |$)/ })).toContainText('Ask each time');
     expect(await suite.preference(another.request, account.id)).toEqual({ accountId: account.id, defaultApp: null, revision: 2 });
   } finally {
     await restarted.close();
@@ -546,8 +546,8 @@ test('late App/preference responses cannot publish after the browser locks for a
     await expectHome(page, 'benefits');
     await whoami(page.request, suite, 'benefits', second.id);
     const preferences = await openPreferences(page);
-    await expect(preferences.getByRole('button', { name: 'Default App', exact: true })).toContainText('Ask each time');
-    await preferences.getByRole('button', { name: 'Default App', exact: true }).click();
+    await expect(preferences.getByRole('button', { name: /^Default App(?: |$)/ })).toContainText('Ask each time');
+    await preferences.getByRole('button', { name: /^Default App(?: |$)/ }).click();
     await expect(page.getByRole('option', { name: 'Lender', exact: true })).toHaveCount(0);
     await expect(page.getByRole('option', { name: 'Benefits', exact: true })).toBeVisible();
     expect(await suite.preference(page.request, second.id)).toEqual({ accountId: second.id, defaultApp: null, revision: 0 });

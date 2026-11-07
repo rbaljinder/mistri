@@ -34,7 +34,7 @@ for (const width of [412, 1024, 1440])
     // The home dashboard is the App's root; its window and picks are parameters.
     await expect(page).toHaveURL(/\/\?period=last-30-days$/);
     await stable();
-    await page.getByRole('button', { name: 'Filter by stage', exact: true }).click();
+    await page.getByRole('button', { name: /^Filter by stage(?: |$)/ }).click();
     await page.getByRole('option', { name: 'Proposal', exact: true }).click();
     await expect(page).toHaveURL(/last-30-days.*stage.*proposal/);
     await stable();
@@ -46,7 +46,7 @@ for (const width of [412, 1024, 1440])
     await page.reload();
     await expect(page.locator('html')).not.toHaveAttribute('data-starting');
     await expect(page.getByRole('button', { name: 'Time window: Last 90 days' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Filter by stage', exact: true })).toContainText('Proposal');
+    await expect(page.getByRole('button', { name: /^Filter by stage(?: |$)/ })).toContainText('Proposal');
     await stable();
     await page.screenshot({ path: testInfo.outputPath(`filtered-home-${width}.png`) });
     await metric.click();
@@ -56,7 +56,7 @@ for (const width of [412, 1024, 1440])
     await stable();
     await page.getByRole('button', { name: /^Time window:/ }).click();
     await page.getByRole('menuitem', { name: 'Default' }).click();
-    await page.getByRole('button', { name: 'Filter by stage', exact: true }).click();
+    await page.getByRole('button', { name: /^Filter by stage(?: |$)/ }).click();
     await page.getByRole('option', { name: 'Any stage', exact: true }).click();
     await expect(page).toHaveURL(/\/$/);
     await stable();

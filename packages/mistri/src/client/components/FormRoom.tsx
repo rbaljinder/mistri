@@ -6,7 +6,7 @@
  * grant, never as the public. The envelope names no record: a form's
  * command creates its rows, so the key is empty and the revision zero.
  */
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, currentEntry, renderCrumbs, state } from '@mistriwork/kit/client/core.js';
 import { activeApp } from '../appState.js';
@@ -20,6 +20,9 @@ import type { AppPayloadApp } from '../../shared/appPayload.js';
 /** A signed-in form as the App serves it: the whole form, which the kit's room type reads only part of. */
 type ServedForm = RoomForm<AppPayloadApp>;
 import { FormSurface, type FormPresentation, type FormReceipt } from './FormSurface.js';
+import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+import { draftTransport } from './draftFormApi.js';
+import type { SavedFormPresentation } from './SavedFormSurface.js';
 import type { CommandQuestions } from './CommandFields.js';
 import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
 import { say } from '../copy/forms/components/FormRoom.js';
@@ -27,6 +30,23 @@ import type { UiCommandOutcome } from './sdk/context.js';
 
 /** How a submission this form sent ended, for the component that opened it: never `closed`, which is the caller's word for nothing sent. */
 export type FormOutcome = Exclude<UiCommandOutcome, { status: 'closed' }>;
+
+/* The saved form is a part of its own, fetched when a form that saves each step is drawn: no first paint needs it. */
+const SavedFormSurface = onDemand(() => import('./SavedFormSurface.js'), 'SavedFormSurface');
+
+/** A signed-in form saved on every step: its draft belongs to the person (`save.owner`). */
+const savesDraft = (form: ServedForm) => (form as { save?: { owner?: string } }).save?.owner !== undefined;
+
+/** A saved form asks each step's command's inputs on its step and the submit's own on the review (formHttp.ts presentForm does the same for a public one). */
+function savedPresentation(form: ServedForm): SavedFormPresentation {
+  const steps = (form.steps ?? []) as unknown as Array<{ command?: { input?: FormPresentation['input'] } }>;
+  return {
+    ...formPresentation(form),
+    input: [...steps.flatMap((step) => step.command?.input ?? []), ...form.command.input],
+    steps: form.steps ?? [],
+    save: { submit: form.command.input.map((field) => field.name) },
+  };
+}
 
 /** The signed-in submission: the ordinary command envelope, naming no record. */
 async function submitSignedInForm(
@@ -138,7 +158,34 @@ export function FormBody({
       return { initial, ...(questions ? { questions } : {}) };
     },
   });
+  const draft = useMemo(() => {
+    if (!savesDraft(form)) return undefined;
+    const transport = draftTransport(connection, form as unknown as Parameters<typeof draftTransport>[1]);
+    return {
+      ...transport,
+      async submit(key: string, input: CommandInputValue, version: string) {
+        const receipt = await transport.submit(key, input, version);
+        // What the form created shows in every list that reads it.
+        void client.invalidateQueries();
+        onOutcome?.({ status: 'applied' });
+        return receipt;
+      },
+    };
+    // `onOutcome` is the opener's callback and is read when the submit lands, not a reason to read the draft again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, connection, client]);
   if (form.error) return <p className="note">{form.error}</p>;
+  if (draft) {
+    return (
+      <SavedFormSurface
+        key={form.id}
+        form={savedPresentation(form)}
+        appName={appName}
+        draft={draft}
+        {...(onDismiss ? { onDismiss } : {})}
+      />
+    );
+  }
   if (prepares && prepared.error) return <p className="note">{prepared.error.message}</p>;
   if (prepares && !prepared.data) return <p className="note" aria-busy="true" />;
   return (

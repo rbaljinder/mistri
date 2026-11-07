@@ -58,9 +58,9 @@ test('a file is mapped by its headers, checked and imported', async () => {
   fireEvent.change(input, { target: { files: [file('SKU,Vendor,Cost,Notes\nA-1,Summit,=1+1,x\nA-2,Nobody,3,y\n')] } });
   await screen.findByText(/Choose the field each column fills/);
   // By caption, by a reference's own path caption ("Vendor" for supplier_id.name), and "Cost" left for the reader.
-  expect(screen.getByRole('button', { name: 'Field for SKU' }).textContent).toContain('SKU');
-  expect(screen.getByRole('button', { name: 'Field for Vendor' }).textContent).toContain('Supplier');
-  expect(screen.getByRole('button', { name: 'Field for Notes' }).textContent).toContain('Leave out');
+  expect(screen.getByRole('button', { name: /^Field for SKU\b/ }).textContent).toContain('SKU');
+  expect(screen.getByRole('button', { name: /^Field for Vendor\b/ }).textContent).toContain('Supplier');
+  expect(screen.getByRole('button', { name: /^Field for Notes\b/ }).textContent).toContain('Leave out');
 
   api.mockResolvedValueOnce({
     outcome: 'checked',

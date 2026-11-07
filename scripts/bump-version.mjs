@@ -26,6 +26,8 @@ const PROSE = [
   { file: 'packages/mistri/README.md', pattern: /These App features ship in mistri (\S+?);/ },
   { file: 'site/src/content/docs/docs/status.md', pattern: /^description: The (\S+) scope/m },
   { file: 'site/src/content/docs/docs/status.md', pattern: /This site describes \*\*mistri (\S+?)\*\*/ },
+  // The extension example's peer range: a release candidate satisfies only a range that names one.
+  { file: 'site/src/content/docs/docs/status.md', pattern: /"@mistriwork\/mistri": "\^(\S+?)"/ },
 ];
 
 const readJSON = (root, file) => JSON.parse(readFileSync(join(root, file), 'utf8'));

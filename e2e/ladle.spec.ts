@@ -136,13 +136,13 @@ test('the school’s site, its own schedule route, and the staff App embedded un
   await expect.poll(() => new URL(page.url()).pathname).toBe('/staff/check-in');
   await embed.getByRole('button', { name: /^Fresh pasta by hand/ }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('class')).toBe('2');
-  await expect(embed.getByRole('button', { name: 'Still expected: 8' })).toBeVisible();
+  await expect(embed.getByRole('button', { name: /^8 Still expected/ })).toBeVisible();
   await embed.getByRole('button', { name: 'Check in Morgan Lee' }).click();
   await expect(embed.getByText('Morgan Lee is checked in.')).toBeVisible();
   await expect.poll(() => bookingStatus('Morgan Lee')).toBe('checked_in');
   await expect(embed.getByRole('button', { name: 'Check in Morgan Lee' })).toHaveCount(0);
   // The platform's blocks on the same page read the same rows: the metrics move, and the arrival is listed.
-  await expect(embed.getByRole('button', { name: 'Arrived: 2' })).toBeVisible();
-  await expect(embed.getByRole('button', { name: 'Still expected: 6' })).toBeVisible();
+  await expect(embed.getByRole('button', { name: /^2 Arrived/ })).toBeVisible();
+  await expect(embed.getByRole('button', { name: /^6 Still expected/ })).toBeVisible();
   await expect(embed.getByRole('row', { name: /Morgan Lee/ })).toBeVisible();
 });

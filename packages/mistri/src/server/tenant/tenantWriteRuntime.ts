@@ -7,6 +7,9 @@ import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import { accessibleSchema, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
 import { compileAppTransitions } from '../app/appTransitions.js';
+import { compileAppStamps, stampInsert, stampUpdate, type StampMoment } from '../app/appStamps.js';
+import { lookupTenantPerson } from '../app/appMe.js';
+import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 import { AppValidationDenied } from '../app/appValidationDenied.js';
 import { compileAppDefinitionValidation } from '../app/appValidation.js';
 import type { Identity } from '../auth/auth.js';
@@ -93,6 +96,12 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
   /* A machine's column moves only through its actions here as in a single
      database App: an ordinary tenant write is judged by the same rules. */
   const transitions = compileAppTransitions(ownership.schema, runtime.app);
+  /* An action's `me`/`now`, a New form's default and a file rule's stamps, by the same rules as a single App's
+     (appStamps.ts): the person is the admitted account's row of the tenant's own people table, the moment the
+     server's clock. A people table that is not the tenant's holds nobody's row here (appMe.ts lookupTenantPerson). */
+  const stamps = compileAppStamps(ownership.schema, runtime.app);
+  const me = runtime.app.auth?.me;
+  const peopleOwned = !!me && ownership.ownership[me.from]?.kind === 'tenant';
   return Object.freeze({
     /** `operation` names which of the host's operations ran, for a writer kind
      * that records one; it is the host's own fact, never a request's. */
@@ -130,6 +139,15 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
             } else write.clear();
             fields.set(table.id, { read, write });
           }
+          /* Read as the write runs, through its own transaction (authorizeTransaction passes it): nothing the
+             request says becomes a stamp. */
+          const moment = (reader: Parameters<typeof lookupTenantPerson>[4]): StampMoment => ({
+            now: clockNow(),
+            who: scope.who(),
+            person: async () =>
+              (await lookupTenantPerson(runtime.app, ownership.schema, scope.who(), peopleOwned ? principal.accountId : undefined, reader))
+                .person?.key ?? null,
+          });
           // Visible, not granted: a platform-owned table is no tenant resource.
           const access: ResourceAccess = {
             readable: visibleGrants.readable,
@@ -140,6 +158,8 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
             ...(grants.internal ? { internal: grants.internal } : {}),
             ...(validation ? { validation } : {}),
             ...(transitions ? { transitions } : {}),
+            ...(stamps?.rules.size ? { stamp: (request, reader) => stampUpdate(stamps, request, moment(reader)) } : {}),
+            ...(stamps?.defaults ? { fill: (request, reader) => stampInsert(stamps, request, moment(reader)) } : {}),
           };
           const visible = accessibleSchema(ownership.schema, { ...access, rows });
           const schema = captureScopeCatalog({ ...visible, tables: visible.tables.map((table) => ({ ...table, deletable: false })) });

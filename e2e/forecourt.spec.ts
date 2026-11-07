@@ -38,7 +38,7 @@ test.describe('Forecourt, browsed signed out', () => {
       // The hero: its photo from the App's files, drawn in place, and the search inside it.
       await expect(page.getByRole('img', { name: /Three cars in the Forecourt studio/ })).toHaveAttribute('src', /\/api\/file\?.*inline=1/);
       const search = page.getByRole('search', { name: 'Search Vehicles' });
-      await search.getByLabel('Make', { exact: true }).click();
+      await search.getByRole('button', { name: /^Make(?: |$)/ }).click();
       await page.getByRole('option', { name: 'Hyundai', exact: true }).click();
       await search.getByRole('button', { name: 'Show vehicles' }).click();
       // The address is the question in words: the list's key and its filter, no query language.
@@ -51,7 +51,7 @@ test.describe('Forecourt, browsed signed out', () => {
       await expect(page.getByRole('list', { name: 'Vehicles' }).getByRole('listitem')).toHaveCount(hyundais);
 
       // Sorted by price: the cheapest first, and the address keeps the order.
-      await page.getByRole('button', { name: 'Sort', exact: true }).click();
+      await page.getByRole('button', { name: /^Sort(?: |$)/ }).click();
       await page.getByRole('option', { name: 'Lowest price', exact: true }).click();
       await expect(page).toHaveURL(/\/vehicles\?make=Hyundai&sort=price$/);
       const cheapest = Number(scalar(sample.db, "SELECT MIN(price) FROM vehicle WHERE make = 'Hyundai' AND status != 'sold'"));

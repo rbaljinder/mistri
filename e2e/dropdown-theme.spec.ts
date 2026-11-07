@@ -56,7 +56,7 @@ for (const theme of themes)
       for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 924 });
         // The list's page size is its themed Select; its filters open pickers, not listboxes.
-        const trigger = page.getByRole('button', { name: 'Rows per page', exact: true });
+        const trigger = page.getByRole('button', { name: /^Rows per page(?: |$)/ });
         await trigger.click();
         const list = page.getByRole('listbox', { name: 'Rows per page', exact: true });
         await expect(list).toBeVisible();
@@ -81,7 +81,10 @@ for (const theme of themes)
       // Preferences render the same dropdown inside a dialog's portal container.
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await page.getByRole('menuitem', { name: /^Preferences/ }).click();
-      await page.getByRole('dialog', { name: 'Preferences', exact: true }).getByRole('button', { name: 'Color mode', exact: true }).click();
+      await page
+        .getByRole('dialog', { name: 'Preferences', exact: true })
+        .getByRole('button', { name: /^Color mode(?: |$)/ })
+        .click();
       const list = page.getByRole('listbox', { name: 'Color mode', exact: true });
       await expect(list).toHaveCSS('border-radius', theme.radius);
       await expect(list.getByRole('option').first()).toHaveCSS('border-radius', theme.itemRadius);

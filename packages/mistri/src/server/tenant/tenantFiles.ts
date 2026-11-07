@@ -17,6 +17,8 @@ import { appCsvAmounts, appExportsTable } from '../http/appExport.js';
 import { readStoredFile } from '../http/fileRows.js';
 import { sniffImage } from '../http/imageSniff.js';
 import { ownerHeaders, send } from './tenantWire.js';
+import { tenantDraftReaderOf } from './tenantReadRuntime.js';
+import { beneathDraft, draftFileHidden } from '../forms/draftFiles.js';
 
 /**
  * One file of a file resource, read on the lease: through the context's own
@@ -31,10 +33,26 @@ export async function tenantFileRead(
   schema: DatabaseSchema,
   input: Record<string, unknown>,
   scope: FileScope,
+  draft?: { readonly context: object; readonly person: () => Promise<string | number | null> },
 ): Promise<{ status: number; body: unknown }> {
   const table = findTable(schema, typeof input.table === 'string' ? input.table : '');
   const rule = table ? appFileRules(app, schema).rules.get(table.id) : undefined;
   if (!table || !rule) return { status: 404, body: { error: 'This resource does not hold files.' } };
+  /* A file beneath a signed-in draft is the draft's person's alone until it is submitted (forms/draftFiles.ts), asked
+     of the context's draft reader, which sees the root whatever the member's grants. A visitor is nobody's person. */
+  const drafts = draft ? tenantDraftReaderOf(draft.context) : undefined;
+  if (drafts && input.key && typeof input.key === 'object' && beneathDraft(app, drafts.schema, table.id)) {
+    const hidden = await draftFileHidden({
+      app,
+      schema: drafts.schema,
+      reader: drafts.reader,
+      table: table.id,
+      key: input.key as Record<string, string | number>,
+      who: undefined,
+      person: draft!.person,
+    });
+    if (hidden) return { status: 404, body: { error: 'No file here.' } };
+  }
   let stored: Awaited<ReturnType<typeof readStoredFile>>;
   try {
     stored = await readStoredFile(reader, table, rule, input.key, input.variant, scope);

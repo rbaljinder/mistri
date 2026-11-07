@@ -1,4 +1,21 @@
 /* Each look (style.css names the order). */
+/* IBM Plex Mono for a data column (SIL Open Font License; its text in fonts/IBMPlexMono-OFL.txt and dist/client/fonts/):
+   the ids, codes, numbers and dates a list's cells and a record's values set apart (`--figures`, below). A face is
+   fetched when a line is drawn in its family, so a page with no such cell asks for nothing, and the sheets of the
+   looks that already ship it (ledgerLook.css, the Workbench's) declare the same files. The two faces are in
+   plexMono.css, linked by the served page only: an embedding host brings them with fonts/faces.css, as it does every
+   other kit face, rather than the shell carrying the bytes. `swap`, with the face a line
+   is set in until it arrives measured to it: Courier New's advance is 600 units, as Plex Mono's, so only the ascent
+   and descent are said (1025 and 275 of 1000, no line gap), and a figure swaps in without a column or a line moving. */
+@font-face {
+  font-family: 'IBM Plex Mono Fallback';
+  font-weight: 100 900;
+  src: local('Courier New'), local('CourierNewPSMT'), local('Liberation Mono'), local('LiberationMono'), local('Courier');
+  size-adjust: 100%;
+  ascent-override: 102.5%;
+  descent-override: 27.5%;
+  line-gap-override: 0%;
+}
 @layer look {
 /* Structural identities for the built-in looks, which dress Apps only
    (docs/design.md, Tokens): every rule keys on a look being worn
@@ -693,6 +710,16 @@
   }
   html:root[data-type-data~='figures'] .app-mode :is(td.mono, .num-value, .date-value, .id-value) {
     font-family: var(--mono);
+  }
+  /* A data column in Plex Mono, in every look and only there: the ids, codes and numbers a table's cells set apart
+     (`td.mono`, Grid.tsx) and the figures, dates and keys of a record's fields and header facts. Words, headings and
+     a stat's hero figure keep their theme's faces. A theme whose data face reaches figures says its own, above. */
+  .app-mode {
+    --figures: 'IBM Plex Mono', 'IBM Plex Mono Fallback', var(--code);
+  }
+  .app-mode td.mono,
+  .app-mode :is(.page-field > dd, .page-head-facts) :is(.num-value, .date-value, .id-value) {
+    font-family: var(--figures);
   }
 
   /* ---------- Meaning (recipes.status = dot) ---------- */

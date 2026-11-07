@@ -6,6 +6,7 @@ import '../../packages/kit/src/client/features.css';
 import '../../packages/kit/src/client/page.css';
 import '../../packages/kit/src/client/visualThemes.css';
 import '../../packages/kit/src/client/themeFamilies.css';
+import '../../packages/kit/src/client/plexMono.css';
 import '../../packages/kit/src/client/customThemes.css';
 import '../../packages/kit/src/client/structure.css';
 import '../../packages/kit/src/client/components/ListEmpty.css';

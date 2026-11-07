@@ -126,7 +126,8 @@ test.describe('Thread board: cards carried by a mouse and by a finger', () => {
   });
   const value = (column: string, id: number) => scalar(sample.db, `SELECT ${column} FROM issue WHERE id=?`, id);
   const id = (name: string) => Number(scalar(sample.db, 'SELECT id FROM issue WHERE name=?', name));
-  const nameOf = async (card: Locator) => ((await card.getByRole('button').first().getAttribute('aria-label')) ?? '').split(',')[0];
+  // A card is named by the words drawn on it (label in name), so its title is read from the card itself.
+  const nameOf = async (card: Locator) => (await card.locator('.triage-card-title').first().textContent())?.trim() ?? '';
 
   async function open(page: Page) {
     await page.setViewportSize({ width: 1440, height: 924 });
@@ -185,7 +186,7 @@ test.describe('Thread board: cards carried by a mouse and by a finger', () => {
     const names = () =>
       lane
         .locator('article.triage-card-wrap')
-        .evaluateAll((cards) => cards.map((card) => card.querySelector('button')?.getAttribute('aria-label')?.split(',')[0]));
+        .evaluateAll((cards) => cards.map((card) => card.querySelector('.triage-card-title')?.textContent?.trim()));
     const order = [secondName, firstName];
     await mouse(page, second.getByRole('button').first(), first);
     expect((await names()).slice(0, 2)).toEqual(order);

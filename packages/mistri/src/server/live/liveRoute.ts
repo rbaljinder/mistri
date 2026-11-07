@@ -37,7 +37,7 @@ import { appEntrypoint } from '../app/appEntrypoint.js';
 import { httpPolicyReads, type HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import { policyLiveScopeOf, type AppPolicyContext } from '../policy/appPolicyContext.js';
 import { connectionHub, liveOffResources, liveSyncOn } from './liveBinding.js';
-import { keyText, scopeFingerprint, type LiveAuthority, type LiveGrant } from './liveFilter.js';
+import { keyText, scopeFingerprint, viaClosure, type LiveAuthority, type LiveGrant } from './liveFilter.js';
 import { guard, type LiveHub } from './liveHub.js';
 import { openLiveStream } from './liveStream.js';
 
@@ -84,11 +84,18 @@ function grantFor(
   scope: boolean | RowScopeFilter | undefined,
   owner: string,
   physical: string,
+  rules?: Readonly<Record<string, boolean | RowScopeFilter | undefined>>,
 ): LiveGrant | undefined {
   const table = served.tables.find((each) => each.id === id);
   if (!table || scope === false || scope === undefined) return undefined;
   const filter = scope === true ? true : scope;
-  return Object.freeze({ id, key: primaryKey(table), columns, scope: filter, fingerprint: scopeFingerprint(owner, physical, filter) });
+  return Object.freeze({
+    id,
+    key: primaryKey(table),
+    columns,
+    scope: filter,
+    fingerprint: scopeFingerprint(owner, physical, filter, rules && viaClosure(filter, rules)),
+  });
 }
 
 /** A probe's answer as the change store's keys are matched: each value as text, so `7` and `"7"` are the one key. */
@@ -304,7 +311,7 @@ function policyAuthority(app: AppDef, req: IncomingMessage, policy: HttpAppPolic
   for (const table of served.tables) {
     if (app.resources?.[table.id]?.live === false) continue;
     const physical = scope.toPhysical(table.id);
-    const grant = grantFor(served, table.id, columns.get(table.id)!, rows[table.id], app.id, physical);
+    const grant = grantFor(served, table.id, columns.get(table.id)!, rows[table.id], app.id, physical, rows);
     if (!grant) continue;
     joinGrant(tables.get(scope.connectionFor(table.id))!, physical, grant, app.resources?.[table.id]?.query !== undefined);
     /* A probe asks each resource the reader has over the table, the narrowed ones on their own conditions: a key any

@@ -57,6 +57,8 @@ export interface BrandingWrite extends BrandingQuery {
   readonly logo?: BrandingLogo;
   /** The dark logo, as the light one: named in the value (`logoDark`, which keeps its bytes stored), with its bytes when new. */
   readonly darkLogo?: BrandingLogo;
+  /** The tab icon, as the dark logo is: named in the value (`favicon`), with its bytes when new. */
+  readonly favicon?: BrandingLogo;
   readonly by: string;
   readonly at: string;
 }
@@ -82,7 +84,7 @@ export class BrandingUnavailable extends Refusal {
 
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_.:@-]*$/;
 const HASH = /^[0-9a-f]{64}$/;
-const LOGO_TYPE = /^image\/(png|jpeg|webp|gif|svg\+xml)$/;
+const LOGO_TYPE = /^image\/(png|jpeg|webp|gif|svg\+xml|x-icon)$/;
 const bytes = (value: string) => Buffer.byteLength(value, 'utf8');
 
 function text(value: unknown, limit: number, what: string, pattern?: RegExp): asserts value is string {
@@ -132,5 +134,14 @@ export function assertBrandingWrite(write: unknown): asserts write is BrandingWr
       throw new Refusal('Branding: the dark logo is empty or too large.');
     if ((JSON.parse(value.value) as { logoDark?: { hash?: unknown } }).logoDark?.hash !== logo.hash)
       throw new Refusal('Branding: a new dark logo must be the one the value names.');
+  }
+  if (value.favicon !== undefined) {
+    const icon = value.favicon;
+    text(icon.hash, 64, 'the favicon hash', HASH);
+    text(icon.type, 32, 'the favicon type', LOGO_TYPE);
+    if (!(icon.bytes instanceof Uint8Array) || !icon.bytes.length || icon.bytes.length > BRANDING_LIMITS.logo)
+      throw new Refusal('Branding: the favicon is empty or too large.');
+    if ((JSON.parse(value.value) as { favicon?: { hash?: unknown } }).favicon?.hash !== icon.hash)
+      throw new Refusal('Branding: a new favicon must be the one the value names.');
   }
 }

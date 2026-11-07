@@ -1,7 +1,7 @@
 import { Refusal, type Filter, type ScopedReads, type WriteTransaction } from '../adapter.js';
-import { buildWhere, type ConditionEquality, type SqlFragment, type SqlStyle } from '../../shared/filter.js';
+import { buildWhere, type Condition, type ConditionEquality, type SqlFragment, type SqlStyle } from '../../shared/filter.js';
 import { recordRefusalCause } from '../../shared/refusal.js';
-import type { RowScope, RowScopeFilter } from '../../shared/rowScope.js';
+import type { RowScope, RowScopeFilter, ViaCondition } from '../../shared/rowScope.js';
 import { coerceForColumn, columnKind, type DatabaseSchema, type ForeignKey, type TableMeta } from '../../shared/schema.js';
 import { blockingTriggers, firedBy, sayRuns, sayTriggers, sayWrite, type ScopeTrigger, type TriggeringWrite } from './scopeTriggers.js';
 import type { Afterward, ScopedTriggers } from './triggerProof.js';
@@ -220,9 +220,23 @@ export function referencesStatement(
 export function wholeWithin(scope: Readonly<Record<string, unknown>>, bound: Readonly<Record<string, unknown>>): ReadonlySet<string> {
   return new Set(
     Object.keys(bound).filter(
-      (table) => bound[table] !== false && Object.hasOwn(scope, table) && JSON.stringify(scope[table]) === JSON.stringify(bound[table]),
+      (table) => bound[table] !== false && Object.hasOwn(scope, table) && scopeText(scope[table]) === scopeText(bound[table]),
     ),
   );
+}
+
+/* A rule as text, each AND group saying a condition once. A tenant request's rows already carry the tenant's predicate,
+   and its writer composes the tenant's predicate over them again (tenantRequestRuntime.ts, tenantWriteKindMember.ts), so
+   a table the member reads whole is `tenant AND tenant` beside a bound of `tenant`: the same rows, never judged so,
+   and no command over HTTP could delete a row its own tenant's rows reference. A condition repeated within one
+   conjunction narrows nothing, so dropping the repeat is exact; nothing else is rewritten, and a rule that differs in
+   anything else is still not whole. */
+function scopeText(rule: unknown): string {
+  if (!rule || typeof rule !== 'object' || !Array.isArray((rule as { groups?: unknown }).groups)) return JSON.stringify(rule);
+  const groups = (rule as { groups: unknown[] }).groups.map((group) =>
+    Array.isArray(group) ? [...new Map(group.map((condition) => [JSON.stringify(condition), condition])).values()] : group,
+  );
+  return JSON.stringify({ ...rule, groups });
 }
 
 /** A bound names exactly the scope's tables: it bounds that scope, never another. */
@@ -242,6 +256,8 @@ export class ScopeRefusal extends Refusal {}
 const refuse = (reason?: string): never => {
   throw recordRefusalCause(new ScopeRefusal('This operation is not available in the current row scope.'), reason);
 };
+const isViaCondition = (condition: Condition | ViaCondition): condition is ViaCondition =>
+  typeof (condition.via as { resource?: unknown } | undefined)?.resource === 'string';
 const keyText = (key: Record<string, unknown>) =>
   Object.entries(key)
     .map(([column, value]) => `${column} ${JSON.stringify(value)}`)
@@ -303,7 +319,11 @@ function withOwnRows(
     out[table] = {
       ...rule,
       groups: rule.groups.map((group) =>
-        group.map((condition) => {
+        group.map((given) => {
+          /* A relationship test needs no extension: it reads the live target relation inside the transaction, so a row
+             inserted a statement earlier is already there. */
+          if (given.via !== undefined || typeof given.column !== 'string') return given;
+          const condition = given as Condition;
           const added = extra.get(condition.column);
           if (!added || condition.other !== undefined || condition.any !== undefined) return condition;
           if (condition.op === '=' && comparable(condition.value))
@@ -320,7 +340,14 @@ function withOwnRows(
 /** One reference a write makes, to be checked; or the refusal that ends the list where one cannot be. */
 type ParentCheck =
   | { readonly refused: string }
-  | { readonly fk: ForeignKey; readonly values: readonly unknown[]; readonly filter: Filter; readonly parent: TableMeta };
+  | {
+      readonly fk: ForeignKey;
+      readonly values: readonly unknown[];
+      readonly filter: Filter;
+      readonly parent: TableMeta;
+      /** A row scope's `via` (the parent need only exist among the rows the principal may see, once or more), not a foreign key (exactly one). */
+      readonly exists?: true;
+    };
 /** A check sent: its parent's lock and its count, in flight. */
 type Asked =
   | Extract<ParentCheck, { refused: string }>
@@ -338,6 +365,8 @@ export function createScopedTransaction(
   bound?: ScopeBound,
   own?: ScopeOwnRows,
   triggers?: ScopedTriggers,
+  /** The principal's rows, for the `via` conditions a write's parents are checked against (viaChecks). */
+  scope?: RowScope,
 ): WriteTransaction {
   /* The rows this transaction inserted inside the principal's rows, by table, and the reads that count them in
      (ScopeOwnRows). Rebuilt on each such insert; until the first, the reads are the ones resolved for the request. */
@@ -479,6 +508,46 @@ export function createScopedTransaction(
      known (what the row held is not what the update leaves), so a check of what a write gives leaves it out. */
   const generated = (table: TableMeta, name: string) => table.columns.find((column) => column.name === name)?.writable === false;
   const generatedIn = (table: TableMeta, fk: ForeignKey) => fk.from.columns.some((name) => generated(table, name));
+  /* A row scope's `via` is checked as a reference is: the parent it names must be among the rows the principal may see
+     (and held to COMMIT), and a hidden parent answers as a missing one. Only where the policy is one group: of several,
+     a row need satisfy only one, which the read after the statement judges whole (a tree's roots name no visible
+     parent). A command whose rows may land outside the principal's (a bound) is judged there as well. The parent's
+     own scope applies, so the target's filter (`where`) and any chain behind it are part of the count. */
+  const synthetic = new WeakMap<object, ForeignKey>();
+  const viaChecks = (table: TableMeta, row: Record<string, unknown>, set?: ReadonlySet<string>, given = false): ParentCheck[] => {
+    const rule = bound ? undefined : scope?.[table.id];
+    if (!rule || typeof rule !== 'object' || rule.groups.length !== 1) return [];
+    const checks: ParentCheck[] = [];
+    for (const condition of rule.groups[0]) {
+      if (!isViaCondition(condition) || condition.via.resource === table.id) continue;
+      const columns = typeof condition.column === 'string' ? [condition.column] : [...condition.column];
+      const keys = typeof condition.via.column === 'string' ? [condition.via.column] : [...condition.via.column];
+      if (set && !columns.some((column) => set.has(column))) continue;
+      if (given && !columns.every((column) => Object.hasOwn(row, column) && row[column] !== undefined)) continue;
+      const values = columns.map((column) => asWritten(table.columns.find((candidate) => candidate.name === column)?.type, row[column]));
+      const parent = catalog.schema.tables.find((candidate) => candidate.id === condition.via.resource);
+      if (!parent) {
+        checks.push({
+          refused: `"${table.id}" is scoped through "${condition.via.resource}", which is not in this write's footprint: declare it read by the command.`,
+        });
+        break;
+      }
+      if (values.some((value) => value === null) || !values.every(comparable)) {
+        checks.push({
+          refused: `"${table.id}".${columns.join('+')} holds no value the principal's rows could include, so the row cannot be in scope.`,
+        });
+        break;
+      }
+      let fk = synthetic.get(condition);
+      if (!fk)
+        synthetic.set(condition, (fk = { name: 'via', from: { table: table.id, columns }, to: { table: parent.id, columns: keys } }));
+      const match = keys.map((column, index) => ({ column, op: '=' as const, value: values[index] as string | number }));
+      // The target's filter narrows the count: each alternative holds the key too.
+      const filter: Filter = { groups: condition.via.where ? condition.via.where.map((group) => [...match, ...group]) : [match] };
+      checks.push({ fk, values, filter, parent, exists: true });
+    }
+    return checks;
+  };
   const parentChecks = (table: TableMeta, row: Record<string, unknown>, set?: ReadonlySet<string>, given = false): ParentCheck[] => {
     const checks: ParentCheck[] = [];
     for (const fk of catalog.schema.foreignKeys.filter(
@@ -543,12 +612,15 @@ export function createScopedTransaction(
       }
       checks.push({ fk, values, filter, parent });
     }
+    if (!checks.some((check) => 'refused' in check)) checks.push(...viaChecks(table, row, set, given));
     return checks;
   };
   /** Whether a check binds every value as text read by its column's type (Condition.equality): PostgreSQL's. */
   const bindsText = (check: Extract<ParentCheck, { fk: ForeignKey }>) => check.filter.groups[0].every((condition) => condition.equality);
   const unseen = (check: Extract<ParentCheck, { fk: ForeignKey }>) =>
     `"${check.fk.from.table}".${check.fk.from.columns.join('+')} points at the "${check.fk.to.table}" row ${keyText(Object.fromEntries(check.fk.to.columns.map((column, index) => [column, check.values[index]])))}, which the principal's rows do not include (or the command does not declare "${check.fk.to.table}" read).`;
+  /** Whether the count of a parent's rows does not prove the reference: a foreign key names one row, a `via` any number of them. */
+  const missing = (check: Extract<ParentCheck, { fk: ForeignKey }>, counted: number) => (check.exists ? counted < 1 : counted !== 1);
   /** The checks sent at once (locks.together): each parent's lock, then its count, every answer heard. */
   const ask = (checks: readonly ParentCheck[]): Asked[] =>
     checks.map((check) => {
@@ -586,7 +658,7 @@ export function createScopedTransaction(
         if ('refused' in check) return refuse(check.refused);
         // A parent's visibility must hold until commit, not just at this read.
         await locks?.parent(check.parent, check.filter);
-        if ((await guards.count(check.fk.to.table, check.filter)) !== 1) return refuse(unseen(check));
+        if (missing(check, await guards.count(check.fk.to.table, check.filter))) return refuse(unseen(check));
         proven.push(check);
       }
       return;
@@ -597,7 +669,7 @@ export function createScopedTransaction(
     for (const check of asked) {
       if ('refused' in check) return refuse(check.refused);
       await check.locked;
-      if ((await check.counted) !== 1) return refuse(unseen(check));
+      if (missing(check, await check.counted)) return refuse(unseen(check));
       proven.push(check);
     }
   };

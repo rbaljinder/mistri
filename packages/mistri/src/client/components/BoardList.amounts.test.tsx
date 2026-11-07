@@ -142,7 +142,7 @@ test('a card says its money short with the whole amount in its title, and reads 
   const card = await screen.findByRole('button', { name: /Nurse on site/ });
   const short = within(card).getByText('$65K');
   expect(short).toHaveAttribute('title', '$65,000.00');
-  expect(card.getAttribute('aria-label')).toContain('$65,000.00');
+  expect(card).toHaveAccessibleName(expect.stringMatching(/\$65K.*\$65,000\.00/));
   // Under a thousand is already short: said whole.
   lanes.discover[0].amount = '950.50';
   cleanup();

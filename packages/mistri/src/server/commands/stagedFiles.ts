@@ -61,6 +61,10 @@ export class StageRefusal extends Error {
   }
 }
 
+/** A sender who holds as many as they may, said as the answer a host sends. */
+export const stagedFullRefusal = (full: StagedFilesFull): StageRefusal =>
+  new StageRefusal(429, 'too_many_files', `${full.message} Send the form, or remove a file, and try again.`);
+
 /** The hash a held file is kept under. */
 export const stagedIdHash = (id: string): string => createHash('sha256').update(id, 'utf8').digest('hex');
 
@@ -203,8 +207,7 @@ export async function stageCommandFile(
   } catch (error) {
     // Said from inside the transaction, so it may arrive as the failed transaction's cause.
     const cause = error instanceof Error && !(error instanceof StagedFilesFull) && !(error instanceof StageRefusal) ? error.cause : error;
-    if (cause instanceof StagedFilesFull)
-      throw new StageRefusal(429, 'too_many_files', `${cause.message} Send the form, or remove a file, and try again.`);
+    if (cause instanceof StagedFilesFull) throw stagedFullRefusal(cause);
     if (cause instanceof StageRefusal) throw cause;
     throw error;
   }

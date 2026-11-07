@@ -12,7 +12,7 @@ test('a nullable text field distinguishes database NULL from literal null text i
   try {
     expect((await update(null)).ok()).toBe(true);
     await page.goto(`${CRM}/lead/~${id}`);
-    await page.getByRole('button', { name: 'Edit Phone', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Phone(?: |$)/ }).click();
     const input = page.getByRole('textbox', { name: 'Phone', exact: true });
     await expect(input).toHaveValue('');
     for (const value of ['null', '']) {
@@ -46,7 +46,7 @@ for (const failure of ['lost response', 'invalid acknowledgement'] as const)
       const notice = page.locator('.pending-uncertain');
       await expect(notice).toContainText('Update not confirmed');
       await expect(action).toBeDisabled();
-      await expect(page.getByRole('button', { name: 'Edit Name', exact: true })).toBeDisabled();
+      await expect(page.getByRole('button', { name: /^Edit Name(?: |$)/ })).toBeDisabled();
       expect(scalar(CRM_DB, 'SELECT status FROM lead WHERE id = ?', id)).toBe('working');
       await notice.getByText('Proposed changes', { exact: true }).click();
       await expect(notice).toContainText('working');

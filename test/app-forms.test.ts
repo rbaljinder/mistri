@@ -244,7 +244,7 @@ describe('every form', () => {
     const { label, ...rest } = finance();
     assert.throws(
       () => withViews({ finance: { ...rest, title: label } }),
-      /views "finance" has no "title"\. It takes: kind, label, path, icon, description, command, steps, style, note, review, submitLabel, done, public, prefillable, resume, draft, abandoned, statusCheck, link, inputs\./,
+      /views "finance" has no "title"\. It takes: kind, label, path, icon, description, command, steps, style, note, review, submitLabel, done, public, prefillable, resume, draft, abandoned, owner, statusCheck, link, inputs\./,
     );
     assert.throws(() => parseTestApp({ ...base, intake: [] }, 'f'), /has no "intake"\. It takes:/);
     assert.throws(() => withViews({ finance: { ...finance(), sidebar: true } }), /has no "sidebar"/);

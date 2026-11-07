@@ -503,11 +503,11 @@ describe('the screen', () => {
 
   test('metrics say their figure and their delta, coloured the way the author said', async () => {
     draw();
-    const won = await screen.findByRole('button', { name: 'Won: 250,000' });
+    const won = await screen.findByRole('button', { name: /^250,000 Won\b/ });
     expect(within(won).getByText('↑ 50,000').closest('.dash-delta')).toHaveClass('good');
     // The change says what it is a change from.
     expect(within(won).getByText('vs prior 30 days', { exact: false })).toHaveClass('dash-delta-period');
-    const deals = await screen.findByRole('button', { name: 'Deals: 42' });
+    const deals = await screen.findByRole('button', { name: /^42 Deals\b/ });
     // Under All time the window narrows nothing, so no card has anything to say about it.
     expect(within(deals).queryByText('Right now')).toBeNull();
   });
@@ -533,9 +533,9 @@ describe('the screen', () => {
         ],
       },
     });
-    const won = await screen.findByRole('button', { name: 'Won: 250,000, 50% of 500,000 target' });
+    const won = await screen.findByRole('button', { name: /^250,000 Won.*50% of 500,000 target/ });
     expect(within(won).getByText('50% of 500,000 target')).toHaveClass('dash-target-text');
-    expect(await screen.findByRole('button', { name: 'Average: 0.5' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^0\.5 Average\b/ })).toBeInTheDocument();
   });
 
   test('a target that is the figure\'s own whole is said as a share of it, "118 of 159 (74%)", not as a goal', async () => {
@@ -558,7 +558,7 @@ describe('the screen', () => {
         ],
       },
     });
-    const card = await screen.findByRole('button', { name: 'Approved: 118 of 159, 74 percent' });
+    const card = await screen.findByRole('button', { name: /^\S+ Approved.*118 of 159 \(74%\)/ });
     expect(within(card).getByText('118 of 159 (74%)')).toHaveClass('dash-target-text');
     expect(within(card).queryByText(/target/)).toBeNull();
   });
@@ -580,25 +580,25 @@ describe('the screen', () => {
         ],
       },
     });
-    const fees = await screen.findByRole('button', { name: /^Fees: \$414,100\.00/ });
-    const deposits = await screen.findByRole('button', { name: /^Deposits: \$27,300\.00/ });
+    const fees = await screen.findByRole('button', { name: /^\$414\.1K Fees\b.*\$414,100\.00/ });
+    const deposits = await screen.findByRole('button', { name: /^\$27\.3K Deposits\b.*\$27,300\.00/ });
     expect(within(fees).getByText('$414.1K')).toHaveAttribute('title', expect.stringMatching(/^\$414,100\.00/));
     expect(within(deposits).getByText('$27.3K')).toHaveAttribute('title', expect.stringMatching(/^\$27,300\.00/));
-    const balance = await screen.findByRole('button', { name: /^Balance: \$28,123\.45/ });
+    const balance = await screen.findByRole('button', { name: /^\$28,123\.45 Balance\b/ });
     expect(within(balance).getByText('$28,123.45')).toBeInTheDocument();
   });
 
   test('once the reader picks a window, a card it does not move says so', async () => {
     const user = userEvent.setup();
     draw();
-    await screen.findByRole('button', { name: 'Deals: 42' });
+    await screen.findByRole('button', { name: /^42 Deals\b/ });
     await user.click(screen.getByRole('button', { name: 'Last 30 days' }));
-    const deals = screen.getByRole('button', { name: 'Deals: 42' });
-    const won = await screen.findByRole('button', { name: /^Won: / });
+    const deals = screen.getByRole('button', { name: /^42 Deals\b/ });
+    const won = await screen.findByRole('button', { name: /^(?:\S+ )?Won\b/ });
     expect(within(deals).getByText('Right now')).toBeInTheDocument();
     expect(within(won).queryByText('Right now')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'All time' }));
-    expect(within(screen.getByRole('button', { name: 'Deals: 42' })).queryByText('Right now')).toBeNull();
+    expect(within(screen.getByRole('button', { name: /^42 Deals\b/ })).queryByText('Right now')).toBeNull();
   });
 
   test('a windowed metric holds its change and its trend from the first paint, and draws the window a day at a time', async () => {
@@ -637,7 +637,7 @@ describe('the screen', () => {
       },
     });
     // Before any read has landed, the change's line and the trend's height already stand.
-    const card = screen.getByRole('button', { name: /^Won:/ });
+    const card = screen.getByRole('button', { name: /^(?:\S+ )?Won\b/ });
     expect(card.querySelector('.dash-delta')!.textContent).toBe('\u00a0');
     expect(card.querySelector('.spark-host.is-reserved')).not.toBeNull();
     await waitFor(() => expect(within(card).getByText('↑ 30')).toBeInTheDocument());
@@ -696,13 +696,13 @@ describe('the screen', () => {
         ],
       },
     });
-    const good = await screen.findByRole('button', { name: 'Won: 250,000' });
+    const good = await screen.findByRole('button', { name: /^250,000 Won(?:\s|$)/ });
     await waitFor(() => expect(good.querySelector('.spark-host')).toHaveClass('good'));
     expect(good.querySelector('.home-card-label svg.dash-section-icon')).not.toBeNull();
-    const bad = screen.getByRole('button', { name: 'Won, fewer is better: 250,000' });
+    const bad = screen.getByRole('button', { name: /^250,000 Won, fewer is better\b/ });
     await waitFor(() => expect(bad.querySelector('.spark-host')).toHaveClass('bad'));
     expect(within(bad).getByText('↑ 50,000').closest('.dash-delta')).toHaveClass('bad');
-    const plain = screen.getByRole('button', { name: 'Won, unjudged: 250,000' });
+    const plain = screen.getByRole('button', { name: /^250,000 Won, unjudged\b/ });
     await waitFor(() => expect(plain.querySelector('.spark-host svg.spark')).not.toBeNull());
     expect(plain.querySelector('.spark-host')!.className).toBe('spark-host is-reserved');
     const chart = screen.getByRole('heading', { name: 'By stage' });
@@ -939,11 +939,11 @@ describe('the screen', () => {
     breakdowns['deal stage = won and closed_on = last 30 days sum amount'] = { columns: ['sum'], rows: [{ sum: 90000 }] };
     breakdowns['deal stage = won and closed_on = previous 30 days sum amount'] = { columns: ['sum'], rows: [{ sum: 100000 }] };
     draw({ onWindow });
-    await screen.findByRole('button', { name: 'Won: 250,000' });
+    await screen.findByRole('button', { name: /^250,000 Won\b/ });
     await user.click(screen.getByRole('button', { name: 'Last 30 days' }));
     expect(onWindow).toHaveBeenCalledWith('last 30 days');
     expect(screen.getByRole('button', { name: 'Last 30 days' })).toHaveAttribute('aria-pressed', 'true');
-    const won = await screen.findByRole('button', { name: 'Won: 90,000' });
+    const won = await screen.findByRole('button', { name: /^90,000 Won\b/ });
     expect(within(won).getByText('↓ 10,000').closest('.dash-delta')).toHaveClass('bad');
     // The unclocked metric was not asked again.
     const asked = calls.flatMap((c) => (c.path === '/api/breakdowns' ? (c.body.items as Array<Record<string, unknown>>) : [c.body]));
@@ -973,14 +973,14 @@ describe('the screen', () => {
         sections: [follows, { ...follows, title: 'Weekly', windows: ['last 7 days', 'last 30 days'], windowKey: 'weekly' }],
       },
     });
-    const all = await screen.findByRole('button', { name: 'Won: 250,000' });
+    const all = await screen.findByRole('button', { name: /^250,000 Won\b/ });
     expect(within(all).queryByText(/vs prior/)).toBeNull();
     // A section with windows of its own starts at its first, and compares with the one before it.
     const weekly = (await screen.findByText('↓ 2,000')).closest('.dash-delta');
     expect(weekly).toHaveClass('bad');
     expect(weekly).toHaveTextContent('vs prior 7 days');
     await user.click(screen.getByRole('button', { name: 'Last 30 days' }));
-    const won = await screen.findByRole('button', { name: /^Won.*: 90,000/ });
+    const won = await screen.findByRole('button', { name: /^90,000 Won\b/ });
     expect(within(won).getByText('↑ 30,000').closest('.dash-delta')).toHaveClass('good');
     expect(within(won).getByText('vs prior 30 days', { exact: false })).toBeInTheDocument();
   });
@@ -992,11 +992,11 @@ describe('the screen', () => {
     breakdowns['deal stage = won count'] = { columns: ['count'], rows: [{ count: 10 }] };
     breakdowns['deal stage = won count by stage'] = { columns: ['stage', 'count'], rows: [{ stage: 'won', count: 10 }] };
     draw({ onPick });
-    await screen.findByRole('button', { name: 'Deals: 42' });
-    await user.click(screen.getByRole('button', { name: 'Filter by stage' }));
+    await screen.findByRole('button', { name: /^42 Deals\b/ });
+    await user.click(screen.getByRole('button', { name: /^Filter by stage\b/ }));
     await user.click(screen.getByRole('option', { name: 'won' }));
     expect(onPick).toHaveBeenCalledWith({ stage: 'won' });
-    await screen.findByRole('button', { name: 'Deals: 10' });
+    await screen.findByRole('button', { name: /^10 Deals\b/ });
     expect(screen.queryByTitle('Open deal where stage = lead')).toBeNull();
   });
 
@@ -1051,13 +1051,13 @@ describe('the screen', () => {
         ],
       },
     });
-    const deals = await screen.findByRole('button', { name: 'Deals: 42' });
+    const deals = await screen.findByRole('button', { name: /^42 Deals\b/ });
     expect(deals).toHaveClass('opens-view');
     expect(deals.querySelector('.home-card-go')).toHaveTextContent('→');
     await userEvent.setup().click(deals);
     expect(gone.at(-1)).toEqual({ table: 'deal', query: 'deal', view: 'pipeline' });
     // A view this reader is not served opens the table, without the arrow.
-    const won = screen.getByRole('button', { name: 'Won: 250,000' });
+    const won = screen.getByRole('button', { name: /^250,000 Won\b/ });
     expect(won.querySelector('.home-card-go')).toBeNull();
   });
 
@@ -1067,7 +1067,7 @@ describe('the screen', () => {
     });
     const deals = await screen.findByRole('group', { name: 'Deals: 42' });
     expect(deals).toHaveClass('home-card-still');
-    expect(screen.queryByRole('button', { name: 'Deals: 42' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^42 Deals\b/ })).toBeNull();
     await userEvent.setup().click(deals);
     expect(gone).toEqual([]);
   });
@@ -1106,7 +1106,7 @@ describe('the screen', () => {
     app = { ui: {}, resources: {}, nav: [], views };
     breakdowns[`deal ${filter} count`] = { columns: ['count'], rows: [{ count: 3 }] };
     draw({ dashboard: { ...views.desk, id: 'desk' } });
-    const metric = await screen.findByRole('button', { name: 'Deals: 3' });
+    const metric = await screen.findByRole('button', { name: /^3 Deals\b/ });
     const asked = calls.flatMap((c) => (c.path === '/api/breakdowns' ? (c.body.items as Array<Record<string, unknown>>) : [c.body]));
     expect(asked.map((ask) => ask.text)).toEqual([`deal ${filter} count`]);
     await userEvent.setup().click(metric);
@@ -1160,11 +1160,11 @@ describe('the screen', () => {
       }
       draw({ dashboard: { ...desk, id: 'desk' } });
       const user = userEvent.setup();
-      const initial = await screen.findByRole('button', { name: 'Won: 5' });
+      const initial = await screen.findByRole('button', { name: /^5 Won\b/ });
       await user.click(initial);
       expect(gone.at(-1)).toEqual({ table: 'deal', query: `deal ${cohort} and closed_on = last 30 days`, view: 'pipeline' });
       await user.click(screen.getByRole('button', { name: 'Last 7 days' }));
-      const weekly = await screen.findByRole('button', { name: 'Won: 2' });
+      const weekly = await screen.findByRole('button', { name: /^2 Won\b/ });
       expect(within(weekly).getByText('↑ 1')).toBeInTheDocument();
       await user.click(weekly);
       expect(gone.at(-1)).toEqual({ table: 'deal', query: `deal ${cohort} and closed_on = last 7 days`, view: 'pipeline' });
@@ -1473,11 +1473,11 @@ describe('the dashboard blocks', () => {
     draw({ dashboard: { ...dashboard, windowControl: 'button' }, onWindow });
     expect(document.querySelectorAll('.dash-window-button')).toHaveLength(1);
     expect(document.querySelector('.dash-windows')).toBeNull();
-    await screen.findByRole('button', { name: 'Won: 250,000' });
+    await screen.findByRole('button', { name: /^250,000 Won\b/ });
     await user.click(document.querySelector('.dash-window-button') as HTMLElement);
     await user.click(await screen.findByRole('menuitem', { name: /Last 30 days/ }));
     expect(onWindow).toHaveBeenCalledWith('last 30 days');
-    expect(await screen.findByRole('button', { name: 'Won: 90,000' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^90,000 Won\b/ })).toBeInTheDocument();
   });
 
   describe('areas', () => {
@@ -1506,7 +1506,7 @@ describe('the dashboard blocks', () => {
           ],
         ),
       });
-      await screen.findByRole('button', { name: 'Deals: 42' });
+      await screen.findByRole('button', { name: /^42 Deals\b/ });
       expect(areaNames()).toEqual(['side', 'mix', 'work']);
       expect(template()).toBe('"side mix" "side work"');
       expect(document.querySelector('.dash-grid')?.getAttribute('data-columns')).toBe('2');
@@ -1524,7 +1524,7 @@ describe('the dashboard blocks', () => {
           ],
         ),
       });
-      await screen.findByRole('button', { name: 'Deals: 42' });
+      await screen.findByRole('button', { name: /^42 Deals\b/ });
       const [kpis, a] = [...document.querySelectorAll('.dash-area')];
       expect(kpis.querySelectorAll('.dash-strip')).toHaveLength(1);
       expect(kpis.querySelectorAll('.dash-strip .home-card')).toHaveLength(2);
@@ -1534,7 +1534,7 @@ describe('the dashboard blocks', () => {
 
     test('a dashboard without a layout is drawn as it always was', async () => {
       draw();
-      await screen.findByRole('button', { name: 'Deals: 42' });
+      await screen.findByRole('button', { name: /^42 Deals\b/ });
       expect(document.querySelector('.dash-grid, .dash-area, .dash-laid')).toBeNull();
     });
 

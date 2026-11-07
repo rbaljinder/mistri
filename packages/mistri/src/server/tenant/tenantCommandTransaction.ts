@@ -22,6 +22,7 @@ import { serviceCommandKind } from './tenantCommandKindService.js';
 import { captureTenantData, recordRefusalCause, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { assertStructuredReadFilter } from '@mistriwork/engine/server/resourceReadOperations.js';
+import { heldFileMethods } from './tenantHeldFiles.js';
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
 
 const deny = (): never => {
@@ -355,6 +356,8 @@ export async function runTenantCommandTransaction<T>(
                     invoke({ appId, name, per, start }, (input) => journal.nextNumber!(input.appId, input.name, input.per, input.start)),
                 }
               : {}),
+            // Held files are kept in this place's own journal store, under the same fence as a commit.
+            ...heldFileMethods(invoke, journal.stage?.bind(journal), journal.takeStaged?.bind(journal)),
           }),
         }
       : {}),

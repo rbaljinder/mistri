@@ -141,10 +141,22 @@ export function createTenantInverseImages(
   )
     return denyTenant();
   const policy = authorizeDeletedRecord;
-  /* `validation`, `transitions`, `creatable` and `internal` (a file's object and
-     hash) ride on the access an App with write rules, a machine, per-role create
-     or files is given; an inverse image puts back a before-image and reads none of them. */
-  const raw = tenantOptions(access, ['readable', 'writable', 'fields', 'rows', 'validation', 'transitions', 'creatable', 'internal']);
+  /* `validation`, `transitions`, `creatable`, `internal` (a file's object and
+     hash), and `stamp` and `fill` (an action's and a New form's `me`/`now`) ride on
+     the access an App with write rules, a machine, per-role create, files or stamps
+     is given; an inverse image puts back a before-image and reads none of them. */
+  const raw = tenantOptions(access, [
+    'readable',
+    'writable',
+    'fields',
+    'rows',
+    'validation',
+    'transitions',
+    'creatable',
+    'internal',
+    'stamp',
+    'fill',
+  ]);
   const strings = (input: unknown): Set<string> => {
     try {
       if (!input || typeof input !== 'object' || isProxy(input)) return denyTenant();

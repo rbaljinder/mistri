@@ -496,7 +496,7 @@ test.describe('Depot inventory operations', () => {
       await expect(feed.locator('.activity-entry').first()).toContainText('Rush');
       await expect(feed.locator('.activity-entry').filter({ hasNotText: `SO-${order}` })).toHaveCount(0);
       // The chart's period is its own, and the address says it.
-      await page.getByLabel('Period of Lines moved by day').click();
+      await page.getByRole('button', { name: /^Period of Lines moved by day(?: |$)/ }).click();
       await page.getByRole('option', { name: 'Last 30 days' }).click();
       await expect(page).toHaveURL(/[?&]period\.lines-moved-by-day=last-30-days/);
       // The open orders select in place and offer the room's "Set field…".

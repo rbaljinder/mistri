@@ -117,8 +117,7 @@ test.describe('on Thread', () => {
       .filter({ has: page.locator('article.triage-card-wrap').nth(1) })
       .first();
     const cards = lane.locator('article.triage-card-wrap');
-    const title = async (index: number) =>
-      ((await cards.nth(index).getByRole('button').first().getAttribute('aria-label')) ?? '').split(',')[0];
+    const title = async (index: number) => (await cards.nth(index).locator('.triage-card-title').first().textContent())?.trim() ?? '';
     const first = await title(0);
     const second = await title(1);
 
@@ -154,13 +153,19 @@ test.describe('on Thread', () => {
        are read again; the focus goes with it rather than falling to the page,
        and the move is said. */
     const mover = page.locator('section.triage-lane').first().locator('article.triage-card-wrap').first().getByRole('button').first();
-    const moving = ((await mover.getAttribute('aria-label')) ?? '').split(',')[0];
+    const moving = (await mover.locator('.triage-card-title').textContent())?.trim() ?? '';
     await mover.focus();
     await page.keyboard.press('Alt+ArrowRight');
     await expect(page.locator('.triage-sr')).toContainText(`Moved “${moving}” to `);
-    await expect
-      .poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? ''))
-      .toMatch(new RegExp(`^${moving.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    // The card as drawn in the next lane, found there and not anywhere on the page, holds the focus.
+    const moved = page
+      .locator('section.triage-lane')
+      .nth(1)
+      .locator('article.triage-card-wrap')
+      .filter({ has: page.locator('.triage-card-title', { hasText: moving }) })
+      .getByRole('button')
+      .first();
+    await expect(moved).toBeFocused();
   });
 
   test('the icon rail: folded, the menu keeps every entry, named and usable', async ({ page }) => {

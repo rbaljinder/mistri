@@ -692,7 +692,11 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
             ? (() => {
                 const said = shortAmount(detail, amountIn(row))!;
                 // Read out whole; drawn short, the whole figure in its title.
-                return { subtitle: said.title, line: <span title={said.title}>{said.text}</span> };
+                return {
+                  subtitle: said.title,
+                  line: <span title={said.title}>{said.text}</span>,
+                  ...(said.title !== said.text ? { hear: said.title } : {}),
+                };
               })()
             : {
                 subtitle: lineWords ? vocabularyWord(String(detail)) : String(detail),
@@ -719,7 +723,12 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
                 // A reference says the record it names, as the title does (`SoHo`, never `2`), unless a rule dresses it.
                 const named = namedCell(table, fact.column, row, referenceLabels);
                 const said = short
-                  ? { node: <span title={short.title}>{short.text}</span>, text: short.title, person: false }
+                  ? {
+                      node: <span title={short.title}>{short.text}</span>,
+                      text: short.title,
+                      person: false,
+                      ...(short.title !== short.text ? { hear: short.title } : {}),
+                    }
                   : named.value !== value && !columnDisplay(table.id, fact.column)
                     ? { node: String(named.value), text: String(named.value), person: false }
                     : cardFact(

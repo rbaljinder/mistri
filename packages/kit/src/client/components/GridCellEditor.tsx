@@ -234,6 +234,7 @@ export function GridCellEdit({
 }) {
   const client = useQueryClient();
   const errorId = useId();
+  const nameId = useId();
   const label = columnLabel(table.id, column.name) ?? humanName(column.name);
   const stored = said(row[column.name]);
   const [editing, setEditing] = useState(false);
@@ -401,9 +402,12 @@ export function GridCellEdit({
     return (
       <button
         ref={launcher}
+        id={`${nameId}-edit`}
         type="button"
         className="cell-edit-launch"
         aria-label={say('edit', { label })}
+        /* "Edit {column}", then the value drawn: the name holds the visible words (WCAG 2.5.3). */
+        aria-labelledby={`${nameId}-edit ${nameId}-value`}
         data-cell-opens=""
         data-cell-edits=""
         onClick={(event) => {
@@ -411,7 +415,9 @@ export function GridCellEdit({
           open();
         }}
       >
-        {body}
+        <span id={`${nameId}-value`} style={{ display: 'contents' }}>
+          {body}
+        </span>
       </button>
     );
   }

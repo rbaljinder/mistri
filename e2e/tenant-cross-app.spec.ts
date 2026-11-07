@@ -170,7 +170,7 @@ async function openTarget(page: Page) {
 
 async function rememberDraft(page: Page, value: string) {
   await openWork(page);
-  await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+  await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
   const field = page.getByRole('textbox', { name: 'Name', exact: true });
   await field.fill(value);
   await page.evaluate(async () => {

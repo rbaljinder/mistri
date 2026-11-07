@@ -135,9 +135,9 @@ test.describe('Payday people operations', () => {
       await expect(page.locator('.dashboard-layout .page-aside table')).toHaveCount(0);
 
       await page.goto(`${sample.origin}/reports`);
-      const headcount = page.getByRole('button', { name: /^Active headcount: / });
+      const headcount = page.getByRole('button', { name: /^\d+ Active headcount/ });
       const expected = Number(scalar(sample.db, "SELECT COUNT(*) FROM employee WHERE employment_status IN ('active', 'leave')"));
-      await expect(headcount).toHaveAccessibleName(`Active headcount: ${expected}`);
+      await expect(headcount).toHaveAccessibleName(new RegExp(`^${expected} Active headcount`));
       await expect(headcount.locator('.home-card-go')).toBeVisible();
       await headcount.click();
       // The People room, from the dashboard, narrowed to the rows the card counted.

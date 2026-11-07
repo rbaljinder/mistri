@@ -1,0 +1,17 @@
+/* IBM Plex Mono, 400 and 500, for a data column (themeFamilies.css, `--figures`). Linked by the served page alone (index.html):
+   the embed shell leaves it out so the font bytes stay out of its chunk, and a host gets the same faces from
+   fonts/faces.css. */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/ibm-plex-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/ibm-plex-mono-500.woff2') format('woff2');
+}

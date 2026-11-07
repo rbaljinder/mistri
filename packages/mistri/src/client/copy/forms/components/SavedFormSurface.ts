@@ -34,5 +34,11 @@ export const say = defineMessages({
   yourApplicationIsSaved: 'Your application is saved. Carry on where you left off; what you saved is not shown again.',
   eachStepIsSaved:
     'Each step is saved as you go. We don’t show your details back to you; keep this tab open to review them before you submit.',
+  startOver: 'Start over',
+  yourDraftIsSaved: 'Your draft is saved. Carry on where you left off, or start over.',
+  savedEarlier: 'Saved earlier',
+  draftChangedElsewhere: 'This draft changed somewhere else. Review it again before you submit.',
+  reviewNotRead: 'Your answers could not be read back for review. Submit again in a moment.',
+  reviewNotReady: 'Your answers are still being read back for review. Submit again in a moment.',
   checkingForAnApplication: 'Checking for an application in progress…',
 });

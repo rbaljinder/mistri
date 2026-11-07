@@ -13,7 +13,7 @@ import type { BrandingWrite, StoredBranding, StoredBrandingLogo } from '../packa
 import { parseTestApp } from './support/commandCatalog.js';
 import { resolveViews } from '../packages/mistri/src/shared/app.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
-import { admitLogo, LogoRefused, sanitizeSvg } from '../packages/mistri/src/server/app/brandImage.js';
+import { admitFavicon, admitLogo, LogoRefused, sanitizeSvg } from '../packages/mistri/src/server/app/brandImage.js';
 import { brandingLogoHeaders, createTenantBrandingService } from '../packages/mistri/src/server/tenant/tenantBranding.js';
 import {
   audienceBranding,
@@ -22,6 +22,7 @@ import {
   tenantTheme,
   validateTenantBranding,
 } from '../packages/mistri/src/shared/tenantBranding.js';
+import { withHead } from '../packages/engine/src/server/clientHttp.js';
 import { fillMailBrand, mailLinkPage, mailLinkPolicy, type MailBrand } from '../packages/mistri/src/server/email/mailLinkPage.js';
 
 const tenantAuth = { rows: 'tenant', roles: { admin: {}, agent: {}, staff: { realm: 'platform' } } } as never;
@@ -186,6 +187,7 @@ function memoryStore() {
       writes.push(write);
       if (write.logo) logos.set(write.logo.hash, { type: write.logo.type, bytes: write.logo.bytes });
       if (write.darkLogo) logos.set(write.darkLogo.hash, { type: write.darkLogo.type, bytes: write.darkLogo.bytes });
+      if (write.favicon) logos.set(write.favicon.hash, { type: write.favicon.type, bytes: write.favicon.bytes });
       const revision = (values.get(write.tenant)?.revision ?? 0) + 1;
       values.set(write.tenant, { value: write.value, revision, by: write.by, at: write.at, logoHash: write.logoHash });
       return revision;
@@ -417,4 +419,75 @@ test('a dark logo is allowed with the logo and with nothing else', () => {
   assert.throws(() => validateTenantBranding({ logoDark: { hash: 'nope', type: 'image/png' } }, withLogo), BrandingRefused);
   const without = declare({ allow: ['name'], editors: ['admin'] });
   assert.throws(() => validateTenantBranding({ logoDark: dark }, without), /does not let a customer change "logoDark"/);
+});
+
+const shell =
+  '<!doctype html><html lang="en"><head><meta charset="utf-8" /><link rel="icon" href="data:image/svg+xml,<svg xmlns=\'x\'></svg>" /></head><body></body></html>';
+
+test('a tab icon is a PNG, an ICO or an SVG, small, and read from its bytes', () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16, 3)]);
+  const ico = Buffer.concat([Buffer.from([0, 0, 1, 0, 1, 0]), Buffer.alloc(32, 5)]);
+  assert.equal(admitFavicon(png).type, 'image/png');
+  assert.equal(admitFavicon(ico).type, 'image/x-icon');
+  assert.equal(
+    admitFavicon(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script><rect width="4" height="4"/></svg>')).type,
+    'image/svg+xml',
+  );
+  assert.throws(() => admitFavicon(Buffer.alloc(0)), LogoRefused);
+  assert.throws(() => admitFavicon(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0])), /PNG, an ICO or an SVG/);
+  assert.throws(() => admitFavicon(Buffer.from('not an image')), /PNG, an ICO or an SVG/);
+  assert.throws(() => admitFavicon(Buffer.concat([png, Buffer.alloc(70 * 1024)])), /larger than 64 KB/);
+});
+
+test("a tenant's tab icon is its own: saved, written into its page's icon link, never another tenant's, and the fallback where there is none", async () => {
+  const app = brandedApp();
+  const store = memoryStore();
+  const service = createTenantBrandingService({ app, store, cache: new MemoryCacheStore() });
+  const ico = (seed: number) => Buffer.concat([Buffer.from([0, 0, 1, 0, 1, 0]), Buffer.alloc(32, seed)]);
+  const address = /^\/api\/branding\/logo\/[0-9a-f]{64}$/;
+
+  await service.save('north', { value: { name: 'North Co' }, favicon: ico(1).toString('base64') }, 'alice');
+  await service.save('south', { value: { name: 'South Co' } }, 'bob');
+  const north = await service.presentation('north');
+  const south = await service.presentation('south');
+  assert.match(String(north?.value.icon), address);
+  assert.equal(south?.value.icon, undefined, "another tenant's icon is never carried");
+  assert.ok(await service.logo(String(north?.value.icon).split('/').pop()!), 'the icon is served by its hash');
+  assert.equal((await store.logo({ hash: String(north?.value.icon).split('/').pop()! }))?.type, 'image/x-icon');
+
+  // The page head: the tenant's own link replaces the shell's; a tenant without one keeps the App's and the platform's.
+  const withIcon = withHead(shell, { branding: north! } as never);
+  assert.match(withIcon, new RegExp(`<link rel="icon" data-brand-icon href="${String(north?.value.icon)}" />`));
+  assert.equal((withIcon.match(/rel="icon"/g) ?? []).length, 1);
+  const without = withHead(shell, { branding: south! } as never);
+  assert.doesNotMatch(without, /data-brand-icon/);
+  assert.match(without, /href="data:image\/svg\+xml/);
+  // Under a base path the link is said under it.
+  assert.match(
+    withHead(shell, { branding: north!, mount: { base: '/tools', json: '{}' } } as never),
+    /href="\/tools\/api\/branding\/logo\//,
+  );
+  // A forged address in a presentation never reaches the link.
+  const forged = { ...north!, value: { ...north!.value, icon: 'https://evil.example/x.ico' } };
+  assert.doesNotMatch(withHead(shell, { branding: forged } as never), /<link[^>]*evil\.example/);
+
+  // A save that uploads nothing keeps it; a body cannot name one it did not upload; null removes it; a bad file is refused.
+  await service.save('north', { value: { name: 'North Co', favicon: { hash: 'f'.repeat(64), type: 'image/png' } } }, 'alice');
+  assert.equal((await service.presentation('north'))?.value.icon, north?.value.icon);
+  await service.save('north', { value: { name: 'North Co' }, favicon: null }, 'alice');
+  assert.equal((await service.presentation('north'))?.value.icon, undefined);
+  assert.equal(JSON.parse(store.writes.at(-1)!.value).favicon, undefined);
+  await assert.rejects(service.save('north', { value: {}, favicon: 'not base64!' }, 'alice'), LogoRefused);
+  await assert.rejects(service.save('north', { value: {}, favicon: Buffer.from('plain text').toString('base64') }, 'alice'), LogoRefused);
+});
+
+test('a tab icon is allowed with the logo key and with nothing else', () => {
+  const withLogo = declare({ allow: ['name', 'logo'], editors: ['admin'] });
+  const icon = { hash: 'a'.repeat(64), type: 'image/x-icon' };
+  assert.deepEqual(validateTenantBranding({ favicon: icon }, withLogo).favicon, icon);
+  assert.throws(() => validateTenantBranding({ favicon: { hash: 'a'.repeat(64), type: 'image/jpeg' } }, withLogo), BrandingRefused);
+  assert.throws(
+    () => validateTenantBranding({ favicon: icon }, declare({ allow: ['name'], editors: ['admin'] })),
+    /does not let a customer change "favicon"/,
+  );
 });

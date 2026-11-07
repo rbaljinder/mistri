@@ -728,8 +728,10 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.16: a headline's `subtitle` and a fields block's `empty` (two entries, no new name), and a resource's `query` (one entry; `query` is a rollup's name already), and a current card's `opens` (two entries, the card's and the list's; `opens` is a name already): 1722/510.
     // 1.0.0-rc.18: the shell's `header`, the bar in the sidebar's head, a prototype (three entries, each shell the
     // shape is declared in; `header` is a recipe's name already): 1725/510.
+    // 1.0.0-rc.20: a signed-in saved form's `owner` (one entry, a name `owner` already counted): 1727/510.
+    // 1.0.0-rc.20: a file rule's `stamps`, the columns the server writes on an upload (one entry, one new name): 1728/511.
     // 1.0.0-rc.18: a dashboard's `head`, compact or none (one entry, no new name: `head` is a theme's already): 1726/510.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1726, names: 510 });
+    assert.deepEqual({ entries, names: names.size }, { entries: 1728, names: 511 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

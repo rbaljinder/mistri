@@ -311,7 +311,7 @@ test('command-only membership prepares, executes and replays with no generic CRU
   const f = await fixture(t),
     service = await f.issue();
   assert.ok(Object.isFrozen(service));
-  assert.deepEqual(Object.keys(service).sort(), ['availability', 'execute', 'prepare', 'retire', 'status']);
+  assert.deepEqual(Object.keys(service).sort(), ['availability', 'draft', 'execute', 'prepare', 'retire', 'stage', 'status']);
   assert.deepEqual(plain(await service.prepare(request, north, f.prepare())), { expectedVersion: 0 });
   assert.deepEqual(plain(await service.status(request, north, f.body())), { status: 'not_found', outcome: 'unknown' });
   assert.equal(f.control.calls, 0);

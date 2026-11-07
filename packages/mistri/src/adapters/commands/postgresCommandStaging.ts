@@ -32,6 +32,8 @@ const COMMAND_STAGED_META_TABLE = runtimeName('postgres', STAGED_META_TABLE);
 const schema = runtimeSchema('postgres');
 
 const q = runtimeTable('postgres', COMMAND_STAGED_TABLE);
+/* The place's own count (commandStaging.ts PLACE): $2..$5 are the namespace. */
+const PLACE = 'store_id = $2 AND source_id = $3 AND realm = $4 AND tenant_id = $5';
 const POSTGRES_STAGED_DDL = `CREATE TABLE ${q} (
   id_hash text COLLATE "C" PRIMARY KEY CHECK (length(id_hash) = 64),
   app_id text COLLATE "C" NOT NULL,
@@ -163,16 +165,16 @@ export async function stagePostgresFile(
   );
   const held = (
     await client.query(
-      `SELECT count(*)::bigint AS files, coalesce(sum(size), 0)::bigint AS bytes FROM ${q} WHERE app_id = $1 AND owner = $2 AND expires_at > $3`,
-      [appId, row.owner, now],
+      `SELECT count(*)::bigint AS files, coalesce(sum(size), 0)::bigint AS bytes FROM ${q} WHERE app_id = $1 AND ${PLACE} AND owner = $6 AND expires_at > $7`,
+      [appId, ...namespace, row.owner, now],
     )
   ).rows[0] as { files: string | number; bytes: string | number };
   if (Number(held.files) + 1 > most.files || Number(held.bytes) + row.size > most.bytes) throw new StagedFilesFull();
   if (most.shared) {
     const all = (
       await client.query(
-        `SELECT coalesce(sum(size), 0)::bigint AS bytes FROM ${q} WHERE app_id = $1 AND starts_with(owner, $2) AND expires_at > $3`,
-        [appId, most.shared.prefix, now],
+        `SELECT coalesce(sum(size), 0)::bigint AS bytes FROM ${q} WHERE app_id = $1 AND ${PLACE} AND starts_with(owner, $6) AND expires_at > $7`,
+        [appId, ...namespace, most.shared.prefix, now],
       )
     ).rows[0] as { bytes: string | number };
     if (Number(all.bytes) + row.size > most.shared.bytes) throw new StagedFilesFull(true);

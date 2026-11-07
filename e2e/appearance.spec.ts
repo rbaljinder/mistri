@@ -37,9 +37,9 @@ test('custom themes: app default, browser override, reload, mode, removal and re
   await page.getByRole('menuitem', { name: /^Preferences/ }).click();
   const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
   // The App's own theme is the look in force until the reader picks another.
-  await expect(prefs.getByRole('button', { name: 'Visual theme', exact: true })).toContainText('Custom');
+  await expect(prefs.getByRole('button', { name: /^Visual theme(?: |$)/ })).toContainText('Custom');
   const choose = async (name: string | RegExp) => {
-    await prefs.getByRole('button', { name: 'Visual theme', exact: true }).click();
+    await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
     await page.getByRole('option', typeof name === 'string' ? { name, exact: true } : { name }).click();
   };
   await choose('Sage');
@@ -97,12 +97,12 @@ for (const system of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('menuitem', { name: /Preferences/ }).click();
     const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
-    await prefs.getByRole('button', { name: 'Visual theme', exact: true }).click();
+    await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
     await page.getByRole('option', { name: 'Sage', exact: true }).click();
     for (const mode of ['Light', 'Dark', 'System']) {
-      await prefs.getByRole('button', { name: 'Color mode', exact: true }).click();
+      await prefs.getByRole('button', { name: /^Color mode(?: |$)/ }).click();
       await page.getByRole('option', { name: mode, exact: true }).click();
-      await expect(prefs.getByRole('button', { name: 'Color mode', exact: true }).locator('.dd-value')).toHaveText(mode);
+      await expect(prefs.getByRole('button', { name: /^Color mode(?: |$)/ }).locator('.dd-value')).toHaveText(mode);
       if (mode === 'System') await expect(page.locator('html')).not.toHaveAttribute('data-theme');
       else await expect(page.locator('html')).toHaveAttribute('data-theme', mode.toLowerCase());
       await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'sage');
@@ -110,7 +110,7 @@ for (const system of ['light', 'dark'] as const) {
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(prefs.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
-      await prefs.getByRole('button', { name: 'Color mode', exact: true }).click();
+      await prefs.getByRole('button', { name: /^Color mode(?: |$)/ }).click();
       const choices = page.getByRole('listbox', { name: 'Color mode', exact: true });
       await expect(choices).toBeVisible();
       const box = (await choices.boundingBox())!;
@@ -131,7 +131,7 @@ test('appearance: Sage is selectable, responsive, and reversible back to the def
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('menuitem', { name: /Preferences/ }).click();
   const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
-  await prefs.getByRole('button', { name: 'Visual theme', exact: true }).click();
+  await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
   await page.getByRole('option', { name: 'Sage', exact: true }).click();
   await prefs.getByRole('button', { name: 'Close', exact: true }).click();
   await page.reload();
@@ -160,7 +160,7 @@ test('appearance: Sage is selectable, responsive, and reversible back to the def
   await page.emulateMedia({ colorScheme: 'light' });
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('menuitem', { name: /Preferences/ }).click();
-  await prefs.getByRole('button', { name: 'Visual theme', exact: true }).click();
+  await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
   await page.getByRole('option', { name: 'Workshop', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'workshop');
   await expect(header).toHaveCSS('background-color', original);

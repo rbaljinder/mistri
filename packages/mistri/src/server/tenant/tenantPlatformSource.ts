@@ -60,6 +60,7 @@ import {
 import { postgresCatalogDigestStatement } from '@mistriwork/engine/adapters/postgresCatalogDigest.js';
 import { schemaMoved } from '@mistriwork/engine/adapters/postgresSchemaEpoch.js';
 import { SYSTEM_SCHEMAS } from '@mistriwork/engine/adapters/postgresCatalog.js';
+import { physicalRowScope } from './tenantReadScope.js';
 import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 
 export interface TenantPlatformSourceDeclaration {
@@ -452,7 +453,7 @@ export function openSqlitePlatformReadSource(existingPath: string, input: Tenant
           // Nothing is read here: every read below revalidates the membership first.
           const bound = admitted(declaration, membership, evidence, rows);
           const scope = composePlatformSourceScope(schema, bound.rows);
-          const physicalScope = Object.fromEntries(Object.entries(scope).map(([id, rule]) => [toPhysical(id), rule]));
+          const physicalScope = physicalRowScope(scope, toPhysical);
           const reads = mapAppScopedReads(
             createScopedReads(pinned!.catalog.physicalSchema, physicalScope, ANSI_STYLE, async (sql, hint) => {
               const started = performance.now();
@@ -666,7 +667,7 @@ export async function openPostgresPlatformReadSource(
           // Nothing is read here: every read below revalidates the membership first.
           const bound = admitted(declaration, membership, evidence, rows);
           const scope = composePlatformSourceScope(schema, bound.rows);
-          const physicalScope = Object.fromEntries(Object.entries(scope).map(([id, rule]) => [toPhysical(id), rule]));
+          const physicalScope = physicalRowScope(scope, toPhysical);
           const reads = mapAppScopedReads(
             createScopedReads(found.physicalSchema, physicalScope, style, async (sql, hint) => (lent ?? denyTenant()).execute(sql, hint)),
             { schema, toPhysical, toLogical },

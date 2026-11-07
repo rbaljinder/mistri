@@ -18,25 +18,29 @@ decisionDue: defineJob({
 ```
 
 Everything here is **at least once** on the wire and **at most once in your
-tables**: the delivery is retried until it is acknowledged, and the command it
-reaches keeps a receipt, so a repeat is answered from the receipt instead of
-running again. mistri has no broker; each queue is a table in your database
+tables** wherever the command it reaches keeps a receipt: the delivery is
+retried until it is acknowledged, and a repeat is answered from the receipt
+instead of running again. Jobs, workflows, inbound endpoints, the App API and
+MCP always keep one. A browser action keeps one only with `track` or an
+`Idempotency-Key` header ([where a receipt is kept](/docs/commands/#when-the-outcome-is-uncertain));
+an untracked action sent twice after an uncertain answer can run twice, so
+give it a key, or declare `track`, before a client retries it. mistri has no broker; each queue is a table in your database
 (or the App's job store), so a restart loses nothing that was committed.
 
 ## At a glance
 
-| Mechanism | Retries | Deduplicated by | Order | After a restart |
-| --- | --- | --- | --- | --- |
-| A command (`/api/commands/execute`, the App API, MCP) | None: the caller retries | The idempotency key and the actor, where a receipt is kept | None between requests | A receipt answers a retry, for as long as `retention.commands` keeps it |
-| An event | None: a fact is a row written with the receipt | The receipt: one batch per committed command | Declaration order within one command | Discovered from the committed receipts |
-| A job on an event | 8 attempts, 1 s doubling to 60 s | The job, its version and the event id, which is the command's key | None between jobs; a job's own slots never overlap | The lease expires, the attempt is recorded as unknown and the job is claimed again |
-| A job at times (`every`) | As a job | The slot | One slot of a job at a time | The latest missed slot runs once; a first start runs none |
-| An inbound endpoint | None: the sender retries | `key`, which becomes the receipt's key | None | The delivery store remembers it |
-| A command's webhook effect | 8 attempts, 1 s doubling to 5 min | `Idempotency-Key`, the same on every attempt | Declaration order within one command | Retry state and attempt counts are kept |
-| A workflow | A step's own `retry`; `run` 3 attempts, `call` 5 | Each step's stored result; `run` by command receipt | Steps run in order | Finished steps return what they stored; an unfinished one resumes |
-| An integration call | 3 tries, 250 ms then 500 ms | The idempotency key the provider dedupes by, and the journal | Inside the command's lookup | The command's receipt answers a replay |
-| An integration channel message | 8 tries, a minute apart | The message row | Held through quiet hours | Held and failed rows are kept |
-| Notification email | 8 tries, 1 minute doubling to 1 hour | The queued message | None | Queued in the write's own transaction |
+| Mechanism                                             | Retries                                          | Deduplicated by                                                   | Order                                              | After a restart                                                                    |
+| ----------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| A command (`/api/commands/execute`, the App API, MCP) | None: the caller retries                         | The idempotency key and the actor, where a receipt is kept        | None between requests                              | A receipt answers a retry, for as long as `retention.commands` keeps it            |
+| An event                                              | None: a fact is a row written with the receipt   | The receipt: one batch per committed command                      | Declaration order within one command               | Discovered from the committed receipts                                             |
+| A job on an event                                     | 8 attempts, 1 s doubling to 60 s                 | The job, its version and the event id, which is the command's key | None between jobs; a job's own slots never overlap | The lease expires, the attempt is recorded as unknown and the job is claimed again |
+| A job at times (`every`)                              | As a job                                         | The slot                                                          | One slot of a job at a time                        | The latest missed slot runs once; a first start runs none                          |
+| An inbound endpoint                                   | None: the sender retries                         | `key`, which becomes the receipt's key                            | None                                               | The delivery store remembers it                                                    |
+| A command's webhook effect                            | 8 attempts, 1 s doubling to 5 min                | `Idempotency-Key`, the same on every attempt                      | Declaration order within one command               | Retry state and attempt counts are kept                                            |
+| A workflow                                            | A step's own `retry`; `run` 3 attempts, `call` 5 | Each step's stored result; `run` by command receipt               | Steps run in order                                 | Finished steps return what they stored; an unfinished one resumes                  |
+| An integration call                                   | 3 tries, 250 ms then 500 ms                      | The idempotency key the provider dedupes by, and the journal      | Inside the command's lookup                        | The command's receipt answers a replay                                             |
+| An integration channel message                        | 8 tries, a minute apart                          | The message row                                                   | Held through quiet hours                           | Held and failed rows are kept                                                      |
+| Notification email                                    | 8 tries, 1 minute doubling to 1 hour             | The queued message                                                | None                                               | Queued in the write's own transaction                                              |
 
 ## Command receipts
 
@@ -144,4 +148,4 @@ event to a command that is safe to see twice.
 - Decide who redrives. A failed delivery waits for an operator with the `jobs`, `deliveries` or `workflows` operations ([observe and operate](/docs/observe/)).
 - Size the windows: `retention` keeps attempts 30 days and receipts 730 days unless you say otherwise.
 
-*Proved by:* `test/job-runner.test.ts` (a handler error retries as the next attempt; a timeout is unknown and a later runner takes over; a revoked grant fails without the handler), `test/event-delivery-store.test.ts` and `test/event-delivery-outage.test.ts` (restart keeps attempts, declaration order, the attempt ceiling, recovery in receipt order), `test/job-every.test.ts` and `test/jobs-run.test.ts` (each slot once across servers, no missed slot on a first start), `test/inbound-webhooks.test.ts` (a replay answers the first delivery's receipt; the same id with another body is 409), `test/command-effects.test.ts` (sent after commit, never twice for a replay, never for a refusal; a 5xx or 4xx asked again, then a redrive), `test/workflow-engine.test.ts` (a process killed after a command committed resumes without running it twice; a failing provider is asked again after its back-off), `test/integrations.test.ts` (a held message is tried eight times, a minute apart; a command's integration call is tried three times, then refuses), `test/jobs-cli.test.ts` (a job is attempted eight times, backing off from 1 second to a 60-second ceiling), `test/tenant-jobs.test.ts` (a tenant job that records events or looks up is refused at load), `test/business-command-execution.test.ts` (a key retried after its receipt was pruned is a new request).
+_Proved by:_ `test/job-runner.test.ts` (a handler error retries as the next attempt; a timeout is unknown and a later runner takes over; a revoked grant fails without the handler), `test/event-delivery-store.test.ts` and `test/event-delivery-outage.test.ts` (restart keeps attempts, declaration order, the attempt ceiling, recovery in receipt order), `test/job-every.test.ts` and `test/jobs-run.test.ts` (each slot once across servers, no missed slot on a first start), `test/inbound-webhooks.test.ts` (a replay answers the first delivery's receipt; the same id with another body is 409), `test/command-effects.test.ts` (sent after commit, never twice for a replay, never for a refusal; a 5xx or 4xx asked again, then a redrive), `test/workflow-engine.test.ts` (a process killed after a command committed resumes without running it twice; a failing provider is asked again after its back-off), `test/integrations.test.ts` (a held message is tried eight times, a minute apart; a command's integration call is tried three times, then refuses), `test/jobs-cli.test.ts` (a job is attempted eight times, backing off from 1 second to a 60-second ceiling), `test/tenant-jobs.test.ts` (a tenant job that records events or looks up is refused at load), `test/business-command-execution.test.ts` (a key retried after its receipt was pruned is a new request).

@@ -1,6 +1,8 @@
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { assertTransitionInsert, assertTransitions, type AppTransitionRules } from '../app/appTransitions.js';
-import { stampUpdate, type AppStamps, type StampMoment } from '../app/appStamps.js';
+import { stampInsert, stampUpdate, type AppStamps, type StampMoment } from '../app/appStamps.js';
+import { bindUploadParent, type UploadParent } from '../files/uploadParent.js';
+import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
 import type { QueryPerson } from '@mistriwork/engine/shared/query.js';
 import {
   Refusal,
@@ -226,6 +228,8 @@ export function createHttpPolicyUpdates(
       signal: AbortSignal,
       lines?: readonly LineCollection[],
       moment: () => StampMoment = () => ({ now: new Date() }),
+      /** An upload's row: the record its list hangs off, read in this transaction as this principal, and the stamps its rule writes. */
+      file?: { parent?: UploadParent },
     ) {
       const body = snapshotScopedData(raw);
       if (
@@ -241,11 +245,30 @@ export function createHttpPolicyUpdates(
         throw new Refusal('Insert values must be an object. Use {} explicitly for database defaults.');
       }
       const table = body.table;
-      const request = { table, values: body.values } as InsertRequest;
+      let request = { table, values: body.values } as InsertRequest;
       try {
         return await transact(context, table, async (tx) => {
           assertWritable(context, table);
           if (signal.aborted) throw new AppAccessDenied();
+          if (file) {
+            /* The parent is read through the scoped transaction, so a record outside this principal's rows is no
+               record to them; the link is written from what was read, never from the body. */
+            if (file.parent) {
+              const bound = await bindUploadParent(context.schema, table, file.parent, { ...request.values }, (read) => tx.query(read));
+              if ('error' in bound) {
+                if (bound.status === 404) throw new AppAccessDenied();
+                throw sayRefusal(new Refusal(bound.error), bound.error);
+              }
+              request = carryServerRequest(request, { ...request, values: bound.values as InsertRequest['values'] });
+            }
+            /* The columns the file rule stamps: the server's clock and this session's person, never the body's. */
+            const said = moment();
+            const people = person && (() => person(context.schema, said.who, tx).then((found) => found.person?.key ?? null));
+            request = carryServerRequest(
+              request,
+              await stampInsert(stamps(context.schema), request, { ...said, ...(people ? { person: people } : {}) }),
+            );
+          }
           // The scoped writer checks the actual defaulted/coerced stored row
           // and all FK parents before returning this field-projected result.
           const result = await insertOne(context, tx, request);

@@ -339,10 +339,10 @@ test.describe('Payday payroll workflow', () => {
       });
       await page.getByRole('button', { name: /^Account: / }).click();
       await page.getByRole('menuitem', { name: /^Preferences/ }).click();
-      await page.getByRole('button', { name: 'Language', exact: true }).click();
+      await page.getByRole('button', { name: /^Language(?: |$)/ }).click();
       await page.getByRole('option', { name: 'Español', exact: true }).click();
       const prefs = page.getByRole('dialog', { name: 'Preferencias', exact: true });
-      await expect(prefs.getByRole('button', { name: 'Idioma', exact: true })).toContainText('Español');
+      await expect(prefs.getByRole('button', { name: /^Idioma(?: |$)/ })).toContainText('Español');
       await prefs.getByRole('button', { name: 'Cerrar', exact: true }).click();
       await expect(page).toHaveURL(before);
       await expect(page.locator('html')).toHaveAttribute('lang', 'es');

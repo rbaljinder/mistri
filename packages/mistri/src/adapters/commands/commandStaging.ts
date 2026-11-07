@@ -228,6 +228,10 @@ export function provisionSqliteCommandStaging(db: DatabaseSync): boolean {
  */
 export const STAGED_SWEEP = 32;
 
+/* Whose count it is: the place's own store (an App's, or a tenant's, or the platform's), so one tenant's visitors never
+   spend another's share, and a flood of files into one place leaves the others' room alone. */
+const PLACE = 'store_id = ? AND source_id = ? AND realm = ? AND tenant_id = ?';
+
 /** Holds one file, in the caller's open transaction, unless its sender (or, on a public form, every visitor) holds enough already. */
 export function stageSqliteFile(
   db: DatabaseSync,
@@ -247,13 +251,17 @@ export function stageSqliteFile(
     `DELETE FROM ${table} WHERE id_hash IN (SELECT id_hash FROM ${table} WHERE app_id = ? AND expires_at <= ? LIMIT ${STAGED_SWEEP})`,
   ).run(appId, now);
   const held = db
-    .prepare(`SELECT count(*) AS files, coalesce(sum(size), 0) AS bytes FROM ${table} WHERE app_id = ? AND owner = ? AND expires_at > ?`)
-    .get(appId, row.owner, now) as { files: number; bytes: number };
+    .prepare(
+      `SELECT count(*) AS files, coalesce(sum(size), 0) AS bytes FROM ${table} WHERE app_id = ? AND ${PLACE} AND owner = ? AND expires_at > ?`,
+    )
+    .get(appId, ...namespace, row.owner, now) as { files: number; bytes: number };
   if (Number(held.files) + 1 > most.files || Number(held.bytes) + row.size > most.bytes) throw new StagedFilesFull();
   if (most.shared) {
     const all = db
-      .prepare(`SELECT coalesce(sum(size), 0) AS bytes FROM ${table} WHERE app_id = ? AND substr(owner, 1, ?) = ? AND expires_at > ?`)
-      .get(appId, most.shared.prefix.length, most.shared.prefix, now) as { bytes: number };
+      .prepare(
+        `SELECT coalesce(sum(size), 0) AS bytes FROM ${table} WHERE app_id = ? AND ${PLACE} AND substr(owner, 1, ?) = ? AND expires_at > ?`,
+      )
+      .get(appId, ...namespace, most.shared.prefix.length, most.shared.prefix, now) as { bytes: number };
     if (Number(all.bytes) + row.size > most.shared.bytes) throw new StagedFilesFull(true);
   }
   db.prepare(`INSERT INTO ${table} (id_hash, app_id, store_id, source_id, realm, tenant_id, owner, command_id, field, name, type, size, data, expires_at)

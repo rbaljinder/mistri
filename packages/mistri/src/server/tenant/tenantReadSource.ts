@@ -50,7 +50,7 @@ import {
 } from './tenantMembership.js';
 import { assertTenantOwnership, captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import type { PlatformMembershipEvidence, PlatformMembershipLookup, PlatformMembershipRecord } from './tenantPlatform.js';
-import { composePlatformReadScope, composePublicReadScope, composeTenantReadScope } from './tenantReadScope.js';
+import { composePlatformReadScope, composePublicReadScope, composeTenantReadScope, physicalRowScope } from './tenantReadScope.js';
 import {
   assertPublicResolved,
   capturePublicEvidence,
@@ -641,7 +641,7 @@ export function openSqliteTenantReadSource(
     // One compiled reader per admitted scope. Every call first revalidates the
     // principal it was bound for, tenant or platform, in its own snapshot.
     const scoped = (scope: RowScope): ScopedReads => {
-      const physicalScope = Object.fromEntries(Object.entries(scope).map(([id, rule]) => [toPhysical(id), rule]));
+      const physicalScope = physicalRowScope(scope, toPhysical);
       return mapAppScopedReads(
         createScopedReads(physicalSchema, physicalScope, ANSI_STYLE, async (sql, hint) => {
           const started = performance.now();
@@ -1473,10 +1473,7 @@ export async function openPostgresTenantReadSource(
          statements, finds it checked (rowScope.ts) rather than copying it again. */
       let physicalScope = physicalScopes.get(scope);
       if (!physicalScope) {
-        physicalScope = snapshotRowScope(
-          physicalSchema,
-          Object.fromEntries(Object.entries(scope).map(([id, rule]) => [toPhysical(id), rule])),
-        );
+        physicalScope = snapshotRowScope(physicalSchema, physicalRowScope(scope, toPhysical));
         if (isRowScopeSnapshot(scope) && isFixedScopeCatalog(physicalSchema)) physicalScopes.set(scope, physicalScope);
       }
       return (lease: PostgresReadSnapshot) =>

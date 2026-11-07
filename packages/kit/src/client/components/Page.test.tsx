@@ -502,7 +502,7 @@ test.each(['config', 'saved'] as const)(
       (call) => call.path === '/api/view/run' && String((call.body.view as HttpViewDefinition)?.id).endsWith(':fields'),
     );
     expect(fieldRead?.body.count).toBe('none');
-    expect(screen.queryByRole('button', { name: /^Page$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Page\b/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^(Copy layout|Layout)$/ })).toBeNull();
     expect(screen.queryByText('Alternate layout')).toBeNull();
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Note' }));
@@ -563,7 +563,7 @@ test.each(['config', 'saved'] as const)('Workbench retains the layout picker and
   draw({ page: { ...page, source }, others: [{ id: 'alternate', name: 'Alternate layout', source: 'saved' }], onLayout });
   await user.click(screen.getByRole('button', { name: source === 'saved' ? 'Layout' : 'Copy layout' }));
   expect(onLayout).toHaveBeenCalledOnce();
-  await user.click(screen.getByRole('button', { name: /^Page$/ }));
+  await user.click(screen.getByRole('button', { name: /^Page\b/ }));
   await user.click(screen.getByRole('option', { name: /Alternate layout/ }));
   expect(gone.at(-1)).toEqual(['go', expect.objectContaining({ pageId: 'alternate', key: { id: 4 } }), 'replace']);
 });
@@ -573,7 +573,7 @@ test('App rootless chooser keeps its heading and business content without layout
   draw({ entry: { kind: 'page', pageId: page.id, table: 'customer' }, chooser: <button type="button">Choose customer</button> });
   expect(screen.getByRole('heading', { name: 'Customer desk' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Choose customer' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /^Page$/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Page\b/ })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Copy layout' })).toBeNull();
 });
 
@@ -1428,9 +1428,9 @@ test.each([false, true])('Page fields honor column writability with resource edi
   draw({ base, page: { ...page, sections: [{ kind: 'fields', paths: ['id', 'name', 'status'] }] }, plans: [] });
   expect(await screen.findByText('Harbour Freight')).toBeVisible();
   expect(screen.queryByRole('textbox', { name: /name/i })).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Edit Name' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Edit Name\b/ })).toBeNull();
   expect(screen.queryByRole('textbox', { name: /^id/i })).toBeNull();
-  if (app) expect(screen.getByRole('button', { name: 'Edit Status' })).toBeVisible();
+  if (app) expect(screen.getByRole('button', { name: /^Edit Status\b/ })).toBeVisible();
   else expect(screen.getByRole('textbox', { name: 'status (TEXT)' })).toHaveValue('active');
 });
 
@@ -2029,13 +2029,13 @@ test('a property rail keeps an empty field, where a value is set, and edits each
     },
     plans: [],
   });
-  const status = await screen.findByRole('button', { name: 'Edit Status' });
+  const status = await screen.findByRole('button', { name: /^Edit Status\b/ });
   const rail = document.querySelector('dl.page-properties')!;
   expect(rail).toContainElement(status);
   expect([...rail.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual(['status', 'email', 'id']);
-  expect(within(rail as HTMLElement).getByRole('button', { name: 'Edit Email' })).toBeVisible();
+  expect(within(rail as HTMLElement).getByRole('button', { name: /^Edit Email\b/ })).toBeVisible();
   // The key is a property, never an editor.
-  expect(within(rail as HTMLElement).queryByRole('button', { name: 'Edit Id' })).toBeNull();
+  expect(within(rail as HTMLElement).queryByRole('button', { name: /^Edit Id\b/ })).toBeNull();
   expect(rail).toHaveStyle({ '--page-properties-columns': '2' });
   expect(document.querySelector('.page-field-grid')).toBeNull();
 });

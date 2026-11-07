@@ -29,8 +29,8 @@ test('a lead converted without a contact is refused on its record, marks the con
     await expect(page.locator('body')).toHaveClass(/app-mode/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(String(stored('name')));
 
-    await page.getByRole('button', { name: 'Edit Status', exact: true }).click();
-    await page.getByRole('button', { name: 'Status', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Status(?: |$)/ }).click();
+    await page.getByRole('button', { name: /^Status(?: |$)/ }).click();
     await page.getByRole('option', { name: 'Converted', exact: true }).click();
     const dock = page.getByRole('region', { name: 'Unsaved changes', exact: true });
     await expect(dock).toContainText('1 unsaved change');
@@ -53,7 +53,7 @@ test('a lead converted without a contact is refused on its record, marks the con
     // Every named field is on the record, so the summary adds nothing; the draft stays.
     await expect(page.getByText(REFUSED)).toHaveCount(0);
     await expect(dock).toContainText('1 unsaved change');
-    await expect(page.getByRole('button', { name: 'Status', exact: true })).toContainText('Converted');
+    await expect(page.getByRole('button', { name: /^Status(?: |$)/ })).toContainText('Converted');
     expect(stored('status')).toBe('working');
     expect(stored('converted_contact_id')).toBeNull();
 

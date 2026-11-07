@@ -27,8 +27,9 @@ import { declaredScale, exactAverage, formatDecimal, parseDecimal } from '@mistr
 import { continueGroups, keysetAfter, keysetOrder } from '@mistriwork/engine/shared/keysetPage.js';
 import { FORBIDDEN_ANSWER_NAMES } from '@mistriwork/engine/shared/aggregate.js';
 import { authorFault } from '@mistriwork/engine/shared/refusal.js';
-import type { DateUnit } from '@mistriwork/engine/shared/filter.js';
-import { parseQuery, type QueryPerson } from '@mistriwork/engine/shared/query.js';
+import { asksAboutRows, type DateUnit } from '@mistriwork/engine/shared/filter.js';
+import { ANY_CONDITION, anyConditions, parseQuery, splitClauseTail, type QueryPerson } from '@mistriwork/engine/shared/query.js';
+import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import {
   columnKind,
   findTable,
@@ -36,6 +37,7 @@ import {
   type ColumnKind,
   type ColumnMeta,
   type DatabaseSchema,
+  type ForeignKey,
   type TableMeta,
 } from '@mistriwork/engine/shared/schema.js';
 import { BusinessCommandExecutionError, refuse } from './commandErrors.js';
@@ -285,6 +287,9 @@ interface CommandTable {
   readonly key: readonly string[];
   readonly kinds: Readonly<Record<string, ColumnKind>>;
   readonly meta: TableMeta;
+  /** The tables its handle may ask about with `any`/`no`, and the references between them: exactly the tables the
+      catalog declares (commandCatalog), so a child outside the declared reads is not a table there. */
+  readonly declared?: { readonly tables: TableMeta[]; readonly foreignKeys: ForeignKey[] };
   /** The engine the table is read from: PostgreSQL's unconstrained numeric sums to exact text, SQLite's is a float. */
   readonly dialect?: string;
   /** The rollups and computed columns a command's `when` may judge it by (commandWhen.ts); its handler reads columns. */
@@ -311,6 +316,9 @@ export function commandCatalog(
   logical: (local: string) => string,
 ): CommandCatalog | undefined {
   const tables: Record<string, CommandTable> = {};
+  const idOf = new Map<string, string>();
+  for (const name of footprint) idOf.set(logical(name), name);
+  const declared: { tables: TableMeta[]; foreignKeys: ForeignKey[] } = { tables: [], foreignKeys: [] };
   for (const name of footprint) {
     /* Named once, not once per table scanned: `logical` reads the App's
        sources each time, and every command's footprint is cataloged at
@@ -318,13 +326,23 @@ export function commandCatalog(
     const id = logical(name);
     const meta = findTable(schema, id);
     if (!meta) return undefined;
+    const renamed = Object.freeze({ ...meta, id: name, name, schema: '' });
+    declared.tables.push(renamed);
     tables[name] = Object.freeze({
       name,
+      declared,
       key: Object.freeze(meta.columns.filter((column) => column.primaryKey).map((column) => column.name)),
       kinds: Object.freeze(Object.fromEntries(meta.columns.map((column) => [column.name, columnKind(column.type)]))),
-      meta: Object.freeze({ ...meta, id: name, name, schema: '' }),
+      meta: renamed,
       dialect: schema.dialect,
     });
+  }
+  /* The references among the declared tables, in their local names: a table's handle asks about no other. */
+  for (const fk of schema.foreignKeys) {
+    const from = idOf.get(fk.from.table);
+    const to = idOf.get(fk.to.table);
+    if (from !== undefined && to !== undefined)
+      declared.foreignKeys.push({ ...fk, from: { ...fk.from, table: from }, to: { ...fk.to, table: to } });
   }
   return Object.freeze(tables);
 }
@@ -332,6 +350,8 @@ export function commandCatalog(
 /* ---------- wheres ---------- */
 
 const DEFAULT_CAP = 1000;
+/** What a handle's own wheres are compiled with (see compileWhere). */
+const HANDLE = Object.freeze({ anyRows: true });
 interface Compiled {
   readonly filter: Filter;
   readonly none: boolean;
@@ -361,8 +381,10 @@ export function compileWhere(
   now: Date,
   values: readonly unknown[] = [],
   me?: QueryPerson,
-  /** Admit a column on a condition's right (`qty < reorder_at`): only for a `when`, which commandWhen.ts judges once the row is read. */
-  options: { columnValues?: boolean } = {},
+  /** `columnValues` admits a column on a condition's right (`qty < reorder_at`): only for a `when`, which commandWhen.ts
+      judges once the row is read. `anyRows` admits `any`/`no` over a declared child: only for a handle's `db`, whose reads
+      reach the child through the same transaction (compileAnyWhere); everywhere else one is refused as it always was. */
+  options: { columnValues?: boolean; anyRows?: boolean } = {},
 ): Compiled {
   if (where === undefined) return { filter: { groups: [] }, none: false, orderBy: [] };
   if (typeof where === 'string' || isTemplate(where)) {
@@ -370,6 +392,7 @@ export function compileWhere(
       typeof where === 'string'
         ? where
         : where.reduce((out, part, index) => out + part + (index < values.length ? quoted(values[index]) : ''), '');
+    if (options.anyRows && anyConditions(splitClauseTail(text).head).length) return compileAnyWhere(table, text, now);
     const schema: DatabaseSchema = { label: table.name, dialect: 'sqlite', tables: [table.meta], foreignKeys: [], readAt: '' };
     const { query, errors } = parseQuery(`${table.name} ${text}`, {
       schema,
@@ -395,6 +418,66 @@ export function compileWhere(
     } else if (value !== undefined) conditions.push({ column, op: '=', value: scalar(table, column, value) });
   }
   return { filter: { groups: conditions.length ? [conditions] : [] }, none, orderBy: [] };
+}
+
+/**
+ * A where that asks about the rows pointing at this one (`any line where qty > 5`, `no payment`), read against the
+ * tables the handle declares and no others: the child must be one of them, or the where is refused by name. The
+ * test is carried as a condition (`Condition.any`) and written as an EXISTS where the read is executed, over the
+ * child's own table, read as this table is — by the same transaction, under the same scope or none. A reference path
+ * (`customer_id.name`) stays refused here, in the child's conditions too.
+ */
+function compileAnyWhere(table: CommandTable, text: string, now: Date): Compiled {
+  const world = table.declared;
+  const reads = world?.tables.map((each) => each.name) ?? [table.name];
+  const { head } = splitClauseTail(text);
+  for (const found of anyConditions(head)) {
+    const [, word, child] = ANY_CONDITION.exec(found.text) ?? [];
+    if (child !== undefined && !reads.some((read) => read === child))
+      throw new Error(
+        `${table.name}: "${word} ${child}" asks about ${child}, which is not among the tables this handle reads (${reads.join(', ')}); declare it in read or write.`,
+      );
+  }
+  const schema: DatabaseSchema = {
+    label: table.name,
+    dialect: 'sqlite',
+    tables: world?.tables ?? [table.meta],
+    foreignKeys: world?.foreignKeys ?? [],
+    readAt: '',
+  };
+  const parsed = parseViewQuery(schema, table.name, text, zonedNow(table.zone, now), { columnValues: false });
+  if (parsed.errors.length) throw new Error(`${table.name}: ${parsed.errors.map((error) => error.message).join(' ')}`);
+  if (parsed.columns.length) throw new Error(`${table.name}: a where names rows, not columns; leave out "show".`);
+  /* A path is a column of another table, which the child's conditions and these do not read. */
+  const own = (path: string): string => {
+    if (path.includes('.'))
+      throw new Error(`${table.name}: "${path}" is a path, and a condition here reads only ${table.name}'s own columns.`);
+    return path;
+  };
+  const inner = (filter: Filter | undefined): void => {
+    for (const group of filter?.groups ?? []) for (const c of group) own(c.column);
+  };
+  const groups = parsed.filter.groups.map((group) =>
+    group.map((c): Condition => {
+      if (c.any) {
+        inner(c.any.filter);
+        return { column: c.path, op: c.op, any: c.any };
+      }
+      return {
+        column: own(c.path),
+        op: c.op,
+        ...(c.value === undefined ? {} : { value: c.value }),
+        ...(c.collation ? { collation: c.collation } : {}),
+        ...(c.other === undefined ? {} : { other: own(c.other) }),
+      };
+    }),
+  );
+  return {
+    filter: { groups },
+    none: false,
+    orderBy: parsed.orderBy.map((order) => ({ column: own(order.path), direction: order.direction })),
+    ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
+  };
 }
 
 function scalar(table: CommandTable, column: string, value: unknown): string | number | boolean {
@@ -701,10 +784,16 @@ async function withConstants(
 /** The `db` of one command run: a frozen object of table handles, exactly the footprint's. */
 export function createCommandDb(options: CommandDbOptions): Readonly<Record<string, ReadTable<UntypedRow> | WriteTable<UntypedRow>>> {
   const handles: Record<string, ReadTable<UntypedRow> | WriteTable<UntypedRow>> = {};
-  for (const name of new Set([...options.read, ...options.write])) {
+  const names = new Set([...options.read, ...options.write]);
+  for (const name of names) {
     const table = options.catalog[name];
     if (!table) throw new Error(`The command's catalog has no table "${name}".`);
-    handles[name] = tableHandle(table, options.write.includes(name), options);
+    /* What an `any`/`no` may ask about is what this handle declares, whatever else the catalog holds. */
+    const declared = table.declared && {
+      tables: table.declared.tables.filter((each) => names.has(each.id)),
+      foreignKeys: table.declared.foreignKeys.filter((fk) => names.has(fk.from.table) && names.has(fk.to.table)),
+    };
+    handles[name] = tableHandle(declared ? { ...table, declared } : table, options.write.includes(name), options);
   }
   return Object.freeze(handles);
 }
@@ -742,7 +831,7 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       return found[0] ?? refuse('not_found');
     },
     async find(where) {
-      const found = await rows(compileWhere(table, where, now()), 2);
+      const found = await rows(compileWhere(table, where, now(), [], undefined, HANDLE), 2);
       if (found.length > 1) throw new Error(`${name}: find matched several rows; narrow the where, or use where().`);
       return found[0];
     },
@@ -756,7 +845,7 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       const order: { column: string; direction: 'asc' | 'desc' }[] = [];
       let cap: number | undefined;
       const run = async (limit?: number): Promise<UntypedRow[]> => {
-        const compiled = compileWhere(table, where, now(), values);
+        const compiled = compileWhere(table, where, now(), values, undefined, HANDLE);
         const bound = limit ?? cap ?? compiled.limit;
         const found = await rows(compiled, bound ?? DEFAULT_CAP + 1, [...compiled.orderBy, ...order]);
         if (bound === undefined && found.length > DEFAULT_CAP) {
@@ -776,9 +865,13 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
         if (order.length || cap !== undefined)
           authorMistake(`${name}: .orderBy and .limit order and count rows, and an aggregate reads every row its where matches.`);
         const plan = planAggregate(table, keys, given);
-        const compiled = compileWhere(table, where, now(), values);
+        const compiled = compileWhere(table, where, now(), values, undefined, HANDLE);
         if (compiled.orderBy.length || compiled.limit !== undefined)
           authorMistake(`${name}: an aggregate's where says which rows; leave "sort" and "limit" out of it.`);
+        if (asksAboutRows(compiled.filter))
+          authorMistake(
+            `${name}: a sum or a group reads rows by their own columns; read the rows with an "any"/"no" where, or count them.`,
+          );
         const orderBy = groupOrder.map((o) => ({ name: plan.orderName(o.name), direction: o.direction }));
         if (compiled.none) return grouped ? [] : [plan.decode({})];
         /* Fail closed: a transaction that cannot say an aggregate under its scope (an HTTP source, a facade that
@@ -823,7 +916,7 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       const page = async (after: unknown, size: unknown): Promise<Page<UntypedRow>> => {
         if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 1 || size > MOST_PAGE)
           authorMistake(`${name}: a page's size is a whole number from 1 to ${MOST_PAGE}.`);
-        const compiled = compileWhere(table, where, now(), values);
+        const compiled = compileWhere(table, where, now(), values, undefined, HANDLE);
         const paged = pageOrder(compiled);
         let filter = compiled.filter;
         if (after !== undefined) {
@@ -916,7 +1009,7 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       return query;
     },
     async count(where) {
-      const compiled = compileWhere(table, where, now());
+      const compiled = compileWhere(table, where, now(), [], undefined, HANDLE);
       return compiled.none ? 0 : tx.count(name, compiled.filter);
     },
   };

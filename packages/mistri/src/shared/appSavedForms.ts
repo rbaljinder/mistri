@@ -39,6 +39,13 @@ export interface AppFormSave {
   draft: { column: string; value: string };
   /** An expired draft: removed with the rows that point at it, or kept for follow-up. */
   abandoned: 'purge' | 'keep';
+  /**
+   * A signed-in form's draft belongs to a person: the root's column the server
+   * fills with the session's `me` on the first step and finds the draft by on
+   * every other. Absent, the form is public and its draft is held by a cookie's
+   * token. Never an input, and never asked on a step (savedFormChecks.ts).
+   */
+  owner?: string;
 }
 
 /** One value a status check asks for, in the order asked, compared with a column of the root. */
@@ -135,7 +142,7 @@ export function formCommands(form: Pick<AppFormView, 'command' | 'steps'>): AppF
 }
 
 /** The steps of a saved form: `step('About you', 'startApplication')`, each naming its command. */
-export function parseSavedSteps(raw: unknown, at: string): AppFormStepCommand[] {
+export function parseSavedSteps(raw: unknown, at: string, publicForm = true): AppFormStepCommand[] {
   if (!Array.isArray(raw) || !raw.length || raw.length > MAX_STEPS)
     throw new Error(`${at} must be a list of 1 to ${MAX_STEPS} steps, each running its own command.`);
   const ids = new Set<string>(),
@@ -153,7 +160,7 @@ export function parseSavedSteps(raw: unknown, at: string): AppFormStepCommand[] 
     const id = stepIdOf(entry, label, here);
     if (ids.has(id)) throw new Error(`${here} repeats the step id "${id}".`);
     ids.add(id);
-    const command = parseFormCommandReference(entry.command, `${here}, "command"`, true);
+    const command = parseFormCommandReference(entry.command, `${here}, "command"`, publicForm);
     if (commands.has(command.id))
       throw new Error(`${here} runs "${command.id}", which another step runs too. Each step saves through its own command.`);
     commands.add(command.id);
@@ -179,7 +186,15 @@ function days(raw: unknown, at: string): number {
 
 /** A form saved on every step, and what it needs beside its steps: where the draft is kept, and what becomes of it. */
 export function parseFormSave(e: Record<string, unknown>, at: string): AppFormSave {
-  if (e.public !== true) throw new Error(`${at} saves each step, which a public form does: say public: true.`);
+  const signedIn = e.public !== true;
+  if (signedIn && e.owner === undefined)
+    throw new Error(
+      `${at} saves each step, which a public form does: say public: true. A signed-in form saves each step too, for a person's own draft: say owner: 'applicant_person_id', the root's column the server fills with the signed-in person.`,
+    );
+  if (!signedIn && e.owner !== undefined)
+    throw new Error(`${at} is public, and a public draft is held by a cookie: "owner" is for a signed-in form.`);
+  if (signedIn && (e.statusCheck !== undefined || e.link !== undefined))
+    throw new Error(`${at} is signed in, and a person's draft needs no status check or link: those are for a public form.`);
   if (!isRecord(e.resume))
     throw new Error(
       `${at} saves each step and needs "resume": { token, expires, progress, after }, the root row's columns the server keeps.`,
@@ -203,7 +218,15 @@ export function parseFormSave(e: Record<string, unknown>, at: string): AppFormSa
   const value = words(draftValue, `${at}, "draft.${draftColumn}"`, 60);
   if (e.abandoned !== undefined && e.abandoned !== 'purge' && e.abandoned !== 'keep')
     throw new Error(`${at} has an "abandoned" of ${JSON.stringify(e.abandoned)}. Use 'purge' or 'keep'.`);
-  return { resume, draft: { column: draftColumn, value }, abandoned: (e.abandoned as 'purge' | 'keep' | undefined) ?? 'purge' };
+  const owner = signedIn ? column(e.owner, at, 'an "owner"') : undefined;
+  if (owner !== undefined && [...Object.values(resume).filter((v) => typeof v === 'string'), draftColumn].includes(owner))
+    throw new Error(`${at}, "owner" names "${owner}", which the form keeps for something else.`);
+  return {
+    resume,
+    draft: { column: draftColumn, value },
+    abandoned: (e.abandoned as 'purge' | 'keep' | undefined) ?? 'purge',
+    ...(owner === undefined ? {} : { owner }),
+  };
 }
 
 /** A saved form's status check: the receipt, the values that confirm it, what it shows, and the step-up. */
@@ -359,7 +382,9 @@ export const tokenColumns = (form: Pick<AppFormView, 'save' | 'link'>): string[]
 
 /** Every root column the platform writes and no step may: the resume's, the link's, the status check's alert. */
 export function platformColumns(form: Pick<AppFormView, 'save' | 'statusCheck' | 'link'>): string[] {
-  const resume = form.save ? [form.save.resume.token, form.save.resume.expires, form.save.resume.progress] : [];
+  const resume = form.save
+    ? [form.save.resume.token, form.save.resume.expires, form.save.resume.progress, ...(form.save.owner ? [form.save.owner] : [])]
+    : [];
   return [...resume, ...(form.link ? linkColumns(form.link) : []), ...(form.statusCheck?.alert ? [form.statusCheck.alert] : [])];
 }
 

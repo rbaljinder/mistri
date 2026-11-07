@@ -33,7 +33,7 @@ import {
   type DatabaseSchema,
   type TableMeta,
 } from '@mistriwork/engine/shared/schema.js';
-import { grantsByRole, isTenantApp, type AppDef } from './appModel.js';
+import { grantsByRole, type AppDef } from './appModel.js';
 import { personTable } from './appMe.js';
 import { ComputedError, computedKind, computedReads, readsNow, type ComputedNode } from '@mistriwork/engine/shared/computed.js';
 import { parseComputed } from '@mistriwork/engine/shared/computedParse.js';
@@ -190,7 +190,7 @@ function expressionColumn(
 }
 
 /** The table `column` points at, by its declared reference or a foreign key; false for none. */
-function referencedTable(column: ColumnMeta, table: TableMeta, schema: DatabaseSchema): string | false {
+export function referencedTable(column: ColumnMeta, table: TableMeta, schema: DatabaseSchema): string | false {
   if (column.references) return tableNamed(schema, column.references.table)?.id ?? column.references.table;
   const fk = schema.foreignKeys.find(
     (key) => key.from.table === table.id && key.from.columns.length === 1 && key.from.columns[0] === column.name,
@@ -288,26 +288,44 @@ export function formDefaultStamps(app: AppDef, schema: DatabaseSchema): Map<stri
       found.set(table.id, columns);
     }
   }
+  /* A file rule's `stamps` are written the same way, and never shown: an upload's form is the file, so no column of
+     it is the person's to change (the upload route fills them, as it fills the link; appRecordWrites.ts). */
+  for (const [name, resource] of Object.entries(app.resources ?? {})) {
+    const table = tableNamed(schema, name);
+    if (!table || !resource.file?.stamps) continue;
+    for (const [field, word] of Object.entries(resource.file.stamps)) {
+      const column = table.columns.find((candidate) => candidate.name === field);
+      if (!column || (word === 'me' && !app.auth)) continue;
+      const said = stampColumn(word, column, referencedTable(column, table, schema), people);
+      if (!('column' in said)) continue;
+      const columns = found.get(table.id) ?? new Map<string, DefaultStamp>();
+      columns.set(field, Object.freeze({ stamp: said.column, shown: false }));
+      found.set(table.id, columns);
+    }
+  }
   return found;
 }
 
 /**
  * The stamps that need no catalog to judge, refused as the App is read: me
- * is somebody only where people sign in, and a tenant App's writes run on an
- * engine that does not resolve stamps yet, so either would store the word.
+ * is somebody only where people sign in, so without sign-in it would store the
+ * word. A tenant App resolves them on its own write path (tenantWriteRuntime.ts,
+ * and an upload in tenantHttp.ts), me as the session's person in the tenant.
  */
 export function checkStamps(app: AppDef, where: string): void {
   for (const [name, resource] of Object.entries(app.resources ?? {})) {
+    const fileStamps = Object.entries(resource.file?.stamps ?? {});
+    const fileMe = fileStamps.find(([, word]) => word === 'me');
+    if (fileMe && !app.auth) {
+      throw new Error(
+        `${where}: resources "${name}", file stamps "${fileMe[0]}" with me, the signed-in person, ` +
+          'and this App has no sign-in. Add "auth", or stamp now.',
+      );
+    }
     for (const action of resource.actions ?? []) {
       if (action.command) continue;
       const stamped = Object.entries(action.set ?? {}).filter(([, value]) => isStampWord(value));
       if (!stamped.length) continue;
-      if (isTenantApp(app)) {
-        throw new Error(
-          `${where}: resources "${name}", action "${action.id}" stamps "${stamped[0][0]}" with ${stamped[0][1]}, ` +
-            'which a tenant App (auth.rows: "tenant") does not write yet. Write it in a command, from its now() and actor.',
-        );
-      }
       const me = stamped.find(([, value]) => value === 'me');
       if (me && !app.auth) {
         throw new Error(

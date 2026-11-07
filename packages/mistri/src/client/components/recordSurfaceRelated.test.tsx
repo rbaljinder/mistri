@@ -263,7 +263,7 @@ test('a list of files offers its upload with no create of its own', async () => 
 const inserts = () => model.api.mock.calls.filter(([path]) => path === '/api/insert');
 async function openRelated() {
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: 'Edit Name' }));
+  await user.click(await screen.findByRole('button', { name: /^Edit Name\b/ }));
   const parentInput = screen.getByRole('textbox', { name: 'Name' });
   await user.type(parentInput, ' draft');
   const draft = activateDraft(issue, key);

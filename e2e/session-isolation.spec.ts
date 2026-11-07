@@ -34,7 +34,7 @@ async function expectLocked(page: Page) {
   await expect(page.locator('#session-lock').getByRole('button', { name: 'Reload', exact: true })).toBeVisible();
   await expect(page.locator('body')).toHaveClass(/session-locked/);
   await expect(page.getByRole('button', { name: 'Records', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Edit Name', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Edit Name(?: |$)/ })).toHaveCount(0);
   await expect(page.locator('.palette-host, .page-title')).toHaveCount(0);
 }
 
@@ -87,7 +87,7 @@ test.describe('verified sessions own browser state', () => {
     const star = page.getByRole('button', { name: /^Add ".+" to Favorites$/ });
     await expect(star).toBeVisible();
     await star.click();
-    await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Alice private retained draft');
     await follow(page, `/ticket`);
     await follow(page, recordPath);
@@ -132,7 +132,7 @@ test.describe('verified sessions own browser state', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, app);
     await openRecord(page, app);
-    await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Must not be saved');
     let writes = 0;
     page.on('request', (request) => {
@@ -153,7 +153,7 @@ test.describe('verified sessions own browser state', () => {
   test('a cookie account switch cannot execute an old tab edit under the new account', async ({ page }) => {
     await login(page, app);
     await openRecord(page, app);
-    await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Stale account edit');
     await login(page, app, app.accounts[1]);
     const response = page.waitForResponse((reply) => new URL(reply.url()).pathname === '/api/update');
@@ -190,7 +190,7 @@ test.describe('verified sessions own browser state', () => {
       }
     });
     try {
-      await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+      await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
       await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Committed before expiry');
       await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await expect.poll(() => captured).toBe(true);

@@ -23,7 +23,7 @@ test('an action is listed after the options, runs on click, and never becomes th
       actions={[{ label: '↻ Re-read the schema', onSelect: reread }]}
     />,
   );
-  const trigger = screen.getByRole('button', { name: 'Database connection' });
+  const trigger = screen.getByRole('button', { name: /^Database connection\b/ });
   expect(trigger).toHaveAttribute('aria-expanded', 'false');
   await user.click(trigger);
   const options = await screen.findAllByRole('option');
@@ -52,7 +52,7 @@ test('choosing an option reports it and closes; the arrows walk options and acti
       actions={[{ label: 'Re-read', onSelect: reread }]}
     />,
   );
-  await user.click(screen.getByRole('button', { name: 'Pick' }));
+  await user.click(screen.getByRole('button', { name: /^Pick\b/ }));
   await screen.findAllByRole('option');
   await user.keyboard('{End}');
   expect(screen.getAllByRole('option')[2]).toHaveClass('active');
@@ -60,7 +60,7 @@ test('choosing an option reports it and closes; the arrows walk options and acti
   expect(reread).toHaveBeenCalledTimes(1);
   expect(onChange).not.toHaveBeenCalled();
 
-  await user.click(screen.getByRole('button', { name: 'Pick' }));
+  await user.click(screen.getByRole('button', { name: /^Pick\b/ }));
   await user.click((await screen.findAllByRole('option'))[1]);
   expect(onChange).toHaveBeenCalledWith('b');
 });
@@ -81,12 +81,12 @@ test('optional ownership props expose the real portal and open state without cha
     />,
   );
   expect(popupRef.current).toBeNull();
-  await user.click(screen.getByRole('button', { name: 'Select' }));
+  await user.click(screen.getByRole('button', { name: /^Select\b/ }));
   expect(popupRef.current).toHaveClass('dd-popup');
   expect(view.container.contains(popupRef.current)).toBe(false);
   expect(open).toHaveBeenLastCalledWith(true, expect.anything());
   await user.keyboard('{Escape}');
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-expanded', 'false'));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Select\b/ })).toHaveAttribute('aria-expanded', 'false'));
   expect(open).toHaveBeenLastCalledWith(false, expect.anything());
   expect(change).not.toHaveBeenCalled();
   view.unmount();
@@ -103,7 +103,7 @@ test('each of the five tones styles its option through its own class', async () 
       onChange={() => {}}
     />,
   );
-  await user.click(screen.getByRole('button', { name: 'Tones' }));
+  await user.click(screen.getByRole('button', { name: /^Tones\b/ }));
   const options = await screen.findAllByRole('option');
   for (const tone of ['good', 'warn', 'bad', 'info', 'neutral']) {
     expect(options.find((o) => o.textContent?.includes(tone))).toHaveClass(`dd-tone-${tone}`);

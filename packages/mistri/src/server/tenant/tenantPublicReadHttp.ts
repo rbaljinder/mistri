@@ -281,7 +281,15 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
       const { checks: _checks, ...shown } = composed;
       return reply(shown);
     }
-    if (path === FILE_READ_PATH) return tenantFileRead(app, readAdapter(context), schema, input, { app: app.id, tenant: tenantId });
+    if (path === FILE_READ_PATH)
+      return tenantFileRead(
+        app,
+        readAdapter(context),
+        schema,
+        input,
+        { app: app.id, tenant: tenantId },
+        { context, person: async () => null },
+      );
     /* A list's text filter on a searched field is asked of the engine within the placed tenant, then read here as any row is. */
     const reader = options.search ? options.search.reader(readAdapter(context), schema, tenantId) : readAdapter(context);
     const result = await dispatchResourceReadHttp(path as ResourceHttpPath, input, reader as typeof reader & ScopedReads, schema, {

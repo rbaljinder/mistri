@@ -152,7 +152,7 @@ describe('the editor', () => {
     const view = render(
       <Editable app table={customer} row={row} column={{ ...customer.columns[1], writable: true }} recordKey={key} display={display} />,
     );
-    await user.click(screen.getByRole('button', { name: 'Edit Name' }));
+    await user.click(screen.getByRole('button', { name: /^Edit Name\b/ }));
     await user.type(screen.getByRole('textbox', { name: 'Name' }), ' changed');
     view.rerender(
       <Editable app table={customer} row={row} column={{ ...customer.columns[1], writable: false }} recordKey={key} display={display} />,
@@ -176,7 +176,7 @@ describe('the editor', () => {
       />,
     );
     expect(screen.queryByRole('textbox')).toBeNull();
-    const launch = screen.getByRole('button', { name: 'Edit Name' });
+    const launch = screen.getByRole('button', { name: /^Edit Name\b/ });
     expect(launch).toHaveTextContent('Acme');
     await user.click(launch);
     const input = screen.getByRole('textbox', { name: 'Name' });
@@ -184,8 +184,8 @@ describe('the editor', () => {
     await user.type(input, ' changed');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Edit Name' })).toHaveTextContent('Acme');
-    expect(screen.getByRole('button', { name: 'Edit Name' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /^Edit Name\b/ })).toHaveTextContent('Acme');
+    expect(screen.getByRole('button', { name: /^Edit Name\b/ })).toHaveFocus();
     expect(applied).toEqual([]);
   });
 
@@ -201,7 +201,7 @@ describe('the editor', () => {
         display={(value) => <button type="button">Copy {String(value)}</button>}
       />,
     );
-    const pencil = screen.getByRole('button', { name: 'Edit Name' });
+    const pencil = screen.getByRole('button', { name: /^Edit Name\b/ });
     expect(pencil).not.toHaveTextContent('Acme');
     expect(screen.getByRole('button', { name: 'Copy Acme' }).closest('button.inline-edit-value')).toBeNull();
   });
@@ -215,7 +215,7 @@ describe('the editor', () => {
         <PendingBar table={customer} recordKey={key} />
       </>,
     );
-    const control = screen.getByRole('button', { name: 'Status' });
+    const control = screen.getByRole('button', { name: /^Status\b/ });
     expect(control).toHaveTextContent('In progress');
     await user.click(control);
     await user.click(screen.getByRole('option', { name: 'Done' }));
@@ -229,7 +229,7 @@ describe('the editor', () => {
     model.rules = { active: { values: { true: 'On', false: 'Off' } } };
     const column = col('active', 'boolean', { nullable: false });
     render(<Editable app table={customer} row={{ id: 4, active: true }} column={column} recordKey={key} />);
-    const control = screen.getByRole('button', { name: 'Active' });
+    const control = screen.getByRole('button', { name: /^Active\b/ });
     expect(control).toHaveTextContent('On');
     await user.click(control);
     expect(screen.getByRole('option', { name: 'On' })).toBeVisible();
@@ -244,7 +244,7 @@ describe('the editor', () => {
     render(
       <Editable app table={customer} row={{ id: 4, active: 1 }} column={col('active', 'BOOLEAN', { nullable: false })} recordKey={key} />,
     );
-    await user.click(screen.getByRole('button', { name: 'Active' }));
+    await user.click(screen.getByRole('button', { name: /^Active\b/ }));
     expect(screen.getByRole('option', { name: 'Billable' })).toBeVisible();
     expect(screen.getByRole('option', { name: 'No' })).toBeVisible();
   });
@@ -361,7 +361,7 @@ describe('a refused record Save', () => {
     model.reply = refusal('notes');
     const user = userEvent.setup();
     drawApp(textTable, textRow, true);
-    await user.click(screen.getByRole('button', { name: 'Edit Name' }));
+    await user.click(screen.getByRole('button', { name: /^Edit Name\b/ }));
     await user.type(screen.getByLabelText('Name'), ' Ltd');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await flush();
@@ -489,10 +489,10 @@ describe('opt-in App blur save', () => {
     model.mode = 'blur';
     const user = userEvent.setup();
     drawApp(textTable, textRow, inline);
-    if (inline) await user.click(screen.getByRole('button', { name: 'Edit Name' }));
+    if (inline) await user.click(screen.getByRole('button', { name: /^Edit Name\b/ }));
     await user.type(screen.getByLabelText('Name'), ' Ltd');
     expect(applied).toEqual([]);
-    await user.click(inline ? screen.getByRole('button', { name: 'Edit Notes' }) : screen.getByLabelText('Notes'));
+    await user.click(inline ? screen.getByRole('button', { name: /^Edit Notes\b/ }) : screen.getByLabelText('Notes'));
     await waitFor(() => expect(applied).toHaveLength(1));
     expect(applied[0]).toEqual([
       '/api/update',
@@ -762,7 +762,7 @@ describe('opt-in App blur save', () => {
     const user = userEvent.setup();
     const table = { ...textTable, columns: [...textTable.columns, col('status', 'TEXT', { allowed: ['open', 'done'], nullable: false })] };
     drawApp(table, { ...textRow, status: 'open' });
-    const trigger = screen.getByRole('button', { name: 'Status' });
+    const trigger = screen.getByRole('button', { name: /^Status\b/ });
     await user.click(trigger);
     await user.click(screen.getByRole('option', { name: 'Done' }));
     await flush();
@@ -911,7 +911,7 @@ describe('opt-in App blur save', () => {
         : col('choice', 'TEXT', { allowed: ['open', 'done'], nullable: false });
     const table = { ...textTable, columns: [textTable.columns[0], column, textTable.columns[2]] };
     drawApp(table, { id: 4, choice: kind === 'picker' ? 1 : 'open', notes: 'Memo' });
-    const control = screen.getByRole(kind === 'picker' ? 'combobox' : 'button', { name: 'Choice' });
+    const control = screen.getByRole(kind === 'picker' ? 'combobox' : 'button', { name: /^Choice\b/ });
     if (kind === 'picker') await waitFor(() => expect(control).toHaveValue('Acme'));
     await user.click(control);
     await screen.findAllByRole('option');

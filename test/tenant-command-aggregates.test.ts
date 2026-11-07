@@ -191,3 +191,35 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       );
     });
   });
+
+/** A handler's `any`/`no` on the tenant writer stays refused: the tenant's command transactions admit a structured filter
+    of the table's own columns and values only (tenantManagedTransaction.ts, tenantCommandTransaction.ts), so a tenant
+    command asks about related rows by reading them, as it did before. Fail-closed, never dropped. */
+for (const { dialect, skip } of TENANT_DIALECTS)
+  describe(`a tenant command's any/no on ${dialect}`, { skip }, () => {
+    test('is refused, and the same read without it is answered', async (t) => {
+      const f = await fixture(t, dialect);
+      /* `id` is the dealer's own column, so a refusal here is the `any`/`no`, never an unknown column. */
+      for (const op of ['isNotNull', 'isNull'] as const) {
+        const filter = { groups: [[{ column: 'id', op, any: { via: 'deal.tenant_id' } }]] };
+        await assert.rejects(
+          f.command((tx) => tx.query({ table: 'dealer', filter, limit: 10, offset: 0 }), ALICE, ['dealer', 'deal']),
+          refused,
+        );
+        await assert.rejects(
+          f.command((tx) => tx.count('dealer', filter), ALICE, ['dealer', 'deal']),
+          refused,
+        );
+      }
+      assert.equal(
+        (
+          await f.command(
+            (tx) => tx.query({ table: 'dealer', filter: { groups: [[{ column: 'id', op: 'isNotNull' }]] }, limit: 10, offset: 0 }),
+            ALICE,
+            ['dealer', 'deal'],
+          )
+        ).rows.length,
+        1,
+      );
+    });
+  });

@@ -394,3 +394,40 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       await assert.rejects(forged.count('deal'));
     });
   });
+
+/** A loader's `any`/`no` over a tenant source's rows: the child resolves to its physical table and is read under the
+    reader's row policy, as the parent is (commandDb.ts, appResources.ts physicalAny). */
+for (const { dialect, skip } of TENANT_DIALECTS)
+  describe(`a tenant loader's any/no on ${dialect}`, { skip }, () => {
+    test('a dealer is found by the deals its reader can read, and by none they cannot', async (t) => {
+      const f = await fixture(t, dialect);
+      const dealers = async (rule: boolean | typeof mine, text: string) => {
+        const reads = await f.source.bindPlatformReads(f.lee, { dealer: true, deal: rule });
+        return runPageLoader({
+          name: 'dealers',
+          loader: defineLoader({
+            reads: ['dealer', 'deal'],
+            load: async ({ db }: { db: Record<string, { where(text: string): PromiseLike<Array<{ id: string }>> }> }) =>
+              (await db.dealer.where(text)).map((row) => row.id).sort(),
+          } as never) as never,
+          reader: { query: reads.query, count: reads.count, aggregate: reads.aggregate },
+          schema: f.schema,
+          params: {},
+          viewer: { roles: ['manager'] },
+          now: new Date(),
+        });
+      };
+      const notSecret = {
+        groups: [[{ column: 'stage', op: '=' as const, value: 'open' }], [{ column: 'stage', op: '=' as const, value: 'won' }]],
+      };
+      // Every deal: south's secret one makes south a dealer with one.
+      assert.deepEqual(await dealers(true, 'any deal where stage = secret'), ['south']);
+      assert.deepEqual(await dealers(true, 'no deal where stage = secret'), ['north']);
+      // The reader's policy hides it, and a row they cannot read does not satisfy the any.
+      assert.deepEqual(await dealers(notSecret, 'any deal where stage = secret'), []);
+      assert.deepEqual(await dealers(notSecret, 'no deal where stage = secret'), ['north', 'south']);
+      assert.deepEqual(await dealers(notSecret, 'any deal where stage = open'), ['north', 'south']);
+      assert.deepEqual(await dealers(notSecret, 'name = "North Motors" and any deal where (stage = won and amount > 1)'), ['north']);
+      assert.deepEqual(await dealers(false, 'any deal'), []);
+    });
+  });

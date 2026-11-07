@@ -218,6 +218,17 @@ export async function writePostgresBranding(client: PgQuery, write: BrandingWrit
       Buffer.from(write.darkLogo.bytes),
     ]);
   }
+  if (write.favicon) {
+    await client.query(`INSERT INTO ${q(logo)} (app, hash, type, bytes) VALUES ($1, $2, $3, $4) ON CONFLICT (app, hash) DO NOTHING`, [
+      write.app,
+      write.favicon.hash,
+      write.favicon.type,
+      Buffer.from(write.favicon.bytes),
+    ]);
+  }
+  const iconHash = (JSON.parse(write.value) as { favicon?: { hash?: string } }).favicon?.hash;
+  if (iconHash && !(await client.query(`SELECT 1 FROM ${q(logo)} WHERE app = $1 AND hash = $2`, [write.app, iconHash])).rows.length)
+    throw new Refusal('Branding: the favicon the value names is not stored.');
   const darkHash = (JSON.parse(write.value) as { logoDark?: { hash?: string } }).logoDark?.hash;
   if (darkHash && !(await client.query(`SELECT 1 FROM ${q(logo)} WHERE app = $1 AND hash = $2`, [write.app, darkHash])).rows.length)
     throw new Refusal('Branding: the dark logo the value names is not stored.');
@@ -236,7 +247,8 @@ export async function writePostgresBranding(client: PgQuery, write: BrandingWrit
   );
   await client.query(
     `DELETE FROM ${q(logo)} WHERE app = $1 AND hash NOT IN (SELECT logo_hash FROM ${q(value)} WHERE app = $1 AND logo_hash IS NOT NULL)
-    AND hash NOT IN (SELECT value_json::json #>> '{logoDark,hash}' FROM ${q(value)} WHERE app = $1 AND value_json::json #>> '{logoDark,hash}' IS NOT NULL)`,
+    AND hash NOT IN (SELECT value_json::json #>> '{logoDark,hash}' FROM ${q(value)} WHERE app = $1 AND value_json::json #>> '{logoDark,hash}' IS NOT NULL)
+    AND hash NOT IN (SELECT value_json::json #>> '{favicon,hash}' FROM ${q(value)} WHERE app = $1 AND value_json::json #>> '{favicon,hash}' IS NOT NULL)`,
     [write.app],
   );
   return Number(saved.rows[0].revision);

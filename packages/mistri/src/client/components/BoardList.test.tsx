@@ -182,7 +182,7 @@ test('lanes follow the authored order, said as words, and cards land in their la
   // The stored value stays the lane's title, as a tone chip keeps it.
   expect(screen.getByRole('heading', { level: 2, name: 'In progress' })).toHaveAttribute('title', 'in_progress');
   const lanes = screen.getAllByRole('heading', { level: 2 }).map((node) => node.closest('section')!);
-  expect(within(lanes[0]).getByRole('button', { name: 'Broken login, Aster' })).toBeInTheDocument();
+  expect(within(lanes[0]).getByRole('button', { name: /^Broken login Aster\b/ })).toBeInTheDocument();
   expect(within(lanes[1]).getByRole('button', { name: 'Slow export' })).toBeInTheDocument();
   expect(within(lanes[2]).getByText('Nothing here')).toBeInTheDocument();
   expect(screen.queryByText('Old thing')).toBeNull();
@@ -593,7 +593,7 @@ test.each(['grant', 'connection', 'field', 'embedded'])('%s denial draws no move
 test('a card opens its record with the exact key and the board as its set', async () => {
   mocks.allowed = false;
   draw([finish]);
-  await userEvent.click(screen.getByRole('button', { name: 'Broken login, Aster' }));
+  await userEvent.click(screen.getByRole('button', { name: /^Broken login Aster\b/ }));
   expect(mocks.open).toHaveBeenCalledExactlyOnceWith('ticket', { id: bigId }, 'Broken login', 'push', {
     records: [
       { key: { id: bigId }, label: 'Broken login' },
@@ -603,7 +603,7 @@ test('a card opens its record with the exact key and the board as its set', asyn
   cleanup();
   mocks.open.mockReset();
   draw([finish], { interactive: false });
-  await userEvent.click(screen.getByRole('button', { name: 'Broken login, Aster' }));
+  await userEvent.click(screen.getByRole('button', { name: /^Broken login Aster\b/ }));
   expect(mocks.open).not.toHaveBeenCalled();
 });
 
@@ -616,7 +616,7 @@ test('a rejected write is said, and the card stays where it was', async () => {
   await choose('Broken login', 'In progress');
   await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith('Nope', 'error'));
   const lane = screen.getByRole('heading', { level: 2, name: 'New' }).closest('section')!;
-  expect(within(lane).getByRole('button', { name: 'Broken login, Aster' })).toBeInTheDocument();
+  expect(within(lane).getByRole('button', { name: /^Broken login Aster\b/ })).toBeInTheDocument();
   expect(await trigger('Broken login')).toBeEnabled();
 });
 
@@ -627,7 +627,7 @@ test('an unconfirmed write stays on the card as its own words', async () => {
   });
   draw();
   await choose('Broken login', 'In progress');
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Broken login, Aster' })).toHaveTextContent('Update not confirmed'));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Broken login Aster\b/ })).toHaveTextContent('Update not confirmed'));
   expect(mocks.toast).not.toHaveBeenCalled();
 });
 
@@ -835,12 +835,12 @@ test('a moved card stands in its new lane before the write is answered, and a re
   });
   draw();
   await choose('Broken login', 'In progress');
-  const card = within(laneOf('In progress')).getByRole('button', { name: 'Broken login, Aster' });
+  const card = within(laneOf('In progress')).getByRole('button', { name: /^Broken login Aster\b/ });
   expect(card.closest('.triage-card')).toHaveAttribute('aria-busy', 'true');
-  expect(within(laneOf('New')).queryByRole('button', { name: 'Broken login, Aster' })).toBeNull();
+  expect(within(laneOf('New')).queryByRole('button', { name: /^Broken login Aster\b/ })).toBeNull();
   await waitFor(() => expect(answers).toHaveLength(1));
   answers[0](false);
-  await waitFor(() => expect(within(laneOf('New')).getByRole('button', { name: 'Broken login, Aster' })).toBeInTheDocument());
+  await waitFor(() => expect(within(laneOf('New')).getByRole('button', { name: /^Broken login Aster\b/ })).toBeInTheDocument());
   expect(mocks.toast).toHaveBeenCalledWith('Nope', 'error');
 });
 
@@ -872,10 +872,12 @@ test('a move that asks first holds the card faded in its new lane, and Cancel pu
   const user = userEvent.setup();
   draw([{ ...finish, confirm: true }]);
   await choose('Broken login', 'Done', user);
-  expect(within(laneOf('Done')).getByRole('button', { name: 'Broken login, Aster', hidden: true }).closest('.triage-card')).toHaveClass(
-    'is-asking',
-  );
+  expect(
+    within(laneOf('Done'))
+      .getByRole('button', { name: /^Broken login Aster\b/, hidden: true })
+      .closest('.triage-card'),
+  ).toHaveClass('is-asking');
   await user.click(screen.getByRole('button', { name: 'Cancel', hidden: true }));
-  expect(within(laneOf('New')).getByRole('button', { name: 'Broken login, Aster' })).toBeInTheDocument();
+  expect(within(laneOf('New')).getByRole('button', { name: /^Broken login Aster\b/ })).toBeInTheDocument();
   expect(updates()).toEqual([]);
 });

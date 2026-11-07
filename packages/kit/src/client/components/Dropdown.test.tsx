@@ -11,8 +11,8 @@ test("a list its caller names nothing is called by the catalog's word, and a nam
       <Dropdown value="b" items={[{ value: 'b', label: 'Beta' }]} ariaLabel="Region" onChange={() => {}} />
     </>,
   );
-  expect(screen.getByRole('button', { name: 'Select' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Region' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Select\b/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Region\b/ })).toBeInTheDocument();
 });
 
 test('only a short name can follow "Choose" in a placeholder', () => {

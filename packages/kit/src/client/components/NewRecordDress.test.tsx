@@ -140,7 +140,7 @@ describe('each field wears its dress', () => {
         .map((radio) => radio.parentElement!.textContent),
     ).toEqual(['Low', 'Normal', 'Urgent']);
     // Five are a listbox, opened on the schema's default, said as a word.
-    expect(screen.getByRole('button', { name: 'Stage' })).toHaveTextContent(/^Todo/);
+    expect(screen.getByRole('button', { name: /^Stage\b/ })).toHaveTextContent(/^Todo/);
     // A flag that must be answered is a switch, off.
     expect(screen.getByRole('switch', { name: 'Billable' })).not.toBeChecked();
     // Money carries its currency; a timestamp takes a date and a time.
@@ -257,9 +257,9 @@ describe("`as` draws a vocabulary or a flag the author's way", () => {
         }}
       />,
     );
-    expect(screen.getByRole('button', { name: 'Priority' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Priority\b/ })).toBeInTheDocument();
     expect(within(screen.getByRole('radiogroup', { name: 'Stage' })).getAllByRole('radio')).toHaveLength(5);
-    expect(screen.getByRole('button', { name: 'Billable' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Billable\b/ })).toBeInTheDocument();
   });
 });
 

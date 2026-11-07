@@ -131,7 +131,7 @@ for (const theme of THEME_PRESETS)
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await page.getByRole('menuitem', { name: /^Preferences/ }).click();
       const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
-      await prefs.getByRole('button', { name: 'Visual theme', exact: true }).click();
+      await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
       const other = THEME_PRESETS.find((preset) => preset.id !== theme.id)!;
       await page.getByRole('option', { name: other.label, exact: true }).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme-style', other.id);
@@ -158,7 +158,7 @@ test('a look chosen in Preferences survives a reload, and the walk under it read
   await expect(page.locator('.chart-donut')).toBeVisible();
   const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
   const choose = async (control: string, option: string, exact = true) => {
-    await prefs.getByRole('button', { name: control, exact: true }).click();
+    await prefs.getByRole('button', { name: new RegExp(`^${control}(?: |$)`) }).click();
     await page.getByRole('option', { name: option, exact }).click();
   };
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -185,7 +185,7 @@ test('a look chosen in Preferences survives a reload, and the walk under it read
   await expect(pager.locator('.pager-range')).toHaveText(/^51–/);
 
   await page.goto(`${CRM}/@opportunity~1`);
-  await page.getByRole('button', { name: 'Edit Opportunity', exact: true }).click();
+  await page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ }).click();
   const field = page.getByRole('textbox', { name: 'Opportunity', exact: true });
   await expect(field).toBeFocused();
   await expect(field).toHaveCSS('border-radius', theme.radius!.field!);
@@ -231,7 +231,7 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByRole('menuitem', { name: /^Preferences/ }).click();
         const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
-        await prefs.getByRole('button', { name: 'Visual theme', exact: true }).click();
+        await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
         await page.getByRole('option', { name: 'Meridian', exact: true }).click();
         await prefs.getByRole('button', { name: 'Close', exact: true }).click();
         await page.reload();

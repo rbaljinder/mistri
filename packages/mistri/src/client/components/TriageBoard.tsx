@@ -50,6 +50,8 @@ interface TriageFact {
   text: string;
   /** A person (an avatar or a stack of them): stands at the foot's right end. */
   person?: boolean;
+  /** What the drawn node says short: the whole, which the card's name takes after the drawn words (hidden). */
+  hear?: string;
 }
 
 /** A swimlane: one row across every lane. */
@@ -70,6 +72,8 @@ export interface TriageCard {
   subtitle?: string;
   /** The subtitle as its column dresses it; `subtitle` stays its accessible text. */
   line?: ReactNode;
+  /** What the drawn `line` says short: the whole, which the card's name takes after the drawn words (hidden). */
+  hear?: string;
   meta?: string;
   /**
    * The lanes this card may move to, decided by the host. Absent means any
@@ -536,11 +540,12 @@ export function TriageBoard({
       card.title,
       card.second,
       card.subtitle,
+      card.hear,
       card.meta,
       card.pending,
       card.changed,
       card.category ? `${card.category.label}:${card.category.color}` : '',
-      (card.footer ?? []).map((fact) => `${fact.key}:${fact.icon ?? ''}:${fact.text}:${fact.person ? 1 : 0}`).join(','),
+      (card.footer ?? []).map((fact) => `${fact.key}:${fact.icon ?? ''}:${fact.text}:${fact.person ? 1 : 0}:${fact.hear ?? ''}`).join(','),
       selectedId === card.id,
       moving,
       draggable,
@@ -763,9 +768,7 @@ const BoardCard = memo(
             ref={(element) => acts.current.remember(card.id, element)}
             className="triage-card-open"
             aria-pressed={selected}
-            aria-label={[card.category?.label, card.title, card.second, card.subtitle, ...(card.footer ?? []).map((fact) => fact.text)]
-              .filter(Boolean)
-              .join(', ')}
+            /* No aria-label: the card is named by the words drawn on it (WCAG 2.5.3, label in name). */
             aria-keyshortcuts={keys || undefined}
             onClick={() => acts.current.select(card)}
             onKeyDown={(event) => acts.current.keyDown(event, card)}
@@ -774,6 +777,7 @@ const BoardCard = memo(
             <span className="triage-card-title">{card.title}</span>
             {card.second && <span className="triage-card-second">{card.second}</span>}
             {card.subtitle && <span className="triage-card-subtitle">{card.line ?? card.subtitle}</span>}
+            {card.hear && <span className="visually-hidden">, {card.hear} </span>}
             {card.meta && <span className="triage-card-meta">{card.meta}</span>}
             {card.footer?.length ? (
               <span className="triage-card-foot">
@@ -781,6 +785,9 @@ const BoardCard = memo(
                   <span key={fact.key} className={`triage-card-fact${fact.person ? ' is-person' : ''}`} title={fact.text}>
                     {fact.icon && <Icon name={fact.icon as IconName} size={13} className="triage-card-fact-icon" />}
                     {fact.node}
+                    {/* An avatar draws initials; the person's name is what the card's name still owes assistive technology. */}
+                    {fact.person && <span className="visually-hidden"> {fact.text}</span>}
+                    {fact.hear && <span className="visually-hidden">, {fact.hear} </span>}
                   </span>
                 ))}
               </span>

@@ -21,6 +21,8 @@ import { ScopedRelations, snapshotRowScope, type RowScope } from '../../shared/r
 import { compileView, compileViewCount } from '../../shared/view.js';
 import { compileBreakdown, compileBreakdownCount } from '../../shared/breakdown.js';
 import { compileAggregate } from '../../shared/aggregate.js';
+import { childRows } from '../../shared/anyRows.js';
+import type { AnyRows } from '../../shared/filter.js';
 import { readExactly, summed } from '../../shared/decimals.js';
 import { RequestFault } from '../../shared/refusal.js';
 import { storedTextOf, storedTextSelect } from './storedText.js';
@@ -112,10 +114,30 @@ export function createScopedReads(
       if (!table.columns.some((column) => column.name === name)) throw new RequestFault('Unknown column in scoped read.');
       return style.quote(name);
     };
-    const relations = new ScopedRelations(schema, style, scope);
+    const relations = new ScopedRelations(schema, style, scope, schema);
     const relation = relations.table(id);
+    /* Rows that point at this one (`any`/`no`) are read through the reader's own scope, as this table's rows are: the
+       child is a relation of this statement, planned here with its values bound ahead of the outer filter's, so the
+       EXISTS carries none. A child the reader's catalog does not hold is refused (ScopedRelations.table). */
+    const planned = new Map<AnyRows, string>();
+    for (const group of filter?.groups ?? []) {
+      for (const c of group) {
+        if (c.any === undefined || planned.has(c.any)) continue;
+        const { child, join } = childRows(schema, id, c.any, style);
+        const source = c.any.filter?.groups.length ? relations.filtered(child.id, c.any.filter) : relations.table(child.id);
+        const alias = style.quote('_tw_any');
+        planned.set(c.any, `EXISTS (SELECT 1 FROM ${source} ${alias} WHERE ${join(alias, relation)})`);
+      }
+    }
     const prefix = relations.finish();
-    const where = buildWhere(filter, style, prefix.params.length + 1, column, undefined, undefined, undefined, references, typeIn(table));
+    const exists = planned.size
+      ? (rows: AnyRows) =>
+          planned.get(rows) ??
+          ((): never => {
+            throw new RequestFault('This read cannot ask about the rows that point at it.');
+          })()
+      : undefined;
+    const where = buildWhere(filter, style, prefix.params.length + 1, column, undefined, undefined, exists, references, typeIn(table));
     return { table, column, relation, prefix, where, params: [...prefix.params, ...where.params] };
   };
   /* A SQLite sum that cannot be exact says so in its cell (decimals.ts); PostgreSQL's numeric always is. */
@@ -180,7 +202,7 @@ export function createScopedReads(
     async countEach(items: readonly { table: string; filter?: Filter }[], limit?: number) {
       const given = snapshotScopedData(items);
       if (!given.length || given.length > COUNT_EACH_MAX) throw new Refusal(`One statement counts 1 to ${COUNT_EACH_MAX} things.`);
-      const relations = new ScopedRelations(schema, style, scope);
+      const relations = new ScopedRelations(schema, style, scope, schema);
       const planned = given.map((item) => {
         const table = tableFor(item.table);
         const column = (name: string): string => {
@@ -201,25 +223,25 @@ export function createScopedReads(
       return countEachRows(result.rows, given.length);
     },
     async runView(view, offset = 0) {
-      const compiled = compileView(schema, snapshotScopedData(view), style, offset, scope);
+      const compiled = compileView(schema, snapshotScopedData(view), style, offset, scope, schema);
       const result = await execute(compiled);
       return { ...result, columns: compiled.columns.map((column) => column.name), resolved: compiled.columns, joins: compiled.joins };
     },
     async countView(view, limit) {
-      return counted(compileViewCount(schema, snapshotScopedData(view), style, scope, limit));
+      return counted(compileViewCount(schema, snapshotScopedData(view), style, scope, limit, schema));
     },
     async runBreakdown(breakdown, offset = 0) {
-      const compiled = compileBreakdown(schema, snapshotScopedData(breakdown), style, offset, scope);
+      const compiled = compileBreakdown(schema, snapshotScopedData(breakdown), style, offset, scope, schema);
       const result = await exact(() => execute(compiled), breakdown.measures);
       return { ...result, columns: compiled.columns.map((column) => column.name), resolved: compiled.columns };
     },
     async countBreakdown(breakdown, limit) {
-      return counted(compileBreakdownCount(schema, snapshotScopedData(breakdown), style, scope, limit));
+      return counted(compileBreakdownCount(schema, snapshotScopedData(breakdown), style, scope, limit, schema));
     },
     /* The base table read through the scope's relation, as `count` reads it, and nothing else: an aggregate names
        only its table's own columns (aggregate.ts), so no other table's relation is planned at all. */
     async aggregate(request) {
-      const compiled = compileAggregate(schema, snapshotScopedData(request), style, 0, scope);
+      const compiled = compileAggregate(schema, snapshotScopedData(request), style, 0, scope, schema);
       return { rows: (await exact(() => execute(compiled), request.measures)).rows };
     },
   } satisfies ScopedReads);

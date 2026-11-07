@@ -121,6 +121,8 @@ let original: string | null | undefined;
 function setFavicon(host: HTMLElement, svg: SVGSVGElement | null, initial?: string, image?: string): void {
   const link = tabIcon();
   if (!link) return;
+  // A tenant's own tab icon, written into the page's head by the server (engine clientHttp.ts), is the one the tab keeps.
+  if (link.hasAttribute('data-brand-icon')) return;
   if (original === undefined) original = link.getAttribute('href');
   if (image) {
     link.setAttribute('href', image);

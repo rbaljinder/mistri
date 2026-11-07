@@ -3,6 +3,7 @@ import { isProxy } from 'node:util/types';
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import { AppAccessDenied } from '../app/appAccess.js';
+import { sessionActorWords } from '../app/appStamps.js';
 import {
   registerTenantCommandEventBinding,
   type AuthorizedBusinessCommand,
@@ -17,6 +18,8 @@ import {
   type BusinessCommandStatus,
 } from '../commands/businessCommandExecution.js';
 import { validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
+import { StagedFilesFull } from '../../adapters/commands/commandStaging.js';
+import { StageRefusal, stageCommandFile, stagedFullRefusal } from '../commands/stagedFiles.js';
 import {
   BusinessCommandDefinitionError,
   CommandLookupRefusal,
@@ -48,6 +51,7 @@ import type { CommandFlags } from '../commands/commandFlags.js';
 import { authorizedCommandFlags, commandFlagsOnce } from '../commands/commandFlagCapture.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
 import { actingPrincipal } from './tenantApiRequest.js';
+import { runDraftRoute } from '../forms/draftHttp.js';
 
 export interface TenantCommandOptions<Request> extends TenantWriteRuntimeOptions<Request> {
   readonly commands: {
@@ -65,7 +69,11 @@ export interface TenantCommandExecutionOptions {
   /** The door the handler is told: the tenant API's `api` or App MCP's `mcp`; absent, the screen. */
   readonly entry?: 'api' | 'mcp';
 }
-type Mode = 'availability' | 'prepare' | 'execute' | 'status';
+/** What holding a file answers: the file as held, or the refusal as the ordinary host says it. */
+type StagedFileAnswer =
+  | { id: string; name: string; type: string; size: number }
+  | { refused: { status: number; code: string; message: string } };
+type Mode = 'availability' | 'prepare' | 'execute' | 'status' | 'draft' | 'stage';
 const deny = (): never => {
   throw new AppAccessDenied();
 };
@@ -211,6 +219,9 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
     writableConnection: (connection) => connection === identity.source.connection,
     transactionalConnection: (connection) => connection === identity.source.connection,
     managedOwnership: ownerFields,
+    // A tenant's people are its own rows, keyed by account (appMe.ts lookupTenantPerson): `me` is found by the
+    // actor's account, never its email. A people table of another realm, or a shared one, holds nobody here.
+    peopleByAccount: !!app.auth?.me && ownership.ownership[app.auth.me.from]?.kind === 'tenant',
   });
   // The App's whole registry pins its references; only a tenant's commands run
   // here. A public command runs only through public intake (tenantIntake.ts),
@@ -240,7 +251,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
     body: unknown,
     input: TenantCommandExecutionOptions = {},
     guard?: TenantInvocationGuard,
-  ): Promise<BusinessCommandStatus | PreparedCommand | CommandAvailabilityResult> => {
+  ): Promise<BusinessCommandStatus | PreparedCommand | CommandAvailabilityResult | StagedFileAnswer> => {
     let commandError: BusinessCommandExecutionError | undefined, context: ReturnType<typeof captureTenantCommandExecution> | undefined;
     try {
       let captured: unknown;
@@ -257,10 +268,13 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
         selectors,
         async (scope) => {
           // A token's command acts under the token's own roles (tenantApiRequest.ts).
+          // Its email is the verified session's (scope.who), as a single App's actor carries: what `me` writes
+          // beside a text column, and what a stamp needs to know someone proven is signed in (appStamps.ts written).
           const actor = captureTenantData({
             id: scope.principal.accountId,
             appId: app.id,
             roles: actingPrincipal(request, scope.principal).roles,
+            ...sessionActorWords({ id: scope.principal.accountId, who: scope.who() }),
           });
           const flags = commandFlagsOnce(async () => {
             await scope.session();
@@ -340,6 +354,10 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                   return Object.freeze<AuthorizedBusinessCommand>({
                     ...authorization,
                     transaction: deny,
+                    /* No plain transaction here either: what a signed-in draft finds (the person's open draft, its
+                       version) and a decision's inputs are read in this command's own fenced transaction, scoped to
+                       the tenant's rows, and write nothing (draftHttp.ts, decideReads.ts). */
+                    readsInCommand: true,
                     ...(authorization.lookupTables ? { lookup: scopedLookupReader(authorization, () => scope.reads()) } : {}),
                     receiptOwner: captureTenantData({
                       storeId: identity.storeId,
@@ -367,6 +385,31 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                 },
               }),
             );
+            /* A signed-in form saved on every step (draftHttp.ts): the same route as a single App's, on this binding, so
+               every step, resume and start-over runs under this member's grant in the tenant's own rows, and the draft
+               is found by its owner, this member's row of the tenant's people. */
+            if (mode === 'draft')
+              return (await runDraftRoute({
+                app,
+                commands: registry,
+                binding,
+                actor,
+                body: captured,
+                execution: { signal: context!.options.signal, requestId: context!.options.requestId },
+                flagsFor: (envelope) => authorizedCommandFlags(binding, actor, envelope, flags),
+                // One transaction per tenant request: the host reads the step's draft back with a resume (tenantHttp.ts).
+                stepSummary: false,
+              })) as BusinessCommandStatus;
+            /* A file held for this member's own command (stagedFiles.ts): in the tenant's journal store, under the
+               member's grant, for `actor:<account>`. A refusal is the answer, never a thrown denial. */
+            if (mode === 'stage') {
+              try {
+                return await stageCommandFile(binding, actor, captured);
+              } catch (error) {
+                if (error instanceof StageRefusal) return { refused: { status: error.status, code: error.code, message: error.message } };
+                throw error;
+              }
+            }
             const execution = { ...context!.options, flags: await authorizedCommandFlags(binding, actor, captured, flags) };
             return mode === 'status'
               ? await lookupBusinessCommandStatus(binding, actor, captured, execution)
@@ -385,6 +428,16 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
         }),
       );
     } catch (error) {
+      /* A member at their count is answered, not failed. The store's refusal fails the transaction it was said in,
+         whatever the callback does with it, and arrives here as the cause of the write's own failure. */
+      if (mode === 'stage') {
+        for (let cause: unknown = error, depth = 0; cause && depth < 8; cause = refusalCause(cause) ?? (cause as Error).cause, depth++) {
+          if (cause instanceof StagedFilesFull) {
+            const { status, code, message } = stagedFullRefusal(cause);
+            return { refused: { status, code, message } };
+          }
+        }
+      }
       /* A membership that no longer holds is the answer, whatever else the
          request met: a refusal, never a database that could not answer
          (tenantRequestRuntime.ts). Its outcome stays unknown for execute and
@@ -397,7 +450,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
         mode === 'status' ||
         known?.outcome === 'unknown' ||
         (error instanceof TenantWriteFailure && error.outcome === 'unknown') ||
-        (mode === 'execute' && !known);
+        ((mode === 'execute' || mode === 'draft') && !known);
       /* The refusal a caller hears is unchanged, and so is what travels with
          it. What the realm boundary must stop discarding is the reason: a
          replacement error with the original dropped is why an unexplained
@@ -450,5 +503,21 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
       options?: TenantCommandExecutionOptions,
       guard?: TenantInvocationGuard,
     ) => operation('status', request, selectors, body, options, guard) as Promise<BusinessCommandStatus>,
+    /** A step, resume, review or start-over of a signed-in saved form (draftHttp.ts): its answer is the route's own. */
+    draft: (
+      request: Request,
+      selectors: readonly string[],
+      body: unknown,
+      options?: TenantCommandExecutionOptions,
+      guard?: TenantInvocationGuard,
+    ) => operation('draft', request, selectors, body, options, guard) as Promise<unknown>,
+    /** A file held for a signed-in form's command: its id and name, or the refusal's status, code and sentence. */
+    stage: (
+      request: Request,
+      selectors: readonly string[],
+      body: unknown,
+      options?: TenantCommandExecutionOptions,
+      guard?: TenantInvocationGuard,
+    ) => operation('stage', request, selectors, body, options, guard) as Promise<StagedFileAnswer>,
   });
 }

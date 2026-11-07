@@ -523,7 +523,7 @@ const SCENARIOS = [
     name: 'sort',
     path: '/vehicles',
     act: async (page) => {
-      await page.getByRole('button', { name: 'Sort', exact: true }).click();
+      await page.getByRole('button', { name: /^Sort(?: |$)/ }).click();
       await page.getByRole('option', { name: 'Lowest price', exact: true }).click();
       await page.waitForURL(/sort=price/);
     },

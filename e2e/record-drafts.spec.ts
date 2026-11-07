@@ -16,7 +16,7 @@ test('navigation retains a draft for explicit resume and stale originals cannot 
     if (request.url().endsWith('/api/update')) writes.push(request.postDataJSON());
   });
   await page.goto(record);
-  await page.getByRole('button', { name: 'Edit Opportunity', exact: true }).click();
+  await page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ }).click();
   const input = page.getByRole('textbox', { name: 'Opportunity', exact: true });
   await input.fill('Discarded first draft');
   await page.getByRole('button', { name: 'Discard', exact: true }).click();
@@ -26,7 +26,7 @@ test('navigation retains a draft for explicit resume and stale originals cannot 
   await follow(page, '/@opportunity~1');
   const recovery = page.getByRole('region', { name: 'Retained draft' });
   await expect(recovery).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Edit Opportunity', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ })).toBeDisabled();
   await recovery.getByText('Proposed changes', { exact: true }).click();
   await expect(recovery).toContainText('My retained draft');
   expect(writes).toHaveLength(0);
@@ -50,10 +50,10 @@ test('navigation retains a draft for explicit resume and stale originals cannot 
 
 test('drafts stay separate across records', async ({ page }) => {
   await page.goto(record);
-  await page.getByRole('button', { name: 'Edit Opportunity', exact: true }).click();
+  await page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ }).click();
   await page.getByRole('textbox', { name: 'Opportunity', exact: true }).fill('Record one draft');
   await follow(page, '/@opportunity~2');
-  await page.getByRole('button', { name: 'Edit Opportunity', exact: true }).click();
+  await page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ }).click();
   await page.getByRole('textbox', { name: 'Opportunity', exact: true }).fill('Record two draft');
   await follow(page, '/@opportunity~1');
   let recovery = page.getByRole('region', { name: 'Retained draft' });
@@ -81,7 +81,7 @@ test('a late save settles only its original draft after navigation', async ({ pa
   });
   try {
     await page.goto(record);
-    await page.getByRole('button', { name: 'Edit Opportunity', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ }).click();
     await page.getByRole('textbox', { name: 'Opportunity', exact: true }).fill('Saved after navigation');
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();
     await expect.poll(() => sent).toBe(true);
@@ -89,7 +89,7 @@ test('a late save settles only its original draft after navigation', async ({ pa
     release();
     await expect(page.locator('#toast')).toContainText('original record');
     await follow(page, '/@opportunity~1');
-    await expect(page.getByRole('button', { name: 'Edit Opportunity', exact: true })).toContainText('Saved after navigation');
+    await expect(page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ })).toContainText('Saved after navigation');
     await expect(page.getByRole('region', { name: 'Retained draft' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
   } finally {

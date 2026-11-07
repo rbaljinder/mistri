@@ -1,6 +1,6 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.19 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.20 scope, stable and preview features, current limitations and planned work.
 ---
 
 The scope of this release, stable and preview features, current limitations and planned work.
@@ -10,7 +10,7 @@ npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.19**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.20**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -139,7 +139,7 @@ and `package.json` are files, not entry points.
 | `@mistriwork/mistri/ui` | Custom components, `useCommand`, the kit (`Loaded` is Preview) | Stable |
 | `@mistriwork/mistri/ui/testing` | Rendering a component against a served App in a test | Stable |
 | `@mistriwork/mistri/commands` | `defineCommand`, `defineEvent`, `defineChallenges`, effects (the aggregates are Preview) | Stable |
-| `@mistriwork/mistri/policy` | `defineAppRowPolicy` and `defineAppTenantPolicy` | Stable |
+| `@mistriwork/mistri/policy` | `defineAppRowPolicy`, `defineAppTenantPolicy` and `via()` (a row scope through a relationship) | Stable |
 | `@mistriwork/mistri/jobs` | `defineJobs`, `defineJob`, `defineInbound` | Stable |
 | `@mistriwork/mistri/workflows` | `defineWorkflow`, `defineWorkflows`, `flowRunner` | Stable |
 | `@mistriwork/mistri/integration` | `defineIntegration`, for a vendor package | Stable |
@@ -170,9 +170,14 @@ entry points above:
   "version": "1.0.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "peerDependencies": { "@mistriwork/mistri": "^1.0.0" }
+  "peerDependencies": { "@mistriwork/mistri": "^1.0.0-rc.20" }
 }
 ```
+
+The range names the release candidate on purpose: npm matches a prerelease
+only against a range that names one, so `^1.0.0` would call every release
+candidate an unmet peer. `^1.0.0-rc.19` takes this candidate, the later ones
+and every 1.x release.
 
 ```ts title="src/index.ts"
 import { defineIntegration, int, shape, text } from '@mistriwork/mistri/integration';
