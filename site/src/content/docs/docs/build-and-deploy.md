@@ -44,6 +44,49 @@ npx @mistriwork/mistri --config ./mistri.json --app ./build/my-app  # served wit
 
 The bundler is [Rolldown](https://rolldown.rs), an optional dev dependency; without it each module is type-stripped on its own. Bundles keep source maps: run Node with `NODE_OPTIONS=--enable-source-maps` and a stack trace names the App's TypeScript line.
 
+## From a script or CI
+
+Run mistri from a script with the command the package installs,
+`node_modules/.bin/mistri` (`npx @mistriwork/mistri` resolves to the same file,
+and a package script or `npm exec` finds it on `PATH`). That command, its flags
+and its exit codes are the supported interface ([compatibility](/docs/compatibility/#stable)).
+The file it points at, `dist/server/index.js`, is internal and may move in any
+release: do not spawn it with `node`, and do not import from `dist/`.
+
+```sh
+./node_modules/.bin/mistri --version
+./node_modules/.bin/mistri check --app ./my-app --config ./mistri.json --json > check.json
+./node_modules/.bin/mistri build --app ./my-app --out build/my-app || exit $?
+```
+
+Read the result from the exit code first (the table above for `build`;
+`mistri check --help` for `check`), then from the files below. A script that
+needs a build's identity reads `mistri-build.json`, which `mistri build`
+writes at the top of the build directory. These fields are the ones a script
+may rely on:
+
+| Field | Holds |
+| --- | --- |
+| `format` | `1`. A different number is a manifest this mistri does not read |
+| `mistri` | The mistri version that made the build; only that version serves it |
+| `app.id`, `app.name` | The App's id and name |
+| `id` | The build's fingerprint (16 hex), the same on any machine that builds the same source, and the `build` that `/readyz` reports from a server running it |
+| `checks.typecheck.status` | `passed`, `skipped` or `none` |
+| `checks.database.status` | `passed` or `skipped` |
+| `checks.validation` | Always `passed`: a build that fails validation is never written |
+| `entries` | The bundled server entries by kind (`commands`, `jobs`, `policy`), each a path relative to the build; a kind that is absent was not bundled |
+| `outputs.types` | The schema types file, when the build was given `--config` |
+
+Every other field (`node`, `bundler`, `sha256`, the `detail` text of a check,
+the other keys of `outputs`) is internal: it is how mistri verifies and reads
+its own build, and may change in any release. Do not edit a build, and do not
+copy files out of one: a file whose hash differs from `sha256` makes the server
+refuse the whole build. A new key may appear in the manifest; a script ignores
+keys it does not know.
+
+*Proved by:* `test/app-build-cli.test.ts` (the manifest's `checks`, `outputs.types` and a refused build),
+`packages/mistri/src/server/app/appBuild.ts` (the format and version check a server makes).
+
 ## In a container
 
 Build in one stage; ship the build and the pruned `node_modules`:

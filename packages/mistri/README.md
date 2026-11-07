@@ -28,7 +28,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.18; the
+These App features ship in mistri 1.0.0-rc.19; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -667,7 +667,7 @@ mistri shot [--app <dir>] [<route>…] [<db> | --db <target> | --config <path>]
                 [--theme <id|all>] [--palette <id>]
                 [--compare <look>] [--recipes <part>] [--dark | --light] [--phone | --desk | --both]
                 [--click <name>] [--type <field> <text>] [--press <key>] [--wait-for <text>] [--matrix]
-                [--width <px>] [--full] [--scale <1-3>] [--as <role|email> [--tenant <id>]]
+                [--width <px>] [--full] [--scale <1-3>] [--as <role|email> [--tenant <id>] [--store <dir>]]
                 [--out <dir>] [--text]
                               serve the App on a free port with a temporary
                               config directory and write a PNG of each route
@@ -729,6 +729,11 @@ mistri shot [--app <dir>] [<route>…] [<db> | --db <target> | --config <path>]
                               role is held in, a temporary membership in the
                               App's tenant store (journaled), revoked when the
                               shot ends; a platform role needs none
+      --store <dir>           with --as: read the accounts from this folder instead
+                              of <app>/.mistri/ and a plain start's. It is shaped
+                              as an App's .mistri/ (its config/ holds the auth
+                              store): a copy of one, or another checkout's. The
+                              only store read; never written
       --out <dir>             with shot: where every file goes, from the current
                               directory (default mistri-shots/<app> in the
                               temporary directory, where --compare, --recipes
@@ -756,7 +761,7 @@ mistri seed [--app <dir>] [<db> | --db <target> | --config <path>]
       --append                with seed: add to tables that already hold rows
 
 mistri grade [--app <dir>] [<db> | --db <target> | --config <path>] [<route>…]
-                [--as <role|email|all> [--tenant <id>]] [--theme <id|all> [--palette <id|all>]]
+                [--as <role|email|all> [--tenant <id>] [--store <dir>]] [--theme <id|all> [--palette <id|all>]]
                 [--json] [--browser <path>]
                               serve the App as shot does and measure every
                               view, a record of each page and its documents

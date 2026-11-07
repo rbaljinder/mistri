@@ -185,6 +185,7 @@ tagged template whose values are always quoted:
 ``db.vehicle.where`make = ${input.make}` ``. More than 1,000 rows without
 `.limit` is refused. Ids past 2^53 arrive as strings; never pass one through
 `Number()`.
+A handler's `where` reads that table's own columns only: a reference path or `any … via` is refused. [Where the query language works](/docs/query/#where-the-query-language-works) lists what each place reads.
 
 Bytes go into a row only through `insertFile`, under the file resource's
 rules: its name, type and size columns are filled, and a file over its
@@ -296,7 +297,7 @@ answer is `temporarily_unavailable`.
 
 - `initial({ record, db })` returns the form's starting values, read at the revision the form submits. A command with `targets: 'none'` gets no `record`: its form opens at what `initial({ db })` reads.
 - A granted command with `targets: 'none'` that no form runs (Mark all read) is a button: `useCommand('markAllRead').run({}, {})` sends it with an empty key.
-- `run` resolves with `{ status: 'applied', output }`, `output` being what the handler returned, so a component acts on what it made (opens the ticket by `output.id`) instead of looking it up; otherwise `{ status: 'refused', message }`, or `{ status: 'closed' }` when its form closed with nothing sent.
+- `run` resolves with `{ status: 'applied', output }`, `output` being what the handler returned, so a component acts on what it made (opens the ticket by `output.id`) instead of looking it up; otherwise `{ status: 'refused', message }`, or `{ status: 'closed' }` when its form closed with nothing sent. `open` (the command's own form over the page) resolves when the form closes, with how its last submission ended: `applied` with the same `output`, `refused` with the server's words, `unknown` (an answer that never came; its `check()` asks again under the same key), or `closed` only when nothing was sent. A form left behind by a changed session lets go the same way.
 - A command on a record that only a component runs (a playbook's tick) is still the resource's action, in no menu: `checkStep: action('Mark a step done', { command: 'checkStep', header: false })`. `useCommand('checkStep')` runs it under the same grant, revision check and audit.
 - `lookup({ sources, record })` reads another source (a database or an HTTP connection) before the transaction opens; a failure is `temporarily_unavailable`.
 - `effects: { notify: post('dealer-hooks', output => ({ id: output.applicationId })) }` posts to a `"kind": "webhook"` connection after commit, with retries; nothing is sent on rollback. `{ envelope: false, headers }` sends your own body shape; a delivery whose headers name one the request owns, the connection's `auth.header` among them, is rejected for an operator, not sent. On a tenant App each delivery carries its tenant.
@@ -386,6 +387,28 @@ Save followed by a command is two operations.
 output). Once the App API or MCP publishes the command, a job runs it, or its
 receipts are kept, `mistri check` names a contract change as breaking, and
 `mistri check --bump <command>` moves it to the next version.
+
+## When the outcome is uncertain
+
+A command ends one of three ways, and a caller that lost the answer needs to
+tell them apart:
+
+| Ends | What it means | Says |
+| --- | --- | --- |
+| Applied | The transaction committed | `status: 'applied'`, the handler's `output`, a receipt id and `replayed` |
+| Refused | Nothing changed | A `code` and `outcome: 'not_applied'` |
+| Unknown | The server cannot say whether it committed (a COMMIT sent and never acknowledged, a status lookup that finds no receipt) | A `code` and `outcome: 'unknown'` |
+
+A refusal is always safe to answer and retry as a new request. An unknown one
+is not: never send the command again under a new key.
+
+- **The key.** Every request carries `idempotencyKey` (the body of `/api/commands/execute`; the `Idempotency-Key` header on the [App API](/docs/app-api/)). Where a receipt is kept, the same key and the same input answer the first run's receipt with `replayed: true` and run nothing. The same key with other input, or another command version, is `idempotency_conflict`. A receipt belongs to the actor who ran it: another account's request under the same key is a new request.
+- **Where a receipt is kept.** The App API, MCP, jobs and workflows always keep one. A signed-in form's submission keeps one, because a reload sends it again. A browser action keeps one only with `track` declared or an `Idempotency-Key` header ([what a command keeps](#what-a-command-keeps)). A public form, an import and a tenant's command keep one and a full audit.
+- **Asking what happened.** `POST /api/commands/status` takes the same envelope and reads the receipt without running the handler. A receipt found is the answer, `replayed: true`. None found is `not_found` with `outcome: 'unknown'`, never "not applied": a receipt that was never written and one that belongs to another actor look the same. After the caller's grant to the command was revoked, the lookup answers `forbidden` (also `outcome: 'unknown'`), never the old receipt.
+- **How long.** A receipt lives as long as `retention.commands`, by default 730 days, then a daily job forgets it; a receipt whose command recorded events is kept while its events are. `retention: { commands: 'forever' }` keeps them all. Once a receipt is gone nothing remembers its key, so a script that retries must retry within the window.
+- **In a component.** `useCommand(id).run(key, input, options)` sends once under one key per run and resolves `applied` (with `output`), `refused` (the server's words), `closed` (its form was closed with nothing sent) or `unknown` (the answer never came). `unknown` carries `check()`, which sends the same run again under the same key, so the run applies at most once. `open(key, input, options)` shows the command's own form and resolves with how its last submission ended, the same four ways. A run that has to survive a reload takes `{ attempt }`, a UUID the component made once and kept; the same attempt sent again is the same run. Show **Result not confirmed** for `unknown`, never "failed".
+
+*Proved by:* `test/business-command-execution.test.ts` (replay without a second run, `idempotency_conflict`, status never says "not applied", receipts owned by the actor, replay surviving a restart), `test/retention.test.ts` (an old receipt goes; one with events, and a recent one, stay), `packages/mistri/src/client/components/sdk/commands.test.tsx` (`unknown` and `check` under the same key; an `attempt` is the key).
 
 ## Common mistakes
 

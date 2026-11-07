@@ -113,7 +113,7 @@ test('a row too narrow for every filter keeps one line: the filters give way to 
   /* Narrower than the row needs in any look: Workshop's condensed face kept all three filters in a 1280 window, which
      Lumen's did not. */
   await page.setViewportSize({ width: 1100, height: 900 });
-  const more = page.getByRole('button', { name: /^More filters: / });
+  const more = page.getByRole('button', { name: /^Filter: / });
   await expect(more).toBeVisible();
   // The row does not run past the window; what gave way is named, from the end.
   const row = page.locator('.applist-controls');

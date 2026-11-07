@@ -74,7 +74,7 @@ import { authoredRoles } from '../../shared/themeCheck.js';
 
 const GRADE_USAGE =
   'mistri grade [--app <dir>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>]\n' +
-  '                [<route>…] [--as <role|email|all> [--tenant <id>]] [--theme <id|all> [--palette <id|all>]] [--json] [--browser <path>]';
+  '                [<route>…] [--as <role|email|all> [--tenant <id>] [--store <dir>]] [--theme <id|all> [--palette <id|all>]] [--json] [--browser <path>]';
 const GRADE_EXIT = { clean: 0, couldNotGrade: 1, errors: 2 } as const;
 
 /** The flags grade reads; the rest are a start's and go to the server, as shot's do. */
@@ -83,6 +83,7 @@ function readFlags(argv: string[]): {
   routes: string[];
   as?: string;
   tenant?: string;
+  store?: string;
   browser?: string;
   theme?: string;
   palette?: string;
@@ -110,8 +111,16 @@ function readFlags(argv: string[]): {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--json') options.json = true;
-    else if (arg === '--app' || arg === '--as' || arg === '--tenant' || arg === '--browser' || arg === '--theme' || arg === '--palette') {
-      const key = arg.slice(2) as 'app' | 'as' | 'tenant' | 'browser' | 'theme' | 'palette';
+    else if (
+      arg === '--app' ||
+      arg === '--as' ||
+      arg === '--tenant' ||
+      arg === '--store' ||
+      arg === '--browser' ||
+      arg === '--theme' ||
+      arg === '--palette'
+    ) {
+      const key = arg.slice(2) as 'app' | 'as' | 'tenant' | 'store' | 'browser' | 'theme' | 'palette';
       if (key === 'app' && options.app) throw new Refusal('the App may be named only once.');
       options[key] = value(i++, arg);
     } else if (takesValue.has(arg)) options.rest.push(arg, value(i++, arg));

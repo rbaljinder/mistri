@@ -319,6 +319,79 @@ describe('mistri check --json', () => {
     assert.ok(errors[0]!.message.includes(`+ ${fact}`), errors[0]!.message);
   });
 
+  /* A load that stops for a second, unrelated reason must not hide the lock's change nor the one command that accepts it. */
+  test('a changed authority lock is still said beside another refusal that stops the check from loading', async () => {
+    const dir = app('lock-and-jobs', {
+      'app.ts': readFileSync(join(ROOT, 'examples/apps/tick/app.ts'), 'utf8'),
+      'jobs.ts': 'export default {};\n',
+    });
+    const wrote = await run(['check', '--app', dir, '--config', config, '--write-authority']);
+    assert.equal(wrote.code, 0, wrote.out + wrote.err);
+    const lock = readFileSync(join(dir, 'authority.lock'), 'utf8');
+    const fact = lock.split('\n').find((line) => line.startsWith('resource '));
+    assert.ok(fact, lock);
+    writeFileSync(join(dir, 'authority.lock'), lock.replace(`${fact}\n`, ''));
+    // The jobs module needs a command registry the App does not keep: the check's own load refuses it.
+    const args = ['check', '--app', dir, '--config', config, '--jobs', join(dir, 'jobs.ts')];
+    const ran = await run([...args, '--json']);
+    assert.equal(ran.code, 4, ran.out + ran.err);
+    const errors = (JSON.parse(ran.out).problems as Problem[]).filter((problem) => problem.severity === 'error');
+    assert.deepEqual(errors.map((problem) => problem.code).sort(), ['authority-lock', 'invalid-app']);
+    const said = errors.find((problem) => problem.code === 'authority-lock')!;
+    assert.match(said.message, /--write-authority/);
+    assert.ok(said.message.includes(`+ ${fact}`), said.message);
+    const text = await run(args);
+    assert.match(text.out, /--write-authority/);
+    assert.match((await run([...args, '--brief'])).out, /^authority-lock /m);
+  });
+
+  /* F31: a value past its range is refused as the definition is read; it is the themes step's finding, not an invalid App. */
+  test('a theme value out of range is a theme-range finding under the themes step, in every output', async () => {
+    const tick = readFileSync(join(ROOT, 'examples/apps/tick/app.ts'), 'utf8');
+    const theme =
+      "import { defineTheme } from '@mistriwork/mistri/app';\n" +
+      "const wide = defineTheme({ id: 'wide', label: 'Wide', extends: 'sage', type: { roles: { display: { tracking: '0.5em' } } } });\n";
+    const dir = app('theme-range', { 'app.ts': theme + tick.replace('  ui: {\n', '  ui: {\n    customThemes: [wide],\n') });
+    const ran = await run(['check', '--app', dir, '--config', config, '--json']);
+    assert.equal(ran.code, 4, ran.out + ran.err);
+    const report = JSON.parse(ran.out);
+    conforms(report);
+    const errors = (report.problems as Problem[]).filter((problem) => problem.severity === 'error');
+    assert.deepEqual(
+      errors.map((problem) => [problem.code, problem.step]),
+      [['theme-range', 'themes']],
+      ran.out,
+    );
+    assert.equal(errors[0]!.path, 'ui.customThemes[0].type.roles.display.tracking');
+    assert.match(errors[0]!.message, /^ui\.customThemes\[0\]\.type\.roles\.display\.tracking must be a length from -0\.03em to 0\.15em\.$/);
+    const text = await run(['check', '--app', dir, '--config', config]);
+    assert.match(text.out, /themes\s+failed\s+1 theme value out of range/);
+    assert.match(text.out, /tracking must be a length from -0\.03em to 0\.15em/);
+    assert.doesNotMatch(text.out, /invalid-app|App error/);
+    assert.match(
+      (await run(['check', '--app', dir, '--config', config, '--brief'])).out,
+      /^theme-range \S*app\.ts ui\.customThemes\[0\]\.type\.roles\.display\.tracking must be/m,
+    );
+  });
+
+  test('a skill copy stamped by an older mistri is a warning that never fails check', async () => {
+    const tick = readFileSync(join(ROOT, 'examples/apps/tick/app.ts'), 'utf8');
+    const dir = app('skill-stale', { 'app.ts': tick });
+    mkdirSync(join(dir, '.claude', 'skills', 'mistri'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'skills', 'mistri', '.mistri-skill.json'), JSON.stringify({ mistri: '0.0.1', files: {} }));
+    const ran = await run(['check', '--app', dir, '--config', config, '--json']);
+    assert.equal(ran.code, 0, ran.out + ran.err);
+    const report = JSON.parse(ran.out);
+    conforms(report);
+    const found = (report.problems as Problem[]).filter((problem) => problem.code === 'skill-stale');
+    assert.deepEqual(
+      found.map((problem) => problem.severity),
+      ['warning'],
+      ran.out,
+    );
+    assert.match(found[0]!.message, /0\.0\.1.*agent init/);
+  });
+
   test('check and the served App agree: a validation reading a computed column is accepted by both (DM5)', async () => {
     const tick = readFileSync(join(ROOT, 'examples/apps/tick/app.ts'), 'utf8');
     const written = (must: string) =>

@@ -269,7 +269,7 @@ computed-style snapshot of every look holds this).
   `section.title`, `stat`, `stat.figure`, `fields`, `field.label`, `table`,
   `table.head`, `table.row`, `status`, `tag`, `button.primary`,
   `button.secondary`, `button.quiet`, `link`, `board.lane`, `board.card`,
-  `workflow.step`, `banner`, `steps.step`, `avatar`, `menu`, `dialog` and
+  `workflow.step`, `banner`, `steps.step`, `avatar`, `identityMark`, `menu`, `dialog` and
   `chart`. A part takes a `ground`, an `ink` and an `edge` as color roles by
   their path (`nav.ground`, `status.good`, `chart[2]`), never a hex, so
   `check` measures its ink on its ground in every mode and palette
@@ -287,7 +287,9 @@ computed-style snapshot of every look holds this).
   and its `face`, `weight` and `case` reach the App's name beside it too, so
   `logo: { case: 'upper' }` sets the name in capitals, as Workshop's slot
   menu draws it, and `case: 'none'` takes Workshop's capitals off; the rest
-  stay the mark's.
+  stay the mark's. `identityMark` is the sidebar's tile of the App's initials; with `avatar: 'round'` it is drawn in the
+  menu's accent on the accent tint, a pair `check` measures (`theme-contrast`, "the identity mark"), and a part style
+  restyles it.
 - **The icons' weight.** `type.icons` is `regular` (omitted), `light`,
   `bold` or `fill`, Phosphor's. Thin is refused (a 1px stroke fades at the
   16px an icon is drawn at), and so is duotone (a second tone no role says).

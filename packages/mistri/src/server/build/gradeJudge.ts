@@ -576,7 +576,7 @@ type TreePart = { count: number; role: string; name: string; disclosure: boolean
 
 /**
  * One line of an accessibility snapshot read as a part: its role, its name as said (hint and all), and the rest. The
- * snapshot is YAML, so a name with a colon in it ("More filters: Priority, Owner") comes single-quoted, and was read as
+ * snapshot is YAML, so a name with a colon in it ("Filter: Priority, Owner") comes single-quoted, and was read as
  * no part at all.
  */
 const treeLine = (line: string) => {
@@ -590,7 +590,7 @@ const treeLine = (line: string) => {
 
 /** A control that folds others away: "More filters", an overflow "…", or one that says it opens or expands. */
 const folds = (role: string, name: string, rest: string): boolean =>
-  CONTROL_ROLES.has(role) && (/^(?:more\b|…|\.{3}|⋯|overflow)/i.test(name) || /\[(?:expanded|haspopup)/.test(rest));
+  CONTROL_ROLES.has(role) && (/^(?:more\b|…|\.{3}|⋯|overflow|filter:)/i.test(name) || /\[(?:expanded|haspopup)/.test(rest));
 
 /** The named parts of an accessibility snapshot as a multiset of `role "name"`: text nodes (chart ticks, hints) are not parts. */
 function treeParts(tree: string): Map<string, TreePart> {

@@ -64,6 +64,34 @@ const ALLOWED: Array<{ rule: string; target: string; why: string }> = [
       'A menu row is named by its label and says its count as its description (Sidebar.tsx, TableRow): named with the ' +
       'number it was "Website 1". The label starts the name and the visible words; the count after it is not label.',
   },
+  /* Five kinds of control still name themselves apart from the words they show. Each is held here by its class, so the
+     rule gates every other control in every room and a new mismatch fails. The fix is a name that starts with the
+     visible words, which moves the names about a hundred component tests and the e2e specs query by. */
+  {
+    rule: 'label-content-name-mismatch',
+    target: 'class="dd-button',
+    why: 'A dropdown is named by its field ("Rows per page") over the value it shows.',
+  },
+  {
+    rule: 'label-content-name-mismatch',
+    target: 'class="home-card',
+    why: 'A metric card is named "Label: figure", over a figure drawn before its label.',
+  },
+  {
+    rule: 'label-content-name-mismatch',
+    target: 'class="cell-edit-launch',
+    why: 'A grid cell\'s edit button is named "Edit {column}" over the value it shows.',
+  },
+  {
+    rule: 'label-content-name-mismatch',
+    target: 'class="inline-edit-value',
+    why: 'A record field\'s edit button is named "Edit {field}" over the value it shows.',
+  },
+  {
+    rule: 'label-content-name-mismatch',
+    target: 'class="triage-card-open',
+    why: 'A triage card is named by its title and facts joined by commas, over the words drawn on it.',
+  },
 ];
 
 interface Finding {
@@ -78,21 +106,16 @@ async function audit(page: Page, where: string, findings: Finding[]) {
   // Motion is off, so a colour mid-transition is not what is measured.
   await page.waitForTimeout(150);
   const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-  /* WCAG 2.5.3 (label in name) is A, but axe-core ships its rule off as experimental. It is on over the shell, the
-     bar and the sidebar (a search named "(⌘K)", initials outside the account's name failed it). The rooms are not
-     gated by it yet: a grid cell's edit button ("Edit Asking rent" over "$1,920.00"), a dropdown named by its field
-     over the value it shows, a metric card and a triage card all name themselves apart from their visible words. */
-  if (await page.locator('header.topbar, .layout > .sidebar').count())
-    violations.push(
-      ...(
-        await new AxeBuilder({ page })
-          .include('header.topbar')
-          .include('.layout > .sidebar')
-          .options({ rules: { 'label-content-name-mismatch': { enabled: true } } })
-          .withRules(['label-content-name-mismatch'])
-          .analyze()
-      ).violations,
-    );
+  /* WCAG 2.5.3 (label in name) is A, but axe-core ships its rule off as experimental. It is on over every room
+     this spec visits: a control's accessible name starts with the words it shows (ALLOWED holds what is known to differ). */
+  violations.push(
+    ...(
+      await new AxeBuilder({ page })
+        .options({ rules: { 'label-content-name-mismatch': { enabled: true } } })
+        .withRules(['label-content-name-mismatch'])
+        .analyze()
+    ).violations,
+  );
   for (const violation of violations) {
     if (!GATED.has(violation.impact ?? '')) continue;
     const targets = violation.nodes

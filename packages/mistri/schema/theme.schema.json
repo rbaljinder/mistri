@@ -1018,7 +1018,7 @@
     },
     "parts": {
       "type": "object",
-      "description": "Each published part’s own style, by its name: ground, bar, bar.search, nav, nav.item, nav.current, nav.group, logo, page.title, tabs, tab.current, section, section.title, stat, stat.figure, fields, field.label, table, table.head, table.row, status, tag, button.primary, button.secondary, button.quiet, link, board.lane, board.card, workflow.step, banner, steps.step, avatar, menu, dialog, chart. Contract 1: a 1.x release may publish another part and withdraws none.",
+      "description": "Each published part’s own style, by its name: ground, bar, bar.search, nav, nav.item, nav.current, nav.group, logo, page.title, tabs, tab.current, section, section.title, stat, stat.figure, fields, field.label, table, table.head, table.row, status, tag, button.primary, button.secondary, button.quiet, link, board.lane, board.card, workflow.step, banner, steps.step, avatar, identityMark, menu, dialog, chart. Contract 1: a 1.x release may publish another part and withdraws none.",
       "propertyNames": {
         "enum": [
           "ground",
@@ -1053,6 +1053,7 @@
           "banner",
           "steps.step",
           "avatar",
+          "identityMark",
           "menu",
           "dialog",
           "chart"

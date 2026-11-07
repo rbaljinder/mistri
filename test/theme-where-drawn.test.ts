@@ -85,6 +85,23 @@ test("the pill menu's current entry is measured on the tint it is drawn on, over
   assert.ok(current.ratio < 4.5);
 });
 
+test("a round avatar's identity mark is measured whatever the menu is, and a part restyles it", () => {
+  const colors = { light: { nav: { ground: '#1d2226', ink: '#e6edf0', muted: '#a9b4ba', line: '#2b3236', accent: '#2f6f68' } } };
+  const theme = (extra: Record<string, unknown>) =>
+    compileAppTheme({ kind: 'theme', id: 'mark', label: 'Mark', extends: 'lumen', colors, ...extra }, 'mark');
+  const found = (extra: Record<string, unknown>) =>
+    checkThemeWithFixes(theme(extra)).filter(
+      (problem) => problem.check.includes('identity mark') || problem.check.startsWith('parts.identityMark'),
+    );
+  const round = found({ recipes: { nav: 'quiet', avatar: 'round' } });
+  assert.ok(round.length, 'a dim nav accent on its own tint is refused although the menu is not a pill');
+  assert.match(round[0]!.check, /navAccent\/its own tint over navGround \(the identity mark\)/);
+  assert.deepEqual(found({ recipes: { nav: 'quiet', avatar: 'plain' } }), [], 'a plain mark draws no such pair');
+  // A part names the mark: its own pair is the one measured.
+  const styled = found({ recipes: { nav: 'quiet', avatar: 'round' }, parts: { identityMark: { ink: 'nav.ink', ground: 'nav.ground' } } });
+  assert.ok(styled.every((problem) => problem.check.startsWith('navAccent/') || problem.check.startsWith('parts.identityMark')));
+});
+
 test('the built-in looks pass the measures where drawn, in every palette and both modes', () => {
   for (const look of THEME_PRESETS) {
     const contrast = checkTheme(look).filter((problem) => !problem.check.includes(' beside '));

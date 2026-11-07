@@ -1149,6 +1149,7 @@
       "tests": [{ "file": "test/virtualization-cli.test.ts" }, { "file": "test/tick-app.test.ts" }]
     },
     { "id": "cli-flag-shutdown-grace", "surface": ["cli: flag --shutdown-grace"], "tests": [{ "file": "test/shutdown-timings.test.ts" }] },
+    { "id": "cli-flag-store", "surface": ["cli: flag --store"], "tests": [{ "file": "test/shot-role-account.test.ts" }] },
     {
       "id": "cli-flag-suite",
       "surface": ["cli: flag --suite"],

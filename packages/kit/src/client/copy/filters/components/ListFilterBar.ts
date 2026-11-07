@@ -2,7 +2,8 @@
 import { defineMessages } from '../../../messages.js';
 
 export const say = defineMessages({
-  moreFilters: 'More filters: {map}',
+  // Starts with the button's visible word (WCAG 2.5.3, label in name): {filter} is the word it shows.
+  moreFilters: '{filter}: {map}',
   search: 'Search {listLabel}…',
   labelEquals: '{label} equals…',
   takesANumber: '{label} takes a number.',

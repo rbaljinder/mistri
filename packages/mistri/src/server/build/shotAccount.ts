@@ -12,7 +12,7 @@
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { LoadedApp } from '../app/apps.js';
 import { hashPassword } from 'better-auth/crypto';
@@ -45,6 +45,7 @@ export function shotAccount(
   xdg: string,
   env: NodeJS.ProcessEnv,
   refuse: (why: string) => never,
+  store?: string,
 ): { email: string; password: string } {
   const app = loaded.app;
   if (!app.auth) refuse(`--as: "${app.name}" has no sign-in, so every page is already what a reader sees.`);
@@ -55,7 +56,7 @@ export function shotAccount(
     );
   const password = env[AS_PASSWORD];
   if (!password) refuse(`--as ${email} signs in with the password in ${AS_PASSWORD}: set it in the environment, not on the command line.`);
-  const stores = localStores(loaded, env);
+  const stores = localStores(loaded, env, store);
   const found = stores.find((file) => existsSync(file) && holds(file, email));
   if (!found)
     refuse(
@@ -82,8 +83,9 @@ export async function shotRoleAccount(
   xdg: string,
   env: NodeJS.ProcessEnv,
   linked: ReadonlySet<string> = new Set(),
+  store?: string,
 ): Promise<{ email: string; password: string } | undefined> {
-  for (const file of localStores(loaded, env)) {
+  for (const file of localStores(loaded, env, store)) {
     if (!existsSync(file)) continue;
     const accounts = accountsOfRole(file, role);
     const found = accounts.find((account) => linked.has(account.email.toLowerCase())) ?? accounts[0];
@@ -142,8 +144,13 @@ export async function personEmails(app: LoadedApp['app'], adapter: Pick<Adapter,
   }
 }
 
-/** The stores a local run of the App keeps its accounts in: mistri dev's, then a plain start's. */
-function localStores(loaded: LoadedApp, env: NodeJS.ProcessEnv): string[] {
+/**
+ * The stores a local run of the App keeps its accounts in: mistri dev's, then a plain start's. `--store <dir>` names
+ * another: a folder shaped as `<app>/.mistri/` (an App's dev folder, or a copy of one kept elsewhere), whose `config/`
+ * holds the store; then it is the only one read, so a run never signs in to an account the reader did not point at.
+ */
+function localStores(loaded: LoadedApp, env: NodeJS.ProcessEnv, store?: string): string[] {
+  if (store !== undefined) return [appAuthStore(loaded, { ...env, XDG_CONFIG_HOME: join(resolve(store), 'config') })];
   const dir = loaded.dir ?? dirname(loaded.path);
   return [appAuthStore(loaded, { ...env, XDG_CONFIG_HOME: devConfigHome(dir) }), appAuthStore(loaded, env)];
 }

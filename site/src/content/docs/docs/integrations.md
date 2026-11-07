@@ -153,6 +153,7 @@ deployment's, not a tenant's.
 
 ## Related
 
+- [Operational guarantees](/docs/operational-guarantees/): retries, idempotency and restarts for calls, webhooks and channels.
 - [Commands](/docs/commands/): `lookup`, `effects` and the receipt a replay answers from.
 - [Events and jobs](/docs/events-and-jobs/): the jobs module that lists integrations, and inbound callbacks.
 - [Secrets](/docs/secrets/): `MISTRI_SECRETS_KEY` and what it seals.

@@ -802,6 +802,10 @@ function stateFindings(
       color('navAccent'),
       soft && nav ? over(soft, nav) : undefined,
     );
+  /* A round avatar look draws the sidebar's identity mark in the menu's accent on a 12% tint of that accent, laid on
+     the menu's ground (lumenLook.css). */
+  const navAccent = color('navAccent');
+  if (recipes.avatar === 'round') check('navAccent/its own tint over navGround (the identity mark)', navAccent, tintOver(navAccent, nav));
   /* The search is a field on the surface in the page's ink (themeFamilies.css), a pair the page's checks read; the
      dark bar alone draws it on an 8% ink tint of its own ground in its muted ink (brandLook.css). */
   if (recipes.bar === 'dark') check('navMuted/navigation search', color('navMuted'), navGround(0.08));
@@ -848,13 +852,17 @@ function stateFindings(
   /* A part's words on its ground (theme-part): its own ink on its own ground, or the one it is drawn on unsaid. */
   for (const [part, style] of Object.entries(theme.parts ?? {})) {
     if (!style || (style.ground === undefined && style.ink === undefined)) continue;
-    const ink = style.ink ? pathRole(style.ink) : partInk(part);
+    const round = recipes.avatar === 'round';
+    const ink = style.ink ? pathRole(style.ink) : partInk(part, round);
     const ground = style.ground ? pathRole(style.ground) : partGround(part, palette);
     if (!ink || !ground) continue;
     const said = (role: string) => rolePath(role);
     const label = `parts.${part}: ${ink} on ${ground}`;
+    /* A round mark left on its own ground is drawn on a 12% tint of the menu's accent over the menu (lumenLook.css),
+       not on the menu's ground itself. */
+    const tinted = part === 'identityMark' && round && !style.ground;
     const foreground = color(ink as keyof ThemePalette),
-      background = color(ground as keyof ThemePalette);
+      background = tinted ? tintOver(color('navAccent'), color('navGround')) : color(ground as keyof ThemePalette);
     if (!foreground || !background) continue;
     const ratio = measuredContrast(foreground, background);
     if (ratio === undefined || (!all && ratio >= 4.5)) continue;
@@ -870,15 +878,22 @@ function stateFindings(
   return result;
 }
 
+/** The round identity mark's ground: its accent at 12% over the menu (lumenLook.css). */
+function tintOver(accent: Color | undefined, ground: Color | undefined): Color | undefined {
+  return accent && ground ? over(mixColor(accent, [0, 0, 0, 0], 0.12), ground) : undefined;
+}
+
 /** The ink a part's words are drawn in when its style says none: the menu's for the menu's parts, the link's for a
     link; a primary button's is the ink drawn on the accent fill. */
-function partInk(part: string): string | undefined {
+function partInk(part: string, round: boolean): string | undefined {
+  if (part === 'identityMark') return round ? 'navAccent' : 'navInk';
   if (part === 'button.primary') return 'onAccent';
   if (/^(?:nav|bar|logo)\b/.test(part)) return 'navInk';
   return part === 'link' ? 'link' : 'ink';
 }
 /** The ground a part is drawn on when its style says none. */
 function partGround(part: string, palette: ThemePalette): string {
+  if (part === 'identityMark') return 'navGround';
   if (/^(?:nav|bar|logo)\b/.test(part)) return 'navGround';
   if (part === 'button.primary') return 'accent';
   return (part === 'ground' || part === 'page.title') && palette.ground ? 'ground' : 'surface';

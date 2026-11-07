@@ -25,11 +25,12 @@
  * needs one of these on purpose is not a component this platform draws yet.
  */
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { AppDef } from '../../shared/appModel.js';
 import type { CompiledComponents } from './appComponents.js';
 import { astParser, scanPageSource } from './appPages.js';
 import { nearestToken, UI_TOKENS } from '@mistriwork/kit/shared/uiTokens.js';
+import { APP_ICONS, parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 
 interface ComponentFinding {
   component: string;
@@ -80,6 +81,64 @@ const SCRIPT_WARNINGS: Array<[RegExp, string]> = [
   ],
 ];
 
+/**
+ * Where a source names an icon: `<Icon name=…>`, an `icon=…` prop on a kit component and an `icon: …` key. A name chosen at
+ * run time (`<Icon name={done ? 'check-circle' : 'circle-dashed'} />`) escapes the check of the icons an App declares, and the
+ * types only see it while the name stays a literal, so each string literal a name can be (a plain one, or either branch of a
+ * conditional) is held to the App's icons here. A name built from a variable is the author's to keep right: `mistri dev` says
+ * it in the browser's console.
+ */
+function iconFindings(text: string, warn: (line: number, message: string) => void): void {
+  const QUOTE = /['"`]/;
+  /* One expression from `start`: to the brace that closes a braced one, else to the comma or closer that ends it. */
+  const expressionFrom = (start: number, braced: boolean): string => {
+    let depth = 0;
+    let end = start;
+    // A bare string ends at its quote unless a conditional follows it: `icon="bell" size={…}` is one name.
+    if (!braced && QUOTE.test(text[start] ?? '')) {
+      const close = text.indexOf(text[start]!, start + 1);
+      if (close > 0 && !/^\s*\?/.test(text.slice(close + 1, close + 40))) return text.slice(start, close + 1);
+    }
+    for (; end < text.length; end++) {
+      const c = text[end]!;
+      if (QUOTE.test(c)) {
+        const close = text.indexOf(c, end + 1);
+        if (close < 0) break;
+        end = close;
+      } else if (c === '(' || c === '[' || c === '{') depth++;
+      else if (c === ')' || c === ']' || c === '}') {
+        if (depth === 0) break;
+        depth--;
+      } else if ((c === ',' || c === ';') && depth === 0 && !braced) break;
+    }
+    return text.slice(start, end).trim();
+  };
+  const literal = /^(['"`])([^'"`\\\n$]*)\1$/;
+  const branch = /(?:^|[?:])\s*(['"`])([^'"`\\\n$]*)\1(?=\s*(?:$|[:,)]))/g;
+  for (const match of text.matchAll(/(?:<Icon\b(?:[^>{}]|\{[^{}]*\})*?\bname|\bicon)\s*[=:]\s*/g)) {
+    let from = match.index + match[0].length;
+    const braced = text[from] === '{';
+    if (braced) from++;
+    const expression = expressionFrom(from, braced);
+    const names = literal.test(expression)
+      ? [literal.exec(expression)![2]!]
+      : expression.includes('?')
+        ? [...expression.matchAll(branch)].map((each) => each[2]!)
+        : [];
+    for (const name of names) {
+      try {
+        if (name) parseIcon(name, 'it');
+      } catch (error) {
+        const near = /Did you mean [^?]+\?/.exec((error as Error).message)?.[0];
+        warn(
+          text.slice(0, match.index).split('\n').length,
+          `"${name}" is not one of the App icons.${near ? ` ${near}` : ''} The icons: ${APP_ICONS.join(', ')}.`,
+        );
+      }
+    }
+  }
+}
+
 /** A duration in ms from a CSS time (`150ms`, `.3s`). */
 const millis = (value: string, unit: string) => Number(value) * (unit.toLowerCase() === 's' ? 1000 : 1);
 
@@ -96,10 +155,43 @@ function tokenFindings(text: string, own: ReadonlySet<string>, warn: (line: numb
   }
 }
 
+/**
+ * The class prefixes a shared package declares for its own stylesheet: `"mistri": { "cssPrefix": "acme" }` (or a list)
+ * in the nearest package.json between the stylesheet and the App directory. A package that ships its classes under a
+ * name-space of its own is the owner of them; the App's `c-<id>-` rule is for the App's components. The App's own
+ * package.json is not read: a prefix there would excuse the App's own classes from the rule.
+ */
+async function packagePrefixes(dir: string, file: string): Promise<string[]> {
+  for (let at = dirname(join(dir, file)); at.startsWith(dir) && at !== dir; at = dirname(at)) {
+    // A malformed manifest owns nothing; saying it is broken is npm's job, not this lint's.
+    const manifest = await readFile(join(at, 'package.json'), 'utf8').then(
+      (text) => {
+        try {
+          return JSON.parse(text) as { mistri?: { cssPrefix?: unknown } };
+        } catch {
+          return undefined;
+        }
+      },
+      () => undefined,
+    );
+    if (!manifest) continue;
+    const said = manifest.mistri?.cssPrefix;
+    return (Array.isArray(said) ? said : [said])
+      .filter((prefix): prefix is string => typeof prefix === 'string' && /^[_a-zA-Z][\w-]*$/.test(prefix))
+      .map((prefix) => prefix.replace(/-+$/, ''));
+  }
+  return [];
+}
+
 /** `ids` is every component that sources this stylesheet: a shared one (a receipt.css two components draw) is linted once, and a class is its own if any of them owns it. */
-function cssFindings(ids: readonly string[], text: string, warn: (line: number, message: string) => void): void {
-  const prefixes = ids.map((id) => `c-${id}`);
-  const prefix = prefixes[0];
+function cssFindings(
+  ids: readonly string[],
+  text: string,
+  warn: (line: number, message: string) => void,
+  declared: readonly string[] = [],
+): void {
+  const prefixes = [...ids.map((id) => `c-${id}`), ...declared];
+  const prefix = `c-${ids[0]}`;
   /* Each rule's body with the reduced-motion query it sits in, if any: motion is fine only inside one. */
   const guarded: Array<[number, number]> = [];
   for (const match of text.matchAll(/@media[^{]*prefers-reduced-motion\s*:\s*no-preference[^{]*\{/g)) {
@@ -207,10 +299,11 @@ export async function lintComponents(dir: string, compiled: CompiledComponents, 
       if (css) {
         const ids = sharers.get(file)!;
         tokenFindings(text, new Set(ids.flatMap((sharer) => [...own.get(sharer)!])), warn);
-        cssFindings(ids, text, warn);
+        cssFindings(ids, text, warn, await packagePrefixes(dir, file));
         continue;
       }
       tokenFindings(text, own.get(id)!, warn);
+      iconFindings(text, (line, message) => problems.push({ component: id, file, line, text: message }));
       const manifest = pages.get(id);
       const lang = /\.(tsx?|jsx?)$/.exec(file)?.[1] as 'ts' | 'tsx' | 'js' | 'jsx' | undefined;
       if (manifest && parse && lang) {

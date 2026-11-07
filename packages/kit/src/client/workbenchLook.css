@@ -20,6 +20,11 @@
    a host's look (`registerHostLooks`, worn in `theme` under `data-host-look`), so a host look over it says only what
    it changes: a palette is colour alone, and the structure below is shared.
 
+   A host with looks of its own (the standalone database browser: blueprint, console, folio) relies on the keying:
+   every rule below also needs the root to wear no `data-host-look`, or Instrument's own (`instrument`,
+   `instrument-*`), so a foreign host look is drawn by that host alone and this sheet adds nothing under it. The
+   condition is one `:where()`, which weighs nothing, so the rules compete as they did before it.
+
    Bends, each on purpose:
    - The column heads stand on a tinted band: with hairlines between columns, a band is what tells the head from the
      first row at a glance without a heavier rule.
@@ -33,7 +38,7 @@
 @import './fonts/faces.css';
 
 @layer look {
-  :root:not([data-visual-theme]) {
+  :root:not([data-visual-theme]):where(:not([data-host-look]), [data-host-look='instrument'], [data-host-look^='instrument-']) {
     --face-ui: Inter, 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
     --sans: var(--face-ui);
     /* The kit's seam for a host look's data face (tokens.css): every chrome string the code face set reads it, so
@@ -71,7 +76,7 @@
     --scrim: rgb(16 20 28 / 0.32);
   }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-visual-theme]):not([data-theme='light']) {
+    :root:not([data-visual-theme]):where(:not([data-host-look]), [data-host-look='instrument'], [data-host-look^='instrument-']):not([data-theme='light']) {
       --ground: #101010;
       --surface: #151515;
       --raised: #1d1d1d;
@@ -101,7 +106,7 @@
       --scrim: rgb(0 0 0 / 0.55);
     }
   }
-  :root:not([data-visual-theme])[data-theme='dark'] {
+  :root:not([data-visual-theme]):where(:not([data-host-look]), [data-host-look='instrument'], [data-host-look^='instrument-'])[data-theme='dark'] {
     --ground: #101010;
     --surface: #151515;
     --raised: #1d1d1d;
@@ -131,7 +136,7 @@
     --scrim: rgb(0 0 0 / 0.55);
   }
 
-  :root:not([data-visual-theme]) {
+  :root:not([data-visual-theme]):where(:not([data-host-look]), [data-host-look='instrument'], [data-host-look^='instrument-']) {
     & body {
       font-feature-settings: 'cv11', 'ss03';
       -webkit-font-smoothing: antialiased;

@@ -9,7 +9,7 @@
  * room reads the nav store, which the public form's dialog must not
  * (FormDialog.tsx), and nothing on a first paint needs either.
  */
-import { FormBody } from './FormRoom.js';
+import { FormBody, type FormOutcome } from './FormRoom.js';
 import type { ServedForm as RoomForm } from '@mistriwork/kit/client/components/appRooms.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 
@@ -24,6 +24,7 @@ export function SignedInFormDialog({
   prefill,
   initial,
   onClose,
+  onOutcome,
 }: {
   form: ServedForm;
   appName: string;
@@ -32,6 +33,8 @@ export function SignedInFormDialog({
   /** Where it starts, as a component gave it (`useCommand(…).open(record, input)`): every input, as typed values. */
   initial?: Readonly<Record<string, unknown>>;
   onClose: () => void;
+  /** How each submission ended, for the component that opened the form (`useCommand(…).open`). */
+  onOutcome?: (outcome: FormOutcome) => void;
 }) {
   return (
     <Modal className="form-dialog" onClose={onClose} ariaLabel={form.label}>
@@ -40,6 +43,7 @@ export function SignedInFormDialog({
         appName={appName}
         {...(prefill === undefined ? {} : { prefill })}
         {...(initial ? { initial } : {})}
+        {...(onOutcome ? { onOutcome } : {})}
         onDismiss={onClose}
       />
     </Modal>

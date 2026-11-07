@@ -122,6 +122,7 @@ account menu, on its own page and under its own grants:
 
 ## Related
 
+- [Identity in production](/docs/identity-in-production/): step-up, linking and when a removal ends a session.
 - [Roles and field access](/docs/roles/): what each signed-in person reads, writes and runs.
 - [Sign in with your identity provider](/docs/identity-providers/): OpenID Connect or SAML, roles from claims.
 - [Email](/docs/email/): resets and verified addresses.

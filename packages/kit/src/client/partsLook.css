@@ -953,6 +953,32 @@
     font-variant-caps: var(--part-avatar-caps);
     letter-spacing: var(--part-avatar-tracking);
   }
+  :root[data-parts~="identityMark:ground"] .app-mode .sidebar-identity-mark {
+    background: var(--part-identityMark-ground);
+  }
+  :root[data-parts~="identityMark:ink"] .app-mode .sidebar-identity-mark {
+    color: var(--part-identityMark-ink);
+  }
+  :root[data-parts~="identityMark:edge"] .app-mode .sidebar-identity-mark {
+    border-color: var(--part-identityMark-edge);
+  }
+  :root[data-parts~="identityMark:radius"] .app-mode .sidebar-identity-mark {
+    border-radius: var(--part-identityMark-radius);
+  }
+  :root[data-parts~="identityMark:lift"] .app-mode .sidebar-identity-mark {
+    box-shadow: var(--part-identityMark-lift);
+  }
+  :root[data-parts~="identityMark:face"] .app-mode .sidebar-identity-mark {
+    font-family: var(--part-identityMark-face);
+  }
+  :root[data-parts~="identityMark:weight"] .app-mode .sidebar-identity-mark {
+    font-weight: var(--part-identityMark-weight);
+  }
+  :root[data-parts~="identityMark:case"] .app-mode .sidebar-identity-mark {
+    text-transform: var(--part-identityMark-transform);
+    font-variant-caps: var(--part-identityMark-caps);
+    letter-spacing: var(--part-identityMark-tracking);
+  }
   :root[data-parts~="menu:ground"] .app-mode .tn-pop,
     :root[data-parts~="menu:ground"] .app-mode .th-menu,
     :root[data-parts~="menu:ground"] .app-mode .page-actions-menu {

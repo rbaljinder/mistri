@@ -200,7 +200,9 @@
   }
   :root[data-look-avatar='round'] .sidebar-identity-mark {
     border-radius: 50%;
-    background: var(--accent-soft);
+    /* The menu's accent on a 12% tint of itself, so the mark keeps its contrast on any menu ground; the round
+       check in theme.ts models exactly this pair. */
+    background: color-mix(in srgb, var(--current-ink) 12%, transparent);
     color: var(--current-ink);
   }
   /* The topbar's own items when the menu is a bar. */

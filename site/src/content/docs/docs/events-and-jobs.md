@@ -53,7 +53,9 @@ See it in the sample (`examples/apps/lintel/commands/ledger.ts:25`).
 
 Jobs, inbound endpoints and workflows live in one server-only module, loaded
 with `--jobs` beside `--commands`, and never imported by the App. Delivery is
-in-process and at least once; each command a job runs keeps one receipt.
+at least once, from queues kept in your database and run by the server
+process (there is no broker); each command a job runs keeps one receipt.
+Retries, ordering and what survives a restart: [operational guarantees](/docs/operational-guarantees/).
 
 ### A job on an event
 
@@ -85,7 +87,8 @@ processes serve the App; after a stop, only the latest missed slot runs, and a
 first start never runs a missed one. A slot that falls due while the last run
 still holds its lease waits for it. In a tenant App a job says
 `realm: 'tenant'` (once per active tenant) or `realm: 'platform'` (once, no
-tenant's rows).
+tenant's rows). A tenant App's job may not run a command that declares
+`events` or looks anything up; the server refuses the pair at start.
 
 `mistri jobs run nightlyClose --app . --jobs jobs.ts` runs it now, once, as the
 job's principal, journaled as a slot's run is. It waits while the schedule's
@@ -310,6 +313,7 @@ A tenant App's jobs module also declares its email: `mail: { receive, send, link
 
 ## Related
 
+- [Operational guarantees](/docs/operational-guarantees/): retries, idempotency, ordering and restarts for each of these.
 - [Commands](/docs/commands/): what every job, callback and workflow step runs.
 - [Fake external services](/docs/service-virtualization/): a provider to call and a callback to receive, in tests.
 - [Observe and operate](/docs/observe/): readiness, jobs and deliveries in production.

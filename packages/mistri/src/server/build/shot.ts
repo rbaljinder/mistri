@@ -98,6 +98,8 @@ interface ShotOptions {
   scale: number;
   as?: string;
   tenant?: string;
+  /** `--store <dir>`: a folder shaped as an App's `.mistri/`, whose accounts `--as` signs in to instead of the App's own. */
+  store?: string;
   out?: string;
   text: boolean;
   /** A Chromium or Chrome executable to launch in place of Playwright's own (`--browser`, else `CHROME`). */
@@ -196,6 +198,9 @@ function readFlags(argv: string[]): ShotOptions {
       i++;
     } else if (arg === '--tenant') {
       options.tenant = value(i, arg);
+      i++;
+    } else if (arg === '--store') {
+      options.store = value(i, arg);
       i++;
     } else if (arg === '--out') {
       options.out = value(i, arg);
@@ -1281,6 +1286,7 @@ interface ShotRunOptions {
   routes: string[];
   as?: string;
   tenant?: string;
+  store?: string;
   browser?: string;
   rest: string[];
   /** Without --as, sign in as the role that reads the most where the App signs in by email (grade): a signed-out
@@ -1491,9 +1497,16 @@ class ShotRun {
         });
       } else if (options.as && namesAccount(options.as)) {
         // An account that is there already, signed in over a snapshot of its store: never a write to the original.
-        account = shotAccount(loaded, options.as, this.xdg, process.env, (why) => {
-          throw new Refusal(why);
-        });
+        account = shotAccount(
+          loaded,
+          options.as,
+          this.xdg,
+          process.env,
+          (why) => {
+            throw new Refusal(why);
+          },
+          options.store,
+        );
       } else if (options.as && !options.everyRole) {
         if (!auth) throw new Refusal(`--as: "${loaded.app.name}" has no sign-in, so every page is already what a reader sees.`);
         if (!(auth.providers ?? ['email']).includes('email'))
@@ -1506,7 +1519,7 @@ class ShotRun {
            its name. A fresh account owns nothing, so the pictures would show an empty person; that is the fallback. */
         account = asAddress
           ? undefined
-          : await shotRoleAccount(loaded, options.as, this.xdg, process.env, await personEmails(loaded.app, adapter));
+          : await shotRoleAccount(loaded, options.as, this.xdg, process.env, await personEmails(loaded.app, adapter), options.store);
         if (asAddress) {
           admin = { email: 'shot-admin@example.invalid', password: randomBytes(18).toString('base64url') };
           warn(`note: signed in as ${asAddress}, a new "${options.as}" account made with that address, verified.`);

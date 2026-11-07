@@ -79,6 +79,26 @@ When the other table points here through two references, `via` names the one
 meant. Two `any` conditions may each be held by a different row; for one row
 holding both, put both inside one: `any invoice where (status = paid and total > 500)`.
 
+## Where the query language works
+
+The same words are read in several places, and they do not all reach as far.
+A resource's query follows references and asks about the rows that point at a
+record; a handler's `db.<table>.where` and a policy's `db` read one table's own
+columns, and refuse a path or an `any`.
+
+| Where                                                                  | Own columns | Reference path (`customer_id.name`) | `any` / `no` (`via`) |
+| ---------------------------------------------------------------------- | ----------- | ----------------------------------- | -------------------- |
+| Resource queries: a list's `where`, segments, `q=`, the App API          | yes         | yes                                 | yes                  |
+| `useRows` (`query`)                                                    | yes         | yes                                 | yes                  |
+| A command's or a page loader's `db.<table>.where`                      | yes         | no                                  | no                   |
+| A policy's `db.<table>.where`                                          | yes         | no                                  | no                   |
+| A row scope (`RowScope`)                                               | local columns only, as a structured filter, not text | no | no |
+
+A resource query and `useRows` are the resource's read, so they are held to the
+reader's grants at every hop. A handler's `db` reads the tables its command or
+loader declares, as itself: to ask about related rows there, read the child
+table by its own column (`db.invoice.where({ customer_id })`).
+
 ## Group and measure
 
 Measures come before `by`, then up to three grouping keys:
