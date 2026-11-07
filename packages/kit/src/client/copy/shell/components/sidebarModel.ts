@@ -3,4 +3,5 @@ import { defineMessages } from '../../../messages.js';
 
 export const say = defineMessages({
   noMatches: 'No matches.',
+  allPages: 'All pages',
 });

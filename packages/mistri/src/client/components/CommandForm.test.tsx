@@ -192,14 +192,14 @@ test('unknown locks edits and dismissal, and status misses and retries reuse the
   });
   draw();
   const { user, dialog } = await submit();
-  await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('not yet confirmed'));
+  await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Result not confirmed'));
   const envelope = api.mock.calls[1][1];
   expect(within(dialog).getByLabelText('Reason (required)')).toBeDisabled();
   expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
   await user.keyboard('{Escape}');
   expect(dialog).toBeInTheDocument();
   await user.click(within(dialog).getByRole('button', { name: 'Check result' }));
-  await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('not yet confirmed'));
+  await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Result not confirmed'));
   expect(api.mock.calls[2][1]).toEqual(envelope);
   await user.click(within(dialog).getByRole('button', { name: 'Retry same submission' }));
   await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Assigned.'));
@@ -246,7 +246,7 @@ test('pending blocks duplicate submits and survives reopening even when no longe
   );
   draw();
   const { user, dialog } = await submit();
-  expect(within(dialog).getByRole('status')).toHaveTextContent('Submitting');
+  expect(within(dialog).getByRole('status')).toHaveTextContent('Sending');
   expect(within(dialog).getByRole('button', { name: 'Submitting…' })).toBeDisabled();
   fireEvent.submit(dialog.querySelector('form')!);
   await user.keyboard('{Escape}');
@@ -293,7 +293,7 @@ test('reopening after a command metadata upgrade resumes the original fields and
   });
   draw();
   await submit();
-  await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('not yet confirmed'));
+  await vi.waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Result not confirmed'));
   const first = api.mock.calls[1][1];
   cleanup();
   draw({
@@ -566,11 +566,11 @@ test('a reference list says nothing matches only once the typed search has answe
   expect(await screen.findByText('No matching choices.')).toBeInTheDocument();
 });
 
-test('an output without a message says Completed.', async () => {
+test('an output without a message says the change is saved', async () => {
   api.mockImplementation(async (path: string) => (path.endsWith('/prepare') ? { expectedVersion: 3 } : { ...success, result: { id: 7 } }));
   draw();
   const { dialog } = await submit();
-  await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Completed.'));
+  await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('The change is saved.'));
 });
 
 /* The command's starting values arrive with the revision: until they are in

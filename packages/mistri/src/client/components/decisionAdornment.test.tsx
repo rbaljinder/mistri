@@ -61,20 +61,27 @@ test('no App at all asks nothing', async () => {
 
 test('with suggestions, the adornment draws a chip at the suggested column and nothing at the others', async () => {
   const { result } = hook();
-  await waitFor(() => expect(result.current).toBeDefined());
-  expect(api).toHaveBeenCalledWith('/api/record-decisions', { table: 'ticket', key: { id: 3 } });
   const at = (column: string) => result.current!({ table: 'ticket', column, key: { id: 3 }, filled: false });
+  await waitFor(() => expect(at('assignee_id')).not.toBeNull());
+  expect(api).toHaveBeenCalledWith('/api/record-decisions', { table: 'ticket', key: { id: 3 } });
   expect(at('status')).toBeNull();
   render(<>{at('assignee_id')}</>);
   expect(await screen.findByTestId('chip')).toHaveTextContent('Ada Nguyen');
 });
 
-test('a record with no waiting suggestion has no adornment', async () => {
+test('a record with no waiting suggestion draws no chip, and marks only a filled field a decision answers', async () => {
   api.mockResolvedValue({ suggestions: [] });
   const { result } = hook();
   await waitFor(() => expect(api).toHaveBeenCalled());
   await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(result.current).toBeUndefined();
+  const at = (column: string, filled: boolean) => result.current!({ table: 'ticket', column, key: { id: 3 }, filled });
+  // An empty field keeps the page's own empty mark; a field no decision answers is the page's alone.
+  expect(at('assignee_id', false)).toBeNull();
+  expect(at('status', true)).toBeNull();
+  // A filled answered field is marked from the first paint, so a phone gives its value the line a suggestion needs.
+  const { container } = render(<>{at('assignee_id', true)}</>);
+  expect(container.querySelector('.decision-slot')).not.toBeNull();
+  expect(screen.queryByTestId('chip')).toBeNull();
 });
 
 test('no record key (a preview) asks nothing', async () => {

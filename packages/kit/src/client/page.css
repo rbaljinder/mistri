@@ -650,10 +650,36 @@
   .page-head.has-record .page-head-top {
     margin-bottom: var(--space-2);
   }
-  /* The eyebrow does not sit on the trail's rule above it: a step of the title's size (20px, four fifths), so the
+  /* The head does not sit on the trail's rule above it: a step of the title's size (20px, four fifths), so the
    two read as two things. A room that draws the head without a trail over it (a dialog) takes it back. */
   .page-head.has-record {
     margin-top: var(--space-5);
+  }
+  /* Under an App's trail the kind is heard and not seen (PageHead.tsx): the trail already says where the record is,
+   so its row keeps no height and the name leads the head. Static, so the head is one height from its first paint. */
+  .page-head.has-trail > .page-head-top {
+    margin-bottom: 0;
+  }
+  /* An inferred page's line under the name (PageHead.tsx): the name column's second line, as a list draws it under a
+   name, in the muted ink and the facts' size, in the name's column. It wraps rather than cutting an address short. */
+  .page-head.has-record > .page-head-subtitle {
+    grid-column: 1;
+    min-width: 0;
+    margin: var(--space-1) 0 0;
+    font: 400 var(--text-md) / 1.4 var(--sans);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+  }
+  .page-head-subtitle :is(a, .value-link, .ref-jump) {
+    color: inherit;
+    text-decoration: none;
+  }
+  @media (hover: hover) {
+    .page-head-subtitle :is(a, .value-link, .ref-jump):hover {
+      color: var(--link);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
   }
   .page-group-empty {
     margin: var(--space-2) 0 0;
@@ -831,11 +857,17 @@
   .page-head-more > .page-head-facts {
     margin-top: var(--space-3);
   }
+  /* The caption is a line of its own and the value the next, with what the host adorns it with (a decision's
+     suggestion, decisionAdornment.tsx) beside the value on that line: stacked under it as a third, a suggestion
+     that came after the head painted grew it a line and moved the whole page down. */
   .page-head-facts > .page-fact:has(> .page-fact-caption) {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-1);
+    flex-flow: row wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
     min-width: 0;
+  }
+  .page-head-facts > .page-fact > .page-fact-caption {
+    flex-basis: 100%;
   }
   .page-fact-caption {
     font: 500 var(--text-sm)/1.4 var(--sans);
@@ -859,7 +891,7 @@
       flex-basis: 100%;
       margin-inline-start: 0;
     }
-    .page-head.has-record > :is(.page-head-facts, .page-head-more) {
+    .page-head.has-record > :is(.page-head-subtitle, .page-head-facts, .page-head-more) {
       grid-column: 1 / -1;
       order: -1;
     }
@@ -891,7 +923,7 @@
       flex-basis: 100%;
       margin-inline-start: 0;
     }
-    .page-head.has-record > :is(.page-head-facts, .page-head-more) {
+    .page-head.has-record > :is(.page-head-subtitle, .page-head-facts, .page-head-more) {
       grid-column: 1 / -1;
       order: -1;
     }
@@ -1976,9 +2008,6 @@
     flex-direction: column;
     gap: var(--space-2h);
   }
-  .timeline-composer.is-note .timeline-input {
-    background: color-mix(in srgb, var(--status-warning) 8%, var(--surface));
-  }
   /* A small segmented control: the pressed segment is filled, and the note segment wears the warning tint the
      box takes in note mode, so which of the two a send goes out as is never a guess (a note sent as a reply
      reaches the resident). */
@@ -2014,11 +2043,7 @@
   .timeline-mode.is-note[aria-pressed='true'] {
     background: color-mix(in srgb, var(--status-warning) 16%, var(--surface));
   }
-  /* The house field (style.css .field-control): bare, it was the browser's own box — flush text, and a grey
-   ground in dark mode. */
-  .timeline-input {
-    min-height: 4.5rem;
-  }
+  /* The box the words, the toolbar and Send share is TimelineComposer.css (the mistri package draws the composer). */
   .timeline-composer-foot {
     display: flex;
     justify-content: flex-end;
@@ -3291,7 +3316,20 @@
     white-space: nowrap;
     vertical-align: middle;
   }
+  /* A chip keeps its own width: a flex item may shrink, and a `.tone` clips its label, so a chip in a narrow cell was
+     squeezed to "accessib" and the fit below, which measures the chips, read them narrower than they are and kept
+     too many. Only a lone chip wider than the cell (`data-lone`) is allowed to give way, with its ellipsis. */
+  .tags-cell-list > .record-tag {
+    flex: none;
+    max-width: none;
+  }
+  .tags-cell-list[data-lone] > .record-tag {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
   .tags-cell-more {
+    flex: none;
     color: var(--ink-muted);
     font-size: var(--text-sm);
   }
@@ -3753,8 +3791,10 @@
     text-decoration: underline;
     text-underline-offset: 3px;
   }
+  /* "View home →" is a way on, as a section's "View all" is (features.css): muted, its arrow always, the ink and the
+     underline under the pointer. */
   button.ref-jump.page-card-more {
-    color: var(--link);
+    color: var(--ink-muted);
     font: 500 var(--text-base) var(--sans);
   }
   button.ref-jump.page-card-more::after {
@@ -3762,6 +3802,7 @@
   }
   button.ref-jump.page-card-more:hover {
     background: none;
+    color: var(--ink);
     text-decoration: underline;
     text-underline-offset: 3px;
   }

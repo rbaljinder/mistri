@@ -359,7 +359,7 @@
         "roles": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Each kind of text by what it is for, saying only what differs from the look. Body, data, label and nav text has no size of its own: it follows type.base.",
+          "description": "Each kind of text by what it is for, saying only what differs from the look. Body, data and nav text has no size of its own: it follows type.base; a label’s may be set a step either side of it.",
           "properties": {
             "display": {
               "type": "object",
@@ -597,7 +597,7 @@
             "label": {
               "type": "object",
               "additionalProperties": false,
-              "description": "A column’s head, a stat’s label and a record’s tabs, at the base size: their face, tracking, weight (400 to 700), case and features; upper sets them a step smaller.",
+              "description": "A column’s head, a stat’s label and a record’s tabs, at the base size: their face, size (11px to 14px), tracking, weight (400 to 700), case and features; upper sets them a step smaller unless a size is said.",
               "properties": {
                 "face": {
                   "enum": [
@@ -606,6 +606,11 @@
                     "data",
                     "code"
                   ]
+                },
+                "size": {
+                  "type": "string",
+                  "pattern": "^\\d{1,2}(?:\\.\\d)?px$",
+                  "description": "11px to 14px, at the 13px base."
                 },
                 "tracking": {
                   "type": "string",
@@ -945,6 +950,14 @@
             "hero"
           ],
           "description": "`plain`: A record’s head and a list’s stand on the page’s ground, under the trail’s hairline. `band`: A record’s head and a list’s are one band of the raised ground from edge to edge: the trail, the title, its status, facts and verbs, a list’s tabs and filters; the contents keep their edge. `hero`: A band, with the record’s avatar large beside its title (above it on a phone); a record without one, and a list, draw the band."
+        },
+        "filters": {
+          "enum": [
+            "dashed",
+            "solid",
+            "quiet"
+          ],
+          "description": "`dashed`: A list’s filter not yet asked for is its name behind a +, on a dashed hairline: a place for a filter, not a field. `solid`: A list’s filter not yet asked for is its name behind a + on a solid edge: a key, as the search beside it is, not a place. `quiet`: A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground."
         },
         "required": {
           "enum": [

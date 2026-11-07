@@ -40,6 +40,7 @@ import { ASSISTANT_ROOM } from './appAddress.js';
 import { mentionsMe } from './appMe.js';
 export { embeddedOnlyViews } from '@mistriwork/engine/shared/appEmbeds.js';
 import type { AppPayloadDocument, AppPayloadNavNode, ServedApp } from '@mistriwork/engine/shared/servedApp.js';
+import { DIRECTORY_AT, navPlaces } from '@mistriwork/engine/shared/servedApp.js';
 export type { AppPayloadDocument, AppPayloadNavNode } from '@mistriwork/engine/shared/servedApp.js';
 
 /** A record page, as an address reads it. */
@@ -136,6 +137,8 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
   messages?: Readonly<Record<string, readonly unknown[]>>;
   /** The App keeps each signed-in person an inbox (`notify`, appNotify.ts): the bell, and `/{app}/notifications`. */
   inbox?: true;
+  /** The menu holds more than a dozen places: the Directory room, `/{app}/all-pages`, lists every one (Directory.tsx). */
+  directory?: { icon: 'list' };
   /**
    * The assistant is offered to this person (appAssistant.ts): the panel's
    * trigger, and `record` when it takes the open record as context. The icon
@@ -214,13 +217,15 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
   const views = Object.fromEntries(Object.entries(resolveViews(browserApp, schema)).filter(([, view]) => !isPublicForm(view)));
   const routed = appPayloadPages(pages, schema);
   const documents = appPayloadDocuments(pages, schema);
+  const nav = servedNav(app.nav, views);
   return {
     id: app.id,
     name: app.name,
     ...(app.shortName ? { shortName: app.shortName } : {}),
     ...(app.landing ? { landingView: app.landing.view } : {}),
     views,
-    nav: servedNav(app.nav, views),
+    nav,
+    ...(navPlaces(nav) > DIRECTORY_AT ? { directory: { icon: 'list' as const } } : {}),
     resources: resolveResources(app, schema).resources,
     ui: servedUi(app.ui, views),
     ...(routed.length ? { pages: routed } : {}),
@@ -381,7 +386,10 @@ export function withoutBrokenViews<A extends Pick<AppPayloadApp, 'views' | 'nav'
       const children = prune(node.children);
       return children.length ? [{ ...node, children }] : [];
     });
-  return { ...app, views, nav: prune(app.nav) };
+  const nav = prune(app.nav);
+  /* The Directory is offered on the menu this reader is served: a resident's five places are no long menu. */
+  const { directory, ...rest } = app as A & Pick<AppPayloadApp, 'directory'>;
+  return { ...rest, views, nav, ...(directory && navPlaces(nav) > DIRECTORY_AT ? { directory } : {}) } as A;
 }
 
 /**

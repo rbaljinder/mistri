@@ -142,6 +142,28 @@ export default definePage({ label: String(typeof process === 'object' && process
     assert.deepEqual(placePages(APP, [page(false)], 'desk').nav, APP.nav, 'nav: false keeps it out of the menu');
   });
 
+  test("head: a page file, a page and a dashboard say their head's form; the label still names the room", async (t) => {
+    const [read] = await readFiles(t, { 'walk.page.tsx': pageSource("label: 'Walk', reads: ['desk'], head: 'compact'") });
+    assert.equal(read.fields.head, 'compact', 'definePage takes head');
+    const placed = placePages(APP, [read], 'desk') as { views: Record<string, { head?: unknown }> };
+    assert.equal(placed.views.walk.head, 'compact', 'and the page view it is placed as carries it');
+    const app = parse({
+      ...views({
+        board: { ...APP.views.board, head: 'compact' },
+        notes: { ...APP.views.notes, head: false },
+        desk: { kind: 'dashboard', label: 'Desk', description: 'Today at the desk', sections: [{ kind: 'note', text: 'Hi' }], head: false },
+      }),
+      nav: [...APP.nav, 'desk'],
+    });
+    const view = (key: string) => app.views[key] as { label: string; head?: string; headingHidden?: true };
+    assert.deepEqual([view('board').head, view('board').headingHidden], ['compact', undefined], 'compact keeps its title drawn');
+    // A page that draws its own head keeps its title for a screen reader: the room's one h1, under the same label.
+    assert.deepEqual([view('notes').head, view('notes').headingHidden, view('notes').label], ['own', true, 'Notes']);
+    assert.deepEqual([view('desk').head, view('desk').headingHidden], ['own', true], 'a dashboard says it the same way');
+    assert.throws(() => parse(views({ board: { ...APP.views.board, head: 'big' } })), /"head" is 'compact' .* or false/);
+    assert.throws(() => parse(views({ board: { ...APP.views.board, head: true } })), /"head" is 'compact'/);
+  });
+
   test('page-reads, page-params, page-commands, page-public, page-coverage: what the page declares, held to the App', () => {
     assert.throws(() => parse(views({ board: { ...APP.views.board, reads: [] } })), /\[page-reads\]/);
     assert.throws(() => parse(views({ board: { ...APP.views.board, params: ['period'] } })), /\[page-params\]/);

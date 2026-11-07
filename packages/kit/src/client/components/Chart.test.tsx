@@ -672,22 +672,84 @@ describe('stacked bars', () => {
     expect(container.querySelector('.chart-stacked-row')).toHaveTextContent('won $6, lost $2');
   });
 
-  test('bars over days stand in time order, the latest ones kept, each said as a date', () => {
+  describe('over periods', () => {
     const days = ['2026-09-10', '2026-09-14', '2026-08-27', '2026-09-02'].flatMap((key, i) => [
       { key, series: 'pick', value: 40 - i * 5 },
       { key, series: 'receipt', value: 2 },
     ]);
-    installShell({ format: () => ({ locale: 'en-US' }) });
-    try {
-      const { container } = render(<StackedBars rows={days} limit={3} />);
-      expect([...container.querySelectorAll('.chart-stacked-label')].map((label) => label.textContent)).toEqual([
-        'Sep 2, 2026',
-        'Sep 10',
-        'Sep 14',
+
+    test('time runs across the page: a column a day in time order, the latest kept, the empty days at zero', () => {
+      installShell({ format: () => ({ locale: 'en-US' }) });
+      try {
+        const { container } = render(<StackedBars rows={days} limit={3} say={money} />);
+        // Not rows: the figure is the bars' own, and the legend stays over it.
+        expect(container.querySelector('.chart-stacked-rows')).toBeNull();
+        const figure = container.querySelector('svg.chart-bars')!;
+        expect(
+          container.querySelector('.chart-stacked-legend')!.compareDocumentPosition(figure) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        // The three latest days kept (Sep 2, 10 and 14), and the days between them filled in at zero.
+        const named = [...container.querySelectorAll('.chart-data th')].map((cell) => cell.textContent);
+        expect(named).toHaveLength(13);
+        expect(named[0]).toBe('Sep 2, 2026');
+        expect(named[12]).toBe('Sep 14, 2026');
+        const held = [...container.querySelectorAll('.chart-column')].map((column) => column.querySelectorAll('.chart-column-part').length);
+        expect(held.map(Boolean)).toEqual([true, false, false, false, false, false, false, false, true, false, false, false, true]);
+        // Each column is divided by the second key, and every one is a row for assistive technology.
+        expect(container.querySelector('.chart-data tr')).toHaveTextContent('Sep 2, 2026pick $25 · receipt $2');
+      } finally {
+        installShell({ format: () => null });
+      }
+    });
+
+    test('the figure is a fixed height, whatever the number of days', () => {
+      const heights = (rows: typeof days) => {
+        const { container, unmount } = render(<StackedBars rows={rows} limit={30} />);
+        const box = container.querySelector('svg.chart-bars')!.getAttribute('viewBox');
+        unmount();
+        return box?.split(' ').at(-1);
+      };
+      expect(heights(days)).toBe('180');
+      expect(heights(days.slice(0, 4))).toBe('180');
+    });
+
+    test('a column drills where it has a key, and a day nothing happened on is no door', async () => {
+      const picked: unknown[] = [];
+      const { container } = render(<StackedBars rows={days} limit={3} onPick={(value) => picked.push(value)} />);
+      // A picture holds no buttons: the figure is a group once it has doors.
+      expect(container.querySelector('svg.chart-bars')).toHaveAttribute('role', 'group');
+      const doors = screen.getAllByRole('button');
+      expect(doors).toHaveLength(3);
+      expect(doors.map((door) => door.tabIndex)).toEqual([0, -1, -1]);
+      await userEvent.setup().click(doors[1]);
+      expect(picked).toEqual(['2026-09-10']);
+      doors[0].focus();
+      fireEvent.keyDown(doors[0], { key: 'End' });
+      expect(doors[2]).toHaveFocus();
+      fireEvent.keyDown(doors[2], { key: 'Enter' });
+      expect(picked).toEqual(['2026-09-10', '2026-09-14']);
+    });
+
+    test('the series keep their tokens and their tones in the columns as in the legend', () => {
+      const states = ['2026-09-01', '2026-09-08'].flatMap((key) => [
+        { key, series: 'paid', value: 5 },
+        { key, series: 'open', value: 3 },
       ]);
-    } finally {
-      installShell({ format: () => null });
-    }
+      const { container } = render(<StackedBars rows={states} seriesTone={(key) => (key === 'paid' ? 'good' : 'warn')} />);
+      const swatches = [...container.querySelectorAll<HTMLElement>('.chart-stacked-legend .chart-swatch')].map(
+        (swatch) => swatch.style.background,
+      );
+      const filled = [...container.querySelectorAll<SVGElement>('.chart-column:first-of-type .chart-column-part')].map(
+        (part) => part.style.fill,
+      );
+      expect(new Set(filled)).toEqual(new Set(swatches));
+    });
+
+    test('a category stack keeps its rows', () => {
+      const { container } = render(<StackedBars rows={rows} say={money} />);
+      expect(container.querySelector('.chart-stacked-rows')).not.toBeNull();
+      expect(container.querySelector('svg.chart-bars')).toBeNull();
+    });
   });
 
   test('a target past every bar sets the scale and is ruled across each track', () => {
@@ -741,6 +803,33 @@ describe('the spark', () => {
     cleanup();
     const { container: short } = render(<Sparkline rows={rows.slice(0, 3)} />);
     expect(short.innerHTML).toBe('');
+  });
+
+  test('under four periods above zero it is thin bars over a baseline, kept short, and a run of nothing draws none', () => {
+    const sparse = [
+      { key: 'w1', value: 0 },
+      { key: 'w2', value: 4 },
+      { key: 'w3', value: 0 },
+      { key: 'w4', value: 0 },
+      { key: 'w5', value: 2 },
+      { key: 'w6', value: 0 },
+    ];
+    const { container } = render(<Sparkline rows={sparse} say={money} />);
+    // No line to read a fall and a climb into: a bar for each period that held something.
+    expect(container.querySelector('.spark-stroke')).toBeNull();
+    expect(container.querySelector('.spark-dot')).toBeNull();
+    expect(container.querySelector('.spark')).toHaveClass('spark-sparse');
+    expect(container.querySelectorAll('.spark-bar')).toHaveLength(2);
+    expect(container.querySelector('.spark-base')).not.toBeNull();
+    expect(screen.getByRole('img')).toHaveAttribute('aria-label', 'trend: $0, $4, $0, $0, $2, $0');
+    cleanup();
+    const { container: none } = render(<Sparkline rows={sparse.map((row) => ({ ...row, value: 0 }))} />);
+    expect(none.innerHTML).toBe('');
+    cleanup();
+    // Four periods above zero is a trend again.
+    const { container: busy } = render(<Sparkline rows={sparse.map((row, at) => ({ ...row, value: at < 4 ? 1 + at : 0 }))} />);
+    expect(busy.querySelector('.spark-stroke')).not.toBeNull();
+    expect(busy.querySelector('.spark')).not.toHaveClass('spark-sparse');
   });
 });
 

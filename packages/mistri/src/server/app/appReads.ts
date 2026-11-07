@@ -17,5 +17,5 @@ export const APP_READS: AppReads = Object.freeze<AppReads>({
   error: (err: unknown) => appError(err),
   /* The person is looked up once, and only for text that compares with them. */
   person: async (me, texts, schema, adapter) =>
-    textsMentionMe(texts, schema) ? { me: await readMeSets(await me(), texts, schema, adapter) } : {},
+    textsMentionMe(texts, schema) ? { me: await readMeSets(await me(texts), texts, schema, adapter) } : {},
 });

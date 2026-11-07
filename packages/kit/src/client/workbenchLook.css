@@ -1,0 +1,415 @@
+/* The Workbench's own look: Instrument, in the Fog and moss palette (docs/design.md, Two dresses).
+
+   "A precision instrument: a hairline measuring grid, every figure on a monospace column", in near-monochrome neutral
+   grey with one low-chroma moss for what you can follow (a reference, the current table, focus) and for Run. Words are
+   set in Inter, in sentence case at three weights, and everything counted, compared or keyed in IBM Plex Mono, so
+   figures line up to the digit and a key reads character by character; both faces are the kit's own (faces.css),
+   fetched only when the page draws them. Absence is NULL in small capitals, which a stored string "null" can never be
+   mistaken for. Dark is the same instrument by night.
+
+   What the audit of the old native look found, answered here: one code face for chrome, labels and data alike, so
+   nothing in the interface outranked anything else; tracked capitals on every label, louder than the values under
+   them; three button dialects in one bar; a card holding chips beside a box holding a diagram on the landing; a bar
+   down the side of the current related table and of a field being read (the refusal list's side-tab border); a
+   record's tools wrapping to two lines; a phone's column heads given to their move arrows instead of their names.
+
+   Why a sheet of its own and not style.css: an App never wears it. Every rule is keyed on a root with no kit look worn
+   (`:root:not([data-visual-theme])`), so it could stand in the first stylesheet only as dead weight on every App's
+   first paint; instead the Workbench's own chunk imports it (`@mistriwork/kit/client/workbenchLook.css`), so the
+   database browser's page carries it and an App's does not. It stands in `look`, over the tool's own rules and under
+   a host's look (`registerHostLooks`, worn in `theme` under `data-host-look`), so a host look over it says only what
+   it changes: a palette is colour alone, and the structure below is shared.
+
+   Bends, each on purpose:
+   - The column heads stand on a tinted band: with hairlines between columns, a band is what tells the head from the
+     first row at a glance without a heavier rule.
+   - The schema diagram sits on a dot graticule: the one place the instrument shows its scale; it carries no meaning a
+     reader needs.
+   - A second face, IBM Plex Mono, for figures.
+
+   The motion tokens are the house's (the doctrine holds as written). Contrast was checked pair by pair, light and dark:
+   text, NULL and type ink, key and reference ink on every ground they sit on at 4.5:1; a field's edge and the focus
+   ring at 3:1. */
+@import './fonts/faces.css';
+
+@layer look {
+  :root:not([data-visual-theme]) {
+    --face-ui: Inter, 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --sans: var(--face-ui);
+    /* The kit's seam for a host look's data face (tokens.css): every chrome string the code face set reads it, so
+       pointing it at the interface face moves them all; the figures then take theirs below. */
+    --data-face: var(--face-ui);
+    --figures: 'IBM Plex Mono', var(--code);
+    --control-h: 30px;
+    --grid-head-char: 6.8;
+    --ground: #f5f5f5;
+    --surface: #fefefe;
+    --raised: #ededed;
+    --line: #e3e3e3;
+    --line-strong: #cccccc;
+    --line-control: #858585;
+    --ink: #171717;
+    --ink-muted: #575757;
+    --ink-subtle: #686868;
+    --accent: #4d6b2b;
+    --accent-ink: #42601f;
+    --on-accent: #ffffff;
+    --accent-soft: #4d6b2b14;
+    --link: #42601f;
+    --focus: #5f8336;
+    --status-good: #1f7a5a;
+    --status-warning: #9c5a06;
+    --status-critical: #b8352c;
+    --status-info: #5b54a8;
+    --row-hover: #f3f3f3;
+    --pop-line: #d9d9d9;
+    --head-band: #f5f5f5;
+    --graticule: #1717171f;
+    --shadow-pop: 0 1px 2px rgb(16 20 28 / 0.06), 0 8px 24px rgb(16 20 28 / 0.1);
+    --shadow-panel: 0 1px 2px rgb(16 20 28 / 0.06), 0 12px 32px rgb(16 20 28 / 0.12);
+    --shadow-modal: 0 2px 6px rgb(16 20 28 / 0.08), 0 24px 64px rgb(16 20 28 / 0.18);
+    --scrim: rgb(16 20 28 / 0.32);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-visual-theme]):not([data-theme='light']) {
+      --ground: #101010;
+      --surface: #151515;
+      --raised: #1d1d1d;
+      --line: #262626;
+      --line-strong: #363636;
+      --line-control: #6b6b6b;
+      --ink: #e8e8e8;
+      --ink-muted: #a6a6a6;
+      --ink-subtle: #939393;
+      --accent: #9cc26a;
+      --accent-ink: #b0d283;
+      --on-accent: #121410;
+      --accent-soft: #9cc26a1f;
+      --link: #b0d283;
+      --focus: #9cc26a;
+      --status-good: #5cc6a0;
+      --status-warning: #e6a85c;
+      --status-critical: #f0857a;
+      --status-info: #b2aaf5;
+      --row-hover: #1a1a1a;
+      --pop-line: #2c2c2c;
+      --head-band: #181818;
+      --graticule: #ffffff17;
+      --shadow-pop: 0 0 0 1px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.5);
+      --shadow-panel: 0 0 0 1px rgb(0 0 0 / 0.3), 0 14px 36px rgb(0 0 0 / 0.55);
+      --shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.35), 0 28px 72px rgb(0 0 0 / 0.65);
+      --scrim: rgb(0 0 0 / 0.55);
+    }
+  }
+  :root:not([data-visual-theme])[data-theme='dark'] {
+    --ground: #101010;
+    --surface: #151515;
+    --raised: #1d1d1d;
+    --line: #262626;
+    --line-strong: #363636;
+    --line-control: #6b6b6b;
+    --ink: #e8e8e8;
+    --ink-muted: #a6a6a6;
+    --ink-subtle: #939393;
+    --accent: #9cc26a;
+    --accent-ink: #b0d283;
+    --on-accent: #121410;
+    --accent-soft: #9cc26a1f;
+    --link: #b0d283;
+    --focus: #9cc26a;
+    --status-good: #5cc6a0;
+    --status-warning: #e6a85c;
+    --status-critical: #f0857a;
+    --status-info: #b2aaf5;
+    --row-hover: #1a1a1a;
+    --pop-line: #2c2c2c;
+    --head-band: #181818;
+    --graticule: #ffffff17;
+    --shadow-pop: 0 0 0 1px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.5);
+    --shadow-panel: 0 0 0 1px rgb(0 0 0 / 0.3), 0 14px 36px rgb(0 0 0 / 0.55);
+    --shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.35), 0 28px 72px rgb(0 0 0 / 0.65);
+    --scrim: rgb(0 0 0 / 0.55);
+  }
+
+  :root:not([data-visual-theme]) {
+    & body {
+      font-feature-settings: 'cv11', 'ss03';
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    /* Sentence case throughout: the old look's tracked capitals were louder than the values they named. */
+    & body * { text-transform: none; letter-spacing: normal; }
+    & ::selection { background: color-mix(in srgb, var(--focus) 26%, transparent); }
+
+    /* ---------- the frame: the chrome on the ground round a near-white working surface ---------- */
+
+    & .topbar { gap: var(--space-4); padding-block: var(--space-2h); background: var(--surface); border-bottom: 1px solid var(--line); }
+    & body.write-mode .topbar { border-bottom-color: var(--status-critical); }
+    & .brand-name { font: 600 var(--text-md) var(--face-ui); letter-spacing: -0.01em; }
+    & .conn-picker .dd-button {
+      min-height: 28px; padding: 0 var(--space-3); border-color: transparent; background: none;
+      font: 500 var(--text-base) var(--face-ui); color: var(--ink);
+    }
+    & .conn-picker .dd-button:hover { background: var(--raised); } /* motion-ok: colour only, at the hover token */
+    & .conn-manage { color: var(--ink-subtle); }
+    & #query {
+      font-size: var(--text-base); line-height: 1.4; padding-block: var(--space-2h); border-radius: var(--radius);
+      background: var(--ground);
+    }
+    & #query:focus { background: var(--surface); }
+    & #querybar > button {
+      padding: var(--space-2h) var(--space-4); font: 500 var(--text-base) var(--face-ui);
+      border-radius: var(--radius);
+    }
+    & .icon-button { font: 500 var(--text-sm) var(--face-ui); color: var(--ink-muted); padding: var(--space-2) var(--space-3); }
+    & .icon-button:hover { color: var(--ink); background: var(--raised); border-color: transparent; } /* motion-ok: colour only */
+    & .tn-search-key {
+      font: 500 var(--text-xs) var(--face-ui); color: var(--ink-subtle);
+      padding: 1px var(--space-2h); border: 1px solid var(--line-strong); border-radius: calc(var(--radius) - 2px);
+    }
+
+    /* ---------- the table list ---------- */
+
+    & .sidebar { border-right: 1px solid var(--line); background: var(--ground); }
+    & #table-filter { padding-block: var(--space-2h); font: var(--text-base) var(--face-ui); }
+    & #table-list button {
+      font: var(--text-base) var(--face-ui); color: var(--ink); border-radius: var(--radius-item);
+      padding-block: var(--space-2h); border: none;
+    }
+    & #table-list button:hover { background: var(--raised); } /* motion-ok: colour only */
+    /* The current thing is a tint and its ink, never a bar. */
+    & #table-list button[aria-current='true'] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 500; }
+    & #table-list .rows { font: var(--text-xs) var(--figures); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+    & #table-list button[aria-current='true'] .rows { color: var(--accent-ink); }
+    & #table-list .view-tag { font: 500 var(--text-xs) var(--face-ui); color: var(--ink-subtle); }
+    & .sidebar-reveal { font: 500 var(--text-sm) var(--face-ui); color: var(--ink-muted); border-color: var(--line); background: var(--surface); }
+
+    /* ---------- trail, tabs, filters, a result's head ---------- */
+
+    & .crumbs-host { background: var(--surface); border-bottom: 1px solid var(--line); }
+    & .crumbs { font: var(--text-base) var(--face-ui); }
+    & .crumbs .sep { color: var(--ink-subtle); }
+    & .crumbs .current { color: var(--ink); font-weight: 500; }
+    & .crumbs button:not(.crumb-home) { color: var(--ink-muted); }
+    & .tabs { border-bottom: 1px solid var(--line); }
+    & .tab { font: 500 var(--text-base) var(--face-ui); color: var(--ink-muted); padding-block: var(--space-3); }
+    & .tab:hover { color: var(--ink); } /* motion-ok: colour only */
+    & .tab[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--accent); }
+    & .applist-filterbar { gap: var(--space-3); }
+    & .applist-field-label { font: 500 var(--text-sm) var(--face-ui); color: var(--ink-muted); }
+    & .applist-quick, & .applist-field .dd-button, & .picker-input, & .conn-filter, & .cell-edit, & .edit-field-surface :is(input, select, textarea) {
+      border-radius: var(--radius); font-family: var(--face-ui);
+    }
+    & .applist-go { font: 500 var(--text-base) var(--face-ui); }
+    & .result-head { align-items: baseline; row-gap: var(--space-2); }
+    & .result-head .result-title { font: 600 var(--text-lg) var(--face-ui); letter-spacing: -0.012em; }
+    & .result-head .stat { font: var(--text-sm) var(--face-ui); color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    & .result-head .stat-order { color: var(--ink-muted); }
+    & .export-summary { font: 500 var(--text-sm) var(--face-ui); border-radius: var(--radius); }
+
+    /* ---------- the measuring grid ---------- */
+
+    & table { font: var(--text-base) var(--face-ui); font-variant-numeric: tabular-nums; }
+    & .grid-inset > .table-wrap { border: 1px solid var(--line); border-radius: var(--radius); padding-bottom: 0; margin-bottom: var(--space-4); }
+    & .grid-inset > .table-wrap th:first-child,
+    & .grid-inset > .table-wrap td:first-child { padding-left: var(--space-3h); }
+    & .grid-inset > .table-wrap th:last-child,
+    & .grid-inset > .table-wrap td:last-child { padding-right: var(--space-3h); }
+    & th {
+      font: 500 var(--text-sm) var(--face-ui); color: var(--ink-muted);
+      background: var(--head-band); border-bottom: 1px solid var(--line-strong);
+    }
+    & th.sorted { color: var(--ink); border-bottom-color: var(--accent); }
+    & :is(th, td) { border-right: 1px solid var(--line); }
+    & :is(th, td):last-child { border-right: 0; }
+    & tbody tr:last-child td { border-bottom: 0; }
+    & th .pk { font: 500 var(--text-xs) var(--face-ui); color: var(--accent-ink); margin-inline-start: var(--space-1); }
+    & th .fk, & th .th-arrow { color: var(--accent-ink); }
+    /* Figures, keys and codes on the instrument's face: they line up to the digit. */
+    & :is(td.num, td.mono, td.reflink, .num-value, .date-value) { font-family: var(--figures); font-size: var(--text-sm); }
+    & td.reflink { color: var(--link); }
+    & td.null, & .field dd.null {
+      color: var(--ink-subtle);
+      font-family: var(--face-ui); font-style: normal; font-variant-caps: all-small-caps; letter-spacing: 0.04em;
+      font-size: var(--text-base);
+    }
+    & td.bool .yes { color: var(--ink); }
+    & td.bool .no { color: var(--ink-muted); }
+    & .expander { color: var(--ink-subtle); }
+    & td.expander-cell, & th.expander-cell { border-right-color: var(--line); }
+    & tbody tr.clickable:hover { background: var(--row-hover); } /* motion-ok: colour only */
+    & .pinned { background: var(--surface); }
+    & tbody tr:hover .pinned { background: var(--row-hover); } /* motion-ok: colour only */
+    & .pager { font: var(--text-sm) var(--face-ui); color: var(--ink-muted); }
+    & .pager .page-input { font: var(--text-sm) var(--figures); }
+    & .step-button { font: 500 var(--text-sm) var(--face-ui); }
+    & .detail-head :is(h4, .detail-via, .detail-count) { font-family: var(--face-ui); }
+
+    /* A phone keeps a column head's moves for when it holds focus, so a narrow head shows its name. */
+    @media (hover: none) {
+      & .th-moves { display: none; }
+      & th:focus-within .th-moves { display: contents; }
+    }
+
+    /* ---------- a record: an inspector's readout ---------- */
+
+    & .panel > .record-heading {
+      font: 600 var(--text-lg) var(--face-ui); color: var(--ink); letter-spacing: -0.012em; gap: var(--space-2h);
+      /* The name keeps its line: when the tools do not fit beside it they step down a line, rather than the name breaking. */
+      flex-wrap: wrap; row-gap: var(--space-2h);
+    }
+    & .panel > .record-heading > span { flex: 1 1 auto; overflow-wrap: normal; }
+    & .record-heading button { white-space: nowrap; }
+    & :is(.record-as-page, .record-layout, .record-delete, .record-heading button.ghost) {
+      padding: var(--space-1h) var(--space-3); font: 500 var(--text-sm) var(--face-ui); border-radius: var(--radius);
+    }
+    & .field { border-left: 0; padding-block: var(--space-2h); border-radius: 0; border-bottom: 1px solid var(--line); }
+    & .field:hover { background: var(--raised); } /* motion-ok: colour only */
+    & .fields > .field:last-child { border-bottom: 0; }
+    & .field dt { font: var(--text-base)/1.5 var(--face-ui); color: var(--ink-muted); }
+    & .field dt .type, & .field .req { font: var(--text-xs) var(--figures); color: var(--ink-subtle); }
+    & .field .pk { font: 500 var(--text-xs) var(--face-ui); color: var(--ink-subtle); }
+    & .field dd { font: var(--text-base)/1.5 var(--face-ui); }
+    & .field dd .prose { font-family: var(--face-ui); }
+    & .field dd :is(.num-value, .date-value) { color: var(--ink); }
+    & .field-group-head { font: 600 var(--text-sm) var(--face-ui); color: var(--ink-muted); }
+    & .ref-jump {
+      gap: var(--space-2h); padding: 1px var(--space-2h); border-radius: var(--radius);
+      border: 1px solid var(--line); background: var(--surface);
+    }
+    & .ref-jump:hover { border-color: var(--accent-ink); background: var(--accent-soft); } /* motion-ok: colour only */
+    & .ref-jump-value { color: var(--accent-ink); font-weight: 500; font-family: var(--figures); font-size: var(--text-sm); }
+    & .ref-jump-table { font: var(--text-sm) var(--face-ui); color: var(--ink-subtle); background: none; padding: 0; }
+    & .related-head > .related-title, & .panel > .related-title { font: 600 var(--text-sm) var(--face-ui); color: var(--ink-muted); }
+    & .related-item { border-left: 0; border-radius: var(--radius-item); padding-block: var(--space-3); }
+    & .related-list { padding-inline: var(--space-2); }
+    & .related-item:hover:not([disabled]) { background: var(--raised); } /* motion-ok: colour only */
+    & .related-item[aria-selected='true'] { background: var(--accent-soft); }
+    & .related-count { font: 600 var(--text-md) var(--figures); color: var(--ink); letter-spacing: -0.01em; }
+    & .related-item[aria-selected='true'] .related-count { color: var(--accent-ink); }
+    & .related-table { font: 500 var(--text-base) var(--face-ui); }
+    & .related-via, & .record-child-via, & .detail-via { font: var(--text-sm) var(--face-ui); color: var(--ink-subtle); }
+    & .record-child-head .record-child-title { font: 600 var(--text-base) var(--face-ui); color: var(--ink); }
+    & .record-children .table-wrap { margin-inline: var(--space-4h); border: 1px solid var(--line); border-radius: var(--radius); padding-bottom: 0; }
+    & .record-children .table-wrap th:first-child,
+    & .record-children .table-wrap td:first-child { padding-left: var(--space-3h); }
+
+    /* Staged edits: "not saved yet" is a quiet band with the count in the warning ink, not the pink of danger. */
+    & .pending { background: color-mix(in srgb, var(--status-warning) 7%, var(--surface)); border-bottom: 1px solid var(--line); }
+    & .pending-count { color: var(--status-warning); font: 600 var(--text-sm) var(--face-ui); }
+    & .pending-cols { font: var(--text-sm) var(--figures); color: var(--ink-muted); }
+    & .cell-edit.dirty, & .dirty { border-color: var(--status-warning); background: color-mix(in srgb, var(--status-warning) 6%, var(--field-fill)); }
+
+    /* ---------- popups: one hairline, one radius step, one soft shadow ---------- */
+
+    & :is(.th-menu, .more-list, .dd-popup, .ac, .palette, .history-panel) {
+      background: var(--surface); border: 1px solid var(--pop-line); border-radius: var(--radius-pop); box-shadow: var(--shadow-pop);
+    }
+    & :is(.th-menu-item, .more-item, .dd-option, .ac-item, .palette-item) { border-radius: var(--radius-item); }
+    /* motion-ok: colour only, the highlight a pointer or the keyboard moves */
+    & :is(.th-menu-item, .more-item, .dd-option, .ac-item):hover,
+    & :is(.th-menu-item, .more-item, .dd-option)[data-highlighted],
+    & .ac-item.active { background: var(--raised); } /* motion-ok: colour only */
+    & :is(.th-menu-label, .more-item, .more-label, .dd-label, .dd-text) { font: var(--text-base) var(--face-ui); color: var(--ink); }
+    & :is(.th-menu-cond, .more-detail, .dd-detail) { font: var(--text-sm) var(--face-ui); color: var(--ink-subtle); }
+    & .more-group-label { font: 600 var(--text-xs) var(--face-ui); color: var(--ink-subtle); }
+    & .th-menu-sep, & .dd-divider { background: var(--line); }
+    & .ac-label { font: var(--text-base) var(--code); }
+    & .ac-detail { font: var(--text-sm) var(--face-ui); color: var(--ink-subtle); }
+
+    & .palette { box-shadow: var(--shadow-modal); border-radius: var(--radius-dialog); overflow: hidden; }
+    & .palette-input { font: var(--text-lg) var(--face-ui); padding-block: var(--space-4); border-bottom: 1px solid var(--line); background: var(--surface); }
+    & .palette-item.active { background: var(--accent-soft); }
+    & .palette-item.active .palette-label { color: var(--ink); }
+    & .palette-label { font: var(--text-base) var(--face-ui); }
+    & .palette-kind { font: 500 var(--text-xs) var(--face-ui); color: var(--ink-subtle); }
+    & .palette-detail { font: var(--text-sm) var(--face-ui); color: var(--ink-subtle); }
+
+    & .modal { border: 1px solid var(--pop-line); border-radius: var(--radius-dialog); box-shadow: var(--shadow-modal); background: var(--surface); }
+    & .modal :is(h2, h3) { font: 600 var(--text-lg) var(--face-ui); letter-spacing: -0.012em; }
+    & .confirm-diff { font: var(--text-base) var(--face-ui); }
+    & .confirm-diff td { font-family: var(--figures); }
+    & .toast {
+      background: var(--surface); color: var(--ink); border: 1px solid var(--pop-line); border-radius: var(--radius-pop);
+      box-shadow: var(--shadow-pop); font: var(--text-base) var(--face-ui);
+    }
+    & .toast-ok .toast-message::before {
+      content: ''; display: inline-block; width: 7px; height: 7px; margin-inline-end: var(--space-3);
+      border-radius: 50%; background: var(--status-good); vertical-align: 1px;
+    }
+    & .toast-action { font: 500 var(--text-base) var(--face-ui); border-color: var(--line-strong); border-radius: var(--radius); }
+
+    /* ---------- the SQL pane ---------- */
+
+    & .sql-panel { border-top: 1px solid var(--line-strong); background: var(--surface); }
+    & .sql-head { border-bottom: 1px solid var(--line); }
+    & .sql-title, & .sql-eyebrow { font: 600 var(--text-sm) var(--face-ui); color: var(--ink); }
+    & .sql-target { font: var(--text-sm) var(--face-ui); color: var(--ink-muted); }
+    & .sql-input { font: var(--text-base)/1.55 var(--code); border-radius: var(--radius); }
+    & .sql-stats, & .sql-walk { font: var(--text-sm) var(--face-ui); color: var(--ink-muted); }
+
+    /* ---------- the landing: rules, not a card of chips; the schema on its graticule ---------- */
+
+    & .landing-top > .shape { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; }
+    & .shape-counts, & .shape-gist { font: var(--text-base) var(--face-ui); color: var(--ink-muted); }
+    & .shape-head h2, & .shape-head .shape-toggle { font: 600 var(--text-xl) var(--face-ui); letter-spacing: -0.012em; }
+    & .shape-label, & .landing-starts-head { font: 500 var(--text-sm) var(--face-ui); color: var(--ink-subtle); }
+    & .shape-says { font: var(--text-base) var(--face-ui); color: var(--ink-muted); }
+    & .shape-link { font: 500 var(--text-base) var(--face-ui); color: var(--accent-ink); }
+    & .shape-arrow { color: var(--ink-subtle); }
+    & .landing-chip {
+      border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--space-2h) var(--space-3h);
+    }
+    & .landing-chip:hover { border-color: var(--line-strong); background: var(--raised); } /* motion-ok: colour only */
+    & .landing-chip-name { font: 500 var(--text-base) var(--face-ui); color: var(--ink); }
+    & :is(.landing-chip-table, .start-rows) { font: var(--text-sm) var(--face-ui); color: var(--ink-subtle); }
+    & .diagram-title { font: 600 var(--text-lg) var(--face-ui); letter-spacing: -0.012em; }
+    & .diagram-viewport {
+      border: 1px solid var(--line); border-radius: var(--radius-panel); background-color: var(--surface);
+      background-image: radial-gradient(circle at 1px 1px, var(--graticule) 1px, transparent 1.2px);
+      background-size: 16px 16px;
+    }
+    & .node > rect { rx: 5px; ry: 5px; stroke: var(--line-strong); }
+    & .node-focus > rect { stroke: var(--accent); }
+    & .node-head text { font-family: var(--face-ui); font-weight: 600; }
+    & :is(.node-field, .node-type, .edge-label, .node-more text) { font-family: var(--face-ui); }
+    & .node-field.is-key, & .node-field.is-ref { font-family: var(--figures); }
+    & .node-type { fill: var(--ink-subtle); }
+    & .edge { stroke: var(--line-strong); }
+    & .zoom-controls { border: 1px solid var(--line); border-radius: var(--radius); box-shadow: none; background: var(--surface); }
+    & .diagram-legend { font: var(--text-sm) var(--face-ui); color: var(--ink-subtle); }
+    & .ddl { font: var(--text-sm)/1.6 var(--code); }
+
+    /* ---------- connections ---------- */
+
+    & .conn-manager { background: var(--ground); }
+    & .conn-head h2, & .conn-brand-name { font: 600 var(--text-xl) var(--face-ui); letter-spacing: -0.012em; }
+    & .conn-lede { font: var(--text-base) var(--face-ui); color: var(--ink-muted); }
+    & .conn-list { border: 1px solid var(--line); border-radius: var(--radius-panel); background: var(--surface); overflow: hidden; }
+    & .conn-row { border-bottom: 1px solid var(--line); }
+    & .conn-row:last-child { border-bottom: 0; }
+    & .conn-row:hover { background: var(--raised); } /* motion-ok: colour only */
+    & .conn-name-text { font: 500 var(--text-base) var(--face-ui); }
+    & :is(.conn-detail, .conn-meta, .conn-status, .conn-count) { font: var(--text-sm) var(--face-ui); color: var(--ink-subtle); }
+    & .conn-badge { font: 500 var(--text-xs) var(--face-ui); color: var(--ink-muted); border-radius: 999px; }
+    & .conn-action { font: 500 var(--text-sm) var(--face-ui); }
+
+    /* ---------- states ---------- */
+
+    & .errors {
+      margin: var(--space-3) var(--space-4h); padding: var(--space-3) var(--space-4); border-radius: var(--radius);
+      background: color-mix(in srgb, var(--status-critical) 6%, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--status-critical) 30%, var(--line));
+      color: var(--status-critical); font: var(--text-base) var(--face-ui);
+    }
+    & :is(.grid-inset, .table-wrap) > .note { font: var(--text-base) var(--face-ui); color: var(--ink-muted); }
+    & .clause { border-radius: var(--radius); font-family: var(--face-ui); }
+    & .clause-label { font: 500 var(--text-xs) var(--face-ui); color: var(--ink-subtle); }
+    & .clause-text { font-family: var(--code); }
+
+    /* ---------- figures elsewhere: counts and ranges on the instrument's face ---------- */
+
+    & :is(.stat, .pager-range, .conn-meta, .start-rows, .landing-chip-table, .detail-count) { font-family: var(--figures); font-size: var(--text-xs); }
+    & .result-head .stat-order { font-family: var(--face-ui); font-size: var(--text-sm); }
+  }
+}

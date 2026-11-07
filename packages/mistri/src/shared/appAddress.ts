@@ -61,8 +61,8 @@ import { filterAddressWord } from '@mistriwork/engine/shared/listFilters.js';
 import { slug as slugOf } from '@mistriwork/engine/shared/slug.js';
 import { tabKey } from '@mistriwork/engine/shared/addressParams.js';
 import { SERVER_SEGMENTS } from '@mistriwork/engine/shared/mount.js';
-import { ASSISTANT_ROOM } from '@mistriwork/engine/shared/servedApp.js';
-export { ASSISTANT_ROOM } from '@mistriwork/engine/shared/servedApp.js';
+import { ASSISTANT_ROOM, DIRECTORY_ROOM } from '@mistriwork/engine/shared/servedApp.js';
+export { ASSISTANT_ROOM, DIRECTORY_ROOM } from '@mistriwork/engine/shared/servedApp.js';
 
 /** Words an App route may not take: `new` is the New form's, the rest the server's own (mount.ts). */
 export const RESERVED_PATHS: readonly string[] = ['new', ...SERVER_SEGMENTS, '_components', 'sign-in', 'welcome', 'form'];
@@ -106,6 +106,8 @@ export interface AddressBookInput {
   inbox?: boolean;
   /** The assistant has a page of its own, `/{app}/assistant`, for the person served (appPayload.ts). */
   assistant?: boolean;
+  /** The menu is long enough for a Directory, `/{app}/all-pages` (appPayload.ts), where no view or page took the word. */
+  directory?: boolean;
   /** The views are what one person is served, not the whole App's: a resource's `view` naming one they are not
    * served is that person's to pass over, not a problem (the whole App's book still says a misnamed one). */
   projected?: boolean;
@@ -140,7 +142,8 @@ export type RouteTarget =
   | { kind: 'page'; page: string; table: string }
   | { kind: 'table'; table: string }
   | { kind: 'inbox' }
-  | { kind: 'assistant' };
+  | { kind: 'assistant' }
+  | { kind: 'directory' };
 
 /** How one table's records are addressed. */
 interface RecordRoute {
@@ -235,6 +238,8 @@ const describe = (target: RouteTarget): string => {
       return 'the notifications inbox';
     case 'assistant':
       return "the assistant's page";
+    case 'directory':
+      return 'the directory';
     default:
       return `the table "${target.table}"`;
   }
@@ -315,6 +320,10 @@ export function appAddressBook(input: AddressBookInput): AddressBook {
     if (claim(segment, { kind: 'page', page: page.id, table: page.base }, `pages "${page.id}"`, page.path !== undefined))
       book.pages.set(page.id, segment);
   }
+
+  /* Claimed after every view and page: the Directory is the platform's own room, and an App that already uses the
+     word keeps it, with no Directory address (its link still opens the room). */
+  if (input.directory) claim(DIRECTORY_ROOM, { kind: 'directory' }, 'the directory', false);
 
   for (const table of input.tables) {
     const resource = Object.hasOwn(input.resources, table.id) ? input.resources[table.id] : undefined;
@@ -512,7 +521,7 @@ export function readAppSegments(book: AddressBook, raw: readonly string[]): Pars
     const id = raw.length === 2 ? decode(raw[1]) : undefined;
     return id ? { kind: 'conversation', target, id } : undefined;
   }
-  if (target.kind === 'dashboard' || target.kind === 'form' || target.kind === 'inbox') return undefined;
+  if (target.kind === 'dashboard' || target.kind === 'form' || target.kind === 'inbox' || target.kind === 'directory') return undefined;
   if (raw.length === 2 && raw[1] === 'new') return target.kind === 'page' ? undefined : { kind: 'new', target };
   const table = target.table;
   const read = readKey(book, table, raw[1]);

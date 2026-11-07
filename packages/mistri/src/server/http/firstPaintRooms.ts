@@ -24,7 +24,7 @@ import {
   type ListQuestionSpec,
   type ListRules,
 } from '@mistriwork/engine/shared/listQuestion.js';
-import { DEFAULT_LIMIT, NAV_COUNT_LIMIT } from '@mistriwork/engine/shared/reads.js';
+import { LIST_PAGE_SIZE, NAV_COUNT_LIMIT } from '@mistriwork/engine/shared/reads.js';
 import { RECORD_COMPOSE_PATH } from '@mistriwork/engine/shared/recordReads.js';
 import type { PageDef } from '@mistriwork/engine/shared/page.js';
 import { andQuery, quoteValue } from '@mistriwork/engine/shared/query.js';
@@ -44,6 +44,9 @@ import {
 import { sparkText } from '@mistriwork/engine/shared/dashboardTrend.js';
 import { autoKeyOf } from '@mistriwork/engine/shared/autoBucket.js';
 import { funnelText } from '@mistriwork/engine/shared/funnel.js';
+import { boardAmount, boardsInCookie, laneCountsText, laneWindow } from '@mistriwork/engine/shared/boardLanes.js';
+import { splitQuery } from '@mistriwork/engine/shared/clauses.js';
+import type { AppBoardList } from '@mistriwork/engine/shared/listPresentations.js';
 
 /** What the page's boot answers gave, as the client holds them. */
 export interface RoomInput {
@@ -58,6 +61,8 @@ export interface RoomInput {
   me: Record<string, unknown>;
   /** Browsing signed out, within `auth.public`. */
   visitor: boolean;
+  /** The views this browser reads as boards (kit LayoutSwitch.tsx, boardLanes.ts BOARD_COOKIE). */
+  boards?: ReadonlySet<string>;
 }
 
 const squeeze = (text: string): string => text.replace(/\s+/g, ' ').trim();
@@ -65,7 +70,12 @@ const squeeze = (text: string): string => text.replace(/\s+/g, ' ').trim();
 /* The page sizes a reader has not changed (client core.js pageSize, relatedRows.ts). */
 const RELATED_ROWS = 10;
 
-type ListView = ListQuestionSpec & { error?: string; countQuery?: string; presentation?: { kind?: string } };
+type ListView = ListQuestionSpec & {
+  error?: string;
+  countQuery?: string;
+  presentation?: { kind?: string };
+  asBoard?: AppBoardList;
+};
 
 /** The list room a view key names, as the client's rooms read it (appRooms.ts): neither a dashboard nor a form. */
 function listView(payload: AppPayloadApp, key: string): ListView | undefined {
@@ -116,6 +126,7 @@ interface KeptBook {
   readonly order: string;
   readonly inbox: boolean;
   readonly assistant: boolean;
+  readonly directory: boolean;
   readonly book: AddressBook;
 }
 const BOOKS_KEPT = 8;
@@ -130,6 +141,7 @@ function addressBookOf(input: RoomInput): AddressBook {
     order: order.join('\0'),
     inbox: payload.inbox === true,
     assistant: payload.assistant?.page === true,
+    directory: payload.directory !== undefined,
   };
   /* Only what cannot change is kept by: a payload built afresh, or not frozen, is read afresh. */
   const lasting = [payload.views, payload.resources, payload.pages ?? Object.freeze([]), schema.tables].every((part) =>
@@ -144,7 +156,8 @@ function addressBookOf(input: RoomInput): AddressBook {
       book.tables === said.tables &&
       book.order === said.order &&
       book.inbox === said.inbox &&
-      book.assistant === said.assistant,
+      book.assistant === said.assistant &&
+      book.directory === said.directory,
   );
   if (found) return found.book;
   const book = appAddressBook({
@@ -155,6 +168,7 @@ function addressBookOf(input: RoomInput): AddressBook {
     tables: schema.tables,
     inbox: said.inbox,
     assistant: said.assistant,
+    directory: said.directory,
     projected: true,
   });
   kept.push({ ...said, book });
@@ -252,7 +266,11 @@ function menuCounts(input: RoomInput, plan: RoomPlan): void {
 function listReads(input: RoomInput, rules: ListRules, key: string, plan: RoomPlan, home = false): void {
   const view = listView(input.payload, key);
   const kind = view?.presentation?.kind;
-  if (!view || kind === 'board' || kind === 'calendar' || kind === 'tree' || kind === 'gantt' || kind === 'split') return;
+  if (!view || kind === 'calendar' || kind === 'tree' || kind === 'gantt' || kind === 'split') return;
+  /* A board, declared or the one a list offers and this browser reads it as (LayoutSwitch.tsx): its lanes' first
+     pages in the list's one read, and their counts in one breakdown (TableRoom.tsx, BoardList.tsx). */
+  const board =
+    kind === 'board' ? (view.presentation as unknown as AppBoardList) : view.asBoard && input.boards?.has(key) ? view.asBoard : undefined;
   const params = new URLSearchParams(input.search);
   /* The home list opens on its first tab, whatever the address carries. */
   if (home ? input.search : [...params.keys()].some((name) => name !== 'tab')) return;
@@ -261,15 +279,37 @@ function listReads(input: RoomInput, rules: ListRules, key: string, plan: RoomPl
   const found = asked === null ? 0 : tabs.findIndex((tab) => tabKey(tab) === asked);
   const index = found < 0 ? 0 : found;
   /* A grouped grid reads its rows in its group's order (TableRoom.tsx): the first page is that read. */
-  const q = view.group ? groupedQuestion(appListQuery(rules, view, index), view.group) : appListQuery(rules, view, index);
-  plan.reads.push({ method: 'POST', target: '/api/run', body: { q, limit: DEFAULT_LIMIT, offset: 0, exactCount: false, app: input.app } });
+  const q = view.group && !board ? groupedQuestion(appListQuery(rules, view, index), view.group) : appListQuery(rules, view, index);
+  /* A board whose question names its own limit is laid out as it is, read by the client (presentedList.tsx). */
+  if (board && /^limit\s+\d+\b/i.test(splitQuery(q).limit ?? '')) return;
+  if (board) {
+    const display = (column: string) => {
+      const resource = Object.hasOwn(input.payload.resources, view.table) ? input.payload.resources[view.table] : undefined;
+      const rule = resource?.display && Object.hasOwn(resource.display, column) ? resource.display[column] : undefined;
+      return rule?.format === 'money' || rule?.format === 'number' ? (rule as { format: string; currencyColumn?: string }) : null;
+    };
+    const { amount, currencyBy } = boardAmount(board, display);
+    const text = laneCountsText(q, board.by, amount, currencyBy);
+    plan.reads.push({
+      method: 'POST',
+      target: '/api/run',
+      body: { q, offset: 0, exactCount: false, ...laneWindow(board.by), app: input.app },
+    });
+    if (text) plan.reads.push({ method: 'POST', target: '/api/breakdown', body: { text, limit: 500, app: input.app } });
+  } else
+    plan.reads.push({
+      method: 'POST',
+      target: '/api/run',
+      body: { q, limit: LIST_PAGE_SIZE, offset: 0, exactCount: false, app: input.app },
+    });
   /* The tab badges not on screen, and the reader's saved views of this list. */
   const saved = input.visitor ? [] : (input.filters?.filters?.[key] ?? []);
   const yours = Array.isArray(saved) ? saved.filter((item) => item && typeof item.query === 'string') : [];
   if (tabs.length <= 1 && !yours.length) return;
   const items = [
     ...new Set([
-      ...(tabs.length ? tabs : [{ label: '' }]).flatMap((_, i) => (i === index ? [] : [appListQuery(rules, view, i)])),
+      /* A board reads no total, so its own tab is counted with the others (AppList.tsx). */
+      ...(tabs.length ? tabs : [{ label: '' }]).flatMap((_, i) => (i === index && !board ? [] : [appListQuery(rules, view, i)])),
       ...yours.map((item) => squeeze(`${view.table} ${item.query}`)),
     ]),
   ].sort();
@@ -450,8 +490,10 @@ function dashboardList(
   const { query } = dashboardListQuery(lookupsOf(rules), section, own?.presentation as never);
   const presented = own?.presentation && own.presentation.kind !== 'split';
   const limit = section.limit ?? 5;
-  if (aside && !presented && (section.show?.length ?? 0) <= 3) run({ q: query, limit, offset: 0 });
-  else run({ q: query, limit, offset: 0, exactCount: false });
+  /* A section that says no total asks for none (an overview's list, appOverview.ts): its rows are one statement. */
+  const none = section.counted === false ? { count: 'none' } : {};
+  if (aside && !presented && (section.show?.length ?? 0) <= 3) run({ q: query, limit, offset: 0, ...none });
+  else run({ q: query, limit, offset: 0, exactCount: false, ...none });
 }
 
 /* A public form's address, its status check and its account screen; the landing (clientSurface.ts). */
@@ -477,7 +519,7 @@ export const APP_PAINT_ROOMS: PaintRooms = {
     if (WELCOME.test(path)) return [{ method: 'GET', target: '/api/landing' }];
     return undefined;
   },
-  async room({ path, search, requested, me, runtime, ask }) {
+  async room({ path, search, requested, me, runtime, ask, cookie }) {
     if (me.tenant === true) return undefined;
     const visitor = me.signedIn !== true && me.public === true;
     /* Signed out of an App that signs people in, and not browsing it: the sign-in screen, or the App's public home, draws. */
@@ -506,6 +548,7 @@ export const APP_PAINT_ROOMS: PaintRooms = {
       filters: filters as RoomInput['filters'],
       me,
       visitor,
+      boards: boardsInCookie(cookie),
     });
     return { app: selected, plan };
   },

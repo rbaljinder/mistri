@@ -246,7 +246,7 @@ function PlatformValue({ col, value, tableId, compact = false, links = !compact,
         </ul>
       );
     if (compact) return <span className="json-preview-text">{previewOf(shown as object)}</span>;
-    return <JsonValue value={shown as object} bar={!items} />;
+    return <JsonValue value={shown as object} bar={!items} label={col?.name} />;
   }
   /* A money column whose currency is the record's own: the code its row holds. */
   const owned =

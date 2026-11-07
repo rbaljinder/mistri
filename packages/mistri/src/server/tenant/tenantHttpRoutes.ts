@@ -109,7 +109,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/counts': ['items', 'countLimit'],
   /* `after`, `before` and `end` are a list's page step (shared/keysetPage.ts): without them every pager's Next
      page was refused as a forged context, and the page locked. */
-  '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset', ...PAGE_STEP_FIELDS],
+  '/api/run': ['q', 'columns', 'exactCount', 'countLimit', 'count', 'limit', 'offset', 'lanes', ...PAGE_STEP_FIELDS],
   '/api/view/run': ['view', 'text', 'query', 'count', 'limit', 'offset'],
   [TENANT_EXPORT_PATH]: ['q', 'format', 'columns'],
   '/api/breakdown': ['def', 'text', 'limit', 'offset'],

@@ -6,8 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "name",
-    "home"
+    "name"
   ],
   "properties": {
     "$schema": {
@@ -180,7 +179,7 @@
       }
     },
     "home": {
-      "description": "Where a visitor starts, required: a view id for everyone, or rules read in order that end with a rule with no condition.",
+      "description": "Where a visitor starts: a view id for everyone, or rules read in order that end with a rule with no condition. Without it, an overview of the App's main table at /overview.",
       "oneOf": [
         {
           "type": "string",
@@ -5185,6 +5184,10 @@
           "anyOf": [{ "type": "string", "minLength": 1 }, { "const": false }],
           "description": "false draws the dashboard without its title (it stays for a screen reader). Otherwise the words over the sections when they are not the label (which the menu and the tab keep): \"Hello, {me.name}\". {me.name} is the signed-in reader's name, said by the server; with none, the label is drawn. Needs auth."
         },
+        "head": {
+          "anyOf": [{ "const": "compact" }, { "const": false }],
+          "description": "The head's form. 'compact': the title alone on one line with its verbs, at a list's size, with no intro. false: the dashboard draws its own head; its title is kept for a screen reader (the room's one h1), and the label still names the tab, the crumb and the palette entry. Absent: the full head, title and intro."
+        },
         "description": {
           "type": "string",
           "minLength": 1,
@@ -6729,6 +6732,11 @@
               "type": "boolean",
               "default": true,
               "description": "With the side placement: folding the sidebar leaves a rail of the entries' icons by default. Set false to hide it completely. An App with no nav has no menu."
+            },
+            "header": {
+              "enum": ["bar", "sidebar"],
+              "default": "sidebar",
+              "description": "With the side placement, where the bar's furniture stands on a signed-in screen at a desk: in the sidebar ('sidebar', the default), full height, its head the App's mark, New and the search, its foot the bell, the account and Collapse; or across the top of the window ('bar'). A phone, the top placement, public pages and sign-in keep the bar; with rail: false and no header, the bar."
             },
             "menuSearch": {
               "type": "boolean",

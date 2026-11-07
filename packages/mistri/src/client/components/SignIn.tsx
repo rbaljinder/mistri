@@ -9,12 +9,13 @@
  * name), because the person is signing in to the app, not to the tool
  * underneath.
  */
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { AuthRefusal, post, reload } from './authRequest.js';
+import { applyBrandLogo, headBrandingMark } from '../appBrand.js';
 import { say } from '../copy/public/components/SignIn.js';
 import { navReplace, navState } from '@mistriwork/kit/client/shellHost.js';
 
@@ -74,6 +75,16 @@ const MARKS: Record<string, ReactNode> = {
     </>
   ),
 };
+/** The App's own mark, centered over the card where the App's top bar would have been: the same glyph, picture or initial
+    the bar draws (appBrand.tsx), so the door wears the App's dress and not the tool's. */
+function SignInMark({ info }: { info: SignInInfo }) {
+  const host = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    applyBrandLogo(host.current, headBrandingMark() ?? info.look?.logo, info.app, info.look?.icons);
+  }, [info.app, info.look]);
+  return <span ref={host} className="signin-logo brand-mark" aria-hidden="true" />;
+}
+
 /** Each tenant's own identity providers, of either kind: found by the domain of the email a person types, never listed. */
 const TENANT_PROVIDERS = ['oidc:*', 'saml:*'];
 /** The provider id Better Auth knows a listed provider by: `oidc:workforce` is `workforce`, `saml:okta` is `okta`. */
@@ -387,8 +398,9 @@ export function SignIn({
           <span aria-hidden="true">←</span> {info.app}
         </a>
       )}
+      <SignInMark info={info} />
       <div className="signin-card">
-        {/* The App's name is in the bar above; the heading says what this screen is for, in it. */}
+        {/* The heading says what this screen is for, and whose; the mark above it is the App's. */}
         <h1 className="signin-title">{title}</h1>
         {mode === 'claim' && claims && (
           <ClaimInvitation

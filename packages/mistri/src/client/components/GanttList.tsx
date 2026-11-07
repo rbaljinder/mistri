@@ -117,6 +117,25 @@ function monthStep(width: number, months: number): number {
   return [1, 2, 3, 6, 12].find((step) => (width / months) * step >= 36) ?? 12;
 }
 
+/**
+ * The chart's window: the bars' span widened to whole weeks (Monday to Monday, so a
+ * bar never starts against the edge and the ruler's weeks line up), with today in
+ * view when it is near. Today is left out when it is further from the span than
+ * the span is long (or four weeks), because stretching a past or far-future
+ * chart to reach it would squeeze every bar to a sliver; the line then is not drawn.
+ */
+export function windowOf(first: number, last: number, today: number): { from: number; to: number } {
+  const span = last + 1 - first;
+  const near = Math.max(span, 28);
+  let lo = first;
+  let hi = last + 1;
+  if (today < lo && lo - today <= near) lo = today;
+  else if (today >= hi && today - hi < near) hi = today + 1;
+  /* 1970-01-01 was a Thursday, so a Monday is a day ≡ 4 (mod 7). */
+  const monday = (day: number) => day - ((((day - 4) % 7) + 7) % 7);
+  return { from: monday(lo), to: monday(hi + 6) };
+}
+
 interface GanttListProps {
   table: TableMeta;
   spec: AppGanttList;
@@ -192,9 +211,7 @@ export function GanttList({ table, spec, entry, interactive = true, label, refer
     return out;
   }, [rows]);
   const now = today ?? Math.floor(Date.now() / DAY);
-  /* The span is every bar's with a day's margin each side; today is in it when it is near. */
-  const from = Math.min(...bars.map((bar) => bar.first)) - 1;
-  const to = Math.max(...bars.map((bar) => bar.last)) + 2;
+  const { from, to } = windowOf(Math.min(...bars.map((bar) => bar.first)), Math.max(...bars.map((bar) => bar.last)), now);
   const span = Math.max(1, to - from);
   const at = (day: number) => `${(((day - from) / span) * 100).toFixed(3)}%`;
   const locale = formatLocale();

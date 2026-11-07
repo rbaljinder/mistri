@@ -119,7 +119,7 @@ redrive is never forgotten, however old.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `home` | string \| array | Stable | Where a visitor starts, required: a view id for everyone, or rules read in order that end with a rule with no condition. Used in `examples/apps/tick/app.ts`. |
+| `home` | string \| array | Stable | Where a visitor starts: a view id for everyone, or rules read in order that end with a rule with no condition. Without it, an overview of the App's main table at /overview. Used in `examples/apps/tick/app.ts`. |
 
 ## `home[].realm`
 

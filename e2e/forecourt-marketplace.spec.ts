@@ -176,7 +176,9 @@ test.describe('Forecourt marketplace', () => {
       .filter({ has: page.getByRole('heading', { name: 'Inquiries by week' }) })
       .last();
     await expect(weekly).toBeVisible();
-    const ticks = await weekly.locator('.chart-stacked-label').allTextContents();
+    // Weeks run across, a column each, under the legend (rows are for categories): the axis names them.
+    await expect(weekly.locator('.chart-columns .chart-column-part').first()).toBeVisible();
+    const ticks = await weekly.locator('.chart-x-tick').allTextContents();
     expect(ticks.length).toBeGreaterThan(1);
     // Each tick is a week's first day: "Sep 28, 2026", then "Oct 5" — a day of the month, never a month alone.
     for (const tick of ticks) expect(tick).toMatch(/^[A-Z][a-z]{2} \d{1,2}(, \d{4})?$/);

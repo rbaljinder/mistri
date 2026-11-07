@@ -16,7 +16,7 @@ auth: { providers: ['email', saml('corp')] },
   "verifiedEmails": true }
 ```
 
-Startup prints the two things to register at the provider: this App's entity ID (`<public URL>/api/auth/sso/saml2/sp/metadata?providerId=corp`, which also serves its metadata) and its assertion consumer service (`<public URL>/api/auth/sso/saml2/sp/acs/corp`). It needs the `@better-auth/sso` package, which `npm install @mistriwork/mistri` brings unless optional dependencies are skipped.
+Startup prints the two things to register at the provider: this App's entity ID (`<public URL>/api/auth/sso/saml2/sp/metadata?providerId=corp`, which also serves its metadata) and its assertion consumer service (`<public URL>/api/auth/sso/saml2/sp/acs/corp`). It needs the `@better-auth/sso` package, which installing `@mistriwork/mistri` brings unless optional dependencies are skipped.
 
 <!-- no picture: the sign-in screen gains one button with the provider's label; Sign-in shows that screen. -->
 

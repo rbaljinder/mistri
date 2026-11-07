@@ -166,7 +166,7 @@ test.describe('on Thread', () => {
   test('the icon rail: folded, the menu keeps every entry, named and usable', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 924 });
     await page.goto(`${sample.origin}/`);
-    await page.getByRole('button', { name: 'Hide the table list' }).click();
+    await page.getByRole('button', { name: 'Collapse menu' }).click();
     await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
     const issues = page.getByRole('button', { name: /^Issues/ });
     await expect(issues).toBeVisible();

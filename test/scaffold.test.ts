@@ -1255,11 +1255,12 @@ describe('the raw scaffold passes the design check it is graded by', () => {
     // A provider has no parent, figure or date: its head says what it is.
     assert.deepEqual(pageOf('provider').sections[0].facts, ['specialty', 'phone', 'email']);
     const patient = pageOf('patient').sections;
+    // The parent's card says what tells it from another of its name (referenceSubline.ts: here its email) first.
     assert.deepEqual(
       patient.find((section) => section.kind === 'card'),
       {
         kind: 'card',
-        show: ['primary_provider_id', 'primary_provider_id.specialty', 'primary_provider_id.phone'],
+        show: ['primary_provider_id', 'primary_provider_id.email', 'primary_provider_id.specialty'],
         title: 'Primary provider',
       },
     );

@@ -39,9 +39,9 @@ import { Dropdown, readsAsName } from './Dropdown.js';
 import { RecordPicker } from './RecordPicker.js';
 import { DateField } from './DateField.js';
 import { isPickerDate } from '@mistriwork/ui/internal/datePickerModel.js';
-import { formatLocale, formatTimezone } from '../locale.js';
+import { formatClockZone, formatLocale, formatTimezone } from '../locale.js';
 import { InputSlot, columnInput } from './inputRenderers.js';
-import { autoKey, isRequired } from '@mistriwork/engine/shared/form.js';
+import { autoKey, enteredNow, isRequired, platformWritten } from '@mistriwork/engine/shared/form.js';
 import { columnTextRule, textRuleBreak, type TextRule } from '@mistriwork/engine/shared/textRules.js';
 import { shell } from '../shellMode.js';
 import { resourceOf } from './appRooms.js';
@@ -56,7 +56,9 @@ import { rowCurrency } from '@mistriwork/engine/shared/money.js';
 import { MinorMoneyInput, minorProblem } from './MinorMoneyInput.js';
 import type { LineDraft } from '../shellMode.js';
 import {
+  clockDefault,
   fieldInput,
+  inferredNarrowing,
   flagStart,
   formColumns,
   formFrame,
@@ -67,6 +69,7 @@ import {
   missingFields,
   narrowingCondition,
   presetValue,
+  SEGMENTED_WORDS,
   type FieldInput,
   type FormCuration,
 } from './newRecordModel.js';
@@ -120,8 +123,6 @@ export interface NewRecordProps {
   retainUncertain?: boolean;
   /** How the App dresses a column (`display`): its vocabulary's words, its currency. */
   display?: (column: ColumnMeta) => DisplayRule | null | undefined;
-  /** The App's name, over a New form drawn as a page. */
-  appName?: string;
   /** True synchronously before dispatch; false only after a known local phase.
    * Cleanup never emits settlement. Used by the host's existing exit guard. */
   onUnresolvedChange?: (unresolved: boolean) => void;
@@ -189,8 +190,9 @@ function NewRecordFormBody({
 }: FormBodyProps) {
   useMessageLanguage();
   const assigned = autoKey(table);
-  const columns = formColumns(table, form, app);
-  const groups = formGroups(table, form, app);
+  const written = app ? newFormWritten(table) : undefined;
+  const columns = formColumns(table, form, app, written);
+  const groups = formGroups(table, form, app, written);
   /* A switch is on or off, never "leave it": a flag it draws starts where the
      form, else the database, says — off for one that must be answered — and
      that start is sent like any default. */
@@ -206,6 +208,15 @@ function NewRecordFormBody({
   const defaults: Record<string, unknown> = {
     ...Object.fromEntries(flags),
     ...(app ? inferredFormDefaults({ columns }) : {}),
+    /* When the record was entered starts at now (form.ts, enteredNow), said as the date field says a moment. */
+    ...(app
+      ? Object.fromEntries(
+          enteredNow(columns, form?.defaults ?? {}).map((column) => [
+            column.name,
+            clockDefault('now', column, new Date(), formatClockZone()),
+          ]),
+        )
+      : {}),
     ...(form?.defaults ?? {}),
   };
   const switches = new Set(flags.map(([name]) => name));
@@ -285,7 +296,11 @@ function NewRecordFormBody({
     Object.entries(defaults).map(([name, value]) => [name, value === null || value === undefined ? '' : String(value)]),
   );
   /* The fields whose choices read another: a picker narrowed by a project empties when the project changes. */
-  const dependents = (name: string) => columns.filter((column) => Object.values(dress(column)?.where ?? {}).includes(name));
+  /* What a picker's choices are narrowed by: the form's word (`where`), else the schema's (a site picked after its
+     customer, newRecordModel.ts inferredNarrowing). */
+  const inferredWhere = app ? inferredNarrowing(columns, target) : {};
+  const whereOf = (column: ColumnMeta) => dress(column)?.where ?? inferredWhere[column.name];
+  const dependents = (name: string) => columns.filter((column) => Object.values(whereOf(column) ?? {}).includes(name));
   /* Steps carve the New form into pages (`form.steps`); an inline Quick Add stays one row. */
   const steps = !compact && form?.steps?.length ? form.steps : undefined;
   const [stepIndex, setStepIndex] = useState(0);
@@ -477,10 +492,11 @@ function NewRecordFormBody({
                 const own = dress(column);
                 /* A narrowed picker offers nothing until the fields it reads are filled, and says which. */
                 /* It reads the draft, and the values the form fills without asking (a bound parent key, a default). */
-                const narrowed = own?.where && kind === 'reference' ? narrowingCondition(own.where, { ...defaults, ...values }) : '';
+                const where = whereOf(column);
+                const narrowed = where && kind === 'reference' ? narrowingCondition(where, { ...defaults, ...values }) : '';
                 const waitingOn =
                   narrowed === undefined
-                    ? Object.values(own!.where!)
+                    ? Object.values(where!)
                         .map((name) => table.columns.find((c) => c.name === name))
                         .filter((c): c is ColumnMeta => Boolean(c))
                         .map(label)
@@ -538,7 +554,12 @@ function NewRecordFormBody({
                       const help = [own?.help, waitingOn ? say('chooseFirst', { waitingOn }) : ''].filter(Boolean).join(' ') || undefined;
                       const helpId = help ? `${errorPrefix}-${index}-help` : undefined;
                       return (
-                        <div className={`insert-field${app ? ' form-field' : ''}${fieldMessage ? ' missing is-invalid' : ''}`}>
+                        <div
+                          data-kind={
+                            app && (kind === 'number' || kind === 'money' || kind === 'date' || kind === 'datetime') ? kind : undefined
+                          }
+                          className={`insert-field${app ? ' form-field' : ''}${fieldMessage ? ' missing is-invalid' : ''}`}
+                        >
                           {app ? (
                             /* A record's form asks as a command form does: an answer that may be left empty says so
                                in a word beside its label, and a needed one is simply asked (docs/design.md, Access). */
@@ -593,12 +614,27 @@ function NewRecordFormBody({
                                   if (!edited.current.has(name) && f.getFieldValue(column.name) === value) f.setFieldValue(name, taken);
                                 });
                               }
-                              /* A choice narrowed by this field no longer belongs to it. */
+                              /* A choice narrowed by this field goes only where it no longer belongs to the pick. A deal
+                                 the form was given (opened from the deal, or from the assistant's proposal) stays when
+                                 the account picked is that deal's own: with the inferred narrowing every New form that
+                                 asks the account first would otherwise drop the record it was opened for. */
                               for (const dependent of dependents(column.name)) {
-                                if (f.getFieldValue(dependent.name)) {
+                                const held = f.getFieldValue(dependent.name);
+                                if (!held) continue;
+                                const drop = () => {
+                                  if (f.getFieldValue(dependent.name) !== held) return;
                                   edited.current.add(dependent.name);
                                   f.setFieldValue(dependent.name, '');
+                                  setDirty(hasFormChanges(columns, f.state.values, defaults, edited.current));
+                                };
+                                const remote = Object.entries(whereOf(dependent) ?? {}).find(([, local]) => local === column.name)?.[0];
+                                if (value === '' || value === null || value === undefined || !remote) {
+                                  drop();
+                                  continue;
                                 }
+                                void derivedValue(`${dependent.name}.${remote}`, dependent, String(held), target).then((under) => {
+                                  if (f.getFieldValue(column.name) === value && under !== String(value)) drop();
+                                });
                               }
                               if (serverError)
                                 setClearedServerFields((previous) => {
@@ -999,16 +1035,23 @@ export function PlatformControl({
           ['0', say('common.no')],
         ];
     const cards = as === 'cards';
+    /* A vocabulary here has no descriptions, so what keeps its cards is only how many words there are. */
+    const stacked = cards && words.length > SEGMENTED_WORDS;
     return (
-      <div className={cards ? 'choice-cards' : 'choice-pair'} role="radiogroup" aria-label={spoken} aria-required={required || undefined}>
+      <div
+        className={stacked ? 'choice-cards' : cards ? 'choice-row' : 'choice-pair'}
+        role="radiogroup"
+        aria-label={spoken}
+        aria-required={required || undefined}
+      >
         {words.map(([stored, said], index) => (
-          <label key={stored} className={`${cards ? 'choice-card' : 'choice-pick'}${value === stored ? ' is-on' : ''}`}>
+          <label key={stored} className={`${stacked ? 'choice-card' : 'choice-pick'}${value === stored ? ' is-on' : ''}`}>
             {cards && rule?.icons?.[stored] && isAppIcon(rule.icons[stored]) ? (
-              <span className="choice-card-icon" aria-hidden="true">
+              <span className={stacked ? 'choice-card-icon' : 'choice-pick-icon'} aria-hidden="true">
                 <Icon name={rule.icons[stored] as AppIconName} />
               </span>
             ) : null}
-            {cards ? <span className="choice-card-label">{said}</span> : null}
+            {stacked ? <span className="choice-card-label">{said}</span> : null}
             <input
               type="radio"
               name={radioName}
@@ -1018,7 +1061,7 @@ export function PlatformControl({
               onChange={() => onChange(stored)}
               ref={index === 0 ? setControl : undefined}
             />
-            {cards ? <span className="choice-box" aria-hidden="true" /> : said}
+            {stacked ? <span className="choice-box" aria-hidden="true" /> : said}
           </label>
         ))}
       </div>
@@ -1138,7 +1181,9 @@ export function PlatformControl({
         onChange={onChange}
         withTime={kind === 'datetime'}
         aria-label={app ? spoken : `${column.name} (${column.type})`}
-        placeholder={said || (kind === 'datetime' ? say('yyyyMmDdHh') : 'YYYY-MM-DD')}
+        /* A day's box says the locale's pattern, as its hint does and as it reads what is typed (MM/DD/YYYY in
+           en-US; ISO is read too): the field's own (DateField.tsx). */
+        placeholder={said || (kind === 'datetime' ? say('yyyyMmDdHh') : undefined)}
         locale={formatLocale()}
         timezone={formatTimezone()}
       />
@@ -1286,6 +1331,12 @@ function newRecordTitle(table: TableMeta, app: boolean): string {
   });
 }
 
+/** What the database and this App's machine fill on a new record of `table`, unasked (form.ts, platformWritten). */
+function newFormWritten(table: TableMeta): Set<string> {
+  const machine = resourceOf(shell().app(), table.id)?.machine;
+  return platformWritten(table, machine ? { column: machine.column, states: machine.states.map((state) => state.value) } : undefined);
+}
+
 /**
  * The New form as an app shows it: a drawer over the list. A modal hid the
  * list you were on, fought the picker's menu for room, and could not be
@@ -1293,7 +1344,9 @@ function newRecordTitle(table: TableMeta, app: boolean): string {
  * which takes the first Escape.
  */
 export function NewRecordDrawer(props: NewRecordProps) {
-  const frame = props.app ? formFrame(props.form, formColumns(props.table, props.form, props.app).length) : 'drawer';
+  const frame = props.app
+    ? formFrame(props.form, formColumns(props.table, props.form, props.app, newFormWritten(props.table)).length)
+    : 'drawer';
   const pane = frame === 'page' ? shellById('content') : null;
   return pane ? <NewRecordPage {...props} pane={pane} /> : <NewRecordSheet {...props} />;
 }
@@ -1301,8 +1354,9 @@ export function NewRecordDrawer(props: NewRecordProps) {
 /**
  * The New form as a page of its own (`form.open: 'page'`, or a long or
  * stepped form): drawn in the content pane, beside the App's menu, as a
- * command form is — one centred measure under the App's name and the
- * form's title. The list it was opened from stays where it was, hidden
+ * command form is — one centred measure under the form's title; the App's
+ * name is the bar's already, so it is not said over the title again. The
+ * list it was opened from stays where it was, hidden
  * rather than taken down, so Cancel finds it as it was left.
  */
 function NewRecordPage({ pane, ...props }: NewRecordProps & { pane: HTMLElement }) {
@@ -1328,7 +1382,6 @@ function NewRecordPage({ pane, ...props }: NewRecordProps & { pane: HTMLElement 
   return createPortal(
     <div className="newrecord-page-host">
       <section className="form-page newrecord-page" aria-labelledby={titleId}>
-        {props.appName && <p className="eyebrow">{props.appName}</p>}
         <h1 id={titleId}>{title}</h1>
         {props.form?.description && <p className="form-page-description">{props.form.description}</p>}
         <NewRecordForm

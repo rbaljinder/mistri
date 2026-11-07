@@ -10,17 +10,19 @@ import { shell } from '../shellMode.js';
 import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { findTable } from '../core.js';
+import { HISTORY_TAB, isInferredPage } from '@mistriwork/engine/shared/pageModel.js';
+import { tabbedSection } from '@mistriwork/engine/shared/recordReads.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { rootMatches, sectionClass, type PageDef, type PageEntry, type PageSection, type SectionPlan } from './pageModel.js';
 import { PageRenderContext, inAppPage, spoken, usePageApi, type SlotProps } from './pageContext.js';
-import { Loading, SectionBox } from './PageSectionBox.js';
+import { Loading, SectionBox, historyWord } from './PageSectionBox.js';
 import { FieldsSection } from './PageFields.js';
 import { BreakdownSection, ChartSection, MetricSection } from './PageMetrics.js';
 import { DashboardNote } from './DashboardNote.js';
 import { TimelineSection } from './PageTimeline.js';
 import type { HistoryApi } from './PageHistory.js';
 import type { FlowsApi } from './PageFlows.js';
-import { ListSection } from './PageRelated.js';
+import { ListSection, RelatedCount, useRelatedCounts, type Counting } from './PageRelated.js';
 import { EmptyRun } from './PageEmptyRun.js';
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { useTabFold } from './useTabFold.js';
@@ -343,26 +345,45 @@ function ListTabs({
   onTab,
   draw,
   scoped,
+  counting,
 }: {
   items: Shown[];
   entry: PageEntry;
   onTab: (tab: string | undefined) => void;
   draw: (item: Shown) => ReactNode;
   scoped: boolean;
+  /** On an inferred page: the record whose rows each tab counts. */
+  counting?: Counting;
 }) {
   useMessageLanguage();
   /* The token is the source's words (apps.ts keepAddresses), so an address names one tab in every language. */
   const named = (item: Shown) =>
-    item.section.addressWords?.title ??
-    item.section.title ??
-    (findTable(item.section.from ?? '') as TableMeta | undefined)?.name ??
-    item.section.from ??
-    '';
+    item.section.kind === 'history'
+      ? HISTORY_TAB
+      : (item.section.addressWords?.title ??
+        item.section.title ??
+        (findTable(item.section.from ?? '') as TableMeta | undefined)?.name ??
+        item.section.from ??
+        '');
+  const counts = useRelatedCounts(
+    items.map((item) => item.section),
+    counting,
+  );
+  const word = (item: Shown) =>
+    item.section.kind === 'history' && item.section.title === undefined
+      ? historyWord()
+      : (item.section.title ?? spoken((findTable(item.section.from ?? '') as TableMeta | undefined)?.name ?? item.section.from ?? ''));
+  const counted = (item: Shown) => (counting ? <RelatedCount section={item.section} counting={counting} counts={counts} /> : null);
   // Read as the strip renders: the run is still being gathered when the strip is created.
   const tabs = items.map((item) => ({
     key: item.index,
     token: scoped ? `section:${item.index}` : named(item),
-    label: item.section.title ?? spoken((findTable(item.section.from ?? '') as TableMeta | undefined)?.name ?? item.section.from ?? ''),
+    label: (
+      <>
+        {word(item)}
+        {counted(item)}
+      </>
+    ),
   }));
   return <TabStrip tabs={tabs} name="Related lists" entry={entry} onTab={onTab} draw={(i) => draw(items[i])} scoped={scoped} />;
 }
@@ -456,7 +477,7 @@ export function Sections({
   const scoped = region === 'aside';
   /* Each section stands behind its own boundary: one that throws while
      drawing says so under its heading, and the rest of the page stays. */
-  const draw = (item: Shown, collapsed?: boolean) => (
+  const draw = (item: Shown, collapsed?: boolean, counted?: boolean) => (
     <ErrorBoundary
       key={`${item.index}${collapsed ? '-add' : ''}`}
       fallback={(note) => <SectionBox section={item.section} body={null} foldable={false} crashed={note} />}
@@ -476,6 +497,7 @@ export function Sections({
         titleOwner={titleOwner}
         onTitleEditor={onTitleEditor}
         collapsed={collapsed}
+        counted={counted}
       />
     </ErrorBoundary>
   );
@@ -488,6 +510,9 @@ export function Sections({
      full-width box. The Workbench's pages, built from the schema or by
      drag, keep the strip unless they say `listTabs: false`. */
   const autoTabs = inAppPage() ? page.listTabs === true : page.listTabs !== false;
+  /* The page an App infers for a record counts its tabs and ends them with the history (pageAnatomy.ts); a page an
+     author wrote is drawn as written. */
+  const inferred = isInferredPage(page, inAppPage());
   const lay = (items: Shown[], listTabs: boolean, grouped = false): ReactNode[] => {
     /* How long the run of lists containing each section is, so a run of one
        stays a plain section: one tab is a heading with a border around it. */
@@ -499,8 +524,7 @@ export function Sections({
        placement anyone chose, and its lists keep the strip. */
     /* A list that says what it does while empty (`empty: 'hide' | 'collapse'`) is a tab like any other: inside a strip
        an empty list is neither hidden nor collapsed, its tab shows it and the strip already folds it. */
-    const tabbed = (section: PageSection) =>
-      section.kind === 'list' && section.presentation !== 'gallery' && (section.width === undefined || !inAppPage());
+    const tabbed = (section: PageSection) => tabbedSection(section, inAppPage(), inferred);
     /* Outside a strip, such a list is left out or said in one line with its neighbours (PageEmptyRun.tsx). */
     const emptyable = (section: PageSection) =>
       section.kind === 'list' && Boolean(section.emptyMode) && (section.presentation !== 'card' || section.emptyMode === 'hide');
@@ -532,7 +556,17 @@ export function Sections({
       if (listTabs && autoTabs && listRuns.has(i) && (listRuns.get(i) ?? 0) > 1) {
         if (!strip) {
           strip = [];
-          laid.push(<ListTabs key={`tabs-${i}`} items={strip} entry={entry} onTab={onTab} draw={draw} scoped={scoped} />);
+          laid.push(
+            <ListTabs
+              key={`tabs-${i}`}
+              items={strip}
+              entry={entry}
+              onTab={onTab}
+              draw={draw}
+              scoped={scoped}
+              counting={inferred ? { base, recordKey: key } : undefined}
+            />,
+          );
         }
         strip.push(item);
         leave = null;
@@ -558,7 +592,8 @@ export function Sections({
         return;
       }
       leave = null;
-      laid.push(draw(item));
+      /* A related list alone on an inferred page says its count in its head, as it would on its tab. */
+      laid.push(draw(item, false, inferred && listTabs && autoTabs && item.section.kind === 'list' && tabbed(item.section)));
     });
     return laid;
   };

@@ -19,7 +19,7 @@
  */
 import { createElement } from 'react';
 import { message, subscribeMessages } from './messages.js';
-import { $, el, findTable, go, pageView, state, tableView, svgEl } from './core.js';
+import { $, currentEntry, el, findTable, go, pageView, state, subscribeWalk, tableView, svgEl } from './core.js';
 import { allSavedFilters } from './views.js';
 import { historyFor } from './history.js';
 import { detailOf, menuItems, menuMode } from './menu.js';
@@ -31,6 +31,7 @@ import { appMenu, appRooms, isListRoom, roomPageId } from './components/appRooms
 import { navigationPaths } from './components/navigationTree.js';
 import { plural } from './locale.js';
 import { say } from './copy/shell/palette.js';
+import { noteVisit } from './paletteRecents.js';
 import { addHostListener, portalRoot, shellBody, shellQuery } from './shellHost.js';
 
 /**
@@ -42,7 +43,7 @@ import { addHostListener, portalRoot, shellBody, shellQuery } from './shellHost.
  */
 const sources = { places: [], databases: [] };
 
-/** @typedef {{ kind: string, label: string, search: string, detail?: string, run: () => unknown }} PaletteItem */
+/** @typedef {{ kind: string, label: string, search: string, detail?: string, icon?: string, room?: string, run: () => unknown }} PaletteItem */
 
 /**
  * @param {'places' | 'databases'} where @param {() => PaletteItem[]} source
@@ -69,6 +70,9 @@ export function entries() {
       label: entry.label,
       search: `${entry.label} ${groups.join(' ')}`,
       detail: groups.length ? groups.join(' / ') : undefined,
+      /* The room's own mark, and its key, which the Recent group finds it by (paletteRecents.ts). */
+      icon: entry.icon,
+      room: entry.id,
       run: () =>
         go(
           isListRoom(entry)
@@ -198,6 +202,10 @@ function closePalette() {
  * query bar, which is where the hands usually are.
  */
 export function initPalette() {
+  /* Where an App's reader has been, for the palette's Recent group: noted on every tick of the walk, in memory only. */
+  subscribeWalk(() => {
+    if (shell().inApp()) noteVisit(currentEntry());
+  });
   addHostListener(
     document,
     'keydown',
@@ -312,8 +320,14 @@ export function initSidebarToggle() {
        back: it takes the reveal's words and direction. */
     const rail = shellBody().classList.contains('app-nav-rail');
     const back = next && rail;
-    collapse.setAttribute('aria-label', back ? say('showTheTableList') : say('hideTheTableList'));
-    collapse.title = back ? say('showTheTableListB') : say('hideTheTableListB');
+    /* An App's button is named by what it folds, the menu, and its name starts with the word it shows
+       ("Collapse"; WCAG 2.5.3, label in name). Made of the words the catalog has, "Collapse menu" / "Contraer menú",
+       so no language pays for two more. The Workbench's hides its table list and shows no word. */
+    const menuWord = message('navigation.menu').toLocaleLowerCase();
+    const appName = `${back ? message('navigation.expand') : message('navigation.collapse')} ${menuWord}`;
+    collapse.setAttribute('aria-label', inApp ? appName : back ? say('showTheTableList') : say('hideTheTableList'));
+    collapse.title = inApp ? `${appName} (⌘B)` : back ? say('showTheTableListB') : say('hideTheTableListB');
+    reveal.setAttribute('aria-label', inApp ? `${message('navigation.expand')} ${menuWord}` : say('showTheTableList'));
     collapse.replaceChildren(
       chevrons(back ? 'right' : 'left'),
       ...(inApp ? [el('span', { class: 'sidebar-collapse-label' }, [message('navigation.collapse')])] : []),

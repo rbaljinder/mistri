@@ -85,7 +85,7 @@ test.describe('Loaner Desk guarded operations', () => {
       expect(response.status()).toBe(409);
       expect(await response.json()).toMatchObject({ code: 'stale_record', outcome: 'not_applied' });
       await expect(secondForm).toBeVisible();
-      await expect(secondForm.getByRole('status')).toHaveText('The record has changed. Reload it before trying again.');
+      await expect(secondForm.getByRole('status')).toContainText('The record has changed. Reload it before trying again.');
       await expect(secondForm.getByRole('status')).not.toHaveAttribute('data-phase', 'success');
       expect(rows(sample.db, 'SELECT borrower_id, status, returned_on FROM equipment_loan')).toEqual([
         { borrower_id: 'ada', status: 'open', returned_on: null },

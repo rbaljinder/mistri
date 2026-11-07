@@ -29,7 +29,10 @@
     ) {
     background: var(--nav-current);
     color: var(--nav-on-current, var(--nav-ink));
-    box-shadow: none;
+    /* The block replaces a look's own mark, but not one the look draws beside any block (`--nav-current-mark`, the
+     slot's marker in workshopLook.css), so a theme may tint the current entry and keep the accent's slot, as
+     Workshop does. */
+    box-shadow: var(--nav-current-mark, none);
   }
   :root[data-nav-current] .app-mode .topbar :is(.tn-item[aria-current='true'], .tn-group.active > .tn-group-button)::after {
     background: transparent;
@@ -632,6 +635,34 @@
     }
     dl.page-properties > .page-field:last-child {
       border-bottom: 0;
+    }
+  }
+  /* The inferred record's form (pageAnatomy.ts, inferredSections): the classic form a person works in all day.
+   Caption beside value, the caption right-aligned on one track so every value in a column starts on one line;
+   two columns where each has 18rem, else one. 18rem is what the main column beside the side menu and the aside
+   gives each of two at 1280 (627px): at 21rem that desk drew one column of seven short fields. The track is 8rem,
+   or 30% of a narrow column, so a value keeps about 12rem there: at 38% a booked time and an email address broke
+   onto a second line. A longer caption wraps under itself rather than taking the value's room. No rule under each row, the shared edge is the order. A value wraps
+   and is never cut short; long text spans both columns. A phone keeps the rail's rows (above). */
+  @media (min-width: 761px) {
+    dl.page-properties.page-classic {
+      grid-template-columns: repeat(
+        auto-fill,
+        minmax(min(100%, max(18rem, (100% - (var(--page-properties-columns, 1) - 1) * 32px) / var(--page-properties-columns, 1))), 1fr)
+      );
+    }
+    dl.page-properties.page-classic > .page-field,
+    dl.page-properties.page-classic > .page-field-wide {
+      grid-template-columns: min(8rem, 30%) minmax(0, 1fr);
+      gap: var(--space-4);
+      padding: var(--space-1h) 0;
+      border-bottom: 0;
+    }
+    dl.page-properties.page-classic > .page-field > dt {
+      text-align: end;
+    }
+    dl.page-properties.page-classic > .page-field-wide {
+      grid-column: 1 / -1;
     }
   }
   /* The aside's fields: one column beside the record, back into columns when it stacks under it. */
@@ -1308,4 +1339,173 @@
 }
 .page-tabpanel > .page-section > .page-section-bar {
   justify-content: flex-end;
+}
+
+/* The bar in the sidebar (`ui.shell.header: 'sidebar'`, the default; docs/design.md, the shell): a side-placed App
+   draws no band across the window. The sidebar runs the window's height — its head the App's mark and name with New
+   beside them, the search under them; its foot the bell and the account over the workspace and Collapse — and each
+   room's own head row is the content's first line. The header element itself stands in the sidebar
+   (packages/mistri/src/client/sidebarShell.js), still `.topbar`, so a theme's bar recipe dresses the head. Only at a
+   desk and signed in: a phone's drawer, the top placement and public pages keep the bar, and the class is not set
+   there. */
+@layer structure {
+  body.app-sidebar-shell:not(.sidebar-hidden) .layout > .sidebar,
+  body.app-sidebar-shell:not(.sidebar-hidden) .layout > .sidebar[data-density] {
+    width: 240px;
+  }
+  body.app-sidebar-shell .sidebar > .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 48px auto;
+    grid-template-areas: 'brand new' 'search search';
+    align-items: center;
+    gap: 0 var(--space-2);
+    padding: 0 var(--space-3) var(--space-3);
+    flex: none;
+    /* The bar's own height and inset (style.css, a look's) were a band's. */
+    min-height: 0;
+    height: auto;
+  }
+  body.app-sidebar-shell .sidebar > .topbar > .brand {
+    grid-area: brand;
+    min-width: 0;
+    margin: 0;
+    padding: var(--space-2);
+    justify-self: start;
+    max-width: 100%;
+  }
+  body.app-sidebar-shell .sidebar > .topbar .brand-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.app-sidebar-shell .sidebar > .topbar > #new-menu-host {
+    grid-area: new;
+    display: flex;
+  }
+  /* New is the head's quiet plus, a 28px square: a bordered "+ New" was the one box among marks (as on a phone). */
+  body.app-sidebar-shell .sidebar > .topbar .new-menu-trigger {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    justify-content: center;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+  @media (hover: hover) {
+    body.app-sidebar-shell .sidebar > .topbar .new-menu-trigger:hover {
+      background: var(--raised);
+    }
+  }
+  body.app-sidebar-shell .sidebar > .topbar .new-menu-words {
+    display: none;
+  }
+  body.app-sidebar-shell .sidebar > .topbar .new-menu-mark {
+    display: inline;
+    font: 300 calc(22px * var(--type-k)) / 1 var(--sans); /* off-scale: a glyph sized as a mark in its 28px square, not text */
+    color: var(--nav-muted, var(--ink-muted));
+  }
+  body.app-sidebar-shell .sidebar > .topbar > #search-button {
+    grid-area: search;
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    min-height: 0;
+    box-sizing: border-box;
+    margin: 0;
+    /* In the menu the search is a field on the menu's ground, as the menu's filter is (visualThemes.css): the bar's
+       field takes the page's surface, and the menu's inks there (nav.muted on white under a dark nav) read 1.9:1.
+       Tokens rather than a background, so whatever field a look or an author's parts draw stands on the nav. */
+    --surface: var(--nav-ground, var(--ground));
+    --line: color-mix(in srgb, var(--nav-ink, var(--ink)) 45%, var(--nav-ground, var(--ground)));
+  }
+  /* The foot: the bar's keys (the bell and the account, an authoring badge, the assistant's door) on one row over the
+     workspace's identity and Collapse. */
+  body.app-sidebar-shell .sidebar-account {
+    flex: none;
+    padding: var(--space-2h) var(--space-3);
+    border-top: 1px solid var(--line);
+  }
+  body.app-sidebar-shell .sidebar-account > .topbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    min-width: 0;
+  }
+  body.app-sidebar-shell .sidebar-account .account-with-inbox {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  body.app-sidebar-shell .sidebar-account button.account {
+    color: var(--ink);
+  }
+  body.app-sidebar-shell .sidebar-account :is(.inbox-trigger, .icon-button) {
+    color: var(--ink-muted);
+  }
+  body.app-sidebar-shell .sidebar-account + #sidebar-app-footer .sidebar-identity {
+    padding-top: var(--space-3);
+  }
+  /* Folded to the rail: the head and the foot stand in one column of marks — the App's mark, New, the search's
+     magnifier; the bell and the avatar. */
+  body.app-sidebar-shell.sidebar-hidden .sidebar > .topbar {
+    grid-template-columns: 1fr;
+    grid-template-rows: 48px auto auto;
+    grid-template-areas: 'brand' 'new' 'search';
+    justify-items: center;
+    row-gap: var(--space-2);
+    padding-inline: var(--space-2);
+  }
+  body.app-sidebar-shell.sidebar-hidden .sidebar > .topbar > .brand {
+    justify-self: center;
+  }
+  body.app-sidebar-shell.sidebar-hidden .sidebar > .topbar .brand-name {
+    display: none;
+  }
+  body.app-sidebar-shell.sidebar-hidden .sidebar > .topbar > #search-button {
+    width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+  body.app-sidebar-shell.sidebar-hidden .sidebar > .topbar > #search-button :is(.tn-search-hint, .tn-search-key) {
+    display: none;
+  }
+  body.app-sidebar-shell.sidebar-hidden .sidebar-account {
+    padding-inline: var(--space-2);
+  }
+  body.app-sidebar-shell.sidebar-hidden .sidebar-account :is(.topbar-actions, .account-with-inbox) {
+    flex-direction: column;
+    justify-content: center;
+  }
+  body.app-sidebar-shell.sidebar-hidden .sidebar-account .account-caret {
+    display: none;
+  }
+  /* Each room's head row is the content's first line: the trail's bar, a list's or a dashboard's title and verbs —
+     52px at least, on a hairline, where the band stood over them. */
+  body.app-sidebar-shell #content > .crumbs-host:first-child > .crumbs,
+  body.app-sidebar-shell #content > .applist-host:first-child > .applist-head,
+  body.app-sidebar-shell #content > .applist-head:first-child {
+    min-height: 52px;
+    box-sizing: border-box;
+    /* The content pane is a column that scrolls: a floor in place of `auto` let a tall room shrink its head to it. */
+    flex-shrink: 0;
+  }
+  body.app-sidebar-shell #content > .applist-host:first-child > .applist-head,
+  body.app-sidebar-shell #content > .applist-head:first-child {
+    margin-top: 0;
+    padding-block: var(--space-3h);
+    border-bottom: 1px solid var(--line);
+  }
+  body.app-sidebar-shell #content > .applist-host:first-child > .applist-head + .applist-controls {
+    padding-top: var(--space-3);
+  }
+  body.app-sidebar-shell #content > .applist-head:first-child + * {
+    padding-top: var(--space-4);
+  }
 }

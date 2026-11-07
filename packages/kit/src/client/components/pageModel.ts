@@ -98,6 +98,8 @@ export interface PageSection {
   /** A record header's status column, fact words, filled verb and destructive verbs (shared/pageModel.ts). */
   status?: string;
   factLabels?: Record<string, import('@mistriwork/engine/shared/appCards.js').FactLabel>;
+  /** An inferred header's spans: a start fact's end column, said with it as one range (shared/pageModel.ts, PageFields.spans). */
+  spans?: Record<string, string>;
   primary?: string;
   destructive?: string[];
   headerActions?: string[];

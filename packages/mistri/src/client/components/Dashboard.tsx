@@ -63,7 +63,7 @@ import {
   type AskLookups,
 } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { sparkText, sparkWindow } from '@mistriwork/engine/shared/dashboardTrend.js';
-import { trendPoints } from '@mistriwork/engine/shared/autoBucket.js';
+import { trendPoints, windowPhraseOf } from '@mistriwork/engine/shared/autoBucket.js';
 import type { ColumnMeta, ForeignKey, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { message, messageLanguage, subscribeMessages } from '@mistriwork/kit/client/messages.js';
 import { activeApp, inAppMode } from '../appState.js';
@@ -132,6 +132,16 @@ const untitled = (section: { table?: string; by?: string }) => {
   const table = humanName(section.table ?? '');
   return section.by ? `${table} by ${(columnLabel(section.table ?? '', section.by) as string | null) ?? humanName(section.by)}` : table;
 };
+
+/** What a section with nothing in it says, from its own title: "No leases ending soon" under "Leases ending soon", where
+    the grid's "No rows match." named neither the section nor why. The title's first word is lower-cased unless it is a
+    name or an acronym (a capital past its first letter). */
+function nothingIn(title: string): string {
+  const said = title.trim().replace(/[.!?:]+$/, '');
+  const first = said.split(/\s+/)[0] ?? '';
+  const word = /[A-Z]/.test(first.slice(1)) ? first : first.charAt(0).toLowerCase() + first.slice(1);
+  return sayCopy('noneIn', { title: `${word}${said.slice(first.length)}` });
+}
 
 const CustomDashSection = onDemand(() => import('./sdk/CustomSection.js'), 'CustomDashSection');
 /* A list that works as its room does, and the feed of recent changes: each fetched the first time a dashboard holds one. */
@@ -862,64 +872,108 @@ const StepCards = memo(function StepCards({ section }: { section: Section }) {
   const counted = data.data ? orderGroups(data.data.rows ?? [], keyName, countName, vocabulary) : [];
   const keys = vocabulary ?? counted.map((row) => row[keyName]);
   const countOf = new Map(counted.map((row) => [String(row[keyName]), row[countName]]));
-  const steps = keys.filter((key) => key != null).slice(0, section.limit ?? 8);
+  const all = keys.filter((key) => key != null).slice(0, section.limit ?? 8);
+  /* The states a thing is finished in (a column's `states.final`) are not steps on the road: a card each, at nought, was
+     as loud as the work in hand. They are one quiet line after the road, counted as the steps are; where every value is
+     final there is no road to separate them from, and they stay cards. */
+  const finals = new Set<string>(
+    (findTable(section.table) as TableMeta | undefined)?.columns.find((column) => column.name === section.by)?.states?.final ?? [],
+  );
+  const closed = all.filter((key) => finals.has(String(key)));
+  const steps = closed.length < all.length ? all.filter((key) => !finals.has(String(key))) : all;
+  const ended = steps === all ? [] : closed;
   if (data.data && !steps.length) return section.emptyMode === 'hide' ? <LeaveOut /> : <Nothing text={sayCopy('nothingToCountYet')} />;
   // Rows of four or fewer, as even as the count allows (eight steps are two rows of four, not six and two): the
   // columns are named here so a step that starts a row is known to the looks that part the cells with hairlines.
   const cols = steps.length <= 4 ? Math.max(steps.length, 1) : Math.ceil(steps.length / Math.ceil(steps.length / 4));
   return (
-    <ol
-      className="dash-steps"
-      style={{ ['--steps' as string]: Math.max(steps.length, 1), ['--cols' as string]: cols }}
-      aria-busy={!data.data || undefined}
-    >
-      {steps.map((key, index) => {
-        const text = String(key);
-        const { tone } = ruleSays(rule, text);
-        const icon = rule?.icons && Object.hasOwn(rule.icons, text) ? (rule.icons[text] as AppIconName) : undefined;
-        const note = section.notes?.[text];
-        const figure = data.data ? say(countOf.get(text) ?? 0) : '\u00a0';
-        const body = (
-          <>
-            {icon && (
-              <span className={`dash-step-mark${tone ? ` tone-${tone}` : ''}`} aria-hidden="true">
-                <Icon name={icon} size={16} />
+    <>
+      <ol
+        className="dash-steps"
+        style={{ ['--steps' as string]: Math.max(steps.length, 1), ['--cols' as string]: cols }}
+        aria-busy={!data.data || undefined}
+      >
+        {steps.map((key, index) => {
+          const text = String(key);
+          const { tone } = ruleSays(rule, text);
+          const icon = rule?.icons && Object.hasOwn(rule.icons, text) ? (rule.icons[text] as AppIconName) : undefined;
+          const note = section.notes?.[text];
+          const figure = data.data ? say(countOf.get(text) ?? 0) : '\u00a0';
+          const none = Boolean(data.data) && !Number(countOf.get(text));
+          const body = (
+            <>
+              {icon && (
+                <span className={`dash-step-mark${tone ? ` tone-${tone}` : ''}`} aria-hidden="true">
+                  <Icon name={icon} size={16} />
+                </span>
+              )}
+              <span className="dash-step-words">
+                <span className="dash-step-title">{sayKey(key)}</span>
+                {note && <span className="dash-step-note">{note}</span>}
               </span>
-            )}
-            <span className="dash-step-words">
-              <span className="dash-step-title">{sayKey(key)}</span>
-              {note && <span className="dash-step-note">{note}</span>}
-            </span>
-            <span className="dash-step-figure">{figure}</span>
-          </>
-        );
-        return (
-          <li
-            key={text}
-            className={`dash-step${tone ? ` is-${tone}` : ''}${index % cols === 0 ? ' is-row-start' : ''}${icon ? '' : ' no-mark'}`}
-          >
-            {drill ? (
-              (() => {
-                const link = drill.link(key);
-                const title = sayCopy('openTableWhereBy', { table: section.table ?? '', by: section.by ?? '', key: text });
-                return link ? (
-                  <a className="dash-step-card" href={link.href} title={title} onClick={link.onClick}>
-                    {body}
-                  </a>
-                ) : (
-                  <button type="button" className="dash-step-card" title={title} onClick={() => drill(key)}>
-                    {body}
-                  </button>
-                );
-              })()
+              <span className={`dash-step-figure${none ? ' is-none' : ''}`}>{figure}</span>
+            </>
+          );
+          return (
+            <li
+              key={text}
+              className={`dash-step${tone ? ` is-${tone}` : ''}${index % cols === 0 ? ' is-row-start' : ''}${icon ? '' : ' no-mark'}`}
+            >
+              {drill ? (
+                (() => {
+                  const link = drill.link(key);
+                  const title = sayCopy('openTableWhereBy', { table: section.table ?? '', by: section.by ?? '', key: text });
+                  return link ? (
+                    <a className="dash-step-card" href={link.href} title={title} onClick={link.onClick}>
+                      {body}
+                    </a>
+                  ) : (
+                    <button type="button" className="dash-step-card" title={title} onClick={() => drill(key)}>
+                      {body}
+                    </button>
+                  );
+                })()
+              ) : (
+                <div className="dash-step-card">{body}</div>
+              )}
+              {index < steps.length - 1 && <Icon name="caret-right" size={14} className="dash-step-arrow" />}
+            </li>
+          );
+        })}
+      </ol>
+      {ended.length > 0 && (
+        <p className="dash-steps-ended">
+          <span className="dash-steps-ended-label">{sayCopy('closedSteps')}</span>
+          {ended.map((key) => {
+            const text = String(key);
+            const count = Number(countOf.get(text));
+            const words = (
+              <>
+                {sayKey(key)}{' '}
+                <span className={`dash-steps-ended-figure${data.data && !count ? ' is-none' : ''}`}>
+                  {data.data ? say(countOf.get(text) ?? 0) : '\u00a0'}
+                </span>
+              </>
+            );
+            const link = drill?.link(key);
+            const title = sayCopy('openTableWhereBy', { table: section.table ?? '', by: section.by ?? '', key: text });
+            return link ? (
+              <a key={text} className="dash-steps-ended-item" href={link.href} title={title} onClick={link.onClick}>
+                {words}
+              </a>
+            ) : drill ? (
+              <button key={text} type="button" className="dash-steps-ended-item" title={title} onClick={() => drill(key)}>
+                {words}
+              </button>
             ) : (
-              <div className="dash-step-card">{body}</div>
-            )}
-            {index < steps.length - 1 && <Icon name="caret-right" size={14} className="dash-step-arrow" />}
-          </li>
-        );
-      })}
-    </ol>
+              <span key={text} className="dash-steps-ended-item">
+                {words}
+              </span>
+            );
+          })}
+        </p>
+      )}
+    </>
   );
 });
 
@@ -1008,6 +1062,11 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
             : undefined
         }
         sayLegend={stacked ? (totals) => legendSayer(section, totals) : undefined}
+        timed={
+          stacked &&
+          (/\s/.test(firstKey) ||
+            /date|time/i.test((findTable(section.table) as TableMeta | undefined)?.columns.find((c) => c.name === firstKey)?.type ?? ''))
+        }
         onPick={
           donut || section.shape === 'line'
             ? drillFor(section)
@@ -1234,11 +1293,12 @@ function AsideRows({
   table: TableMeta | undefined;
   query: string;
   empty?: ReactNode;
-  onRows: (data: { total?: number; exactTotal?: boolean }) => void;
+  onRows: (data: { total?: number; exactTotal?: boolean; rows?: unknown[] }) => void;
 }) {
   const rows = useQuery<Rows & { total?: number; exactTotal?: boolean; errors?: Array<{ message: string }> }>({
     queryKey: ['run', query, section.limit ?? 5],
-    queryFn: () => batchedRun({ q: query, limit: section.limit ?? 5, offset: 0 }),
+    queryFn: () =>
+      batchedRun({ q: query, limit: section.limit ?? 5, offset: 0, ...(section.counted === false ? { count: 'none' as const } : {}) }),
     refetchInterval: minuteTick(query, section.table),
     staleTime: TILE_FRESH,
     placeholderData: keepPreviousData,
@@ -1326,7 +1386,13 @@ const List = memo(function List({ section, aside = false, period }: { section: S
      reference is drawn by its record's name, fetched beside it and kept out
      of sight (shared/dashboardAsks.ts, whose words a first page is asked in). */
   const { query, keys, named, referenceLabels } = dashboardListQuery(lookups, section, source?.presentation);
-  const onRows = (data: { total?: number; exactTotal?: boolean }) => {
+  const onRows = (data: { total?: number; exactTotal?: boolean; rows?: unknown[] }) => {
+    /* A section that asked no total knows only whether it has rows, which is all its leaving out reads. */
+    if (section.counted === false) {
+      setMatched(data.rows?.length);
+      setCount('');
+      return;
+    }
     setMatched(data.total);
     if (!data.total) {
       setCount('');
@@ -1359,7 +1425,12 @@ const List = memo(function List({ section, aside = false, period }: { section: S
       ) : (
         <div className="dash-list">
           <TableRoom
-            entry={{ kind: 'table', table: section.table as string, query }}
+            entry={{
+              kind: 'table',
+              table: section.table as string,
+              query,
+              ...(section.counted === false ? { counted: false as const } : {}),
+            }}
             sizing={section.sizing}
             chrome={false}
             interactive={false}
@@ -1377,7 +1448,7 @@ const List = memo(function List({ section, aside = false, period }: { section: S
             present={shell().present ?? undefined}
             listLabel={source?.label}
             order={source?.order}
-            empty={sourceEmpty}
+            empty={sourceEmpty ?? <ListEmpty spec={{ title: nothingIn(section.title ?? untitled(section)) }} />}
             export={exportOffered(app, section.table as string | undefined) ? undefined : false}
             onResult={onRows}
           />
@@ -1512,27 +1583,46 @@ function Lane({
 
 /* ---------- the controls ---------- */
 
+/** The window every dated section keeps when none is picked: their one phrase (`last 90 days`); null where some keep
+    different ones, or others keep none, so no one phrase says what the unpicked state is; undefined where none keeps one. */
+function ownWindowOf(sections: Array<{ query?: string; over?: string; windowBase?: string }>): string | null | undefined {
+  const dated = sections.filter((section) => section.over);
+  const kept = dated.filter((section) => section.windowBase !== undefined);
+  if (!kept.length) return undefined;
+  const phrases = new Set(kept.map((section) => windowPhraseOf(section.query, section.over)?.toLowerCase() ?? ''));
+  const [only] = phrases;
+  return kept.length === dated.length && phrases.size === 1 && only ? only : null;
+}
+
 /**
  * The window picker: the unpicked state and the dashboard's offered phrases.
  * Unpicked is "All time" only when it is: where a section keeps a window of
  * its own (`close_date = last 90 days`), the pressed "All time" sat over
- * figures still counting their ninety days, so it says "Default" there, and
+ * figures still counting their ninety days, so it says the window they keep
+ * ("Last 90 days"), or "Default" where the sections keep different ones, and
  * each figure says its own window (windowTitle, metricWindow).
  */
 function WindowRow({
   windows,
   current,
   onPick,
-  ownWindows,
+  ownWindow,
   control = 'segmented',
 }: {
   windows: string[];
   current: string | null;
   onPick: (w: string | null) => void;
-  ownWindows: boolean;
+  /** What the unpicked state is: undefined where no section keeps a window (all time), the phrase they all keep, or null where they differ. */
+  ownWindow: string | null | undefined;
   control?: 'segmented' | 'button';
 }) {
-  const word = (w: string | null) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : sayCopy(ownWindows ? 'defaultWindow' : 'allTimeWindow'));
+  const said = (phrase: string) => phrase.charAt(0).toUpperCase() + phrase.slice(1);
+  const word = (w: string | null) =>
+    w ? said(w) : ownWindow ? said(ownWindow) : sayCopy(ownWindow === null ? 'defaultWindow' : 'allTimeWindow');
+  /* Where every dated section keeps one window, the unpicked state is that window, and the same phrase offered
+     beside it would be a second entry reading alike that means the same: it is the unpicked one, so it is not listed. */
+  const offered = [null, ...windows.filter((w) => !ownWindow || w.toLowerCase() !== ownWindow)];
+  const pressed = (w: string | null) => (w === null ? !current || (!!ownWindow && current.toLowerCase() === ownWindow) : w === current);
   if (control === 'button') {
     /* The dates the window covers, its last day inclusive (the window's end is the next day's start); a phrase the
        calendar cannot place is said as itself. */
@@ -1558,10 +1648,10 @@ function WindowRow({
         popupClassName="more-list dash-window-list"
         align="end"
       >
-        {[null, ...windows].map((w) => (
+        {offered.map((w) => (
           <DropItem key={w ?? ''} className="more-item" onClick={() => onPick(w)}>
             <span className="more-tick" aria-hidden="true">
-              {w === current ? '✓' : ''}
+              {pressed(w) ? '✓' : ''}
             </span>
             <span className="more-label">{word(w)}</span>
           </DropItem>
@@ -1571,8 +1661,8 @@ function WindowRow({
   }
   return (
     <div className="dash-windows" role="group" aria-label={sayCopy('timeWindow')}>
-      {[null, ...windows].map((w) => (
-        <button key={w ?? ''} type="button" className="dash-window" aria-pressed={w === current} onClick={() => onPick(w)}>
+      {offered.map((w) => (
+        <button key={w ?? ''} type="button" className="dash-window" aria-pressed={pressed(w)} onClick={() => onPick(w)}>
           {word(w)}
         </button>
       ))}
@@ -2081,7 +2171,7 @@ export function Dashboard({
                   setWindow(w);
                   onWindow?.(w);
                 }}
-                ownWindows={allSections(dashboard).some((section) => section.over && section.windowBase !== undefined)}
+                ownWindow={ownWindowOf(allSections(dashboard))}
                 control={dashboard.windowControl}
               />
             ) : null}

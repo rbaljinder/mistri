@@ -234,6 +234,18 @@
    link-blue names under the title read as a row of navigation, not as what the record is (page.css). */
 :root[data-visual-theme] .page-head-facts .page-fact button.ref-jump { color: var(--ink); }
 :root[data-visual-theme] .page-head-facts .page-fact button.ref-jump:hover { color: var(--link); }
+/* In a grid a reference is the cell's own word in the ink, and a link only to the pointer or the keyboard: a column of
+   link-blue names beside the plain ones read as the loudest column on the page, and the cell is a door whichever colour
+   it wears (the peek opens on hover, the click goes). A record's fields keep the link ink above, where a reference is
+   the one thing to follow. Mono's underline stays (themeFamilies.css). */
+:root[data-visual-theme] .app-mode td.reflink { color: var(--ink); }
+:root[data-visual-theme] .app-mode td.reflink:is(:focus-visible, :focus-within) { color: var(--link); }
+@media (hover: hover) {
+  :root[data-visual-theme] .app-mode td.reflink:hover { color: var(--link); }
+}
+/* A true flag is a tick in the ink; a false one is an empty cell (Grid.tsx names it "No" for assistive technology), so
+   a column of flags shows the rows that are, not a column of crosses. */
+:root[data-visual-theme] .app-mode td.bool .yes { color: var(--ink); }
 
 :root[data-visual-theme] .dash-controls { padding-top: 20px; padding-bottom: var(--space-3); gap: var(--space-4); }
 :root[data-visual-theme] .dash-windows { padding: var(--space-1h); gap: var(--space-1); background: var(--raised); border: 1px solid var(--line); border-radius: var(--control-radius, var(--radius)); }

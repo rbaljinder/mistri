@@ -53,6 +53,8 @@ export interface AskedSection {
   target?: number | { table: string; query?: string; measure: string; by?: string; over?: string; windowBase?: string };
   /** The target is the whole this metric is a share of, not a goal (it follows the metric's window and picks). */
   targetWhole?: true;
+  /** A rows section asked for its rows and no total (served only: an overview's, which says none). */
+  counted?: false;
   error?: string;
 }
 

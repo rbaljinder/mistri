@@ -57,6 +57,8 @@ export interface CommandOperation {
   /** Sent by a component's `run`, or from the form its `open` holds: its caller resolves it, so a record's action bar
       must not draw its form while it is in flight (a composer's reply would show twice). */
   headless?: boolean;
+  /** Pending on a read of the receipt of a lost answer (`send(…, 'status')`), not on a send: the outcome says "checking". */
+  checking?: boolean;
 }
 
 // A new manifest version must not open a second operation over an unresolved submission.
@@ -206,6 +208,7 @@ export const commandOperations = {
     }
     inFlight.add(operation);
     operation.phase = 'pending';
+    operation.checking = endpoint === 'status';
     operation.message = endpoint === 'status' ? say('checkingResult') : say('common.submitting');
     changed();
     try {

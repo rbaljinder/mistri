@@ -44,7 +44,9 @@ test.describe('the shared account menu', () => {
       // longer than the interaction timeout loading the initial module graph.
       await expect(record).toBeVisible({ timeout: 20_000 });
       const trigger = page.getByRole('button', { name: /^Account:/ });
-      await expect(trigger).toHaveAccessibleName(`Account: ${app.accounts[0].email}`);
+      // Named by what it shows, in its order (WCAG 2.5.3): the avatar's initial, then the address it stands for.
+      const email = app.accounts[0].email;
+      await expect(trigger).toHaveAccessibleName(`Account: ${email[0].toUpperCase()} ${email}`);
       for (const width of [1440, 390]) {
         await page.setViewportSize({ width, height: 844 });
         await expect(trigger).toBeVisible();

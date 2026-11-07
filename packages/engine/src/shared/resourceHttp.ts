@@ -45,6 +45,8 @@ interface HttpRunRequest extends HttpPaginationInput {
   countLimit?: number;
   /** `none` for a caller that never shows a total; `exact` is `exactCount`. */
   count?: 'none' | 'exact' | 'estimate';
+  /** A board's lanes in one read: the first `limit` rows (1 to 100) of each value of the column `by`, no total. */
+  lanes?: { by: string; limit: number };
   /** A page by key: the rows after a boundary (a reply's `bounds.last`), before one (`bounds.first`),
    * or the list's last `limit` rows. `offset` then only names the page; an order that cannot page by key reads by it. */
   after?: Boundary;

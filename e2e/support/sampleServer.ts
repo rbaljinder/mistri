@@ -17,6 +17,8 @@ export const COMMONS_ADMIN = { email: 'admin@commons.example.test', password: 'd
 export const LOANER_ADMIN = { email: 'admin@loaner.example.test', password: 'disposable-loaner-admin-password' };
 /** Atelier's owner, the bootstrapped administrator; staff and warehouse accounts are made from it (e2e/atelier.spec.ts). */
 export const ATELIER_ADMIN = { email: 'admin@atelier.example.test', password: 'disposable-atelier-admin-password' };
+/** The bare benchmark's administrator: an App nobody arranged, signed in to as any App is. */
+export const BARE_ADMIN = { email: 'admin@bare.example.test', password: 'disposable-bare-admin-password' };
 
 /* Depot's ledger, Commons' forum and Forecourt's images each cost several
    seconds to generate per browser test. Seed once per worker (and day when
@@ -81,7 +83,8 @@ export async function startSample(
     | 'depot'
     | 'commons'
     | 'loaner-desk'
-    | 'atelier',
+    | 'atelier'
+    | 'bare',
   /* `dev` serves the dev observer (--dev), for a spec that counts what a room asks the database. */
   /* `jobs` serves the App's jobs module (--jobs), for a spec that watches its flows run. */
   /* `env` adds to the server's environment: a spec that compares the server's drawing on and off (MISTRI_SSR=0). */
@@ -91,7 +94,13 @@ export async function startSample(
      fixtures (test/fixtures/databases), not inside the App. */
   const publicApp = name === 'tick';
   const separateSeed =
-    name === 'thread' || name === 'payday' || name === 'depot' || name === 'commons' || name === 'loaner-desk' || name === 'atelier';
+    name === 'thread' ||
+    name === 'payday' ||
+    name === 'depot' ||
+    name === 'commons' ||
+    name === 'loaner-desk' ||
+    name === 'atelier' ||
+    name === 'bare';
   const market = name === 'forecourt-market';
   const forecourt = name === 'forecourt' || market;
   const commanded =
@@ -107,7 +116,11 @@ export async function startSample(
             ? LOANER_ADMIN
             : name === 'atelier'
               ? ATELIER_ADMIN
-              : FORECOURT_STAFF;
+              : name === 'bare'
+                ? BARE_ADMIN
+                : FORECOURT_STAFF;
+  /* The bare benchmark has no commands, and signs its readers in like the commanded samples. */
+  const signsIn = commanded || name === 'bare';
   const source = market
     ? resolve('test/fixtures/apps/forecourt-market')
     : resolve(publicApp ? 'examples/apps' : 'test/fixtures/apps', name);
@@ -122,7 +135,11 @@ export async function startSample(
         : join(source, 'seed.mjs');
   // Command-backed samples migrate their journal through the public SDK.
   if (name === 'depot' || name === 'commons' || forecourt) seedExpensiveSampleDatabase(forecourt ? 'forecourt' : name, seed, db);
-  else execFileSync(process.execPath, [...(commanded ? ['--import', 'tsx'] : []), seed, db]);
+  // The bare benchmark's dates are around a fixed day, so what is overdue is the same every run.
+  else
+    execFileSync(process.execPath, [...(commanded ? ['--import', 'tsx'] : []), seed, db], {
+      env: { ...process.env, ...(name === 'bare' ? { BARE_TODAY: '2026-09-04' } : {}) },
+    });
   const appDirectory = options.built ? join(directory, 'build') : source;
   if (options.built) {
     execFileSync(
@@ -172,7 +189,7 @@ export async function startSample(
         XDG_CONFIG_HOME: join(directory, 'xdg'),
         MISTRI_OPEN: '0',
         ...(name === 'tick' ? { MISTRI_CLOCK: '2026-09-08T12:00:00Z' } : {}),
-        ...(commanded
+        ...(signsIn
           ? {
               BETTER_AUTH_SECRET: 'disposable-forecourt-browser-secret-at-least-thirty-two-characters',
               MISTRI_AUTH_ADMIN_EMAIL: account.email,

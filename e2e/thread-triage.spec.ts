@@ -185,7 +185,11 @@ test.describe('Thread triage queue and board', () => {
       await actions(2).click();
       await expect(page.getByRole('group', { name: 'Move to' }).getByRole('menuitem')).toHaveText(['In progress']);
       await page.keyboard.press('Escape');
-      // A done card has no authored way out: its menu edits it and moves it nowhere.
+      // A done card has no authored way out: its menu edits it and moves it nowhere. Done, a final state, draws
+      // folded to a strip until the reader opens it.
+      const done = lanes.nth(4);
+      await expect(done).toHaveClass(/is-folded/);
+      await done.locator('.triage-lane-unfold').click();
       await actions(5).click();
       await expect(page.getByRole('group', { name: 'Edit' })).toBeVisible();
       await expect(page.getByRole('group', { name: 'Move to' })).toHaveCount(0);

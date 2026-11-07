@@ -43,15 +43,17 @@
   }
   /* A soft bar is a panel on the page, apart from the menu beside it, so it is drawn in the page's own colors: the
      navigation's dress the menu, wherever the menu is. When the menu is drawn in the bar (placement top) the bar is
-     the menu, and it wears nav.ground as a side menu does. */
-  :root[data-look-bar='soft'] body:not(.app-topnav) .topbar {
+     the menu, and when the bar stands in the sidebar (sidebarShell.js) it is the menu's head: either way it wears
+     nav.ground as a side menu does. Kept a page panel there, the head was a white block in a dark menu with the
+     menu's light inks on it (1.1:1). */
+  :root[data-look-bar='soft'] body:not(.app-topnav, .app-sidebar-shell) .topbar {
     --nav-ground: var(--surface);
     --nav-ink: var(--ink);
     --nav-muted: var(--ink-muted);
     --nav-line: var(--line);
     --nav-accent: var(--accent);
   }
-  :root[data-look-bar='soft'] body.app-topnav .topbar {
+  :root[data-look-bar='soft'] body:is(.app-topnav, .app-sidebar-shell) .topbar {
     background: var(--nav-ground);
     border-bottom-color: var(--nav-line);
   }

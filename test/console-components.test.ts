@@ -47,11 +47,14 @@ test('Console component artifact loads from an installed tree without source or 
   // 96 KB (minified) since 0.8.11's flags room: the flag sheet with staged edits and their review (FlagSheet), the rule
   // editor and the experiment's comparison and verdict ship in the one component a room is. It loads only when the room
   // is opened, never on an App's first paint; every source in it is still the room's own, which the check above holds.
-  assert.ok(Buffer.byteLength(script) < 96_000, 'the room stays a small component, not a second client');
+  // 104 KB since rc.18 (measured 98,979, from 88,173): the kit's JSON viewer, which the flag sheet and the experiment's
+  // results show a value in, became one to work in (a filter, Raw, Copy value and path, keyboard as a tree: jsonTree.ts).
+  assert.ok(Buffer.byteLength(script) < 104_000, 'the room stays a small component, not a second client');
   // 335 KB since rc.16 (measured 334,640; 334.5 KB at rc.12): every source in the map is still the room's own or the kit's
   // (the check above holds that); the kit's message catalogs, which each room embeds, grew with rc.12's chunk-failure copy
-  // and the money entry, and with rc.16's "Show more" and empty-field words.
-  assert.ok(Buffer.byteLength(compiled.files[`${entry.js}.map`]) < 335_000, 'the map contains only component sources');
+  // and the money entry, and with rc.16's "Show more" and empty-field words. 390 KB since rc.18 (measured 380,821): the
+  // same JSON viewer's sources, as above.
+  assert.ok(Buffer.byteLength(compiled.files[`${entry.js}.map`]) < 390_000, 'the map contains only component sources');
   assert.ok(entry.css && compiled.files[entry.css], 'the scoped stylesheet ships with the room');
 
   // Only the emitted loader and its normal source-mode signal exist here:

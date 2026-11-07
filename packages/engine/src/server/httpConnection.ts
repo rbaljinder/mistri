@@ -43,6 +43,12 @@ export interface HttpConnectionConfig {
   cache?: { ttl: number };
 }
 
+/** `"a", "b" and "c"`. */
+const listed = (words: readonly string[]): string => {
+  const quoted = words.map((word) => JSON.stringify(word));
+  return quoted.length < 2 ? quoted.join('') : `${quoted.slice(0, -1).join(', ')} and ${quoted.at(-1)}`;
+};
+
 const HTTP_ONLY = ['description', 'auth', 'insecure', 'allowLinkLocal', 'cache'] as const;
 /* RFC 9110's token, minus the headers the request itself owns. */
 const HEADER_NAME = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
@@ -54,9 +60,15 @@ const MAX_CACHE_TTL_SECONDS = 86_400;
  * An entry's HTTP fields, checked: the resolved block for an `http`
  * connection, undefined for a database. Throws naming the field, because a
  * config someone wrote is refused rather than half-read. Service kinds
- * (`cache`, `webhook`, …) are read by serviceConnections.ts before this is asked.
+ * (`cache`, `webhook`, …) are read by serviceConnections.ts before this is asked;
+ * `kinds` are the ones the reader's sections know, so an unknown kind is answered
+ * with the list this reader takes rather than one written down once and outgrown.
  */
-export function httpConnectionOf(entry: Record<string, unknown>, path: string): HttpConnectionConfig | undefined {
+export function httpConnectionOf(
+  entry: Record<string, unknown>,
+  path: string,
+  kinds: readonly string[] = ['cache'],
+): HttpConnectionConfig | undefined {
   const where = `${path}: connection "${String(entry.name)}"`;
   if (entry.kind === undefined) {
     const stray = HTTP_ONLY.find((key) => entry[key] !== undefined);
@@ -71,7 +83,7 @@ export function httpConnectionOf(entry: Record<string, unknown>, path: string): 
   }
   if (entry.kind !== 'http') {
     throw new Error(
-      `${where} has "kind": ${JSON.stringify(entry.kind)}. The kinds are "http", "cache" and "webhook"; a database needs none.`,
+      `${where} has "kind": ${JSON.stringify(entry.kind)}. The kinds are ${listed(['http', ...[...kinds].sort()])}; a database needs none.`,
     );
   }
   // Writes to an API arrive with their own slice; until then a flag saying otherwise would be a promise nothing keeps.

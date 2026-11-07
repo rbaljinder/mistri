@@ -329,6 +329,16 @@ describe('a conversation timeline', () => {
     await waitFor(() => expect(runs.at(-1)).toEqual({ ref: 'note', key: { id: 7 }, input: { body: 'Ask billing' } }));
   });
 
+  test('the words, and Send at their foot, share one box with no edge of their own', async () => {
+    draw();
+    await screen.findByText('Oldest');
+    const box = document.querySelector('.timeline-composer .timeline-box')!;
+    expect(box.contains(screen.getByRole('textbox', { name: 'Reply' }))).toBe(true);
+    expect(box.querySelector('.timeline-composer-foot button[type="submit"]')).not.toBeNull();
+    // One box: the mode toggle stays above it, outside.
+    expect(box.querySelector('.timeline-modes')).toBeNull();
+  });
+
   test("a custom section's fill puts words in the box and chooses the mode, sending nothing; with no composer it says so", async () => {
     draw();
     await screen.findByText('Oldest');

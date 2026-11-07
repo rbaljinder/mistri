@@ -157,6 +157,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'components',
       // The fields a decision may suggest, by table, so a record holds their places before it asks (decide/decisionServing.ts).
       'decisions',
+      // rc.18: a long menu's Directory, sent where the reader's menu leads to more than twelve places (Directory.tsx).
+      'directory',
       // 1.0: the records on paper this reader may open, each a verb on its record (shared/appDocuments.ts).
       'documents',
       'exportableTables',

@@ -91,6 +91,10 @@ export interface ListSpec {
   count?: boolean;
   /** Columns or label paths the list shows, in order. */
   show?: string[];
+  /** A second line under a shown column where the list's columns are inferred (shared/listInference.ts). */
+  subtitles?: Readonly<Record<string, string>>;
+  /** The board the list may be switched to, where its machine has three to seven open states (listInference.ts). */
+  asBoard?: import('@mistriwork/engine/shared/listPresentations.js').AppBoardList;
   filters?: string[];
   /** The orders a reader may choose from the list's Sort menu. */
   sorts?: Array<{ label: string; sort: string }>;

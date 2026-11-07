@@ -11,7 +11,7 @@ import { useContext, useEffect, type CSSProperties, type ReactNode } from 'react
 import { useQuery } from '@tanstack/react-query';
 import { readRecordSource, shareRecordSource } from '../recordSource.js';
 import { readPageFields } from './pageFieldsRead.js';
-import { dressFor, sayValue, type DisplayRule } from './valueModel.js';
+import { choiceWord, dressFor, sayValue, type DisplayRule } from './valueModel.js';
 import { pathEqualityFilter, recordKey as checkedRecordKey } from '../resourceRequests.js';
 import { columnDisplay, columnLabel, emptyWord, findTable, labelPath, primaryKey, rowLabel, state } from '../core.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
@@ -29,9 +29,10 @@ import { api as callApi, toast } from '../core.js';
 import { ownedBy } from '../requestIdentity.js';
 import type { AppUpdateAction } from '@mistriwork/engine/schema/model.js';
 import { PageHeadline } from './PageHeadline.js';
-import { PageRenderContext, recordReadNames, usePageApi, type RecordActions, type SlotProps } from './pageContext.js';
+import { PageRenderContext, inAppPage, recordReadNames, usePageApi, type RecordActions, type SlotProps } from './pageContext.js';
 import { Loading, SectionBox } from './PageSectionBox.js';
 import { sectionClass } from './pageModel.js';
+import { isInferredPage } from '@mistriwork/engine/shared/pageModel.js';
 import { say } from '../copy/record/components/PageFields.js';
 import { onDemand } from './onDemand.js';
 
@@ -409,6 +410,15 @@ export function FieldsSection({
     );
   }
 
+  /* The inferred page's form (pageAnatomy.ts), and the record's name as its head says it: what the form need not repeat. */
+  const inferredForm = rail && section.region !== 'aside' && isInferredPage(page, inAppPage());
+  const name = String(rowLabel(base, row)).trim().toLowerCase();
+  const saysTheName = (path: string, value: unknown): boolean => {
+    const column = columnAt(path);
+    if (column?.references || typeof value === 'object') return false;
+    const text = column?.allowed?.length ? choiceWord(columnDisplay(base.id, path) as DisplayRule | null, String(value)) : String(value);
+    return text.trim().toLowerCase() === name;
+  };
   const bound = resourceOf(shell().app(), base.id)?.defined;
   const definedOf = (id: string) => resourceOf(shell().app(), id)?.defined;
   const fields = (named ? paths.filter((path) => path !== namePath) : paths).map((path) => {
@@ -510,6 +520,11 @@ export function FieldsSection({
           />
         </dd>
       );
+    } else if (inferredForm && !adorned && filled(path) && saysTheName(path, value)) {
+      /* A value the record's name already says ("Labor", a labor line's kind beside its name "Labor") is not said
+         again under it: the classic form leaves it out as it leaves out an empty one. Where the reader may set it,
+         it stays, as the place to set it (the branch above). */
+      return null;
     } else if (hideEmpty && !filled(path) && !adorned) {
       return null;
     } else if (value === null || value === undefined) {
@@ -582,8 +597,13 @@ export function FieldsSection({
   /* Both are lists of terms, so both are drawn as one: a property rail says
      caption beside value, the grid says them in columns. A grid of <dt>/<dd>
      in a <div> had no list for assistive technology to announce. */
+  /* An inferred page's form is the classic one (structure.css); a rail an author placed keeps its own dress. */
+  const classic = inferredForm;
   const grid = rail ? (
-    <dl className="page-properties" style={columns ? ({ '--page-properties-columns': String(columns) } as CSSProperties) : undefined}>
+    <dl
+      className={classic ? 'page-properties page-classic' : 'page-properties'}
+      style={columns ? ({ '--page-properties-columns': String(columns) } as CSSProperties) : undefined}
+    >
       {fields}
     </dl>
   ) : (

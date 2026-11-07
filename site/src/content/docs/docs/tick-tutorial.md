@@ -7,7 +7,7 @@ Edit a running App and watch each change land — a tab, a different presentatio
 
 ```sh
 mkdir tick-try && cd tick-try && npm init -y && npm pkg set type=module
-npm install @mistriwork/mistri typescript
+npm install @mistriwork/mistri@next typescript
 cp -r node_modules/@mistriwork/mistri/examples/apps/tick ./tick
 node node_modules/@mistriwork/mistri/examples/databases/tick/seed.mjs ./tick.db
 npx @mistriwork/mistri --config ./tick.db.json --app tick --open

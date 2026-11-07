@@ -94,7 +94,7 @@ export default defineApp({
 </div>
 
 ```sh title="Terminal"
-npm init -y && npm pkg set type=module && npm install @mistriwork/mistri typescript
+npm init -y && npm pkg set type=module && npm install @mistriwork/mistri@next typescript
 createdb billing
 npx @mistriwork/mistri migrate diff init --app .   # writes migrations/V1__init.sql from schema.sql
 npx @mistriwork/mistri migrate up --app .          # applies it, then checks the App against it
@@ -103,7 +103,7 @@ npx @mistriwork/mistri dev                         # serves it, and reloads on e
 
 You read the first migration before it runs; the next comes the same way when
 you change `schema.sql`. No front end to write, no API to wire, no build step
-to serve. Starting with nothing, `npm create mistri billing` makes a starter App
+to serve. Starting with nothing, `npm create mistri@next billing` makes a starter App
 with a SQLite database of its own, and a SQLite starter needs nothing else
 running; with a database you have, mistri drafts the App from it.
 [Get started](/docs/getting-started/)

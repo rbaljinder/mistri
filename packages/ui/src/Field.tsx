@@ -13,6 +13,9 @@
  */
 import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from 'react';
 
+/** The short answers: a count, an amount, a day, a day and its time, a time of day. */
+export type AnswerKind = 'number' | 'money' | 'date' | 'datetime' | 'time';
+
 export interface FieldControlProps {
   id: string;
   'aria-describedby'?: string;
@@ -48,6 +51,10 @@ interface FieldProps {
   reserve?: boolean;
   /** Compact: a filter's or a dense row's size. */
   size?: 'compact' | 'default';
+  /** What kind of answer the control takes, where it is a short one: the control is only as wide as that answer
+      (forms.css) and consecutive short fields share a row. Decided from the data, never measured, so no answer
+      resizes its field. Absent for text and for a choice, which take the column. */
+  kind?: AnswerKind;
   className?: string;
   children: ReactElement<Record<string, unknown>> | ((control: FieldControlProps) => ReactNode);
 }
@@ -61,6 +68,7 @@ export function Field({
   group = false,
   check = false,
   size = 'default',
+  kind,
   optional,
   labelAside,
   labelHidden = false,
@@ -103,6 +111,7 @@ export function Field({
      "required" from `aria-required` instead. */
   return (
     <div
+      data-kind={kind}
       className={[
         'form-field',
         size === 'compact' ? 'form-field-compact' : '',

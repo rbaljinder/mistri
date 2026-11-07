@@ -50,7 +50,8 @@ page over it refreshes as before.
 
 The stream carries which records changed, filtered by the reader's own grants
 (a table or column they cannot read, a row outside their policy, are never
-mentioned), and never a value. The page asks again through the same reads it
+mentioned; in a tenant App, nothing of another tenant), and never a value
+([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do)). The page asks again through the same reads it
 always used, so every rule those reads have still applies.
 
 A dashboard takes no `refresh`. Under live sync it follows changes,

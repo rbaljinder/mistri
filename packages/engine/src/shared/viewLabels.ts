@@ -425,6 +425,7 @@ export function viewPaths(schema: DatabaseSchema, view: ViewDef, plan: JoinPlan,
                 .join(' ');
               return `CASE ${value} ${cases} ELSE COALESCE(${value}, '') END`;
             }
+            if (field.date) return dayText(value, style, literal);
             return `COALESCE(${value}, '')`;
           };
           /* A fallback chain is its first alternative with a value: each said as it would alone, an empty text
@@ -442,6 +443,22 @@ export function viewPaths(schema: DatabaseSchema, view: ViewDef, plan: JoinPlan,
       ? undefined
       : plainType(schema, view.base, path);
   return { resolve, qualify, membership, exists, typeOf };
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * A date or a timestamp, as text, said as a day a person reads ("Sep 13, 2026"): a name's `{starts_at|date}`
+ * (recordLabel.ts). Read off the text every engine writes a date as — `YYYY-MM-DD`, then any time — with SUBSTR and
+ * CASE alone, which all three say alike, so no engine's date functions or session settings enter a name. A value
+ * not written that way (an epoch, a typo in a text column) is said as it is stored. The year is always said: a
+ * name is read in lists of any age, and the day is the record's as stored, not moved into the reader's zone.
+ */
+function dayText(value: string, style: SqlStyle, literal: (text: string) => string): string {
+  const month = `CASE SUBSTR(${value}, 6, 2) ${MONTHS.map((word, at) => `WHEN ${literal(String(at + 1).padStart(2, '0'))} THEN ${literal(`${word} `)}`).join(' ')} ELSE '' END`;
+  const day = `CASE WHEN SUBSTR(${value}, 9, 1) = '0' THEN SUBSTR(${value}, 10, 1) ELSE SUBSTR(${value}, 9, 2) END`;
+  const iso = `SUBSTR(${value}, 5, 1) = '-' AND SUBSTR(${value}, 8, 1) = '-'`;
+  return `CASE WHEN ${iso} THEN ${style.concat([month, day, literal(', '), `SUBSTR(${value}, 1, 4)`])} ELSE COALESCE(${value}, '') END`;
 }
 
 /* What a stored column is to an expression that reads it: a yes-or-no column native or a 0/1 integer. */

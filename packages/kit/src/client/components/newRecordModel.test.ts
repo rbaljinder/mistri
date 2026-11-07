@@ -1,7 +1,15 @@
 import { expect, test } from 'vitest';
-import { formColumns, hasFormChanges, insertValues, isFormFieldVisible, missingFields, presetValue } from './newRecordModel.js';
+import {
+  formColumns,
+  hasFormChanges,
+  inferredNarrowing,
+  insertValues,
+  isFormFieldVisible,
+  missingFields,
+  presetValue,
+} from './newRecordModel.js';
 import { parseComputed } from '../../../../engine/src/shared/computedParse.js';
-import { autoKey } from '../../../../engine/src/shared/form.js';
+import { autoKey, enteredNow, platformWritten } from '../../../../engine/src/shared/form.js';
 import type { ColumnMeta, TableMeta } from '../../../../engine/src/shared/schema.js';
 
 const column = (name: string, extra: Partial<ColumnMeta> = {}): ColumnMeta => ({
@@ -215,4 +223,83 @@ test("a field's when over a computed column is worked out from the draft", () =>
   expect(isFormFieldVisible(form, note, { amount: '2', price: '10' }, priced)).toBe(false);
   // Nothing typed yet: unknown, so the field stays where the person can see it.
   expect(isFormFieldVisible(form, note, {}, priced)).toBe(true);
+});
+
+const job: TableMeta = {
+  id: 'job',
+  name: 'job',
+  schema: '',
+  isView: false,
+  columns: [
+    column('id', { type: 'INTEGER', primaryKey: true, nullable: false, identity: 'by-default' }),
+    column('number', { type: 'INTEGER', nullable: false, default: "nextval('job_number_seq')" }),
+    column('title', { nullable: false }),
+    column('customer_id', { type: 'INTEGER', nullable: false, references: { table: 'customer', column: 'id' } }),
+    column('site_id', { type: 'INTEGER', nullable: false, references: { table: 'site', column: 'id' } }),
+    column('status', { nullable: false, default: "'new'" }),
+    column('opened_at', { type: 'TIMESTAMP', nullable: false }),
+    column('created_at', { type: 'TIMESTAMP', nullable: false, default: 'CURRENT_TIMESTAMP' }),
+    column('updated_on', { type: 'TEXT', default: "date('now')" }),
+    column('invoiced_on', { type: 'DATE', default: 'CURRENT_DATE' }),
+    column('completed_at', { type: 'TIMESTAMP' }),
+    column('status_since', { type: 'TIMESTAMP' }),
+  ],
+};
+const machine = { column: 'status', since: 'status_since', states: ['new', 'scheduled', 'completed'] };
+
+test("a New form leaves to the platform what it writes: stamps it defaults, a sequence, a state's own stamp", () => {
+  const written = platformWritten(job, machine);
+  expect([...written].sort()).toEqual(['completed_at', 'created_at', 'number', 'status_since', 'updated_on']);
+  // A day with a default is the creator's to say (an invoice's date, today unless said); with no machine, no state stamps.
+  expect(written.has('invoiced_on')).toBe(false);
+  expect([...platformWritten(job)].sort()).toEqual(['created_at', 'number', 'updated_on']);
+  const asked = formColumns(job, undefined, true, written).map((c) => c.name);
+  expect(asked).toEqual(['title', 'customer_id', 'site_id', 'status', 'opened_at', 'invoiced_on']);
+  // A field the App's form names is the author's to ask, written or not.
+  expect(formColumns(job, { show: ['title', 'completed_at'] }, true, written).map((c) => c.name)).toEqual(['title', 'completed_at']);
+  expect(
+    formColumns(job, { groups: [{ id: 'when', label: 'When', fields: ['completed_at'] }] } as never, true, written).map((c) => c.name),
+  ).toContain('completed_at');
+});
+
+test('a required stamp of when a record was entered starts at now, still asked', () => {
+  expect(enteredNow(job.columns, {}).map((c) => c.name)).toEqual(['opened_at']);
+  expect(enteredNow(job.columns, { opened_at: '2026-01-01' })).toEqual([]);
+  expect(enteredNow([column('due_at', { type: 'TIMESTAMP', nullable: false })], {})).toEqual([]);
+});
+
+test('a later picker is narrowed by an earlier required pick its table points at, by one column only', () => {
+  const tables: Record<string, TableMeta> = {
+    site: {
+      id: 'site',
+      name: 'site',
+      schema: '',
+      isView: false,
+      columns: [
+        column('id', { type: 'INTEGER', primaryKey: true, nullable: false }),
+        column('customer_id', { type: 'INTEGER', nullable: false, references: { table: 'customer', column: 'id' } }),
+      ],
+    },
+    contact: {
+      id: 'contact',
+      name: 'contact',
+      schema: '',
+      isView: false,
+      columns: [
+        column('id', { type: 'INTEGER', primaryKey: true, nullable: false }),
+        column('customer_id', { type: 'INTEGER', references: { table: 'customer', column: 'id' } }),
+        column('billing_customer_id', { type: 'INTEGER', references: { table: 'customer', column: 'id' } }),
+      ],
+    },
+  };
+  const target = (id: string) => tables[id];
+  expect(inferredNarrowing(job.columns, target)).toEqual({ site_id: { customer_id: 'customer_id' } });
+  // Picked before the customer, the site waits on nothing.
+  const reversed = [job.columns[4], job.columns[3]];
+  expect(inferredNarrowing(reversed, target)).toEqual({});
+  // An optional earlier pick narrows nothing; a table that points back two ways is not guessed between.
+  const optional = [{ ...job.columns[3], nullable: true }, job.columns[4]];
+  expect(inferredNarrowing(optional, target)).toEqual({});
+  const contact = column('contact_id', { type: 'INTEGER', references: { table: 'contact', column: 'id' } });
+  expect(inferredNarrowing([job.columns[3], contact], target)).toEqual({});
 });

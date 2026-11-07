@@ -6,7 +6,7 @@ description: Install the agent skill, hand the agent a brief, and let it build p
 Install the agent skill, hand the agent a brief, and let it build page by page against `mistri check`, screenshots and a rubric.
 
 ```sh
-npm init -y && npm install @mistriwork/mistri typescript
+npm init -y && npm install @mistriwork/mistri@next typescript
 npx @mistriwork/mistri agent init
 ```
 
@@ -22,7 +22,7 @@ Chromium, installed once with
 In an empty folder, or the project the App will live in:
 
 ```sh
-npm init -y && npm install @mistriwork/mistri typescript
+npm init -y && npm install @mistriwork/mistri@next typescript
 npx @mistriwork/mistri agent init
 ```
 

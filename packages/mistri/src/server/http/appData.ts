@@ -12,7 +12,7 @@ import { appZone } from '../../shared/appUi.js';
 import { sessionRoles } from '../../shared/appViewRoles.js';
 import { localeWeekStart } from '@mistriwork/engine/shared/weekStart.js';
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
-import { lookupPerson, unprovenPerson } from '../app/appMe.js';
+import { emailOnly, lookupPerson, unprovenPerson } from '../app/appMe.js';
 import { searchAwareAdapter } from '../app/appSearchRuntime.js';
 import { liveSyncOn } from '../live/liveBinding.js';
 import { trackingReads } from '../live/liveReads.js';
@@ -118,7 +118,15 @@ export const APP_DATA: DataHooks = {
       appHost: source.selectedHost,
       recipient: who,
       ...(source.zone === undefined ? {} : { zone: source.zone }),
-      ...(me ? { me: () => me(reads) } : {}),
+      /* Text that compares `me` only with an email column needs the email alone, which the session holds (emailOnly). */
+      ...(me
+        ? {
+            me: (texts?: readonly unknown[]) =>
+              !identity.emailUnproven && texts && emailOnly(app!, texts, source.schema)
+                ? Promise.resolve({ email: who ?? null })
+                : me(reads),
+          }
+        : {}),
     };
   },
   page: async (ctx, source, body) => {

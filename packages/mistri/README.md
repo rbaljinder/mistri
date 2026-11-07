@@ -9,12 +9,13 @@ policies, jobs and workflows declared in a typed DSL over a database you
 already have — SQLite or PostgreSQL — and served from it.
 
 ```bash
-npm create mistri                               # a starter App, in a directory of its own
+npm create mistri@next                          # a starter App, in a directory of its own
 npx @mistriwork/mistri dev --app ./my-app             # serve it with a dev secret and a sign-in per role
 npx @mistriwork/mistri check --app ./my-app     # schema types, typecheck and validation
 ```
 
-It needs Node 24 or newer. Browsing a database with no App is the database
+It needs Node 24 or newer. Until 1.0.0 ships, npm's `latest` tag is a placeholder, so
+install the release candidate as `@next` (`npm install @mistriwork/mistri@next`). Browsing a database with no App is the database
 browser's, a package of its own: `npx tablewalk <db>`. The DSL is imported as
 `@mistriwork/mistri/app`, `@mistriwork/mistri/commands` and the rest until the names move.
 
@@ -27,7 +28,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.17; the
+These App features ship in mistri 1.0.0-rc.18; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).

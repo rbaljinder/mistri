@@ -79,12 +79,38 @@ need a restart.
 - **Jobs and services.** Jobs, timers, inbound endpoints, integrations and effects run as a service the policy's `services: ['clock']` names, and get the rows `resolveRows` gives `service:clock` ([events and jobs](/docs/events-and-jobs/)). A command's events are recorded under the policy too.
 - **Mail.** A notify rule's `email: true` mails a recipient only while the policy gives them that record, the same rows a session of theirs would get. `send: { channel: 'email' }` mails an address the record holds ([email](/docs/email/#mail-to-an-address-a-record-holds)).
 - **Triggers.** A database trigger runs inside the write and reaches whatever its body says, which the policy cannot bound, so a write that fires one is refused. A trigger that only checks the row is not: it reads `NEW`, `OLD` and literals and raises (`SELECT RAISE(ABORT, '…') WHERE NEW.balance < 0` on SQLite, `IF NEW.balance < 0 THEN RAISE EXCEPTION '…'; END IF; RETURN NEW;` in PL/pgSQL). A trigger fires only on its own event and `UPDATE OF` columns, so an update of other columns runs. On PostgreSQL the same holds for a CHECK constraint, a column's default, a generated column, an expression index or a domain that calls a function the database defines: a write that runs it is refused (a domain's, only a write of its column). PostgreSQL's own functions (`now()`, `nextval`, `gen_random_uuid()`) block nothing. `mistri check` names each command one blocks (`[command-trigger]`): move that work into the command, or [name the trigger](#triggers-the-app-names), rather than drop a check.
-- **Refused.** Raw SQL, MCP, the CLI's export modes and the App API's event feed. The server serves exactly one `--app` with a policy.
+- **Refused.** Raw SQL, the database's own MCP (`--mcp`; the App's `--app-mcp` is served), the CLI's export modes and the App API's event feed. The server serves exactly one `--app` with a policy. The [table below](#what-each-kind-of-app-can-do) sets each against an unscoped App and a tenant App.
 
 ```sh
 mistri check --app ./dealer --policy ./dealer/policy.ts
 mistri --config server.json --app ./dealer --policy ./dealer/policy.ts
 ```
+
+### Bounds
+
+What `resolveRows` returns is copied and checked within fixed bounds, the
+same on every request:
+
+| Bound | Size |
+| --- | --- |
+| Values in one list (an `in` filter's ids) | 4,096 |
+| Values in one scope, every resource together | 16,384 |
+| Conditions in one scope | 2,048 |
+| Resources in one scope | 256 |
+| Characters in one string, and in the whole scope | 16,384, and 262,144 |
+
+A scope past a bound is refused, never cut short: the read or write fails, and
+the refusal names the bound, how far past it the scope went and what to do:
+`Invalid row scope: a list holds 5,000 values, 904 past the bound of 4,096 per list.`
+Never cap a list in the policy to fit, which would hide rows without a word.
+
+A list of ids grows with the person's rows; a column does not. Give each
+scoped table a column that holds its owner (an account, a household, a
+dealership) and compare it with `=`, one value however many rows it admits
+(`{ column: 'household_id', op: '=', value: householdId }`), or narrow the
+policy to fewer resources or a coarser parent. A policy that matches rows
+through a relationship rather than a list (an `EXISTS` over another table) is
+not available yet.
 
 ### Triggers the App names
 
@@ -128,6 +154,31 @@ post_balance)`), and live sync announces them. A command that also writes a
 table its trigger writes is `[trigger-double-write]`. A trigger not named stays
 refused; one that only checks `NEW` and `OLD` needs no name. Tenant Apps do
 not accept named triggers yet.
+
+## What each kind of App can do
+
+An unscoped App's roles read whole tables. A row-policy App narrows them per
+person (this page), and a [tenant App](/docs/tenant-apps/) serves several
+organizations from one App. Each feature's own page has the detail.
+
+<!-- capability-table:start -->
+| Capability | Unscoped App | Row policy | Tenant App |
+| --- | --- | --- | --- |
+| File fields of a signed-in command | Yes | Yes | Yes, 10 MB a file at most |
+| File fields of a public form ([files](/docs/commands/#files-and-a-signature)) | Yes | No | No |
+| Tables of files (`resources.*.file`) | Yes | Yes: an upload is an insert the policy judges | Yes, 10 MB a file at most |
+| Public forms ([command forms](/docs/command-forms/)) | Yes | Only those `publicForms` enrolls, fixed or placed | Yes, placed with one tenant by its link |
+| Forms saved on every step (`resume`) | Yes | No: `mistri check` refuses one | Yes, without `statusCheck` or `link` |
+| Database triggers a command's write fires | Run as written | Validation-only ones run; any other refuses the write (`[command-trigger]`) unless [named](#triggers-the-app-names) (Preview) | Validation-only ones run; any other refuses the write; none can be named yet |
+| Commands over the [App API](/docs/app-api/) and its MCP | Yes | Yes, each token as its own account | Yes, each token bound to one membership |
+| The App API's generic writes | Yes, where every role reads all rows | No | No |
+| The App API's event feed | Yes, where every role reads all rows | No (`[policy-events-feed]`) | No: webhooks instead (`[api-event-unsupported]`) |
+| `mistri check --pending`, `check --deploy`, `mistri build` | Every step | Every step, given `--policy` | The queries step is skipped; validation waits for the tenant stores |
+| Delete and restore | Yes | Only with `authorizeDeletedRecord` | Only with `authorizeDeletedRecord` (`[tenant-delete-unauthorized]`) |
+| List exports | Yes | Yes, the person's rows | Yes, the tenant's rows |
+| The [assistant](/docs/assistant/) | Yes | Yes, reading as the person, under the policy | Yes, where the platform owner turns it on for that customer |
+| [Live sync](/docs/live-sync/) | Yes | Yes, naming only changes to the person's rows | Yes, naming only the tenant's own changes |
+<!-- capability-table:end -->
 
 ## Common mistakes
 

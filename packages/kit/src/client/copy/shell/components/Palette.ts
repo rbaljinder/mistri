@@ -16,4 +16,18 @@ export const say = defineMessages({
   kindRecord: 'record',
   kindSql: 'sql',
   kindDatabase: 'database',
+  kindCreate: 'create',
+  /* An App's row says what it opens in its line, first: "Page · Leasing". */
+  kindDetail: '{kind} · {detail}',
+  /* An App's palette sorts what it finds under these, in this order; a heading is a quiet label, not a badge. */
+  groupRecent: 'Recent',
+  groupPages: 'Pages',
+  groupCreate: 'Create',
+  groupCommands: 'Commands',
+  groupRecords: 'Records',
+  /* The footer's key hints: the keys are marks, these are what each does. */
+  hintMove: 'move',
+  hintOpen: 'open',
+  hintClose: 'close',
+  keyEscape: 'esc',
 });

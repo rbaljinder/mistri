@@ -23,6 +23,7 @@
  */
 import { checkNarrowed, narrowedFixedColumns } from './appNarrowed.js';
 import { checkShellNew } from './appNewMenu.js';
+import { servedOverview } from './appOverview.js';
 import { destinationProblem, servedView, servedViewKind } from './appDestinations.js';
 import { parseBrandingDeclaration } from './tenantBranding.js';
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
@@ -108,6 +109,9 @@ import { appSearchProblem } from './appSearch.js';
 import { checkImports, importProblem } from './appImport.js';
 import { metricCohortQuery, parseContent } from './appViews.js';
 import { cardsProblem, cardsTitled } from '@mistriwork/engine/shared/appCards.js';
+import type { InferenceResource } from '@mistriwork/engine/shared/listInference.js';
+import { inferredList } from './appInferredList.js';
+import { declaredDisplayOf, effectiveDisplay } from '@mistriwork/engine/shared/displayDefaults.js';
 import { parseAppPages } from './appPages.js';
 import { appRealms, checkTenancy } from './appTenancy.js';
 import { headingOf } from '@mistriwork/engine/shared/appNoun.js';
@@ -1172,12 +1176,30 @@ export function resolveViews(app: AppDef, schema: DatabaseSchema): Record<string
   const files = new Set(appFileRules(app, schema).rules.keys());
   /* `me` is judged as a request's parse will read it (appMe.ts), on a person no row is. */
   const person = checkedPerson(app, schema);
+  /* What a list that declares little is drawn by (listInference.ts): the resource's record label, its display rules
+     as drawn and its machine. */
+  const declaredOf = declaredDisplayOf(app, schema);
+  const inferenceFor =
+    (name: string) =>
+    (table: TableMeta): InferenceResource => {
+      const resource = app.resources?.[name];
+      return {
+        recordLabel: resource?.recordLabel,
+        display: effectiveDisplay(resource?.display, table, { machine: resource?.machine, schema, served: true, declared: declaredOf }),
+        ...(resource?.machine ? { machine: resource.machine } : {}),
+      };
+    };
   for (const key of viewOrder(app)) {
     const view = app.views[key];
     resolved[key] = isFormView(view)
       ? resolveFormView(view, schema)
       : 'sections' in view
-        ? resolveDashboard(view, schema, person, app.views)
+        ? resolveDashboard(
+            view.overview ? servedOverview(view, app, schema, (name) => inferenceFor(name)(tableNamed(schema, name)!)) : view,
+            schema,
+            person,
+            app.views,
+          )
         : withImport(
             resolveListView(
               view,
@@ -1187,6 +1209,7 @@ export function resolveViews(app: AppDef, schema: DatabaseSchema): Record<string
               person,
               app.resources?.[view.table]?.recordLabel,
               (column) => Object.keys(app.resources?.[view.table]?.display?.[column]?.icons ?? {}).length > 0,
+              inferenceFor(view.table),
             ),
             schema,
           );
@@ -1602,6 +1625,7 @@ function resolveDashboard(
     // resolved payload as its label; this object deliberately rebuilds fields.
     ...(entry.heading ? { heading: entry.heading } : {}),
     ...(entry.headingHidden ? { headingHidden: true as const } : {}),
+    ...(entry.head ? { head: entry.head } : {}),
     ...(entry.description ? { description: entry.description } : {}),
     // The menu's mark, served like the label: the menus draw both.
     ...(entry.icon ? { icon: entry.icon } : {}),
@@ -1755,6 +1779,7 @@ function resolveListView(
   person?: QueryPerson,
   recordLabel?: string | false,
   icons?: (column: string) => boolean,
+  infer?: (table: TableMeta) => InferenceResource,
 ): ResolvedListView {
   const me = person ? { me: person } : {};
   const table = tableNamed(schema, view.table);
@@ -1762,6 +1787,7 @@ function resolveListView(
   if (!table) {
     error = `This connection has no table "${view.table}" — or more than one, and the name needs qualifying.`;
   } else {
+    if (infer) view = inferredList(view, schema, table, infer(table));
     if (view.presentation) view = { ...view, presentation: titledPresentation(view.presentation, table, schema, recordLabel) };
     /* A show entry may be a dotted label path — "account_id.name" puts
        the record's name where its id would sit — judged by the same path

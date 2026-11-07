@@ -265,6 +265,7 @@
         "./client/theme.js",
         "./client/url.js",
         "./client/visualTheme.js",
+        "./client/workbenchLook.css",
         "./client/write.js",
         "./clientFiles.js",
         "./vite"

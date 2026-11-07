@@ -43,6 +43,17 @@ a.btn.ghost { background: transparent; color: var(--ink-muted); border-color: va
 .form-field-hint { margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-muted); }
 .form-field-problem { margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--status-critical); overflow-wrap: anywhere; }
 .form-field-compact { gap: var(--space-2); }
+/* A field is as wide as its answer (docs/design.md, Forms): a count, an amount, a day and a time are a few characters
+   long, and a box the width of the column for them says "write a paragraph". The cap is on the control, not the field,
+   so its label, hint and problem keep the column's measure. Set from the data kind the form already knows (Field's
+   `kind`), never measured, so no answer resizes its field. Here with the Field that carries the kind, not in forms.css,
+   which loads only beside a control of its own: a form of plain boxes never fetches it. Consecutive short fields share
+   a row where the form lays its fields on a grid (features.css, `.insert-group-fields` and `.command-fields`). */
+.form-field[data-kind="number"], .form-field[data-kind="time"] { --answer-max: 160px; }
+.form-field[data-kind="money"] { --answer-max: 200px; }
+.form-field[data-kind="date"] { --answer-max: 240px; }
+.form-field[data-kind="datetime"] { --answer-max: 280px; }
+.form-field[data-kind] > :is(input, .field-box, .field-with-action, .date-field, .insert-affix, .picker) { max-inline-size: var(--answer-max); }
 /* A checkbox field: the box, then its label beside it, the label a click
    target too; the hint and the problem sit under the label, not the box. */
 .form-field-check-row { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; }

@@ -200,9 +200,10 @@ describe("`as` draws a vocabulary or a flag the author's way", () => {
         }}
       />,
     );
-    // Three words that would be radios are cards (a label and a box); a flag is a Yes and a No, not a switch.
+    // Three words the author asks as cards are a row of picks (a short choice is not five stacked cards); a flag is a Yes and a No, not a switch.
     const cards = await screen.findByRole('radiogroup', { name: 'Priority' });
-    expect(cards).toHaveClass('choice-cards');
+    expect(cards).toHaveClass('choice-row');
+    expect(cards.querySelector('.choice-card, .choice-box')).toBeNull();
     expect(
       within(cards)
         .getAllByRole('radio')
@@ -217,6 +218,33 @@ describe("`as` draws a vocabulary or a flag the author's way", () => {
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await vi.waitFor(() => expect(p.onAdded).toHaveBeenCalled());
     expect(sent()).toMatchObject({ title: 'Draft', priority: 'high', billable: '1' });
+  });
+
+  test('cards keep their stack only past five words; up to five are one row of picks that wraps', async () => {
+    const wide = keyed(
+      'wide',
+      col('title', 'TEXT', { nullable: false }),
+      col('kind', 'TEXT', { nullable: false, allowed: ['a', 'b', 'c', 'd', 'e', 'f'] }),
+    );
+    const five = keyed(
+      'five',
+      col('title', 'TEXT', { nullable: false }),
+      col('kind', 'TEXT', { nullable: false, allowed: ['a', 'b', 'c', 'd', 'e'] }),
+    );
+    const row = (table: TableMeta) => {
+      draw(<NewRecordForm {...props()} table={table} form={{ show: ['title', 'kind'], fields: { kind: { as: 'cards' } } }} />);
+      return screen.findByRole('radiogroup', { name: 'Kind' });
+    };
+    const stacked = await row(wide);
+    expect(stacked).toHaveClass('choice-cards');
+    expect(stacked.querySelectorAll('.choice-card')).toHaveLength(6);
+    cleanup();
+    const picks = await row(five);
+    expect(picks).toHaveClass('choice-row');
+    expect(picks.querySelectorAll('.choice-pick')).toHaveLength(5);
+    // Still radios to the keyboard and a screen reader: one group, one answer.
+    await userEvent.setup().click(within(picks).getByRole('radio', { name: 'C' }));
+    expect(within(picks).getByRole('radio', { name: 'C' })).toBeChecked();
   });
 
   test('select puts few words in a listbox and radios puts many in a row of them', () => {
@@ -307,6 +335,33 @@ describe('a picker narrowed by an earlier field', () => {
     await vi.waitFor(() => expect(p.onAdded).toHaveBeenCalled());
     expect(sent()).toEqual({ title: 'Draft', project_id: '7', priority: 'normal', billable: false });
   });
+
+  /* The schema's narrowing (inferredNarrowing): a milestone the form was given, as a New form opened from a record or
+     the assistant's proposal gives one, stays when the project picked is its own, and goes when it is another's. */
+  test.each([
+    { owner: 7, kept: true },
+    { owner: 3, kept: false },
+  ])('a given milestone of project $owner after Launch is picked: kept $kept', async ({ owner, kept }) => {
+    const user = userEvent.setup();
+    const p = props();
+    answers['/api/query'] = (body: { table: string; columns: string[] }) =>
+      body.table === 'milestone' && body.columns[0] === 'project_id' ? { rows: [{ project_id: owner }] } : { rows: [] };
+    draw(
+      <NewRecordForm
+        {...p}
+        form={{ show: ['title', 'project_id', 'milestone_id'], defaults: { milestone_id: 5, priority: 'normal', billable: false } }}
+      />,
+    );
+    await user.type(screen.getByRole('textbox', { name: 'Title' }), 'Draft');
+    await user.type(screen.getByRole('combobox', { name: 'Project' }), 'La');
+    await user.click(await screen.findByText('Launch'));
+    await vi.waitFor(() =>
+      expect(calls.some((call) => call.path === '/api/query' && (call.body as { table?: string }).table === 'milestone')).toBe(true),
+    );
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await vi.waitFor(() => expect(p.onAdded).toHaveBeenCalled());
+    expect(sent().milestone_id).toBe(kept ? 5 : undefined);
+  });
 });
 
 describe('the frame', () => {
@@ -317,7 +372,6 @@ describe('the frame', () => {
     draw(
       <NewRecordDrawer
         {...props()}
-        appName="Tracker"
         form={{
           description: 'One piece of work.',
           show: ['title', 'project_id', 'milestone_id', 'description', 'priority', 'stage', 'billable', 'budget', 'due_on'],
@@ -327,7 +381,8 @@ describe('the frame', () => {
     expect(pane).toHaveClass('has-new-page');
     const page = within(pane).getByRole('region', { name: 'New task' });
     expect(within(page).getByRole('heading', { level: 1, name: 'New task' })).toBeInTheDocument();
-    expect(within(page).getByText('Tracker')).toHaveClass('eyebrow');
+    // The App's name is the bar's: not said again over the form's title.
+    expect(page.querySelector('.eyebrow')).toBeNull();
     expect(within(page).getByText('One piece of work.')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).toBeNull();
     // Cancel then Add, under the last field.
@@ -498,5 +553,26 @@ describe('a record form draws its rows', () => {
     expect(row).not.toBeNull();
     expect(section).toContainElement(row as HTMLElement);
     expect(within(row as HTMLElement).getByRole('textbox', { name: 'Budget' })).toBeInTheDocument();
+  });
+});
+
+describe('a short answer says its kind, so the form sizes it by the data', () => {
+  test('a count, an amount, a day and a day with its time carry data-kind; text and a choice carry none', () => {
+    const counted = keyed('counted', col('title', 'TEXT', { nullable: false }), col('seats', 'INTEGER'));
+    draw(<NewRecordForm {...props()} table={counted} form={{ show: ['title', 'seats'] }} />);
+    const kindOf = (name: string) => screen.getByRole('textbox', { name }).closest('.insert-field')?.getAttribute('data-kind');
+    expect(kindOf('Title')).toBeNull();
+    expect(kindOf('Seats')).toBe('number');
+    cleanup();
+    draw(<NewRecordForm {...props()} form={{ show: ['title', 'budget', 'due_on', 'starts_at', 'priority'] }} />);
+    expect(kindOf('Budget')).toBe('money');
+    expect(kindOf('Due on')).toBe('date');
+    expect(kindOf('Starts at')).toBe('datetime');
+    expect(screen.getByRole('radiogroup', { name: 'Priority' }).closest('.insert-field')?.getAttribute('data-kind')).toBeNull();
+  });
+
+  test('the Workbench form has no kinds: its label-beside-value layout is its own', () => {
+    draw(<NewRecordForm {...props()} app={false} form={undefined} />);
+    expect(document.querySelector('[data-kind]')).toBeNull();
   });
 });

@@ -6,7 +6,7 @@ description: 'Start an App that is only an API: expose reads and writes, issue a
 Start an App that is only an API: expose reads and writes, issue a scoped token, follow its events and export its contracts.
 
 ```sh
-npx @mistriwork/mistri new --api "Field Notes"
+npx @mistriwork/mistri@next new --api "Field Notes"
 cd field-notes && npx @mistriwork/mistri check --app . --config mistri.json
 ```
 
@@ -53,7 +53,7 @@ To update or complete a record, first `GET …/prepare` for its `ETag`, then sen
 
 `GET …/$events` returns `{ items, next }`, oldest first. Pass `next` back as `after`; at the end, `next` stays where the feed stands, so a poller keeps it. Each item is `{ id, name, occurredAt, resource, key, payload }`. It never says who acted.
 
-A token sees an event only when it holds `event:<name>` and its roles can read the record the event is about. Only Apps whose roles read all rows have a feed. A tenant App sends its events through webhooks.
+A token sees an event only when it holds `event:<name>` and its roles can read the record the event is about. Only Apps whose roles read all rows have a feed. A tenant App sends its events through webhooks ([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do)).
 
 ## Contracts
 

@@ -105,7 +105,8 @@ export interface PageDefinition<R extends string, C extends string, P extends st
  * file's name and the page's address (`/{app}/<path>`); `label` is what the menu and the heading call it (text, or `msg('…')` said in the reader's language, as a view's), `icon` its mark
  * in the menu, as a view's; `nav` places it in the App's menu (`false` keeps it out; `position` is its place among its
  * neighbors, from 0), `roles`
- * narrows who is offered it, `public: true` opens it to signed-out visitors within `auth.public`.
+ * narrows who is offered it, `public: true` opens it to signed-out visitors within `auth.public`; `head` is the form its
+ * head takes (`'compact'`, or `false` where the component draws its own).
  */
 export declare function definePage<
   const R extends ResourceName,
@@ -120,6 +121,10 @@ export declare function definePage<
   roles?: readonly string[];
   public?: true;
   favorite?: boolean;
+  /** The head's form: `'compact'` is the title alone on one line with its verbs, no intro; `false` is a page that draws
+      its own head, its title kept for a screen reader (the page's one h1) and the label still the tab's, the crumb's
+      and the palette's word. Absent: the full head. */
+  head?: 'compact' | false;
   reads: readonly R[];
   commands?: readonly C[];
   params?: readonly P[];

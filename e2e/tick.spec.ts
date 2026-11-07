@@ -181,11 +181,11 @@ test.describe('Tick checklist', () => {
       await expectCenteredHeader(page);
       const nav = page.locator('#topnav');
       await expect(nav).toBeVisible();
-      await expect(nav.getByRole('button', { name: 'Search (⌘K)' })).toBeVisible();
+      await expect(nav.getByRole('button', { name: 'Search ⌘K' })).toBeVisible();
       const frame = await page.locator('.app-content-frame').boundingBox();
       /* On a phone the nav's own box stands aside (display: contents) so its
          search joins the bar's one row; the search is what must stay in bounds. */
-      const navBox = await nav.getByRole('button', { name: 'Search (⌘K)' }).boundingBox();
+      const navBox = await nav.getByRole('button', { name: 'Search ⌘K' }).boundingBox();
       expect(navBox!.x).toBeGreaterThanOrEqual(frame!.x);
       expect(navBox!.x + navBox!.width).toBeLessThanOrEqual(frame!.x + frame!.width + 1);
       /* Tick names its home and no nav: its one list is the whole App, so
@@ -193,7 +193,7 @@ test.describe('Tick checklist', () => {
       await expect(nav.locator('.tn-item, .tn-popitem')).toHaveCount(0);
       await expect(nav.getByRole('button', { name: 'Menu', exact: true })).toHaveCount(0);
       await expect(nav.getByRole('button', { name: 'Tasks', exact: true })).toHaveCount(0);
-      await nav.getByRole('button', { name: 'Search (⌘K)' }).click();
+      await nav.getByRole('button', { name: 'Search ⌘K' }).click();
       await expect(page.getByRole('combobox', { name: 'Search', exact: true })).toBeVisible();
       await page.keyboard.press('Escape');
     });

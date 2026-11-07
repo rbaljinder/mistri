@@ -35,7 +35,7 @@ vi.mock('../../../../kit/src/client/clauses.js', () => ({
   splitQuery: (text: string) => ({ filter: text.replace(/^\S+\s*/, '').replace(/\s*sort .*$/, '') }),
 }));
 vi.mock('../../../../kit/src/client/locale.js', () => ({ formatLocale: () => 'en-US', formatNumber: (n: number) => String(n) }));
-const { GanttList, dayOf, rowsOf } = await import('./GanttList.js');
+const { GanttList, dayOf, rowsOf, windowOf } = await import('./GanttList.js');
 const { canShowGantt } = await import('../../../../kit/src/client/components/presentationFit.js');
 const spec: AppGanttList = { kind: 'gantt', start: 'starts_on', end: 'ends_on', primary: 'name', by: 'kind', progress: 'done' };
 const rows = [
@@ -90,8 +90,8 @@ test('each bar says its span, its share done, or its one day', async () => {
     'Trade show, on Apr 14, 2026',
   ]);
   const spring = screen.getAllByRole('button')[0];
-  // Thirty days of a span of 1 March to 2 July, both days counted.
-  expect(parseFloat(spring.style.width)).toBeCloseTo((30 / 123) * 100, 2);
+  // Thirty days of a window of whole weeks: Monday 2 March to Monday 6 July.
+  expect(parseFloat(spring.style.width)).toBeCloseTo((30 / 126) * 100, 2);
   expect(spring.style.getPropertyValue('--done')).toBe('100%');
   expect(screen.getAllByRole('button')[2]).toHaveClass('is-mark');
 });
@@ -117,4 +117,15 @@ test('days read off dates and timestamps alike; ungrouped rows are one per bar',
   expect(rowsOf(bars, false).map((row) => row.name)).toEqual(['A', 'B']);
   expect(canShowGantt(table, spec)).toBe(true);
   expect(canShowGantt(table, { ...spec, end: 'nope' })).toBe(false);
+});
+
+test('the window is whole weeks from Monday, with today in it when it is near', () => {
+  const d = dayOf;
+  // Data 3 Mar (Tue) to 10 Mar (Tue) 2026, today inside: Monday 2 Mar to Monday 16 Mar.
+  expect(windowOf(d('2026-03-03')!, d('2026-03-10')!, d('2026-03-05')!)).toEqual({ from: d('2026-03-02')!, to: d('2026-03-16')! });
+  // Today a little before or after is brought in.
+  expect(windowOf(d('2026-03-03')!, d('2026-03-10')!, d('2026-02-20')!).from).toBe(d('2026-02-16')!);
+  expect(windowOf(d('2026-03-03')!, d('2026-03-10')!, d('2026-03-30')!).to).toBe(d('2026-04-06')!);
+  // Today a year away is not worth squeezing the bars for.
+  expect(windowOf(d('2026-03-03')!, d('2026-03-10')!, d('2027-03-30')!)).toEqual({ from: d('2026-03-02')!, to: d('2026-03-16')! });
 });

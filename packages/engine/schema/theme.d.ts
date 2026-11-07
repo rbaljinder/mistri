@@ -332,6 +332,9 @@ export interface ThemeRecipes {
       page's ground, on a band of the raised ground from edge to edge, or a band with the record's avatar large beside
       its title. It paints the box the page placed: it never moves a region, adds to the head or reorders it. */
   header?: 'plain' | 'band' | 'hero';
+  /** A list's filter not yet asked for ("+ Status"): on a dashed hairline, on a solid edge, or with no edge until a
+      pointer is over it. Its own part, so a theme picks it apart from its buttons. */
+  filters?: 'dashed' | 'solid' | 'quiet';
   /** A required field's mark: a red star after its label, or the word "(optional)" after the labels of the fields that
       may be left empty (`aria-required` stays either way). The words are the form's, in the reader's language. */
   required?: 'star' | 'optional-word';
@@ -455,8 +458,8 @@ type TypeWeight = 400 | 500 | 600 | 700 | 800 | 900;
 
 /**
  * Each kind of text, by what it is for. A role says only what differs from the look; its size is the size at the
- * 13px base, and grows with `base`. Body, data, label and navigation text has no size of its own: it follows the
- * base. A weight past 700 is for a face the theme ships at that weight (`type.faces`); `check` warns of one it does
+ * 13px base, and grows with `base`. Body, data and navigation text has no size of its own: it follows the base. A
+ * label's may be set a step either side of it. A weight past 700 is for a face the theme ships at that weight (`type.faces`); `check` warns of one it does
  * not (theme-type).
  */
 export interface ThemeTypeRoles {
@@ -471,8 +474,9 @@ export interface ThemeTypeRoles {
   section?: { face?: ThemeTypeFace; size?: TypePx; tracking?: TypeEm; weight?: TypeWeight; case?: ThemeTypeCase; features?: readonly ThemeTypeFeature[] };
   /** Prose, fields and the interface: its leading, 1.35 to 1.8. */
   body?: { leading?: number; features?: readonly ThemeTypeFeature[] };
-  /** The short names things are filed under: a column's head, a stat's label, a record's tabs. */
-  label?: { face?: ThemeTypeFace; tracking?: TypeEm; weight?: 400 | 500 | 600 | 700; case?: ThemeTypeCase; features?: readonly ThemeTypeFeature[] };
+  /** The short names things are filed under: a column's head, a stat's label, a record's tabs. 11px to 14px, a step
+      either side of the base; omitted, the base (a step under it in capitals). */
+  label?: { face?: ThemeTypeFace; size?: TypePx; tracking?: TypeEm; weight?: 400 | 500 | 600 | 700; case?: ThemeTypeCase; features?: readonly ThemeTypeFeature[] };
   /** A table's cells and a record's values, in the data face; tabular figures stay. `reach: 'figures'` sets only
       the figures, keys and dates in it (a table's, a field's and a record header's facts), and leaves names and words
       in the interface face; omitted, every value is in it, and a header's figures too. */

@@ -247,3 +247,17 @@ test('an App breakdown success needs neither total nor SQL diagnostics', async (
   expect(explain).toHaveBeenCalledWith(undefined);
   expect(history).toHaveBeenCalledWith('invoice count');
 });
+
+test("a board's rows are its lanes' first pages in one read windowed by its lane column, with no total", async () => {
+  request.mockResolvedValue(viewReply);
+  render(wrap(<TableRoom entry={entry} presentation={{ kind: 'board', by: 'status', primary: 'id' }} />));
+  await screen.findByTestId('rows');
+  expect(request).toHaveBeenCalledWith('/api/run', {
+    q: entry.query,
+    limit: 240,
+    offset: 0,
+    exactCount: false,
+    count: 'none',
+    lanes: { by: 'status', limit: 20 },
+  });
+});

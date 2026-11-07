@@ -31,7 +31,9 @@ import { subtitlePath } from './subtitlePath.js';
 import { listSecondLineColumns } from './appListColumns.js';
 import type { AppCardsList } from './appCards.js';
 import { findTable, labelPath, primaryKey, type DatabaseSchema, type TableMeta } from './schema.js';
-import { DEFAULT_HISTORY_LIMIT, kindReading, type PageSection } from './pageModel.js';
+import { DEFAULT_HISTORY_LIMIT, HISTORY_TAB, isInferredPage, kindReading, type PageSection } from './pageModel.js';
+import { resolvePath } from './pagePaths.js';
+import { COUNT_EACH_MAX } from './reads.js';
 import { assertNever } from './model.js';
 import { andQuery, quoteValue } from './query.js';
 import { tabMatches } from './addressParams.js';
@@ -71,11 +73,17 @@ export interface ReadSection {
   readonly status?: string;
   readonly subfigure?: string;
   readonly subtitle?: string;
+  readonly spans?: Readonly<Record<string, string>>;
   readonly was?: string;
   readonly actions?: ReadonlyArray<{ readonly prefill?: Readonly<Record<string, string>>; readonly to?: AppTarget }>;
   readonly names?: boolean;
   readonly workflow?: { readonly field: string };
   readonly from?: string;
+  /** A related list's way back to the record, and its own narrowing: what its tab's count asks. */
+  readonly path?: string;
+  readonly filter?: string;
+  readonly of?: string;
+  readonly similar?: unknown;
   readonly limit?: number;
   readonly record?: readonly string[];
   readonly when?: string;
@@ -269,6 +277,10 @@ export function headerColumns(
   const fetched = projection.fetched;
   const namePath = namePathOf(names, base);
   if (namePath && !fetched.includes(namePath)) fetched.push(namePath);
+  /* An inferred page's line under the record's name (pageAnatomy.ts). */
+  if (section.subtitle && !fetched.includes(section.subtitle)) fetched.push(section.subtitle);
+  /* And where a fact runs until: a visit's end, said with its start as one range. */
+  for (const end of Object.values(section.spans ?? {})) if (!fetched.includes(end)) fetched.push(end);
   /* A fact's second line is drawn under its value, as a field's is. */
   for (const second of secondLines(names, base, section.paths ?? [])) if (!fetched.includes(second)) fetched.push(second);
   return { fetched, labels: projection.labels };
@@ -371,18 +383,46 @@ export function historyBody(base: TableMeta, key: Readonly<Record<string, unknow
  */
 export function drawnSections(
   schema: DatabaseSchema,
-  page: { sections: readonly ReadSection[]; listTabs?: boolean },
+  page: { id?: string; sections: readonly ReadSection[]; listTabs?: boolean },
   tab: string | undefined,
   appPage: boolean,
 ): Set<number> {
+  return laidSections(schema, page, tab, appPage).drawn;
+}
+
+/** The address word a tab of a run of lists answers to: its list's title or table, an inferred page's history's own. */
+function listTabToken(schema: DatabaseSchema, section: ReadSection): string {
+  return section.kind === 'history' ? HISTORY_TAB : (section.title ?? findTable(schema, section.from ?? '')?.name ?? section.from ?? '');
+}
+
+/**
+ * A section a run of lists draws as one of its tabs: a list that is no picture and has no width an author gave it,
+ * and on an inferred page its history, which ends the strip (pageAnatomy.ts) — read when its tab is opened, never
+ * with the page.
+ */
+export function tabbedSection(section: ReadSection, appPage: boolean, inferred: boolean): boolean {
+  return (
+    (section.kind === 'list' && section.presentation !== 'gallery' && (section.width === undefined || !appPage)) ||
+    (inferred && section.kind === 'history')
+  );
+}
+
+/** What drawnSections says, and each run of related lists by its sections' indexes: a strip of tabs, or a list alone. */
+function laidSections(
+  schema: DatabaseSchema,
+  page: { id?: string; sections: readonly ReadSection[]; listTabs?: boolean },
+  tab: string | undefined,
+  appPage: boolean,
+): { drawn: Set<number>; runs: number[][] } {
   const drawn = new Set<number>();
+  const runs: number[][] = [];
+  const inferred = isInferredPage(page, appPage);
   const shownAll = page.sections.map((section, index) => ({ section, index })).filter(({ section }) => !section.hidden);
   const header = shownAll.find(({ section }) => section.kind === 'fields' && section.presentation === 'header');
   if (header) drawn.add(header.index);
   const hasAside = page.sections.some((section) => section.region === 'aside' && !section.hidden);
   const autoTabs = appPage ? page.listTabs === true : page.listTabs !== false;
-  const tabbed = (section: ReadSection) =>
-    section.kind === 'list' && section.presentation !== 'gallery' && (section.width === undefined || !appPage);
+  const tabbed = (section: ReadSection) => tabbedSection(section, appPage, inferred);
   type Shown = { section: ReadSection; index: number };
   const lay = (items: readonly Shown[], listTabs: boolean, scoped: boolean) => {
     for (let i = 0; i < items.length; i += 1) {
@@ -393,14 +433,14 @@ export function drawnSections(
       let end = i;
       while (end + 1 < items.length && tabbed(items[end + 1].section)) end += 1;
       const run = items.slice(i, end + 1);
-      if (run.length === 1) drawn.add(run[0].index);
-      else {
-        const token = (item: Shown) =>
-          scoped
-            ? `section:${item.index}`
-            : (item.section.title ?? findTable(schema, item.section.from ?? '')?.name ?? item.section.from ?? '');
+      if (run.length === 1) {
+        drawn.add(run[0].index);
+        runs.push([run[0].index]);
+      } else {
+        const token = (item: Shown) => (scoped ? `section:${item.index}` : listTabToken(schema, item.section));
         const asked = run.findIndex((item) => tabMatches(token(item), tab));
         drawn.add(run[asked === -1 ? 0 : asked].index);
+        runs.push(run.map((item) => item.index));
       }
       i = end;
     }
@@ -434,7 +474,48 @@ export function drawnSections(
       scoped,
     );
   }
-  return drawn;
+  return { drawn, runs };
+}
+
+/** A related tab's count's ceiling, as a list's total has one: past it the tab says "10,000+". */
+export const RELATED_COUNT_LIMIT = 10_000;
+
+/**
+ * The question a related tab's count asks, in the words `/api/counts` reads: the rows of its list that point at the
+ * record (`booking class_session_id = 5`), under the list's own narrowing. One hop to the record by its whole key,
+ * which is what an inferred page lists; any other list has no question, and its tab keeps the count's room empty.
+ */
+export function relatedCountQuestion(
+  schema: DatabaseSchema,
+  section: ReadSection,
+  base: TableMeta,
+  key: Readonly<Record<string, unknown>>,
+): string | undefined {
+  if (section.kind !== 'list' || !section.from || !section.path || section.of || section.similar || section.group) return undefined;
+  const hop = resolvePath(schema, section.from, section.path).path;
+  if (hop?.hops.length !== 1 || hop.endsAt !== base.id) return undefined;
+  const { from, to } = hop.hops[0];
+  if (to.columns.some((column) => key[column] === undefined || key[column] === null)) return undefined;
+  const meets = from.columns.map((column, i) => `${column} = ${quoteValue(String(key[to.columns[i]]))}`).join(' and ');
+  return `${section.from} ${andQuery(meets, section.filter)}`;
+}
+
+/**
+ * Every count a strip of related tabs shows, in one request: one statement for them all where each is a plain
+ * condition (countEach), never a list's read per tab. The client's strip asks this very body (PageSections.tsx),
+ * so on a composed page it is answered from the compose.
+ */
+export function relatedCountsBody(
+  schema: DatabaseSchema,
+  sections: readonly ReadSection[],
+  base: TableMeta,
+  key: Readonly<Record<string, unknown>>,
+): { items: string[]; countLimit: number } | undefined {
+  const items = [...new Set(sections.flatMap((section) => relatedCountQuestion(schema, section, base, key) ?? []))].slice(
+    0,
+    COUNT_EACH_MAX,
+  );
+  return items.length ? { items, countLimit: RELATED_COUNT_LIMIT } : undefined;
 }
 
 /**
@@ -453,7 +534,7 @@ export function recordPageReads(
   key: Readonly<Record<string, unknown>>,
   options: { rows: number; history: boolean; tab?: string },
 ): { row: string[]; parts: Array<{ part: string; columns: string[] }>; reads: ReadAsk[] } {
-  const drawn = drawnSections(names.schema, page, options.tab, names.app);
+  const { drawn, runs } = laidSections(names.schema, page, options.tab, names.app);
   /* Each reader of the row with its own columns, too: the one read of all of
      them is refused whole where any column is, and then each is asked alone,
      as the sections would have been. */
@@ -531,5 +612,16 @@ export function recordPageReads(
         assertNever(section.kind, 'page section kind');
     }
   });
+  /* An inferred page's tabs say how many rows each holds, all of them in one read; a list alone says it in its head. */
+  if (isInferredPage(page, names.app))
+    for (const run of runs) {
+      const body = relatedCountsBody(
+        names.schema,
+        run.map((index) => page.sections[index]),
+        base,
+        key,
+      );
+      if (body) reads.push({ path: '/api/counts', body });
+    }
   return { row: [...new Set(parts.flatMap((part) => part.columns))], parts, reads };
 }

@@ -78,6 +78,9 @@ export const INBOX_PAGE = 'app:inbox';
 /** The page id the assistant's own room rides, reserved as the inbox's is. */
 export const ASSISTANT_PAGE = 'app:assistant';
 
+/** The page id the Directory rides (Directory.tsx): every list, page and New of a menu past a dozen places. */
+export const DIRECTORY_PAGE = 'app:directory';
+
 /** Whether a room is the assistant's page. */
 export const isAssistantRoom = (room: object): room is AssistantRoom => Object.hasOwn(room, 'assistant');
 

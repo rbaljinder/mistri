@@ -18,7 +18,7 @@ import type { BreakdownDef, CompiledMeasure } from '../shared/breakdown.js';
 import type { AggregateRequest, AggregateResult } from '../shared/aggregate.js';
 import type { RowScope } from '../shared/rowScope.js';
 import { Refusal } from '../shared/refusal.js';
-import type { QueryResult } from '../shared/reads.js';
+import { LANE_ROW, type QueryResult } from '../shared/reads.js';
 import { orderClauseSql, type Filter, type SqlFragment, type SqlStyle } from '../shared/filter.js';
 import type { PoolRoleStats } from './poolMetrics.js';
 import type { ScopeTrigger } from './scoped/scopeTriggers.js';
@@ -48,6 +48,7 @@ export {
   countStatement,
   countEachStatement,
   countEachRows,
+  LANE_ROW,
   type CountResult,
   type QueryResult,
 } from '../shared/reads.js';
@@ -91,10 +92,47 @@ export function orderClause(
       expression: quote(o.column),
       direction: o.direction,
       declared: declaredOrder(table?.columns.find((column) => column.name === o.column)),
+      ...(o.nulls ? { nulls: o.nulls } : {}),
     })),
     style,
     startIndex,
   );
+}
+
+/**
+ * A board's every lane in one statement: the filtered rows, numbered within
+ * each value of the lane column in the read's own order (ROW_NUMBER, which
+ * SQLite, PostgreSQL and MySQL 8 all speak), and the first `lanes.limit` of
+ * each kept. A board read each lane apiece, five or eight of one shape
+ * every time it opened; this is one. The rows are read whole inside so the
+ * order and the lane resolve whatever the read projects, and the
+ * projection is taken outside. Rows come lane-number first, so a page cut
+ * across lanes cuts every lane evenly. `n` placeholders come before the
+ * three this adds (the lane's limit, the read's limit, its offset), as the
+ * caller's WHERE and ORDER BY spent them, in that order of text.
+ */
+export function lanesStatement(
+  style: SqlStyle,
+  parts: { prefix?: string; columns: string; source: string; lane: string; order: string },
+  n: number,
+): string {
+  const [rows, lanes, number] = [style.quote('lane_rows'), style.quote('lanes'), style.quote(LANE_ROW)];
+  return (
+    `${parts.prefix ?? ''}SELECT ${parts.columns} FROM (SELECT ${rows}.*, ROW_NUMBER() OVER (PARTITION BY ${rows}.${parts.lane}${parts.order}) AS ${number}` +
+    ` FROM (SELECT * FROM ${parts.source}) AS ${rows}) AS ${lanes}` +
+    ` WHERE ${lanes}.${number} <= ${style.placeholder(n + 1)} ORDER BY ${lanes}.${number}` +
+    ` LIMIT ${style.placeholder(n + 2)} OFFSET ${style.placeholder(n + 3)}`
+  );
+}
+
+/** A lanes read's rows and columns without the number it kept them by. */
+export function withoutLaneRow<T extends { columns: string[]; rows: Array<Record<string, unknown>> }>(result: T): T {
+  if (!result.columns.includes(LANE_ROW) && !result.rows.some((row) => LANE_ROW in row)) return result;
+  return {
+    ...result,
+    columns: result.columns.filter((column) => column !== LANE_ROW),
+    rows: result.rows.map(({ [LANE_ROW]: _number, ...row }) => row),
+  };
 }
 
 /* Registered, not a local symbol: a command handler catches the conflict its
@@ -132,9 +170,14 @@ export interface QueryRequest {
   filter?: Filter;
   /** Column names to return. Empty means the adapter picks a sensible set. */
   columns?: string[];
-  orderBy?: { column: string; direction: 'asc' | 'desc' }[];
+  orderBy?: { column: string; direction: 'asc' | 'desc'; nulls?: 'last' }[];
   limit: number;
   offset: number;
+  /**
+   * A board's lanes in one statement (lanesStatement): the first `limit` rows of each value of `by`, in the read's
+   * order, `limit` and `offset` then counting rows across every lane.
+   */
+  lanes?: { by: string; limit: number };
   /** Binary columns come back as their bytes, not the `<n bytes>` label: a file download's read, never a grid's. */
   binary?: true;
   /**

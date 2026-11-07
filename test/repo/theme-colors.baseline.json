@@ -29,13 +29,6 @@
   },
   {
     "file": "packages/kit/src/client/style.css",
-    "context": ":where(:root:not([data-visual-theme])) .zoom-controls",
-    "property": "box-shadow",
-    "value": "0 2px 10px rgb(0 0 0 / 0.06)",
-    "reason": "shadow"
-  },
-  {
-    "file": "packages/kit/src/client/style.css",
     "context": ":where(:root:not([data-visual-theme])) .picker-list",
     "property": "box-shadow",
     "value": "0 8px 28px rgb(0 0 0 / 0.16)",
@@ -47,20 +40,6 @@
     "property": "background",
     "value": "rgb(0 0 0 / 0.28)",
     "reason": "backdrop"
-  },
-  {
-    "file": "packages/kit/src/client/style.css",
-    "context": ":where(:root:not([data-visual-theme])) .palette",
-    "property": "box-shadow",
-    "value": "0 18px 60px rgb(0 0 0 / 0.28)",
-    "reason": "shadow"
-  },
-  {
-    "file": "packages/kit/src/client/style.css",
-    "context": ":where(:root:not([data-visual-theme])) .more-list",
-    "property": "box-shadow",
-    "value": "0 10px 34px rgb(0 0 0 / 0.18)",
-    "reason": "shadow"
   },
   {
     "file": "packages/kit/src/client/style.css",
@@ -78,13 +57,6 @@
   },
   {
     "file": "packages/kit/src/client/style.css",
-    "context": ":where(:root:not([data-visual-theme])) .th-menu",
-    "property": "box-shadow",
-    "value": "0 6px 20px rgb(0 0 0 / 0.16)",
-    "reason": "shadow"
-  },
-  {
-    "file": "packages/kit/src/client/style.css",
     "context": ".confirm-backdrop",
     "property": "background",
     "value": "rgb(0 0 0 / 0.45)",
@@ -96,20 +68,6 @@
     "property": "background",
     "value": "rgb(0 0 0 / 0)",
     "reason": "backdrop"
-  },
-  {
-    "file": "packages/kit/src/client/style.css",
-    "context": ":where(:root:not([data-visual-theme])) .toast",
-    "property": "box-shadow",
-    "value": "0 4px 16px rgb(0 0 0 / 0.12)",
-    "reason": "shadow"
-  },
-  {
-    "file": "packages/kit/src/client/style.css",
-    "context": ":where(:root:not([data-visual-theme])) body.app-mode .toast",
-    "property": "box-shadow",
-    "value": "0 6px 24px rgb(0 0 0 / 0.14)",
-    "reason": "shadow"
   },
   {
     "file": "packages/kit/src/client/style.css",
@@ -130,13 +88,6 @@
     "context": ":where(:root:not([data-visual-theme])) .pending-dock",
     "property": "box-shadow",
     "value": "0 4px 20px rgb(0 0 0 / 0.16)",
-    "reason": "shadow"
-  },
-  {
-    "file": "packages/kit/src/client/style.css",
-    "context": ":where(:root:not([data-visual-theme])) .ac",
-    "property": "box-shadow",
-    "value": "0 6px 20px rgb(0 0 0 / 0.16)",
     "reason": "shadow"
   },
   {
@@ -663,6 +614,573 @@
     "property": "border",
     "value": "1px solid #80808050",
     "reason": "swatch-boundary"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--ground",
+    "value": "#f5f5f5",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--surface",
+    "value": "#fefefe",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--raised",
+    "value": "#ededed",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--line",
+    "value": "#e3e3e3",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--line-strong",
+    "value": "#cccccc",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--line-control",
+    "value": "#858585",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--ink",
+    "value": "#171717",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--ink-muted",
+    "value": "#575757",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--ink-subtle",
+    "value": "#686868",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--accent",
+    "value": "#4d6b2b",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--accent-ink",
+    "value": "#42601f",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--on-accent",
+    "value": "#ffffff",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--accent-soft",
+    "value": "#4d6b2b14",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--link",
+    "value": "#42601f",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--focus",
+    "value": "#5f8336",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--status-good",
+    "value": "#1f7a5a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--status-warning",
+    "value": "#9c5a06",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--status-critical",
+    "value": "#b8352c",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--status-info",
+    "value": "#5b54a8",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--row-hover",
+    "value": "#f3f3f3",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--pop-line",
+    "value": "#d9d9d9",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--head-band",
+    "value": "#f5f5f5",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--graticule",
+    "value": "#1717171f",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--shadow-pop",
+    "value": "0 1px 2px rgb(16 20 28 / 0.06), 0 8px 24px rgb(16 20 28 / 0.1)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--shadow-panel",
+    "value": "0 1px 2px rgb(16 20 28 / 0.06), 0 12px 32px rgb(16 20 28 / 0.12)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--shadow-modal",
+    "value": "0 2px 6px rgb(16 20 28 / 0.08), 0 24px 64px rgb(16 20 28 / 0.18)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])",
+    "property": "--scrim",
+    "value": "rgb(16 20 28 / 0.32)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--ground",
+    "value": "#101010",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--surface",
+    "value": "#151515",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--raised",
+    "value": "#1d1d1d",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--line",
+    "value": "#262626",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--line-strong",
+    "value": "#363636",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--line-control",
+    "value": "#6b6b6b",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--ink",
+    "value": "#e8e8e8",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--ink-muted",
+    "value": "#a6a6a6",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--ink-subtle",
+    "value": "#939393",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--accent",
+    "value": "#9cc26a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--accent-ink",
+    "value": "#b0d283",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--on-accent",
+    "value": "#121410",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--accent-soft",
+    "value": "#9cc26a1f",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--link",
+    "value": "#b0d283",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--focus",
+    "value": "#9cc26a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--status-good",
+    "value": "#5cc6a0",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--status-warning",
+    "value": "#e6a85c",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--status-critical",
+    "value": "#f0857a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--status-info",
+    "value": "#b2aaf5",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--row-hover",
+    "value": "#1a1a1a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--pop-line",
+    "value": "#2c2c2c",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--head-band",
+    "value": "#181818",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--graticule",
+    "value": "#ffffff17",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--shadow-pop",
+    "value": "0 0 0 1px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.5)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--shadow-panel",
+    "value": "0 0 0 1px rgb(0 0 0 / 0.3), 0 14px 36px rgb(0 0 0 / 0.55)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--shadow-modal",
+    "value": "0 0 0 1px rgb(0 0 0 / 0.35), 0 28px 72px rgb(0 0 0 / 0.65)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-visual-theme]):not([data-theme='light'])",
+    "property": "--scrim",
+    "value": "rgb(0 0 0 / 0.55)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--ground",
+    "value": "#101010",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--surface",
+    "value": "#151515",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--raised",
+    "value": "#1d1d1d",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--line",
+    "value": "#262626",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--line-strong",
+    "value": "#363636",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--line-control",
+    "value": "#6b6b6b",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--ink",
+    "value": "#e8e8e8",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--ink-muted",
+    "value": "#a6a6a6",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--ink-subtle",
+    "value": "#939393",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--accent",
+    "value": "#9cc26a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--accent-ink",
+    "value": "#b0d283",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--on-accent",
+    "value": "#121410",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--accent-soft",
+    "value": "#9cc26a1f",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--link",
+    "value": "#b0d283",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--focus",
+    "value": "#9cc26a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--status-good",
+    "value": "#5cc6a0",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--status-warning",
+    "value": "#e6a85c",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--status-critical",
+    "value": "#f0857a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--status-info",
+    "value": "#b2aaf5",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--row-hover",
+    "value": "#1a1a1a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--pop-line",
+    "value": "#2c2c2c",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--head-band",
+    "value": "#181818",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--graticule",
+    "value": "#ffffff17",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--shadow-pop",
+    "value": "0 0 0 1px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.5)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--shadow-panel",
+    "value": "0 0 0 1px rgb(0 0 0 / 0.3), 0 14px 36px rgb(0 0 0 / 0.55)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--shadow-modal",
+    "value": "0 0 0 1px rgb(0 0 0 / 0.35), 0 28px 72px rgb(0 0 0 / 0.65)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/kit/src/client/workbenchLook.css",
+    "context": ":root:not([data-visual-theme])[data-theme='dark']",
+    "property": "--scrim",
+    "value": "rgb(0 0 0 / 0.55)",
+    "reason": "palette"
   },
   {
     "file": "packages/mistri/src/client/components/Document.css",

@@ -31,8 +31,6 @@ import {
   whenConnectionChanges,
   writeAllowed,
 } from './core.js';
-// The App through the bridge: appnav.js would pull the page's whole tangle of imports in here (uiBridge.ts).
-import { pageBridge } from './uiBridge.js';
 import { syncHash } from './url.js';
 import { mount, unmount } from './components/mount.js';
 import { onDemand } from './components/onDemand.js';
@@ -217,12 +215,7 @@ export function formProps(table, form, host, close, onAdded, options = {}) {
     },
     target: (id) => findTable(id),
     /* How the App dresses each column: a vocabulary's words, money's currency. */
-    ...(app
-      ? {
-          display: (column) => columnDisplay(table.id, column.name),
-          appName: /** @type {{ name?: string } | null} */ (pageBridge.activeApp())?.name,
-        }
-      : {}),
+    ...(app ? { display: (column) => columnDisplay(table.id, column.name) } : {}),
     insert: (values, extra) => {
       if (!connection || !current()) throw new InsertRefusal(say('theConnectionOrView'));
       const currentTable = findTable(table.id);

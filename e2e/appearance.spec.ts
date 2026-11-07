@@ -196,12 +196,13 @@ test('workspace commands: an App offers no database tools and no Workbench', asy
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.keyboard.press('w');
   await expect(page.locator('body')).toHaveClass(/app-mode/);
-  await page.getByRole('button', { name: 'Search (⌘K)' }).click();
+  await page.getByRole('button', { name: 'Search ⌘K' }).click();
   const search = page.getByRole('combobox', { name: 'Search', exact: true });
   await search.fill('Schema');
-  await expect(page.getByRole('option', { name: /^action Schema/ })).toHaveCount(0);
+  await expect(page.getByRole('option', { name: 'Schema', exact: true })).toHaveCount(0);
   await search.fill('Sales dashboard');
-  await expect(page.getByRole('option', { name: /^page Sales dashboard/ })).toBeVisible();
+  // A grouped row is named by its name; its kind is the group's heading and its line ("Page · Sales") its description.
+  await expect(page.getByRole('option', { name: 'Sales dashboard', exact: true })).toHaveAccessibleDescription(/^Page\b/);
   await search.fill('Workbench');
   await expect(page.getByRole('option', { name: /Workbench/ })).toHaveCount(0);
 });

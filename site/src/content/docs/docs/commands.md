@@ -138,8 +138,9 @@ The command takes the files in its own transaction:
 A public form holds files only for a field its command declares, and only for the
 visitor's own browser, by a cookie the first file sets. Ten files and 25 MB
 for each visitor, 10 MB a file and 256 MB across every visitor, within the
-form's own rate limit. Files are not taken by a tenant App, a row policy, a
-form saved on every step or a placed form.
+form's own rate limit. A public form takes no files in a tenant App, under a
+row policy, saved on every step or placed; signed-in commands take them in
+every kind of App ([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do)).
 
 A refusal names its field by path
 (`vehicles[1].stock`) and never echoes the value. Limits: 32 fields in one
@@ -300,6 +301,10 @@ answer is `temporarily_unavailable`.
 - `lookup({ sources, record })` reads another source (a database or an HTTP connection) before the transaction opens; a failure is `temporarily_unavailable`.
 - `effects: { notify: post('dealer-hooks', output => ({ id: output.applicationId })) }` posts to a `"kind": "webhook"` connection after commit, with retries; nothing is sent on rollback. `{ envelope: false, headers }` sends your own body shape; a delivery whose headers name one the request owns, the connection's `auth.header` among them, is rejected for an operator, not sent. On a tenant App each delivery carries its tenant.
 - `effects: { text: send('sms', output => ({ to: output.phone, text: 'Shipped.', consent: true })) }` sends on an [integration's](/docs/integrations/) channel after commit.
+
+### How it ends
+
+A command's form, and a public form, end in one outcome view: **Done** with the handler's `message` (and a link to the record when the person is not already on it), **Not done** with the refusal's own words and the next step by its code, or **Result not confirmed** when the answer was lost, with a check that reads the receipt before anything is sent twice. A handler that has accepted the work but not finished it says so beside its message: `return { message: 'Sent to a manager.', pending: 'approval' }` reads **Awaiting approval**, `pending: 'queued'` **Queued** (declare it in `output` with `pending: literal('approval')` where the command has a shape). The words are yours; the title, the dot in the state's tone and the next step are the platform's.
 
 ## Who may run it
 

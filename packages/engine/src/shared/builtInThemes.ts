@@ -17,8 +17,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
   {
     "id": "workshop",
     "label": "Workshop",
-    "light": p("#f2ede3 #faf8f3 #ece6da #ddd5c6 #8b8274 #7d7466 #1b1813 #4f483d #5f574b #f26a1b #e7dfd0 #aa3600 #c9530b #1b1813 #1b1813 #106b38 #934a06 #c52a2a #2f5578 #ebe5d9 #1b1813 #4f483d #d8cfbe #aa3600 - - #e8691f #2b2620 #9a6cf7 #0e9a6c #0e8fb0 #e0428a #a3510b #94a3b8 #1b1813 #1b1813 2px - #f26a1b #1b1813 #3a3020"),
-    "dark": p("#15130f #1d1a15 #26221c #2f2a22 #6d6555 #7a7262 #efe9de #c2b9aa #a59c8d #ff7a2e #2c261e #ffb88f #e8742c #15130f #efe9de #4ade80 #fbbf24 #f87171 #91a8ff #110f0c #efe9de #b3aa9b #26221c #ffb88f - - #f07a32 #d9d0c0 #9a78ec #12a678 #1597b9 #e0559b #c88317 #6b7694 #8a8170 #8a8170 2px - #ff7a2e #15130f"),
+    "light": p("#fbfaf7 #ffffff #f2ede3 #e6e1d8 #8b8274 #7d7466 #1b1813 #4f483d #5f574b #f26a1b #e7dfd0 #aa3600 #c9530b #1b1813 #1b1813 #106b38 #934a06 #c52a2a #2f5578 #f2ede3 #1b1813 #4f483d #d8cfbe #aa3600 #e3ded4 #1b1813 #e8691f #2b2620 #9a6cf7 #0e9a6c #0e8fb0 #e0428a #a3510b #94a3b8 #e6e1d8 #e6e1d8 1px - #f26a1b #1b1813 #3a3020"),
+    "dark": p("#121110 #1a1917 #24221f #2c2a26 #6d6555 #7a7262 #efe9de #c2b9aa #a59c8d #ff7a2e #2a2723 #ffb88f #e8742c #15130f #efe9de #4ade80 #fbbf24 #f87171 #91a8ff #0f0e0d #efe9de #b3aa9b #24221f #ffb88f #252422 #efe9de #f07a32 #d9d0c0 #9a78ec #12a678 #1597b9 #e0559b #c88317 #6b7694 #2c2a26 #2c2a26 1px - #ff7a2e #15130f"),
     "palettes": [
       {
         "id": "crimson",
@@ -113,7 +113,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "bar": "ruled",
       "tabs": "rule",
       "windows": "segmented",
-      "stat": "ruled",
+      "stat": "divided",
       "section": "open",
       "fields": "open",
       "table": "open",
@@ -122,13 +122,14 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "chart": "plain",
       "buttons": "keyed",
       "links": "plain",
-      "rules": "ink",
+      "rules": "hairline",
       "avatar": "plain",
       "workflow": "markers",
       "banner": "plain",
       "steps": "strip",
       "lanes": "tag",
-      "header": "plain",
+      "header": "band",
+      "filters": "solid",
       "required": "star",
       "checkbox": "native",
       "formStep": "plain",
@@ -140,31 +141,32 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "roles": {
         "title": {
           "face": "heading",
-          "size": "30px",
+          "size": "28px",
           "weight": 700,
-          "case": "upper",
-          "tracking": "0.01em",
-          "leading": 1.1
+          "case": "none",
+          "tracking": "0em",
+          "leading": 1.15
         },
         "heading": {
           "face": "heading",
-          "size": "22px",
+          "size": "23px",
           "weight": 700,
-          "case": "upper",
-          "tracking": "0.01em"
+          "case": "none",
+          "tracking": "0em"
         },
         "section": {
-          "face": "heading",
+          "face": "ui",
           "size": "15px",
-          "weight": 700,
-          "case": "upper",
-          "tracking": "0.04em"
+          "weight": 600,
+          "case": "none",
+          "tracking": "0em"
         },
         "label": {
-          "face": "heading",
-          "weight": 700,
-          "case": "upper",
-          "tracking": "0.06em"
+          "face": "ui",
+          "size": "12px",
+          "weight": 600,
+          "case": "none",
+          "tracking": "0em"
         },
         "data": {
           "features": [
@@ -304,6 +306,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "steps": "strip",
       "lanes": "tint",
       "header": "plain",
+      "filters": "quiet",
       "required": "star",
       "checkbox": "native",
       "formStep": "plain",
@@ -441,6 +444,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "steps": "flat",
       "lanes": "tint",
       "header": "plain",
+      "filters": "dashed",
       "required": "star",
       "checkbox": "native",
       "formStep": "plain",
@@ -580,6 +584,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "steps": "flat",
       "lanes": "tint",
       "header": "band",
+      "filters": "dashed",
       "required": "star",
       "checkbox": "native",
       "formStep": "plain",
@@ -711,6 +716,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "steps": "strip",
       "lanes": "plain",
       "header": "plain",
+      "filters": "dashed",
       "required": "star",
       "checkbox": "native",
       "formStep": "plain",

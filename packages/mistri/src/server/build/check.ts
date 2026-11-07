@@ -26,9 +26,10 @@
  */
 import { existsSync } from 'node:fs';
 import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { Registry, redact } from '@mistriwork/engine/server/connections.js';
 import { appRoutes, appThemeProblems, loadApp, saidByMessage, type LoadedApp } from '../app/apps.js';
+import { BUILD_MANIFEST } from '../app/appBuild.js';
 import { placementIn } from '../../shared/appUi.js';
 import { fontBudgetProblem, fontSummary } from '../app/appFonts.js';
 import { writtenAt, type FixedThemeProblem } from '../../shared/themeFix.js';
@@ -277,6 +278,23 @@ const shown = (path: string) => {
   const near = relative(process.cwd(), path);
   return !near ? '.' : near.startsWith('..') ? path : near;
 };
+
+/** The source a build was likely made from, where `mistri build` put it by default: `build/<name>` beside the
+ * source's parent, or `<name>-build` beside the source. Undefined where neither holds an App source. */
+function builtFrom(buildDir: string): string | undefined {
+  const name = basename(buildDir);
+  const parent = dirname(buildDir);
+  const candidates = [
+    ...(name.endsWith('-build') ? [join(parent, name.slice(0, -'-build'.length))] : []),
+    ...(basename(parent) === 'build' ? [join(dirname(parent), name)] : []),
+  ];
+  return candidates.find(
+    (dir) =>
+      dir !== buildDir &&
+      !existsSync(join(dir, BUILD_MANIFEST)) &&
+      ['app.ts', 'app.mts', 'app.mjs', 'app.json'].some((file) => existsSync(join(dir, file))),
+  );
+}
 
 /* Flags that start a mode of their own. `check` is the loop's one mode; each
    of these would be a second answer to "what does this command do". */
@@ -587,7 +605,12 @@ function contextLine(context: NonNullable<CheckReport['context']>): string {
 
 /** The App's verdict as `mistri check` prints it (oneShot.ts checkApps): its name, then ok or its count of problems. */
 const VERDICT = /^[^:]+: (?:ok|\d+ problems?)$/;
-const NARRATION = /^mistri: (app ".*" from |\d+ connection\(s\)|.+ \((sqlite|postgres|http)\) — )/;
+/* What a run says about itself before it says anything about the App. The Workbench's undo journal is told here too:
+   a connection that holds no undo-journal store keeps Undo in memory (journalStore.ts), which is the Workbench's
+   feature and an App has no Undo; the stores an App does use are judged by the stores step. So it is not a problem
+   with the App, and was an `invalid-app` error on every writable connection that never provisioned the journal. */
+const NARRATION =
+  /^mistri: (app ".*" from |\d+ connection\(s\)|.+ \((sqlite|postgres|http)\) — |"[^"]*": Undo history is kept in memory for this run)/;
 
 /**
  * `mistri check …`, as the command line runs it. Returns the exit code.
@@ -920,6 +943,18 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     console.error(`mistri check: ${app} is not a directory. Check an App's directory: its manifest, pages/ and types travel together.`);
     return CHECK_EXIT.couldNotCheck;
   }
+  /* A build is checked once, when `mistri build` makes it (its typecheck, validation and database steps), and is
+     served as it is. Checked again it crashed on the commands module it no longer has as a source (an external
+     assessment met "Cannot read properties of undefined"); it is refused by name, with the two things to do instead. */
+  if (existsSync(join(appDir, BUILD_MANIFEST))) {
+    const source = builtFrom(appDir);
+    console.error(
+      `mistri check: ${app} is a build output (it holds ${BUILD_MANIFEST}); check reads an App's source. ` +
+        `Check the source App${source ? ` at ${shown(source)}` : ' it was built from'} (mistri check --app ${source ? shown(source) : '<source>'}), ` +
+        `or serve the build as it is (mistri --app ${app}): mistri build checked it when it was made.`,
+    );
+    return CHECK_EXIT.couldNotCheck;
+  }
   /* Read as CommonJS, every import in the App is an error of its own (TS1295) and the load fails
      with "Cannot use import statement outside a module": one line with the fix says it instead. */
   const commonJs = moduleTypeProblem(appDir, shown);
@@ -934,11 +969,17 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
   if (pending) {
     const { pendingCopy } = await import('./pending.js');
     try {
-      copy = await pendingCopy(appDir, rest, {
-        ...(migrations !== undefined ? { migrations } : {}),
-        ...(historyTable !== undefined ? { table: historyTable } : {}),
-        ...(pendingOn !== undefined ? { on: pendingOn } : {}),
-      });
+      copy = await pendingCopy(
+        appDir,
+        rest,
+        {
+          ...(migrations !== undefined ? { migrations } : {}),
+          ...(historyTable !== undefined ? { table: historyTable } : {}),
+          ...(pendingOn !== undefined ? { on: pendingOn } : {}),
+        },
+        // The sections the rest of check reads the file with: the copy's reading must accept what check and serve do.
+        CONFIG_SECTIONS,
+      );
     } catch (error) {
       console.error(`mistri check: --pending could not make its copy: ${(error as Error).message}`);
       return CHECK_EXIT.couldNotCheck;

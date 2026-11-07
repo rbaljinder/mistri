@@ -11,6 +11,8 @@
 .sk-page-section { display: grid; gap: var(--space-4); }
 .sk-page-fields { grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--space-4) var(--field-gap); }
 .sk-page-aside .sk-page-fields { grid-template-columns: minmax(0, 1fr); }
+.sk-page-fields.is-rail { grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); }
+.sk-page-fields.is-rail .sk-page-field { grid-template-columns: min(8rem, 30%) minmax(0, 1fr); align-items: center; gap: var(--space-4); }
 .sk-page-field { display: grid; gap: var(--space-1h); }
 .sk-page-block { display: grid; gap: var(--space-3); }
 .sk-page-section .sk-grid { padding-inline: 0; }

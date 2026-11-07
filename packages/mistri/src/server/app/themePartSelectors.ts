@@ -52,6 +52,12 @@ export const PART_SELECTORS: Record<ThemePart, string> = {
 /** The selectors a part is drawn with. */
 export const partSelector = (part: string): string => PART_SELECTORS[part as ThemePart];
 
+/** Where a part's type — its face, weight and case — reaches past its box: the logo's to the App's name beside the mark,
+    so a theme may set the name as it sets the mark (in capitals, as Workshop's slot menu draws it). Its ground, ink, edge,
+    corner and lift stay the mark's: the name stands on the bar, and `check` measures it there. */
+const TYPE_REACH: Partial<Record<ThemePart, string>> = { logo: app('.brand-mark', '.brand-name') };
+const TYPE_WORDS: ReadonlySet<string> = new Set(['face', 'weight', 'case']);
+
 /** What each property a part style says is drawn as: the CSS properties, each reading its `--part-*` token. */
 const DRAWN: Record<string, readonly (readonly [string, string])[]> = {
   ground: [['background', 'ground']],
@@ -91,7 +97,8 @@ export function partsSheet(): string {
         const name = property === 'background' && UNDER_PATTERN.has(part) ? 'background-color' : property;
         return `${name}: var(--part-${slug}-${token});`;
       });
-      rules.push(`  ${on(word)} {\n    ${declarations.join('\n    ')}\n  }`);
+      const reach = TYPE_WORDS.has(word) ? TYPE_REACH[part as ThemePart] : undefined;
+      rules.push(`  ${on(word, reach ?? selectors)} {\n    ${declarations.join('\n    ')}\n  }`);
     }
     if (HOVERED.has(part)) {
       const hovered = selectors

@@ -37,7 +37,6 @@ import { loadApp, type LoadedApp } from '../app/apps.js';
 import { AppProblems, type AppDef } from '../../shared/app.js';
 import { parseArgs } from '@mistriwork/engine/server/cli/args.js';
 import { readStartupConfig } from '@mistriwork/engine/server/cli/config.js';
-import { CACHE_SECTIONS } from '@mistriwork/engine/server/cacheService.js';
 import type { ConfigSections } from '@mistriwork/engine/server/configSections.js';
 import { resolveConnection } from '@mistriwork/engine/server/auth/credentials.js';
 import { dialectOf, sqlitePath } from '@mistriwork/engine/server/migrate/database.js';
@@ -63,7 +62,8 @@ export async function pendingCopy(
   appDir: string,
   rest: string[],
   flags: { migrations?: string; table?: string; on?: string },
-  sections: ConfigSections = CACHE_SECTIONS,
+  // No default: the engine's cache-only sections refused an email or sign-in entry that check and serve accept.
+  sections: ConfigSections,
 ): Promise<PendingCopy> {
   const refuse = (detail: string, lines: string[] = []): PendingCopy => ({ args: rest, status: 'failed', detail, lines, cleanup: nothing });
   const opts = parseArgs(rest);

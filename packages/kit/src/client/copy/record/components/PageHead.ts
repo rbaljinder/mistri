@@ -8,4 +8,6 @@ export const say = defineMessages({
   thisPageBelongsToTheFile: 'This page belongs to the file it came from — editing it starts your own copy',
   layout: 'Layout',
   copyLayout: 'Copy layout',
+  /* The caption of a fact said as a range, from its start to its end (pageAnatomy.ts, spanOf). */
+  when: 'When',
 });

@@ -35,3 +35,21 @@
   display: flex;
   align-items: center;
 }
+/* A record field a decision answers (decisionAdornment.tsx): on a phone a caption keeps a value beside it only where
+   the value fits whole (structure.css), and a suggestion trailing the value is placed there late, so this value
+   takes the line under its caption from the first paint, and the suggestion that comes has the line beside it. */
+@media (max-width: 760px) {
+  dl.page-properties > .page-field:not(.page-field-wide):has(> dd > .decision-slot) > dd {
+    flex-basis: 100%;
+  }
+}
+/* In a record's head the suggestion stands on its fact's value line (page.css), and is the line's height: its Accept
+   is a button, whose box hung under the value's and grew the head a pixel as it came. */
+.page-head-facts .decision-slot {
+  display: inline-flex;
+  height: 1lh;
+}
+/* The head has no caption-beside-value line to reserve, so a fact's empty mark of a suggestion to come is not drawn. */
+.page-head-facts .decision-slot:empty {
+  display: none;
+}

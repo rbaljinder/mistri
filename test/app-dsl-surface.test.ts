@@ -335,8 +335,8 @@ test('both typed layers check names through the helpers, take no hand-written ob
     export const listedActions: App = { name: 'x', resources: { work_order: { actions: [action('Close', { set: { status: 'closed' } })] } } };
     // @ts-expect-error A computed column is named like a column: its name misspelt fails.
     export const badComputedName: App = { name: 'x', views: { v: listView('V', 'work_order', { show: ['reference', 'is_opn'] }) } };
-    // @ts-expect-error A computed column is a boolean, a number or a date.
-    export const badComputed: App = { name: 'x', resources: { work_order: { computed: { x: { type: 'text', value: 'reference' } } } } };
+    // @ts-expect-error A computed column is a boolean, a number, a date or text.
+    export const badComputed: App = { name: 'x', resources: { work_order: { computed: { x: { type: 'json', value: 'reference' } } } } };
     // @ts-expect-error rows is one of three words.
     export const badRows: App = { name: 'x', auth: { rows: 'open' } };
     // @ts-expect-error A view says presentation; it has no list key.

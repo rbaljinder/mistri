@@ -24,6 +24,9 @@ import { say } from '../copy/record/components/PageSectionBox.js';
    every untitled list's head already is. An authored title has words or capitals of its own and is left as written. */
 const titled = (title: string) => (/^[a-z][a-z0-9_.]*$/.test(title) ? spoken(title) : title);
 
+/** What an untitled history is called in the reader's language: its heading, and its tab on an inferred page. */
+export const historyWord = (): string => say('history');
+
 /** A section's mark leading its heading. A note draws its own over its words, so it has none here. */
 const mark = (section: PageSection) =>
   section.icon && section.kind !== 'note' ? <Icon name={section.icon} size={16} className="dash-section-icon" /> : null;
@@ -37,9 +40,12 @@ export function SectionBox({
   crashed,
   hidden,
   tools,
+  count,
 }: {
   section: PageSection;
   body: ReactNode;
+  /** How many rows a related list holds, said after its heading (PageRelated.tsx, RelatedCount). */
+  count?: ReactNode;
   /** What the section offers beside its heading — a related list's Add and verbs — drawn in the heading's row. */
   tools?: ReactNode;
   foldable: boolean;
@@ -61,7 +67,7 @@ export function SectionBox({
   const heading =
     (section.title === undefined ? undefined : titled(section.title)) ??
     (section.kind === 'history'
-      ? say('history')
+      ? historyWord()
       : section.kind === 'flows'
         ? say('flows')
         : section.kind === 'diagram'
@@ -117,6 +123,7 @@ export function SectionBox({
       ) : (
         heading
       )}
+      {count}
     </h2>
   );
   return (

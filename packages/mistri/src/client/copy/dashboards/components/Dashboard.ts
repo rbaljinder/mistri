@@ -28,6 +28,8 @@ export const say = defineMessages({
   noToCross: 'No {table} to cross.',
   theFullListWithItsTabs: 'The full list, with its tabs and filters',
   figureInAll: '{figure} in all',
+  noneIn: 'No {title}',
+  closedSteps: 'Ended',
   nothingToLayOut: 'Nothing to lay out yet.',
   noToLayOut: 'No {table} to lay out.',
   moreCount: '+ {figure} more',

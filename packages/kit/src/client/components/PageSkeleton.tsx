@@ -9,9 +9,11 @@ import './PageSkeleton.css';
 
 /** One section of a record page, before it answers: its title's bar, then rows in its own shape. */
 function sectionShape(section: PageSection, i: number) {
+  /* A rail, and an inferred page's classic form, say each caption beside its value (structure.css). */
+  const rail = section.kind === 'fields' && section.presentation === 'properties';
   const body =
     section.kind === 'fields' ? (
-      <div className="sk-fields sk-page-fields">
+      <div className={rail ? 'sk-fields sk-page-fields is-rail' : 'sk-fields sk-page-fields'}>
         {Array.from({ length: Math.min(Math.max(section.paths?.length ?? 4, 2), 8) }, (_, f) => (
           <div key={f} className="sk-page-field">
             {bar(30, 9)}
@@ -44,12 +46,19 @@ function sectionShape(section: PageSection, i: number) {
  */
 export function PageSkeleton({ sections }: { sections: readonly PageSection[] }) {
   const shown = sections.filter((section) => !section.hidden);
-  const main = shown.filter((section) => section.region !== 'aside').slice(0, 4);
+  /* The header is the head's, drawn above; the main column's placeholders are its sections. */
+  const main = shown
+    .filter((section) => section.region !== 'aside' && !(section.kind === 'fields' && section.presentation === 'header'))
+    .slice(0, 4);
   const aside = shown.filter((section) => section.region === 'aside').slice(0, 3);
+  /* The head as the page draws it: a record's kind is not drawn over its name in an App (PageHead.tsx), and the line
+     under the name stands where the page has one. */
+  const subtitled = shown.some((section) => section.kind === 'fields' && section.presentation === 'header' && section.subtitle);
   return (
     <div className="sk-page" role="status" aria-label={say('loadingRecord')}>
       <div className="sk-page-head">
         {bar(32, 22)}
+        {subtitled ? bar(22, 12) : null}
         <div className="sk-page-facts">
           {Array.from({ length: 4 }, (_, f) => (
             <span key={f} className="sk-page-fact">

@@ -95,9 +95,9 @@ for (const theme of THEME_PRESETS)
         };
       });
       expect(bar).toEqual({ inside: true, underline: false });
-      /* A record's tabs are in sentence case, the look's own; Mono, Workshop and Ledger set
-       them as a label. Ledger's label role is monospace capitals (its `label` type role, themeLooks.ts), as a
-       ruled book heads its columns. */
+      /* A record's tabs are in sentence case, the look's own; Mono and Ledger set them as a label. Ledger's label
+       role is monospace capitals (its `label` type role, themeLooks.ts), as a ruled book heads its columns; Workshop's
+       label is in sentence case since rc.18, its capitals kept for the App's name. */
       const recordTab = await page.evaluate(() => {
         const tab = document.createElement('button');
         tab.className = 'page-tab';
@@ -107,7 +107,7 @@ for (const theme of THEME_PRESETS)
         tab.remove();
         return transform;
       });
-      expect(recordTab).toBe(theme.id === 'mono' || theme.id === 'workshop' || theme.id === 'ledger' ? 'uppercase' : 'none');
+      expect(recordTab).toBe(theme.id === 'mono' || theme.id === 'ledger' ? 'uppercase' : 'none');
 
       // Room at every width, on the room with the most in it.
       for (const width of [1440, 1024, 390, 320]) {
@@ -181,7 +181,8 @@ test('a look chosen in Preferences survives a reload, and the walk under it read
   await pager.scrollIntoViewIfNeeded();
   await expect(pager.getByRole('button', { name: 'Next', exact: false })).toBeInViewport();
   await pager.getByRole('button', { name: 'Next', exact: false }).click();
-  await expect(pager.locator('.pager-range')).toHaveText(/^21–/);
+  // A list's page is fifty rows (LIST_PAGE_SIZE), so the next one starts at 51.
+  await expect(pager.locator('.pager-range')).toHaveText(/^51–/);
 
   await page.goto(`${CRM}/@opportunity~1`);
   await page.getByRole('button', { name: 'Edit Opportunity', exact: true }).click();
@@ -308,11 +309,12 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
         expect(shape.rule).toBeGreaterThan(0.5);
         expect(shape.boxedNeutral).toEqual([]);
         expect(shape.boxedTones.length).toBe(shape.meaningfulTones);
-      } else if (id === 'lumen') {
+      } else if (id === 'lumen' || id === 'workshop') {
         /* Lumen's recorded exceptions (docs/design.md, Lumen's exceptions),
        exactly: the list open on the ground as in every look, its heads over
        a hairline rather than the 2px rule, and every status a dot and its
-       word, boxed by nothing. */
+       word, boxed by nothing. Workshop shares the hairline since rc.18
+       (Workshop's exceptions). */
         expect(shape.box).toEqual({ border: '0px', shadow: 'none', fill: 'rgba(0, 0, 0, 0)' });
         expect(shape.rule).toBeGreaterThan(0.5);
         expect(shape.rule).toBeLessThan(1.5);

@@ -3,6 +3,7 @@
  * field and a help tip. `frameOf` turns it into the Field's props, so a control never joins them by hand.
  */
 import type { ReactNode } from 'react';
+import type { AnswerKind } from './Field.js';
 import { HelpTip, type HelpTipProps } from './FormParts.js';
 
 export interface FieldFrame {
@@ -20,6 +21,8 @@ export interface FieldFrame {
   tip?: HelpTipProps;
   /** Keep the problem's line in the flow while empty. On by default for a form's controls; turn it off for a dense row. */
   reserve?: boolean;
+  /** A short answer's kind: the control is only as wide as the answer (Field's `kind`). */
+  kind?: AnswerKind;
   /** The control's id; one is made when not given. */
   id?: string;
   className?: string;
@@ -33,6 +36,7 @@ export function frameOf(p: FieldFrame) {
     required: p.required,
     labelHidden: p.labelHidden,
     id: p.id,
+    kind: p.kind,
     className: p.className,
     optional: p.optional,
     labelAside: p.tip ? <HelpTip {...p.tip} /> : undefined,

@@ -37,8 +37,14 @@ test.describe('Service Atlas catalog filters', () => {
       await expect(count).toHaveText(expected.length.toLocaleString());
       await expect(trail.getByRole('button', { name: 'Service catalog', exact: true })).toBeVisible();
       await expect(trail).not.toContainText('dash-service-catalog');
-      await expect(trail.getByRole('button', { name: 'Back', exact: true })).toHaveAttribute('title', 'Back to Service catalog');
-      await trail.getByRole('button', { name: 'Back', exact: true }).click();
+      /* At a desk the trail is the way back and draws no Back; a phone, whose bar is condensed, keeps it. */
+      if (width > 640) {
+        await expect(trail.getByRole('button', { name: 'Back', exact: true })).toHaveCount(0);
+        await trail.getByRole('button', { name: 'Service catalog', exact: true }).click();
+      } else {
+        await expect(trail.getByRole('button', { name: 'Back', exact: true })).toHaveAttribute('title', 'Back to Service catalog');
+        await trail.getByRole('button', { name: 'Back', exact: true }).click();
+      }
       // Back is the dashboard, said as its key.
       await expect(page).toHaveURL(`${sample.origin}/service-catalog`);
       await expect(software).toBeVisible();

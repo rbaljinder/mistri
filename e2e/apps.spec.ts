@@ -391,7 +391,7 @@ test('the palette finds records: type a name, land on the row', async ({ page })
   await expect(page.locator('.dash-body, .landing-pages').first()).toBeVisible();
   await page.keyboard.press('ControlOrMeta+k');
   await page.getByRole('combobox', { name: 'Search' }).fill('Harbour');
-  const hit = page.locator('.palette-item', { has: page.locator('.kind-record') }).first();
+  const hit = page.locator('.palette-item[data-group="records"]').first();
   await expect(hit).toBeVisible();
   await hit.click();
   await expect(page.locator('.page-body .page-section, .record').first()).toBeVisible();

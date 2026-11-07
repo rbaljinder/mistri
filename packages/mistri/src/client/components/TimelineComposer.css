@@ -1,0 +1,62 @@
+/* The conversation composer's box (TimelineComposer.tsx): one field, as a command form's is (docs/design.md, Standing
+   layout rules) — a clean outline at the form edge (`--field-edge`, the look's control edge where it reads quietly), no
+   fill, and the house ring replacing the edge while the reader is in it, the border clear under it so the two never
+   draw a double line. The words, the editor's toolbar and the Send button all live inside that one box, Send at its
+   bottom-right corner; nothing inside draws an edge of its own. Unlayered, because the look's field dress
+   (visualThemes.css, formDress.css) would otherwise give the bare textarea back its own box. */
+.timeline-box {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--field-edge, var(--line-control));
+  border-radius: var(--field-radius, var(--radius));
+  background: transparent;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .timeline-box { transition: border-color var(--t-hover) var(--ease-out); }
+}
+@media (hover: hover) {
+  .timeline-box:hover:not(:focus-within) {
+    border-color: color-mix(in oklab, var(--field-edge, var(--line-control)) 70%, var(--ink));
+  }
+}
+.timeline-box:focus-within {
+  border-color: transparent;
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: 0;
+}
+/* An internal note is not a reply: its whole box wears the warning wash the Note segment wears. */
+.timeline-composer.is-note .timeline-box {
+  background: color-mix(in srgb, var(--status-warning) 8%, transparent);
+}
+/* The plain box: no edge, no ring, no fill of its own, and a comfortable height (about four lines) before a word is typed. */
+.timeline-box .timeline-input {
+  min-height: 5.5rem;
+  padding: var(--space-3) var(--space-3h) var(--space-2);
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  resize: none;
+}
+/* The rich editor is the box's own: its toolbar stays as the rule across the top, and its edge and ring are the box's. */
+.timeline-box .rich-field {
+  min-height: 0;
+}
+.timeline-box .rich-editor,
+.timeline-box .rich-editor:focus-within,
+.timeline-box .rich-editor.is-disabled {
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+}
+.timeline-box .rich-text-editable {
+  min-height: 5.5rem;
+}
+/* Templates at the foot's start, Send at its end, inside the box under the words. */
+.timeline-box .timeline-composer-foot {
+  padding: var(--space-2) var(--space-2h) var(--space-2h);
+}

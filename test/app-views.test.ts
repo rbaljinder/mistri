@@ -1366,14 +1366,24 @@ describe('home', () => {
   const content = { views: { tasks: LIST, d: DASH }, nav: ['d', 'tasks'] };
   const roles = { resources: { task: {} }, auth: { roles: { reader: { read: true } } } };
 
-  test('every App names its home: the refusal names the App, says what to write and lists the views', () => {
+  test('an App that names no home starts on the overview; one with no list to show is still asked where to start', () => {
+    const app = parse(content);
+    assert.deepEqual(app.home, [{ view: 'overview' }]);
+    assert.deepEqual(app.views.overview, { label: 'Overview', icon: 'house', sections: [], overview: true });
+    /* nav may place it by its key, as any view. */
+    assert.deepEqual(parse({ ...content, nav: ['overview', 'tasks', 'd'] }).home, [{ view: 'overview' }]);
+    /* A view of the author's own at that key is theirs: the App is asked where to start. */
     assert.throws(
-      () => parse(content),
+      () => parse({ ...content, views: { ...content.views, overview: DASH }, nav: ['overview', 'd', 'tasks'] }),
+      /has no "home"/,
+    );
+    assert.throws(
+      () => parse({ views: { d: DASH }, nav: ['d'] }),
       (error: Error) => {
         assert.equal(
           error.message,
           `${WHERE}: the App "x" has no "home", so nothing says where a visitor starts. Write home: '<view id>', ` +
-            "or a list of rules that ends with a rule with no condition, { view: '<view id>' }. It declares: tasks, d.",
+            "or a list of rules that ends with a rule with no condition, { view: '<view id>' }. It declares: d.",
         );
         return true;
       },
@@ -1426,7 +1436,8 @@ describe('home', () => {
   test('nav is optional: an App without it has one room, its home, and a menu of nothing', () => {
     const app = parse({ views: { tasks: { ...LIST, label: 'Tasks' } }, home: 'tasks' });
     assert.deepEqual([app.nav, app.views], [[], { tasks: { table: 'task', label: 'Tasks' } }]);
-    assert.deepEqual(resolveViews(app, withRollups(app, SCHEMA)), { tasks: { table: 'task', label: 'Tasks' } });
+    const { table, label } = resolveViews(app, withRollups(app, SCHEMA)).tasks as { table: string; label: string };
+    assert.deepEqual({ tasks: { table, label } }, { tasks: { table: 'task', label: 'Tasks' } });
     assert.deepEqual(parse({ views: { tasks: LIST }, home: 'tasks', nav: [] }).nav, [], 'an empty nav is no nav');
     /* The resource's form and actions are served on the resource, as for any App. */
     const tick = parse({

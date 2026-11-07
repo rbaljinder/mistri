@@ -60,7 +60,13 @@ export function tenantNamePlan(owned: TenantOwnershipSnapshot, template: string 
       parts.push({ text: part.text });
       continue;
     }
-    if (part.mask || part.or || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part.path) || !table?.columns.some((column) => column.name === part.path))
+    if (
+      part.mask ||
+      part.or ||
+      part.date ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part.path) ||
+      !table?.columns.some((column) => column.name === part.path)
+    )
       return undefined;
     parts.push({ column: part.path, ...(part.words ? { words: part.words } : {}) });
   }

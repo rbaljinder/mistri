@@ -24,6 +24,7 @@ import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js'
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { shell } from '../shellMode.js';
 import { resourceOf } from './appRooms.js';
+import { collidingNames, referenceSubline, sublineText, type Subline } from '@mistriwork/engine/shared/referenceSubline.js';
 import { sessionIdentity, subscribeSessionIdentity } from '../sessionIdentity.js';
 import { say } from '../copy/forms/components/RecordPicker.js';
 
@@ -34,6 +35,16 @@ interface Choice {
   label: string;
   /** The row the choice was read from, where the picker draws more of it than its name (`face`). */
   row?: Record<string, unknown>;
+  /** The second line that tells it from another of the same name (referenceSubline.ts): its code, email, parent, day. */
+  sub?: string;
+}
+
+/** The second line a table's choices are read with, by the rule every reference shares, with the App's display rule. */
+function sublineFor(table: TableMeta): Subline | undefined {
+  const naming = labelPath(table);
+  if (naming?.startsWith('$')) return undefined;
+  const display = resourceOf(shell().app(), table.id)?.display as Record<string, { subtitle?: unknown }> | undefined;
+  return referenceSubline(state.schema ?? undefined, table, naming, display);
 }
 
 /** More of each choice than its name: the columns it is read with, and how a choice is drawn from them (FormLines.tsx). */
@@ -98,12 +109,14 @@ async function searchRecords(
   connection = state.activeConnection,
   narrowed = '',
   more: readonly string[] = [],
+  sub?: Subline,
 ): Promise<Choice[]> {
   const naming = labelPath(table) ?? valueColumn;
   const pk = valueColumn;
   if (!pk) return [];
+  const second = sub && sub.path !== pk ? [sub.path] : [];
   const where = [narrowed, text ? `${naming} contains ${JSON.stringify(text)}` : ''].filter(Boolean).join(' and ');
-  const q = [table.id, where, `show ${[...new Set([naming, pk, ...primaryKey(table), ...more])].join(', ')}`, `sort ${naming}`]
+  const q = [table.id, where, `show ${[...new Set([naming, pk, ...primaryKey(table), ...more, ...second])].join(', ')}`, `sort ${naming}`]
     .filter(Boolean)
     .join(' ');
   const data = await api('/api/run', {
@@ -117,6 +130,7 @@ async function searchRecords(
     value: String(r[pk]),
     label: recordLabel(table) === undefined ? String(r[naming] ?? r[pk]) : rowLabel(table, r),
     ...(more.length ? { row: r } : {}),
+    ...(second.length && sublineText(r[second[0]!]) ? { sub: sublineText(r[second[0]!]) } : {}),
   }));
 }
 
@@ -142,10 +156,14 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
   const editing = props.editing;
   const connection = state.activeConnection;
   const valueColumn = props.valueColumn ?? primaryKey(table)[0];
+  /* What tells two choices of one name apart (a face draws its own). */
+  const subline = props.face ? undefined : sublineFor(table);
   const ids = props.multiple === true ? props.value : props.value ? [props.value] : [];
   /* Labels for what is chosen: known once a name has been picked, the id
      itself until then (a preset value arrives as an id alone). */
   const [labels, setLabels] = useState<Map<string, string>>(new Map());
+  /* Each chosen record's second line, so two chips of one name are told apart as their choices were. */
+  const [subs, setSubs] = useState<Map<string, string>>(new Map());
   /* A value's name: fetched, else the one the caller draws for it (`known`), else the value itself. */
   const known = props.multiple !== true ? props.known : undefined;
   const nameOf = (value: string) => labels.get(value) ?? (known?.value === value ? known.label : undefined) ?? value;
@@ -216,8 +234,9 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
       recordLabel(table),
       props.where ?? '',
       props.face?.columns.join(),
+      subline?.path,
     ],
-    queryFn: () => searchRecords(table, asked, valueColumn, connection, props.where, props.face?.columns),
+    queryFn: () => searchRecords(table, asked, valueColumn, connection, props.where, props.face?.columns, props.face ? undefined : subline),
     enabled: open && !props.disabled,
     /* The last answer stays on screen while the next is fetched: a list
        that empties between keystrokes flickers, and an option someone is
@@ -246,14 +265,14 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
   });
 
   const selected = useQuery<Choice[]>({
-    queryKey: ['picker-labels', connection, table.id, valueColumn, ids, props.scope, labelPath(table), recordLabel(table)],
+    queryKey: ['picker-labels', connection, table.id, valueColumn, ids, props.scope, labelPath(table), recordLabel(table), subline?.path],
     enabled: Boolean(valueColumn && ids.length),
     queryFn: async () => {
       const naming = labelPath(table) ?? valueColumn;
-      const columns = [...new Set([valueColumn, naming, ...primaryKey(table)])];
+      const columns = [...new Set([valueColumn, naming, ...primaryKey(table), ...(props.multiple && subline ? [subline.path] : [])])];
       /* A walked name and a label template (`$label`) are paths, which a view reads and a plain query does not. */
       const data =
-        naming.includes('.') || naming.startsWith('$')
+        columns.some((path) => path.includes('.')) || naming.startsWith('$')
           ? await api('/api/view/run', {
               ...ownedBy(connection),
               view: {
@@ -280,11 +299,16 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
       return ((data.rows ?? []) as Array<Record<string, unknown>>).map((row) => ({
         value: String(row[valueColumn]),
         label: recordLabel(table) === undefined ? String(row[naming] ?? row[valueColumn]) : rowLabel(table, row),
+        ...(props.multiple && subline && sublineText(row[subline.path]) ? { sub: sublineText(row[subline.path]) } : {}),
       }));
     },
   });
   useEffect(() => {
     if (selected.data) setLabels((known) => new Map([...known, ...selected.data!.map((choice) => [choice.value, choice.label] as const)]));
+    if (selected.data?.some((choice) => choice.sub))
+      setSubs(
+        (known) => new Map([...known, ...selected.data!.flatMap((choice) => (choice.sub ? [[choice.value, choice.sub] as const] : []))]),
+      );
   }, [selected.data]);
   useEffect(() => {
     if (editing) return;
@@ -305,6 +329,7 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
 
   const pick = (choice: Choice) => {
     setLabels((m) => new Map(m).set(choice.value, choice.label));
+    if (choice.sub) setSubs((m) => new Map(m).set(choice.value, choice.sub!));
     if (props.multiple) {
       report(ids.includes(choice.value) ? ids.filter((v) => v !== choice.value) : [...ids, choice.value]);
       setText('');
@@ -329,6 +354,12 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
   };
 
   const shownLabel = (value: string) => labels.get(value) ?? value;
+  /* A second line where it tells two of one name apart, or always where the App's display asked for one. */
+  const twice = collidingNames(options.map((o) => o.label));
+  const subOf = (o: Choice) => (o.sub && (subline?.declared || twice.has(o.label)) ? o.sub : undefined);
+  const twiceChosen = collidingNames(ids.map(shownLabel));
+  const chipName = (value: string) =>
+    twiceChosen.has(shownLabel(value)) && subs.get(value) ? `${shownLabel(value)} · ${subs.get(value)}` : shownLabel(value);
 
   return (
     <div
@@ -348,11 +379,11 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
         {props.multiple &&
           ids.map((value) => (
             <span key={value} className="picker-chip">
-              <span>{shownLabel(value)}</span>
+              <span>{chipName(value)}</span>
               <button
                 type="button"
                 className="picker-chip-x"
-                aria-label={say('remove', { shownLabel: shownLabel(value) })}
+                aria-label={say('remove', { shownLabel: chipName(value) })}
                 onClick={() => remove(value)}
               >
                 ×
@@ -383,7 +414,14 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
             )
           ) : (
             <>
-              <span className="picker-option-label">{o.label}</span>
+              {subOf(o) ? (
+                <span className="picker-option-name">
+                  <span className="picker-option-label">{o.label}</span>
+                  <span className="picker-option-sub">{subOf(o)}</span>
+                </span>
+              ) : (
+                <span className="picker-option-label">{o.label}</span>
+              )}
               {!props.hideKey && o.label !== o.value && <span className="picker-option-detail">{o.value}</span>}
             </>
           )

@@ -47,9 +47,10 @@ body {
      a popup, a panel and a dialog are as square or as round as the fields
      beside them. They sit here, beside --radius-lg, for the same reason.
      A surface's lift is the scale's (--shadow-pop, --shadow-panel,
-     --shadow-modal); where the browser's own lift was a literal of its own,
-     a rule under :where(:root:not([data-visual-theme])) right after the
-     surface's keeps it, at the same specificity (test/check-client-shape.mjs). */
+     --shadow-modal), which the Workbench's own look sets (workbenchLook.css);
+     where a surface's lift there is a literal of its own, a rule under
+     :where(:root:not([data-visual-theme])) right after the surface's keeps it,
+     at the same specificity (test/check-client-shape.mjs). */
   --radius-item: 5px;
   --radius-pop: 8px;
   --radius-panel: 8px;
@@ -498,7 +499,6 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
   background: var(--surface); border: 1px solid var(--line);
   box-shadow: var(--shadow-pop);
 }
-:where(:root:not([data-visual-theme])) .zoom-controls { box-shadow: 0 2px 10px rgb(0 0 0 / 0.06); }
 .zoom-controls button { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
 .zoom-readout {
   min-width: 3.4rem; text-align: center;
@@ -586,7 +586,6 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
   box-shadow: var(--shadow-modal);
   overflow: hidden;
 }
-:where(:root:not([data-visual-theme])) .palette { box-shadow: 0 18px 60px rgb(0 0 0 / 0.28); }
 .palette-input {
   padding: var(--space-4h) var(--space-5);
   border: none; border-bottom: 1px solid var(--line);
@@ -622,6 +621,35 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
 .palette-detail { font: var(--text-xs) var(--mono); color: var(--ink-subtle); }
 .palette-empty { padding: var(--space-5); margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
 
+/* An App's palette (Palette.tsx, `palette-grouped`; the Workbench keeps the flat list above): rows in groups under
+   quiet headings, each with the mark its room or table has in the menu, the kind said in the line under the name and
+   not as a badge, and the keys it answers to in a footer. The list is one height whatever it holds, so typing —
+   which empties some groups and fills others — never moves the box the reader's eye is in. */
+.palette-grouped .palette-list { block-size: min(30rem, 56vh); min-block-size: 0; overscroll-behavior: contain; }
+.palette-group-head {
+  padding: var(--space-3) var(--space-3h) var(--space-2);
+  font: 600 var(--text-xs) var(--sans); color: var(--ink-subtle);
+}
+.palette-group + .palette-group { margin-top: var(--space-2); }
+.palette-grouped .palette-item { grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-3); }
+.palette-icon { display: grid; place-items: center; color: var(--ink-muted); }
+.palette-item.active .palette-icon { color: var(--ink); }
+.palette-grouped :is(.palette-label, .palette-detail) { font-family: var(--sans); }
+.palette-grouped .palette-label { min-width: 0; font-size: var(--text-md); }
+.palette-grouped .palette-detail { white-space: nowrap; }
+.palette-foot {
+  flex: none; display: flex; align-items: center; gap: var(--space-5);
+  block-size: 28px; padding: 0 var(--space-5);
+  border-top: 1px solid var(--line);
+  font: var(--text-xs) var(--sans); color: var(--ink-subtle);
+}
+.palette-hint { display: inline-flex; align-items: center; gap: var(--space-2); }
+.palette-foot kbd {
+  display: inline-grid; place-items: center; min-inline-size: 16px; padding: 0 var(--space-1h);
+  border: 1px solid var(--line); border-radius: min(3px, var(--radius));
+  font: inherit; color: var(--ink-muted);
+}
+
 /* ---------- the sidebar toggle ---------- */
 
 /* Header controls that are not the primary action: an icon's worth of space
@@ -646,7 +674,6 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
   border: 1px solid var(--line-strong); border-radius: var(--radius-pop);
   box-shadow: var(--shadow-pop);
 }
-:where(:root:not([data-visual-theme])) .more-list { box-shadow: 0 10px 34px rgb(0 0 0 / 0.18); }
 .more-item {
   display: grid; grid-template-columns: 1.1rem 1fr auto;
   align-items: baseline; gap: var(--space-3);
@@ -1109,7 +1136,6 @@ th.align-right:not(:last-child) .th-resizer { width: var(--space-3h); }
   box-shadow: var(--shadow-pop);
   padding: var(--space-2);
 }
-:where(:root:not([data-visual-theme])) .th-menu { box-shadow: 0 6px 20px rgb(0 0 0 / 0.16); }
 @media (prefers-reduced-motion: no-preference) {
   .th-menu {
     transform-origin: top center;
@@ -1651,6 +1677,24 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
   .record-summary dl > div { display: flex; align-items: baseline; gap: var(--space-2h); min-width: 0; max-width: 100%; }
   .record-summary dt { flex: none; font: 500 var(--text-sm)/1.5 var(--sans); color: var(--ink-muted); }
   .record-summary dd { min-width: 0; margin: 0; font: var(--text-md)/1.45 var(--sans); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  /* In an App a row says each value once and its caption never (design.md, Mobile): the title, then the first values on
+     one line — a status as its dot and word, a person as avatar and name, a date short — and the caption stays for
+     whoever reads by ear, as the grid's header is. Two lines at most: every fact stands in one fixed line box, so the
+     rows are whole and a third line is cut off at a fact's edge, never through one. An empty value is not drawn (it
+     would be a mark with no caption to say what is missing), so the facts after it close up. The Workbench keeps its
+     captions: it is a tool for reading data as stored. */
+  body.app-mode .record-summary dl {
+    --summary-line: calc(var(--text-md) * 1.8);
+    gap: 0 var(--field-gap);
+    max-block-size: calc(var(--summary-line) * 2);
+    overflow: hidden;
+  }
+  body.app-mode .record-summary dl > div { position: relative; block-size: var(--summary-line); align-items: center; overflow: hidden; }
+  body.app-mode .record-summary dl > div[data-empty] { display: none; }
+  body.app-mode .record-summary dt {
+    position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
   /* A dashboard's list stands on its section's edge, where the section's title does. */
   .dash-list .record-summaries { padding: 0; }
 }
@@ -1670,7 +1714,6 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
   box-shadow: var(--shadow-pop);
   background: var(--raised); color: var(--ink-muted);
 }
-:where(:root:not([data-visual-theme])) .toast { box-shadow: 0 4px 16px rgb(0 0 0 / 0.12); }
 @media (prefers-reduced-motion: no-preference) {
   .toast {
     /* A transition rather than a keyframe: transitions retarget mid-flight,
@@ -1692,7 +1735,6 @@ body.app-mode .toast {
   background: var(--surface); color: var(--ink);
   box-shadow: var(--shadow-pop);
 }
-:where(:root:not([data-visual-theme])) body.app-mode .toast { box-shadow: 0 6px 24px rgb(0 0 0 / 0.14); }
 body.app-mode .toast-message { flex: 1; min-width: 0; }
 body.app-mode .toast-icon {
   display: grid; place-items: center; flex: 0 0 22px; height: 22px;
@@ -2328,7 +2370,6 @@ body.app-mode .page-head.has-record + .page-body { padding-bottom: calc(132px + 
   box-shadow: var(--shadow-pop);
   padding: var(--space-2);
 }
-:where(:root:not([data-visual-theme])) .ac { box-shadow: 0 6px 20px rgb(0 0 0 / 0.16); }
 .ac[hidden] { display: none; }
 @media (prefers-reduced-motion: no-preference) {
   .ac {
@@ -2439,6 +2480,14 @@ body.app-mode .page-head.has-record + .page-body { padding-bottom: calc(132px + 
 /* With a list's verbs at the bar's end, both took an auto margin and split the
    free space: Back floated mid-bar. Back keeps the end; the verbs follow it. */
 .crumbs .crumb-back + .crumb-tools { margin-left: var(--space-3); }
+/* In an App the trail is the one way back at a desk: Back said the trail's
+   last step again at the bar's other end (docs/design.md, the trail). A phone
+   keeps it, where the trail is cut to its last crumb. A rule of the width,
+   not of a measurement, so the bar is one shape from its first paint. */
+@media (min-width: 641px) {
+  body.app-mode .crumbs .crumb-back { display: none; }
+  body.app-mode .crumbs .crumb-back + .crumb-tools { margin-left: auto; }
+}
 
 .related-item {
   display: grid; grid-template-columns: minmax(2.4rem, auto) 1fr;

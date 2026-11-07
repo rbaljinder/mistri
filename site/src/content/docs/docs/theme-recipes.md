@@ -310,6 +310,18 @@ A record's head and a list's: on the page's ground, or one band from edge to edg
 
 <!-- /recipe words -->
 
+## `filters`
+
+A list's filter not yet asked for, the "+ Status" beside its search: a dashed place, a key on a solid edge, or no edge until a pointer is over it. Its own part, so a theme picks it apart from its buttons: Workshop's keyed buttons with solid filters, Lumen's raised buttons with quiet ones.
+
+<!-- recipe words: filters -->
+
+- `dashed`: A list’s filter not yet asked for is its name behind a +, on a dashed hairline: a place for a filter, not a field.
+- `solid`: A list’s filter not yet asked for is its name behind a + on a solid edge: a key, as the search beside it is, not a place.
+- `quiet`: A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground.
+
+<!-- /recipe words -->
+
 ## `required`
 
 How a form says a field is needed: a red star after the label of a required field, or the word "(optional)" after the label of a field that may be left empty. A screen reader hears "required" either way. A command form and a resource's New form always say "(optional)"; the recipe sets the rule for the App's other forms.
@@ -394,7 +406,7 @@ type: {
 - `heading`: A list naming itself over its rows: its face, size (16px to 28px), leading, tracking, weight (omitted, the title’s), case and features.
 - `section`: A section’s title on a record and a dashboard: its face, case and features; a dashboard’s section title also takes a size (12px to 20px), tracking and weight.
 - `body`: Prose, fields and the interface, at the base size: its leading (1.35 to 1.8) and features.
-- `label`: A column’s head, a stat’s label and a record’s tabs, at the base size: their face, tracking, weight (400 to 700), case and features; upper sets them a step smaller.
+- `label`: A column’s head, a stat’s label and a record’s tabs, at the base size: their face, size (11px to 14px), tracking, weight (400 to 700), case and features; upper sets them a step smaller unless a size is said.
 - `data`: A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates, a record header’s facts too).
 - `figure`: A stat’s figure: its face, size (18px to 40px), tracking, weight and features, tabular figures kept.
 - `nav`: The menu’s entries in the bar, at the base size: their face, tracking, weight (400 to 600) and case; upper sets them a step smaller.

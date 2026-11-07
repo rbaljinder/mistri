@@ -239,6 +239,7 @@ describe('mistri check --design', () => {
       'default-shell',
       'destructive-first',
       'fields-by-type',
+      'list-shows-key',
       'lone-metric',
       'raw-label',
       'required-unfilled',
@@ -276,6 +277,7 @@ describe('mistri check --design', () => {
       'page "order"',
       'resource "sales_order"',
       'the shell',
+      'view "orders"',
       'view "today"',
     ]);
   });
@@ -796,5 +798,73 @@ describe('the design step of mistri check', () => {
     );
     assert.equal(ran.code, 0, ran.out);
     assert.match(ran.out, /^\s+design\s+passed\s+nothing to say$/m);
+  });
+});
+
+describe('what a bare App leaves to the defaults', () => {
+  const bare: DatabaseSchema = {
+    label: 'field',
+    dialect: 'sqlite',
+    readAt: '2026-09-25T00:00:00Z',
+    foreignKeys: [{ name: 'fk1', from: { table: 'visit', columns: ['job_id'] }, to: { table: 'job', columns: ['id'] } }],
+    tables: [
+      { id: 'job', name: 'job', schema: 'main', isView: false, columns: [id, column('title', 'TEXT', { nullable: false })] },
+      {
+        id: 'visit',
+        isView: false,
+        name: 'visit',
+        schema: 'main',
+        columns: [
+          id,
+          column('job_id', 'INTEGER', { nullable: false, references: { table: 'job', column: 'id' } }),
+          column('status', 'TEXT', { nullable: false, allowed: ['scheduled', 'completed', 'missed'] }),
+          column('starts_at', 'TIMESTAMP', { nullable: false }),
+          column('completed_at', 'TIMESTAMP'),
+          column('created_at', 'TIMESTAMP', { nullable: false, default: 'CURRENT_TIMESTAMP' }),
+          column('summary', 'TEXT'),
+        ],
+      },
+    ],
+  };
+  const app = (visit: object, show: string[]): AppDef => ({
+    ...composed,
+    nav: [{ group: 'work', label: 'Work', children: [{ view: 'visits' }] }],
+    home: [{ view: 'visits' }],
+    resources: { job: {}, visit } as AppDef['resources'],
+    views: { visits: { table: 'visit', icon: 'calendar', show } } as unknown as AppDef['views'],
+  });
+  const codes = (def: AppDef) =>
+    designLint(def, [], bare).filter((finding) => ['list-shows-key', 'unnamed-records', 'new-asks-stamp'].includes(finding.code));
+
+  test('a list showing the key, records with no name, and a New form asking what is written are each said with a fix', () => {
+    const machine = { column: 'status', states: [{ name: 'scheduled' }, { name: 'completed' }, { name: 'missed' }], edges: [] };
+    const found = codes(
+      app({ access: 'write', machine, form: { show: ['job_id', 'starts_at', 'completed_at', 'created_at'] } }, [
+        'id',
+        'job_id',
+        'starts_at',
+      ]),
+    );
+    assert.deepEqual(
+      found.map((finding) => [finding.code, finding.at]),
+      [
+        ['list-shows-key', 'view "visits"'],
+        ['unnamed-records', 'resource "visit"'],
+        ['new-asks-stamp', 'resource "visit"'],
+      ],
+    );
+    const said = found.map(sayDesignFinding).join('\n');
+    assert.match(said, /recordLabel: '\{job_id\.title\} · \{starts_at\}'/);
+    assert.match(said, /"completed_at" and "created_at"|completed_at.*created_at/);
+  });
+
+  test('a key dressed as the name, a declared name, and a form default each answer it', () => {
+    const quiet = codes(
+      app({ access: 'write', recordLabel: 'V-{id}', form: { show: ['job_id', 'created_at'], defaults: { created_at: 'now' } } }, [
+        'id',
+        'job_id',
+      ]),
+    );
+    assert.deepEqual(quiet, []);
   });
 });

@@ -36,14 +36,23 @@ export function JsonPreview({ value, name, type }: { value: object; name: string
       </button>
       {open && here && (
         <Modal ref={modal} className="confirm json-overlay" ariaLabel={`${name} (JSON)`} onClose={() => setOpen(false)}>
-          <header className="json-overlay-head">
-            <h2>{name}</h2>
-            {type && <span className="json-overlay-type">{type.toLowerCase()}</span>}
-            <button type="button" className="ghost json-overlay-close" onClick={() => modal.current?.close()}>
-              {say('common.close')}
-            </button>
-          </header>
-          <JsonView value={value} />
+          {/* The viewer's bar is the dialog's head: the name, then the filter — the first thing
+              focus lands on, when the document is long enough to have one — the tools and Close. */}
+          <JsonView
+            value={value}
+            label={name}
+            head={
+              <header className="json-overlay-title">
+                <h2>{name}</h2>
+                {type && <span className="json-overlay-type">{type.toLowerCase()}</span>}
+              </header>
+            }
+            tail={
+              <button type="button" className="ghost json-overlay-close" onClick={() => modal.current?.close()}>
+                {say('common.close')}
+              </button>
+            }
+          />
         </Modal>
       )}
     </>

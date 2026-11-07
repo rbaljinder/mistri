@@ -41,6 +41,7 @@ import { splitQuery } from '@mistriwork/kit/client/clauses.js';
 import { canonicalize, squeeze, stripCondition } from '@mistriwork/kit/client/filterbar.js';
 import {
   ASSISTANT_PAGE,
+  DIRECTORY_PAGE,
   INBOX_PAGE,
   dashPageId,
   dashViewKey,
@@ -76,6 +77,7 @@ import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import {
   INBOX_SEGMENT,
   ASSISTANT_ROOM,
+  DIRECTORY_ROOM,
   addressSlug,
   appAddressBook,
   readAppSegments,
@@ -373,6 +375,7 @@ function addressBook(): AddressBook | undefined {
         tables: schema.tables,
         inbox: app.inbox === true,
         assistant: app.assistant?.page === true,
+        directory: app.directory !== undefined,
         projected: true,
       }),
     };
@@ -511,6 +514,8 @@ function sayEntry(book: AddressBook, entry: Entry): Said | undefined {
   }
   if (entry.kind === 'page') {
     if (entry.pageId === INBOX_PAGE) return book.routes.get(INBOX_SEGMENT)?.kind === 'inbox' ? { segments: [INBOX_SEGMENT] } : undefined;
+    if (entry.pageId === DIRECTORY_PAGE)
+      return book.routes.get(DIRECTORY_ROOM)?.kind === 'directory' ? { segments: [DIRECTORY_ROOM] } : undefined;
     // The assistant's page, and one conversation on it (`tab` holds its id).
     if (entry.pageId === ASSISTANT_PAGE)
       return book.routes.get(ASSISTANT_ROOM)?.kind === 'assistant'
@@ -589,6 +594,9 @@ export function needsNaturalKey(entry: Entry | undefined): { table: string; colu
 /** The notifications room as the walk holds it. */
 export const inboxEntry = (): Entry => ({ kind: 'page', pageId: INBOX_PAGE, table: undefined, label: say('notifications') });
 
+/** The Directory as the walk holds it. */
+const directoryEntry = (): Entry => ({ kind: 'page', pageId: DIRECTORY_PAGE, table: undefined, label: say('allPages') });
+
 /** The assistant's page as the walk holds it, on one conversation when `conversation` names it. */
 export const assistantEntry = (conversation?: string): Entry => ({
   kind: 'page',
@@ -648,6 +656,7 @@ export function appStackFrom(hash: string): { connection: string; stack: Entry[]
     }
     if (target.kind === 'page') return { connection, stack: [{ kind: 'page', pageId: target.page, table: target.table }] };
     if (target.kind === 'inbox') return { connection, stack: [inboxEntry()] };
+    if (target.kind === 'directory') return { connection, stack: [directoryEntry()] };
     if (target.kind === 'assistant') return { connection, stack: [assistantEntry()] };
     return { connection, stack: [tableView(target.table) as Entry] };
   }

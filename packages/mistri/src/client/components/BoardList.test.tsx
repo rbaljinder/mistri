@@ -184,7 +184,7 @@ test('lanes follow the authored order, said as words, and cards land in their la
   const lanes = screen.getAllByRole('heading', { level: 2 }).map((node) => node.closest('section')!);
   expect(within(lanes[0]).getByRole('button', { name: 'Broken login, Aster' })).toBeInTheDocument();
   expect(within(lanes[1]).getByRole('button', { name: 'Slow export' })).toBeInTheDocument();
-  expect(within(lanes[2]).getByText('No records here.')).toBeInTheDocument();
+  expect(within(lanes[2]).getByText('Nothing here')).toBeInTheDocument();
   expect(screen.queryByText('Old thing')).toBeNull();
   expect(screen.getByText('1 record is in other states.')).toBeInTheDocument();
 });
@@ -265,13 +265,25 @@ function serveLanes(counts: Array<[string | null, number]>) {
   });
 }
 
-test('given its question, a board counts each lane over the whole list and reads a lane a page at a time', async () => {
-  serveLanes([
+/* The list's one read windowed by the lane column (TableRoom.tsx): each lane's first twenty. */
+const laneWindow = (counts: Array<[string | null, number]>) =>
+  counts.flatMap(([lane, size]) =>
+    Array.from({ length: Math.min(size, 20) }, (_, i) => ({
+      id: `${lane}-${i}`,
+      name: `${lane ?? 'none'} ${i}`,
+      status: lane,
+      owner: null,
+    })),
+  );
+
+test('given its question, a board counts each lane over the whole list, draws the window, and reads a lane further alone', async () => {
+  const counts: Array<[string, number]> = [
     ['new', 900],
     ['in_progress', 3],
     ['archived', 2],
-  ]);
-  draw([], { query: 'ticket status != closed show id, name, status, owner sort rank' });
+  ];
+  serveLanes(counts);
+  draw([], { query: 'ticket status != closed show id, name, status, owner sort rank', rows: laneWindow(counts) });
   // One breakdown for every lane's count, under the list's own conditions and nothing of its order.
   await waitFor(() =>
     expect(mocks.api).toHaveBeenCalledWith('/api/breakdown', expect.objectContaining({ text: 'ticket status != closed count by status' })),
@@ -280,20 +292,24 @@ test('given its question, a board counts each lane over the whole list and reads
   expect(await screen.findByLabelText('900 items')).toBeInTheDocument();
   const lane = screen.getByRole('heading', { level: 2, name: 'New' }).closest('section')!;
   await waitFor(() => expect(within(lane).getAllByRole('button', { name: /^new \d+$/ })).toHaveLength(20));
-  expect(mocks.api).toHaveBeenCalledWith(
-    '/api/run',
-    expect.objectContaining({ q: 'ticket status != closed and status = new show id, name, status, owner sort rank', limit: 20 }),
-  );
+  // The lanes came in the list's read: nothing is read lane by lane.
+  expect(mocks.api.mock.calls.filter(([path]) => path === '/api/run')).toEqual([]);
   expect(screen.getByText('2 records are in other states.')).toBeInTheDocument();
-  // Its next page is read in place.
+  // Its next page is read in place, that lane alone.
   await userEvent.click(within(lane).getByRole('button', { name: 'Show 20 more' }));
   await waitFor(() => expect(within(lane).getAllByRole('button', { name: /^new \d+$/ })).toHaveLength(40));
+  expect(mocks.api.mock.calls.filter(([path]) => path === '/api/run')).toEqual([
+    [
+      '/api/run',
+      { q: 'ticket status != closed and status = new show id, name, status, owner sort rank', limit: 40, offset: 0, count: 'none' },
+    ],
+  ]);
 });
 
 test('records with no value have a lane of their own, and a board past its cap says so', async () => {
   const many: Array<[string | null, number]> = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map((status, i) => [status, 20 - i]);
   serveLanes([...many, [null, 4]]);
-  draw([], { query: 'ticket', spec: { ...spec, lanes: undefined } });
+  draw([], { query: 'ticket', spec: { ...spec, lanes: undefined }, rows: laneWindow([...many, [null, 4]]) });
   await waitFor(() =>
     expect(screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)).toEqual([
       'A',
@@ -307,8 +323,69 @@ test('records with no value have a lane of their own, and a board past its cap s
       'No status',
     ]),
   );
-  expect(mocks.api).toHaveBeenCalledWith('/api/run', expect.objectContaining({ q: 'ticket status is empty' }));
+  expect(
+    within(screen.getByRole('heading', { level: 2, name: 'No status' }).closest('section')!).getAllByRole('button', { name: /^none \d+$/ }),
+  ).toHaveLength(4);
   expect(await screen.findByText('12 records are in 1 more state: a board draws at most 8 lanes.')).toBeInTheDocument();
+});
+
+test('an inferred board gathers its final states in one folded Done lane, absent on a tab that leaves them out', async () => {
+  const counts: Array<[string, number]> = [
+    ['new', 2],
+    ['in_progress', 1],
+    ['done', 3],
+    ['closed', 1],
+  ];
+  serveLanes(counts);
+  const inferred: AppBoardList = { kind: 'board', by: 'status', primary: 'name', lanes: ['new', 'in_progress'], done: ['done', 'closed'] };
+  draw([], { query: 'ticket show id, name, status, owner', rows: laneWindow(counts), spec: inferred });
+  // All: one strip, folded from the first paint, counting both final states, its cards undrawn.
+  const strip = await screen.findByRole('button', { name: /^Done/ });
+  expect(strip).toHaveAttribute('aria-expanded', 'false');
+  expect(strip.closest('section')).toHaveClass('is-folded');
+  expect(await within(strip).findByLabelText('4 items')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^done \d+$/ })).toBeNull();
+  expect(screen.queryByText(/other states/)).toBeNull();
+  // Opened, it holds both states' cards.
+  await userEvent.click(strip);
+  const lane = screen.getByRole('heading', { level: 2, name: 'Done' }).closest('section')!;
+  expect(within(lane).getAllByRole('button', { name: /^(done|closed) \d+$/ })).toHaveLength(4);
+  cleanup();
+  window.localStorage.clear();
+
+  // Open: the tab names the state, holds nothing finished, and has no Done lane at all, not one saying 0.
+  const open: Array<[string, number]> = [
+    ['new', 2],
+    ['in_progress', 1],
+  ];
+  serveLanes(open);
+  draw([], { query: 'ticket status in (new, in_progress) show id, name, status, owner', rows: laneWindow(open), spec: inferred });
+  await waitFor(() => expect(mocks.api).toHaveBeenCalledWith('/api/breakdown', expect.anything()));
+  await screen.findByLabelText('2 items');
+  expect(screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)).toEqual(['New', 'In progress']);
+  expect(screen.queryByRole('button', { name: /^Done/ })).toBeNull();
+});
+
+test('a "when" that only names states is answered from the card, and a drop on Done writes the one final state', async () => {
+  const worded = {
+    ...table,
+    columns: table.columns.map((c) => (c.name === 'status' ? { ...c, allowed: ['new', 'in_progress', 'done', 'closed'] } : c)),
+  };
+  serve([]);
+  const inferred: AppBoardList = { kind: 'board', by: 'status', primary: 'name', lanes: ['new', 'in_progress'], done: ['done', 'closed'] };
+  const close: AppAction = { id: 'close', label: 'Close', set: { status: 'done' }, when: 'status in (new, in_progress)' };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <BoardList table={worded} rows={rows.slice(0, 2)} spec={inferred} actions={[start, close]} interactive />
+    </QueryClientProvider>,
+  );
+  // Done is a lane here (no tab names the state), and the card may be moved to it: asked of nobody.
+  expect(await lanesFor('Broken login')).toEqual(['In progress', 'Done']);
+  expect(await lanesFor('Slow export')).toEqual(['Done']);
+  expect(mocks.api.mock.calls.filter(([path]) => path === '/api/run')).toEqual([]);
+  await choose('Slow export', 'Done');
+  await waitFor(() => expect(updates()).toEqual([{ status: 'done' }]));
 });
 
 test('lanes fall back to the column vocabulary, then to the values seen', () => {

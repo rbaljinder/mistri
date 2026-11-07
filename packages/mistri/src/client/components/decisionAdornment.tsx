@@ -53,18 +53,23 @@ export function useRecordDecisions(
   const landed = useRef(onLanded);
   landed.current = onLanded;
   const adorn = useMemo((): FieldAdornment | undefined => {
-    if (!decided || !recordKey || !suggestions?.length) return undefined;
+    if (!decided || !recordKey) return undefined;
     const settled = () => {
       refreshDecisions(client, connection, table);
       landed.current();
     };
-    return ({ column }) => {
-      const suggestion = suggestions.find((each) => each.field === column);
-      if (!suggestion) return null;
+    /* A filled field a decision answers is marked from the first paint, whether or not a suggestion is on its way, so
+       a phone gives its value the line under the caption before one comes (decisionMarks.css): beside the caption, a
+       suggestion trailing the value widened it past the line, and the value dropped under the caption late. */
+    return ({ column, filled }) => {
+      const suggestion = suggestions?.find((each) => each.field === column);
+      if (!suggestion) return filled && Object.hasOwn(answered!, column) ? <span className="decision-slot" /> : null;
       return (
-        <Suspense fallback={<span className="decision-chip-held">{suggestion.label}</span>}>
-          <DecisionChip suggestion={suggestion} table={table} recordKey={recordKey} onSettled={settled} />
-        </Suspense>
+        <span className="decision-slot">
+          <Suspense fallback={<span className="decision-chip-held">{suggestion.label}</span>}>
+            <DecisionChip suggestion={suggestion} table={table} recordKey={recordKey} onSettled={settled} />
+          </Suspense>
+        </span>
       );
     };
   }, [decided, suggestions, client, connection, table, keyText]); // eslint-disable-line react-hooks/exhaustive-deps

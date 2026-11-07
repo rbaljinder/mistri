@@ -59,9 +59,10 @@ test('an app has no Workbench, connection management or database-switch commands
     await page.keyboard.press('ControlOrMeta+k');
     const search = page.getByRole('combobox', { name: 'Search', exact: true });
     await search.fill('Connections');
-    await expect(page.getByRole('option', { name: /^action Connections/ })).toHaveCount(0);
+    // A grouped row is named by its name alone, its kind said in its line (Palette.tsx).
+    await expect(page.getByRole('option', { name: 'Connections', exact: true })).toHaveCount(0);
     await search.fill('Other database');
-    await expect(page.getByRole('option', { name: /^database / })).toHaveCount(0);
+    await expect(page.locator('[role="option"] .palette-detail', { hasText: /^Database\b/ })).toHaveCount(0);
     await search.fill('Workbench');
     await expect(page.getByRole('option', { name: /Workbench/ })).toHaveCount(0);
     await page.keyboard.press('Escape');

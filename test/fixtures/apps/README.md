@@ -38,3 +38,9 @@ Not every fixture here is frozen. [`command-desk`](command-desk/README.md) is
 the browser gate's own App: three specs that check framework behaviour used to
 borrow a public sample's seed, and lost the whole gate when that sample was
 reshaped. A gate's fixtures belong to the gate.
+
+[`bare`](bare/README.md) is a benchmark, not a sample: an App that declares
+only what an agent's least effort writes (tables, writes, a job's states, a
+list each, a menu), so every room in it is mistri's default. The visual
+matrix captures it each release; grow it only by what a lazy agent would also
+write, never to show a feature.

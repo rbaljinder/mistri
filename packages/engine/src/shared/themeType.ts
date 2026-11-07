@@ -59,7 +59,8 @@ export const TYPE_ROLES: Record<ThemeTypeRole, RoleRule> = {
   },
   section: { takes: ['face', 'size', 'tracking', 'weight', 'case', 'features'], size: [12, 20], weights: WEIGHTS },
   body: { takes: ['leading', 'features'], leading: [1.35, 1.8] },
-  label: { takes: ['face', 'tracking', 'weight', 'case', 'features'], weights: [400, 500, 600, 700] },
+  /* A step either side of the base (text-xs to text-md): a label is filed-under words, never a heading's size. */
+  label: { takes: ['face', 'size', 'tracking', 'weight', 'case', 'features'], size: [11, 14], weights: [400, 500, 600, 700] },
   data: { takes: ['features', 'reach'] },
   figure: { takes: ['face', 'size', 'tracking', 'weight', 'features'], size: [18, 40], weights: WEIGHTS },
   nav: { takes: ['face', 'tracking', 'weight', 'case'], weights: [400, 500, 600] },

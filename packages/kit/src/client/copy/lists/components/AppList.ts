@@ -28,4 +28,5 @@ export const say = defineMessages({
   match: '{gridTotal} match',
   captionFilters: '{caption} filters',
   everything: 'Everything',
+  layout: 'Show {caption} as',
 });

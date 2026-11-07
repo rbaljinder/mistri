@@ -54,12 +54,14 @@ import {
   type TriggerEvent,
 } from './scopeTriggers.js';
 
-type Token =
+/** Each token keeps `at`, its offset in the definition, so a refusal can say where reading stopped. */
+type Token = (
   | { kind: 'word'; text: string; upper: string }
   | { kind: 'id'; text: string }
   | { kind: 'string'; text: string }
   | { kind: 'literal'; text: string }
-  | { kind: 'op'; text: string };
+  | { kind: 'op'; text: string }
+) & { at: number };
 
 const EVERY: readonly TriggerEvent[] = ['insert', 'update', 'delete'];
 
@@ -119,9 +121,14 @@ const EXPRESSION_WORDS = new Set([
 ]);
 const WRITES = new Set(['INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'UPSERT']);
 
-class Unreadable extends Error {}
-const fail = (): never => {
-  throw new Unreadable();
+/** Where reading stopped: an offset in the definition, or the token found there; neither when it ran out of text. */
+class Unreadable extends Error {
+  constructor(readonly stop?: number | Token) {
+    super('unreadable');
+  }
+}
+const fail = (stop?: number | Token): never => {
+  throw new Unreadable(stop);
 };
 
 const identifierStart = (char: string) => /[A-Za-z_]/.test(char) || char.charCodeAt(0) >= 0x80;
@@ -138,9 +145,10 @@ function tokenize(sql: string): Token[] {
   let i = 0;
   const quoted = (close: string, doubled: boolean): string => {
     let text = '';
+    const open = i;
     i += 1;
     for (;;) {
-      if (i >= sql.length) return fail();
+      if (i >= sql.length) return fail(open);
       const char = sql[i];
       if (char === close) {
         if (doubled && sql[i + 1] === close) {
@@ -157,6 +165,7 @@ function tokenize(sql: string): Token[] {
   };
   while (i < sql.length) {
     const char = sql[i];
+    const at = i;
     if (whitespace(char)) {
       i += 1;
     } else if (sql.startsWith('--', i)) {
@@ -165,36 +174,37 @@ function tokenize(sql: string): Token[] {
     } else if (sql.startsWith('/*', i)) {
       const end = sql.indexOf('*/', i + 2);
       // SQLite ends an unterminated comment at the end of input; a trigger's text never has one, so it refuses.
-      if (end === -1) return fail();
+      if (end === -1) return fail(at);
       i = end + 2;
     } else if (char === "'") {
-      tokens.push({ kind: 'string', text: quoted("'", true) });
+      tokens.push({ kind: 'string', text: quoted("'", true), at });
     } else if ((char === 'x' || char === 'X') && sql[i + 1] === "'") {
       i += 1;
-      tokens.push({ kind: 'literal', text: `X'${quoted("'", false)}'` });
+      tokens.push({ kind: 'literal', text: `X'${quoted("'", false)}'`, at });
     } else if (char === '"') {
-      tokens.push({ kind: 'id', text: quoted('"', true) });
+      tokens.push({ kind: 'id', text: quoted('"', true), at });
     } else if (char === '`') {
-      tokens.push({ kind: 'id', text: quoted('`', true) });
+      tokens.push({ kind: 'id', text: quoted('`', true), at });
     } else if (char === '[') {
-      tokens.push({ kind: 'id', text: quoted(']', false) });
+      tokens.push({ kind: 'id', text: quoted(']', false), at });
     } else if (/[0-9]/.test(char) || (char === '.' && /[0-9]/.test(sql[i + 1] ?? ''))) {
       const match = /^(?:0[xX][0-9A-Fa-f_]+|(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9][0-9_]*)(?:[eE][+-]?[0-9_]+)?)/.exec(sql.slice(i));
-      if (!match) return fail();
+      if (!match) return fail(at);
       i += match[0].length;
       // `12abc` is one bad token to SQLite, not a number beside a word.
-      if (i < sql.length && identifierPart(sql[i])) return fail();
-      tokens.push({ kind: 'literal', text: match[0] });
+      if (i < sql.length && identifierPart(sql[i])) return fail(at);
+      tokens.push({ kind: 'literal', text: match[0], at });
     } else if (identifierStart(char)) {
       let end = i + 1;
       while (end < sql.length && identifierPart(sql[end])) end += 1;
       const text = sql.slice(i, end);
-      tokens.push({ kind: 'word', text, upper: text.toUpperCase() });
+      tokens.push({ kind: 'word', text, upper: text.toUpperCase(), at });
       i = end;
     } else {
       const op = ['->>', '||', '<=', '>=', '==', '!=', '<>', '<<', '>>', '->'].find((candidate) => sql.startsWith(candidate, i)) ?? char;
-      if (!'()[],;.+-*/%<>=&|~'.includes(op[0])) return fail();
-      tokens.push({ kind: 'op', text: op });
+      // `!` opens only `!=` to SQLite: a lone one, `?`, `$`, `@`, `:` or `#` (a parameter) refuses.
+      if (!'()[],;.+-*/%<>=&|~'.includes(op[0]) && op !== '!=') return fail(at);
+      tokens.push({ kind: 'op', text: op, at });
       i += op.length;
     }
   }
@@ -219,18 +229,18 @@ class Cursor {
     return this.tokens[this.at++] ?? fail();
   }
   expectWord(word: string): void {
-    if (this.word() !== word) fail();
+    if (this.word() !== word) fail(this.peek());
     this.at += 1;
   }
   expectOp(op: string): void {
-    if (this.op() !== op) fail();
+    if (this.op() !== op) fail(this.peek());
     this.at += 1;
   }
   /** A name: a bare word or a quoted identifier. */
   name(): string {
     const token = this.take();
     if (token.kind === 'word' || token.kind === 'id') return token.text;
-    return fail();
+    return fail(token);
   }
   /** `name` or `schema.name`. */
   qualified(): string {
@@ -301,30 +311,30 @@ function expression(cursor: Cursor, stop: (cursor: Cursor) => boolean, options: 
     any = true;
     const token = cursor.take();
     if (token.kind === 'string' || token.kind === 'literal') continue;
-    if (token.kind === 'id') fail();
+    if (token.kind === 'id') fail(token);
     if (token.kind === 'op') {
       if (token.text === '(') {
         // A keyed read: one column of one row another table holds, found by NEW's or OLD's columns.
         if (options.effects && cursor.word() === 'SELECT') options.effects.push(keyedRead(cursor));
         else parens.push('plain');
       } else if (token.text === ')') {
-        if (!parens.pop()) fail();
+        if (!parens.pop()) fail(token);
       } else if (token.text === ',') continue;
-      else if (!OPERATORS.has(token.text)) fail();
+      else if (!OPERATORS.has(token.text)) fail(token);
       continue;
     }
     // A quoted name here is a column of no row, or a string SQLite falls back to: not proven.
-    const word = token.kind === 'word' ? token.upper : fail();
+    const word = token.kind === 'word' ? token.upper : fail(token);
     if (word === 'NEW' || word === 'OLD') {
       cursor.expectOp('.');
       cursor.name();
     } else if (word === 'IN') {
       // After IN a bare word is a table to SQLite (`NEW.note IN TRUE` reads one named "true"): only a list is proven.
-      if (cursor.op() !== '(') fail();
+      if (cursor.op() !== '(') fail(cursor.peek());
     } else if (word === 'CASE') {
       cases += 1;
     } else if (word === 'END') {
-      if (!cases) fail();
+      if (!cases) fail(token);
       cases -= 1;
     } else if (word === 'DISTINCT') {
       // Only `IS [NOT] DISTINCT FROM`.
@@ -333,13 +343,13 @@ function expression(cursor: Cursor, stop: (cursor: Cursor) => boolean, options: 
       const isBefore =
         (before?.kind === 'word' && before.upper === 'IS') ||
         (before?.kind === 'word' && before.upper === 'NOT' && twoBefore?.kind === 'word' && twoBefore.upper === 'IS');
-      if (!isBefore) fail();
+      if (!isBefore) fail(token);
       cursor.expectWord('FROM');
     } else if (word === 'CAST') {
       cursor.expectOp('(');
       parens.push('cast');
     } else if (word === 'AS') {
-      if (parens.at(-1) !== 'cast') fail();
+      if (parens.at(-1) !== 'cast') fail(token);
       // A type name: words, and at most one `(n)` or `(n, m)`.
       if (cursor.peek()?.kind !== 'word') fail();
       while (cursor.peek()?.kind === 'word') cursor.at += 1;
@@ -375,7 +385,7 @@ function expression(cursor: Cursor, stop: (cursor: Cursor) => boolean, options: 
       // The written row's own column, bare: `posted_minor + NEW.amount`. Which columns the table has is the catalog's.
       options.own.add(token.text);
     } else {
-      fail();
+      fail(token);
     }
   }
 }
@@ -527,6 +537,7 @@ function keyedDelete(cursor: Cursor): TriggerEffect {
   return { kind: 'delete', table, key: keyEqualities(cursor, table, (at) => at.op() === ';') };
 }
 
+const DOES_MORE = 'it does more than check the row it fires on';
 /**
  * Why a body that is not validation-only is not, from the tokens it holds outside its literals: said as exactly as
  * they allow, since the owner reads it to know what to change. A subquery is not said to read a table it may not
@@ -555,7 +566,7 @@ function why(tokens: readonly Token[]): string {
     return isOp(open, '(') && isWord(kind, 'ABORT') && isOp(comma, ',') && message?.kind === 'string' && isOp(close, ')');
   };
   if (words.some((word) => word.upper === 'RAISE' && !literal(word))) return "its RAISE is not RAISE(ABORT, '…') with a literal message";
-  return 'it does more than check the row it fires on';
+  return DOES_MORE;
 }
 
 /** The definition as tokens, one space apart: comments, spacing and keyword case never move the digest. */
@@ -582,11 +593,16 @@ function digestOf(tokens: readonly Token[]): string {
 export function readSqliteTrigger(name: string, sql: unknown, generated: ReadonlySet<string>): ScopeTrigger {
   const unknown: ScopeTrigger = { name, events: EVERY, validates: false, why: 'its definition is not one mistri can read' };
   if (typeof sql !== 'string') return unknown;
+  // Where reading stopped, so the person who wrote the trigger can find the construct and rewrite it.
+  const stoppedAt = (error: unknown, cursor?: Cursor) => {
+    const stop = error instanceof Unreadable && error.stop !== undefined ? error.stop : cursor?.peek();
+    return stop === undefined ? 'the end of the definition' : located(sql, stop);
+  };
   let tokens: Token[];
   try {
     tokens = tokenize(sql);
-  } catch {
-    return unknown;
+  } catch (error) {
+    return { ...unknown, why: `its definition has ${stoppedAt(error)}, which mistri does not read` };
   }
   const digest = digestOf(tokens);
   const cursor = new Cursor(tokens);
@@ -608,6 +624,7 @@ export function readSqliteTrigger(name: string, sql: unknown, generated: Readonl
       cursor.at += 1;
       cursor.expectWord('OF');
     }
+    const eventToken = cursor.peek();
     const event = cursor.word();
     cursor.at += 1;
     if (event === 'INSERT') events = ['insert'];
@@ -624,16 +641,17 @@ export function readSqliteTrigger(name: string, sql: unknown, generated: Readonl
         const fold = (column: string) => column.replace(/[A-Z]/g, (char) => char.toLowerCase());
         if (columns.some((column) => generated.has(fold(column)))) columns = undefined;
       }
-    } else return { ...unknown, digest };
+    } else return fail(eventToken);
     cursor.expectWord('ON');
     cursor.qualified();
     bodyStart = cursor.at;
-  } catch {
-    return { ...unknown, digest };
+  } catch (error) {
+    return { ...unknown, digest, why: `its definition has ${stoppedAt(error, cursor)}, which mistri does not read` };
   }
   const fired = { name, events, ...(columns ? { columns } : {}), digest };
   try {
-    if (tokens.slice(bodyStart).some((token) => (token.kind === 'word' || token.kind === 'id') && wide(token.text))) fail();
+    const past = tokens.slice(bodyStart).find((token) => (token.kind === 'word' || token.kind === 'id') && wide(token.text));
+    if (past) fail(past);
     if (cursor.word() === 'FOR') {
       cursor.at += 1;
       cursor.expectWord('EACH');
@@ -670,9 +688,21 @@ export function readSqliteTrigger(name: string, sql: unknown, generated: Readonl
       effects,
       ...(plainDefinition(sql, tokens, 'sqlite') ? {} : { unaccepted: PLAIN }),
     };
-  } catch {
-    return { ...fired, validates: false, why: why(tokens.slice(bodyStart)) };
+  } catch (error) {
+    const said = why(tokens.slice(bodyStart));
+    return { ...fired, validates: false, why: said === DOES_MORE ? `${said}: mistri does not read ${stoppedAt(error, cursor)}` : said };
   }
+}
+
+/** A token, or the character at an offset, and its line and column: `` `!` at line 3, column 34 ``. */
+function located(sql: string, stop: number | Token): string {
+  const at = typeof stop === 'number' ? stop : stop.at;
+  const shown =
+    typeof stop === 'number' ? sql[at] : stop.kind === 'string' ? `'${stop.text}'` : stop.kind === 'id' ? `"${stop.text}"` : stop.text;
+  const before = sql.slice(0, at);
+  const line = before.split('\n').length;
+  const column = at - before.lastIndexOf('\n');
+  return `\`${shown.length > 40 ? `${shown.slice(0, 40)}…` : shown}\` at line ${line}, column ${column}`;
 }
 
 /** Words that open a table constraint, never a column definition (a column so named must be quoted). */

@@ -8,8 +8,12 @@
  * or the provisioning functions here for a host that has no App framework),
  * never by opening a connection. A writable connection whose database holds
  * this build's layout keeps its journal there; one that holds none keeps it in
- * memory, as before, and one that holds another layout keeps it in memory and
- * says why once.
+ * memory, as before, and in the database browser says so once, naming the
+ * step that provisions it (a journal that silently outlasts nothing is a
+ * promise the docs make and the run does not keep). An App says nothing of it:
+ * Undo is the Workbench's, an App offers none, so the notice would be an
+ * operator chore with nothing to gain, and `mistri check` read it as the App's
+ * failure. One that holds another layout keeps it in memory and says why once.
  *
  * It sits in the business database, beside the rows it describes, under the
  * reserved prefix: the catalog never lists it, and a copy of the database
@@ -33,6 +37,7 @@ import type { PgQuery } from '../adapters/postgresPool.js';
 import { storeHostOf, writeViewOf, type StoreHost } from '../adapters/storeHost.js';
 import { runtimeName, runtimeSchema, runtimeTable } from '../shared/runtimeTables.js';
 import { attachJournalStore, type JournalEntry, type JournalStore } from './journal.js';
+import { product } from './product.js';
 
 const WRITE_JOURNAL_VERSION = 1;
 /** The reserved prefix of its tables (`mistri.undo_*` on PostgreSQL). */
@@ -362,24 +367,28 @@ function postgresStore(host: Extract<StoreHost, { dialect: 'postgres' }>): Journ
   };
 }
 
+/** A database that can hold the store and holds none of it: the journal stays in memory, and the operator is told. */
+const NOT_PROVISIONED = 'not-provisioned';
+
 /**
- * The store an adapter's database holds, or undefined where it holds none of
- * it (the journal then stays in memory). An adapter a wrapper narrowed is
- * looked through to the one it wraps. Throws WriteJournalUnavailable for a
- * layout that is not this build's.
+ * The store an adapter's database holds; NOT_PROVISIONED where the database
+ * could hold it and holds none (the journal then stays in memory); undefined
+ * where the adapter has no database to hold one (an HTTP source). An adapter a
+ * wrapper narrowed is looked through to the one it wraps. Throws
+ * WriteJournalUnavailable for a layout that is not this build's.
  */
-async function writeJournalStoreOf(adapter: Adapter): Promise<JournalStore | undefined> {
+async function writeJournalStoreOf(adapter: Adapter): Promise<JournalStore | typeof NOT_PROVISIONED | undefined> {
   const host = storeHostOf(adapter) ?? storeHostOf(writeViewOf(adapter)?.over);
   if (!host) return undefined;
   if (host.dialect === 'sqlite') {
     const db = host.reader();
-    if (!sqliteCatalog(db).length) return undefined;
+    if (!sqliteCatalog(db).length) return NOT_PROVISIONED;
     if (!sqliteWriteJournalReady(db))
       throw new WriteJournalUnavailable(layoutRefusal('The write journal store', sqliteLayoutVersion(db, META), WRITE_JOURNAL_VERSION));
     return sqliteStore(host);
   }
   return host.withReadClient(async (client) => {
-    if (!(await pgRelations(client)).count) return undefined;
+    if (!(await pgRelations(client)).count) return NOT_PROVISIONED;
     if (!(await postgresWriteJournalReady(client)))
       throw new WriteJournalUnavailable(
         layoutRefusal('The write journal store', await postgresLayoutVersion(client, pgMeta), WRITE_JOURNAL_VERSION),
@@ -388,11 +397,23 @@ async function writeJournalStoreOf(adapter: Adapter): Promise<JournalStore | und
   });
 }
 
+/** What an operator needs when a writable connection's database holds no store: what is lost, and the one step that provisions it. */
+function unprovisioned(connection: string, adapter: Adapter): string {
+  const host = storeHostOf(adapter) ?? storeHostOf(writeViewOf(adapter)?.over);
+  const target = host?.dialect === 'postgres' ? "postgres: '<the connection's URL>'" : "sqlite: '<the database file>'";
+  return (
+    `"${connection}": Undo history is kept in memory for this run, and a restart forgets it: this database holds no undo-journal store. ` +
+    `It is provisioned once, never by opening a connection. With the server stopped, run ` +
+    `provisionStores({ ${target} }, { only: ['undo-journal'] }) from @mistriwork/mistri/maintenance ` +
+    `(or ${host?.dialect === 'postgres' ? 'provisionPostgresWriteJournal' : 'provisionSqliteWriteJournal'} from @mistriwork/engine/server/journalStore.js), then start again.`
+  );
+}
+
 /**
  * Keep `connection`'s journal in its database when the database holds the
  * store: what it held is read back, and every write from here on is kept
- * there too. Never fatal: a store that cannot be read leaves the journal in
- * memory, said through `warn`. Resolves to whether the store is now used.
+ * there too. Never fatal: a store that is missing or cannot be read leaves the
+ * journal in memory, said through `warn` (the caller says it once). Resolves to whether the store is now used.
  */
 export async function keepWriteJournal(
   connection: string,
@@ -401,6 +422,11 @@ export async function keepWriteJournal(
 ): Promise<boolean> {
   try {
     const store = await writeJournalStoreOf(adapter);
+    if (store === NOT_PROVISIONED) {
+      // Only the browser offers Undo (the header says why an App stays quiet).
+      if (product() === 'tablewalk') warn(unprovisioned(connection, adapter));
+      return false;
+    }
     if (!store) return false;
     await attachJournalStore(connection, store, warn);
     return true;

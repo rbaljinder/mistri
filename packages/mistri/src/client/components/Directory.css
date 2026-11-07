@@ -1,0 +1,21 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* The Directory (Directory.tsx): one measure, the filter box over the groups, each place a row of its mark, its
+   name and, in muted ink at the row's end, what it is. Rows are the menu's height; the lit one is the palette's. */
+.directory { display: grid; gap: var(--space-4); width: min(48rem, 100%); }
+.directory .applist-head { margin: 0; }
+/* The box and the groups stand on the room's inset, under the title, as a list's rows do (features.css). */
+.directory > :not(.applist-head) { margin-inline: var(--room-inset); }
+.directory-search { display: flex; }
+.directory-search .applist-search-input { flex: 1; min-width: 0; }
+.directory-sections { display: grid; gap: var(--space-5); }
+.directory-section { display: grid; gap: var(--space-1); }
+.directory-group { margin: 0 0 var(--space-1); font: 500 var(--text-xs) var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); }
+.directory-line { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-item); cursor: pointer; }
+.directory-line.active { background: var(--accent-soft); color: var(--accent-ink); }
+.directory-icon { width: 16px; height: 16px; color: var(--ink-muted); }
+.directory-line.active .directory-icon { color: inherit; }
+.directory-label { min-width: 0; overflow-wrap: anywhere; }
+.directory-kind { color: var(--ink-muted); font-size: var(--text-sm); }
+.directory-none { margin: 0; }
+}

@@ -22,16 +22,25 @@ for (const theme of ['lumen', 'mono'])
       const title = await record.locator('.record-summary-title').boundingBox();
       expect(title!.x - gutter!.x).toBeGreaterThanOrEqual(16);
       expect(gutter!.x + gutter!.width - title!.x - title!.width).toBeGreaterThanOrEqual(16);
-      /* A summary is two lines: the name, then its facts on one wrapping line,
-       each caption beside its value, the facts apart where they share a line. */
-      const facts = await record.locator('dl > div').evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON()));
+      /* A summary is the name, then its values on one wrapping line of at most two, with no caption drawn beside them
+       (each stays as its value's accessible name, visually hidden), the values apart where they share a line. A value
+       that is empty is not drawn, so it takes no place in the line. */
+      const facts = await record
+        .locator('dl > div:not([data-empty])')
+        .evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON()));
+      expect(facts.length).toBeGreaterThan(0);
       expect(facts[0].left).toBeCloseTo(title!.x, 0);
       for (const [before, after] of facts.slice(0, -1).map((fact, i) => [fact, facts[i + 1]])) {
         if (Math.abs(after.top - before.top) < 2) expect(after.left - before.right).toBeGreaterThanOrEqual(16);
         else expect(after.left).toBeCloseTo(title!.x, 0);
       }
       expect(facts[0].top).toBeGreaterThanOrEqual(title!.y + title!.height);
+      expect(new Set(facts.map((fact) => Math.round(fact.top))).size).toBeLessThanOrEqual(2);
       for (const fact of facts) expect(fact.right).toBeLessThanOrEqual(width - 16);
+      const captions = await record
+        .locator('dl > div:not([data-empty]) > dt')
+        .evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().width));
+      for (const wide of captions) expect(wide).toBeLessThanOrEqual(1);
       await page.screenshot({ path: testInfo.outputPath(`record-gutters-${width}.png`) });
     }
   });
@@ -254,7 +263,7 @@ test('runtime UX: charts resize with their container and keep date labels apart'
 test('runtime UX: dismissing search restores its launcher, and search offers no Workbench', async ({ page }) => {
   await page.goto(CRM);
   await expect(page.locator('body')).toHaveClass(/app-topnav/);
-  const search = page.getByRole('button', { name: 'Search (⌘K)' });
+  const search = page.getByRole('button', { name: 'Search ⌘K' });
   await search.click();
   const input = page.getByRole('combobox', { name: 'Search' });
   await expect(input).toHaveAttribute('placeholder', 'Search records, pages and commands…');

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from './support/harness';
 import type { Request } from '@playwright/test';
-import { startSample, PAYDAY_ADMIN } from './support/sampleServer';
+import { startSample, BARE_ADMIN, PAYDAY_ADMIN } from './support/sampleServer';
 import { ROOM_BUDGETS } from '../scripts/statement-budgets.mjs';
 import { statementShape } from '../packages/engine/src/adapters/telemetry/statement.js';
 import { BUILD_MS } from './support/budgets';
@@ -171,6 +171,51 @@ test.describe('statement budgets', () => {
       // Preserve the crash check before closing the page and its server.
       await expect(page.locator('[data-section-error]')).toHaveCount(0);
       await page.close();
+    } finally {
+      await sample.stop();
+    }
+  });
+
+  /* The App nobody arranged: the home and the board it was given are read as an arranged App's are, a statement
+     a section and the board's lanes in one window, carried in the first document. */
+  test("The bare App's inferred home and board read within their budgets", async ({ page }) => {
+    const sample = await startSample('bare', { dev: true });
+    try {
+      const login = await page.request.post(`${sample.origin}/api/auth/sign-in/email`, {
+        headers: { origin: sample.origin },
+        data: BARE_ADMIN,
+      });
+      expect(login.ok()).toBe(true);
+      await page.goto(`${sample.origin}/`);
+      await expect(page.locator('#content .page-section').first()).toBeVisible({ timeout: 30_000 });
+      within(
+        'bare home',
+        await room(page, sample.origin, async () => {
+          await page.goto(`${sample.origin}/`);
+          await expect(page.locator('#content .page-section').first()).toBeVisible({ timeout: 30_000 });
+        }),
+      );
+      /* Read as a board, which this browser remembers and says to the server (LayoutSwitch.tsx). */
+      await page.goto(`${sample.origin}/jobs`);
+      await page.getByRole('button', { name: 'Board', exact: true }).click();
+      await expect(page.locator('.triage-card').first()).toBeVisible({ timeout: 30_000 });
+      within(
+        'bare board',
+        await room(page, sample.origin, async () => {
+          await page.goto(`${sample.origin}/jobs`);
+          await expect(page.locator('.triage-card').first()).toBeVisible({ timeout: 30_000 });
+        }),
+      );
+      // The same board opened from the App's own menu: its lanes, their counts and its tabs', nothing of the shell.
+      await page.getByRole('navigation', { name: 'App menu' }).getByRole('button', { name: 'Visits', exact: true }).click();
+      await expect(page.locator('#content tbody tr').first()).toBeVisible({ timeout: 30_000 });
+      within(
+        'bare board, from the menu',
+        await room(page, sample.origin, async () => {
+          await page.getByRole('navigation', { name: 'App menu' }).getByRole('button', { name: 'Jobs', exact: true }).click();
+          await expect(page.locator('.triage-card').first()).toBeVisible({ timeout: 30_000 });
+        }),
+      );
     } finally {
       await sample.stop();
     }

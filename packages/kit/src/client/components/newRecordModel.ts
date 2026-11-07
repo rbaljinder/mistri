@@ -1,3 +1,9 @@
+/**
+ * The New form's rules, apart from its drawing (NewRecord.tsx, DefinedFields.tsx, PageRelated.tsx): which columns it
+ * asks and in what groups, which a condition hides, what each starts at (a declared default, today or now, a flag's
+ * start), the control each field gets, how an earlier pick narrows a later one, whether it opens as a drawer or a page,
+ * and what is missing or changed before the values are written.
+ */
 import { coerceForColumn, columnKind, isFlagColumn, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { autoKey, formShownFields, isRequired } from '@mistriwork/engine/shared/form.js';
 import type { AppForm } from '@mistriwork/engine/shared/servedApp.js';
@@ -55,16 +61,24 @@ function editableColumns(table: TableMeta, app: boolean): ColumnMeta[] {
   );
 }
 
-export function formColumns(table: TableMeta, form: FormCuration | undefined, app: boolean): ColumnMeta[] {
+/**
+ * The columns a New form asks, in order. `written` is what the database and the App's machine fill without being
+ * asked (platformWritten in form.ts): left out where the form names its fields by the schema, kept where the App's
+ * form names one itself (in `show`, a step or a group), since a declared field is the author's to ask.
+ */
+export function formColumns(table: TableMeta, form: FormCuration | undefined, app: boolean, written?: ReadonlySet<string>): ColumnMeta[] {
   const shown = formShownFields(form);
-  const columns = shown ? [...new Set(shown)].flatMap((name) => table.columns.find((c) => c.name === name) ?? []) : table.columns;
+  const named = new Set(form?.groups?.flatMap((group) => group.fields) ?? []);
+  const columns = shown
+    ? [...new Set(shown)].flatMap((name) => table.columns.find((c) => c.name === name) ?? [])
+    : table.columns.filter((c) => !written?.has(c.name) || named.has(c.name));
   const editable = new Set(editableColumns(table, app));
   return columns.filter((c) => editable.has(c));
 }
 
 /** Grouped fields retain authored order; ungrouped fields follow in form order. */
-export function formGroups(table: TableMeta, form: FormCuration | undefined, app: boolean): FormGroup[] {
-  const columns = formColumns(table, form, app);
+export function formGroups(table: TableMeta, form: FormCuration | undefined, app: boolean, written?: ReadonlySet<string>): FormGroup[] {
+  const columns = formColumns(table, form, app, written);
   if (!form?.groups?.length) return [{ label: '', columns }];
   const byName = new Map(columns.map((column) => [column.name, column]));
   const claimed = new Set<string>();
@@ -181,6 +195,9 @@ const PROSE =
   /^(?:description|notes?|body|bio|biography|comments?|summary|details|message|instructions|remarks|content|about)$|_(?:notes?|description|details|comments?|summary)$/i;
 /** Radios show every word at once; past this many the listbox is shorter. The command form's rule. */
 const RADIO_WORDS = 4;
+/** A choice declared as cards, up to this many words and none described, is a row of picks instead: five stacked cards
+    took 270px to say five words (docs/design.md, Forms). A card that carries a description keeps its card. */
+export const SEGMENTED_WORDS = 5;
 
 /** The declared length of a text column, when its type says one: `varchar(500)` → 500. */
 function declaredLength(column: ColumnMeta): number | undefined {
@@ -252,6 +269,33 @@ export function narrowingCondition(
     clauses.push(`${remote} = ${typeof value !== 'string' || /^-?\d+(?:\.\d+)?$/.test(text) ? text : JSON.stringify(text)}`);
   }
   return clauses.join(' and ');
+}
+
+/**
+ * The pickers a form narrows by an earlier pick where the App's form says nothing (`fields.<column>.where`): a
+ * reference whose table points at the table of a required reference asked before it, by exactly one column, offers
+ * only the records under that pick — a job's site among the chosen customer's sites, never every customer's. An
+ * optional earlier pick narrows nothing, since a picker waiting on a field that may stay empty would wait for good.
+ * The narrowing is the picker's, as a declared one is: the server still takes any record the reader may name.
+ */
+export function inferredNarrowing(
+  columns: readonly ColumnMeta[],
+  target: (tableId: string) => TableMeta | undefined,
+): Record<string, Record<string, string>> {
+  const narrowed: Record<string, Record<string, string>> = {};
+  columns.forEach((later, at) => {
+    const into = later.references ? target(later.references.table) : undefined;
+    if (!into) return;
+    for (const earlier of columns.slice(0, at)) {
+      const up = earlier.references;
+      if (!up || earlier.nullable !== false || up.table === later.references!.table) continue;
+      const via = into.columns.filter((column) => column.references?.table === up.table && column.references.column === up.column);
+      if (via.length !== 1) continue;
+      narrowed[later.name] = { [via[0].name]: earlier.name };
+      return;
+    }
+  });
+  return narrowed;
 }
 
 /**

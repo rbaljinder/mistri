@@ -61,7 +61,8 @@ export default defineApp({
 ```
 
 This App uses Lintel's schema: one declared resource, one list view over
-it, and the `home` every App names. Resources, views, pages and nav can each
+it, and a `home` naming where a visitor starts (an App that names none starts
+on an inferred overview, below). Resources, views, pages and nav can each
 live in their own typed module; Tick keeps its tiny schema type inline instead.
 Physical connections and credentials belong in server configuration, never in
 the App definition.
@@ -72,8 +73,14 @@ with `recordLabel`, including a joined path such as
 `labels` (captions) and `noun` (the kind of record). If an explicit name is
 null or unavailable to the reader, mistri uses the complete primary key;
 it never substitutes an ownership field such as `account_id`. The declaration
-does not grant field access. With no `recordLabel`, existing name inference is
-unchanged. See [the resource reference](../site/src/content/docs/docs/dsl-resources.md).
+does not grant field access. With no `recordLabel`, the name is the table's
+name column (`name`, `title`, `number`…), else its first text where every
+record has one; a record whose only text may be blank (a visit's `summary`,
+written after the visit) is named by the record it belongs to and its day,
+"Fix sticking door · Sep 13, 2026", else by its noun and key, "Line item #1".
+The grid, the crumbs, the palette, a reference chip and a card read that one
+name. `mistri check --design` says `unnamed-records` where a listed resource
+leans on this. See [the resource reference](../site/src/content/docs/docs/dsl-resources.md).
 
 **Named queries.** A resource's `segments` name its queries once
 (`open: 'status is open'`). The name is a word of the query language, so a
@@ -104,6 +111,19 @@ default export is the page (`pages/lead.ts`: `export default page('lead',
 `pages/<path>.page.tsx` and a catalog `messages/<locale>.ts` are. `app.ts`
 lists none of them, and `mistri check` says each file it found and what it
 became, so a file that was not read (no default export) is seen not to be.
+
+**A record with no page of its own.** A resource no page names still opens on
+a whole page, inferred from the catalog and what the App declares: the name
+with its display `subtitle` under it, the status as its dot and word, and up
+to four facts (what it belongs to, its money, its date, a count, then its
+rollups and figures); a classic form, caption beside value, one section per
+`form.groups` group (or `form.steps`), the status a `machine` moves and a
+reference drawn as a card left out; every related table the reader may read
+as a tab with its count, and `history()` as the last tab where the resource
+keeps one; and beside them a card per reference with something to say.
+Nothing is new to write: `labels`, `display`, `form` and `machine` are what it
+reads. A page you write replaces it whole (docs/design.md, "The inferred
+record").
 
 **A default aside.** A record page that declares no `region: 'aside'` section
 gets the generated page's: the record's remaining readable fields (those no
@@ -175,6 +195,105 @@ in place, a viewed record says it was updated, a record being edited is never ch
 offers the change beside theirs), and a list being worked in holds still behind an "N updates" pill. A dashboard
 therefore takes no `refresh`. See [live sync](../site/src/content/docs/docs/live-sync.md); the rules the pages follow
 are in [the design system](design.md), rule 11.
+
+## What each kind of App can do
+
+An unscoped App's roles read whole tables; a row-policy App narrows them per person; a tenant App serves several
+organizations from one App. The table is the site's ([row access](../site/src/content/docs/docs/row-access.md#what-each-kind-of-app-can-do)),
+kept equal to it by `test/prose.test.ts`; change both together.
+
+<!-- capability-table:start -->
+| Capability | Unscoped App | Row policy | Tenant App |
+| --- | --- | --- | --- |
+| File fields of a signed-in command | Yes | Yes | Yes, 10 MB a file at most |
+| File fields of a public form ([files](../site/src/content/docs/docs/commands.md#files-and-a-signature)) | Yes | No | No |
+| Tables of files (`resources.*.file`) | Yes | Yes: an upload is an insert the policy judges | Yes, 10 MB a file at most |
+| Public forms ([command forms](../site/src/content/docs/docs/command-forms.md)) | Yes | Only those `publicForms` enrolls, fixed or placed | Yes, placed with one tenant by its link |
+| Forms saved on every step (`resume`) | Yes | No: `mistri check` refuses one | Yes, without `statusCheck` or `link` |
+| Database triggers a command's write fires | Run as written | Validation-only ones run; any other refuses the write (`[command-trigger]`) unless [named](../site/src/content/docs/docs/row-access.md#triggers-the-app-names) (Preview) | Validation-only ones run; any other refuses the write; none can be named yet |
+| Commands over the [App API](../site/src/content/docs/docs/app-api.md) and its MCP | Yes | Yes, each token as its own account | Yes, each token bound to one membership |
+| The App API's generic writes | Yes, where every role reads all rows | No | No |
+| The App API's event feed | Yes, where every role reads all rows | No (`[policy-events-feed]`) | No: webhooks instead (`[api-event-unsupported]`) |
+| `mistri check --pending`, `check --deploy`, `mistri build` | Every step | Every step, given `--policy` | The queries step is skipped; validation waits for the tenant stores |
+| Delete and restore | Yes | Only with `authorizeDeletedRecord` | Only with `authorizeDeletedRecord` (`[tenant-delete-unauthorized]`) |
+| List exports | Yes | Yes, the person's rows | Yes, the tenant's rows |
+| The [assistant](../site/src/content/docs/docs/assistant.md) | Yes | Yes, reading as the person, under the policy | Yes, where the platform owner turns it on for that customer |
+| [Live sync](../site/src/content/docs/docs/live-sync.md) | Yes | Yes, naming only changes to the person's rows | Yes, naming only the tenant's own changes |
+<!-- capability-table:end -->
+
+## What an App gets without declaring it
+
+A coding agent's least effort is a `listView(label, table)` per table and no
+home, so that App has to read as if somebody had arranged it. Each piece
+below is inferred only where the App declares none, from the catalog and what
+the App says of the resource (its record label, display rules and machine),
+never from a row; a declared piece is drawn as written, and the others are
+still inferred beside it. A list that names its columns (`show`) or a
+presentation has been arranged, and none of its parts is inferred: its order,
+tabs and filters were left to the defaults on purpose. The served view lists
+what was inferred under `inferred`.
+
+**A list's columns.** The name first (the display title, with a code the row
+is also quoted by, unique in the catalog, as its second line: a job's number
+under its title), then the state, what it belongs to by name, one date (due,
+else start, else created) and its money, then its other short words and
+figures, seven at most and fewer where the room is narrow. The key is left
+out where the row has a name, as are a column the schema pins to one value,
+long text, a second copy of what a second line already says, every date but
+the one, an address past its first part, and documents and bytes. A row whose
+own name may be blank leads with what it belongs to (a visit by its job).
+
+**A list's order.** Work with a state and a date to be done by reads soonest
+first by that date, the undated after the dated on every engine
+(`sort due_on nulls last`); anything else newest first by when it came to be; a
+table with neither by its name. Never by its key.
+
+**A list's tabs.** From the machine, or a `status` vocabulary whose final
+words are read off what they say (completed, cancelled, closed, paid…): Open,
+each open state while there are two to five, Done and All, the last two
+newest first. Their counts are one grouped read in the first document. A list
+whose standing `query` names the state keeps its own reading: no tabs, order
+or board are inferred for it.
+
+**A list's filters.** Every vocabulary and yes-or-no among its own columns
+(the state only where no tab says it already), each reference to a table of
+at most fifty records, and the one date. A due date earlier than today on an
+open row is toned as overdue, as everywhere.
+
+**A board to switch to.** A list whose machine has three to seven open
+states gets a List | Board switch in its filter bar, kept per reader and view
+in the browser and said to the server in a cookie, so a page opened on the
+board carries its reads. The lanes are the open states in the machine's
+order, and the final ones together in one folded Done lane, present only
+where the list can hold a finished record (not under Open); a card is the
+name, what it belongs to, the date and the priority toned. Dropping a card
+runs the one verb that leads there, through the command path and its grants,
+and is refused with the reason where none or two do; a drop on Done writes
+the one final state the card's verbs lead to. Like a declared board, it reads
+every lane's first twenty cards in the list's one read, windowed by the
+state (`lanes: { by, limit }` on `/api/run`, one `ROW_NUMBER` statement), and
+every lane's count in one breakdown: two statements however many lanes.
+
+**An overview home.** An App that names no `home` starts on `/overview`, an
+overview of its main table — the one a machine moves, else the one the most
+tables point at: its rows by state as one strip of figures, each opening the
+list; the open rows overdue or due today; the reader's open rows where the
+table points at the one `auth.me` reads people from, said empty in so many
+words when they have none; and the newest. Each appears only where the table
+can answer it, four statements at most and no total under a list, all in the
+first document. A `nav` that leaves it out gets it as its first item,
+Overview; `nav` may place it as `overview` itself, and a view of the App's own
+at that key is the App's, and then it must name its home.
+
+**A sidebar that holds the bar.** A side-placed App's signed-in screens at a
+desk draw no band across the window (`ui.shell.header`, `'sidebar'` unless
+said): the sidebar runs the window's full height with the App's mark, New and
+the search (⌘K) at its head and the bell and the account at its foot, and each
+room's own head row is the content's first line. Folding leaves the icon rail.
+A phone keeps the bar over its drawer, and public pages, sign-in and the top
+placement keep the bar as before. `header: 'bar'` puts the bar back across the
+window; so does `rail: false` with no `header`, since a sidebar folded away
+whole would take the mark, the search and the account with it.
 
 ## What the samples are, and are not
 

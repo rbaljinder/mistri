@@ -138,6 +138,7 @@
  "e2e/shot-text.spec.ts": 21.1,
  "e2e/shot.spec.ts": 62.2,
  "e2e/sidebar-groups.spec.ts": 7.8,
+ "e2e/sidebar-shell.spec.ts": 8.2,
  "e2e/smoke-mistri.spec.ts": 5,
  "e2e/startup-notice.spec.ts": 8,
  "e2e/startup.spec.ts": 8.8,

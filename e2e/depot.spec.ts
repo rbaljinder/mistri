@@ -522,7 +522,8 @@ test.describe('Depot inventory operations', () => {
       await expect(page.getByRole('tab', { name: new RegExp(`^Low stock\\s*${low.length}$`) })).toBeVisible();
       // The first page of them, each one of the SKUs the fixture says are short, and none other.
       const grid = page.getByRole('grid').first();
-      await expect(grid.getByRole('row')).toHaveCount(Math.min(low.length, 20) + 1);
+      // A list opens on fifty rows (LIST_PAGE_SIZE).
+      await expect(grid.getByRole('row')).toHaveCount(Math.min(low.length, 50) + 1);
       const shown = await grid.getByRole('row').evaluateAll((rows) => rows.slice(1).map((row) => row.textContent ?? ''));
       const skus = new Set(low.map(({ sku }) => sku));
       for (const text of shown)
@@ -555,7 +556,8 @@ test.describe('Depot inventory operations', () => {
 
       await page.keyboard.press('ControlOrMeta+k');
       await page.getByRole('combobox', { name: 'Search' }).fill('new cycle');
-      await page.locator('.palette-item', { hasText: 'New cycle count' }).first().click();
+      // A form's line says the command's own words ("Cycle count"), under Create; typing "new …" still finds it.
+      await page.locator('.palette-item[data-group="create"]', { hasText: 'Cycle count' }).first().click();
       await expect(page.getByRole('heading', { name: 'Start a count', level: 1 })).toBeVisible();
 
       // An operator makes counts, not orders or the catalog: one line.

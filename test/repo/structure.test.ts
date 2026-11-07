@@ -413,6 +413,8 @@ const CLIENT_CROSSINGS = [
   'CustomSection',
   // The App's dashboard room, named as the shell's `rooms` (shellMode.ts) by appnav.js and fetched on demand.
   'Dashboard',
+  // A long menu's Directory (All pages), named as the shell's `rooms` by appnav.js and fetched on demand.
+  'Directory',
   // A record's document, named as the shell's `rooms` by appnav.js and fetched on demand.
   'Document',
   // The dev observer (observe/) is a React page of its own, and wears the tool's listbox.

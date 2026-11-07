@@ -22,7 +22,7 @@
  * source, and fonts differ between machines. Compare on one machine.
  *
  * It starts its own Apps (Lintel, Ladle and Tick, the public examples; the fixtures Compass, Thread,
- * Forecourt, Payday, Depot, Commons and Parcel; and Ignition when `TABLEWALK_TEST_PG` names a PostgreSQL server), each seeded
+ * Forecourt, Payday, Depot, Commons and Parcel; Bare, the least-effort benchmark; and Ignition when `TABLEWALK_TEST_PG` names a PostgreSQL server), each seeded
  * into a fresh temporary directory and read against one pinned clock, so "last
  * 30 days" means the same rows on every run. Compass is served writable and
  * signed out of nothing, so its New form, a working lead's actions and a
@@ -523,6 +523,33 @@ export const APPS = [
       ['shipments', '/'],
       ['carriers', '/carriers'],
       ['carrier', '/@carrier~car-01'],
+    ],
+  },
+  /* The benchmark, not a sample: an App that declares what an agent's least effort does (tables, writes, a machine,
+     a list each, a menu, no home) and nothing that draws, so every room here is mistri's default. Each list, a record of each
+     table and a New form, signed in as its administrator and dated to the matrix's "today". */
+  {
+    id: 'bare',
+    seed: (db) => run(process.execPath, ['test/fixtures/databases/bare/seed.mjs', db], { BARE_TODAY: TODAY }),
+    serve: (db) => ['--config', `${db}.json`, '--app', 'test/fixtures/apps/bare'],
+    signedOut: [['sign-in', '/']],
+    pages: [
+      ['overview', '/'],
+      ['jobs', '/jobs'],
+      ['visits', '/visits'],
+      ['customers', '/customers'],
+      ['sites', '/sites'],
+      ['technicians', '/technicians'],
+      ['line-items', '/line-items'],
+      ['notes', '/notes'],
+      ['job', '/jobs/112'],
+      ['visit', '/visits/113'],
+      ['customer', '/customers/42'],
+      ['site', '/sites/1'],
+      ['technician', '/technicians/1'],
+      ['line-item', '/line-items/1'],
+      ['note', '/notes/1'],
+      ['new-job', '/jobs/new'],
     ],
   },
   /* Read by `--styles` only: the App `npm run smoke` walks, over the built-in demo. A release's pictures are of the

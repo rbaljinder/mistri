@@ -143,6 +143,7 @@ export function publicAddressBook(app: AppPayloadApp, schema: DatabaseSchema): A
     tables: schema.tables,
     inbox: app.inbox === true,
     assistant: app.assistant?.page === true,
+    directory: app.directory !== undefined,
     projected: true,
   });
 }

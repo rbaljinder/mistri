@@ -207,7 +207,8 @@ or at `COMMIT` rolls all of them back together. Two things are new:
   posted.
 - **Double-applies.** If a command writes `account.posted_minor` and an
   accepted trigger on the same event does too, the change is applied twice.
-  `mistri check` reports this as a problem (`[trigger-double-write]`).
+  `mistri check` reports this as a warning (`[trigger-double-write]`), column by
+  column for an update: a handler that sets `account.status` is not named.
 
 ## What stays refused
 
@@ -581,10 +582,16 @@ Where the build departs from the design above, and why.
 - **History and live sync for an insert whose key the database assigned.**
   Nothing reads the key back, so it has no history row, and live sync
   announces its table as `many`.
-- **`[trigger-double-write]` is a warning, not a problem.** A command's
-  footprint names tables, not columns, so the check cannot tell a handler that
-  writes `account.posted_minor` from one that writes `account.status`. A
-  problem would refuse the second; the warning names the trigger's columns.
+- **`[trigger-double-write]` is a warning, not a problem, and column-aware for
+  updates.** A command's footprint names tables, not columns, so the check reads
+  the handler's own source: the literal keys of each `db.<table>.insert({…})` and
+  `db.<table>.update(row, {…})` (a shorthand key counts), and names an update
+  only where the trigger's columns and the handler's meet. Where the handler's
+  write cannot be read — a spread, a variable or computed key, a `db` passed to
+  a helper, `insertFile`, no handler source — it stays conservative and names the
+  trigger's columns, as it did before. An insert or a delete is the table's:
+  two inserts are two rows whatever their columns. It is a warning because the
+  reading is of text, not a proof.
 - **Tenant Apps keep Part 1.** `resources.<t>.triggers` is read under a row
   policy only; a tenant App's named trigger is still refused.
 - **PostgreSQL judges every expression in an effect, as it judges a

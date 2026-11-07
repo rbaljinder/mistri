@@ -96,12 +96,15 @@ function serve() {
   });
 }
 
+/* Every lane's first cards, as the list's one read windowed by the lane column hands them to the board (TableRoom.tsx). */
+const windowed = () => Object.entries(lanes).flatMap(([stage, cards]) => cards.map((card, i) => ({ id: `${stage}-${i}`, stage, ...card })));
+
 const base: AppBoardList = { kind: 'board', by: 'stage', primary: 'name', lines: ['amount'] };
-function draw(spec: AppBoardList = base) {
+function draw(spec: AppBoardList = base, rows: Array<Record<string, unknown>> = windowed()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <BoardList table={table} rows={[]} spec={spec} label="Pipeline" query="deal show id, name, stage, amount" />
+      <BoardList table={table} rows={rows} spec={spec} label="Pipeline" query="deal show id, name, stage, amount" />
     </QueryClientProvider>,
   );
 }
@@ -221,7 +224,7 @@ test('a storage that throws leaves the declared lanes folded and the board worki
 
 test('where each card says its own currency, a card says its amount in it and a lane sums each currency apart', async () => {
   mocks.amountRule = { format: 'money', currency: 'USD', currencyColumn: 'currency' };
-  mocks.api.mockImplementation(async (path: string, body: { q?: string; text?: string }) => {
+  mocks.api.mockImplementation(async (path: string) => {
     if (path === '/api/breakdown')
       return {
         columns: ['stage', 'lane_currency', 'lane_cards', 'lane_amount'],
@@ -230,22 +233,13 @@ test('where each card says its own currency, a card says its amount in it and a 
           { stage: 'discover', lane_currency: 'JPY', lane_cards: 1, lane_amount: '150000' },
         ],
       };
-    if (path === '/api/run') {
-      const stage = /stage = (\w+)/.exec(body.q ?? '')?.[1] ?? '';
-      return {
-        rows:
-          stage === 'discover'
-            ? [
-                { id: 'd-0', stage, name: 'Hearing program', amount: '9800.00', currency: 'USD' },
-                { id: 'd-1', stage, name: 'Tokyo clinic', amount: '150000', currency: 'JPY' },
-              ]
-            : [],
-      };
-    }
     return {};
   });
   try {
-    draw();
+    draw(base, [
+      { id: 'd-0', stage: 'discover', name: 'Hearing program', amount: '9800.00', currency: 'USD' },
+      { id: 'd-1', stage: 'discover', name: 'Tokyo clinic', amount: '150000', currency: 'JPY' },
+    ]);
     await waitFor(() =>
       expect(mocks.api).toHaveBeenCalledWith(
         '/api/breakdown',
@@ -262,25 +256,26 @@ test('where each card says its own currency, a card says its amount in it and a 
   }
 });
 
-test('an empty final lane folds from the first paint on the next visit, never when the counts land', async () => {
+test("a final state of the column's machine folds to a strip from the first paint, with cards or without", async () => {
   const stage = table.columns[2] as unknown as { states?: { final?: string[] } };
-  const cards = lanes.lost;
   stage.states = { final: ['won', 'lost'] };
-  lanes.lost = [];
   try {
-    draw();
-    // The first visit draws Lost open, and keeps it open once its count of nothing has landed: folding then moved the board.
-    await waitFor(() => expect(within(lane('Lost')).getByLabelText('0 items')).toBeInTheDocument());
-    expect(lane('Lost').closest('section')).not.toHaveClass('is-folded');
-    await waitFor(() => expect(window.localStorage.getItem('mistri.board-folds:crm:deal:stage:Pipeline:empty')).toBe('["lost"]'));
-    cleanup();
-    // The next visit folds it before anything is read; Won, which has a card, stays open.
+    // Before anything is read, Won and Lost are strips already: the counts that land after change no lane's width.
     mocks.api.mockImplementation(() => new Promise(() => {}));
     draw();
+    expect(screen.getByRole('button', { name: /Won/ }).closest('section')).toHaveClass('is-folded');
     expect(screen.getByRole('button', { name: /Lost/ }).closest('section')).toHaveClass('is-folded');
+    cleanup();
+    // Once the counts land, the strip says its count; the live stages stay open.
+    serve();
+    draw();
+    const won = await screen.findByRole('button', { name: /^Won/ });
+    expect(await within(won).findByLabelText('1 item')).toBeInTheDocument();
+    expect(lane('Discover').closest('section')).not.toHaveClass('is-folded');
+    // A click opens it, and it is read then.
+    await userEvent.click(won);
     expect(lane('Won').closest('section')).not.toHaveClass('is-folded');
   } finally {
     delete stage.states;
-    lanes.lost = cards;
   }
 });

@@ -33,7 +33,7 @@ const change = (name: string) => fireEvent.change(screen.getByLabelText('Name'),
 
 test('old bootstrap and unsupported runtimes expose no profile entry', async () => {
   render(<AccountControl who="Ada" />);
-  await userEvent.click(screen.getByRole('button', { name: 'Account: Ada' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Account: A Ada' }));
   expect(screen.queryByRole('menuitem', { name: 'Your profile' })).toBeNull();
   expect(screen.getAllByRole('menuitem')).toHaveLength(1);
   expect(fetcher).not.toHaveBeenCalled();
@@ -42,7 +42,7 @@ test('old bootstrap and unsupported runtimes expose no profile entry', async () 
 test('supported menu opens profile without sign-out, focuses name and returns keyboard focus on Escape', async () => {
   const user = userEvent.setup();
   render(<AccountControl who="Ada" accountProfile />);
-  const trigger = screen.getByRole('button', { name: 'Account: Ada' });
+  const trigger = screen.getByRole('button', { name: 'Account: A Ada' });
   trigger.focus();
   await user.keyboard('{ArrowDown}');
   await vi.waitFor(() => expect(screen.getByRole('menuitem', { name: 'Your profile' })).toHaveFocus());
@@ -207,7 +207,7 @@ test("a settings record named Your profile leaves the sign-in's own item as Your
   setMenuGroup('ks-settings', [{ label: 'Your profile', category: 'Settings', scope: 'app', onSelect: () => {} }]);
   try {
     render(<AccountControl who="Ada" accountProfile />);
-    await userEvent.click(screen.getByRole('button', { name: 'Account: Ada' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Account: A Ada' }));
     await vi.waitFor(() => expect(screen.getAllByRole('menuitem', { name: 'Your profile' })).toHaveLength(1));
     expect(screen.getByRole('menuitem', { name: 'Your account' })).toBeInTheDocument();
   } finally {

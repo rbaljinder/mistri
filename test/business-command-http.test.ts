@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -462,6 +462,34 @@ test('command loader refuses unregistered module defaults and suppresses private
     const invalid = join(directory, 'invalid.mjs');
     writeFileSync(invalid, 'export default { assign: {} };');
     await assert.rejects(loadBusinessCommands(invalid), /must be created with defineCommand/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+/* An external assessment ran an App from a folder with no package.json: Node read its commands module as CommonJS, its
+   defineCommand was a second copy of mistri, and the refusal said a command was not made with defineCommand. */
+test('a commands module loaded as CommonJS is refused as one, with the fix; an ES module keeps the authoring refusal', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-command-cjs-'));
+  try {
+    const file = join(directory, 'commands.ts');
+    writeFileSync(file, 'export default { assign: {} };\n');
+    writeFileSync(join(directory, 'package.json'), '{ "name": "x" }\n');
+    await assert.rejects(loadBusinessCommands(file), (error: Error) => {
+      assert.match(error.message, /^The commands module "commands\.ts" was loaded as CommonJS \(.+package\.json has no "type"\)/);
+      assert.match(
+        error.message,
+        /set "type": "module" in the App's package\.json \(npm pkg set type=module\), or name the file commands\.mts\.$/,
+      );
+      assert.doesNotMatch(error.message, /must be created with defineCommand/);
+      return true;
+    });
+    // The same module as an ES module: a plain object is the author's mistake, said as before.
+    const esm = join(directory, 'esm');
+    mkdirSync(esm);
+    writeFileSync(join(esm, 'package.json'), '{ "type": "module" }\n');
+    writeFileSync(join(esm, 'commands.ts'), 'export default { assign: {} };\n');
+    await assert.rejects(loadBusinessCommands(join(esm, 'commands.ts')), /Command "assign" must be created with defineCommand/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

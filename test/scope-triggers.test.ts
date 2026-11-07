@@ -147,7 +147,40 @@ test('SQLite: a trigger that is not validation-only is said to do what it does, 
   assert.equal(why("SELECT replace(NEW.s, 'a', 'b'), random();"), "it calls random(), which is not one of SQLite's own pure functions");
   assert.equal(why("SELECT RAISE(ROLLBACK, 'x');"), "its RAISE is not RAISE(ABORT, '…') with a literal message");
   assert.equal(why('SELECT RAISE(ABORT, NEW.secret);'), "its RAISE is not RAISE(ABORT, '…') with a literal message");
-  assert.equal(why('SELECT NEW.n WHERE NEW.n IS DISTINCT FROM OLD.n AND "x";'), 'it does more than check the row it fires on');
+  // Where nothing more particular is true, it says where reading stopped: the quoted name.
+  assert.equal(
+    why('SELECT NEW.n WHERE NEW.n IS DISTINCT FROM OLD.n AND "x";'),
+    'it does more than check the row it fires on: mistri does not read `"x"` at line 1, column 95',
+  );
+});
+
+/* An external assessment: a validation-only trigger written with `!=` was refused while the same one with `<>` was
+   accepted, and the refusal said only "its definition is not one mistri can read". */
+test('SQLite: `!=` is read as `<>` is, and a definition mistri cannot read is refused naming the token and where it is', () => {
+  const update = (where: string) =>
+    sqlite(`CREATE TRIGGER t BEFORE UPDATE OF status ON item\nBEGIN\n  SELECT RAISE(ABORT, 'closed') WHERE ${where};\nEND`);
+  const bang = update("NEW.status != 'closed'");
+  const angle = update("NEW.status <> 'closed'");
+  assert.deepEqual([bang.validates, bang.events, bang.columns], [true, ['update'], ['status']]);
+  assert.deepEqual(bare(bang), bare(angle));
+  assert.equal(update('NEW.a != OLD.a AND NEW.b <> OLD.b').validates, true);
+  // Only `!=` begins with `!` to SQLite: a lone one is still refused, and so is a parameter.
+  for (const [where, said] of [
+    ["NEW.status ! 'closed'", 'its definition has `!` at line 3, column 50, which mistri does not read'],
+    ['NEW.status = ?', 'its definition has `?` at line 3, column 52, which mistri does not read'],
+    ['NEW.status = $who', 'its definition has `$` at line 3, column 52, which mistri does not read'],
+  ]) {
+    const read = update(where);
+    assert.deepEqual([read.validates, read.events, read.why], [false, ['insert', 'update', 'delete'], said], where);
+  }
+  // A header it cannot follow names the word, and still fires on every write.
+  const upsert = sqlite('CREATE TRIGGER t BEFORE UPSERT ON a BEGIN SELECT 1; END');
+  assert.deepEqual(
+    [upsert.events, upsert.why],
+    [['insert', 'update', 'delete'], 'its definition has `UPSERT` at line 1, column 25, which mistri does not read'],
+  );
+  // An unterminated string is named where it opens.
+  assert.equal(update("NEW.status = 'closed").why, "its definition has `'` at line 3, column 52, which mistri does not read");
 });
 
 const row = (overrides: Partial<PostgresTriggerRow> = {}): PostgresTriggerRow => ({

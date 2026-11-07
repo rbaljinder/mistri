@@ -107,9 +107,10 @@ test.describe('Decisions', () => {
         await route.continue();
       });
       await page.goto(`${app.origin}/incidents/3`);
-      await expect(page.getByText('software', { exact: true })).toBeVisible();
+      // The field itself: on a desk the record's head says the category again among its key facts.
+      await expect(page.locator('dl').getByText('software', { exact: true })).toBeVisible();
       release();
-      const chip = page.locator('.decision-chip');
+      const chip = page.locator('dl .decision-chip');
       await expect(chip).toBeVisible();
       await expect(chip.getByLabel('Suggested: hardware, very likely')).toBeVisible();
       expect(await shifted(page)).toBe(0);
@@ -120,7 +121,7 @@ test.describe('Decisions', () => {
   test('Accept runs the command as the person, and the suggestion becomes the value', async ({ page }) => {
     await signIn(page, app);
     await page.goto(`${app.origin}/incidents/2`);
-    const chip = page.locator('.decision-chip');
+    const chip = page.locator('dl .decision-chip');
     await expect(chip.getByLabel('Suggested: printer, likely')).toBeVisible();
     await chip.getByRole('button', { name: 'Accept', exact: true }).click();
     await expect(chip).toHaveCount(0);
@@ -131,7 +132,7 @@ test.describe('Decisions', () => {
   test('"Why this?" says what was asked, with what, of whom and how surely', async ({ page }) => {
     await signIn(page, app);
     await page.goto(`${app.origin}/incidents/3`);
-    await page.getByRole('button', { name: 'More about the suggestion hardware' }).click();
+    await page.locator('dl').getByRole('button', { name: 'More about the suggestion hardware' }).click();
     await page.getByRole('menuitem', { name: 'Why this?' }).click();
     const why = page.getByRole('dialog', { name: 'Why hardware?' });
     await expect(why).toContainText('Which category is this incident?');
@@ -140,7 +141,7 @@ test.describe('Decisions', () => {
     await expect(why).toContainText('88% · very likely');
     await why.getByRole('button', { name: 'Close' }).click();
     // Dismissed, it is gone, and the person's value stands.
-    await page.getByRole('button', { name: 'More about the suggestion hardware' }).click();
+    await page.locator('dl').getByRole('button', { name: 'More about the suggestion hardware' }).click();
     await page.getByRole('menuitem', { name: 'Dismiss' }).click();
     await expect(page.locator('.decision-chip')).toHaveCount(0);
     expect(stored(app, 3).category).toBe('software');

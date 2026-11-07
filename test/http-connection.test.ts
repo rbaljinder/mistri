@@ -108,7 +108,10 @@ test('a URL a browser retargets the connection to gets no credential', async () 
 
 test('the config file is refused where an http entry is wrong, naming the field', async () => {
   const cases: Array<[Record<string, unknown>, RegExp]> = [
-    [desk({ kind: 'rest' }), /"kind": "rest"\. The kinds are "http", "cache" and "webhook"/],
+    [
+      desk({ kind: 'rest' }),
+      /"kind": "rest"\. The kinds are "http", "cache", "email", "embed", "oauth", "oidc", "saml", "scim" and "webhook"/,
+    ],
     [desk({ writable: true }), /read-only; remove "writable"/],
     [desk({ schemas: ['public'] }), /"schemas" belongs to Postgres/],
     [desk({ description: undefined }), /needs a "description"/],

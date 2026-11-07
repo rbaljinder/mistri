@@ -8,13 +8,14 @@ Make a starter App with one command, serve it while you change it, check it
 the way CI will, and build it for production.
 
 ```sh
-npm create mistri billing
+npm create mistri@next billing
 cd billing
 npm install
 npx @mistriwork/mistri dev
 ```
 
-**You need** Node 24 or newer. The starter brings its own SQLite database, so
+**You need** Node 24 or newer. Until 1.0.0 ships, npm's `latest` tag is a
+placeholder: `@next` installs the release candidate. The starter brings its own SQLite database, so
 nothing else has to be running. Two other ways in, further down: [from a
 schema of your own](#from-a-schema-of-your-own) on PostgreSQL, and [from a
 database you have](/docs/quickstart-app/).
@@ -22,7 +23,7 @@ database you have](/docs/quickstart-app/).
 ## 1. Make the App
 
 ```sh
-npm create mistri billing
+npm create mistri@next billing
 cd billing
 npm install
 ```
@@ -88,7 +89,7 @@ Write the tables you want, the App over them and one connection, on an empty
 PostgreSQL database. These are the four files the [home page](/) shows.
 
 ```sh
-npm init -y && npm pkg set type=module && npm install @mistriwork/mistri typescript
+npm init -y && npm pkg set type=module && npm install @mistriwork/mistri@next typescript
 ```
 
 ```sh

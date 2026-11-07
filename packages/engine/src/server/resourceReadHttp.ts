@@ -54,7 +54,22 @@ function plainCount(schema: DatabaseSchema, view: ViewDef): { filter?: Filter } 
 }
 
 /* What a batched list's page may say: what `/api/run` reads of a first page. */
-const RUN_FIELDS = ['q', 'limit', 'offset', 'count', 'exactCount', 'countLimit'] as const;
+const RUN_FIELDS = ['q', 'limit', 'offset', 'count', 'exactCount', 'countLimit', 'lanes'] as const;
+
+/** The most rows a lanes read keeps per lane: a board's page, a few times over. */
+const LANE_MOST = 100;
+
+/** A run's `lanes`, read: absent, refused, or the column and how many of each. */
+function readLanes(raw: unknown): { by: string; limit: number } | undefined | 'invalid' {
+  if (raw === undefined) return undefined;
+  const lanes = raw as { by?: unknown; limit?: unknown } | null;
+  if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes) || Object.keys(lanes).some((key) => key !== 'by' && key !== 'limit'))
+    return 'invalid';
+  const { by, limit } = lanes;
+  if (typeof by !== 'string' || !by || typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > LANE_MOST)
+    return 'invalid';
+  return { by, limit };
+}
 
 /** A dashboard is at most a few dozen sections; a batch past this is not one. */
 export const BREAKDOWN_BATCH = 48;
@@ -86,7 +101,8 @@ export interface AppReads {
    * the person.
    */
   person(
-    me: () => Promise<QueryPerson | null>,
+    /** Given the texts, a lookup may be skipped where they need only the email (app/appMe.ts emailOnly). */
+    me: (texts?: readonly unknown[]) => Promise<QueryPerson | null>,
     texts: readonly unknown[],
     schema: DatabaseSchema,
     adapter: Adapter,
@@ -102,7 +118,7 @@ interface ResourceReadHttpOptions {
    * asked only when the text says `me` (appMe.ts). Absent — the database
    * browser, a tenant App — `me` is the word it is.
    */
-  me?: () => Promise<QueryPerson | null>;
+  me?: (texts?: readonly unknown[]) => Promise<QueryPerson | null>;
   /**
    * The ISO weekday an App's weeks start on (its `ui.locale`, weekStart.ts),
    * set on every breakdown in place of whatever the request said. Absent —
@@ -203,6 +219,9 @@ export async function dispatchResourceReadHttp(
     if (body.count !== undefined && body.count !== 'none' && body.count !== 'exact' && body.count !== 'estimate') {
       return refusal(400, ['count must be "none", "exact" or "estimate".']);
     }
+    /* A board's lanes, each its first page, in one statement (adapter.ts lanesStatement): a list of one table, no total. */
+    const lanes = readLanes(body.lanes);
+    if (lanes === 'invalid') return refusal(400, [`lanes is { by: a column, limit: 1 to ${LANE_MOST} }.`]);
     const text = String(body.q ?? '');
     const person = await personFor(text);
     const parsed = parseQuery(text, { schema, now: options.now(), ...person });
@@ -221,6 +240,14 @@ export async function dispatchResourceReadHttp(
       const asView = textToView(schema, text, { id: 'bar', name: '', now: options.now(), ...person });
       if (asView.view && !asView.errors.length) {
         const base = findTable(schema, asView.view.base);
+        /* A list that names a path (`customer_id.name`) is a view, and its lanes are read the same one way. */
+        if (lanes) {
+          if (!base || base.union || step || !base.columns.some((column) => column.name === lanes.by))
+            return refusal(400, [`A board reads its lanes in one read only by a column of ${asView.view.base}'s own rows.`]);
+          const most = options.rowsMost?.(asView.view.base);
+          const bounded = most === undefined ? body : { ...body, limit: Math.min(clampLimit(body.limit ?? asView.view.limit), most) };
+          return runViewForBar(adapter, schema, { ...asView.view, lanes }, bounded, app, 'none');
+        }
         /* A union pages by offset: its rows have no one key order across branches (unionReads.ts). */
         const paging = base && !base.union ? viewPaging(schema, base, asView.view, step) : undefined;
         if (step && !paging?.continuation) {
@@ -262,16 +289,20 @@ export async function dispatchResourceReadHttp(
        every page of someone else's rate budget: its lists page by whether a
        full page came back, as a view without a count does. */
     const exact = body.exactCount === true || body.count === 'exact';
-    const countMode = schema.dialect === 'http' || body.count === 'none' ? 'none' : exact ? 'exact' : 'estimate';
+    const countMode = schema.dialect === 'http' || body.count === 'none' || lanes ? 'none' : exact ? 'exact' : 'estimate';
     /* A filtered total is counted to DEFAULT_COUNT_LIMIT unless the request
        asks for the exact number or names its own bound: past it the list says
        "10,000+" and offers to count exactly. Unfiltered, the catalog's
        estimate or a plain count answers as before. */
     const countLimit = body.countLimit ?? (!exact && q.filter?.groups?.length ? DEFAULT_COUNT_LIMIT : undefined);
     const own = findTable(schema, q.table);
+    /* Lanes are a column of one stored table's rows: a union pages its branches apart, an API answers in its own order. */
+    if (lanes && (!own || own.union || schema.dialect === 'http' || step || !own.columns.some((column) => column.name === lanes.by))) {
+      return refusal(400, [`A board reads its lanes in one read only by a column of ${q.table}'s own rows.`]);
+    }
     const most = options.rowsMost?.(own?.id ?? q.table);
     const bounded = (limit: unknown) => (most === undefined ? limit : Math.min(clampLimit(limit), most));
-    const paging = own && !own.union ? recordsPaging(own, schema.dialect, q.orderBy, q.columns, q.filter, step) : undefined;
+    const paging = own && !own.union && !lanes ? recordsPaging(own, schema.dialect, q.orderBy, q.columns, q.filter, step) : undefined;
     if (step && !paging?.continuation) {
       const refused = tooDeep();
       if (refused) return refused;
@@ -284,7 +315,13 @@ export async function dispatchResourceReadHttp(
     } = await readRecords(
       adapter,
       schema,
-      { ...q, ...(paging?.columns ? { columns: paging.columns } : {}), limit: bounded(body.limit ?? q.limit), offset: body.offset },
+      {
+        ...q,
+        ...(paging?.columns ? { columns: paging.columns } : {}),
+        ...(lanes ? { lanes } : {}),
+        limit: bounded(body.limit ?? q.limit),
+        offset: body.offset,
+      },
       countMode,
       countLimit,
       paging?.continuation,

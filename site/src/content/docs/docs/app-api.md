@@ -47,7 +47,8 @@ A row-policy App (`auth.rows: 'policy'`) is served under its `--policy`: each
 token reads and acts as its own account, through the same policy the App's
 pages use, so a row the policy hides is not found and a command on it is
 refused. Its token names the account by id, not by email. It writes through
-the commands it exposes; it has no event feed and no generic writes.
+the commands it exposes; it has no event feed and no generic writes
+([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do)).
 
 ## Tokens
 

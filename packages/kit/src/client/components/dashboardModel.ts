@@ -108,6 +108,8 @@ export interface Section {
   noDrill?: true;
   /** Authored `empty: 'hide'`: the section is left out of the dashboard while it has nothing to draw. */
   emptyMode?: 'hide';
+  /** Served only: a rows section that reads its rows and no total (an overview's). */
+  counted?: false;
   /** The section's own windows, the first where it starts; `windowKey` names it in the address. */
   windows?: string[];
   windowKey?: string;
@@ -137,6 +139,9 @@ export interface DashboardDef {
   heading?: string;
   /** The title is not drawn; it stays for a screen reader. */
   headingHidden?: true;
+  /** The head's form (`head`): `compact`, the title alone on one line with its verbs and no intro; `own`, a page that
+      draws its own head (`head: false`), its title kept for a screen reader and its intro left to it (DashHead.tsx). */
+  head?: 'compact' | 'own';
   /** Plain text, authored with the dashboard and served only with it. */
   description?: string;
   sections: Section[];

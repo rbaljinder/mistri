@@ -1,108 +1,247 @@
-/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+/* A JSON document, laid out (components/JsonView.tsx), and the overlay that
+   shows one from a grid cell (JsonPreview.tsx). Its own sheet, fetched with
+   the viewer, so no first page carries the rules of a part most visits never
+   draw; what a first page needs (the cell's line, the field's width) is in
+   JsonPreview.css. Every value is a token from style.css, so light, dark and
+   an App's theme dress it the same way. In the tool's own layer, as it was
+   when features.css took it: a look's rules still come after. */
 @layer base {
-/* A JSON document, laid out (components/JsonView.tsx), its one-line grid
-   preview and its overlay (JsonPreview.tsx). Every value is a token from
-   style.css, so light, dark and an App's theme dress it the same way. */
 
-.json-view { min-width: 0; max-width: 70rem; font: var(--text-base)/1.55 var(--sans); color: var(--ink); }
-/* A document is a block: in a record's or a page's field grid it takes the
-   full width, as long text does, rather than being squeezed into a column. */
-.field:has(.json-view), .page-field:has(.json-view) { grid-column: 1 / -1; }
+.json-view {
+  /* The type tints, shared by the tree and the raw text: each a status ink
+     drawn back toward the text's own, so a payload's kinds are told apart at a
+     glance and none of them shouts (docs/design.md: bold by type and
+     contrast, never by saturation). Mixed toward the ink, never the ground,
+     so each keeps at least its status ink's contrast, light and dark. Keys
+     and punctuation stay the quiet greys: they are the frame, not the data. */
+  --json-key: var(--ink-muted);
+  --json-string: color-mix(in srgb, var(--status-good) 64%, var(--ink));
+  --json-number: color-mix(in srgb, var(--status-info) 70%, var(--ink));
+  --json-literal: color-mix(in srgb, var(--status-warning) 70%, var(--ink));
+  --json-null: var(--ink-subtle);
+  --json-punct: var(--ink-subtle);
+  /* The caret's gutter: every key at a level starts on one line, folding or not. */
+  --json-caret: 1.15em;
+  min-width: 0; max-width: 70rem; font: var(--text-base)/1.55 var(--sans); color: var(--ink);
+}
 
-.json-bar { display: flex; justify-content: flex-end; gap: var(--space-2); margin-bottom: var(--space-1); }
+/* ---------- the bar ---------- */
+
+.json-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); margin-bottom: var(--space-3); }
+.json-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-left: auto; }
 .json-tool {
-  background: transparent; color: var(--ink-muted); border: 1px solid transparent;
-  padding: 1px var(--space-3); font-size: var(--text-sm); line-height: 1.6;
+  background: transparent; color: var(--ink-muted); border: 1px solid transparent; border-radius: var(--radius);
+  padding: var(--space-1) var(--space-3); font-size: var(--text-sm); line-height: 1.6;
 }
-.json-tool:hover { color: var(--ink); background: var(--raised); }
 .json-tool[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent-soft); }
-
-/* Labels beside values. The label column is as wide as its longest key up to
-   a cap, so a short document is not stretched across the room and a long key
-   wraps rather than pushing its value off the edge. */
-.json-fields {
-  display: grid; grid-template-columns: fit-content(14rem) minmax(0, 1fr);
-  gap: var(--space-2) var(--space-5); margin: 0;
+/* Tree | Raw: a segmented pair, the chosen one filled, as a list's Records | Table is. */
+.json-modes { display: inline-flex; gap: var(--space-1); padding: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius); }
+.json-mode {
+  background: transparent; color: var(--ink-muted); border: 0; border-radius: var(--radius);
+  padding: 0 var(--space-3); font-size: var(--text-sm); line-height: 1.6;
 }
-.json-field { display: contents; }
-.json-key { color: var(--ink-muted); font: var(--text-sm)/1.65 var(--code); overflow-wrap: anywhere; }
+.json-mode[aria-pressed="true"] { background: var(--raised); color: var(--ink); }
+
+.json-filter { display: flex; align-items: center; gap: var(--space-3); flex: 1 1 14rem; max-width: 24rem; min-width: 0; }
+.json-filter-input {
+  flex: 1; min-width: 0; padding: var(--space-1h) var(--space-3);
+  border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--field-fill); color: var(--ink);
+  font: var(--text-sm)/1.5 var(--sans);
+}
+.json-filter-input::placeholder { color: var(--ink-subtle); }
+.json-filter-input:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -1px; border-color: transparent; }
+.json-count { flex: none; color: var(--ink-subtle); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- the tree ---------- */
+
+/* Labels beside values. The caret has a gutter of its own, so keys line up
+   whether they fold or not; the label column is as wide as its longest key up
+   to a cap, so a short document is not stretched across the room and a long
+   key wraps rather than pushing its value off the edge. Each node is a row
+   of the one grid (subgrid), so a row can be hovered, focused and ringed as
+   one line while every key at its level still shares a column. The value
+   column is as wide as its widest value and no wider, so a line's band and
+   its copies end near what it says, not at the far side of the room. The
+   copies have a column of their own past the widest value, held while they
+   are hidden, so a short value is never under them. */
+.json-fields { display: grid; grid-template-columns: var(--json-caret) fit-content(14rem) minmax(0, max-content) max-content; justify-content: start; row-gap: var(--space-2); }
+.json-entry { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; row-gap: var(--space-2); min-width: 0; }
+.json-row {
+  grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: baseline;
+  position: relative; border-radius: min(3px, var(--radius));
+}
+.json-caret { color: var(--ink-subtle); font-size: var(--text-xs); text-align: center; user-select: none; }
+.json-row .json-caret { grid-column: 1; }
+.json-key {
+  grid-column: 2; padding-right: var(--space-5);
+  color: var(--json-key); font: var(--text-sm)/1.65 var(--code); overflow-wrap: anywhere;
+}
 .json-index { color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
-.json-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-/* A nested object is indented under its count by a hairline, not boxed:
-   one box, hairlines inside. */
-.json-group { margin: var(--space-1) 0 var(--space-2h); padding-left: var(--space-4); border-left: 1px solid var(--line); }
-
-.json-fold, .json-more {
-  background: none; border: 0; padding: 0; border-radius: min(3px, var(--radius));
-  font: var(--text-sm)/1.65 var(--sans); cursor: pointer;
+.json-value { grid-column: 3; min-width: 0; overflow-wrap: anywhere; }
+.is-fold > .json-caret, .is-fold > .json-key, .json-summary, .json-fold-row > .json-caret { cursor: pointer; }
+/* A nested level is indented under its count by a hairline, not boxed: one
+   box, hairlines inside, and the hairline is the guide that says which level
+   a line is on. */
+.json-group { grid-column: 3 / -1; min-width: 0; margin-bottom: var(--space-2); padding-left: var(--space-3); border-left: 1px solid var(--line); }
+/* On a phone the value column is a third of the screen: a level indents under its key instead, the value column
+   takes the rest of the line, and a key never takes more than two fifths of it. Size containment keeps a nested
+   level (a wide table, say) out of the sizing of the keys it sits under; it fills the width they leave and scrolls
+   inside itself past that. */
+@media (max-width: 600px) {
+  .json-fields { grid-template-columns: var(--json-caret) fit-content(40%) minmax(0, 1fr); }
+  .json-group { grid-column: 2 / -1; contain: inline-size; }
 }
-.json-fold { color: var(--ink-muted); }
-.json-fold:hover { color: var(--ink); }
-.json-caret { display: inline-block; width: 1.1em; color: var(--ink-subtle); }
-.json-more { display: block; margin-top: var(--space-2); color: var(--link); }
-.json-more:hover { text-decoration: underline; }
+.json-summary { color: var(--ink-muted); font: var(--text-sm)/1.65 var(--code); }
+
+/* The node the keyboard is on, and the one under the pointer: a tint across the line, and the house ring for the keyboard. */
+.json-entry:focus, .json-fold:focus, .json-tr:focus, .json-chip:focus, .json-item:focus { outline: none; }
+.json-entry:focus > .json-row, .json-fold:focus > .json-fold-row, .json-tr:focus > td, .json-item:focus { background: var(--raised); }
+.json-entry:focus-visible > .json-row, .json-fold:focus-visible > .json-fold-row, .json-chip:focus-visible, .json-item:focus-visible {
+  outline: var(--focus-width) solid var(--focus); outline-offset: 1px;
+}
+.json-tr:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -1px; }
+
+.json-fold { min-width: 0; }
+.json-fold-row { display: flex; align-items: baseline; position: relative; border-radius: min(3px, var(--radius)); }
+.json-fold-row > .json-caret { flex: none; width: var(--json-caret); }
+.json-fold > .json-group { margin-left: calc(var(--json-caret) / 2); }
+
+/* A node's copies: hidden, not dimmed, until its line is hovered or it is the
+   node the keyboard is on (docs/design.md: a row's own menu). A field's sit in
+   its own column; elsewhere, and on a phone where that column would cost a
+   third of the line, they sit over the end of the line on its own tint. Either
+   way showing them moves nothing. */
+.json-actions {
+  position: absolute; top: 0; bottom: 0; right: 0; z-index: 1;
+  display: flex; align-items: flex-start; gap: var(--space-1); padding-left: var(--space-3);
+  background: var(--raised); border-radius: min(3px, var(--radius)); visibility: hidden;
+}
+/* Shorter than 24px, so the line's band holds them; the pair sits apart, and only one line's pair shows at a time
+   (WCAG 2.5.8's spacing). */
+.json-row > .json-actions { position: static; grid-column: 4; align-self: start; }
+@media (max-width: 600px) { .json-row > .json-actions { position: absolute; } }
+.json-act {
+  padding: var(--space-1) var(--space-2h); border: 0; border-radius: min(3px, var(--radius));
+  background: transparent; color: var(--link); font: var(--text-xs)/1.4 var(--sans); white-space: nowrap; cursor: pointer;
+}
+.json-act:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -1px; }
+.json-entry:focus > .json-row > .json-actions,
+.json-fold:focus > .json-fold-row > .json-actions,
+.json-tr:focus > .json-act-cell > .json-actions,
+.json-chip:focus > .json-actions,
+.json-item:focus > .json-actions,
+.json-actions:focus-within { visibility: visible; }
+@media (hover: hover) and (pointer: fine) {
+  .json-row:hover, .json-fold-row:hover, .json-tr:hover > td, .json-item:hover { background: var(--raised); }
+  .json-row:hover > .json-actions,
+  .json-fold-row:hover > .json-actions,
+  .json-tr:hover > .json-act-cell > .json-actions,
+  .json-chip:hover > .json-actions,
+  .json-item:hover > .json-actions { visibility: visible; }
+  .json-tool:hover, .json-mode:hover { color: var(--ink); }
+  .json-tool:not([aria-pressed="true"]):hover { background: var(--raised); }
+  .json-act:hover { background: var(--accent-soft); }
+  .json-fold-row:hover > .json-summary, .is-fold:hover > .json-key { color: var(--ink); }
+  .json-more:hover { text-decoration: underline; }
+}
+
+.json-more {
+  display: block; margin-top: var(--space-2); padding: 0; border: 0; border-radius: min(3px, var(--radius)); background: none;
+  color: var(--link); font: var(--text-sm)/1.65 var(--sans); cursor: pointer;
+}
 
 /* Like records, lined up. Wide ones scroll inside themselves; the page never does. */
 .json-table-wrap { overflow-x: auto; max-width: 100%; }
 .json-table { border-collapse: collapse; font-size: var(--text-sm); }
 .json-table th {
-  text-align: left; font: var(--text-xs)/1.5 var(--code); font-weight: normal; color: var(--ink-muted);
+  text-align: left; font: var(--text-xs)/1.5 var(--code); font-weight: normal; color: var(--json-key);
   padding: var(--space-1h) var(--space-4h) var(--space-1h) 0; border-bottom: 1px solid var(--line-strong); white-space: nowrap;
 }
 .json-table td {
   padding: var(--space-2) var(--space-4h) var(--space-2) 0; border-bottom: 1px solid var(--line);
   vertical-align: top; max-width: 24rem; overflow-wrap: anywhere;
 }
+.json-table :is(th, td).json-figures { text-align: right; }
+/* The row's copies hang from a column of no width at its end, over the row's last cells. */
+.json-table :is(th, td).json-act-cell { position: relative; width: 0; padding: 0; }
+.json-act-cell > .json-actions { top: var(--space-1); bottom: auto; }
 
 .json-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .json-chip {
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised);
+  position: relative; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised);
   padding: 0 var(--space-3); font-size: var(--text-sm); line-height: 1.65;
 }
+/* A chip is too short to cover: its copies drop below it, a popover's box. */
+.json-chip > .json-actions {
+  top: calc(100% + var(--space-1)); bottom: auto; left: 0; right: auto; padding: var(--space-1);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-pop);
+}
 .json-lines { margin: 0; padding-left: 2em; }
+.json-item { position: relative; border-radius: min(3px, var(--radius)); }
 .json-lines li::marker { color: var(--ink-subtle); font: var(--text-xs) var(--code); }
 
-.json-number, .json-date { font-variant-numeric: tabular-nums; }
-.json-table :is(th, td).json-figures { text-align: right; }
-.json-number { font-family: var(--mono); }
-.json-null, .json-empty { color: var(--ink-subtle); }
-.json-empty { font-family: var(--code); }
-.json-bool {
-  display: inline-block; padding: 0 var(--space-3); border-radius: 999px;
-  font-size: var(--text-xs); line-height: 1.65; background: var(--raised); color: var(--ink-muted);
-}
-.json-bool.yes { background: var(--accent-soft); color: var(--accent-ink); }
+/* ---------- values, by type ---------- */
+
+.json-text { color: var(--json-string); }
+/* Prose is read, not scanned: a paragraph stays in the text's own ink. */
+.json-long { display: block; white-space: pre-wrap; color: var(--ink); }
+.json-code { font: var(--text-sm) var(--code); }
+.json-number { color: var(--json-number); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.json-date { font-variant-numeric: tabular-nums; }
+.json-bool { color: var(--json-literal); font: var(--text-sm) var(--code); }
+.json-null { color: var(--json-null); font: var(--text-sm) var(--code); }
+.json-empty { color: var(--ink-subtle); font-family: var(--code); }
 .json-link { color: var(--link); overflow-wrap: anywhere; }
-.json-long { display: block; white-space: pre-wrap; }
+/* A hex color carries a swatch of itself, edged so white on white and black on black still show. */
+.json-swatch {
+  display: inline-block; width: 0.8em; height: 0.8em; margin-right: var(--space-2); vertical-align: -0.05em;
+  border: 1px solid var(--line-strong); border-radius: min(2px, var(--radius));
+}
+/* A match: the warm hue a change from elsewhere is said in (--changed-hue), lightly, under the text's own ink. */
+.json-mark { background: color-mix(in srgb, var(--changed-hue) 32%, transparent); color: inherit; border-radius: min(2px, var(--radius)); }
+
+/* ---------- raw ---------- */
 
 .json-raw {
   margin: 0; padding: var(--space-3) var(--space-3h); max-height: 24rem; overflow: auto;
-  font: var(--text-sm)/1.55 var(--code); white-space: pre; tab-size: 2;
+  font: var(--text-sm)/1.55 var(--code); white-space: pre; tab-size: 2; color: var(--ink);
   background: var(--ground); border: 1px solid var(--line); border-radius: var(--radius);
 }
+.json-raw.is-wrapped { white-space: pre-wrap; overflow-wrap: anywhere; }
 .json-raw:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -1px; }
-
-/* In a grid cell: the shape in one quiet line, the whole cell a button. */
-.json-preview {
-  display: block; width: 100%; padding: 0; border: 0; border-radius: 0; background: none;
-  text-align: left; font: var(--text-sm)/inherit var(--code); color: var(--ink-muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+/* Each line's number in a gutter as wide as the last one's: generated
+   content, so a selection and a copy never take it. */
+.json-line { display: block; position: relative; padding-left: calc((var(--json-digits, 2) + 2) * 1ch); }
+.json-line::before {
+  content: attr(data-n); position: absolute; left: 0; width: calc(var(--json-digits, 2) * 1ch);
+  text-align: right; color: var(--ink-subtle); opacity: 0.85; user-select: none;
 }
-.json-preview:hover { color: var(--link); }
-.json-preview:focus-visible { outline-offset: -2px; }
-.json-preview-text { font: var(--text-sm) var(--code); color: var(--ink-muted); }
+/* In the text, the keys are its frame: the ink, with the punctuation receding behind them. */
+.json-t-key { color: var(--ink); }
+.json-t-string { color: var(--json-string); }
+.json-t-number { color: var(--json-number); }
+.json-t-boolean { color: var(--json-literal); }
+.json-t-null, .json-t-punct { color: var(--json-null); }
 
-/* The overlay is the confirm dialog's box and scrim, at a document's width. */
-.json-overlay { width: min(60rem, calc(100vw - 2rem)); max-width: none; max-height: 85vh; }
+/* ---------- the overlay ---------- */
+
+/* The confirm dialog's box and scrim, at a document's width; its bar is the
+   dialog's head (the title, the filter, the tools, Close) and stays put while
+   a long document scrolls under it. */
+.json-overlay { width: min(72rem, calc(100vw - 2rem)); max-width: none; max-height: 85vh; overflow: auto; padding-top: 0; }
 .json-overlay .json-view { max-width: none; }
-.json-overlay .json-raw { max-height: 60vh; }
-.json-overlay-head { display: flex; align-items: baseline; gap: var(--space-3h); margin-bottom: var(--space-3h); }
-.json-overlay-head h2 { margin: 0; font: 600 calc(15px * var(--type-k))/1.4 var(--sans); overflow-wrap: anywhere; }
+.json-overlay .json-bar {
+  position: sticky; top: 0; z-index: 2; margin-bottom: var(--space-3h);
+  padding: var(--space-5) 0 var(--space-3); background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.json-overlay .json-raw { max-height: none; }
+.json-overlay-title { display: flex; align-items: baseline; gap: var(--space-3h); min-width: 0; }
+.json-overlay-title h2 { margin: 0; font: 600 calc(15px * var(--type-k))/1.4 var(--sans); overflow-wrap: anywhere; }
 .json-overlay-type { color: var(--ink-subtle); font: var(--text-xs) var(--code); }
-.json-overlay-close { margin-left: auto; padding: var(--space-1h) var(--space-3h); font-size: var(--text-sm); }
+.json-overlay-close { padding: var(--space-1h) var(--space-3h); font-size: var(--text-sm); }
 
 @media (prefers-reduced-motion: no-preference) {
-  .json-tool, .json-fold, .json-preview {
+  .json-tool, .json-mode, .json-act, .json-row, .json-fold-row {
     transition: color var(--t-hover) var(--ease-out), background-color var(--t-hover) var(--ease-out);
   }
 }

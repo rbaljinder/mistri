@@ -20,6 +20,7 @@ import type {
 } from '../../../../engine/src/shared/resourceHttp.js';
 import { configureAppTargetLinks } from '../../../../mistri/src/client/appTargetLinks.js';
 import { establishSessionIdentity, lockSessionIdentity } from '../sessionIdentity.js';
+import { crumbToolsRef } from './crumbSlot.js';
 
 const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
 const gone: unknown[] = [];
@@ -42,6 +43,8 @@ let breakdownOverride: ResourceClientReply<'/api/breakdown'> | undefined;
 let moneyDisplay = false;
 /** Display rules by column, beside the money one `moneyDisplay` turns on. */
 let displays: Record<string, Record<string, unknown>> = {};
+/** What `/api/counts` answers, by question: an inferred page's related tabs (recordReads.ts, relatedCountsBody). */
+let relatedTotals: Record<string, number> = {};
 
 /* A counted metric is asked as a keyless count (PageMetrics.tsx): it answers
    what the view it counts would have — the same failure, or its total. */
@@ -226,6 +229,13 @@ vi.mock('../core.js', () => ({
       return viewResponse(view);
     }
     if (path === '/api/breakdown') return breakdownReply(body.def);
+    if (path === '/api/counts')
+      return {
+        results: (body as unknown as { items: string[] }).items.map((question) =>
+          question in relatedTotals ? { total: relatedTotals[question] } : { errors: [{ message: 'not counted' }] },
+        ),
+      };
+    if (path === '/api/record-history') return { entries: [], more: undefined };
     // The page's figures together (breakdownBatch.ts): each item answered as it would be alone.
     if (path === '/api/breakdowns') {
       return {
@@ -402,6 +412,7 @@ beforeEach(() => {
   breakdownOverride = undefined;
   moneyDisplay = false;
   displays = {};
+  relatedTotals = {};
 });
 afterEach(() => {
   cleanup();
@@ -2125,6 +2136,140 @@ describe('a chart and a note on a record', () => {
   });
 });
 
+/* ---------- the page an App infers for a record it declared none for (pageAnatomy.ts, inferredSections) ---------- */
+
+const core = (await import('../core.js')) as unknown as { state: { schema: { foreignKeys: unknown[] } } };
+describe('the inferred record page', () => {
+  const keys = [
+    { name: 'invoice_customer', from: { table: 'invoice', columns: ['customer_id'] }, to: { table: 'customer', columns: ['id'] } },
+    { name: 'note_customer', from: { table: 'note', columns: ['customer_id'] }, to: { table: 'customer', columns: ['id'] } },
+  ];
+  beforeEach(() => {
+    core.state.schema.foreignKeys = keys;
+    appMode = true;
+    labelled = 'name';
+    viewRows = [{ id: 4, name: 'Harbour Freight', status: 'active' }];
+  });
+  afterEach(() => {
+    core.state.schema.foreignKeys = [];
+  });
+  const sections = (history: boolean): PageDef['sections'] => [
+    { kind: 'fields', presentation: 'header', status: 'status', paths: ['status'] },
+    { kind: 'fields', presentation: 'properties', columns: 2, emptyMode: 'show', paths: ['status'] },
+    { kind: 'list', from: 'invoice', title: 'Invoices', path: 'customer_id', columns: ['id', 'total'] },
+    { kind: 'list', from: 'note', title: 'Notes', path: 'customer_id', columns: ['id', 'body'] },
+    ...(history ? [{ kind: 'history' as const }] : []),
+  ];
+  const inferred = (over: Partial<PageDef> = {}): PageDef => ({
+    id: 'suggested:customer',
+    name: 'customer',
+    base: 'customer',
+    source: 'suggested',
+    listTabs: true,
+    sections: sections(true),
+    ...over,
+  });
+  const listPlans: SectionPlan[] = [
+    { index: 2, view: viewDefinition('list-invoices', 'invoice', ['id', 'total']) },
+    { index: 3, view: viewDefinition('list-notes', 'note', ['id', 'body']) },
+  ];
+
+  test('its related tables are one strip, each tab counted by one read, its history the last tab, read when opened', async () => {
+    relatedTotals = { 'invoice customer_id = 4': 12, 'note customer_id = 4': 1 };
+    draw({ page: inferred(), plans: listPlans });
+    const strip = await screen.findByRole('tablist', { name: 'Related lists' });
+    await waitFor(() => expect(within(strip).getByRole('tab', { name: /Invoices/ }).textContent).toBe('Invoices12'));
+    expect(
+      within(strip)
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent?.replace(/\d[\d,]*\+?$/, '')),
+    ).toEqual(['Invoices', 'Notes', 'History']);
+    // Every tab keeps the room its count will take from the first paint; the history has none to take.
+    expect(
+      within(strip)
+        .getAllByRole('tab')
+        .map((tab) => Boolean(tab.querySelector('.tab-count'))),
+    ).toEqual([true, true, false]);
+    const counted = calls.filter((call) => call.path === '/api/counts');
+    expect(counted).toHaveLength(1);
+    expect(counted[0].body).toEqual({ items: ['invoice customer_id = 4', 'note customer_id = 4'], countLimit: 10_000 });
+    expect(calls.some((call) => call.path === '/api/record-history')).toBe(false);
+    await userEvent.setup().click(within(strip).getByRole('tab', { name: 'History' }));
+    await waitFor(() => expect(calls.some((call) => call.path === '/api/record-history')).toBe(true));
+  });
+
+  test('a count past the ceiling says so, and a count that could not be read leaves its room empty', async () => {
+    relatedTotals = { 'invoice customer_id = 4': 10_000 };
+    draw({ page: inferred({ sections: sections(false) }), plans: listPlans });
+    const strip = await screen.findByRole('tablist', { name: 'Related lists' });
+    await waitFor(() => expect(within(strip).getAllByRole('tab')[0].querySelector('.tab-count')?.textContent).toBe('10,000'));
+    expect(within(strip).getAllByRole('tab')[1].querySelector('.tab-count')?.textContent).toBe('');
+  });
+
+  test('its form is the classic one: caption beside value, a field without a value kept in its place', async () => {
+    viewRows = [{ id: 4, name: 'Harbour Freight', status: null }];
+    draw({ page: inferred(), plans: listPlans });
+    const form = await waitFor(() => {
+      const dl = document.querySelector('dl.page-properties');
+      expect(dl).not.toBeNull();
+      return dl!;
+    });
+    expect(form).toHaveClass('page-classic');
+    expect(within(form as HTMLElement).getByText(/^status$/i)).toBeTruthy();
+  });
+
+  test('a related list alone says its count beside its heading', async () => {
+    relatedTotals = { 'invoice customer_id = 4': 3 };
+    draw({ page: inferred({ sections: sections(false).slice(0, 3) }), plans: listPlans.slice(0, 1) });
+    // Asked again each time: the list's loading heading is replaced by its own when its rows arrive.
+    await waitFor(() => expect(screen.getByRole('heading', { name: /Invoices/ }).querySelector('.tab-count')?.textContent).toBe('3'));
+    expect(screen.queryByRole('tablist')).toBeNull();
+  });
+
+  test("a reference's card stands in the aside, which weaves into the column where the columns stack", async () => {
+    draw({
+      page: inferred({
+        sections: [
+          ...sections(false),
+          { kind: 'fields', title: 'Account', presentation: 'card', region: 'aside', paths: ['status', 'name'] },
+        ],
+      }),
+      plans: listPlans,
+    });
+    await screen.findByRole('tablist', { name: 'Related lists' });
+    expect(document.querySelector('.page-layout')?.getAttribute('data-leads')).toBe('true');
+    expect(document.querySelector('.page-aside')?.textContent).toMatch(/Account/);
+    expect(document.querySelector('.page-main')?.textContent).not.toMatch(/Account/);
+  });
+
+  test("the head says the name's second line, and under the trail the record's kind is heard, not seen", async () => {
+    // The trail's bar, drawn over the room in the same commit (Crumbs.tsx): its tools' slot is how the head knows.
+    render(<div ref={crumbToolsRef} />);
+    const header = { kind: 'fields' as const, presentation: 'header' as const, status: 'status', paths: [], subtitle: 'status' };
+    draw({ page: inferred({ sections: [header, ...sections(false).slice(1)] }), plans: listPlans });
+    const head = document.querySelector('.page-head')!;
+    expect(head).toHaveClass('has-trail');
+    expect(head.querySelector('.page-title')).toHaveClass('visually-hidden');
+    expect(head.querySelector('.page-title')?.textContent).toBe('Customer');
+    // Held, unseen, while the row is read, then said: the line is there from the first paint.
+    expect(head.querySelector('.page-head-subtitle')).not.toBeNull();
+    await waitFor(() => expect(head.querySelector('.page-head-subtitle:not([aria-hidden])')?.textContent).toMatch(/active/));
+  });
+
+  test('a page the App declared is drawn as written: no counts, no classic dress, its history a section of its own', async () => {
+    draw({ page: inferred({ id: 'customer-desk', source: 'config' }), plans: listPlans });
+    const strip = await screen.findByRole('tablist', { name: 'Related lists' });
+    expect(
+      within(strip)
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent),
+    ).toEqual(['Invoices', 'Notes']);
+    expect(calls.some((call) => call.path === '/api/counts')).toBe(false);
+    await waitFor(() => expect(document.querySelector('dl.page-properties')).not.toBeNull());
+    expect(document.querySelector('dl.page-classic')).toBeNull();
+  });
+});
+
 /* ---------- a record header and a current card ---------- */
 
 const unitPage = (sections: PageDef['sections']): PageDef => ({ id: 'unit', name: 'Unit', base: 'unit', source: 'config', sections });
@@ -2449,4 +2594,48 @@ describe("a page's layout", () => {
     expect(document.querySelector('.page-layout')).not.toHaveAttribute('data-layout');
     expect(document.querySelector('.page-head')).not.toHaveAttribute('data-layout');
   });
+});
+
+test("a header's span is said once, its end not repeating the start's day, and the end is read with the record", async () => {
+  appMode = true;
+  labelled = 'name';
+  viewRows = [{ id: 4, name: 'Maple Court B103', beds: 3, f5: '2026-09-13 14:00:00', f6: '2026-09-13 16:00:00' }];
+  drawUnit([{ kind: 'fields', presentation: 'header', paths: ['f5', 'beds'], spans: { f5: 'f6' } } as PageDef['sections'][number]]);
+  const head = document.querySelector('.page-head')!;
+  await waitFor(() => expect(head.querySelector('.page-head-facts:not([aria-hidden])')).not.toBeNull());
+  const read = calls.find((call) => (call.body.view as { id?: string } | undefined)?.id?.endsWith(':header'));
+  expect((read!.body.view as { columns: Array<{ path: string }> }).columns.map((c) => c.path)).toContain('f6');
+  const [when] = [...head.querySelectorAll('.page-head-facts .page-fact')].map((fact) => fact.textContent!.replace(/[\s  ]+/g, ' '));
+  expect(when).toBe('When: Sep 13, 2026, 2:00 – 4:00 PM');
+});
+
+test("an inferred page's form leaves out a value the record's name already says, unless it is where the value is set", async () => {
+  editing = false;
+  appMode = true;
+  labelled = 'name';
+  viewRows = [{ id: 4, name: 'Labor', f5: 'labor', f6: 'Kept' }];
+  const sections = [{ kind: 'fields' as const, presentation: 'properties' as const, columns: 2, paths: ['f5', 'f6'] }];
+  drawUnit(sections);
+  await waitFor(() => expect(document.querySelector('dl.page-properties')).not.toBeNull());
+  // An authored page says what it was told.
+  expect([...document.querySelectorAll('dl.page-properties dt')].map((dt) => dt.textContent)).toEqual(['f5', 'f6']);
+  cleanup();
+  render(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+      <PageView
+        entry={{ kind: 'page', pageId: 'suggested:unit', table: 'unit', key: { id: 4 }, label: '4' }}
+        page={{ ...unitPage(sections), id: 'suggested:unit' }}
+        base={unit}
+        plans={[]}
+        others={[]}
+        onLabel={vi.fn()}
+        onTab={() => {}}
+        onLayout={() => {}}
+      />,
+    ),
+  );
+  await waitFor(() => expect(document.querySelector('dl.page-properties')).not.toBeNull());
+  expect([...document.querySelectorAll('dl.page-properties dt')].map((dt) => dt.textContent)).toEqual(['f6']);
 });

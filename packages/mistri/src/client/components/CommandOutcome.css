@@ -1,0 +1,18 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
+@layer components {
+/* How a command ended (CommandOutcome.tsx): a dot and its word in the state's tone, then the App's words in the
+   ink and the way on in muted ink. Meaning is the dot and its word (docs/design.md); the body is never tinted, so
+   a long refusal reads as a sentence, not as an alarm. */
+.command-outcome { display: grid; gap: var(--space-1); color: var(--ink); }
+.command-outcome > p { margin: 0; }
+.command-outcome-title { display: flex; align-items: center; gap: var(--space-2); font-weight: 600; color: var(--outcome-ink, var(--ink-muted)); }
+.command-outcome-title::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.command-outcome[data-state="done"] { --outcome-ink: var(--status-good); }
+.command-outcome[data-state="pending"] { --outcome-ink: var(--status-info); }
+.command-outcome[data-waiting="sending"], .command-outcome[data-waiting="checking"] { --outcome-ink: var(--ink-muted); }
+.command-outcome[data-state="refused"] { --outcome-ink: var(--status-critical); }
+.command-outcome[data-state="unknown"] { --outcome-ink: var(--status-warning); }
+.command-outcome-body { line-height: 1.45; overflow-wrap: anywhere; }
+.command-outcome-next { color: var(--ink-muted); line-height: 1.45; }
+.command-outcome > .command-outcome-check { margin-top: var(--space-2); }
+}

@@ -66,7 +66,8 @@ offer it (`roles`) only to people whose reads may leave your server. A conversat
 and a person has at most two answers under way at once.
 
 In a tenant App it answers inside the current customer only, and only where the platform owner has turned it on
-for that customer in **Account → Manage tenants**.
+for that customer in **Account → Manage tenants**. Under a row policy it reads as the person, through the policy
+([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do)).
 
 ## Common mistakes
 

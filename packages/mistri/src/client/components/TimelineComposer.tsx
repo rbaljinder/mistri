@@ -15,6 +15,7 @@ import type { PageSection } from '@mistriwork/kit/client/components/pageModel.js
 import { RichTextField, mentionSearch, pictureKeeper } from '@mistriwork/kit/client/components/RichTextField.js';
 import { shellById } from '@mistriwork/kit/client/shellHost.js';
 import { say } from '../copy/record/components/TimelineComposer.js';
+import './TimelineComposer.css';
 
 /** A conversation's composer, pinned under its rows: a Reply / Internal note toggle over one box, sent through the
     commands the author named — the same pipeline a record's action button and `useCommand` use, so a refusal is said
@@ -99,61 +100,63 @@ export function TimelineComposer({
           ))}
         </div>
       )}
-      <label className="visually-hidden" htmlFor={label}>
-        {mode[2]}
-      </label>
-      {rich ? (
-        <RichTextField
-          id={label}
-          label={mode[2]}
-          placeholder={placeholder}
-          value={text}
-          disabled={sending}
-          onChange={setText}
-          onKey={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-              void send();
-              return true;
-            }
-            return false;
-          }}
-          {...(rich.mentions ? { mentions: mentionSearch(rich.mentions, state.activeConnection) } : {})}
-          {...(() => {
-            const keep = pictureKeeper(rich.images, table ? { table, key: recordKey } : undefined, state.activeConnection);
-            return keep ? { pictures: keep, onProblem: (message: string) => toast(message, 'error') } : {};
-          })()}
-        />
-      ) : (
-        <textarea
-          id={label}
-          ref={input}
-          className="field-control timeline-input"
-          rows={3}
-          value={text}
-          placeholder={placeholder}
-          disabled={sending}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              void send();
-            }
-          }}
-        />
-      )}
-      <div className="timeline-composer-foot">
-        {composer.templates && (
-          <Templates
-            templates={composer.templates}
-            onPick={(words) => {
-              setText(words);
-              requestAnimationFrame(() => (input.current ?? shellById(label))?.focus());
+      <div className="timeline-box">
+        <label className="visually-hidden" htmlFor={label}>
+          {mode[2]}
+        </label>
+        {rich ? (
+          <RichTextField
+            id={label}
+            label={mode[2]}
+            placeholder={placeholder}
+            value={text}
+            disabled={sending}
+            onChange={setText}
+            onKey={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                void send();
+                return true;
+              }
+              return false;
+            }}
+            {...(rich.mentions ? { mentions: mentionSearch(rich.mentions, state.activeConnection) } : {})}
+            {...(() => {
+              const keep = pictureKeeper(rich.images, table ? { table, key: recordKey } : undefined, state.activeConnection);
+              return keep ? { pictures: keep, onProblem: (message: string) => toast(message, 'error') } : {};
+            })()}
+          />
+        ) : (
+          <textarea
+            id={label}
+            ref={input}
+            className="field-control timeline-input"
+            rows={3}
+            value={text}
+            placeholder={placeholder}
+            disabled={sending}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                void send();
+              }
             }}
           />
         )}
-        <Button intent="primary" type="submit" disabled={!text.trim() || sending}>
-          {sending ? say('sending') : mode[0] === 'note' ? say('addNote') : mode[2]}
-        </Button>
+        <div className="timeline-composer-foot">
+          {composer.templates && (
+            <Templates
+              templates={composer.templates}
+              onPick={(words) => {
+                setText(words);
+                requestAnimationFrame(() => (input.current ?? shellById(label))?.focus());
+              }}
+            />
+          )}
+          <Button intent="primary" type="submit" disabled={!text.trim() || sending}>
+            {sending ? say('sending') : mode[0] === 'note' ? say('addNote') : mode[2]}
+          </Button>
+        </div>
       </div>
     </form>
   );

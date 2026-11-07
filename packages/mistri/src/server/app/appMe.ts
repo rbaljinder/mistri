@@ -18,6 +18,7 @@ import { meSetShape, meSetsIn, mentionsMe, personTable } from '../../shared/appM
 import type { QueryPerson } from '@mistriwork/engine/shared/query.js';
 import type { MeSet } from '@mistriwork/engine/shared/queryOperands.js';
 import { primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { maskQuoted } from '@mistriwork/engine/shared/maskQuoted.js';
 
 type Reader = { query: (request: QueryRequest) => Promise<QueryResult> };
 
@@ -205,6 +206,33 @@ export async function personKey(
 export function textsMentionMe(texts: readonly unknown[], schema: DatabaseSchema): boolean {
   const said = texts.filter((text): text is string => typeof text === 'string');
   return said.some((text) => mentionsMe(text)) || segmentsNamed(said, schema).some((text) => mentionsMe(text));
+}
+
+/**
+ * Whether every `me` the texts say is compared with the people table's email
+ * column, by name — `email = me`, `technician_id.email = me` — and so is the
+ * signed-in email, which the session already holds (queryOperands.ts
+ * meOperand: a text column is compared with the email, never the person's
+ * row). Then nobody is looked up before the read: the overview's "Mine" is one
+ * statement, not two. Anything else — a reference, a membership, a segment
+ * that says `me` — is the person's row, and is looked up as always.
+ */
+export function emailOnly(app: AppDef, texts: readonly unknown[], schema: DatabaseSchema): boolean {
+  const column = app.auth?.me?.column;
+  if (!column || !/^[A-Za-z_]\w*$/.test(column)) return false;
+  const said = texts.filter((text): text is string => typeof text === 'string');
+  if (segmentsNamed(said, schema).some((text) => mentionsMe(text))) return false;
+  const compared = new RegExp(`(?:^|[^\\w.])(?:[A-Za-z_]\\w*\\.)*${column}\\s*!?=\\s*$`, 'i');
+  let found = false;
+  for (const text of said) {
+    const masked = maskQuoted(text);
+    for (const match of masked.matchAll(/(?<![\w.$])me(?![\w$])/gi)) {
+      // `me.<table>.<column>` is a membership, never the email.
+      if (masked[match.index + 2] === '.' || !compared.test(masked.slice(0, match.index))) return false;
+      found = true;
+    }
+  }
+  return found;
 }
 
 function segmentsNamed(texts: readonly unknown[], schema: DatabaseSchema): string[] {

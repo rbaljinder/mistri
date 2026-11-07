@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/kit",
-  "version": "1.0.0-rc.17",
+  "version": "1.0.0-rc.18",
   "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -100,6 +100,10 @@
     "./client/components/ErrorBoundary.js": {
       "mistri-built": "./dist/client/components/ErrorBoundary.js",
       "default": "./src/client/components/ErrorBoundary.tsx"
+    },
+    "./client/components/DashHead.js": {
+      "mistri-built": "./dist/client/components/DashHead.js",
+      "default": "./src/client/components/DashHead.tsx"
     },
     "./client/components/FavoriteStar.js": {
       "mistri-built": "./dist/client/components/FavoriteStar.js",
@@ -280,6 +284,10 @@
     "./client/components/dashboardParts.js": {
       "mistri-built": "./dist/client/components/dashboardParts.js",
       "default": "./src/client/components/dashboardParts.ts"
+    },
+    "./client/components/directoryModel.js": {
+      "mistri-built": "./dist/client/components/directoryModel.js",
+      "default": "./src/client/components/directoryModel.ts"
     },
     "./client/components/editInteraction.js": {
       "mistri-built": "./dist/client/components/editInteraction.js",
@@ -709,6 +717,10 @@
       "mistri-built": "./dist/client/visualTheme.js",
       "default": "./src/client/visualTheme.ts"
     },
+    "./client/workbenchLook.css": {
+      "mistri-built": "./dist/client/workbenchLook.css",
+      "default": "./src/client/workbenchLook.css"
+    },
     "./client/write.js": {
       "mistri-built": "./dist/client/write.js",
       "default": "./src/client/write.js"
@@ -741,8 +753,8 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.17",
-    "@mistriwork/ui": "1.0.0-rc.17",
+    "@mistriwork/engine": "1.0.0-rc.18",
+    "@mistriwork/ui": "1.0.0-rc.18",
     "intl-messageformat": "12.1.2",
     "qrcode-generator": "^2.0.4"
   },

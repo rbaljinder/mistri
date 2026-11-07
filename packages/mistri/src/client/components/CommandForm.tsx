@@ -8,7 +8,7 @@ import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AppCommandAction } from '../../shared/app.js';
-import { api, state } from '@mistriwork/kit/client/core.js';
+import { api, go, rowView, state } from '@mistriwork/kit/client/core.js';
 import { commandOperations, type CommandOperation, type CommandOwner } from '../commandState.js';
 import { countedLabel, prepareBulkCommand, type PreparedTarget } from '@mistriwork/kit/client/bulkActions.js';
 import { commandFieldsDeep, commandKeyText, recordColumnsIn, type AppCommandField } from '../../shared/command.js';
@@ -29,6 +29,8 @@ import { Modal } from '@mistriwork/ui/Modal.js';
 import { say } from '../copy/forms/components/CommandForm.js';
 import { liveKeyText, registerEditing, releaseEditNotice, useEditNotice } from '@mistriwork/kit/client/liveState.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+import { CommandOutcome } from './CommandOutcome.js';
+import { outcomeOfOperation } from './outcomeModel.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 
 const LiveEditNotice = onDemand(() => import('@mistriwork/kit/client/components/LiveNotices.js'), 'LiveEditNotice', { quiet: true });
@@ -358,6 +360,22 @@ export function CommandForm({
      (useBulkSelection.tsx ActionLabel) is not counted as English counts; the form's count line says how many. */
   const verb = group && noun && !(action as { counted?: unknown }).counted ? countedLabel(action.label, listed.length, noun) : action.label;
   const noticed = Boolean(changedElsewhere && !operation && !problem);
+  /* The one record it changed, linked when the person is not already on it: a row's action from a list, say. On the
+     record itself the page is what changed, and a link to it would lead nowhere. */
+  const here = state.stack?.at(-1) as { table?: string; key?: Record<string, unknown> } | undefined;
+  const single = !group && Object.keys(owner.key).length > 0;
+  const elsewhere = single && !(here?.table === owner.target && here.key && commandKeyText(here.key) === commandKeyText(owner.key));
+  const openChanged = () => {
+    close();
+    go(rowView(owner.target, owner.key, label));
+  };
+  const fieldLabel = operation?.field ? action.command.input.find((field) => field.name === operation.field)?.label : undefined;
+  const outcome =
+    operation &&
+    outcomeOfOperation(
+      refused && operation.phase === 'error' ? { ...operation, message: `${operation.message} (${refused.label})` } : operation,
+      { ...(single ? { record: { label } } : {}), untracked, ...(fieldLabel ? { fieldLabel } : {}) },
+    );
   const feedback =
     problem ||
     (unknown && untracked ? say('checkTheRecord') : '') ||
@@ -436,7 +454,7 @@ export function CommandForm({
             }}
           />
         </fieldset>
-        <p
+        <div
           className="command-feedback"
           data-phase={problem ? 'error' : (operation?.phase ?? (prepared.isError ? 'error' : 'ready'))}
           /* Drawn while it holds a change from elsewhere: a ready line is otherwise said to a screen reader only, and
@@ -446,8 +464,15 @@ export function CommandForm({
           aria-live="polite"
           aria-atomic="true"
         >
-          {noticed ? <LiveEditNotice table={liveTable(owner.target)} recordKey={owner.key} place="inline" /> : feedback}
-        </p>
+          {noticed ? (
+            <LiveEditNotice table={liveTable(owner.target)} recordKey={owner.key} place="inline" />
+          ) : operation && !problem ? (
+            /* How it ended, in the one outcome view a command and a public form share (outcomeModel.ts). */
+            <CommandOutcome outcome={outcome!} {...(elsewhere ? { onOpen: openChanged } : {})} />
+          ) : (
+            feedback
+          )}
+        </div>
         <div className="confirm-actions">
           <Button intent="secondary" disabled={locked} onClick={close}>
             {success ? say('common.done') : say('common.cancel')}

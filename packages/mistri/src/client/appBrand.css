@@ -60,4 +60,12 @@
   :root:not([data-theme='light'])[data-bar-ground~='dark:light'] .brand-mark.brand-mark--image .brand-image.brand-image--dark { display: none; }
   :root:not([data-theme='light'])[data-bar-ground~='dark:light'] .brand-mark.brand-mark--image:has(.brand-image--dark) .brand-image { display: block; }
 }
+/* The sign-in door's mark (SignIn.tsx): the same glyph, picture or initial the bar draws, larger and centered over the
+   card, since the door draws no bar. `:root:root` to stand over the bar's own sizes above. */
+:root:root .signin-logo.brand-mark { margin-bottom: var(--space-5); }
+:root:root .signin-logo.brand-mark.brand-mark--logo { width: 32px; height: 32px; }
+:root:root .signin-logo.brand-mark.brand-mark--logo .brand-logo { width: 32px; height: 32px; }
+:root:root .signin-logo.brand-mark.brand-mark--initial { width: 40px; height: 40px; font-size: var(--text-xl); }
+:root:root .signin-logo.brand-mark.brand-mark--image { width: 144px; height: 36px; }
+:root:root .signin-logo.brand-mark.brand-mark--image .brand-image { width: 144px; height: 36px; object-position: center; }
 }

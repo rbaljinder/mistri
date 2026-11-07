@@ -463,6 +463,11 @@ export interface AppShell {
   /** With the side placement: folding the sidebar leaves a rail of the
       entries' icons by default. Set false to hide it completely. */
   rail?: boolean;
+  /** With the side placement: where the bar's furniture stands at a desk — in the sidebar itself (`'sidebar'`, the
+      default), whose head holds the mark, New and the search, and whose foot holds the bell and the account, each
+      room's own head row then its first line; or across the top of the window (`'bar'`). Unsaid beside `rail: false`,
+      the bar (sidebarShell.js `headerInSidebar`). */
+  header?: (typeof SHELL_HEADERS)[number];
   /** Show the sidebar menu filter. Defaults to false in Apps. */
   menuSearch?: boolean;
   /** Show live row counts beside the App menu's lists of work: a list whose condition picks its machine's unfinished states, a date at or before today (said in the danger's ink), or the reader (me). A list's own count: true or false says otherwise. Defaults to false; Workbench estimates remain. */
@@ -502,6 +507,8 @@ export interface AppSidebar {
 }
 
 export const PLACEMENTS = ['side', 'top'] as const;
+/** Where a side-placed App's bar stands (`ui.shell.header`). */
+export const SHELL_HEADERS = ['bar', 'sidebar'] as const;
 
 /** An entry as served: the view it opens, the command that view runs when it is a form, and its words. */
 export interface ServedShellNew {
@@ -661,6 +668,9 @@ export interface ServedApp<View extends object = ServedDashboardView | ServedFor
   grantedCommands?: string[];
   grantedActions?: Record<string, string[]>;
   assistant?: { page?: true; record?: true };
+  /** The menu holds more than `DIRECTORY_AT` places: a Directory room lists them all, at `/{app}/all-pages`. Its icon
+      is named here so its glyph rides the payload, as the assistant's does. */
+  directory?: { icon: import('./appIcons.js').AppIconName };
 }
 
 /** A menu node as the view order reads it: a view's reference, a group of nodes, or a link elsewhere. */
@@ -685,3 +695,13 @@ export function viewOrder(app: { views: Readonly<Record<string, unknown>>; nav: 
 /** The assistant's own room, where its App gives it a page (`placement: 'page'`, appAssistant.ts): its word in
  * nav, and its address, `/{app}/assistant` and `/{app}/assistant/{conversation}` for one conversation. */
 export const ASSISTANT_ROOM = 'assistant';
+
+/** The Directory's address, `/{app}/all-pages`: every list, page and New of a long menu, with a filter box. */
+export const DIRECTORY_ROOM = 'all-pages';
+/** How many places a menu holds before a Directory is offered beside it: past a dozen, scanning a menu is a search. */
+export const DIRECTORY_AT = 12;
+
+/** The places a served menu leads to — its views and its links, not the headings over them. */
+export function navPlaces(nav: readonly AppPayloadNavNode[]): number {
+  return nav.reduce((count, node) => count + ('children' in node ? navPlaces(node.children) : 1), 0);
+}

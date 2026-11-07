@@ -6,6 +6,7 @@
 import {
   PLACEMENTS,
   SHELL_GUTTERS,
+  SHELL_HEADERS,
   SHELL_HEADER_WIDTHS,
   SHELL_WIDTHS,
   THEME_KEYS,
@@ -61,6 +62,7 @@ export const SHELL_KEYS = [
   'gutter',
   'placement',
   'rail',
+  'header',
   'counts',
   'sidebar',
   'new',
@@ -427,6 +429,25 @@ function parseShell(raw: unknown, where: string): AppShell {
       );
     }
     shell.rail = input.rail;
+  }
+  /* The bar in the sidebar's head (the default when unsaid, sidebarShell.js): beside a top bar there is no sidebar to
+     hold it, and folded the sidebar must stay a rail, since the mark, the search and the account fold with it rather
+     than vanish. */
+  if (input.header !== undefined) {
+    if (!(SHELL_HEADERS as readonly string[]).includes(String(input.header))) {
+      throw new Error(`${where}: ui.shell.header must be one of: ${SHELL_HEADERS.join(', ')}.`);
+    }
+    if (input.header === 'sidebar' && shell.placement === 'top') {
+      throw new Error(
+        `${where}: ui.shell.header 'sidebar' draws the bar in the side menu's head, so it needs the side placement; this shell has placement "top".`,
+      );
+    }
+    if (input.header === 'sidebar' && shell.rail === false) {
+      throw new Error(
+        `${where}: ui.shell.header 'sidebar' holds the mark, the search and the account in the side menu, so folding it leaves the rail; remove rail: false.`,
+      );
+    }
+    shell.header = input.header as AppShell['header'];
   }
   if (input.sidebar !== undefined) shell.sidebar = parseSidebar(input.sidebar, where);
   if (input.new !== undefined) shell.new = parseShellNew(input.new, where);

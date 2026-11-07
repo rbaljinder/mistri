@@ -21,6 +21,7 @@ import {
   formatPercent,
   withPercentSign,
   formatRelativeDay,
+  formatSpan,
   formatTimeOfDay,
   plural,
   sayNearDay,
@@ -188,6 +189,22 @@ describe('dates and times', () => {
     expect(plain(formatDateTime('2026-03-05 14:30:15')), 'seconds only when there are some').toBe(second);
     expect(plain(formatDateTime('14:30:00')), 'a time alone').toBe(clock);
     expect(plain(formatDateTime('2026-03-05')), 'a date alone').toBe(day);
+  });
+
+  test('a span is said once, its end not repeating the day it shares with its start', () => {
+    const spaced = (text: string | null) => text?.replace(/[\s\u2009\u202f\u00a0]+/g, ' ');
+    inLocale({ locale: 'en-US' });
+    expect(spaced(formatSpan('2026-09-13 14:00:00', '2026-09-13 16:00:00'))).toBe('Sep 13, 2026, 2:00 – 4:00 PM');
+    expect(spaced(formatSpan('2026-09-13 22:00:00', '2026-09-14 02:00:00'))).toBe('Sep 13, 2026, 10:00 PM – Sep 14, 2026, 2:00 AM');
+    expect(spaced(formatSpan('2026-09-13', '2026-09-15'))).toBe('Sep 13 – 15, 2026');
+    inLocale({ locale: 'en-GB' });
+    expect(spaced(formatSpan('2026-09-13T14:00:00Z', '2026-09-13T16:00:00Z')), 'the wall clock as written').toBe(
+      '13 Sept 2026, 14:00–16:00',
+    );
+    inLocale({ locale: 'en-US' });
+    // What is not one range is two facts: no date, an end before its start.
+    expect(formatSpan('2026-09-13 14:00:00', 'soon')).toBeNull();
+    expect(formatSpan('2026-09-13 16:00:00', '2026-09-13 14:00:00')).toBeNull();
   });
 
   test('a plain date is the day it names in every zone, and a stored wall clock is not converted', () => {

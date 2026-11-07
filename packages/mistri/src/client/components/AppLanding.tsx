@@ -15,6 +15,7 @@ import { currentEntry, findTable, go, pageView, state, tableView, toast } from '
 import { syncHash } from '@mistriwork/kit/client/url.js';
 import { recentVisits } from '@mistriwork/kit/client/pagemarks.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+import { DashHead } from '@mistriwork/kit/client/components/DashHead.js';
 import { dashboardSelection, rootSlot, type DashboardDef } from '@mistriwork/kit/client/components/dashboardModel.js';
 import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
 import { appListQuery } from '@mistriwork/kit/client/components/appListModel.js';
@@ -253,10 +254,7 @@ export function AppLanding({ firstDash, loadError, pages, dashboardEntry, entry 
   return (
     <>
       {loadError ? <p className="note app-loaderror">{say('stillShowingTheLast', { loadError })}</p> : null}
-      <div className="applist-head dash-head">
-        <h1 className={`applist-title${firstDash.headingHidden ? ' visually-hidden' : ''}`}>{firstDash.heading ?? firstDash.label}</h1>
-        {firstDash.description && <p className="note dash-description">{firstDash.description}</p>}
-      </div>
+      <DashHead dashboard={firstDash} star={false} />
       <Dashboard
         dashboard={firstDash}
         window={selection.window}

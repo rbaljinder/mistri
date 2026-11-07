@@ -51,6 +51,9 @@ export const RECIPE_MENU = {
   steps: { flat: null, tinted: 'lumen', strip: 'lumen' },
   lanes: { tint: null, tag: 'brand', plain: 'brand' },
   header: { plain: null, band: null, hero: null },
+  /* A list's filter not yet asked for: its own part, so a theme may keep its keyed or raised buttons and still pick the
+     adders' edge (Workshop keys them solid; Lumen's are quiet, as its raised buttons were). */
+  filters: { dashed: null, solid: 'workshop', quiet: 'lumen' },
   /* The four below are a form's: their rules are in @mistriwork/ui's forms.css, which arrives with the first control
      a page draws, so no first stylesheet carries them and the menu names no sheet of a look. */
   required: { star: null, 'optional-word': null },
