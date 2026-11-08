@@ -12,11 +12,15 @@
 import { primaryKey, type DatabaseSchema, type ForeignKey } from '@mistriwork/engine/shared/schema.js';
 import type { QueryRequest, QueryResult } from '@mistriwork/engine/adapters/adapter.js';
 
-/** What an upload's `parent` says: the table of the record, its whole key, and which reference when the file has several. */
+/**
+ * What an upload's `parent` says: the table of the record, its whole key, and which reference when the file has
+ * several. A single-column reference is named by its column; a composite one by all of its columns, because two
+ * references to the parent can share a first column ((tenant_id, item_id) and (tenant_id, replacement_id)).
+ */
 export interface UploadParent {
   readonly table: string;
   readonly key: Readonly<Record<string, string | number>>;
-  readonly link?: string;
+  readonly link?: string | readonly string[];
 }
 
 type Refused = { status: number; error: string };
@@ -32,15 +36,32 @@ export function readUploadParent(body: Record<string, unknown>): { parent?: Uplo
   if (!said || typeof said !== 'object' || Array.isArray(said)) return bad;
   const { table, key, link, ...stray } = said as Record<string, unknown>;
   if (Object.keys(stray).length || typeof table !== 'string' || !table) return bad;
-  if (link !== undefined && (typeof link !== 'string' || !link)) return bad;
+  const name = (value: unknown) => typeof value === 'string' && value !== '';
+  /* A list names a reference's column set, so a column said twice is not one. */
+  const set = (value: unknown[]) => value.length > 0 && value.every(name) && new Set(value).size === value.length;
+  if (link !== undefined && !(name(link) || (Array.isArray(link) && set(link)))) return bad;
   if (!key || typeof key !== 'object' || Array.isArray(key) || !Object.keys(key).length || !Object.values(key).every(scalar)) return bad;
-  return { parent: { table, key: key as Record<string, string | number>, ...(link === undefined ? {} : { link }) } };
+  return {
+    parent: {
+      table,
+      key: key as Record<string, string | number>,
+      ...(link === undefined ? {} : { link: link as string | readonly string[] }),
+    },
+  };
 }
 
 /** The reference from the file's table to the parent's, named by `link` where the file has more than one. */
 function referenceTo(schema: DatabaseSchema, file: string, parent: UploadParent): { fk: ForeignKey } | Refused {
   const here = schema.foreignKeys.filter((fk) => fk.from.table === file && fk.to.table === parent.table);
-  const named = parent.link === undefined ? here : here.filter((fk) => fk.from.columns.includes(parent.link!));
+  /* A list of columns names the reference exactly (the same set, in any order); one column names every reference it is
+     part of, so it is enough only where a single reference has it. */
+  const columns = typeof parent.link === 'string' ? [parent.link] : parent.link;
+  const named =
+    columns === undefined
+      ? here
+      : typeof parent.link === 'string'
+        ? here.filter((fk) => fk.from.columns.includes(parent.link as string))
+        : here.filter((fk) => fk.from.columns.length === columns.length && columns.every((column) => fk.from.columns.includes(column)));
   if (named.length === 1) return { fk: named[0] };
   return {
     status: 400,

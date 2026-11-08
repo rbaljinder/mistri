@@ -71,6 +71,12 @@ function fileOf(table: TableMeta | undefined): ServedResource['file'] {
   return resourceOf(table)?.file;
 }
 
+/* The reference an upload binds to, whole: a single column as itself (the wire it always was), a composite one as all of
+   its columns, since two references to the parent can share the first. */
+function linkOf(bindings: ReadonlyArray<{ column: string }>): string | string[] {
+  return bindings.length === 1 ? bindings[0].column : bindings.map((b) => b.column);
+}
+
 /** A related list's count: its rows, and whether there are more than the count read up to ("10,000+"). */
 interface Counted {
   total: number;
@@ -736,7 +742,7 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
         values: { ...creation!.defaults, ...defaults },
         /* The record this list is drawn on, said once: the server reads it as this reader and writes the link itself,
            so the link above is only what the list believes. A tenant lease's upload says no parent yet. */
-        ...(lease ? {} : { parent: { table: base.id, key: recordKey, link: creation!.bindings![0].column } }),
+        ...(lease ? {} : { parent: { table: base.id, key: recordKey, link: linkOf(creation!.bindings!) } }),
         ...ownedBy(connection),
         file: { name: picked.name, type: picked.type, data: await fileToBase64(picked) },
       })) as { errors?: Array<{ message: string }> };

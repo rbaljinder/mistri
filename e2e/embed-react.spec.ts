@@ -2,7 +2,6 @@ import { execFileSync, type ChildProcess } from 'node:child_process';
 import { spawn } from './support/spawned';
 import { once } from 'node:events';
 import { mkdtempSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { Page } from '@playwright/test';
@@ -21,12 +20,8 @@ const test = base.extend<object, { started: void }>({
       });
       const config = join(directory, 'crm.json');
       writeFileSync(config, JSON.stringify({ connections: [{ name: 'crm', url: db, writable: true }] }));
-      const reservation = createServer();
-      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-      const port = (reservation.address() as { port: number }).port;
-      await new Promise<void>((done) => reservation.close(() => done()));
-      origin = `http://127.0.0.1:${port}`;
-      const started = spawn(process.execPath, ['--import', 'tsx', 'e2e/support/embedReactHost.ts', config, String(port)], {
+      /* Port 0: the host listens on what the OS gives it and says which, so no port is reserved, released and raced for. */
+      const started = spawn(process.execPath, ['--import', 'tsx', 'e2e/support/embedReactHost.ts', config, '0'], {
         env: { ...process.env, XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0', MISTRI_CLOCK: CRM_CLOCK },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -41,7 +36,9 @@ const test = base.extend<object, { started: void }>({
       await new Promise<void>((done, fail) => {
         const timer = setTimeout(() => fail(new Error(`The host did not start: ${log}`)), 30_000);
         started.stdout!.on('data', () => {
-          if (log.includes('Host listening')) {
+          const said = /Host listening on (\d+)/.exec(log);
+          if (said) {
+            origin = `http://127.0.0.1:${said[1]}`;
             clearTimeout(timer);
             done();
           }

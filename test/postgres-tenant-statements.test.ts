@@ -20,9 +20,7 @@
  * fixture works in databases of its own (ignitionLendingFixture.ts).
  */
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test, type TestContext } from 'node:test';
@@ -42,6 +40,7 @@ import { rowScopeCounters } from '../packages/engine/src/shared/rowScope.js';
 import { setServerTiming } from '../packages/engine/src/adapters/telemetry/serverTiming.js';
 import { allocationMeter } from './support/allocationMeter.js';
 import { withoutQualified } from './support/statements.js';
+import { holdPort } from './support/heldPort.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 /* A pooled connection's session SETs are the pool's, paid once per physical
@@ -50,15 +49,6 @@ const SESSION = /^SET (default_transaction_read_only|statement_timeout)\b/;
 const password = 'Ignition-statements-password-123!';
 const list = { q: 'loan_application', limit: 500 };
 
-async function reservePort(): Promise<number> {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string');
-  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  return address.port;
-}
 type Answer = { status: number; headers: Headers; text: string; body: Record<string, unknown> };
 const object = (value: unknown): Record<string, unknown> => {
   assert.ok(value && typeof value === 'object' && !Array.isArray(value));
@@ -90,8 +80,10 @@ async function deploy(t: TestContext, relay?: LatencyProxy) {
   });
 
   const loaded = await loadApp(IGNITION_DIR);
-  const port = await reservePort(),
+  const held = await holdPort(),
+    port = held.port,
     origin = `http://127.0.0.1:${port}`;
+  t.after(() => held.release());
   const auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin] });
   t.after(() => auth.close());
   const people = {
@@ -140,8 +132,7 @@ async function deploy(t: TestContext, relay?: LatencyProxy) {
   const pg = ((await import(specifier)) as { default: { Client: PgClientClass } }).default;
   const counter = countStatements(owner.server, pg.Client);
   t.after(() => counter.restore());
-  owner.server.listen(port, '127.0.0.1');
-  await once(owner.server, 'listening');
+  await held.adopt(owner.server);
 
   const call = async (path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Answer> => {
     const response = await fetch(origin + path, {

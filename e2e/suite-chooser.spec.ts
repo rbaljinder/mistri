@@ -49,11 +49,13 @@ test('suite chooser signs in once, reveals only granted Apps and signs out every
           name: 'Shared Suite',
           store: './identity.db',
           grants: './grants.db',
-          environment: { BETTER_AUTH_SECRET: 'SECRET' },
+          environment: { BETTER_AUTH_SECRET: 'SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
         },
       }),
     );
-    const environment = { SECRET: 'test-suite-secret-longer-than-thirty-two-characters' };
+    /* The per-address sign-in limits stay on in the product; the spec lifts them for its own loopback suite through the
+       test seam (requestRules.ts), as suite-navigation.spec does, so a loaded machine's retries cannot spend them. */
+    const environment = { SECRET: 'test-suite-secret-longer-than-thirty-two-characters', LIMITS: 'off', MODE: 'test' };
     suite = await startConfiguredSuite(file, environment);
     const origin = suite.publicURL;
     await page.setViewportSize({ width: 390, height: 844 });
